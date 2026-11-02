@@ -1,0 +1,42 @@
+{
+  "id": 42,
+  "platform": "google_meet",
+  "native_meeting_id": "abc-defg-hij",
+  "status": "completed",
+  "start_time": "2026-01-05T10:00:00Z",
+  "end_time": "2026-01-05T10:30:00Z",
+  "segments": [
+    {
+      "speaker": "Alice Example",
+      "text": "Hello everyone.",
+      "start": 0.0,
+      "end": 2.5,
+      "absolute_start_time": "2026-01-05T10:00:00Z",
+      "absolute_end_time": "2026-01-05T10:00:02Z",
+      "language": "en",
+      "completed": true,
+      "segment_id": "seg-1"
+    },
+    {
+      "speaker": "Bob Sample",
+      "text": "Hi Alice.",
+      "start": 3.0,
+      "end": 4.0,
+      "absolute_start_time": "2026-01-05T10:00:03Z",
+      "absolute_end_time": "2026-01-05T10:00:04Z",
+      "language": "en",
+      "completed": true,
+      "segment_id": "seg-2"
+    }
+  ],
+  "recordings": [
+    {
+      "id": 7,
+      "status": "completed",
+      "media_files": [
+        {"id": 9, "type": "audio", "format": "wav", "file_size_bytes": 1024}
+      ]
+    }
+  ],
+  "data": {"completion_reason": "stopped"}
+}
