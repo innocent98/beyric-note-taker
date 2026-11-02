@@ -95,6 +95,13 @@ def render_markdown(source: str | None) -> Markup:
 templates.env.filters["markdown"] = render_markdown
 templates.env.filters["local_time"] = lambda dt: dt.astimezone(UTC).strftime("%d %b %Y, %H:%M UTC")
 templates.env.globals["status_text"] = status_text
+_STATUS_TONES = {
+    "ready": "success",
+    "failed": "danger",
+    "processing": "info",
+    "bot_sent": "warning",
+}
+templates.env.globals["status_tone"] = lambda meeting: _STATUS_TONES.get(meeting.status, "neutral")
 
 
 def get_vexa() -> VexaClient:
@@ -212,6 +219,14 @@ def privacy(request: Request):
 @router.get("/terms")
 def terms(request: Request):
     return render(request, "terms.html")
+
+
+@router.get("/styleguide")
+def styleguide(request: Request):
+    """Every shared component in every state: the parity reference. Owner only, never indexed."""
+    response = render(request, "styleguide.html")
+    response.headers["X-Robots-Tag"] = "noindex, nofollow"
+    return response
 
 
 @router.post("/meetings")

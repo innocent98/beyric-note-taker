@@ -1,27 +1,27 @@
 {% extends "base.html" %}
+{% import "components.html" as ui %}
 {% block title %}Vocabulary - Beyric Notes{% endblock %}
 {% block content %}
-<h1>Vocabulary</h1>
-<p class="muted">Names and terms to spell correctly in transcripts and notes.</p>
-<form method="post" action="/vocabulary">
-  <input type="hidden" name="csrf_token" value="{{ csrf }}">
-  <label for="term">New term</label>
-  <input id="term" name="term" maxlength="100" autocomplete="off" required value="{{ term or '' }}">
-  <button type="submit">Add term</button>
-</form>
-{% if rows %}
-<ul class="list">
-  {% for r in rows %}
-  <li>
-    <span class="title">{{ r.term }}</span>
-    <form method="post" action="/vocabulary/{{ r.id }}/delete" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf }}">
-      <button type="submit" class="small danger">Delete</button>
-    </form>
-  </li>
-  {% endfor %}
-</ul>
-{% else %}
-<p class="muted">No terms yet.</p>
-{% endif %}
+<div class="stack">
+  {{ ui.page_head("Vocabulary", "Names and terms to spell correctly in transcripts and notes.") }}
+  {% call ui.card() %}
+  <form method="post" action="/vocabulary" class="row-wrap">
+    {{ ui.csrf_field(csrf) }}
+    <div class="field-grow">{{ ui.field("term", "New term", value=term or "", required=true, attrs='maxlength="100" autocomplete="off"') }}</div>
+    {{ ui.button("Add term") }}
+  </form>
+  {% endcall %}
+  {% call ui.card(flush=true) %}
+  {% if rows %}
+  <ul class="list">
+    {% for r in rows %}
+    {% set end %}<form method="post" action="/vocabulary/{{ r.id }}/delete" class="inline">{{ ui.csrf_field(csrf) }}{{ ui.button("Delete", kind="danger", size="sm") }}</form>{% endset %}
+    {% call ui.list_row(end=end) %}<span class="list-title">{{ r.term }}</span>{% endcall %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  {{ ui.empty_state("No terms yet.", "Add names and terms above and they will be spelled your way.") }}
+  {% endif %}
+  {% endcall %}
+</div>
 {% endblock %}

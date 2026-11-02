@@ -1,4 +1,5 @@
 {% extends "public_base.html" %}
+{% import "components.html" as ui %}
 {% block content %}
 <main class="pub-main">
   <section class="hero">
@@ -6,11 +7,11 @@
       <p class="kicker">Works with Google Meet and Zoom</p>
       <h1>Clear notes from every meeting, without taking them yourself.</h1>
       <p class="lede">Paste a meeting link. Beyric Note Taker joins the call, records the conversation and gives you a summary, decisions and action items when it ends.</p>
-      <p><a class="pub-btn pub-btn-lg" href="/login">Sign in</a></p>
+      <p>{{ ui.button("Sign in", href="/login", size="lg") }}</p>
       <p class="muted small">Beyric Note Taker is in a private pilot with a small group of testers.</p>
     </div>
     <figure class="sample" aria-label="Example meeting notes">
-      <div class="sample-head"><strong>Weekly product sync</strong><span class="badge ready">Ready</span></div>
+      <div class="sample-head"><strong>Weekly product sync</strong>{{ ui.badge("Ready", "success") }}</div>
       <p class="meta">Example &middot; Zoom &middot; 32 min</p>
       <h2>Summary</h2>
       <p>The team agreed to ship the new onboarding flow next Tuesday. Billing changes move to the following sprint while the pricing page is reviewed.</p>

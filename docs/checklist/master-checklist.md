@@ -71,12 +71,15 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 
 Goal: one look everywhere (the logged-in app is still blue and system-ui while the public pages are teal), and parts every later screen reuses. Plan in the frontend-approach spec.
 
-- [ ] `tokens.css`: brand colours, type, spacing, radius, shadow, light and dark, from the designer's prototypes; remove the `body.public` split
-- [ ] Self-host Geist in `/static/fonts/` (CSP stays `'self'`)
-- [ ] Core Jinja macros plus `components.css`: button, badge, card, field, segmented control, menu, dialog, tabs, list row, empty state, toast
-- [ ] Owner-only `noindex` `/styleguide` showing every component and state, light and dark, phone width
-- [ ] Guard tests: no hard-coded colour outside `tokens.css`, no inline `style=`, every macro is in the style guide
-- [ ] Move the existing 10 templates onto the foundation; check each in a browser at phone and desktop width, light and dark
+- [x] `tokens.css`: brand colours, type, spacing, radius, shadow, light and dark, from the designer's prototypes; `body.public` split removed (`feature/ui-foundation`, 2026-11-02)
+- [x] Self-host Geist in `/static/fonts/`; CSP gained `font-src 'self'` only
+- [x] Core Jinja macros plus `components.css`: button, badge, alert, card, fields, segmented control, menu, dialog, tabs, list row, empty state, page head
+  - [ ] Toast (with the first feature that needs it)
+- [x] Owner-only `noindex` `/styleguide` showing every component and state
+- [x] Guard tests: no colour literal outside `tokens.css`, no inline `style=`/`on*=`, every macro in the style guide, shared head (`tests/test_ui_guards.py`)
+- [x] Move the existing 10 templates onto the foundation
+  - [x] Checked by eye: login, Meetings, ready and processing meeting, style guide, landing; light and dark, desktop and phone
+  - [ ] Still to check by eye: Templates, Vocabulary, failed meeting, Privacy and Terms on a phone
 - [ ] Spike: htmx and Alpine (CSP build) under the strict CSP, self-hosted
 - [ ] PWA basics: manifest, icons, service worker
 

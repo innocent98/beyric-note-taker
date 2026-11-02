@@ -1,11 +1,13 @@
 {% extends "base.html" %}
+{% import "components.html" as ui %}
 {% block title %}Log in - Beyric Notes{% endblock %}
 {% block content %}
+{% call ui.card() %}
 <h1>Log in</h1>
-<form method="post" action="/login">
-  <input type="hidden" name="csrf_token" value="{{ csrf }}">
-  <label for="password">Password</label>
-  <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
-  <button type="submit">Log in</button>
+<form method="post" action="/login" class="stack-sm">
+  {{ ui.csrf_field(csrf) }}
+  {{ ui.field("password", "Password", type="password", required=true, attrs='autocomplete="current-password" autofocus') }}
+  {{ ui.button("Log in", block=true) }}
 </form>
+{% endcall %}
 {% endblock %}

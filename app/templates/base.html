@@ -1,32 +1,47 @@
+{% import "components.html" as ui %}
+{%- set path = request.url.path -%}
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+{% include "head.html" %}
 <title>{% block title %}Beyric Note Taker{% endblock %}</title>
-<link rel="stylesheet" href="/static/app.css">
 {% block head %}{% endblock %}
 </head>
 <body>
-<header class="bar">
-  <a class="brand" href="/">Beyric Notes</a>
+<div class="{{ 'shell' if logged_in else 'auth' }}">
   {% if logged_in %}
-  <nav>
-    <a href="/">Meetings</a>
-    <a href="/templates">Templates</a>
-    <a href="/vocabulary">Vocabulary</a>
-    <form method="post" action="/logout" class="inline">
-      <input type="hidden" name="csrf_token" value="{{ csrf }}">
-      <button type="submit" class="link">Log out</button>
-    </form>
-  </nav>
+  <aside class="sidebar">
+    <div class="sidebar-brand">{{ ui.logo() }}</div>
+    <nav class="nav" aria-label="Main">
+      {{ ui.nav_link("/", "Meetings", path == "/" or path.startswith("/meetings")) }}
+    </nav>
+    <div class="nav-label">Configure</div>
+    <nav class="nav" aria-label="Configure">
+      {{ ui.nav_link("/templates", "Templates", path.startswith("/templates")) }}
+      {{ ui.nav_link("/vocabulary", "Vocabulary", path.startswith("/vocabulary")) }}
+    </nav>
+    <div class="sidebar-user">
+      <div class="avatar" aria-hidden="true">O</div>
+      <div class="sidebar-user-name">Owner</div>
+      <form method="post" action="/logout" class="inline">
+        {{ ui.csrf_field(csrf) }}
+        {{ ui.button("Log out", kind="ghost", size="sm") }}
+      </form>
+    </div>
+  </aside>
+  {% else %}
+  {{ ui.logo(large=true, link=none) }}
   {% endif %}
-</header>
-<main>
-{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
-{% block content %}{% endblock %}
-</main>
-<footer class="app-foot"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>
+  <div class="{{ 'shell-main' if logged_in else 'auth-card' }}">
+    <main class="{{ 'page' ~ (' page-narrow' if narrow) if logged_in }}">
+      {% if error %}{% call ui.alert("error") %}{{ error }}{% endcall %}{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+    {% if logged_in %}
+    <footer class="app-foot"><a href="/privacy">Privacy</a><a href="/terms">Terms</a></footer>
+    {% endif %}
+  </div>
+</div>
 <script src="/static/app.js" defer></script>
 </body>
 </html>
