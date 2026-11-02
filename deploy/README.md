@@ -5,7 +5,8 @@ so nothing here takes a public port except through nginx.
 
 | Piece | Where it runs | Reachable from |
 |---|---|---|
-| App: `db`, `migrate`, `worker`, `web` | Docker Compose in this repo | `web` on `127.0.0.1:8020` only |
+| Front door: `next` (Next.js) | Docker Compose in this repo | `127.0.0.1:8020` only; this is the port nginx proxies to |
+| App: `db`, `migrate`, `worker`, `web` (FastAPI) | Docker Compose in this repo | `web` on `127.0.0.1:8021` only (operator and rollback); visitors reach it through `next` |
 | Vexa Lite: `vexa`, `vexa-db`, `vexa-storage` | the same Compose project | the app, as `vexa:8056`; the server only, on `127.0.0.1:18056` |
 | nginx + certbot | **on the host**, not in Docker | the internet, ports 80 and 443 |
 
@@ -17,9 +18,16 @@ so nothing here takes a public port except through nginx.
 - Three networks: `default` (web, worker, vexa; has internet), `appdb` (the app database; no
   internet) and `vexainternal` (Vexa's database and storage; no internet). A bot runs Chrome on
   untrusted meeting pages, so the Vexa container cannot reach the app database at all.
-- nginx connects to `127.0.0.1:8020`, so the app sees nginx as the Docker bridge gateway
-  `172.28.0.1` (`compose.yaml` pins that network). That is the one trusted proxy. Only processes on
-  the server can reach port 8020, so nobody outside can pose as that proxy.
+- nginx connects to `127.0.0.1:8020`, which is `next`, and `next` connects to FastAPI as
+  `http://web:8000`. `next` renders the few pages it owns (`/privacy`, `/terms` and some review
+  pages) and proxies every other path to FastAPI unchanged, so the Jinja pages, `/health` and the
+  login keep working as before. `compose.yaml` pins the network: FastAPI sees nginx as the Docker
+  bridge gateway `172.28.0.1` and `next` as `172.28.0.10`, and trusts both as proxies (`next`
+  passes the visitor's address on in `X-Forwarded-For`; without trusting it the login limit would
+  see every visitor as one address). Only processes on the server can reach ports 8020 and 8021,
+  so nobody outside can pose as a proxy.
+- `next` is capped at 512 MB of memory (`mem_limit`) and holds no secrets. Building its image
+  (`next build`) needs about 1-2 GB for a minute or two, once per deploy.
 - Minimum server: **4 GB memory, 2 vCPUs** free for this app. Vexa used about 540 MB idle in a
   local run and about 1.4 GB with a bot in a call.
 
@@ -43,7 +51,7 @@ Only 22, 80 and 443 should answer. Docker bypasses `ufw` for published ports, so
 is that `compose.yaml` publishes nothing on a public interface. Check from **your laptop**:
 
 ```bash
-for p in 22 80 443 8020 18056 8056 3001 8100 5432; do
+for p in 22 80 443 8020 8021 18056 8056 3001 8100 5432; do
   printf '%s: ' "$p"; nc -z -G 3 SERVER_IP "$p" && echo open || echo closed
 done
 ```
@@ -123,7 +131,8 @@ Edit `.env`:
 | `OWNER_PASSWORD` | a long password |
 | `SESSION_SECRET` | `openssl rand -hex 48` |
 | `APP_ENV`, `COOKIE_SECURE` | `production`, `true` |
-| `TRUSTED_PROXY_IPS` | `172.28.0.1`. Set it **empty** and no proxy is trusted at all |
+| `TRUSTED_PROXY_IPS` | `172.28.0.1`. `next` (`172.28.0.10`) is always trusted on top of this, because every request passes through it; set it **empty** and nginx is not trusted, which makes every visitor look like the same address |
+| `AUDIO_RETENTION_DAYS` | Optional, default `7`. The same value is shown on `/privacy` (compose passes it to `next`) |
 
 ## 4. Start Vexa and create the app's key
 
@@ -140,9 +149,11 @@ fails because the Vexa user already exists.
 ## 5. Start the app
 
 ```bash
-docker compose up -d --build           # migrate runs first, then web and worker
+docker compose up -d --build           # migrate runs first, then web and worker, then next
 docker compose ps
-curl -s http://127.0.0.1:8020/health   # ok
+curl -s http://127.0.0.1:8020/health   # ok  (through next, to FastAPI and the database)
+curl -s http://127.0.0.1:8020/healthz  # ok  (next itself)
+curl -s http://127.0.0.1:8021/health   # ok  (FastAPI directly)
 docker compose exec worker python -c "import urllib.request; print(urllib.request.urlopen('http://vexa:8056/health', timeout=5).status)"   # 200
 ```
 
@@ -175,7 +186,7 @@ After a later change to `deploy/nginx.conf`, do not copy it over the live file (
 certbot's lines): edit `/etc/nginx/sites-available/beyric-notes` by hand, then `sudo nginx -t &&
 sudo systemctl reload nginx`.
 
-What the site does: proxies to `127.0.0.1:8020` (60 s, or 300 s for
+What the site does: proxies to `127.0.0.1:8020`, the Next.js front door (60 s, or 300 s for
 `/meetings/<id>/regenerate`); takes the visitor's address from `CF-Connecting-IP`, trusted only
 from Cloudflare's published ranges; **overwrites** `X-Forwarded-For` with that address, so a client
 cannot dodge the login limit; limits POST `/login` to 6 a minute per address (burst 3, then 429)
@@ -225,9 +236,17 @@ docker compose up -d web worker
 
 Merging a PR into `main` deploys it: `ci` runs, and when it passes `.github/workflows/deploy.yml`
 connects over SSH and runs `deploy/deploy.sh <sha>`. That script refuses any commit not on
-`origin/main`, backs up the database, checks out the commit, builds, starts, and waits up to two
-minutes for `/health`. If the new version never turns healthy it starts the previous commit again
-and the workflow fails.
+`origin/main`, backs up the database, checks out the commit, builds (both images: FastAPI and
+Next.js), starts, and waits up to two minutes until all three checks pass: `127.0.0.1:8020/health`
+(through `next` to FastAPI and the database), `127.0.0.1:8020/healthz` (`next` itself) and
+`127.0.0.1:8021/health` (FastAPI directly). If the new version never turns healthy it starts the
+previous commit again (with `--remove-orphans`, so a commit from before `next` existed does not
+leave the `next` container holding port 8020) and the workflow fails.
+
+**The deploy that introduces `next`** moves port 8020 from `web` to `next`, so for a few seconds
+the site answers 502 while `web` is recreated on 8021 and `next` starts. Do it when no meeting is
+`bot_sent` or `processing` (the worker is not restarted, but the pilot should not be mid-call).
+Before it, check the server has about 2 GB of free memory for the Next.js build.
 
 ### Deploy key setup (once)
 
@@ -259,7 +278,11 @@ deploy/deploy.sh "$(git rev-parse origin/main)"
 ```
 
 Roll back: re-deploy an older commit of `main` with `deploy/deploy.sh <sha>`, or revert the PR on
-GitHub so CD deploys the revert. If the bad version ran a migration, older code may not run on the
+GitHub so CD deploys the revert. To take the Next.js front door out of the path alone (and keep the
+rest of the release), point nginx at FastAPI directly: change `proxy_pass http://127.0.0.1:8020`
+to `http://127.0.0.1:8021` in `/etc/nginx/sites-available/beyric-notes` (three places),
+`sudo nginx -t && sudo systemctl reload nginx`. The Jinja pages, including `/privacy` and `/terms`,
+then answer from FastAPI as before. If the bad version ran a migration, older code may not run on the
 new schema: `docker compose run --rm migrate alembic downgrade -1` first, or restore the backup the
 deploy took (step 7).
 
