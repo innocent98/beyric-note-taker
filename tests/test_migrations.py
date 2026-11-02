@@ -68,3 +68,41 @@ def test_session_epoch_table_is_created_seeded_and_dropped(scratch_url):
     command.upgrade(cfg, "head")  # and back up again
     assert "app_state" in inspect(engine).get_table_names()
     engine.dispose()
+
+
+def test_final_fix_columns_are_added_and_dropped(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    meeting_cols = {c["name"] for c in inspect(engine).get_columns("meetings")}
+    state_cols = {c["name"] for c in inspect(engine).get_columns("app_state")}
+    assert {
+        "vexa_recording_id",
+        "speakers_incomplete",
+        "completion_reason",
+        "terminal_seen_at",
+    } <= meeting_cols
+    assert "worker_heartbeat_at" in state_cols
+
+    command.downgrade(cfg, "0002")
+    meeting_cols = {c["name"] for c in inspect(engine).get_columns("meetings")}
+    assert not {"vexa_recording_id", "speakers_incomplete", "terminal_seen_at"} & meeting_cols
+    assert "worker_heartbeat_at" not in {
+        c["name"] for c in inspect(engine).get_columns("app_state")
+    }
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_migration_matches_models(scratch_url):
+    from alembic.autogenerate import compare_metadata
+    from alembic.migration import MigrationContext
+
+    from app.models import Base
+
+    command.upgrade(alembic_config(scratch_url), "head")
+    engine = create_engine(scratch_url)
+    with engine.connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
+    engine.dispose()
+    assert diff == []
