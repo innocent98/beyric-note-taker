@@ -23,14 +23,16 @@ so nothing here takes a public port except through nginx.
 - Minimum server: **4 GB memory, 2 vCPUs** free for this app. Vexa used about 540 MB idle in a
   local run and about 1.4 GB with a bot in a call.
 
-Paths below: the app lives in `~/beyric-note-taker`, backups in `~/backups/beyric-notes`, and the
+Paths below: the app lives in `/opt/beyric-note-taker` (like `/opt/haven`), backups in `~/backups/beyric-notes`, and the
 domain is `notes.beyrictech.com`. Steps marked **(sudo)** need the server owner's password.
 
 ## 0. What the owner must supply
 
 - [ ] SSH access as a user in the `docker` group, and someone who can run `sudo`.
-- [ ] A DNS `A` record for the domain pointing at the server. On Cloudflare: **DNS only** (grey
-      cloud). Proxied, the app would see Cloudflare's addresses instead of real ones.
+- [ ] A DNS `A` record for the domain pointing at the server. Proxied through Cloudflare (orange
+      cloud) is supported: `deploy/nginx.conf` restores each visitor's real address from
+      `CF-Connecting-IP`. Set Cloudflare's SSL/TLS mode to **Full (strict)**; "Flexible" would
+      loop forever against the HTTP-to-HTTPS redirect certbot adds.
 - [ ] An email address for Let's Encrypt expiry notices.
 - [ ] An OpenAI API key with a spend limit set in the OpenAI dashboard.
 - [ ] The owner's login password for the app.
@@ -78,7 +80,8 @@ Add that public key to the GitHub repository as a **read-only deploy key**
 (`gh repo deploy-key add <file> --repo innocent98/beyric-note-taker --title server`), then:
 
 ```bash
-git clone git@github-beyric-notes:innocent98/beyric-note-taker.git ~/beyric-note-taker
+sudo mkdir -p /opt/beyric-note-taker && sudo chown "$USER": /opt/beyric-note-taker    # (sudo)
+git clone git@github-beyric-notes:innocent98/beyric-note-taker.git /opt/beyric-note-taker
 ```
 
 ## 3. Secrets: `.env.vexa` and `.env`
@@ -86,7 +89,7 @@ git clone git@github-beyric-notes:innocent98/beyric-note-taker.git ~/beyric-note
 Both files live only on the server, are git-ignored, and are never overwritten by a deploy.
 
 ```bash
-cd ~/beyric-note-taker
+cd /opt/beyric-note-taker
 umask 077
 T=$(openssl rand -hex 32)
 cat > .env.vexa <<EOF
@@ -125,7 +128,7 @@ Edit `.env`:
 ## 4. Start Vexa and create the app's key
 
 ```bash
-cd ~/beyric-note-taker
+cd /opt/beyric-note-taker
 docker compose up -d vexa              # also starts vexa-db and vexa-storage
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18056/health    # 200
 deploy/vexa-api-key.sh                 # prints vxa_bot_... once; put it in .env as VEXA_API_KEY
@@ -149,64 +152,49 @@ volume left by an older version is owned by root and needs, once:
 
 ## 6. HTTPS with nginx and Let's Encrypt (sudo)
 
-DNS must already point at the server.
+Same layout as the server's other sites: a file in `sites-available`, linked into `sites-enabled`,
+then `certbot --nginx` adds HTTPS to it.
 
 ```bash
-cd ~/beyric-note-taker
-DOMAIN=notes.beyrictech.com
-EMAIL=you@example.com                  # for expiry notices
-sudo mkdir -p /var/www/certbot
-
-# 6a. Temporary HTTP-only site, only to answer the certificate challenge
-sudo tee /etc/nginx/conf.d/beyric-notes.conf >/dev/null <<EOF
-server {
-    listen 80;
-    listen [::]:80;
-    server_name $DOMAIN;
-    location /.well-known/acme-challenge/ { root /var/www/certbot; }
-    location / { return 404; }
-}
-EOF
+cd /opt/beyric-note-taker
+sudo cp deploy/nginx.conf /etc/nginx/sites-available/beyric-notes
+sudo ln -s /etc/nginx/sites-available/beyric-notes /etc/nginx/sites-enabled/beyric-notes
 sudo nginx -t && sudo systemctl reload nginx
-
-# 6b. Get the certificate (renewal reuses the same webroot method)
-sudo certbot certonly --webroot -w /var/www/certbot -d "$DOMAIN" -m "$EMAIL" --agree-tos --no-eff-email
-
-# 6c. Install the real site
-sed "s/notes\.example\.com/$DOMAIN/g" deploy/nginx.conf | sudo tee /etc/nginx/conf.d/beyric-notes.conf >/dev/null
-sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d notes.beyrictech.com
 ```
 
-`nginx -t` checks every site on the server, so a failure here stops before anything reloads. The
-config shares `http {}` with other sites, so its zone names are prefixed (`notes_login`,
-`notes_general`, `notes_ssl`), `limit_req_status` sits inside its own server block, and it does not
-turn on HTTP/2 (that would switch it on for every site on the same address).
+`nginx -t` checks every site on the server, so a mistake stops before anything reloads. The file
+shares `http {}` with other sites, so its zone names are prefixed (`notes_login`,
+`notes_general`), and `limit_req_status` and the Cloudflare real-IP settings sit inside its own
+server block, so they change nothing for Haven or Novex.
 
-Renewal: certbot's systemd timer already renews other sites here. If
-`/etc/letsencrypt/renewal-hooks/deploy/` has no nginx reload hook yet, add one:
+If certbot's challenge fails while the record is proxied (usually Cloudflare's "Always Use HTTPS"
+redirecting the challenge), switch the record to DNS only, run certbot, and switch it back.
 
-```bash
-echo -e '#!/bin/sh\nsystemctl reload nginx' | sudo tee /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh >/dev/null
-sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
-sudo certbot renew --dry-run
-```
+After a later change to `deploy/nginx.conf`, do not copy it over the live file (that would drop
+certbot's lines): edit `/etc/nginx/sites-available/beyric-notes` by hand, then `sudo nginx -t &&
+sudo systemctl reload nginx`.
 
-What `deploy/nginx.conf` does: redirects HTTP to HTTPS; proxies to `127.0.0.1:8020` (60 s, or
-300 s for `/meetings/<id>/regenerate`); **overwrites** `X-Forwarded-For` with the connecting
-address, so a client cannot dodge the login limit; limits POST `/login` to 6 a minute per address
-(burst 3, then 429) and all traffic to 20 requests a second; adds HSTS (1 year), `X-Frame-Options:
-DENY` and a `Permissions-Policy`. The app sets its own CSP, `nosniff`, `Referrer-Policy` and
-`Cache-Control`.
+What the site does: proxies to `127.0.0.1:8020` (60 s, or 300 s for
+`/meetings/<id>/regenerate`); takes the visitor's address from `CF-Connecting-IP`, trusted only
+from Cloudflare's published ranges; **overwrites** `X-Forwarded-For` with that address, so a client
+cannot dodge the login limit; limits POST `/login` to 6 a minute per address (burst 3, then 429)
+and all traffic to 20 requests a second; adds HSTS (1 year), `X-Frame-Options: DENY` and a
+`Permissions-Policy`. The app sets its own CSP, `nosniff`, `Referrer-Policy` and `Cache-Control`.
+
+Cloudflare closes a request after 100 s (free plan). Only rewriting notes can take that long; the
+page then shows Cloudflare's 524 error, and the rewrite is likely, but not verified, to finish on
+the server. Reload the meeting page.
 
 ## 7. Daily backup
 
 ```bash
-BACKUP_DIR=~/backups/beyric-notes ~/beyric-note-taker/deploy/backup.sh     # once by hand
+BACKUP_DIR=~/backups/beyric-notes /opt/beyric-note-taker/deploy/backup.sh     # once by hand
 crontab -e
 ```
 
 ```
-17 3 * * * BACKUP_DIR=$HOME/backups/beyric-notes $HOME/beyric-note-taker/deploy/backup.sh >> $HOME/backups/beyric-notes/backup.log 2>&1
+17 3 * * * BACKUP_DIR=$HOME/backups/beyric-notes /opt/beyric-note-taker/deploy/backup.sh >> $HOME/backups/beyric-notes/backup.log 2>&1
 ```
 
 The script dumps the app database inside the `db` container, gzips and tests it, writes mode 600,
@@ -216,7 +204,7 @@ database is not backed up either (it only holds meeting records the app has alre
 ### Restore (practise once)
 
 ```bash
-cd ~/beyric-note-taker
+cd /opt/beyric-note-taker
 FILE=~/backups/beyric-notes/notetaker-YYYYMMDDTHHMMSSZ.sql.gz
 docker compose exec -T db psql -U postgres -c 'CREATE DATABASE notetaker_restore'
 gzip -dc "$FILE" | docker compose exec -T db psql -U postgres -d notetaker_restore -v ON_ERROR_STOP=1 -q
@@ -243,11 +231,15 @@ and the workflow fails.
 
 ### Deploy key setup (once)
 
-The CI key can do one thing: run `deploy/deploy.sh`. On the server:
+GitHub needs a private key to log in. It gets its own key, not the owner's: a key stored in
+GitHub can be read by any workflow change, and the owner's key opens a full shell on a server that
+also runs Haven and Novex. This key can do one thing, run `deploy/deploy.sh` with a commit SHA,
+and removing its one line from `authorized_keys` revokes it without touching anyone's access.
+On the server:
 
 ```bash
 ssh-keygen -t ed25519 -N '' -C beyric-notes-cd -f ~/beyric-notes-cd
-echo "command=\"$HOME/beyric-note-taker/deploy/deploy.sh\",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty $(cat ~/beyric-notes-cd.pub)" >> ~/.ssh/authorized_keys
+echo "command=\"/opt/beyric-note-taker/deploy/deploy.sh\",no-port-forwarding,no-X11-forwarding,no-agent-forwarding,no-pty $(cat ~/beyric-notes-cd.pub)" >> ~/.ssh/authorized_keys
 ```
 
 Store these repository secrets, then delete `~/beyric-notes-cd*` from the server:
@@ -262,7 +254,7 @@ Store these repository secrets, then delete `~/beyric-notes-cd*` from the server
 ### By hand
 
 ```bash
-cd ~/beyric-note-taker && git fetch origin main
+cd /opt/beyric-note-taker && git fetch origin main
 deploy/deploy.sh "$(git rev-parse origin/main)"
 ```
 
