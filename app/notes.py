@@ -8,6 +8,7 @@ and "Berlin"), so it is used solely to work out who said what.
 import difflib
 import logging
 import re
+import unicodedata
 
 from openai import OpenAI
 
@@ -120,8 +121,24 @@ def _complete(client, system: str, user: str, *, what: str, failure=NotesFailed)
 # ---- speaker labelling ----
 
 
+MAX_NAME_CHARS = 80
+_NAME_BAD_CHARS = re.compile(r"[\[\]:<>]")
+
+
 def _speaker(segment: dict) -> str:
-    return " ".join(str(segment.get("speaker") or "").split()) or UNKNOWN_SPEAKER
+    """The cleaned display name used as the label everywhere (prompt and `_strip_labels`).
+
+    Participants choose their own names, so drop label syntax (brackets, colon, angle brackets)
+    and control characters, collapse whitespace, and cap the length.
+    """
+    name = "".join(
+        " " if c.isspace() or unicodedata.category(c) in ("Cc", "Zl", "Zp") else c
+        for c in str(segment.get("speaker") or "")
+        if unicodedata.category(c) != "Cf"
+    )
+    name = _NAME_BAD_CHARS.sub("", name)
+    name = " ".join(name.split())[:MAX_NAME_CHARS].strip()
+    return name or UNKNOWN_SPEAKER
 
 
 def _clean_segments(segments: list[dict]) -> list[tuple[str, str]]:
