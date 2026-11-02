@@ -12,6 +12,8 @@ COPY app ./app
 COPY alembic.ini ./
 COPY alembic ./alembic
 RUN pip install --no-cache-dir . \
-    && useradd --system --no-create-home --shell /usr/sbin/nologin app
+    && useradd --system --no-create-home --shell /usr/sbin/nologin app \
+    && mkdir -p /srv/data/audio \
+    && chown -R app:app /srv/data
 
 CMD ["alembic", "upgrade", "head"]

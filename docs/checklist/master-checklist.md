@@ -29,7 +29,7 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [x] Task 4: Speakers and notes (2026-11-02: label_speakers, generate_notes, shared retry; live-evaluated)
 - [x] Task 5: Worker pipeline (2026-11-02)
 - [x] Task 6: Web pages (2026-11-02: login, meetings, retry/regenerate, templates, vocabulary, `web` service; checked at 375 px)
-- [ ] Task 7: Deploy
+- [ ] Task 7: Deploy (2026-11-02: files ready and validated locally, `deploy/` + compose changes; server steps pending, needs an Ubuntu server and a domain)
 - [ ] Task 8: Real-world acceptance
 
 ## Backlog
