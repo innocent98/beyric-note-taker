@@ -304,3 +304,106 @@ def test_download_oserror_becomes_vexa_error_and_cleans_up(
     with pytest.raises(VexaError):
         client.download_audio(1, 2, dest)
     assert not dest.exists()
+
+
+def _fetch_with(httpx_mock, client, **changes):
+    body = {**fixture_data(), **changes}
+    httpx_mock.add_response(url="http://vexa.test/transcripts/zoom/1", json=body)
+    return client.get_meeting("zoom", "1")
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"recordings": "oops"},
+        {"recordings": {"id": 7}},
+        {"recordings": ["oops"]},
+        {"recordings": [{"id": 7, "status": "completed", "media_files": "oops"}]},
+        {"recordings": [{"id": 7, "status": "completed", "media_files": ["oops"]}]},
+        {
+            "recordings": [
+                {"id": "7", "status": "completed", "media_files": [{"id": 9, "type": "audio"}]}
+            ]
+        },
+        {"segments": "oops"},
+        {"segments": ["oops"]},
+        {"segments": {"speaker": "Ada"}},
+        {"data": "oops"},
+        {"data": ["oops"]},
+        {"data": {"completion_reason": ["stopped"]}},
+    ],
+)
+def test_get_meeting_wrong_field_types_raise_vexa_error(httpx_mock, client, changes):
+    with pytest.raises(VexaError):
+        _fetch_with(httpx_mock, client, **changes)
+
+
+def test_get_meeting_null_fields_are_treated_as_absent(httpx_mock, client):
+    meeting = _fetch_with(httpx_mock, client, recordings=None, segments=None, data=None)
+    assert meeting.segments == [] and meeting.recording_id is None
+    assert meeting.completion_reason is None
+
+
+def test_delete_recording_calls_the_recording_route(httpx_mock, client):
+    httpx_mock.add_response(method="DELETE", url="http://vexa.test/recordings/7", json={})
+    client.delete_recording(7)
+    request = httpx_mock.get_requests()[0]
+    assert request.headers["X-API-Key"] == "test-key"
+
+
+def test_delete_recording_not_found_means_already_gone(httpx_mock, client):
+    httpx_mock.add_response(method="DELETE", url="http://vexa.test/recordings/7", status_code=404)
+    client.delete_recording(7)
+
+
+@pytest.mark.parametrize("status", [409, 500, 401])
+def test_delete_recording_failures_raise(httpx_mock, client, status):
+    httpx_mock.add_response(
+        method="DELETE", url="http://vexa.test/recordings/7", status_code=status
+    )
+    with pytest.raises(VexaError):
+        client.delete_recording(7)
+
+
+def test_delete_recording_connection_error(httpx_mock, client):
+    httpx_mock.add_exception(httpx.ConnectError("down"))
+    with pytest.raises(VexaError):
+        client.delete_recording(7)
+
+
+def test_delete_recording_rejects_non_numeric_id_without_request(httpx_mock, client):
+    with pytest.raises(ValueError):
+        client.delete_recording("../bots")
+    assert httpx_mock.get_requests() == []
+
+
+def test_stop_bot_deletes_the_bot_for_the_meeting_code(httpx_mock, client):
+    httpx_mock.add_response(
+        method="DELETE", url="http://vexa.test/bots/google_meet/abc-defg-hij", json={}
+    )
+    client.stop_bot("google_meet", "abc-defg-hij")
+    assert httpx_mock.get_requests()[0].headers["X-API-Key"] == "test-key"
+
+
+def test_stop_bot_no_active_meeting_counts_as_stopped(httpx_mock, client):
+    httpx_mock.add_response(
+        method="DELETE", url="http://vexa.test/bots/zoom/12345678901", status_code=404
+    )
+    client.stop_bot("zoom", "12345678901")
+
+
+@pytest.mark.parametrize("status", [503, 500])
+def test_stop_bot_failure_raises(httpx_mock, client, status):
+    httpx_mock.add_response(
+        method="DELETE", url="http://vexa.test/bots/zoom/12345678901", status_code=status
+    )
+    with pytest.raises(VexaError):
+        client.stop_bot("zoom", "12345678901")
+
+
+def test_stop_bot_rejects_odd_platform_or_id_without_request(httpx_mock, client):
+    with pytest.raises(ValueError):
+        client.stop_bot("zoom", "../x")
+    with pytest.raises(ValueError):
+        client.stop_bot("teams", "1")
+    assert httpx_mock.get_requests() == []

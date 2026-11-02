@@ -69,6 +69,26 @@ def parse_meeting_url(url: str) -> tuple[str, str]:
     return platform, native_id
 
 
+def _list_of_dicts(container: dict, key: str) -> list[dict[str, Any]]:
+    """`container[key]` as a list of objects. Absent or null is an empty list; any other shape
+    means Vexa changed its response, which we refuse to guess about."""
+    value = container.get(key)
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise VexaError(f"get_meeting failed: '{key}' is not a list of JSON objects")
+    return value
+
+
+def _optional_int(container: dict, key: str) -> int | None:
+    value = container.get(key)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise VexaError(f"get_meeting failed: '{key}' is not an integer")
+    return value
+
+
 class VexaClient:
     def __init__(self, timeout: float = 30.0) -> None:
         settings = get_settings()
@@ -117,24 +137,60 @@ class VexaClient:
             raise VexaError("get_meeting failed: response body is not a JSON object")
 
         recording_id = media_id = recording_status = None
-        recordings = body.get("recordings") or []
+        recordings = _list_of_dicts(body, "recordings")
         if recordings:
             recording = recordings[0]
             recording_status = recording.get("status")
-            media_files = recording.get("media_files") or []
-            audio = [m for m in media_files if m.get("type") == "audio"]
+            audio = [
+                m for m in _list_of_dicts(recording, "media_files") if m.get("type") == "audio"
+            ]
             if audio:
-                recording_id = recording.get("id")
-                media_id = audio[0].get("id")
-        data = body.get("data") or {}
+                recording_id = _optional_int(recording, "id")
+                media_id = _optional_int(audio[0], "id")
+        data = body.get("data")
+        if data is None:
+            data = {}
+        if not isinstance(data, dict):
+            raise VexaError("get_meeting failed: 'data' is not a JSON object")
+        completion_reason = data.get("completion_reason")
+        if completion_reason is not None and not isinstance(completion_reason, str):
+            raise VexaError("get_meeting failed: 'completion_reason' is not a string")
         return VexaMeeting(
             status=str(body.get("status", "")),
-            segments=body.get("segments") or [],
+            segments=_list_of_dicts(body, "segments"),
             recording_id=recording_id,
             media_id=media_id,
             recording_status=recording_status,
-            completion_reason=data.get("completion_reason"),
+            completion_reason=completion_reason,
         )
+
+    def delete_recording(self, recording_id: int) -> None:
+        """Delete Vexa's copy of a recording (`DELETE /recordings/{id}`).
+
+        Vexa answers 404 for an id that is unknown, already deleted or not ours, which is the
+        state we want, so that counts as success. 409 means the meeting is not over yet; it and
+        every other failure raise VexaError so the caller tries again later.
+        """
+        self._delete(f"/recordings/{int(recording_id)}", what="delete_recording")
+
+    def stop_bot(self, platform: str, native_id: str) -> None:
+        """Ask Vexa to take the bot out of a meeting (`DELETE /bots/{platform}/{native_id}`).
+
+        A 404 means there is no active bot for that meeting (already gone), which counts as stopped.
+        """
+        if platform not in ("google_meet", "zoom") or not re.fullmatch(r"[A-Za-z0-9-]+", native_id):
+            raise ValueError("unsupported platform or meeting code")
+        self._delete(f"/bots/{platform}/{native_id}", what="stop_bot")
+
+    def _delete(self, path: str, *, what: str) -> None:
+        try:
+            with self._client() as client:
+                response = client.delete(path)
+            if response.status_code == 404:
+                return
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise VexaError(f"{what} failed: {exc}") from exc
 
     def download_audio(self, recording_id: int, media_id: int, path: Path) -> None:
         """Stream the raw audio to `path`.
