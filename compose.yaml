@@ -14,6 +14,7 @@ services:
       POSTGRES_DB: notetaker
     volumes:
       - dbdata:/var/lib/postgresql/data
+    networks: [appdb]
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d notetaker"]
@@ -23,6 +24,7 @@ services:
 
   migrate:
     build: .
+    networks: [appdb]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
@@ -34,6 +36,7 @@ services:
     build: .
     command: ["python", "-m", "app.worker"]
     user: app
+    networks: [default, appdb]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
@@ -58,6 +61,7 @@ services:
       - --proxy-headers
       - --forwarded-allow-ips=${TRUSTED_PROXY_IPS-172.28.0.1}
     user: app
+    networks: [default, appdb]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
@@ -81,7 +85,8 @@ services:
         condition: service_completed_successfully
 
   # ---- Vexa Lite (bots). Same containers as Vexa's deploy/lite Makefile at commit 31122f9, run
-  # here instead so no port is public and no host credentials file is ever mounted. ----
+  # here instead so no port is public, no host credentials file is ever mounted, and Vexa's own
+  # database and storage get random passwords (VEXA_DB_PASSWORD, VEXA_STORAGE_SECRET in .env). ----
 
   vexa-db:
     image: postgres:17-alpine
@@ -89,11 +94,12 @@ services:
     environment:
       POSTGRES_DB: vexa
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres  # private network only, never published (as in Vexa's Makefile)
+      POSTGRES_PASSWORD: ${VEXA_DB_PASSWORD:?set VEXA_DB_PASSWORD in .env}
       TZ: UTC
       PGTZ: UTC
     volumes:
       - vexapgdata:/var/lib/postgresql/data
+    networks: [vexainternal]
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d vexa"]
@@ -108,9 +114,10 @@ services:
       - mkdir -p /srv/vexa-storage/data /srv/vexa-storage/iam && exec versitygw --port :9000 --health /health --iam-dir /srv/vexa-storage/iam --quiet posix /srv/vexa-storage/data
     environment:
       ROOT_ACCESS_KEY: vexa-access-key
-      ROOT_SECRET_KEY: vexa-secret-key
+      ROOT_SECRET_KEY: ${VEXA_STORAGE_SECRET:?set VEXA_STORAGE_SECRET in .env}
     volumes:
       - vexastorage:/srv/vexa-storage
+    networks: [vexainternal]
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/health"]
@@ -126,7 +133,8 @@ services:
       - out=$$(versitygw admin --endpoint-url http://vexa-storage:9000 create-bucket --bucket vexa --owner vexa-access-key 2>&1) || echo "$$out" | grep -q BucketAlreadyOwnedByYou || { echo "$$out"; exit 1; }
     environment:
       ADMIN_ACCESS_KEY: vexa-access-key
-      ADMIN_SECRET_KEY: vexa-secret-key
+      ADMIN_SECRET_KEY: ${VEXA_STORAGE_SECRET}
+    networks: [vexainternal]
     depends_on:
       vexa-storage:
         condition: service_healthy
@@ -141,16 +149,17 @@ services:
       DB_PORT: "5432"
       DB_NAME: vexa
       DB_USER: postgres
-      DB_PASSWORD: postgres
+      DB_PASSWORD: ${VEXA_DB_PASSWORD}
       MINIO_ENDPOINT: vexa-storage:9000
       MINIO_ACCESS_KEY: vexa-access-key
-      MINIO_SECRET_KEY: vexa-secret-key
+      MINIO_SECRET_KEY: ${VEXA_STORAGE_SECRET}
       MINIO_BUCKET: vexa
       MINIO_SECURE: "false"
       VEXA_PUBLIC_API_URL: http://localhost:18056
       TERMINAL_PUBLIC_URL: http://localhost:3001
     ports:
       - "127.0.0.1:18056:8056"  # operator checks from the server only; the app uses vexa:8056
+    networks: [default, vexainternal]
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -sf -o /dev/null http://127.0.0.1:8056/health"]
@@ -164,12 +173,19 @@ services:
       vexa-storage-init:
         condition: service_completed_successfully
 
+# Three networks, so a compromised bot (Chrome on untrusted meeting pages) cannot reach the app's
+# database: `default` carries web, worker and vexa and has internet access; `appdb` (no internet)
+# holds the app database; `vexainternal` (no internet) holds Vexa's own database and storage.
 networks:
   default:
     ipam:
       config:
         - subnet: 172.28.0.0/24
           gateway: 172.28.0.1
+  appdb:
+    internal: true
+  vexainternal:
+    internal: true
 
 volumes:
   dbdata:

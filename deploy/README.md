@@ -14,6 +14,9 @@ so nothing here takes a public port except through nginx.
   8056, 3001 and 8100 on every interface and mounts `~/.claude/.credentials.json` if it exists.
   Here Vexa's terminal and agent ports are not published at all, and no host file is mounted.
 - `vexa` is capped at 3 GB of memory, so a bot running Chrome cannot starve other apps.
+- Three networks: `default` (web, worker, vexa; has internet), `appdb` (the app database; no
+  internet) and `vexainternal` (Vexa's database and storage; no internet). A bot runs Chrome on
+  untrusted meeting pages, so the Vexa container cannot reach the app database at all.
 - nginx connects to `127.0.0.1:8020`, so the app sees nginx as the Docker bridge gateway
   `172.28.0.1` (`compose.yaml` pins that network). That is the one trusted proxy. Only processes on
   the server can reach port 8020, so nobody outside can pose as that proxy.
@@ -103,14 +106,14 @@ cp .env.example .env
   It costs about $0.36 per meeting hour.
 - The secrets are minted so Vexa never falls back to values printed in its own source.
   `ADMIN_TOKEN` is the key to Vexa's admin API; treat it like a root password.
-- Vexa's own database and storage use fixed internal passwords, as in Vexa's Makefile. They are on
-  the project's private network and publish no port.
+- Vexa's own database and storage get random passwords from `.env` (below), unlike Vexa's
+  Makefile, which uses fixed ones.
 
 Edit `.env`:
 
 | Variable | Value |
 |---|---|
-| `POSTGRES_PASSWORD` | `openssl rand -hex 24` |
+| `POSTGRES_PASSWORD`, `VEXA_DB_PASSWORD`, `VEXA_STORAGE_SECRET` | each `openssl rand -hex 24` |
 | `VEXA_API_KEY` | from step 4 |
 | `VEXA_BASE_URL` | leave; compose sets `http://vexa:8056` |
 | `OPENAI_API_KEY` | the OpenAI key |
