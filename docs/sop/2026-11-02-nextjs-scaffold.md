@@ -53,6 +53,7 @@ Server steps for Adebayo (none done by this session, which never touched the ser
 - When `GET /api/session` exists (stream B): move the landing to `/`, show "Open the app" for a logged-in owner in the public header (it always says "Sign in" now), and make `/styleguide` owner-only in production. `STYLEGUIDE_PREVIEW=1` shows it in a local production build.
 - `Host` reaches FastAPI as `web:8000`; use `X-Forwarded-Host` (or a configured base URL) for anything that builds absolute URLs, such as the Google OAuth redirect.
 - A trailing slash is dropped by Next before proxying (`/login/` serves the login page; FastAPI alone answers 307 to `/login`).
+- Stream B's `/api/*` (merged to `main` while this PR was open) goes through the same fallback and was not exercised through Next here: custom request headers such as `X-CSRF-Token` were seen passing in the echo capture, but run `scripts/proxy-check.mjs`-style checks against `/api/session` once both are deployed. A long `/api/meetings/<id>/regenerate` is covered by `proxyTimeout`; nginx's matching 300 s location for `/api/` is the lead's.
 - Service worker and offline shell; PNG Open Graph image (`og:image`) and per-page images; Search Console submission of the sitemap.
 - Re-measure memory on the server; revisit `mem_limit` when owner screens land (stream C).
 - Tokens and fonts exist twice (`app/static`, `web/styles`) until the Jinja pages are retired.

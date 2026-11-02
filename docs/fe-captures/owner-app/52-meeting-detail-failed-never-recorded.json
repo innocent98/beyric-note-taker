@@ -1,0 +1,44 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/12",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 12,
+      "title": "Google Meet abc-defg-hij",
+      "platform": "google_meet",
+      "native_id": "abc-defg-hij",
+      "status": "failed",
+      "step": "waiting",
+      "status_text": "Failed",
+      "status_tone": "danger",
+      "template_id": 1,
+      "created_at": "2026-11-02T21:16:52.726490Z",
+      "failure_reason": "The bot could not record this meeting. It may not have been admitted.",
+      "retry_block": "no_audio",
+      "retry_block_message": "This meeting can't be retried: nothing was captured. Send the bot again with a new link.",
+      "can_cancel": false,
+      "can_retry": false,
+      "can_regenerate": false,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "notes": null,
+      "notes_html": null,
+      "transcript": null
+    }
+  }
+}

@@ -99,7 +99,15 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] CI: `web` job with path filters (docs-only skips both, Python-only skips Node, web-only skips Python), always-reporting `ci` job
   - [ ] Adebayo's server steps (SOP "Operate"): subnet and memory check, deploy outside meetings, post-deploy checks, send back `docker stats` for `next`
   - [ ] Decide X-Forwarded-For trust (`docs/spike/nextjs-scaffold/forwarded-for-trust.md`) before open sign-up
-- [ ] Stream B, JSON API (`feature/json-api`): `/api/` for session, meetings, templates, vocabulary with a CSRF header; tests; captured responses; `docs/fe-integration-guide-*.md`
+- [x] Stream B, JSON API (`feature/json-api`, 2026-11-02, PR open, not merged): `/api/` for session, meetings, templates, vocabulary with a CSRF header; tests; captured responses; `docs/fe-integration-guide-*.md`
+  - [x] Shared rules extracted to `app/services.py`; Jinja routes and all 338 earlier tests unchanged
+  - [x] `/api/session` (get, login, logout), meetings (list, detail, create, cancel, retry, regenerate), templates (list, create, update), vocabulary (list, create, delete)
+  - [x] 401 JSON never a redirect, `X-CSRF-Token` on every write (403 JSON), one error shape, strict bodies, `notes` plus `notes_html`
+  - [x] Test that enumerates every `/api` route and fails if one is public by accident (`tests/test_api.py`, 106 tests)
+  - [x] `docs/openapi.json` plus `scripts/export_openapi.py`; docs and `/openapi.json` stay off in the app
+  - [x] Live captures (`scripts/capture_owner_api.py`, 81 files) and `docs/fe-integration-guide-owner-app.md`; SOP `docs/sop/2026-11-02-json-api.md`
+  - [ ] Opus review of the auth path before merge (lead)
+  - [ ] Follow-ups for stream A and the lead: nginx `/api/` locations (regenerate 300 s timeout, login limit zone), real visitor address through the Next proxy, TypeScript type generation
 - [ ] Stream C, owner app screens to designer parity: login, meetings list and detail, templates, vocabulary
 - [ ] Stream D, new designed screens: accounts and pilot, calendar and auto-join, team, tasks, sprints, share and download, translation
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated

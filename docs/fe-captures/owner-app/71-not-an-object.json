@@ -1,0 +1,33 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/vocabulary",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": [
+      "Beyric"
+    ]
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "body",
+            "message": "Input should be a valid dictionary or object to extract fields from"
+          }
+        ]
+      }
+    }
+  }
+}

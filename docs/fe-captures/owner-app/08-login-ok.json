@@ -1,0 +1,26 @@
+{
+  "note": "The csrf_token here replaces the one from before login.",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "password": "capture-password-placeholder"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-C>"
+    }
+  }
+}

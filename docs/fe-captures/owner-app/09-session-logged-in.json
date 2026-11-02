@@ -1,0 +1,22 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-C>"
+    }
+  }
+}

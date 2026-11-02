@@ -1,0 +1,49 @@
+{
+  "note": "The Zoom link (it carries a password) is not in the response.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "url": "https://us02web.zoom.us/j/12345678901?pwd=PLACEHOLDERPWD",
+      "template_id": 1
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "location": "/api/meetings/2"
+    },
+    "body": {
+      "id": 2,
+      "title": "Zoom 12345678901",
+      "platform": "zoom",
+      "native_id": "12345678901",
+      "status": "bot_sent",
+      "step": "waiting",
+      "status_text": "Bot sent",
+      "status_tone": "warning",
+      "template_id": 1,
+      "created_at": "2026-11-02T21:16:52.689832Z",
+      "failure_reason": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": true,
+      "can_retry": false,
+      "can_regenerate": false,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": 30,
+      "notes": null,
+      "notes_html": null,
+      "transcript": null
+    }
+  }
+}

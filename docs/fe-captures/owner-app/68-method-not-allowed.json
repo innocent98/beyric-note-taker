@@ -1,0 +1,26 @@
+{
+  "note": "",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/templates",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 405,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "allow": "GET"
+    },
+    "body": {
+      "error": {
+        "code": "method_not_allowed",
+        "message": "Method Not Allowed"
+      }
+    }
+  }
+}

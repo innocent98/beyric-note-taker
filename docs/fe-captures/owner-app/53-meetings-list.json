@@ -1,0 +1,169 @@
+{
+  "note": "A heartbeat now exists, so worker_stale is false.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "meetings": [
+        {
+          "id": 12,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "failed",
+          "step": "waiting",
+          "status_text": "Failed",
+          "status_tone": "danger",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.726490Z"
+        },
+        {
+          "id": 11,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "failed",
+          "step": "transcribing",
+          "status_text": "Failed",
+          "status_tone": "danger",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.726490Z"
+        },
+        {
+          "id": 10,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "failed",
+          "step": "transcribing",
+          "status_text": "Failed",
+          "status_tone": "danger",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.726490Z"
+        },
+        {
+          "id": 9,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "failed",
+          "step": "audio",
+          "status_text": "Failed",
+          "status_tone": "danger",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.726490Z"
+        },
+        {
+          "id": 8,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "ready",
+          "step": "done",
+          "status_text": "Ready",
+          "status_tone": "success",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.726490Z"
+        },
+        {
+          "id": 7,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "ready",
+          "step": "done",
+          "status_text": "Ready",
+          "status_tone": "success",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.726490Z"
+        },
+        {
+          "id": 6,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "processing",
+          "step": "notes",
+          "status_text": "Writing the notes",
+          "status_tone": "info",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.726490Z"
+        },
+        {
+          "id": 5,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "processing",
+          "step": "speakers",
+          "status_text": "Working out who said what",
+          "status_tone": "info",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.726490Z"
+        },
+        {
+          "id": 4,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "processing",
+          "step": "transcribing",
+          "status_text": "Writing the transcript",
+          "status_tone": "info",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.726490Z"
+        },
+        {
+          "id": 3,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "processing",
+          "step": "audio",
+          "status_text": "Downloading the audio",
+          "status_tone": "info",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.726490Z"
+        },
+        {
+          "id": 2,
+          "title": "Zoom 12345678901",
+          "platform": "zoom",
+          "native_id": "12345678901",
+          "status": "bot_sent",
+          "step": "waiting",
+          "status_text": "Bot sent",
+          "status_tone": "warning",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.689832Z"
+        },
+        {
+          "id": 1,
+          "title": "Google Meet abc-defg-hij",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "failed",
+          "step": "waiting",
+          "status_text": "Failed",
+          "status_tone": "danger",
+          "template_id": 1,
+          "created_at": "2026-11-02T21:16:52.638257Z"
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null,
+      "worker_stale": false
+    }
+  }
+}
