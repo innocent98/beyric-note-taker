@@ -7,9 +7,10 @@
 | Thing | State |
 |---|---|
 | Live app | https://notes.beyrictech.com, owner login only (password in `~/beyric-notes-owner-password.txt` on Adebayo's Mac) |
-| `main` / server | `552f620` (PRs #1–#8 merged and deployed, `/health` 200, migration `0005`). Server `haven-respite`, app at `/opt/beyric-note-taker` (memory `beyric-note-taker-server`) |
-| Open PRs | **#9** `docs/ui-legal-pages`: designer's privacy and terms designs, company renamed to Beyrichq LTD (docs only). **#10** `feature/public-pages`: public landing, `/privacy`, `/terms` (code; 327 tests pass locally; not yet viewed in a browser). **This handoff** on `docs/handoff-2`. All need Adebayo's "merge #N" |
-| **In flight** | **Meeting 5** (Google Meet, Task 8 "call with speech") was still `bot_sent` at 15:50 UTC, started 15:20. **First job: follow it to `ready` or `failed`** (section 6.1) |
+| `main` / server | `fbd1d94` (PRs #1–#9 and #11 merged and deployed, `/health` 200, migration `0005`). Server `haven-respite`, app at `/opt/beyric-note-taker` (memory `beyric-note-taker-server`) |
+| Open PRs | **#10** `feature/public-pages`: public landing, `/privacy`, `/terms` (code; 327 tests pass locally; not yet viewed in a browser). **This handoff update** on `docs/handoff-3`. Both need Adebayo's "merge #N". No meeting is active, so #10 is safe to deploy |
+| Meeting 5 | **Done:** Google Meet, 15:20 to 16:16 UTC (about 56 min), `ready` at 16:22:50 (transcribing 4 min, speakers 2 min, notes 30 s). 4 named speakers; all six note sections; useful "Please check" items. Reviewed by the second lead; Adebayo: "it went well". Gap: one person appears as both "Godstime America" and "America Godstime" |
+| Updated UI (uncommitted) | The designer's latest `docs/ui` adds a **team and tasks** layer (6.4). It sits **uncommitted in the main checkout**, because it embeds real names and content from meeting 5. Adebayo must choose: commit as is (private repo) or ask the designer for placeholder data |
 | Live server change not in git | Vexa DB `transcriptions.language` widened from `varchar(10)` to `varchar(32)` at about 15:36 UTC with Adebayo's OK. See `docs/sop/2026-11-02-vexa-language-column.md` (in PR #10). It must be made permanent (6.2) |
 | Novex side | `innocent98/Novex-News#10` still open (Adebayo to merge) |
 
@@ -56,7 +57,7 @@ The first lead's decisions still stand: models, Vexa in our compose, three netwo
 
 ## 6. Incoming work, in order
 
-1. **Follow meeting 5 to the end.** Check `select id,status,step,failure_reason from meetings where id=5` (db: `docker compose exec -T db psql -U postgres -d notetaker ... </dev/null`). When it's `ready`, check: speaker names in `speaker_transcript` (Vexa has 2 speakers), notes quality, duration, and Vexa memory (`docker stats`; it was 1.7/3 GB during the call). Report each step to Adebayo. Tick "Meet call with speech" only if it's ready with sensible speakers.
+1. ~~Follow meeting 5 to the end.~~ Done (see section 1). Remaining: merge speaker name variants (name order swapped). Original note: Check `select id,status,step,failure_reason from meetings where id=5` (db: `docker compose exec -T db psql -U postgres -d notetaker ... </dev/null`). When it's `ready`, check: speaker names in `speaker_transcript` (Vexa has 2 speakers), notes quality, duration, and Vexa memory (`docker stats`; it was 1.7/3 GB during the call). Report each step to Adebayo. Tick "Meet call with speech" only if it's ready with sensible speakers.
 2. **Make the Vexa column fix permanent:** an idempotent `alter table transcriptions alter column language type varchar(32)` after `vexa` is up, in `deploy/deploy.sh` or a one-shot compose service; add it to the Vexa upgrade routine; open an upstream issue. Small PR, with an SOP update.
 3. **Check PR #10 in a browser** (the run skill or a local uvicorn; both light and dark), then wait for Adebayo's merge and verify `/`, `/privacy`, `/terms` live while logged out.
 4. **Finish the auto-join design (superpowers:brainstorming), then write it.** Already agreed: everything in section 2. Still to ask, one at a time:
@@ -71,7 +72,16 @@ The first lead's decisions still stand: models, Vexa in our compose, three netwo
    - **Unknown:** whether that works for personal @gmail.com accounts. Plan a throwaway spike as step one of the build.
 
    Then write `docs/superpowers/specs/2026-11-0X-pilot-accounts-calendar-design.md`, run the builder check (subagent), get Adebayo's approval, then superpowers:writing-plans. Build order: accounts → Google Calendar auto-join → instant-Meet auto-join → several bots at once → submit verification with a demo video.
-5. Later backlog (checklist): email notes and sharing, Teams links, languages and translation, Zoom RTMS, `gpt-4o-mini-transcribe` for live hints.
+5. **The updated UI's new features** (not in any design doc yet; scope them with Adebayo before building; they come after accounts):
+   - **Team:** an admin invites teammates.
+   - **Tasks from action items:** each action item becomes a task for the teammate named as its owner, matched by name; items with no match wait under "Needs owner"; optional email to assignees.
+   - **Sprints:** sprint length options; "In current sprint" or "In backlog".
+   - **A decisions log** across meetings, newest first.
+   - **Agenda:** "Add to next agenda" and "Finished since last meeting".
+   - **Sync** to Jira, Linear, Asana or Taiga.
+   - **Languages** (French, Spanish and others).
+   - `Beyric Note Taker v1.dc.html` is the previous version, kept by the designer.
+6. Later backlog (checklist): email notes and sharing, Teams links, languages and translation, Zoom RTMS, `gpt-4o-mini-transcribe` for live hints.
 
 ## 7. How we work here
 
