@@ -24,7 +24,11 @@ for (const scheme of ["light", "dark"]) {
       if (m.type() === "error" || m.type() === "warning") problems.push(`console.${m.type()}: ${m.text()}`);
     });
     page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
-    page.on("requestfailed", (r) => problems.push(`request failed: ${r.url()} ${r.failure()?.errorText}`));
+    page.on("requestfailed", (r) => {
+      // Next cancels a link prefetch when the visitor has already moved on; that is not an error.
+      if (r.url().includes("_rsc=") && r.failure()?.errorText === "net::ERR_ABORTED") return;
+      problems.push(`request failed: ${r.url()} ${r.failure()?.errorText}`);
+    });
     await page.addInitScript(() => {
       window.__csp = [];
       document.addEventListener("securitypolicyviolation", (e) =>
@@ -36,7 +40,8 @@ for (const scheme of ["light", "dark"]) {
       violations: window.__csp,
       hydrated: typeof window.next === "object" || Array.isArray(window.__next_f),
       nonceScripts: [...document.scripts].filter((s) => s.nonce).length,
-      inlineStyleAttrs: document.querySelectorAll("[style]").length,
+      // <next-route-announcer> gets its style from script (CSSOM), which CSP allows; it is not markup.
+      inlineStyleAttrs: document.querySelectorAll("[style]:not(next-route-announcer)").length,
       inlineStyleTags: document.querySelectorAll("style").length,
       font: document.fonts.check('16px "Geist"'),
       title: document.title,

@@ -1,0 +1,28 @@
+Captured 2026-11-02 against a production build of web/ (node .next/standalone/server.js, port 3000)
+with FASTAPI_INTERNAL_URL=http://127.0.0.1:8000 pointing at a stub server that echoes request headers
+(and sleeps 35 s on /slow). The request below stands in for what nginx sends.
+
+$ curl -i "http://127.0.0.1:3000/echo?x=1" -H 'Host: notes.beyrictech.com' -H 'X-Forwarded-For: 203.0.113.9' \
+    -H 'X-Forwarded-Proto: https' -H 'Cookie: session=abc'
+
+HTTP/1.1 200 OK
+set-cookie: a=1; Path=/; HttpOnly
+set-cookie: b=2; Path=/; Secure
+content-type: application/json
+Vary: Accept-Encoding
+
+{
+ "path": "/echo?x=1",                       <- query string kept
+ "headers": {
+  "host": "127.0.0.1:8000",                 <- Host is REWRITTEN to the upstream's
+  "x-forwarded-for": "203.0.113.9",         <- not appended to, not replaced
+  "x-forwarded-proto": "https",
+  "cookie": "session=abc",
+  "x-forwarded-host": "notes.beyrictech.com"   <- the original Host is kept here
+ }
+}
+
+Two Set-Cookie headers come back as two headers.
+
+$ time curl -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/slow     (upstream sleeps 35 s)
+200   35.0 s total      <- proxyTimeout 310000 in next.config.ts; the request is not cut off

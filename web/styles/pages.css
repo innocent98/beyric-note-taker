@@ -29,7 +29,7 @@
 .land-notes-grid p { margin: 0; color: var(--text-2); font-size: var(--text-base); line-height: 1.65; }
 .land-list { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; list-style: none; color: var(--text-2); font-size: var(--text-base); }
 .land-list li { display: flex; justify-content: space-between; gap: var(--space-2); }
-.land-check { display: flex; justify-content: flex-start; gap: var(--space-2); }
+.land-list .land-check { justify-content: flex-start; }
 .land-check svg { flex: none; margin-top: 3px; color: var(--primary); }
 
 .land-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 40px; padding: 72px 0 var(--space-12); }

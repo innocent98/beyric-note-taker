@@ -1,0 +1,9 @@
+PASS  light /welcome  status 200  title "Beyric Note Taker - clear notes from every meeting"  nonce scripts 11  Geist loaded true
+PASS  light /privacy  status 200  title "Privacy Policy - Beyric Note Taker"  nonce scripts 11  Geist loaded true
+PASS  light /terms  status 200  title "Terms of Service - Beyric Note Taker"  nonce scripts 11  Geist loaded true
+PASS  light /styleguide  status 200  title "Style guide - Beyric Note Taker"  nonce scripts 11  Geist loaded true
+PASS  dark  /welcome  status 200  title "Beyric Note Taker - clear notes from every meeting"  nonce scripts 11  Geist loaded true
+PASS  dark  /privacy  status 200  title "Privacy Policy - Beyric Note Taker"  nonce scripts 11  Geist loaded true
+PASS  dark  /terms  status 200  title "Terms of Service - Beyric Note Taker"  nonce scripts 11  Geist loaded true
+PASS  dark  /styleguide  status 200  title "Style guide - Beyric Note Taker"  nonce scripts 11  Geist loaded true
+PASS  client-side navigation keeps the document (http://127.0.0.1:3000/privacy)

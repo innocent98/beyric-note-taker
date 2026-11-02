@@ -1,0 +1,17 @@
+{
+ "eval": "ran",
+ "inlineStyleAttribute": "blocked",
+ "inlineStyleTag": "blocked",
+ "parserInsertedInlineScript": "blocked"
+}
+violation events: []
+
+Negative controls run in Chromium (Playwright) on http://127.0.0.1:3000/privacy, production build.
+- inline style attribute, inline <style> tag, and a parser-inserted inline <script> (document.write)
+  without the nonce: all blocked by the CSP.
+- "eval": ran. NOT a valid control: Playwright's page.evaluate runs through the DevTools protocol,
+  which is exempt from the eval check. unsafe-eval is simply absent from the policy header
+  (tests/csp.test.ts and browser-check.mjs assert that).
+- 'strict-dynamic' by design lets a script that already carries the nonce create further scripts
+  (that is how Next loads its chunks), so a script injected by trusted code is not a CSP violation.
+  Parser-inserted inline scripts, which is what an HTML injection produces, are blocked.
