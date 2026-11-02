@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status:** Spike finished with a go decision. Module 1 is planned and awaiting approval.
+**Status:** Spike finished with a go decision. Module 1 (MVP): Tasks 0 to 6 are built and tested, and the final fix wave (2026-11-02) is applied. Task 7 (deploy) has files ready but no server run yet; Task 8 (real-world acceptance) is not started.
 
 Legend: `[x]` done and verified, `[ ]` not done.
 
@@ -23,9 +23,9 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 ## Module 1: MVP (planned, see `docs/superpowers/plans/2026-11-02-beyric-note-taker-mvp.md`)
 
 - [x] Task 0: Vexa check and project setup (2026-11-02: settings, models, first migration with seeded templates, CI)
-- [ ] Task 1: Vexa client
+- [x] Task 1: Vexa client (2026-11-02: send bot, poll by id, download audio, delete recording, stop bot; malformed fields rejected)
 - [x] Task 2: Audio preparation (2026-11-02: mono 32 kbps Opus chunks up to 15 min, silence-aware cuts, ffmpeg in Docker and CI)
-- [ ] Task 3: Transcription with custom vocabulary
+- [x] Task 3: Transcription with custom vocabulary (2026-11-02: terms sent as a capped `keywords` list; live-checked with two terms)
 - [x] Task 4: Speakers and notes (2026-11-02: label_speakers, generate_notes, shared retry; live-evaluated)
 - [x] Task 5: Worker pipeline (2026-11-02)
 - [x] Task 6: Web pages (2026-11-02: login, meetings, retry/regenerate, templates, vocabulary, `web` service; checked at 375 px)
