@@ -32,10 +32,13 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [ ] Task 7: Deploy (server: Contabo `haven-respite`, shared with Haven and Novex; domain `notes.beyrictech.com`)
   - [x] Deploy files for a shared server: Vexa inside compose on localhost, app on `127.0.0.1:8020`, prefixed nginx zones (2026-11-02, validated locally)
   - [x] CD: `deploy.yml` after `ci` on `main`, forced-command SSH key, `deploy/deploy.sh` with rollback (2026-11-02, not yet run)
-  - [ ] Server: repo, `.env` and `.env.vexa`, Vexa up, key minted, app up
+  - [x] Server: repo (read-only deploy key), `.env` and `.env.vexa`, Vexa up, key minted, app up on `127.0.0.1:8020` (2026-11-02; only 22/80/443 open from outside; Haven and Novex still healthy)
+  - [ ] Cloudflare record switched to DNS only (it was proxied on 2026-11-02)
   - [ ] HTTPS: nginx site and certificate (needs Adebayo's sudo)
-  - [ ] Backups scheduled and one restore practised
-  - [ ] CD secrets set and one deploy through CD
+  - [x] One backup and a scratch restore on the server (2026-11-02: 4 templates restored)
+  - [ ] Nightly backup cron (Adebayo)
+  - [ ] CD key and GitHub secrets (Adebayo; the commands are in `deploy/README.md` step 8)
+  - [ ] One deploy through CD after PR #1 merges
   - [ ] Step 9 verification, including Haven and Novex still healthy
 - [ ] Task 8: Real-world acceptance
 
