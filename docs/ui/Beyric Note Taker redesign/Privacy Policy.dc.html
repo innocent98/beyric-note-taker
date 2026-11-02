@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#FFFFFF;font-family:'Geist',system-ui,sans-serif;color:#141917;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#0E6B5E;text-decoration:none}a:hover{color:#0A5248;text-decoration:underline}html{scroll-behavior:smooth}</style>
+</helmet>
+<div style="font-size:15px;line-height:1.65" data-screen-label="Legal">
+  <header style="border-bottom:1px solid #EDF0EE;position:sticky;top:0;background:#FFFFFF;z-index:5">
+    <div style="max-width:1120px;margin:0 auto;padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <a href="Landing.dc.html" style="display:flex;align-items:center;gap:10px;color:#141917;text-decoration:none">
+        <svg width="28" height="28" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0E6B5E"></rect><path d="M9 8H23a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H15L10.5 24.5V21H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" fill="#FFFFFF"></path><rect x="10.5" y="11.6" width="11" height="1.9" rx=".95" fill="#0E6B5E"></rect><rect x="10.5" y="15.4" width="7" height="1.9" rx=".95" fill="#0E6B5E"></rect></svg>
+        <div style="display:flex;align-items:baseline;gap:5px;font-size:15px;letter-spacing:-0.01em"><span style="font-weight:650">Beyric</span><span style="font-weight:450;color:#5B6460">Note Taker</span></div>
+      </a>
+      <nav style="display:flex;gap:4px">
+        <a href="Privacy Policy.dc.html" style="padding:7px 12px;border-radius:7px;font-size:14px;font-weight:500;background:{{ privBg }};color:#141917;text-decoration:none">Privacy</a>
+        <a href="Terms of Service.dc.html" style="padding:7px 12px;border-radius:7px;font-size:14px;font-weight:500;background:{{ termsBg }};color:#141917;text-decoration:none">Terms</a>
+      </nav>
+    </div>
+  </header>
+  <div style="max-width:1120px;margin:0 auto;padding:56px 24px 96px;display:flex;gap:56px;align-items:flex-start;flex-wrap:wrap">
+    <aside style="flex:0 1 240px;position:sticky;top:96px;display:flex;flex-direction:column;gap:2px">
+      <div style="font-size:12px;font-weight:600;color:#6E7772;margin-bottom:8px;letter-spacing:0.02em">ON THIS PAGE</div>
+      <sc-for list="{{ sections }}" as="s" hint-placeholder-count="10">
+        <a href="#{{ s.id }}" style="font-size:13px;color:#4A524E;padding:5px 0;line-height:1.4;text-decoration:none" style-hover="color:#0E6B5E">{{ s.title }}</a>
+      </sc-for>
+    </aside>
+    <article style="flex:1 1 560px;min-width:0;max-width:720px">
+      <h1 style="margin:0;font-size:clamp(30px,4vw,40px);font-weight:650;letter-spacing:-0.03em;line-height:1.1">{{ title }}</h1>
+      <div style="margin-top:10px;font-size:13px;color:#6E7772">{{ dateLine }}</div>
+      <p style="margin:24px 0 0;font-size:17px;color:#2E3532;text-wrap:pretty">{{ intro }}</p>
+      <sc-for list="{{ sections }}" as="s" hint-placeholder-count="6">
+        <section id="{{ s.id }}" style="padding-top:40px;scroll-margin-top:72px">
+          <h2 style="margin:0 0 12px;font-size:20px;font-weight:600;letter-spacing:-0.015em">{{ s.title }}</h2>
+          <sc-for list="{{ s.blocks }}" as="b">
+            <sc-if value="{{ b.isH }}"><h3 style="margin:20px 0 6px;font-size:15px;font-weight:600">{{ b.text }}</h3></sc-if>
+            <sc-if value="{{ b.isP }}"><p style="margin:0 0 12px;color:#2E3532;text-wrap:pretty">{{ b.text }}</p></sc-if>
+            <sc-if value="{{ b.isL }}">
+              <ul style="margin:0 0 14px;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ b.items }}" as="i"><li style="display:flex;gap:12px;color:#2E3532"><span style="flex:none;width:5px;height:5px;border-radius:50%;background:#0E6B5E;margin-top:10px"></span><span>{{ i }}</span></li></sc-for>
+              </ul>
+            </sc-if>
+          </sc-for>
+        </section>
+      </sc-for>
+      <div style="margin-top:48px;padding:18px 20px;background:#F6F7F6;border-radius:12px;font-size:14px;color:#2E3532">Questions about this page? Email <a href="mailto:{{ email }}">{{ email }}</a>.</div>
+    </article>
+  </div>
+  <footer style="border-top:1px solid #EDF0EE">
+    <div style="max-width:1120px;margin:0 auto;padding:28px 24px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:13px;color:#6E7772">
+      <span>© 2026 Beyrichq LTD</span>
+      <div style="display:flex;gap:20px"><a href="Privacy Policy.dc.html" style="color:#6E7772">Privacy</a><a href="Terms of Service.dc.html" style="color:#6E7772">Terms</a><a href="mailto:hello@beyrictech.com" style="color:#6E7772">Contact</a></div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const p = (text) => ({ isP: true, text });
+const h = (text) => ({ isH: true, text });
+const ul = (items) => ({ isL: true, items });
+const SECTIONS = [
+  ['who', 'Who we are', [
+    p('Beyric Note Taker is operated by Beyrichq LTD ("Beyric", "we", "us"), Lagos, Nigeria. We are the data controller for account and usage information. For meeting content that our customers record, we act as a data processor on behalf of the customer who sent the note taker, and that customer is the controller.'),
+    p('If you have a question about this policy or how we handle your information, contact our privacy team at privacy@beyrictech.com.'),
+  ]],
+  ['collect', 'Information we collect', [
+    h('Information you give us'),
+    ul([
+      'Account details: your name, email address, password (stored in hashed form) and organisation name.',
+      'Settings and content you create: templates, vocabulary terms, language preferences and messages you add when sharing notes.',
+      'Support requests and any other communication you send us.',
+    ]),
+    h('Meeting content'),
+    p('When you send the note taker to a meeting, either manually or through your connected calendar, we collect:'),
+    ul([
+      'Audio from the meeting and, where the platform provides it, the display names of participants and who was speaking.',
+      'The transcript produced from that audio.',
+      'Notes, summaries, decisions, action items and translations produced from the transcript.',
+      'Meeting details such as the platform, meeting link or ID, title, date, time and duration.',
+    ]),
+    p('We do not record video or screen sharing.'),
+    h('Calendar information'),
+    p('If you connect Google Calendar or Microsoft Outlook, we read event titles, times, attendee names and email addresses, organiser, and meeting links for upcoming events. We use this only to decide which meetings to join and to show your upcoming meetings in the app. We do not create, edit or delete calendar events.'),
+    h('Information collected automatically'),
+    ul([
+      'Usage data such as pages viewed, features used and the time and date of activity.',
+      'Device and connection data such as IP address, browser type, operating system and approximate location derived from IP address.',
+      'Cookies and similar technologies, described in the Cookies section below.',
+    ]),
+  ]],
+  ['use', 'How we use your information', [
+    ul([
+      'To provide the service: joining meetings, recording audio, producing transcripts, notes and translations, and delivering them to you.',
+      'To send notes and transcripts to the people you choose when you use the share feature.',
+      'To apply your templates and vocabulary so notes follow your format and spell names correctly.',
+      'To send service emails, such as account verification, password resets, notes ready and failed join notices.',
+      'To keep the service secure, prevent fraud and abuse, and fix problems.',
+      'To understand how the product is used in aggregate so we can improve it.',
+      'To meet legal obligations and enforce our Terms of Service.',
+    ]),
+    p('We do not sell your personal information, and we do not use your meeting content for advertising.'),
+    p('We do not use your meeting audio, transcripts or notes to train or improve our own or third-party processing services. Our service providers are contractually prohibited from doing so.'),
+  ]],
+  ['legal', 'Legal bases for processing', [
+    p('Where data protection laws such as the GDPR, UK GDPR or the Nigeria Data Protection Act 2023 apply, we rely on the following legal bases:'),
+    ul([
+      'Performance of a contract, to provide the service you signed up for.',
+      'Legitimate interests, to secure, maintain and improve the service, where those interests are not overridden by your rights.',
+      'Consent, where we ask for it, for example when you connect a calendar. You can withdraw consent at any time.',
+      'Legal obligation, where we must keep or disclose information by law.',
+    ]),
+    p('For meeting content, the customer who sends the note taker is responsible for having a valid legal basis to record the meeting and for informing participants.'),
+  ]],
+  ['recording', 'Recording and participant notice', [
+    p('The note taker appears in the meeting participant list under a clearly identifiable name while it records. Recording laws differ by country and state, and some require the consent of everyone in the conversation.'),
+    p('If you use Beyric Note Taker, you are responsible for telling participants that the meeting is being recorded and for obtaining any consent the law requires. Any participant can ask the host to remove the note taker, and the recording stops when it leaves.'),
+    p('If you took part in a meeting recorded by a Beyric customer and want a copy of, or changes to, information about you, contact that customer first. We will help them respond and will forward requests we receive directly.'),
+  ]],
+  ['share', 'How we share information', [
+    p('We share information only in the following situations:'),
+    ul([
+      'With people you choose: when you share notes, we email them to the recipients you select.',
+      'With service providers who process data on our behalf under written contracts, including cloud hosting, speech recognition and language processing, translation, email delivery, payment processing, error monitoring and customer support tools. A current list of sub-processors is available on request.',
+      'With meeting and calendar platforms (Google, Microsoft, Zoom) as needed to join meetings and read calendar events you have authorised.',
+      'With authorities when required by law, court order or to protect the rights, safety or property of Beyric, our users or others.',
+      'With a buyer or successor if Beyric is involved in a merger, acquisition or sale of assets, subject to this policy.',
+    ]),
+  ]],
+  ['google', 'Google user data', [
+    p("Beyric Note Taker's use and transfer of information received from Google APIs follows the Google API Services User Data Policy, including the Limited Use requirements."),
+    ul([
+      'We use Google Calendar data only to show your upcoming meetings and to join meetings on your behalf.',
+      'We do not transfer this data to others except as needed to provide the service, for security, or to comply with law.',
+      'We do not use this data for advertising, and people at Beyric do not read it unless you ask us to for support, it is needed for security, or the law requires it.',
+    ]),
+  ]],
+  ['retention', 'How long we keep information', [
+    ul([
+      'Meeting audio: deleted automatically [30] days after the meeting, unless you delete it sooner.',
+      'Transcripts, notes and translations: kept until you delete them or close your account.',
+      'Calendar data: we keep only what is needed for upcoming meetings and remove it when you disconnect your calendar.',
+      'Account information: kept while your account is active and deleted within 30 days of account closure, except where we must keep records by law.',
+      'Backups: removed from backups within 90 days of deletion.',
+    ]),
+  ]],
+  ['security', 'Security', [
+    p('We protect your information with encryption in transit (TLS 1.2 or higher) and at rest (AES-256), access controls based on least privilege, logging of administrative access, and regular security reviews. No system is completely secure, and we will notify you and the relevant authorities of a personal data breach as required by law.'),
+  ]],
+  ['transfers', 'International transfers', [
+    p('Your information may be stored and processed in countries other than your own, including [primary hosting region]. When we transfer personal data out of the UK, the European Economic Area or Nigeria, we use safeguards recognised by the relevant authority, such as Standard Contractual Clauses.'),
+  ]],
+  ['rights', 'Your rights and choices', [
+    p('Depending on where you live, you may have the right to:'),
+    ul([
+      'Access the personal information we hold about you and receive a copy.',
+      'Correct information that is inaccurate or incomplete.',
+      'Delete your information.',
+      'Restrict or object to certain processing.',
+      'Receive your information in a portable format.',
+      'Withdraw consent at any time, without affecting earlier processing.',
+      'Complain to your local data protection authority, such as the Nigeria Data Protection Commission, the UK Information Commissioner or an EU supervisory authority.',
+    ]),
+    p('You can delete individual meetings, export your notes and close your account from within the app. For other requests, email privacy@beyrictech.com. We will respond within 30 days and may need to verify your identity first.'),
+    h('California residents'),
+    p('California residents have the right to know, delete and correct personal information, and to opt out of its sale or sharing. We do not sell or share personal information for cross-context behavioural advertising. We will not discriminate against you for exercising these rights.'),
+  ]],
+  ['children', 'Children', [
+    p('Beyric Note Taker is not intended for children under 16, and we do not knowingly collect their personal information. If you believe a child has given us personal information, contact us and we will delete it.'),
+  ]],
+  ['cookies', 'Cookies', [
+    p('We use strictly necessary cookies to keep you signed in and to secure the service. With your permission, we also use analytics cookies to understand how the product is used. We do not use advertising cookies. You can control cookies through your browser settings, but blocking necessary cookies will stop the app from working.'),
+  ]],
+  ['changes', 'Changes to this policy', [
+    p('We may update this policy from time to time. If we make material changes, we will notify you by email or in the app before they take effect. The date at the top of this page shows when it was last updated.'),
+  ]],
+  ['contact', 'Contact us', [
+    p('Beyrichq LTD, Lagos, Nigeria. Email: privacy@beyrictech.com. Data protection officer: [name], dpo@beyrictech.com.'),
+  ]],
+];
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      title: 'Privacy Policy',
+      dateLine: 'Effective 2 November 2026 · Last updated 2 November 2026',
+      intro: 'This policy explains what information Beyric Note Taker collects, how we use it, who we share it with, and the choices you have. It applies to our website, web app and emails.',
+      email: 'privacy@beyrictech.com',
+      privBg: '#EEF1F0', termsBg: 'transparent',
+      sections: SECTIONS.map(([id, title, blocks]) => ({ id, title, blocks })),
+    };
+  }
+}
+</script>
+</body>
+</html>

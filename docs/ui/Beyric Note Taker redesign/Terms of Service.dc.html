@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#FFFFFF;font-family:'Geist',system-ui,sans-serif;color:#141917;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#0E6B5E;text-decoration:none}a:hover{color:#0A5248;text-decoration:underline}html{scroll-behavior:smooth}</style>
+</helmet>
+<div style="font-size:15px;line-height:1.65" data-screen-label="Legal">
+  <header style="border-bottom:1px solid #EDF0EE;position:sticky;top:0;background:#FFFFFF;z-index:5">
+    <div style="max-width:1120px;margin:0 auto;padding:0 24px;height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <a href="Landing.dc.html" style="display:flex;align-items:center;gap:10px;color:#141917;text-decoration:none">
+        <svg width="28" height="28" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0E6B5E"></rect><path d="M9 8H23a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H15L10.5 24.5V21H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" fill="#FFFFFF"></path><rect x="10.5" y="11.6" width="11" height="1.9" rx=".95" fill="#0E6B5E"></rect><rect x="10.5" y="15.4" width="7" height="1.9" rx=".95" fill="#0E6B5E"></rect></svg>
+        <div style="display:flex;align-items:baseline;gap:5px;font-size:15px;letter-spacing:-0.01em"><span style="font-weight:650">Beyric</span><span style="font-weight:450;color:#5B6460">Note Taker</span></div>
+      </a>
+      <nav style="display:flex;gap:4px">
+        <a href="Privacy Policy.dc.html" style="padding:7px 12px;border-radius:7px;font-size:14px;font-weight:500;background:{{ privBg }};color:#141917;text-decoration:none">Privacy</a>
+        <a href="Terms of Service.dc.html" style="padding:7px 12px;border-radius:7px;font-size:14px;font-weight:500;background:{{ termsBg }};color:#141917;text-decoration:none">Terms</a>
+      </nav>
+    </div>
+  </header>
+  <div style="max-width:1120px;margin:0 auto;padding:56px 24px 96px;display:flex;gap:56px;align-items:flex-start;flex-wrap:wrap">
+    <aside style="flex:0 1 240px;position:sticky;top:96px;display:flex;flex-direction:column;gap:2px">
+      <div style="font-size:12px;font-weight:600;color:#6E7772;margin-bottom:8px;letter-spacing:0.02em">ON THIS PAGE</div>
+      <sc-for list="{{ sections }}" as="s" hint-placeholder-count="10">
+        <a href="#{{ s.id }}" style="font-size:13px;color:#4A524E;padding:5px 0;line-height:1.4;text-decoration:none" style-hover="color:#0E6B5E">{{ s.title }}</a>
+      </sc-for>
+    </aside>
+    <article style="flex:1 1 560px;min-width:0;max-width:720px">
+      <h1 style="margin:0;font-size:clamp(30px,4vw,40px);font-weight:650;letter-spacing:-0.03em;line-height:1.1">{{ title }}</h1>
+      <div style="margin-top:10px;font-size:13px;color:#6E7772">{{ dateLine }}</div>
+      <p style="margin:24px 0 0;font-size:17px;color:#2E3532;text-wrap:pretty">{{ intro }}</p>
+      <sc-for list="{{ sections }}" as="s" hint-placeholder-count="6">
+        <section id="{{ s.id }}" style="padding-top:40px;scroll-margin-top:72px">
+          <h2 style="margin:0 0 12px;font-size:20px;font-weight:600;letter-spacing:-0.015em">{{ s.title }}</h2>
+          <sc-for list="{{ s.blocks }}" as="b">
+            <sc-if value="{{ b.isH }}"><h3 style="margin:20px 0 6px;font-size:15px;font-weight:600">{{ b.text }}</h3></sc-if>
+            <sc-if value="{{ b.isP }}"><p style="margin:0 0 12px;color:#2E3532;text-wrap:pretty">{{ b.text }}</p></sc-if>
+            <sc-if value="{{ b.isL }}">
+              <ul style="margin:0 0 14px;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ b.items }}" as="i"><li style="display:flex;gap:12px;color:#2E3532"><span style="flex:none;width:5px;height:5px;border-radius:50%;background:#0E6B5E;margin-top:10px"></span><span>{{ i }}</span></li></sc-for>
+              </ul>
+            </sc-if>
+          </sc-for>
+        </section>
+      </sc-for>
+      <div style="margin-top:48px;padding:18px 20px;background:#F6F7F6;border-radius:12px;font-size:14px;color:#2E3532">Questions about this page? Email <a href="mailto:{{ email }}">{{ email }}</a>.</div>
+    </article>
+  </div>
+  <footer style="border-top:1px solid #EDF0EE">
+    <div style="max-width:1120px;margin:0 auto;padding:28px 24px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:13px;color:#6E7772">
+      <span>© 2026 Beyrichq LTD</span>
+      <div style="display:flex;gap:20px"><a href="Privacy Policy.dc.html" style="color:#6E7772">Privacy</a><a href="Terms of Service.dc.html" style="color:#6E7772">Terms</a><a href="mailto:hello@beyrictech.com" style="color:#6E7772">Contact</a></div>
+    </div>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const p = (text) => ({ isP: true, text });
+const h = (text) => ({ isH: true, text });
+const ul = (items) => ({ isL: true, items });
+const SECTIONS = [
+  ['accept', 'Agreement to these terms', [
+    p('These Terms of Service ("Terms") form an agreement between you and Beyrichq LTD ("Beyric", "we", "us") for your use of Beyric Note Taker, including our website, web app and emails (the "Service"). By creating an account or using the Service, you agree to these Terms and to our Privacy Policy.'),
+    p('If you use the Service on behalf of an organisation, you confirm that you have authority to accept these Terms for that organisation, and "you" includes the organisation.'),
+  ]],
+  ['account', 'Your account', [
+    ul([
+      'You must be at least 16 years old and able to form a binding contract.',
+      'Give accurate information when you sign up and keep it up to date.',
+      'Keep your password secure. You are responsible for activity under your account.',
+      'Tell us right away at security@beyrictech.com if you suspect unauthorised access.',
+    ]),
+  ]],
+  ['service', 'The Service', [
+    p('Beyric Note Taker joins online meetings on Google Meet, Microsoft Teams and Zoom when you send it a link or when your connected calendar schedules it. It records meeting audio and produces transcripts, notes and translations that you can read, copy, rewrite and share.'),
+    p('We may change, add or remove features over time. If we remove a feature you rely on in a paid plan, we will give you reasonable notice.'),
+  ]],
+  ['recording', 'Recording laws and consent', [
+    p('You are solely responsible for complying with all laws that apply to recording conversations, including laws that require the consent of all participants. Before the note taker records, you must:'),
+    ul([
+      'Tell every participant that the meeting will be recorded and transcribed.',
+      'Obtain any consent required by law or by your organisation.',
+      'Remove the note taker if any participant objects and the law requires their consent.',
+    ]),
+    p('Do not use the Service to record meetings you are not authorised to record.'),
+  ]],
+  ['content', 'Your content', [
+    p('You keep ownership of the meeting audio, transcripts, notes, templates and other content that you or your meetings provide or generate through the Service ("Your Content").'),
+    p('You give Beyric a limited, worldwide, non-exclusive licence to host, process, transmit and display Your Content only as needed to provide and secure the Service and as described in the Privacy Policy. We do not use Your Content to train or improve our own or third-party processing services.'),
+    p('You confirm that you have the rights needed to provide Your Content to us and that it does not violate the law or anyone else\'s rights.'),
+  ]],
+  ['accuracy', 'Accuracy of notes', [
+    p('Transcripts, notes and translations are produced automatically and may contain errors, omissions or misattributed speakers, especially with poor audio, overlapping speech or specialist terms. Review them before relying on them. Do not use the Service as the sole record for legal, medical, financial or other high-stakes decisions.'),
+  ]],
+  ['use', 'Acceptable use', [
+    p('You agree not to:'),
+    ul([
+      'Record people secretly or in breach of recording, privacy or employment laws.',
+      'Use the Service to harass, defame or discriminate against anyone.',
+      'Upload or generate content that is unlawful or infringes intellectual property rights.',
+      'Interfere with, overload or try to gain unauthorised access to the Service or other accounts.',
+      'Reverse engineer the Service, except where the law allows it.',
+      'Resell the Service or use it to build a competing product without our written permission.',
+    ]),
+  ]],
+  ['fees', 'Plans, fees and payment', [
+    p('Some features require a paid plan. Fees, billing periods and usage limits are shown at the time of purchase. Paid plans renew automatically until cancelled. You can cancel at any time from your account settings, and cancellation takes effect at the end of the current billing period.'),
+    p('Fees are non-refundable except where required by law or stated otherwise in writing. We may change prices with at least 30 days\' notice before your next renewal. Prices exclude taxes, which you are responsible for.'),
+  ]],
+  ['third', 'Third-party services', [
+    p('The Service works with platforms we do not control, including Google Meet, Google Calendar, Microsoft Teams, Microsoft Outlook and Zoom. Your use of those platforms is governed by their own terms. We are not responsible for their availability or for changes that affect how the note taker can join or record.'),
+  ]],
+  ['termination', 'Suspension and termination', [
+    p('You may stop using the Service and close your account at any time. We may suspend or end your access if you materially breach these Terms, if required by law, or if your use puts the Service or other users at risk. Where reasonable, we will give notice first.'),
+    p('After your account is closed, you can export Your Content for 30 days, after which we delete it as described in the Privacy Policy.'),
+  ]],
+  ['disclaimer', 'Disclaimers', [
+    p('The Service is provided "as is" and "as available". To the fullest extent allowed by law, we disclaim all warranties, express or implied, including warranties of merchantability, fitness for a particular purpose, accuracy and non-infringement. We do not guarantee that the Service will be uninterrupted, error free or that every meeting will be joined or recorded.'),
+  ]],
+  ['liability', 'Limitation of liability', [
+    p('To the fullest extent allowed by law, Beyric will not be liable for any indirect, incidental, special, consequential or punitive damages, or for lost profits, revenue, data or goodwill. Our total liability for any claim relating to the Service is limited to the greater of the amount you paid us in the 12 months before the claim or USD 100.'),
+    p('Nothing in these Terms limits liability that cannot be limited by law.'),
+  ]],
+  ['indemnity', 'Indemnity', [
+    p('You agree to defend and indemnify Beyric against claims, damages and costs, including reasonable legal fees, arising from Your Content, your breach of these Terms, or your failure to obtain consent required to record a meeting.'),
+  ]],
+  ['law', 'Governing law and disputes', [
+    p('These Terms are governed by the laws of [the Federal Republic of Nigeria], without regard to conflict of law rules. Any dispute will be resolved in the courts of [Lagos State], unless the law of your country of residence gives you the right to bring proceedings locally.'),
+  ]],
+  ['changes', 'Changes to these terms', [
+    p('We may update these Terms. If a change is material, we will notify you by email or in the app at least 30 days before it takes effect. If you continue using the Service after that date, you accept the updated Terms.'),
+  ]],
+  ['general', 'General', [
+    p('These Terms and the Privacy Policy are the entire agreement between you and Beyric about the Service. If any provision is found unenforceable, the rest remain in effect. Our failure to enforce a provision is not a waiver. You may not assign these Terms without our consent; we may assign them in connection with a merger or sale of assets.'),
+  ]],
+  ['contact', 'Contact us', [
+    p('Beyrichq LTD, Lagos, Nigeria. Email: legal@beyrictech.com.'),
+  ]],
+];
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      title: 'Terms of Service',
+      dateLine: 'Effective 2 November 2026 · Last updated 2 November 2026',
+      intro: 'These terms set out the rules for using Beyric Note Taker, including your responsibilities when recording meetings. Please read them carefully.',
+      email: 'legal@beyrictech.com',
+      privBg: 'transparent', termsBg: '#EEF1F0',
+      sections: SECTIONS.map(([id, title, blocks]) => ({ id, title, blocks })),
+    };
+  }
+}
+</script>
+</body>
+</html>
