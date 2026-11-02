@@ -265,6 +265,9 @@ deploy took (step 7).
 
 Update Vexa: change `VEXA_IMAGE_TAG` (in `.env`, default `v012`) only after a test call on the new
 tag; `docker compose up -d vexa` applies it, and setting the old tag back rolls it back.
+After the upgrade, check the language column is still wide: `docker compose up -d vexa-schema-fix`
+runs the idempotent fix again, and `docker compose logs vexa-schema-fix` should say "language is
+already varchar(32)" or "widened". Vexa's own migrations may touch that table, so keep this step.
 
 ## 9. Verification checklist
 

@@ -1,7 +1,7 @@
 # SOP: Vexa live segments failing on long language names
 
 ## What shipped
-A live database change on the server (no PR): Vexa's `transcriptions.language` column went from `varchar(10)` to `varchar(32)`, applied by hand during meeting 5 on 2026-11-02 at about 15:36 UTC, with Adebayo's go-ahead. **It isn't in the repo yet**, so it isn't permanent (see Follow-ups).
+Vexa's `transcriptions.language` column went from `varchar(10)` to `varchar(32)`. It was first applied by hand on the server during meeting 5 (2026-11-02, about 15:36 UTC, with Adebayo's go-ahead), then made permanent by a one-shot compose service, `vexa-schema-fix` (PR: branch `fix/vexa-language-column`).
 
 ## Why
 During meeting 5 (Google Meet), Vexa logged `StringDataRightTruncationError: value too long for type character varying(10)` 198 times in 40 minutes. `whisper-1`, which makes Vexa's live hints, tags each segment with a language name, and on accented English it guessed `haitian creole` (14 characters). Vexa's own schema only allows 10, so every batch containing such a segment failed. Only 4 live segments had been stored. Live segments are our only source of speaker names, so the notes would have come back mostly "Unknown speaker". The audio and the post-call `gpt-transcribe` transcript were never affected.
@@ -13,16 +13,23 @@ alter table transcriptions alter column language type varchar(32);
 ```
 Run in the `vexa-db` container (`psql -U $POSTGRES_USER -d $POSTGRES_DB`). Widening a varchar only changes the catalogue, not the rows, so it takes milliseconds. `lock_timeout` makes sure it can never queue behind Vexa's writes.
 
+### Making it permanent
+`compose.yaml` has a `vexa-schema-fix` service (postgres:17-alpine, on the `vexainternal` network only) that runs `deploy/vexa-schema-fix.sh` once per `docker compose up`, so every deploy re-applies it. The script waits up to 5 minutes for Vexa to create the table, reads the column's current length, and does nothing if it is already 32 or more; otherwise it runs the `alter` above. Choices:
+- A compose service rather than a line in `deploy/deploy.sh`: it also runs on first install and after a Vexa volume is recreated, with no extra step to remember.
+- Nothing depends on it, so a failure never blocks or rolls back a deploy; it shows as an exited service in `docker compose ps -a`.
+- Rejected: patching Vexa's image or source (we run the stock `vexa-lite` image), and pinning the live-hint language (could hurt French speech).
+
 ## Verification
+- Script tested against a scratch Postgres 17 (2026-11-02): the table appearing 7 s late (waits, then widens), a second run (reports "nothing to do"), and inserting `haitian creole` afterwards (accepted). `docker compose config` renders the service. **Not yet seen on the server**: it runs on the next deploy.
 - Stored segments for meeting 5 went from 4 to 116 within a minute. Vexa keeps the failed batch and retries it, so the backlog was saved too. Speakers found: 2.
 - Zero truncation errors after the change.
 - One side effect: a single `InvalidCachedStatementError` at 15:36:51, as asyncpg refreshed its cached query plans after the schema change. The worker's poll got one 500, logged "Vexa unreachable", and the next poll 30 s later was 200. The meeting stayed `bot_sent`.
 - Languages whisper guessed for meeting 5: yoruba 65, english 44, haitian creole 4, latin 1, malay 1. Its language guess isn't reliable on this kind of speech.
 
 ## Operate / roll back
-Check it with `select character_maximum_length from information_schema.columns where table_name='transcriptions' and column_name='language'` (expect 32). Rolling back isn't advised, because narrowing the column would fail on the stored long values.
+After a Vexa upgrade, `docker compose up -d vexa-schema-fix` re-runs the fix (also in `deploy/README.md` section 8). Check it with `select character_maximum_length from information_schema.columns where table_name='transcriptions' and column_name='language'` (expect 32). Rolling back isn't advised, because narrowing the column would fail on the stored long values.
 
 ## Follow-ups
-- **Make it permanent:** the change is lost if the `vexa-db` volume is recreated, and a Vexa upgrade could run migrations over it. Add an idempotent step to `deploy/deploy.sh` (or a one-shot compose service) that runs the `alter` after `vexa` is up, and add it to the Vexa upgrade routine.
+- After the next deploy, check `docker compose logs vexa-schema-fix` on the server says "already varchar(32)" (the column was already widened by hand).
 - Report it upstream to Vexa (the language column is too narrow for whisper's language names).
 - Consider pinning the live-hint language to English in `.env.vexa`, if Vexa supports it, to stop the bad guesses. Test it on one call, because it could hurt French speech.
