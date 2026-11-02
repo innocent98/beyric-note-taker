@@ -6,7 +6,12 @@ import openai
 import pytest
 
 from app import retry
-from app.transcribe import TranscriptionFailed, transcribe_chunks
+from app.transcribe import (
+    MAX_KEYWORD_CHARS,
+    MAX_KEYWORDS,
+    TranscriptionFailed,
+    transcribe_chunks,
+)
 
 
 class FakeOpenAI:
@@ -61,10 +66,22 @@ def test_joins_chunks_in_order(fake_openai, chunks):
     assert all(c["model"] == "gpt-transcribe" for c in client.calls)
 
 
-def test_sends_terms_as_keywords_one_per_line(fake_openai, chunks):
+def test_sends_terms_as_a_keywords_list(fake_openai, chunks):
     client = fake_openai(["a", "b"])
     transcribe_chunks(chunks, ["Beyric", "Vexa", "Beyric"], client=client)
-    assert client.calls[0]["keywords"] == "Beyric\nVexa"
+    assert client.calls[0]["keywords"] == ["Beyric", "Vexa"]
+    assert client.calls[1]["keywords"] == ["Beyric", "Vexa"]
+
+
+def test_keywords_are_capped_in_count_and_length(fake_openai, chunks):
+    client = fake_openai(["a", "b"])
+    terms = [f"term{i}" for i in range(MAX_KEYWORDS + 20)]
+    terms[0] = "x" * (MAX_KEYWORD_CHARS + 50)
+    transcribe_chunks(chunks, terms, client=client)
+    sent = client.calls[0]["keywords"]
+    assert len(sent) == MAX_KEYWORDS
+    assert sent[0] == "x" * MAX_KEYWORD_CHARS
+    assert sent[1] == "term1"
 
 
 def test_no_terms_sends_no_keywords(fake_openai, chunks):
@@ -119,7 +136,7 @@ def test_invalid_term_is_removed_from_keywords(fake_openai, chunks):
     client = fake_openai(["a", "b"])
     terms = ["Beyric", "<script>", "a>b", "line\nbreak", "cr\rterm", "Vexa"]
     transcribe_chunks(chunks, terms, client=client)
-    assert client.calls[0]["keywords"] == "Beyric\nVexa"
+    assert client.calls[0]["keywords"] == ["Beyric", "Vexa"]
 
 
 def test_no_chunks_returns_empty_string(fake_openai):

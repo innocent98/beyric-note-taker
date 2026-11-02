@@ -1,7 +1,8 @@
 """Transcribe prepared audio chunks with OpenAI, biased toward the user's own vocabulary.
 
 Live check (2026-11-02, gpt-transcribe): "Beyric" came back as "BIRIC" with no help and as
-"Biric" with `prompt`, but correctly with `keywords`. So vocabulary goes in `keywords`.
+"Biric" with `prompt`, but correctly with `keywords`. So vocabulary goes in `keywords`, which the
+SDK (3.42.1, `SequenceNotStr[str]`) takes as a list of terms, one list item per term.
 """
 
 from pathlib import Path
@@ -12,6 +13,8 @@ from app.config import get_settings
 from app.retry import call_with_retry
 
 REQUEST_TIMEOUT = 300.0
+MAX_KEYWORDS = 50
+MAX_KEYWORD_CHARS = 100
 _INVALID_KEYWORD_CHARS = ("<", ">", "\r", "\n")
 
 
@@ -19,17 +22,20 @@ class TranscriptionFailed(Exception):
     """A chunk could not be transcribed."""
 
 
-def _keywords(terms: list[str]) -> str:
-    """One term per line. The API rejects the whole request over a bad character, so drop them."""
+def _keywords(terms: list[str]) -> list[str]:
+    """Distinct terms in order, at most MAX_KEYWORDS of at most MAX_KEYWORD_CHARS characters.
+
+    The API rejects the whole request over a bad character, so such terms are dropped.
+    """
     seen: dict[str, None] = {}
     for term in terms:
         term = term.strip()
         if term and not any(char in term for char in _INVALID_KEYWORD_CHARS):
-            seen.setdefault(term)
-    return "\n".join(seen)
+            seen.setdefault(term[:MAX_KEYWORD_CHARS].strip())
+    return list(seen)[:MAX_KEYWORDS]
 
 
-def _transcribe_one(client, chunk: Path, model: str, keywords: str) -> str:
+def _transcribe_one(client, chunk: Path, model: str, keywords: list[str]) -> str:
     def call() -> str:
         with chunk.open("rb") as audio:
             extra = {"keywords": keywords} if keywords else {}
