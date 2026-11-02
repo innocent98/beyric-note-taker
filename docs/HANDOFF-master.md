@@ -10,7 +10,7 @@
 | `main` / server | `fbd1d94` (PRs #1–#9 and #11 merged and deployed, `/health` 200, migration `0005`). Server `haven-respite`, app at `/opt/beyric-note-taker` (memory `beyric-note-taker-server`) |
 | Open PRs | **#10** `feature/public-pages`: public landing, `/privacy`, `/terms` (code; 327 tests pass locally; not yet viewed in a browser). **This handoff update** on `docs/handoff-3`. Both need Adebayo's "merge #N". No meeting is active, so #10 is safe to deploy |
 | Meeting 5 | **Done:** Google Meet, 15:20 to 16:16 UTC (about 56 min), `ready` at 16:22:50 (transcribing 4 min, speakers 2 min, notes 30 s). 4 named speakers; all six note sections; useful "Please check" items. Reviewed by the second lead; Adebayo: "it went well". Gap: one person appears as both "Godstime America" and "America Godstime" |
-| Updated UI (uncommitted) | The designer's latest `docs/ui` adds a **team and tasks** layer (6.4). It sits **uncommitted in the main checkout**, because it embeds real names and content from meeting 5. Adebayo must choose: commit as is (private repo) or ask the designer for placeholder data |
+| Updated UI | The designer's latest `docs/ui` adds a **team and tasks** layer (6.4). Committed in PR #12 with real names and content from meeting 5, by Adebayo's choice ("Commit as is") |
 | Live server change not in git | Vexa DB `transcriptions.language` widened from `varchar(10)` to `varchar(32)` at about 15:36 UTC with Adebayo's OK. See `docs/sop/2026-11-02-vexa-language-column.md` (in PR #10). It must be made permanent (6.2) |
 | Novex side | `innocent98/Novex-News#10` still open (Adebayo to merge) |
 
