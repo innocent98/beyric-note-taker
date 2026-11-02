@@ -32,6 +32,10 @@ extend-exclude = ["spike"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 
+[tool.ruff.lint.per-file-ignores]
+# test_api.py reuses test_web.py's fixtures by importing them, so its tests "redefine" them.
+"tests/test_api.py" = ["F811"]
+
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Form"]
 

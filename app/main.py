@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import auth, web
+from app import api, auth, web
 from app.config import Settings, get_settings
 from app.db import get_session
 
@@ -59,10 +59,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(auth.NotLoggedIn)
     async def _not_logged_in(request: Request, exc: auth.NotLoggedIn) -> Response:
+        if api.is_api_path(request):  # a JSON client must never be sent to the login page
+            return api.error_response(401, "not_authenticated", "Log in first.")
         return RedirectResponse("/login", status_code=303)
 
     @app.exception_handler(auth.CsrfRejected)
     async def _csrf(request: Request, exc: auth.CsrfRejected) -> Response:
+        if api.is_api_path(request):
+            message = f"Missing or wrong {auth.CSRF_HEADER} header. Read it from GET /api/session."
+            return api.error_response(403, "csrf_rejected", message)
         page = "<!doctype html><title>Refused</title><p>This form has expired. Reload it.</p>"
         return HTMLResponse(page, status_code=403)
 
@@ -76,5 +81,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return PlainTextResponse("ok")
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
+    api.install_errors(app)
+    app.include_router(api.router)
     app.include_router(web.router)
     return app

@@ -1,0 +1,844 @@
+"""The JSON API under /api/: same session, same rules as the pages, one error shape.
+
+Fixtures (app, fakes, template) come from test_web.py so both suites drive the same wiring.
+"""
+
+import json
+import re
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from app import auth
+from app.db import get_session
+from app.models import AppState, Meeting, Template, VocabularyTerm
+from app.pipeline import REASON_CANCELLED, REASON_NO_SPEECH
+from app.services import RETRY_BLOCK_TEXT
+from app.vexa import VexaError
+from tests.test_web import (  # noqa: F401  (fixtures used by name)
+    MEET,
+    NOTES,
+    PASSWORD,
+    TRANSCRIPT,
+    ZOOM,
+    FakeOpenAI,
+    add_meeting,
+    anon_client,
+    app,
+    client,
+    fake_openai,
+    fake_vexa,
+    template,
+)
+
+CSRF = auth.CSRF_HEADER
+
+
+class Api:
+    """A JSON client that remembers the CSRF token and sends it on writes."""
+
+    def __init__(self, client: TestClient) -> None:
+        self.client = client
+        self.csrf = client.get("/api/session").json()["csrf_token"]
+
+    def call(self, method: str, url: str, json=None, csrf: str | None | bool = True):
+        token = self.csrf if csrf is True else csrf
+        headers = {CSRF: token} if token else {}
+        response = self.client.request(method, url, json=json, headers=headers)
+        if url == "/api/session" and response.status_code == 200:
+            self.csrf = response.json()["csrf_token"]  # a new session has a new token
+        return response
+
+    def get(self, url):
+        return self.call("GET", url, csrf=False)
+
+    def post(self, url, json=None, **kw):
+        return self.call("POST", url, json, **kw)
+
+    def put(self, url, json=None, **kw):
+        return self.call("PUT", url, json, **kw)
+
+    def delete(self, url, **kw):
+        return self.call("DELETE", url, **kw)
+
+    def log_in(self, password=PASSWORD):
+        return self.post("/api/session", {"password": password})
+
+
+def ready(session, template, **fields) -> Meeting:
+    values = {"status": "ready", "step": "done", "transcript": TRANSCRIPT, "notes": NOTES}
+    return add_meeting(session, template, **{**values, "speaker_transcript": TRANSCRIPT, **fields})
+
+
+@pytest.fixture
+def anon(anon_client):
+    return Api(anon_client)
+
+
+@pytest.fixture
+def api(anon):
+    assert anon.log_in().status_code == 200
+    return anon
+
+
+def error_of(response, status, code):
+    assert response.status_code == status, response.text
+    body = response.json()
+    assert set(body) == {"error"}
+    assert body["error"]["code"] == code
+    assert isinstance(body["error"]["message"], str) and body["error"]["message"]
+    return body["error"]
+
+
+# ---- session ----
+
+
+def test_a_visitor_gets_a_session_and_a_csrf_token(anon_client):
+    response = anon_client.get("/api/session")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["authenticated"] is False
+    assert len(body["csrf_token"]) >= 32
+    assert "session" in response.cookies
+    assert response.headers["cache-control"] == "no-store"
+    assert "default-src 'none'" in response.headers["content-security-policy"]
+    # The cookie is kept, so the same token comes back.
+    assert anon_client.get("/api/session").json() == body
+
+
+def test_login_returns_a_fresh_csrf_token(anon):
+    before = anon.csrf
+    response = anon.log_in()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["authenticated"] is True
+    assert body["csrf_token"] != before
+    assert anon.client.get("/api/session").json() == body
+
+
+def test_login_with_the_old_token_after_login_is_refused(api):
+    stale = auth.new_session()["csrf"]
+    error_of(
+        api.put("/api/templates/1", {"name": "a", "instructions": "b"}, csrf=stale),
+        403,
+        "csrf_rejected",
+    )
+
+
+def test_wrong_password_is_401_and_does_not_log_in(anon):
+    error = error_of(anon.log_in("nope"), 401, "invalid_password")
+    assert error["message"] == "That password is not right."
+    assert anon.client.get("/api/session").json()["authenticated"] is False
+
+
+@pytest.mark.parametrize("password", ["", "pässwörd ✓", "x" * 10_000])
+def test_odd_passwords_are_ordinary_failures(anon, password):
+    error_of(anon.log_in(password), 401, "invalid_password")
+
+
+def test_login_needs_the_csrf_header(anon):
+    error_of(anon.post("/api/session", {"password": PASSWORD}, csrf=False), 403, "csrf_rejected")
+    error_of(anon.post("/api/session", {"password": PASSWORD}, csrf="wrong"), 403, "csrf_rejected")
+    assert anon.client.get("/api/session").json()["authenticated"] is False
+
+
+def test_login_is_rate_limited_and_shares_the_pages_limit(anon):
+    for _ in range(5):
+        error_of(anon.log_in("nope"), 401, "invalid_password")
+    error = error_of(anon.log_in("nope"), 429, "too_many_attempts")
+    assert "15 minutes" in error["message"]
+    error_of(anon.log_in(), 429, "too_many_attempts")  # even the right password waits
+    # The login page counts the same client.
+    token = re.search(r'name="csrf_token" value="([^"]+)"', anon.client.get("/login").text)[1]
+    page = anon.client.post("/login", data={"password": PASSWORD, "csrf_token": token})
+    assert page.status_code == 429
+
+
+def test_a_good_login_clears_the_failures(anon):
+    for _ in range(4):
+        anon.log_in("nope")
+    assert anon.log_in().status_code == 200
+    anon.delete("/api/session")
+    for _ in range(5):
+        error_of(anon.log_in("nope"), 401, "invalid_password")
+
+
+def test_login_body_must_be_valid(anon):
+    error = error_of(anon.post("/api/session", {}), 422, "validation_error")
+    assert error["fields"] == [{"field": "password", "message": "Field required"}]
+    error = error_of(anon.post("/api/session", {"password": 123456}), 422, "validation_error")
+    assert error["fields"][0]["field"] == "password"
+    assert "123456" not in json.dumps(error)  # submitted values are never echoed
+    error_of(anon.post("/api/session", {"password": "x", "extra": 1}), 422, "validation_error")
+
+
+def test_logout_revokes_every_copy_of_the_cookie(anon, app):
+    anon.log_in()
+    cookie, before = anon.client.cookies.get("session"), anon.csrf
+    response = anon.delete("/api/session")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["authenticated"] is False and body["csrf_token"] != before
+    with TestClient(app, follow_redirects=False, cookies={"session": cookie}) as replay:
+        error_of(replay.get("/api/templates"), 401, "not_authenticated")
+
+
+def test_logout_needs_login_and_the_header(anon):
+    error_of(anon.delete("/api/session"), 401, "not_authenticated")
+    anon.log_in()
+    error_of(anon.delete("/api/session", csrf=False), 403, "csrf_rejected")
+    assert anon.client.get("/api/session").json()["authenticated"] is True
+
+
+def test_one_cookie_serves_the_pages_and_the_api(anon):
+    anon.log_in()
+    assert anon.client.get("/templates").status_code == 200
+    token = re.search(r'name="csrf_token" value="([^"]+)"', anon.client.get("/templates").text)[1]
+    assert token == anon.csrf  # the form token and the API token are the same session token
+    anon.client.post("/logout", data={"csrf_token": token})
+    error_of(anon.client.get("/api/templates"), 401, "not_authenticated")
+
+
+def test_an_expired_session_is_401_json_never_a_redirect(anon, app):
+    key = app.state.session_key
+    old = auth.new_session(auth=True, epoch=0, now=1_000_000)
+    with TestClient(app, follow_redirects=False) as client:
+        client.cookies.set("session", auth.sign_session(key, old))
+        error_of(client.get("/api/meetings"), 401, "not_authenticated")
+
+
+# ---- every route is protected ----
+
+
+def api_routes(app):
+    """Every (method, path) the app serves under /api/, read from its own schema."""
+    paths = app.openapi()["paths"]  # the method works although the /openapi.json URL is off
+    routes = [
+        (method.upper(), path)
+        for path, methods in paths.items()
+        if path.startswith("/api/")
+        for method in methods
+    ]
+    assert len(routes) >= 15  # fails loudly if the router stops being mounted
+    return sorted(routes)
+
+
+def concrete(path: str) -> str:
+    return re.sub(r"\{\w+\}", "1", path)
+
+
+PUBLIC = {("GET", "/api/session"), ("POST", "/api/session")}
+
+
+def test_every_api_route_needs_login_except_the_two_session_starters(anon, app):
+    for method, path in api_routes(app):
+        response = anon.call(method, concrete(path), csrf=False)
+        if (method, path) in PUBLIC:
+            assert response.status_code != 401, (method, path)
+        else:
+            error_of(response, 401, "not_authenticated")
+            # with a valid token and a body too: the login check is not skipped
+            response = anon.call(method, concrete(path), {"x": 1})
+            error_of(response, 401, "not_authenticated")
+
+
+def test_every_write_needs_the_csrf_header(api, app, template):
+    for method, path in api_routes(app):
+        if method == "GET":
+            continue
+        for token in (False, "wrong-token"):
+            response = api.call(method, concrete(path), {"x": 1}, csrf=token)
+            error_of(response, 403, "csrf_rejected")
+
+
+def test_reads_work_without_the_header_and_no_route_is_cross_wired(api, app, template):
+    for method, path in api_routes(app):
+        if method == "GET":
+            assert api.get(concrete(path)).status_code in (200, 404)
+
+
+def test_malformed_json_is_422_before_the_login_check_and_leaks_nothing(anon):
+    """FastAPI decodes a JSON body before it runs dependencies, so this one case answers 422
+    where a well-formed body gets 401. Nothing is read, changed or echoed."""
+    response = anon.client.post(
+        "/api/meetings",
+        content=b"{not json",
+        headers={CSRF: anon.csrf, "content-type": "application/json"},
+    )
+    error = error_of(response, 422, "validation_error")
+    assert error["fields"] == [{"field": "body", "message": "JSON decode error"}]
+    assert "{not json" not in response.text
+
+
+# ---- error shape ----
+
+
+def test_unknown_api_paths_and_methods_use_the_error_shape(api):
+    error_of(api.get("/api/nope"), 404, "not_found")
+    error_of(api.get("/api/meetings/abc"), 404, "not_found")
+    error_of(api.get("/api/meetings/99999999999"), 404, "not_found")  # 11 digits: no route
+    response = api.call("PATCH", "/api/templates")
+    error_of(response, 405, "method_not_allowed")
+    assert "allow" in response.headers
+
+
+def test_the_pages_keep_their_own_error_handling(client, app):
+    assert client.get("/nope").json() == {"detail": "Not Found"}
+    with TestClient(app, follow_redirects=False) as visitor:
+        response = visitor.get("/templates")
+    assert response.status_code == 303 and response.headers["location"] == "/login"
+    forbidden = client.post("/templates", data={"name": "a", "instructions": "b"})
+    assert forbidden.status_code == 403 and "expired" in forbidden.text
+
+
+def test_a_crash_is_a_json_500_with_no_detail(app):
+    def boom():
+        raise RuntimeError("secret internals")
+        yield
+
+    app.dependency_overrides[get_session] = boom
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.get("/api/session")  # public, but guard needs the database
+    error = error_of(response, 500, "server_error")
+    assert "secret" not in json.dumps(error)
+
+
+def test_openapi_and_docs_stay_off_in_the_app(api):
+    for path in ("/openapi.json", "/docs", "/redoc"):
+        assert api.client.get(path).status_code == 404
+
+
+def test_the_committed_openapi_file_is_current():
+    from scripts.export_openapi import build
+
+    committed = Path(__file__).resolve().parent.parent / "docs" / "openapi.json"
+    assert json.loads(committed.read_text()) == build(), (
+        "run `python scripts/export_openapi.py` and commit docs/openapi.json"
+    )
+
+
+# ---- meetings: reading ----
+
+
+def test_the_list_is_empty_and_flags_a_silent_worker(api):
+    body = api.get("/api/meetings").json()
+    assert body == {"meetings": [], "has_more": False, "next_before_id": None, "worker_stale": True}
+
+
+def test_worker_stale_follows_the_heartbeat(api, session):
+    session.add(AppState(id=1, worker_heartbeat_at=datetime.now(UTC) - timedelta(minutes=19)))
+    session.commit()
+    assert api.get("/api/meetings").json()["worker_stale"] is False
+    state = session.get(AppState, 1)
+    state.worker_heartbeat_at = datetime.now(UTC) - timedelta(minutes=21)
+    session.commit()
+    assert api.get("/api/meetings").json()["worker_stale"] is True
+
+
+def test_list_items_are_summaries_newest_first(api, session, template):
+    first = add_meeting(session, template, native_id="aaa-aaaa-aaa")
+    second = add_meeting(
+        session,
+        template,
+        platform="zoom",
+        native_id="12345678901",
+        url=ZOOM,
+        status="processing",
+        step="audio",
+    )
+    body = api.get("/api/meetings").json()
+    assert [m["id"] for m in body["meetings"]] == [second.id, first.id]
+    item = body["meetings"][0]
+    assert item == {
+        "id": second.id,
+        "title": "Zoom 12345678901",
+        "platform": "zoom",
+        "native_id": "12345678901",
+        "status": "processing",
+        "step": "audio",
+        "status_text": "Downloading the audio",
+        "status_tone": "info",
+        "template_id": template.id,
+        "created_at": item["created_at"],
+    }
+    assert item["created_at"].endswith("Z")
+    assert body["meetings"][1]["title"] == "Google Meet aaa-aaaa-aaa"
+
+
+def test_list_pages_with_limit_and_before_id(api, session, template):
+    ids = [add_meeting(session, template).id for _ in range(5)]
+    page = api.get("/api/meetings?limit=2").json()
+    assert [m["id"] for m in page["meetings"]] == [ids[4], ids[3]]
+    assert page["has_more"] is True and page["next_before_id"] == ids[3]
+    page = api.get(f"/api/meetings?limit=2&before_id={ids[3]}").json()
+    assert [m["id"] for m in page["meetings"]] == [ids[2], ids[1]]
+    last = api.get(f"/api/meetings?limit=2&before_id={ids[1]}").json()
+    assert [m["id"] for m in last["meetings"]] == [ids[0]]
+    assert last["has_more"] is False and last["next_before_id"] is None
+
+
+@pytest.mark.parametrize(
+    "query", ["limit=0", "limit=101", "limit=x", "before_id=0", "before_id=99999999999"]
+)
+def test_list_query_is_validated(api, query):
+    error = error_of(api.get(f"/api/meetings?{query}"), 422, "validation_error")
+    assert error["fields"][0]["field"] == query.split("=")[0]
+
+
+def test_the_list_holds_at_most_the_default_page_when_there_are_many(api, session, template):
+    for _ in range(52):
+        session.add(
+            Meeting(url=MEET, platform="google_meet", native_id="x", template_id=template.id)
+        )
+    session.commit()
+    body = api.get("/api/meetings").json()
+    assert len(body["meetings"]) == 50 and body["has_more"] is True
+
+
+def test_detail_of_a_meeting_waiting_for_its_bot(api, session, template):
+    meeting = add_meeting(session, template, join_attempts=2)
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["status"] == "bot_sent" and body["status_text"] == "Bot sent"
+    assert body["status_tone"] == "warning"
+    assert body["can_cancel"] is True and body["can_retry"] is False
+    assert body["can_regenerate"] is False
+    assert body["refresh_after_seconds"] == 30
+    assert body["join_attempts"] == 2 and body["max_join_attempts"] == 3
+    assert body["failure_reason"] is None and body["retry_block"] is None
+    assert body["notes"] is None and body["notes_html"] is None and body["transcript"] is None
+
+
+@pytest.mark.parametrize(
+    ("step", "text"),
+    [
+        ("waiting", "Getting started"),
+        ("audio", "Downloading the audio"),
+        ("transcribing", "Writing the transcript"),
+        ("speakers", "Working out who said what"),
+        ("notes", "Writing the notes"),
+    ],
+)
+def test_detail_of_a_processing_meeting_names_the_step(api, session, template, step, text):
+    meeting = add_meeting(session, template, status="processing", step=step)
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["step"] == step and body["status_text"] == text and body["status_tone"] == "info"
+    assert body["refresh_after_seconds"] == 30 and body["can_cancel"] is False
+
+
+def test_detail_of_a_ready_meeting_has_notes_and_transcript(api, session, template):
+    meeting = ready(session, template, speakers_incomplete=True)
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["status_text"] == "Ready" and body["status_tone"] == "success"
+    assert body["notes"] == NOTES
+    assert "<h2>Summary</h2>" in body["notes_html"]
+    assert body["transcript"] == TRANSCRIPT and body["speakers_incomplete"] is True
+    assert body["can_regenerate"] is True and body["refresh_after_seconds"] is None
+    assert body["bot_left_early"] is False
+
+
+def test_transcript_prefers_the_speaker_version(api, session, template):
+    meeting = ready(session, template, transcript="plain text", speaker_transcript="[Ada]: hi")
+    assert api.get(f"/api/meetings/{meeting.id}").json()["transcript"] == "[Ada]: hi"
+    meeting = ready(session, template, transcript="plain text", speaker_transcript=None)
+    assert api.get(f"/api/meetings/{meeting.id}").json()["transcript"] == "plain text"
+
+
+def test_bot_left_early_only_for_removal_reasons_on_ready_meetings(api, session, template):
+    evicted = ready(session, template, completion_reason="evicted")
+    assert api.get(f"/api/meetings/{evicted.id}").json()["bot_left_early"] is True
+    normal = ready(session, template, completion_reason="completed")
+    assert api.get(f"/api/meetings/{normal.id}").json()["bot_left_early"] is False
+
+
+def test_notes_html_is_escaped_and_drops_script_links(api, session, template):
+    notes = "## Summary\n<script>alert(1)</script> [bad](javascript:alert(1)) ![i](http://x/y.png)"
+    meeting = ready(session, template, notes=notes)
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["notes"] == notes  # raw markdown untouched
+    html = body["notes_html"]
+    assert "<script>" in notes and "<script>" not in html and "&lt;script&gt;" in html
+    assert 'href="javascript' not in html  # the link is not rendered at all
+    assert "<img" not in html  # images are off: nothing loads from a remote host
+
+
+def test_notes_html_links_are_nofollow(api, session, template):
+    meeting = ready(session, template, notes="[ok](https://example.com)")
+    html = api.get(f"/api/meetings/{meeting.id}").json()["notes_html"]
+    assert 'rel="noopener noreferrer nofollow"' in html
+
+
+def test_the_meeting_link_is_never_returned(api, session, template):
+    meeting = add_meeting(session, template, platform="zoom", native_id="12345678901", url=ZOOM)
+    for url in ("/api/meetings", f"/api/meetings/{meeting.id}"):
+        assert "SECRETPWD" not in api.get(url).text and "zoom.us" not in api.get(url).text
+
+
+@pytest.mark.parametrize(
+    ("fields", "block"),
+    [
+        ({}, None),
+        ({"step": "waiting"}, "no_audio"),
+        ({"failure_reason": REASON_NO_SPEECH, "step": "transcribing"}, "no_speech"),
+        ({"step": "transcribing", "audio_deleted_at": datetime.now(UTC)}, "audio_deleted"),
+        ({"step": "transcribing", "audio_deleted_at": datetime.now(UTC), "transcript": "t"}, None),
+    ],
+)
+def test_detail_of_a_failed_meeting_says_whether_it_can_be_retried(
+    api, session, template, fields, block
+):
+    values = {"status": "failed", "step": "audio", "failure_reason": "The recording failed."}
+    meeting = add_meeting(session, template, **{**values, **fields})
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["status_text"] == "Failed" and body["status_tone"] == "danger"
+    assert body["retry_block"] == block and body["can_retry"] is (block is None)
+    assert body["retry_block_message"] == RETRY_BLOCK_TEXT.get(block)
+    assert body["failure_reason"] == fields.get("failure_reason", "The recording failed.")
+    assert body["refresh_after_seconds"] is None
+
+
+def test_a_failed_meeting_without_a_reason_gets_the_pages_fallback(api, session, template):
+    meeting = add_meeting(session, template, status="failed", step="audio", failure_reason=None)
+    reason = api.get(f"/api/meetings/{meeting.id}").json()["failure_reason"]
+    assert reason == "Something went wrong while processing this meeting."
+
+
+def test_retry_block_messages_are_the_ones_the_page_shows(client, session, template):
+    for block, fields in (
+        ("no_audio", {"step": "waiting"}),
+        ("no_speech", {"failure_reason": REASON_NO_SPEECH, "step": "audio"}),
+        ("audio_deleted", {"step": "audio", "audio_deleted_at": datetime.now(UTC)}),
+    ):
+        meeting = add_meeting(session, template, status="failed", **fields)
+        assert RETRY_BLOCK_TEXT[block] in client.get(f"/meetings/{meeting.id}").text
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/meetings/999", "/api/meetings/0", "/api/meetings/2147483648"]
+)
+def test_unknown_meeting_ids_are_404(api, path):
+    error = error_of(api.get(path), 404, "not_found")
+    assert error["message"] == "No such meeting"
+
+
+# ---- meetings: writing ----
+
+
+def create(api, template, url=MEET, **extra):
+    return api.post("/api/meetings", {"url": url, "template_id": template.id, **extra})
+
+
+def test_create_sends_a_bot_and_returns_the_meeting(api, template, fake_vexa, session):
+    response = create(api, template)
+    assert response.status_code == 201
+    body = response.json()
+    assert response.headers["location"] == f"/api/meetings/{body['id']}"
+    assert body["status"] == "bot_sent" and body["title"] == "Google Meet abc-defg-hij"
+    assert body["template_id"] == template.id and body["can_cancel"] is True
+    assert fake_vexa.sent == [MEET]
+    row = session.get(Meeting, body["id"])
+    assert row.vexa_meeting_id == "4242" and row.started_polling_at is not None
+
+
+def test_create_trims_the_link(api, template, fake_vexa):
+    assert create(api, template, url=f"  {MEET}  ").status_code == 201
+    assert fake_vexa.sent == [MEET]
+
+
+@pytest.mark.parametrize(
+    "url", ["", "https://example.com/x", "not a url", "https://meet.google.com/" + "a" * 2100]
+)
+def test_create_refuses_a_link_that_is_not_meet_or_zoom(api, template, fake_vexa, session, url):
+    error = error_of(create(api, template, url=url), 400, "invalid_meeting_url")
+    assert (
+        error["message"] == "That is not a Google Meet or Zoom link. Paste the full meeting link."
+    )
+    assert fake_vexa.sent == [] and session.scalars(select(Meeting)).first() is None
+
+
+def test_create_needs_a_real_template(api, template, fake_vexa):
+    response = api.post("/api/meetings", {"url": MEET, "template_id": 9999})
+    error_of(response, 400, "template_required")
+    response = api.post("/api/meetings", {"url": MEET, "template_id": 0})
+    error_of(response, 400, "template_required")
+    response = api.post("/api/meetings", {"url": MEET, "template_id": 2**40})
+    error_of(response, 400, "template_required")
+    assert fake_vexa.sent == []
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"url": MEET},
+        {"template_id": 1},
+        {"url": MEET, "template_id": "1"},
+        {"url": MEET, "template_id": True},
+        {"url": 5, "template_id": 1},
+        {"url": MEET, "template_id": 1, "extra": 1},
+    ],
+)
+def test_create_validates_the_body(api, template, fake_vexa, body):
+    error_of(api.post("/api/meetings", body), 422, "validation_error")
+    assert fake_vexa.sent == []
+
+
+def test_create_refuses_while_a_bot_is_active(api, template, session, fake_vexa):
+    add_meeting(session, template, status="processing", step="audio")
+    error = error_of(create(api, template), 409, "bot_already_active")
+    assert error["message"] == "A bot is already on a meeting. Wait for it to finish first."
+    assert fake_vexa.sent == []
+
+
+def test_create_reports_a_vexa_failure_without_its_detail(api, template, fake_vexa, session):
+    fake_vexa.fail = True
+    response = create(api, template, url=ZOOM)
+    error = error_of(response, 502, "bot_send_failed")
+    assert "secret" not in response.text and "SECRETPWD" not in response.text
+    assert error["message"] == "The bot could not be sent. Please try again in a moment."
+    assert session.scalars(select(Meeting)).first() is None
+
+
+def test_cancel_removes_the_bot(api, template, session, fake_vexa):
+    meeting = add_meeting(session, template)
+    response = api.post(f"/api/meetings/{meeting.id}/cancel")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "failed" and body["failure_reason"] == REASON_CANCELLED
+    assert body["can_cancel"] is False
+    assert body["retry_block"] == "no_audio" and body["can_retry"] is False
+    assert fake_vexa.stopped == [("google_meet", "abc-defg-hij")]
+
+
+def test_cancel_only_while_waiting_for_the_bot(api, template, session, fake_vexa):
+    meeting = add_meeting(session, template, status="processing", step="audio")
+    error = error_of(api.post(f"/api/meetings/{meeting.id}/cancel"), 409, "not_waiting_for_bot")
+    assert "still waiting for its bot" in error["message"]
+    assert not hasattr(fake_vexa, "stopped")
+
+
+def test_cancel_reports_a_vexa_failure_and_changes_nothing(api, template, session, fake_vexa):
+    fake_vexa.stop_error = VexaError("secret detail")
+    meeting = add_meeting(session, template)
+    response = api.post(f"/api/meetings/{meeting.id}/cancel")
+    error_of(response, 502, "bot_stop_failed")
+    assert "secret" not in response.text
+    session.refresh(meeting)
+    assert meeting.status == "bot_sent"
+
+
+def test_retry_resumes_a_failed_meeting_at_its_step(api, template, session):
+    meeting = add_meeting(
+        session, template, status="failed", step="transcribing", failure_reason="x"
+    )
+    response = api.post(f"/api/meetings/{meeting.id}/retry")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "processing" and body["step"] == "transcribing"
+    assert body["failure_reason"] is None and body["refresh_after_seconds"] == 30
+    session.refresh(meeting)
+    assert meeting.started_polling_at is not None
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"status": "ready"},
+        {"status": "processing"},
+        {"status": "failed", "step": "waiting"},
+        {"status": "failed", "step": "audio", "failure_reason": REASON_NO_SPEECH},
+        {"status": "failed", "step": "audio", "audio_deleted_at": datetime.now(UTC)},
+    ],
+)
+def test_retry_is_refused_when_it_cannot_help(api, template, session, fields):
+    meeting = add_meeting(session, template, **fields)
+    error = error_of(api.post(f"/api/meetings/{meeting.id}/retry"), 409, "not_retryable")
+    assert error["message"] == "This meeting cannot be retried."
+    session.refresh(meeting)
+    assert meeting.status == fields["status"]
+
+
+def test_regenerate_rewrites_the_notes_without_transcribing(api, template, session, fake_openai):
+    other = Template(name="Short", instructions="Be brief.")
+    session.add(other)
+    session.commit()
+    meeting = ready(session, template)
+    fake_openai.notes = "\n\n".join(
+        f"## {h}\nRewritten"
+        for h in (
+            "Summary",
+            "Key points",
+            "Decisions",
+            "Action items",
+            "Open questions",
+            "Please check",
+        )
+    )
+    response = api.post(f"/api/meetings/{meeting.id}/regenerate", {"template_id": other.id})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["template_id"] == other.id and "Rewritten" in body["notes"]
+    assert "Rewritten" in body["notes_html"]
+    assert len(fake_openai.chat_calls) == 1 and fake_openai.transcription_calls == 0
+    session.refresh(meeting)
+    assert meeting.template_id == other.id and "Rewritten" in meeting.notes
+
+
+def test_regenerate_errors(api, template, session, fake_openai):
+    waiting = add_meeting(session, template)
+    error = error_of(
+        api.post(f"/api/meetings/{waiting.id}/regenerate", {"template_id": template.id}),
+        409,
+        "not_ready",
+    )
+    assert "once a meeting is ready" in error["message"]
+    finished = ready(session, template)
+    error_of(
+        api.post(f"/api/meetings/{finished.id}/regenerate", {"template_id": 9999}),
+        400,
+        "template_required",
+    )
+    error_of(api.post(f"/api/meetings/{finished.id}/regenerate", {}), 422, "validation_error")
+    assert fake_openai.chat_calls == []
+
+
+def test_regenerate_failure_keeps_the_old_notes(api, template, session, fake_openai):
+    meeting = ready(session, template)
+    fake_openai.notes = ""  # an empty reply makes generate_notes raise NotesFailed
+    error = error_of(
+        api.post(f"/api/meetings/{meeting.id}/regenerate", {"template_id": template.id}),
+        502,
+        "notes_failed",
+    )
+    assert error["message"] == "The notes could not be written. The old notes were kept."
+    session.refresh(meeting)
+    assert meeting.notes == NOTES
+
+
+@pytest.mark.parametrize("action", ["cancel", "retry", "regenerate"])
+def test_meeting_actions_on_unknown_ids_are_404(api, action):
+    body = {"template_id": 1} if action == "regenerate" else None
+    error_of(api.post(f"/api/meetings/999/{action}", body), 404, "not_found")
+
+
+# ---- templates ----
+
+
+def test_templates_list_is_sorted_and_has_instructions(api, template, session):
+    session.add(Template(name="Alpha", instructions="First."))
+    session.commit()
+    body = api.get("/api/templates").json()
+    assert [t["name"] for t in body["templates"]] == ["Alpha", "General"]
+    assert body["templates"][1] == {
+        "id": template.id,
+        "name": "General",
+        "instructions": "Write general notes.",
+    }
+
+
+def test_create_template(api, session):
+    response = api.post("/api/templates", {"name": "  Standup  ", "instructions": " Short. "})
+    assert response.status_code == 201
+    body = response.json()
+    assert body["name"] == "Standup" and body["instructions"] == "Short."
+    assert response.headers["location"] == f"/api/templates/{body['id']}"
+    assert session.get(Template, body["id"]).name == "Standup"
+
+
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        ({"name": "", "instructions": "x"}, "Give the template a name and instructions."),
+        ({"name": "x", "instructions": "   "}, "Give the template a name and instructions."),
+        ({"name": "n" * 101, "instructions": "x"}, "The name can be at most 100 characters."),
+        (
+            {"name": "n", "instructions": "i" * 4001},
+            "The instructions can be at most 4000 characters.",
+        ),
+    ],
+)
+def test_template_rules(api, session, body, message):
+    error = error_of(api.post("/api/templates", body), 400, "invalid_template")
+    assert error["message"] == message
+    assert session.scalars(select(Template)).first() is None
+
+
+def test_template_names_are_unique(api, template):
+    error = error_of(
+        api.post("/api/templates", {"name": "General", "instructions": "x"}), 400, "duplicate_name"
+    )
+    assert error["message"] == "A template with that name already exists."
+
+
+def test_update_template(api, template, session):
+    other = Template(name="Other", instructions="o")
+    session.add(other)
+    session.commit()
+    response = api.put(
+        f"/api/templates/{template.id}", {"name": "General", "instructions": "New text."}
+    )
+    assert response.status_code == 200  # keeping its own name is fine
+    assert response.json() == {"id": template.id, "name": "General", "instructions": "New text."}
+    response = api.put(f"/api/templates/{template.id}", {"name": "Renamed", "instructions": "x"})
+    assert response.json()["name"] == "Renamed"
+    error_of(
+        api.put(f"/api/templates/{template.id}", {"name": "Other", "instructions": "x"}),
+        400,
+        "duplicate_name",
+    )
+    session.refresh(template)
+    assert template.name == "Renamed"
+    error_of(api.put("/api/templates/999", {"name": "a", "instructions": "b"}), 404, "not_found")
+    error_of(api.put(f"/api/templates/{template.id}", {"name": "a"}), 422, "validation_error")
+
+
+# ---- vocabulary ----
+
+
+def test_vocabulary_add_list_and_delete(api, session):
+    for term in ("Zed", "Acme", "  Beyric  "):
+        response = api.post("/api/vocabulary", {"term": term})
+        assert response.status_code == 201 and set(response.json()) == {"id", "term"}
+    terms = api.get("/api/vocabulary").json()["terms"]
+    assert [t["term"] for t in terms] == ["Acme", "Beyric", "Zed"]
+    assert api.delete(f"/api/vocabulary/{terms[0]['id']}").status_code == 204
+    assert api.delete(f"/api/vocabulary/{terms[0]['id']}").status_code == 404  # already gone
+    assert [
+        t.term for t in session.scalars(select(VocabularyTerm).order_by(VocabularyTerm.term))
+    ] == ["Beyric", "Zed"]
+
+
+@pytest.mark.parametrize(
+    ("term", "message"),
+    [
+        ("", "Type a term to add."),
+        ("   ", "Type a term to add."),
+        ("a" * 101, "A term can be at most 100 characters."),
+        ("a<b", "A term cannot contain new lines or the characters < and >."),
+        ("a>b", "A term cannot contain new lines or the characters < and >."),
+        ("a\nb", "A term cannot contain new lines or the characters < and >."),
+    ],
+)
+def test_term_rules(api, term, message):
+    assert (
+        error_of(api.post("/api/vocabulary", {"term": term}), 400, "invalid_term")["message"]
+        == message
+    )
+
+
+def test_duplicate_terms_are_refused(api):
+    api.post("/api/vocabulary", {"term": "Beyric"})
+    error = error_of(api.post("/api/vocabulary", {"term": " Beyric "}), 400, "duplicate_term")
+    assert error["message"] == "That term is already in the list."
+
+
+def test_deleting_an_unknown_term_is_404(api):
+    error_of(api.delete("/api/vocabulary/999"), 404, "not_found")
+    error_of(api.delete("/api/vocabulary/0"), 404, "not_found")
+
+
+def test_term_body_is_validated(api):
+    error_of(api.post("/api/vocabulary", {}), 422, "validation_error")
+    error_of(api.post("/api/vocabulary", {"term": ["a"]}), 422, "validation_error")
