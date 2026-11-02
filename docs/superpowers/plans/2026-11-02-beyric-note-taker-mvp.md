@@ -50,9 +50,14 @@ Live check done: Vexa needs live transcription for speaker names, so always send
 
 ```python
 def test_new_meeting_defaults(session):
-    m = Meeting(url="https://meet.google.com/abc-defg-hij", platform="google_meet",
-                native_id="abc-defg-hij", template_id=1)
-    session.add(m); session.commit()
+    m = Meeting(
+        url="https://meet.google.com/abc-defg-hij",
+        platform="google_meet",
+        native_id="abc-defg-hij",
+        template_id=1,
+    )
+    session.add(m)
+    session.commit()
     assert m.status == "bot_sent"
     assert m.step == "waiting"
     assert m.failure_reason is None
@@ -96,15 +101,22 @@ git commit -m "chore: set up project and data models"
 def test_parse_zoom_url():
     assert parse_meeting_url("https://us05web.zoom.us/j/123456789?pwd=abc") == ("zoom", "123456789")
 
+
 def test_parse_meet_url():
-    assert parse_meeting_url("https://meet.google.com/abc-defg-hij") == ("google_meet", "abc-defg-hij")
+    assert parse_meeting_url("https://meet.google.com/abc-defg-hij") == (
+        "google_meet",
+        "abc-defg-hij",
+    )
+
 
 def test_rejects_other_urls():
     with pytest.raises(UnsupportedMeetingUrl):
         parse_meeting_url("https://example.com/meeting")
 
-def test_download_uses_raw_endpoint(httpx_mock, tmp_path):
-    ...  # assert request path is /recordings/1/media/2/raw?type=audio, not /master
+
+def test_download_uses_raw_endpoint(
+    httpx_mock, tmp_path
+): ...  # assert request path is /recordings/1/media/2/raw?type=audio, not /master
 ```
 
 - [ ] **Step 2: Run them**
@@ -147,6 +159,7 @@ def test_one_hour_audio_splits_under_limits(long_audio, tmp_path):
     assert all(p.stat().st_size < 25_000_000 for p in chunks)
     assert all(duration(p) <= 15 * 60 for p in chunks)
 
+
 def test_silent_audio_raises(silent_audio, tmp_path):
     with pytest.raises(NoSpeechError):
         prepare_chunks(silent_audio, tmp_path)
@@ -186,9 +199,12 @@ Expected: the keyword call spells "Beyric" correctly. If not, use `prompt` and r
 
 ```python
 def test_joins_chunks_in_order(fake_openai): ...
-def test_retries_then_succeeds(fake_openai): ...      # fails twice, then succeeds
+def test_retries_then_succeeds(fake_openai): ...  # fails twice, then succeeds
 def test_gives_up_after_three_attempts(fake_openai):
-    with pytest.raises(TranscriptionFailed): ...
+    with pytest.raises(TranscriptionFailed):
+        ...
+
+
 def test_invalid_term_is_removed_from_keywords(fake_openai): ...  # term containing < or >
 ```
 
@@ -225,6 +241,8 @@ def test_notes_prompt_includes_template_and_vocabulary(fake_openai): ...
 def test_notes_output_has_required_headings(fake_openai):
     # Summary, Key points, Decisions, Action items, Open questions, Please check
     ...
+
+
 def test_label_speakers_keeps_transcript_when_no_segments(): ...
 def test_label_speakers_falls_back_if_words_change(fake_openai): ...
 ```
