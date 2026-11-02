@@ -176,6 +176,9 @@ def check_start(settings: Settings) -> None:
             raise RuntimeError(f"{name} must be set before the app can start in production")
 
 
+PUBLIC_PATHS = frozenset({"/login", "/privacy", "/terms"})
+
+
 async def guard(request: Request, db: Session = Depends(get_session)) -> None:
     """App-wide check: owner pages need a login, and every POST needs a valid CSRF token."""
     path = request.url.path
@@ -185,7 +188,9 @@ async def guard(request: Request, db: Session = Depends(get_session)) -> None:
     if session["auth"] and session["epoch"] != current_epoch(db):
         session = request.state.session = new_session()  # revoked by a logout
         request.state.session_changed = True
-    public = path == "/login"
+    # The landing page (logged-out "/") and the legal pages must be readable without a login:
+    # Google's app review checks them. POSTs to them still need the CSRF token below.
+    public = path in PUBLIC_PATHS or (path == "/" and request.method in ("GET", "HEAD"))
     if not public and not session["auth"]:
         raise NotLoggedIn
     if request.method == "POST":

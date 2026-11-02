@@ -195,7 +195,23 @@ def _index(request, session: Session, status_code=200, **context):
 
 @router.get("/")
 def index(request: Request, session: Session = Depends(get_session)):
+    if not request.state.session["auth"]:
+        return render(request, "landing.html")
     return _index(request, session)
+
+
+# ---- public pages ----
+
+
+@router.get("/privacy")
+def privacy(request: Request):
+    days = request.app.state.settings.audio_retention_days
+    return render(request, "privacy.html", audio_retention_days=days)
+
+
+@router.get("/terms")
+def terms(request: Request):
+    return render(request, "terms.html")
 
 
 @router.post("/meetings")

@@ -1,0 +1,44 @@
+{% extends "public_base.html" %}
+{% block content %}
+<main class="pub-main">
+  <section class="hero">
+    <div>
+      <p class="kicker">Works with Google Meet and Zoom</p>
+      <h1>Clear notes from every meeting, without taking them yourself.</h1>
+      <p class="lede">Paste a meeting link. Beyric Note Taker joins the call, records the conversation and gives you a summary, decisions and action items when it ends.</p>
+      <p><a class="pub-btn pub-btn-lg" href="/login">Sign in</a></p>
+      <p class="muted small">Beyric Note Taker is in a private pilot with a small group of testers.</p>
+    </div>
+    <figure class="sample" aria-label="Example meeting notes">
+      <div class="sample-head"><strong>Weekly product sync</strong><span class="badge ready">Ready</span></div>
+      <p class="meta">Example &middot; Zoom &middot; 32 min</p>
+      <h2>Summary</h2>
+      <p>The team agreed to ship the new onboarding flow next Tuesday. Billing changes move to the following sprint while the pricing page is reviewed.</p>
+      <h2>Decisions</h2>
+      <ul><li>Onboarding ships Tuesday</li><li>Billing moves to next sprint</li></ul>
+      <h2>Action items</h2>
+      <ul><li>Final copy review &middot; Amara</li><li>Update pricing page &middot; Tunde</li></ul>
+    </figure>
+  </section>
+
+  <section class="features">
+    <div><h2>Joins your calls</h2><p>Send the note taker to a Google Meet or Zoom link. It records quietly and leaves when the meeting ends.</p></div>
+    <div><h2>Notes in your format</h2><p>Templates for client calls, interviews and team updates decide what the notes focus on. Write your own in plain language.</p></div>
+    <div><h2>Names spelled right</h2><p>Add the names and terms your team uses, and transcripts and notes spell them the way you do.</p></div>
+  </section>
+
+  <section class="calendar-note">
+    <h2>Coming soon: your calendar</h2>
+    <p>Connect Google Calendar and the note taker joins the meetings you choose by itself, including Google Meet calls you start on the spot. It only reads what it needs to decide which meetings to join, and you can disconnect at any time. See the <a href="/privacy#google">Privacy Policy</a> for exactly what it reads.</p>
+  </section>
+
+  <section class="steps">
+    <h2>How it works</h2>
+    <ol>
+      <li><strong>Paste a meeting link.</strong> Choose a template and send the note taker in.</li>
+      <li><strong>Have your meeting.</strong> Admit it from the waiting room and talk as usual. Tell everyone it is recording.</li>
+      <li><strong>Get the notes.</strong> Read or copy them minutes after the call ends.</li>
+    </ol>
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Beyric Note Taker{% endblock %}</title>
+<meta name="description" content="Beyric Note Taker joins your Google Meet and Zoom calls and writes clear notes: a summary, decisions and action items.">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body class="public">
+<header class="pub-bar">
+  <a class="pub-brand" href="/">
+    <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="logo-tile"></rect><path d="M9 8H23a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H15L10.5 24.5V21H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" class="logo-bubble"></path><path d="M11 12.5h10M11 16.5h6" class="logo-lines"></path></svg>
+    <span>Beyric <span class="pub-brand-sub">Note Taker</span></span>
+  </a>
+  <nav>
+    {% if logged_in %}<a class="pub-btn" href="/">Open the app</a>{% else %}<a class="pub-btn" href="/login">Sign in</a>{% endif %}
+  </nav>
+</header>
+{% block content %}{% endblock %}
+<footer class="pub-foot">
+  <span>&copy; 2026 Beyrichq LTD</span>
+  <span class="pub-foot-links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:privacy@beyrictech.com">Contact</a></span>
+</footer>
+</body>
+</html>
