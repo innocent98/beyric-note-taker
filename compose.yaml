@@ -1,4 +1,4 @@
-# Web and worker services are added by later tasks. For now: database plus migrations.
+# The web service is added by a later task.
 services:
   db:
     image: postgres:17
@@ -23,5 +23,21 @@ services:
       db:
         condition: service_healthy
 
+  worker:
+    build: .
+    command: ["python", "-m", "app.worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
+    volumes:
+      - audiodata:/srv/data/audio
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
   dbdata:
+  audiodata:
