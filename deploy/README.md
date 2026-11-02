@@ -30,8 +30,10 @@ so nothing here takes a public port except through nginx.
   with `web` only, so Vexa, which shares `default` with `web`, cannot reach `next` and forge that
   header. Only processes on the server can reach ports 8020 and 8021,
   so nobody outside can pose as a proxy.
-- `next` is capped at 512 MB of memory (`mem_limit`) and holds no secrets. Building its image
-  (`next build`) needs about 1-2 GB for a minute or two, once per deploy.
+- `next` is capped at 512 MB of memory (`mem_limit`) and holds no secrets. Measured on a Mac it
+  used 37 MB idle and 65 MB at peak under 240 requests, so the cap is a ceiling, not a need.
+  Building its image (`next build`) peaked at about 0.8 GB for its largest process, once per
+  deploy; measure on the server (SOP `2026-11-02-nextjs-scaffold.md`).
 - Minimum server: **4 GB memory, 2 vCPUs** free for this app. Vexa used about 540 MB idle in a
   local run and about 1.4 GB with a bot in a call.
 
@@ -250,7 +252,7 @@ leave the `next` container holding port 8020) and the workflow fails.
 **The deploy that introduces `next`** moves port 8020 from `web` to `next`, so for a few seconds
 the site answers 502 while `web` is recreated on 8021 and `next` starts. Do it when no meeting is
 `bot_sent` or `processing` (the worker is not restarted, but the pilot should not be mid-call).
-Before it, check the server has about 2 GB of free memory for the Next.js build.
+Before it, check the server has about 1.5 GB of free memory for the Next.js build (`free -h`).
 
 ### Deploy key setup (once)
 

@@ -87,7 +87,18 @@ Goal: one look everywhere (the logged-in app is still blue and system-ui while t
 
 Strangler pattern: Next.js takes host port 8020 and proxies any path it does not own to FastAPI, so pages move one at a time with no nginx change and the pilot stays up. Jinja screens and Module 2a's CSS remain until each page is replaced.
 
-- [ ] Stream A, scaffold and spike (`feature/nextjs-scaffold`): `web/` app, Docker and compose service with a memory limit, fallback proxy, cookie forwarding, nonce CSP, tokens/fonts/components ported, public pages rebuilt with SEO basics, style guide page, CI path filters
+- [ ] Stream A, scaffold and spike (`feature/nextjs-scaffold`; SOP `docs/sop/2026-11-02-nextjs-scaffold.md`)
+  - [x] `web/` scaffold: Next.js 16, App Router, TypeScript, npm, Node 22, standalone output, ESLint, typecheck, Vitest
+  - [x] Docker: multi-stage non-root image, compose service `next` (127.0.0.1:8020, `mem_limit`, healthcheck), FastAPI moved to 127.0.0.1:8021, `deploy.sh` builds and checks both and still rolls back, `deploy/README.md`
+  - [x] Fallback proxy proven for the Jinja pages: cookies, `Set-Cookie`, 303, POST bodies, CSRF, headers, long requests, the visitor's address (`web/scripts/proxy-check.mjs`)
+  - [x] Nonce CSP for Next-rendered pages, no `unsafe-inline`, zero console errors in a real browser (`web/scripts/browser-check.mjs`; 2026-11-02)
+  - [x] Tokens, fonts, `components.css` ported; React components for every Jinja macro; `/styleguide` (non-production); guard tests ported
+  - [x] Public pages in Next: `/privacy`, `/terms` live (text equal to the Jinja templates, test-enforced); landing at `/welcome` (noindex) until `GET /api/session` exists
+  - [x] SEO basics: metadata, canonical, Open Graph, JSON-LD, `sitemap.ts`, `robots.ts`, `llms.txt`, favicon, manifest and icons
+  - [x] Container memory measured on a Mac: 37 MiB idle, 65 MiB peak after 240 requests (not yet on the server); `mem_limit` stays 512m as a ceiling
+  - [ ] CI: `web` job with path filters (docs-only skips both, Python-only skips Node, web-only skips Python), always-reporting `ci` job
+  - [ ] Adebayo's server steps (SOP "Operate"): subnet and memory check, deploy outside meetings, post-deploy checks, send back `docker stats` for `next`
+  - [ ] Decide X-Forwarded-For trust (`docs/spike/nextjs-scaffold/forwarded-for-trust.md`) before open sign-up
 - [ ] Stream B, JSON API (`feature/json-api`): `/api/` for session, meetings, templates, vocabulary with a CSRF header; tests; captured responses; `docs/fe-integration-guide-*.md`
 - [ ] Stream C, owner app screens to designer parity: login, meetings list and detail, templates, vocabulary
 - [ ] Stream D, new designed screens: accounts and pilot, calendar and auto-join, team, tasks, sprints, share and download, translation
