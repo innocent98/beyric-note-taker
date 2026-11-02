@@ -83,9 +83,20 @@ Goal: one look everywhere (the logged-in app is still blue and system-ui while t
 - [ ] Spike: htmx and Alpine (CSP build) under the strict CSP, self-hosted
 - [ ] PWA basics: manifest, icons, service worker
 
+## Module 2b: Next.js migration (decided 2026-11-02; plan in `docs/superpowers/specs/2026-11-02-nextjs-migration-plan.md`)
+
+Strangler pattern: Next.js takes host port 8020 and proxies any path it does not own to FastAPI, so pages move one at a time with no nginx change and the pilot stays up. Jinja screens and Module 2a's CSS remain until each page is replaced.
+
+- [ ] Stream A, scaffold and spike (`feature/nextjs-scaffold`): `web/` app, Docker and compose service with a memory limit, fallback proxy, cookie forwarding, nonce CSP, tokens/fonts/components ported, public pages rebuilt with SEO basics, style guide page, CI path filters
+- [ ] Stream B, JSON API (`feature/json-api`): `/api/` for session, meetings, templates, vocabulary with a CSRF header; tests; captured responses; `docs/fe-integration-guide-*.md`
+- [ ] Stream C, owner app screens to designer parity: login, meetings list and detail, templates, vocabulary
+- [ ] Stream D, new designed screens: accounts and pilot, calendar and auto-join, team, tasks, sprints, share and download, translation
+- [ ] Retire Jinja and the Module 2a CSS once every page is migrated
+- [ ] Measure Next.js memory on the server (Adebayo runs the SSH steps)
+
 ## Module 2: Pilot, accounts plus calendar auto-join (designing, 2026-11-02)
 
-Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per account for the whole pilot (admin uncapped); the frontend stays server-rendered Jinja (decided 2026-11-02; UI parity and UX flexibility are conditions, see Module 2a); company is Beyrichq LTD, Lagos, Nigeria. Design: `docs/ui/Beyric Note Taker redesign/` (Calendar card, Upcoming list, Settings → Calendar, legal pages).
+Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per account for the whole pilot (admin uncapped); the frontend moves to Next.js (decided 2026-11-02 evening, superseding the Jinja decision; see Module 2b); company is Beyrichq LTD, Lagos, Nigeria. Design: `docs/ui/Beyric Note Taker redesign/` (Calendar card, Upcoming list, Settings → Calendar, legal pages).
 
 - [ ] Public pages for Google verification
   - [x] Landing, Privacy and Terms built and tested, text true to the app (`feature/public-pages`, 2026-11-02; see SOP)

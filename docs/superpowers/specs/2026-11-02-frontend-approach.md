@@ -1,6 +1,6 @@
 # Frontend approach: stay on FastAPI and Jinja, or move to Next.js?
 
-**Status: DECIDED 2026-11-02 (Adebayo): stay on FastAPI and Jinja.** Condition from him: **UI parity and UX flexibility are very important**; the plan for that is in "Keeping parity and flexibility" below. The comparison that led to it is kept as written. Written 2026-11-02 after he asked whether Python for the frontend is still right given the volume of UI, SEO/AEO/GEO, responsiveness, PWA, and brand parity. This replaces the earlier one-line decision ("server-rendered, not Next.js", handoff section 2), which was made before the team, tasks and sprints UI existed.
+**Status: SUPERSEDED the same evening. First decided 2026-11-02 to stay on Jinja; then Adebayo chose Next.js instead (see `2026-11-02-nextjs-migration-plan.md`). The text below is kept for the record.** Earlier status: stay on FastAPI and Jinja. Condition from him: **UI parity and UX flexibility are very important**; the plan for that is in "Keeping parity and flexibility" below. The comparison that led to it is kept as written. Written 2026-11-02 after he asked whether Python for the frontend is still right given the volume of UI, SEO/AEO/GEO, responsiveness, PWA, and brand parity. This replaces the earlier one-line decision ("server-rendered, not Next.js", handoff section 2), which was made before the team, tasks and sprints UI existed.
 
 ## Where we are today (counted from the repo, 2026-11-02)
 
