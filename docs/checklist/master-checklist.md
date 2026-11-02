@@ -24,7 +24,7 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 
 - [x] Task 0: Vexa check and project setup (2026-11-02: settings, models, first migration with seeded templates, CI)
 - [ ] Task 1: Vexa client
-- [ ] Task 2: Audio preparation
+- [x] Task 2: Audio preparation (2026-11-02: mono 32 kbps Opus chunks up to 15 min, silence-aware cuts, ffmpeg in Docker and CI)
 - [ ] Task 3: Transcription with custom vocabulary
 - [ ] Task 4: Speakers and notes
 - [ ] Task 5: Worker pipeline
