@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     session_secret: str = ""
     cookie_secure: bool = True
     # Comma-separated proxy addresses whose X-Forwarded-For header is trusted ("" = none).
-    # Read by compose.yaml for uvicorn's --forwarded-allow-ips; not used by the app code.
+    # Read by compose.yaml for uvicorn's --forwarded-allow-ips (unset = 172.28.0.1, set but empty
+    # = none); not used by the app code.
     trusted_proxy_ips: str = ""
 
 

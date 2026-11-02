@@ -3,6 +3,8 @@
 # nginx's connections arrive from inside the container (the bridge gateway, 172.28.0.1) is
 # known and can be the one trusted proxy. Vexa also runs on the host (port 8056) and is
 # reached as host.docker.internal.
+# TRUSTED_PROXY_IPS: unset means the bridge gateway above; set but EMPTY means trust no proxy
+# (`-` interpolation, not `:-`, so an empty value is kept rather than replaced by the default).
 services:
   db:
     image: postgres:17
@@ -12,6 +14,7 @@ services:
       POSTGRES_DB: notetaker
     volumes:
       - dbdata:/var/lib/postgresql/data
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d notetaker"]
       interval: 5s
@@ -56,7 +59,7 @@ services:
       - --host=0.0.0.0
       - --port=8000
       - --proxy-headers
-      - --forwarded-allow-ips=${TRUSTED_PROXY_IPS:-172.28.0.1}
+      - --forwarded-allow-ips=${TRUSTED_PROXY_IPS-172.28.0.1}
     user: app
     env_file: .env
     environment:

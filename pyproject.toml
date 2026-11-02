@@ -13,12 +13,14 @@ dependencies = [
     "jinja2>=3.1",
     "httpx>=0.28",
     "python-multipart>=0.0.12",
-    "openai>=2.0",
+    # 2.50 is the first release whose transcription call takes `keywords`.
+    "openai>=2.50",
     "markdown-it-py>=3.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-httpx>=0.35", "ruff>=0.8"]
+# ruff is pinned exactly so local runs and CI lint and format identically.
+dev = ["pytest>=8", "pytest-httpx>=0.35", "ruff==0.17.3"]
 
 [tool.setuptools]
 packages = ["app"]

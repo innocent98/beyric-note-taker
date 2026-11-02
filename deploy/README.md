@@ -10,6 +10,8 @@ One Ubuntu 24.04 server runs everything:
 
 nginx runs on the host so certbot can edit nothing and renew with a plain `certbot renew`. The `web` container is published on `127.0.0.1:8000`; nginx connects to it, so the app sees nginx as the Docker bridge gateway `172.28.0.1` (`compose.yaml` pins that network). That is the one trusted proxy.
 
+`web` is published on `127.0.0.1` only (`compose.yaml`: `127.0.0.1:8000:8000`), so only processes on the server itself can open a connection to it. The trusted gateway address is therefore reachable only from the server: nobody outside can connect to port 8000 and pass themselves off as the trusted proxy, whatever `X-Forwarded-For` they send.
+
 Containers reach Vexa on the host through `host.docker.internal:8056` (`extra_hosts: host-gateway`).
 
 Minimum server: **4 GB memory, 2 vCPUs**, Ubuntu 24.04. Vexa Lite alone used about 830 MB idle in the spike, and a bot in a call needs more.
@@ -132,7 +134,7 @@ hdr = {"X-Admin-API-Key": os.environ["ADMIN_API_TOKEN"], "Content-Type": "applic
 def call(path, body):
     req = urllib.request.Request(base + path, json.dumps(body).encode(), hdr, method="POST")
     return json.load(urllib.request.urlopen(req))
-user = call("/admin/users", {"email": "notes-app@localhost", "name": "Beyric Note Taker", "max_concurrent_bots": 2})
+user = call("/admin/users", {"email": "notes-app@localhost", "name": "Beyric Note Taker", "max_concurrent_bots": 1})
 tok = call(f"/admin/users/{user['id']}/tokens", {"scopes": ["bot", "tx"]})
 print(tok["token"])
 PY
@@ -163,7 +165,7 @@ Edit `.env`:
 | `SESSION_SECRET` | `python3 -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `APP_ENV` | `production` |
 | `COOKIE_SECURE` | `true` |
-| `TRUSTED_PROXY_IPS` | `172.28.0.1` (nginx's address as the container sees it) |
+| `TRUSTED_PROXY_IPS` | `172.28.0.1` (nginx's address as the container sees it). Leave the line out and compose uses the same address; set it **empty** (`TRUSTED_PROXY_IPS=`) and no proxy is trusted at all |
 
 Leave `TRANSCRIPTION_MODEL` and `NOTES_MODEL` at the `.env.example` values unless told otherwise.
 
@@ -234,7 +236,7 @@ sudo certbot renew --dry-run
 systemctl list-timers | grep certbot
 ```
 
-What `deploy/nginx.conf` does: redirects HTTP to HTTPS; proxies to `127.0.0.1:8000`; **overwrites** `X-Forwarded-For` with the connecting address (a client-sent value is discarded, so it cannot dodge the app's login limit); sets `Host` and `X-Forwarded-Proto`; limits POST `/login` to 6 a minute per address (burst 3, then HTTP 429) and all traffic to 20 requests a second; adds HSTS (1 year, no subdomains, no preload), `X-Frame-Options: DENY` and a `Permissions-Policy`. It leaves the CSP, `nosniff`, `Referrer-Policy` and `Cache-Control` to the app, which already sets them.
+What `deploy/nginx.conf` does: redirects HTTP to HTTPS; proxies to `127.0.0.1:8000` (waiting up to 60 s for a reply, 300 s for rewriting notes, `/meetings/<id>/regenerate`); **overwrites** `X-Forwarded-For` with the connecting address (a client-sent value is discarded, so it cannot dodge the app's login limit); sets `Host` and `X-Forwarded-Proto`; limits POST `/login` to 6 a minute per address (burst 3, then HTTP 429) and all traffic to 20 requests a second; adds HSTS (1 year, no subdomains, no preload), `X-Frame-Options: DENY` and a `Permissions-Policy`. It leaves the CSP, `nosniff`, `Referrer-Policy` and `Cache-Control` to the app, which already sets them.
 
 ## 7. Daily backup
 
@@ -328,7 +330,20 @@ curl -s -o /dev/null -w '%{http_code}\n' https://notes.yourdomain.com/health   #
 - [ ] HTTP redirects to HTTPS; HTTPS shows the login page; the browser shows a valid certificate.
 - [ ] Response headers show one `Content-Security-Policy` (the app's), plus HSTS and `X-Frame-Options`.
 - [ ] Login with the owner password works; the cookie is `Secure`.
-- [ ] Spoof test: `curl -s -X POST https://notes.yourdomain.com/login -d 'password=x' -H 'X-Forwarded-For: 1.2.3.4'` repeated 6 times from one machine gets locked out (HTTP 429 from nginx first, then the app's own message). A different spoofed address must not reset the count.
+- [ ] Spoof test. A login POST needs the session cookie and its CSRF token, or the app refuses it with 403 before it counts anything. Get both, then send wrong passwords with a different made-up `X-Forwarded-For` each time:
+
+  ```bash
+  HOST=https://notes.yourdomain.com
+  JAR=$(mktemp)
+  TOKEN=$(curl -s -c "$JAR" "$HOST/login" | sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p')
+  for i in 1 2 3 4 5 6 7 8; do
+    curl -s -b "$JAR" -o /dev/null -w '%{http_code}\n' -X POST "$HOST/login" \
+      -d 'password=wrong' -d "csrf_token=$TOKEN" -H "X-Forwarded-For: 10.9.8.$i"
+  done
+  rm -f "$JAR"
+  ```
+
+  Expected: the first few answers are `401`, then every one is `429`. The `429` comes from nginx (6 a minute, burst 3), keyed on the real connecting address. Changing the made-up `X-Forwarded-For` must not bring `401` back. (The app's own limit, 5 failures in 15 minutes, shows "Too many failed attempts" instead of nginx's plain error page.)
 - [ ] `docker compose ps`: `db`, `web` healthy; `worker` up. `docker compose logs worker` shows no Vexa connection errors.
 - [ ] After `sudo reboot`: Vexa containers, the app and nginx all come back (`docker ps`, `systemctl status nginx`).
 - [ ] `backup.sh` produced a dump; the restore to a scratch database shows meetings and notes.
@@ -338,6 +353,6 @@ curl -s -o /dev/null -w '%{http_code}\n' https://notes.yourdomain.com/health   #
 
 - Backups stay on the same server, so they do not survive losing it. Copy them elsewhere (object storage or another host) once the owner picks a place.
 - The `docker exec` admin calls are the only way to mint keys; there is no rotation procedure yet. To rotate, mint a new key, update `.env`, `docker compose up -d web worker`, then delete the old key in Vexa.
-- Nothing monitors the stack. Add an uptime check on `/health`.
+- Nothing monitors the stack. Add an uptime check on `/health` (it returns `503` when the database is down).
 - Server hardening beyond the provider firewall (SSH keys only, unattended upgrades, fail2ban) is the owner's call.
 - Steps 1 to 9 have not been run on a server yet. Only the files were validated locally (see `.superpowers/sdd/2026-11-02-beyric-note-taker-mvp/task-7-report.md`).
