@@ -1,0 +1,28 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/templates",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Standup",
+      "instructions": "One line per person."
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "location": "/api/templates/5"
+    },
+    "body": {
+      "id": 5,
+      "name": "Standup",
+      "instructions": "One line per person."
+    }
+  }
+}

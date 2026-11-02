@@ -1,0 +1,34 @@
+{
+  "note": "template_id must be a JSON number, not a string.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "url": "https://meet.google.com/abc-defg-hij",
+      "template_id": "1"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "template_id",
+            "message": "Input should be a valid integer"
+          }
+        ]
+      }
+    }
+  }
+}

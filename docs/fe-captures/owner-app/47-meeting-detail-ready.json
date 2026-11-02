@@ -1,0 +1,44 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/7",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 7,
+      "title": "Google Meet abc-defg-hij",
+      "platform": "google_meet",
+      "native_id": "abc-defg-hij",
+      "status": "ready",
+      "step": "done",
+      "status_text": "Ready",
+      "status_tone": "success",
+      "template_id": 1,
+      "created_at": "2026-11-02T21:16:52.726490Z",
+      "failure_reason": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": false,
+      "can_retry": false,
+      "can_regenerate": true,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": true,
+      "refresh_after_seconds": null,
+      "notes": "## Summary\nAda Example and Ben Sample agreed to ship the **beta** on Friday.\n\n## Key points\n- The beta covers meetings and templates\n- Support rota starts Monday\n\n## Decisions\n- Ship the beta on Friday\n\n## Action items\n- Ada Example: write the release note by Thursday\n\n## Open questions\nNone noted\n\n## Please check\nNone noted",
+      "notes_html": "<h2>Summary</h2>\n<p>Ada Example and Ben Sample agreed to ship the <strong>beta</strong> on Friday.</p>\n<h2>Key points</h2>\n<ul>\n<li>The beta covers meetings and templates</li>\n<li>Support rota starts Monday</li>\n</ul>\n<h2>Decisions</h2>\n<ul>\n<li>Ship the beta on Friday</li>\n</ul>\n<h2>Action items</h2>\n<ul>\n<li>Ada Example: write the release note by Thursday</li>\n</ul>\n<h2>Open questions</h2>\n<p>None noted</p>\n<h2>Please check</h2>\n<p>None noted</p>\n",
+      "transcript": "[Ada Example]: Hello everyone, thanks for joining. I can ship the beta on Friday.\n[Ben Sample]: Good. I will take the support rota from Monday."
+    }
+  }
+}

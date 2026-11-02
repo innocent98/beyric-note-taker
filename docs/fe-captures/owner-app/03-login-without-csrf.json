@@ -1,0 +1,26 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "password": "capture-password-placeholder"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

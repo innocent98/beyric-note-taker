@@ -311,13 +311,37 @@ def test_openapi_and_docs_stay_off_in_the_app(api):
         assert api.client.get(path).status_code == 404
 
 
-def test_the_committed_openapi_file_is_current():
+def _outline(schema: dict) -> dict:
+    """What the frontend depends on: operations, and each model's field names and requirements.
+
+    Not the whole file: its wording shifts with FastAPI and pydantic releases, which is no reason
+    to fail a build. `python scripts/export_openapi.py --check` compares everything.
+    """
+    operations = {
+        (path, method): op["operationId"]
+        for path, item in schema["paths"].items()
+        for method, op in item.items()
+    }
+    models = {
+        name: (sorted(model.get("properties", {})), sorted(model.get("required", [])))
+        for name, model in schema["components"]["schemas"].items()
+    }
+    return {"operations": operations, "models": models}
+
+
+def test_the_committed_openapi_file_matches_the_routes():
     from scripts.export_openapi import build
 
     committed = Path(__file__).resolve().parent.parent / "docs" / "openapi.json"
-    assert json.loads(committed.read_text()) == build(), (
-        "run `python scripts/export_openapi.py` and commit docs/openapi.json"
+    assert _outline(json.loads(committed.read_text())) == _outline(build()), (
+        "the API changed: run `python scripts/export_openapi.py` and commit docs/openapi.json"
     )
+
+
+def test_a_login_through_the_page_works_for_the_api(client):
+    body = client.get("/api/session").json()
+    assert body["authenticated"] is True
+    assert client.get("/api/templates").status_code == 200
 
 
 # ---- meetings: reading ----
