@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
+{% if worker_stale %}
+<p class="notice" role="alert">The background worker has not checked in for over 5 minutes. New meetings will not be processed until it is running again.</p>
+{% endif %}
 <h1>New meeting</h1>
 <form method="post" action="/meetings">
   <input type="hidden" name="csrf_token" value="{{ csrf }}">

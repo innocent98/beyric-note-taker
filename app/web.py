@@ -1,7 +1,7 @@
 """Owner-facing pages: log in, paste a meeting link, read the notes and transcript."""
 
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -16,9 +16,9 @@ from starlette.convertors import Convertor, register_url_convertor
 
 from app import auth
 from app.db import get_session
-from app.models import Meeting, Template, VocabularyTerm
+from app.models import AppState, Meeting, Template, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
-from app.pipeline import REASON_NO_SPEECH
+from app.pipeline import REASON_CANCELLED, REASON_NO_SPEECH, REMOVAL_REASONS
 from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError, parse_meeting_url
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,7 @@ MAX_TEMPLATE_NAME_CHARS = 100
 MAX_INSTRUCTION_CHARS = 4000
 BAD_TERM_CHARS = ("<", ">", "\r", "\n")  # the same characters app/transcribe.py drops
 ACTIVE = ("bot_sent", "processing")
+WORKER_STALE_AFTER = timedelta(minutes=5)
 NEW_MEETING_LOCK = 6001  # serialises "is a bot active?" + "send a bot" across requests
 
 STEP_TEXT = {
@@ -176,12 +177,16 @@ def logout(request: Request, session: Session = Depends(get_session)):
 def _index(request, session: Session, status_code=200, **context):
     meetings = session.scalars(select(Meeting).order_by(Meeting.id.desc()).limit(50)).all()
     all_templates = session.scalars(select(Template).order_by(Template.name)).all()
+    state = session.get(AppState, 1)
+    beat = state.worker_heartbeat_at if state else None
+    worker_stale = beat is None or datetime.now(UTC) - beat > WORKER_STALE_AFTER
     return render(
         request,
         "index.html",
         status_code,
         meetings=meetings,
         templates=all_templates,
+        worker_stale=worker_stale,
         **context,
     )
 
@@ -255,6 +260,7 @@ def _meeting_page(request, session: Session, meeting: Meeting, status_code=200, 
         meeting=meeting,
         templates=all_templates,
         retry_block=retry_block(meeting) if meeting.status == "failed" else None,
+        bot_left_early=meeting.completion_reason in REMOVAL_REASONS,
         **context,
     )
 
@@ -290,6 +296,37 @@ def regenerate(
         return _meeting_page(request, session, meeting, 502, error=error)
     meeting.notes = notes
     meeting.template_id = template.id
+    session.commit()
+    return see_other(f"/meetings/{meeting.id}")
+
+
+@router.post("/meetings/{meeting_id:id}/cancel")
+def cancel(
+    meeting_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    vexa=Depends(get_vexa),
+):
+    """Take the bot out of a meeting it has not finished recording. No OpenAI call is made."""
+    _meeting_or_404(session, meeting_id)
+    meeting = session.scalars(  # re-read under a lock so the worker cannot move it meanwhile
+        select(Meeting)
+        .where(Meeting.id == meeting_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one()
+    if meeting.status != "bot_sent":
+        session.rollback()
+        error = "Only a meeting that is still waiting for its bot can be cancelled."
+        return _meeting_page(request, session, meeting, 409, error=error)
+    try:
+        vexa.stop_bot(meeting.platform, meeting.native_id)
+    except VexaError as exc:
+        session.rollback()
+        logger.warning("meeting %s: stop_bot failed (%s)", meeting.id, type(exc).__name__)
+        error = "The bot could not be stopped. Please try again in a moment."
+        return _meeting_page(request, session, meeting, 502, error=error)
+    meeting.status, meeting.failure_reason = "failed", REASON_CANCELLED
     session.commit()
     return see_other(f"/meetings/{meeting.id}")
 

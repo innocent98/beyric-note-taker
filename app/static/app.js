@@ -23,3 +23,19 @@ document.addEventListener("click", function (event) {
     fallback();
   }
 });
+
+// Forms marked data-disable-on-submit lock their buttons once submitted, so a slow request
+// (rewriting notes can take minutes) is not sent twice.
+document.addEventListener("submit", function (event) {
+  var form = event.target.closest("form[data-disable-on-submit]");
+  if (!form) return;
+  setTimeout(function () {
+    form.querySelectorAll("button").forEach(function (button) { button.disabled = true; });
+  }, 0);
+});
+window.addEventListener("pageshow", function (event) {
+  if (!event.persisted) return;
+  document.querySelectorAll("form[data-disable-on-submit] button").forEach(function (button) {
+    button.disabled = false;
+  });
+});

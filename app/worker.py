@@ -14,8 +14,9 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import Meeting
+from app.models import AppState, Meeting
 from app.pipeline import advance_meeting, delete_expired_audio
+from app.vexa import VexaClient
 
 logger = logging.getLogger("app.worker")
 CLEANUP_EVERY_SECONDS = 3600
@@ -34,6 +35,16 @@ def next_meeting_id(session: Session, after_id: int) -> int | None:
         .limit(1)
         .with_for_update(skip_locked=True)
     ).first()
+
+
+def record_heartbeat(session: Session, now: datetime) -> None:
+    """Stamp the time on the app_state row so the home page can tell the worker is alive."""
+    state = session.get(AppState, 1)
+    if state is None:
+        state = AppState(id=1)
+        session.add(state)
+    state.worker_heartbeat_at = now
+    session.commit()
 
 
 def run_pass(session: Session, after_id: int) -> int | None:
@@ -67,9 +78,10 @@ def main() -> None:
     while not stop.is_set():
         try:
             with SessionLocal() as session:
+                record_heartbeat(session, datetime.now(UTC))
                 found = run_pass(session, cursor)
                 if time.monotonic() - last_cleanup >= CLEANUP_EVERY_SECONDS:
-                    removed = delete_expired_audio(session, datetime.now(UTC))
+                    removed = delete_expired_audio(session, datetime.now(UTC), vexa=VexaClient())
                     last_cleanup = time.monotonic()
                     if removed:
                         logger.info("deleted audio for %s meetings", removed)

@@ -21,7 +21,7 @@ from app import audio
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
 from app.models import Meeting, Template, VocabularyTerm
-from app.notes import NotesFailed, generate_notes, label_speakers
+from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
 from app.vexa import VexaClient, VexaError, VexaMeeting
 
@@ -37,6 +37,16 @@ REASON_TRANSCRIPTION = "The recording could not be transcribed. Please try again
 REASON_AUDIO = "The recording could not be prepared for transcription."
 REASON_NOTES = "The notes could not be written. The transcript was saved."
 REASON_UNEXPECTED = "Something went wrong while processing this meeting."
+REASON_DOWNLOAD = "The recording could not be downloaded from the meeting bot."
+REASON_CANCELLED = "You cancelled this meeting before it was recorded."
+
+# A finished meeting whose recording is still "in progress" after this long is downloaded anyway:
+# Vexa builds the audio file when it is read (`GET /recordings/{id}/media/{id}/raw` assembles the
+# master from the uploaded chunks first), so the status can lag behind the file.
+RECORDING_GRACE = timedelta(minutes=10)
+# Vexa `completion_reason` values that mean the bot did not stay to the end. "evicted" is also
+# reported on calls that ended normally, so it only ever produces a notice, never a failure.
+REMOVAL_REASONS = frozenset({"evicted", "max_bot_time_exceeded"})
 
 # Consecutive polls that saw a finished meeting with no audio recording, per meeting. Lost on a
 # restart, which only gives the recording a fresh grace period.
@@ -82,6 +92,14 @@ def _give_up(session: Session, meeting: Meeting) -> None:
     _fail(session, meeting, f"The meeting did not finish being recorded within {hours} hours.")
 
 
+def _remember(meeting: Meeting, info: VexaMeeting) -> None:
+    """Keep what Vexa told us that is needed later: its recording id and why the bot left."""
+    if info.recording_id is not None:
+        meeting.vexa_recording_id = info.recording_id
+    if info.completion_reason is not None:
+        meeting.completion_reason = info.completion_reason
+
+
 def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
     """One look at Vexa while waiting. True once the recording is ready to download."""
     if meeting.started_polling_at is None:
@@ -91,6 +109,11 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
     except VexaError as exc:
         logger.warning("meeting %s: Vexa unreachable (%s)", meeting.id, type(exc).__name__)
         info = None
+
+    if info is not None:
+        _remember(meeting, info)
+        if info.status == "completed" and meeting.terminal_seen_at is None:
+            meeting.terminal_seen_at = now
 
     if info is None:
         pass
@@ -112,6 +135,19 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
             if count >= NO_AUDIO_GRACE_POLLS:
                 _fail(session, meeting, REASON_NOT_ADMITTED)
                 return False
+        elif (
+            info.recording_id is not None
+            and info.media_id is not None
+            and meeting.terminal_seen_at is not None
+            and now - meeting.terminal_seen_at >= RECORDING_GRACE
+        ):
+            # Still "in progress" long after the meeting ended: try the download anyway.
+            logger.warning(
+                "meeting %s: recording still %s; downloading anyway",
+                meeting.id,
+                info.recording_status,
+            )
+            return True
         # Otherwise the recording is still being finished off: keep waiting.
 
     if _expired(meeting, now):
@@ -125,6 +161,7 @@ def _step_audio(session: Session, meeting: Meeting, vexa) -> bool:
     path = audio_path(meeting.id)
     if not path.is_file():
         info = _lookup(vexa, meeting)
+        _remember(meeting, info)
         if info.recording_id is None or info.media_id is None:
             _fail(session, meeting, REASON_NOT_ADMITTED)
             return False
@@ -144,7 +181,7 @@ def _step_audio(session: Session, meeting: Meeting, vexa) -> bool:
 
 
 def _terms(session: Session) -> list[str]:
-    return list(session.scalars(select(VocabularyTerm.term)))
+    return list(session.scalars(select(VocabularyTerm.term).order_by(VocabularyTerm.id)))
 
 
 def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> bool:
@@ -165,9 +202,11 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
 def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> bool:
     if meeting.speaker_transcript is None:
         info = _lookup(vexa, meeting)
-        meeting.speaker_transcript = label_speakers(
+        text, complete = label_transcript(
             meeting.transcript or "", info.segments, client=openai_client
         )
+        meeting.speaker_transcript = text
+        meeting.speakers_incomplete = not complete
     meeting.step = "notes"
     session.commit()
     return True
@@ -226,8 +265,17 @@ def advance_meeting(
         session.rollback()
         logger.warning("meeting %s: Vexa error (%s)", meeting_id, type(exc).__name__)
         meeting = session.get(Meeting, meeting_id)
-        if meeting is not None and _expired(meeting, now):
-            _give_up(session, meeting)
+        # The 6 hour limit belongs to the waiting phase (see `_poll`). Once the recording is
+        # ready, a Vexa blip never fails a meeting. The one exception is a download that has not
+        # worked in 6 hours, which would otherwise keep the bot slot taken forever.
+        if (
+            meeting is not None
+            and meeting.status == "processing"
+            and meeting.step == "audio"
+            and meeting.transcript is None
+            and _expired(meeting, now)
+        ):
+            _fail(session, meeting, REASON_DOWNLOAD)
     except OperationalError as exc:
         # Transient database trouble: do not fail the meeting, try again on the next pass.
         logger.warning("meeting %s: database error (%s)", meeting_id, type(exc).__name__)
@@ -239,7 +287,7 @@ def advance_meeting(
         except OperationalError as inner:
             logger.warning("meeting %s: database still down (%s)", meeting_id, type(inner).__name__)
     except (TranscriptionFailed, NotesFailed, AudioError) as exc:
-        # Audio stays on disk so the meeting can be retried.
+        # Audio stays on disk so the meeting can be retried, unless ffmpeg could not read it.
         _fail_with(session, meeting_id, exc)
     except Exception as exc:
         _fail_with(session, meeting_id, exc)
@@ -260,14 +308,21 @@ def _fail_with(session: Session, meeting_id: int, exc: Exception) -> None:
         reason = REASON_UNEXPECTED
     meeting = session.get(Meeting, meeting_id)
     if meeting is not None:
+        if isinstance(exc, AudioError):
+            # A zero-byte or corrupt download would fail the same way on every retry. Remove it
+            # and go back to the download step, so "Try again" fetches the recording afresh.
+            shutil.rmtree(audio_path(meeting_id).parent, ignore_errors=True)
+            meeting.step = "audio"
         _fail(session, meeting, reason)
 
 
-def delete_expired_audio(session: Session, now: datetime) -> int:
-    """Delete audio folders of finished meetings older than the retention period.
+def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
+    """Delete audio of finished meetings older than the retention period, here and in Vexa.
 
-    The transcript and notes are kept. `audio_deleted_at` is set only once the folder is gone.
-    Returns how many meetings were cleared.
+    The transcript and notes are kept. `audio_deleted_at` is set only once the local folder is
+    gone and, when Vexa's recording id is known, Vexa's copy is gone too (`DELETE
+    /recordings/{id}`; Vexa answers 404 for one already deleted). A Vexa failure leaves the
+    meeting unmarked so the next pass tries again. Returns how many meetings were cleared.
     """
     cutoff = now - timedelta(days=get_settings().audio_retention_days)
     expired = session.scalars(
@@ -286,6 +341,17 @@ def delete_expired_audio(session: Session, now: datetime) -> int:
         except OSError as exc:
             logger.error("meeting %s: could not delete audio (%s)", meeting.id, type(exc).__name__)
             continue
+        if meeting.vexa_recording_id is not None:
+            try:
+                vexa = vexa or VexaClient()
+                vexa.delete_recording(meeting.vexa_recording_id)
+            except VexaError as exc:
+                logger.warning(
+                    "meeting %s: could not delete Vexa's copy (%s); will retry",
+                    meeting.id,
+                    type(exc).__name__,
+                )
+                continue
         meeting.audio_deleted_at = now
         cleared += 1
     session.commit()

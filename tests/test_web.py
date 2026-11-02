@@ -7,13 +7,14 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.auth import LoginLimiter
 from app.config import Settings
 from app.db import get_session
 from app.main import create_app
-from app.models import Meeting, Template, VocabularyTerm
+from app.models import AppState, Meeting, Template, VocabularyTerm
 from app.notes import HEADINGS
 from app.pipeline import REASON_NO_SPEECH
 from app.vexa import VexaError
@@ -46,6 +47,14 @@ class FakeVexa:
             raise VexaError("send_bot failed: secret detail")
         self.sent.append(url)
         return 4242
+
+    stop_error: Exception | None = None
+    stopped: list
+
+    def stop_bot(self, platform, native_id):
+        if self.stop_error:
+            raise self.stop_error
+        self.stopped = getattr(self, "stopped", []) + [(platform, native_id)]
 
 
 class FakeOpenAI:
@@ -737,3 +746,129 @@ def test_huge_template_id_in_forms_is_a_plain_400(client, template, session):
         f"/meetings/{meeting.id}",
     )
     assert regen.status_code == 400
+
+
+# ---- health ----
+
+
+def test_health_is_ok_with_the_database_up(anon_client):
+    response = anon_client.get("/health")
+    assert (response.status_code, response.text) == (200, "ok")
+
+
+def test_health_is_503_without_detail_when_the_database_is_down(app, anon_client):
+    class DownSession:
+        def execute(self, *_a, **_k):
+            raise OperationalError("select 1", {}, Exception("password authentication failed"))
+
+        def close(self):
+            pass
+
+    app.dependency_overrides[get_session] = lambda: DownSession()
+    response = anon_client.get("/health")
+    assert response.status_code == 503
+    assert response.text == "unavailable"
+    assert "password" not in response.text
+    assert "set-cookie" not in response.headers
+
+
+# ---- cancel ----
+
+
+def test_cancel_stops_the_bot_and_fails_the_meeting_without_openai(
+    client, fake_vexa, fake_openai, template, session
+):
+    meeting = add_meeting(session, template)
+    page = client.get(f"/meetings/{meeting.id}").text
+    assert f"/meetings/{meeting.id}/cancel" in page
+    response = post(client, f"/meetings/{meeting.id}/cancel", page=f"/meetings/{meeting.id}")
+    assert response.status_code == 303
+    assert fake_vexa.stopped == [("google_meet", "abc-defg-hij")]
+    session.refresh(meeting)
+    assert meeting.status == "failed"
+    assert meeting.failure_reason == "You cancelled this meeting before it was recorded."
+    assert fake_openai.chat_calls == [] and fake_openai.transcription_calls == 0
+    failed = client.get(f"/meetings/{meeting.id}").text
+    assert "You cancelled this meeting" in failed
+    assert f"/meetings/{meeting.id}/cancel" not in failed
+
+
+def test_cancel_failure_keeps_the_meeting_waiting(client, fake_vexa, template, session):
+    fake_vexa.stop_error = VexaError("stop_bot failed: secret detail")
+    meeting = add_meeting(session, template)
+    response = post(client, f"/meetings/{meeting.id}/cancel", page=f"/meetings/{meeting.id}")
+    assert response.status_code == 502
+    assert "secret" not in response.text
+    session.refresh(meeting)
+    assert meeting.status == "bot_sent"
+
+
+@pytest.mark.parametrize(
+    "status,step", [("processing", "audio"), ("ready", "done"), ("failed", "notes")]
+)
+def test_cancel_only_applies_to_waiting_meetings(
+    client, fake_vexa, template, session, status, step
+):
+    meeting = add_meeting(session, template, status=status, step=step)
+    response = post(client, f"/meetings/{meeting.id}/cancel", page=f"/meetings/{meeting.id}")
+    assert response.status_code == 409
+    assert getattr(fake_vexa, "stopped", []) == []
+    session.refresh(meeting)
+    assert meeting.status == status
+    assert f"/meetings/{meeting.id}/cancel" not in client.get(f"/meetings/{meeting.id}").text
+
+
+def test_cancel_unknown_meeting_is_404(client):
+    assert post(client, "/meetings/999/cancel").status_code == 404
+
+
+# ---- notices on the meeting page ----
+
+SPEAKERS_NOTICE = "Speaker names unavailable for part of this transcript."
+REMOVED_NOTICE = "The bot left the meeting early or was removed. The notes may be incomplete."
+
+
+def test_incomplete_speaker_labels_show_a_notice(client, template, session):
+    meeting = ready_meeting(session, template, speakers_incomplete=True)
+    assert SPEAKERS_NOTICE in client.get(f"/meetings/{meeting.id}").text
+    other = ready_meeting(session, template)
+    assert SPEAKERS_NOTICE not in client.get(f"/meetings/{other.id}").text
+
+
+@pytest.mark.parametrize("reason", ["evicted", "max_bot_time_exceeded"])
+def test_removal_reasons_show_a_notice_on_a_ready_meeting(client, template, session, reason):
+    meeting = ready_meeting(session, template, completion_reason=reason)
+    page = client.get(f"/meetings/{meeting.id}").text
+    assert REMOVED_NOTICE in page
+    assert "Ready" in page
+
+
+@pytest.mark.parametrize("reason", [None, "stopped", "left_alone", "startup_alone", "odd"])
+def test_other_completion_reasons_show_no_notice(client, template, session, reason):
+    meeting = ready_meeting(session, template, completion_reason=reason)
+    assert REMOVED_NOTICE not in client.get(f"/meetings/{meeting.id}").text
+
+
+# ---- worker heartbeat ----
+
+STALE = "The background worker has not checked in"
+
+
+def test_home_page_warns_when_the_worker_has_not_checked_in(client, session):
+    assert STALE in client.get("/").text  # no row, no heartbeat yet
+    session.add(AppState(id=1, worker_heartbeat_at=datetime.now(UTC) - timedelta(minutes=6)))
+    session.commit()
+    assert STALE in client.get("/").text
+
+
+def test_home_page_has_no_warning_for_a_fresh_heartbeat(client, session):
+    session.add(AppState(id=1, worker_heartbeat_at=datetime.now(UTC) - timedelta(minutes=4)))
+    session.commit()
+    assert STALE not in client.get("/").text
+
+
+def test_regenerate_and_cancel_buttons_disable_on_submit(client, template, session):
+    ready = ready_meeting(session, template)
+    assert "data-disable-on-submit" in client.get(f"/meetings/{ready.id}").text
+    waiting = add_meeting(session, template)
+    assert "data-disable-on-submit" in client.get(f"/meetings/{waiting.id}").text

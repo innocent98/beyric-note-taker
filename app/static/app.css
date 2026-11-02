@@ -22,6 +22,7 @@ button.danger { background: #b42318; color: #fff; }
 button.link { background: none; color: var(--accent); margin: 0; padding: 0; min-height: 0; text-decoration: underline; }
 form.inline { display: inline; }
 .error { padding: 10px 12px; border-radius: 8px; border: 1px solid #b42318; background: #fef3f2; color: #7a271a; }
+.notice { padding: 10px 12px; border-radius: 8px; border: 1px solid #b54708; background: #fffaeb; color: #7a2e0e; }
 .note, .muted, .meta { color: var(--muted); }
 .note { margin: 12px 0 0; }
 .meta { font-size: 0.9rem; margin: 0; }

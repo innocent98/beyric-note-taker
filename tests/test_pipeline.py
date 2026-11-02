@@ -7,7 +7,7 @@ from sqlalchemy.exc import OperationalError
 
 from app import audio, pipeline
 from app.config import Settings
-from app.models import Meeting, Template, VocabularyTerm
+from app.models import AppState, Meeting, Template, VocabularyTerm
 from app.notes import HEADINGS
 from app.vexa import VexaError, VexaMeeting
 
@@ -45,6 +45,13 @@ class FakeVexa:
         return item
 
     fail_download = False
+    recording_deletes: list
+    delete_error: Exception | None = None
+
+    def delete_recording(self, recording_id):
+        self.recording_deletes = getattr(self, "recording_deletes", []) + [recording_id]
+        if self.delete_error:
+            raise self.delete_error
 
     def download_audio(self, recording_id, media_id, path):
         self.downloads += 1
@@ -328,6 +335,7 @@ def test_database_error_while_waiting_retries_then_gives_up(session, meeting, mo
 
 
 def test_audio_deleted_after_seven_days(session, meeting, env):
+    meeting.vexa_recording_id = None  # no Vexa copy known
     folder = env / "a" / str(meeting.id)
     folder.mkdir(parents=True)
     (folder / "source.webm").write_bytes(b"a")
@@ -371,3 +379,210 @@ def test_worker_pass_survives_unexpected_error(session, meeting, monkeypatch):
     monkeypatch.setattr(worker, "advance_meeting", boom)
     assert worker.run_pass(session, 0) == meeting.id
     assert session.get(Meeting, meeting.id) is not None  # session still usable after rollback
+
+
+# ---- Vexa copy of the audio ----
+
+
+def _expired_ready_meeting(session, meeting, env, recording_id=7):
+    folder = env / "a" / str(meeting.id)
+    folder.mkdir(parents=True)
+    (folder / "source.webm").write_bytes(b"a")
+    meeting.status, meeting.vexa_recording_id = "ready", recording_id
+    meeting.created_at = NOW - timedelta(days=8)
+    session.commit()
+    return folder
+
+
+def test_first_sight_of_the_recording_stores_its_id(session, meeting):
+    pending = VexaMeeting(
+        status="active", recording_id=7, media_id=9, recording_status="in_progress"
+    )
+    run(session, meeting, FakeVexa(pending))
+    assert meeting.vexa_recording_id == 7
+
+
+def test_cleanup_deletes_both_copies_before_marking_audio_deleted(session, meeting, env):
+    folder = _expired_ready_meeting(session, meeting, env)
+    vexa = FakeVexa(DONE)
+    assert pipeline.delete_expired_audio(session, NOW, vexa=vexa) == 1
+    session.refresh(meeting)
+    assert not folder.exists()
+    assert vexa.recording_deletes == [7]
+    assert meeting.audio_deleted_at is not None
+
+
+def test_vexa_failure_keeps_audio_deleted_at_unset_and_retries_next_pass(session, meeting, env):
+    folder = _expired_ready_meeting(session, meeting, env)
+    vexa = FakeVexa(DONE)
+    vexa.delete_error = VexaError("down")
+    assert pipeline.delete_expired_audio(session, NOW, vexa=vexa) == 0
+    session.refresh(meeting)
+    assert not folder.exists()  # the local copy is gone either way
+    assert meeting.audio_deleted_at is None
+    vexa.delete_error = None
+    assert pipeline.delete_expired_audio(session, NOW, vexa=vexa) == 1
+    session.refresh(meeting)
+    assert meeting.audio_deleted_at is not None
+    assert vexa.recording_deletes == [7, 7]
+
+
+def test_meeting_without_a_known_recording_skips_vexa(session, meeting, env):
+    _expired_ready_meeting(session, meeting, env, recording_id=None)
+    vexa = FakeVexa(DONE)
+    assert pipeline.delete_expired_audio(session, NOW, vexa=vexa) == 1
+    assert getattr(vexa, "recording_deletes", []) == []
+
+
+def test_local_failure_does_not_touch_vexa(session, meeting, env, monkeypatch):
+    _expired_ready_meeting(session, meeting, env)
+
+    def boom(path):
+        raise OSError("busy")
+
+    monkeypatch.setattr(pipeline.shutil, "rmtree", boom)
+    vexa = FakeVexa(DONE)
+    assert pipeline.delete_expired_audio(session, NOW, vexa=vexa) == 0
+    assert getattr(vexa, "recording_deletes", []) == []
+
+
+# ---- a recording stuck in progress ----
+
+STUCK = VexaMeeting(
+    status="completed",
+    recording_id=7,
+    media_id=9,
+    recording_status="in_progress",
+    completion_reason="stopped",
+)
+
+
+def test_stuck_recording_is_downloaded_after_the_grace(session, meeting):
+    vexa = FakeVexa(STUCK)
+    run(session, meeting, vexa)  # first sight of the finished meeting
+    assert (meeting.status, meeting.step) == ("bot_sent", "waiting")
+    assert meeting.terminal_seen_at == NOW
+    assert vexa.downloads == 0
+    run(session, meeting, vexa, now=NOW + timedelta(minutes=9))
+    assert vexa.downloads == 0
+    run(session, meeting, vexa, now=NOW + timedelta(minutes=10, seconds=1))
+    assert vexa.downloads == 1
+    assert (meeting.status, meeting.step) == ("ready", "done")
+
+
+def test_stuck_recording_with_failed_download_stays_for_retry(session, meeting):
+    vexa = FakeVexa(STUCK)
+    vexa.fail_download = True
+    run(session, meeting, vexa)
+    run(session, meeting, vexa, now=NOW + timedelta(minutes=11))
+    assert (meeting.status, meeting.step) == ("processing", "audio")
+    assert meeting.failure_reason is None
+
+
+def test_grace_does_not_apply_while_the_meeting_is_still_running(session, meeting):
+    running = VexaMeeting(
+        status="active", recording_id=7, media_id=9, recording_status="in_progress"
+    )
+    vexa = FakeVexa(running)
+    run(session, meeting, vexa, now=NOW + timedelta(hours=1))
+    assert vexa.downloads == 0 and meeting.terminal_seen_at is None
+
+
+# ---- audio problems ----
+
+
+def test_corrupt_audio_is_deleted_so_retry_downloads_again(session, meeting, env, monkeypatch):
+    def corrupt(source, out_dir):
+        raise audio.AudioError("ffmpeg exited with 1")
+
+    monkeypatch.setattr(audio, "prepare_chunks", corrupt)
+    vexa = FakeVexa(DONE)
+    run(session, meeting, vexa)
+    assert meeting.status == "failed"
+    assert meeting.failure_reason == "The recording could not be prepared for transcription."
+    assert meeting.step == "audio"
+    assert not (env / "a" / str(meeting.id) / "source.webm").exists()
+
+    monkeypatch.setattr(audio, "prepare_chunks", lambda s, o: _good_chunks(o))
+    meeting.status = "processing"  # what the Try again button does
+    session.commit()
+    run(session, meeting, vexa)
+    assert vexa.downloads == 2
+    assert meeting.status == "ready"
+
+
+def _good_chunks(out_dir):
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    chunk = Path(out_dir) / "chunk_000.webm"
+    chunk.write_bytes(b"x")
+    return [chunk]
+
+
+# ---- the 6 hour limit belongs to the waiting phase ----
+
+
+def test_vexa_blip_after_six_hours_does_not_fail_a_meeting_with_a_transcript(session, meeting):
+    meeting.status, meeting.step = "processing", "speakers"
+    meeting.transcript = TRANSCRIPT
+    meeting.started_polling_at = NOW - timedelta(hours=7)
+    session.commit()
+    run(session, meeting, FakeVexa(VexaError("down")))
+    assert (meeting.status, meeting.step) == ("processing", "speakers")
+    assert meeting.failure_reason is None
+
+
+def test_download_that_never_works_gives_up_with_its_own_reason(session, meeting):
+    meeting.status, meeting.step = "processing", "audio"
+    meeting.started_polling_at = NOW - timedelta(hours=7)
+    session.commit()
+    run(session, meeting, FakeVexa(VexaError("down")))
+    assert meeting.status == "failed"
+    assert meeting.failure_reason == "The recording could not be downloaded from the meeting bot."
+    assert "6 hours" not in meeting.failure_reason
+
+
+# ---- speaker names ----
+
+
+def test_speaker_flag_is_false_when_everything_was_labelled(session, meeting):
+    run(session, meeting, FakeVexa(DONE))
+    assert meeting.speakers_incomplete is False
+
+
+def test_speaker_flag_is_true_when_there_are_no_segments(session, meeting):
+    bare = VexaMeeting(status="completed", recording_id=7, media_id=9, recording_status="completed")
+    run(session, meeting, FakeVexa(bare))
+    assert meeting.status == "ready"
+    assert meeting.speakers_incomplete is True
+
+
+# ---- completion reason ----
+
+
+def test_completion_reason_is_stored_and_does_not_fail_the_meeting(session, meeting):
+    done = VexaMeeting(
+        status="completed",
+        segments=DONE.segments,
+        recording_id=7,
+        media_id=9,
+        recording_status="completed",
+        completion_reason="evicted",
+    )
+    run(session, meeting, FakeVexa(done))
+    assert meeting.status == "ready"
+    assert meeting.completion_reason == "evicted"
+
+
+# ---- heartbeat ----
+
+
+def test_heartbeat_is_recorded_on_the_single_state_row(session):
+    from app import worker
+
+    session.add(AppState(id=1))
+    session.commit()
+    worker.record_heartbeat(session, NOW)
+    assert session.get(AppState, 1).worker_heartbeat_at == NOW
+    later = NOW + timedelta(minutes=1)
+    worker.record_heartbeat(session, later)
+    assert session.get(AppState, 1).worker_heartbeat_at == later

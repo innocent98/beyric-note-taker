@@ -11,6 +11,17 @@
 <p class="muted">This page updates every 30 seconds.</p>
 {% endif %}
 
+{% if meeting.status == "bot_sent" %}
+<form method="post" action="/meetings/{{ meeting.id }}/cancel" data-disable-on-submit>
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <button type="submit">Cancel and remove the bot</button>
+</form>
+{% endif %}
+
+{% if meeting.status == "ready" and bot_left_early %}
+<p class="notice" role="note">The bot left the meeting early or was removed. The notes may be incomplete.</p>
+{% endif %}
+
 {% if meeting.status == "failed" %}
 <section>
   <h2>What went wrong</h2>
@@ -39,7 +50,7 @@
   <div class="notes">{{ (meeting.notes or "")|markdown }}</div>
   <textarea id="notes-raw" hidden readonly>{{ meeting.notes or "" }}</textarea>
 
-  <form method="post" action="/meetings/{{ meeting.id }}/regenerate" class="regen">
+  <form method="post" action="/meetings/{{ meeting.id }}/regenerate" class="regen" data-disable-on-submit>
     <input type="hidden" name="csrf_token" value="{{ csrf }}">
     <label for="template_id">Rewrite the notes with a template</label>
     <select id="template_id" name="template_id">
@@ -59,6 +70,9 @@
     <h2>Transcript</h2>
     <button type="button" class="small" data-copy="transcript-text" data-label="Copy transcript">Copy transcript</button>
   </div>
+  {% if meeting.speakers_incomplete %}
+  <p class="notice" role="note">Speaker names unavailable for part of this transcript.</p>
+  {% endif %}
   <pre id="transcript-text" class="transcript">{{ transcript }}</pre>
 </section>
 {% endif %}

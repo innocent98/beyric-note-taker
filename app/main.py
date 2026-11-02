@@ -5,9 +5,13 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app import auth, web
 from app.config import Settings, get_settings
+from app.db import get_session
 
 STATIC = Path(__file__).parent / "static"
 CSP = (
@@ -63,7 +67,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return HTMLResponse(page, status_code=403)
 
     @app.get("/health", include_in_schema=False)
-    def health() -> Response:
+    def health(db: Session = Depends(get_session)) -> Response:
+        """Unauthenticated liveness check that also needs the database. No detail in the body."""
+        try:
+            db.execute(text("select 1"))
+        except SQLAlchemyError:
+            return PlainTextResponse("unavailable", status_code=503)
         return PlainTextResponse("ok")
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
