@@ -1,0 +1,25 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/vocabulary",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "term": "Acme Example"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "term": "Acme Example"
+    }
+  }
+}

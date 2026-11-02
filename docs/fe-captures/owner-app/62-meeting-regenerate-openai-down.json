@@ -1,0 +1,27 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/7/regenerate",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "template_id": 1
+    }
+  },
+  "response": {
+    "status": 502,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "notes_failed",
+        "message": "The notes could not be written. The old notes were kept."
+      }
+    }
+  }
+}

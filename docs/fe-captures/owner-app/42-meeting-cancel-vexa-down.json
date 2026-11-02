@@ -1,0 +1,25 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/2/cancel",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 502,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "bot_stop_failed",
+        "message": "The bot could not be stopped. Please try again in a moment."
+      }
+    }
+  }
+}

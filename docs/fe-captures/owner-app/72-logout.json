@@ -1,0 +1,24 @@
+{
+  "note": "Logs out everywhere; the response carries a new anonymous token.",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax"
+    },
+    "body": {
+      "authenticated": false,
+      "csrf_token": "<csrf-D>"
+    }
+  }
+}
