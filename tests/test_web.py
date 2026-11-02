@@ -22,6 +22,7 @@ from app.web import get_openai_client, get_vexa
 
 PASSWORD = "correct horse battery"
 MEET = "https://meet.google.com/abc-defg-hij"
+OWNER_ONLY = "/templates"  # "/" is the public landing page when logged out
 ZOOM = "https://us02web.zoom.us/j/12345678901?pwd=SECRETPWD"
 NOTES = "\n\n".join(f"## {h}\nNone noted" for h in HEADINGS)
 TRANSCRIPT = "Ada: Hello everyone thanks for joining. I can ship it on Friday."
@@ -166,7 +167,7 @@ def ready_meeting(session, template, **fields) -> Meeting:
 
 
 def test_pages_require_login(anon_client):
-    for path in ("/", "/meetings/1", "/templates", "/vocabulary"):
+    for path in ("/meetings/1", "/templates", "/vocabulary"):
         response = anon_client.get(path)
         assert response.status_code == 303, path
         assert response.headers["location"] == "/login"
@@ -450,7 +451,7 @@ def test_wrong_password_is_refused(anon_client):
     token = token_from(anon_client.get("/login").text)
     response = anon_client.post("/login", data={"password": "nope", "csrf_token": token})
     assert response.status_code == 401
-    assert anon_client.get("/").status_code == 303
+    assert anon_client.get(OWNER_ONLY).status_code == 303
 
 
 def test_login_cookie_flags(app):
@@ -496,13 +497,13 @@ def test_forged_session_cookie_is_rejected(app):
     assert forged
     with TestClient(app, follow_redirects=False) as c:
         c.cookies.set("session", forged)
-        assert c.get("/").status_code == 303
+        assert c.get(OWNER_ONLY).status_code == 303
 
 
 def test_logout_ends_the_session(client):
     response = post(client, "/logout")
     assert response.status_code == 303
-    assert client.get("/").status_code == 303
+    assert client.get(OWNER_ONLY).status_code == 303
 
 
 @pytest.mark.parametrize("field", ["owner_password", "session_secret"])
@@ -577,7 +578,7 @@ def test_logout_revokes_a_copied_session_cookie(app, client):
     assert post(client, "/logout").status_code == 303
     with TestClient(app, follow_redirects=False) as thief:
         thief.cookies.set("session", stolen)
-        assert thief.get("/").status_code == 303
+        assert thief.get(OWNER_ONLY).status_code == 303
         assert thief.post("/meetings", data={}).status_code in (303, 403)
 
 
@@ -595,7 +596,7 @@ def test_changing_the_password_revokes_sessions(app, client):
     changed.dependency_overrides = app.dependency_overrides
     with TestClient(changed, follow_redirects=False) as c:
         c.cookies.set("session", old_cookie)
-        assert c.get("/").status_code == 303
+        assert c.get(OWNER_ONLY).status_code == 303
 
 
 def test_limiter_entries_expire():
@@ -881,3 +882,64 @@ def test_meeting_page_says_when_a_new_bot_was_sent(client, template, session):
     assert "Zoom turned the bot away, so a new one was sent (attempt 2 of 3)." in page
     first = add_meeting(session, template)
     assert "Zoom turned the bot away" not in client.get(f"/meetings/{first.id}").text
+
+
+# ---- public pages ----
+
+PUBLIC_PAGES = ("/", "/privacy", "/terms")
+
+
+def test_logged_out_home_is_the_landing_page_and_shows_no_meetings(anon_client, template, session):
+    ready_meeting(session, template)
+    page = anon_client.get("/")
+    assert page.status_code == 200
+    assert "Clear notes from every meeting" in page.text
+    assert TRANSCRIPT not in page.text
+    assert 'href="/login"' in page.text
+    assert 'action="/meetings"' not in page.text
+
+
+def test_logged_in_home_is_still_the_meetings_page(client, template, session):
+    page = client.get("/").text
+    assert 'action="/meetings"' in page
+    assert "Clear notes from every meeting" not in page
+
+
+@pytest.mark.parametrize("path", PUBLIC_PAGES)
+def test_public_pages_need_no_login(anon_client, path):
+    page = anon_client.get(path)
+    assert page.status_code == 200, path
+    assert 'name="viewport"' in page.text
+    # Links out (Google's policy pages) are fine; loading anything from elsewhere is not.
+    assert not re.search(r'src="https?://|<link[^>]+href="https?://', page.text), path
+    assert 'href="/privacy"' in page.text and 'href="/terms"' in page.text
+
+
+@pytest.mark.parametrize("path", ("/privacy", "/terms"))
+def test_legal_pages_name_the_company(anon_client, path):
+    page = anon_client.get(path).text
+    assert "Beyrichq LTD" in page
+    assert "Lagos, Nigeria" in page
+    assert "Beyric Technologies" not in page
+    assert "[" not in re.sub(r"<[^>]+>", "", page)  # no unfilled placeholders
+
+
+def test_privacy_page_has_the_google_limited_use_statement(anon_client):
+    page = anon_client.get("/privacy").text
+    assert "Google API Services User Data Policy" in page
+    assert "Limited Use" in page
+
+
+def test_privacy_page_states_the_real_audio_retention(anon_client, app):
+    days = app.state.settings.audio_retention_days
+    assert f"{days} days" in anon_client.get("/privacy").text
+
+
+@pytest.mark.parametrize("path", ("/privacy", "/terms"))
+def test_legal_pages_are_public_for_get_only(anon_client, path):
+    assert anon_client.post(path, data={}).status_code in (403, 405)
+
+
+def test_public_pages_do_not_open_other_owner_paths(anon_client):
+    for path in ("/meetings/1", "/templates", "/vocabulary", "/privacy/../templates"):
+        assert anon_client.get(path).status_code in (303, 404), path

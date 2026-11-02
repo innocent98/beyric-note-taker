@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status:** Spike finished with a go decision. Module 1 (MVP): Tasks 0 to 6 are built and tested, and the final fix wave (2026-11-02) is applied. Task 7 (deploy) has files ready but no server run yet; Task 8 (real-world acceptance) is not started.
+**Status (2026-11-02, evening):** MVP live at notes.beyrictech.com (PRs #1–#8 merged and deployed). Task 8 acceptance is under way (meeting 5, a Meet call with speech). The next module, Pilot (accounts plus calendar auto-join), is being designed; its public pages are built (`feature/public-pages`).
 
 Legend: `[x]` done and verified, `[ ]` not done.
 
@@ -44,8 +44,9 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [ ] Task 8: Real-world acceptance
   - [x] First live Zoom meeting processed end to end: about 6 minutes, full speaker names, notes (2026-11-02, after the bigint fix, PR #3)
   - [x] Meet bot joins and records; a muted call correctly fails as "No speech was found" (2026-11-02)
-  - [ ] Meet call with speech
-  - [ ] An hour-long meeting, rated against the old tool
+  - [x] Meet call with speech: meeting 5, about 56 min, ready 6 min after the call; 4 named speakers, all six note sections, useful "Please check" items; Adebayo: "it went well" (2026-11-02). Live speaker hints were fixed mid-call (see the Vexa language-column SOP)
+  - [ ] The same person can appear under two name orders ("Godstime America" / "America Godstime"); merge name variants in speaker labels
+  - [ ] An hour-long meeting, rated against the old tool (meeting 5 was 56 min and went well; a formal rating against Fireflies is still open)
   - [ ] Real OpenAI spend per meeting hour
 
 ## Next, after deploy (agreed 2026-11-02)
@@ -62,21 +63,40 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [x] Zoom sometimes blocks the bot's browser (`zoom_requires_rtms`; 2 of 3 joins): retry automatically (up to 3 bots) and show Vexa's reason instead of the generic message (2026-11-02; not yet seen live)
 - [ ] Longer term, if Zoom keeps blocking: Zoom RTMS (needs a Zoom Marketplace app)
 - [x] Log the database error code in the worker, not just the exception type (it hid the bigint bug) (2026-11-02)
+- [x] Vexa dropped live segments: whisper's language names ("haitian creole") overflow Vexa's `varchar(10)`. Widened to 32 live on the server (2026-11-02, meeting 5)
+- [ ] Make the Vexa column fix permanent (deploy step plus the upgrade routine), and report it upstream
+
+## Module 2: Pilot, accounts plus calendar auto-join (designing, 2026-11-02)
+
+Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per account for the whole pilot (admin uncapped); the frontend stays server-rendered (Jinja, plus htmx/Alpine where needed, PWA possible); company is Beyrichq LTD, Lagos, Nigeria. Design: `docs/ui/Beyric Note Taker redesign/` (Calendar card, Upcoming list, Settings → Calendar, legal pages).
+
+- [ ] Public pages for Google verification
+  - [x] Landing, Privacy and Terms built and tested, text true to the app (`feature/public-pages`, 2026-11-02; see SOP)
+  - [ ] Merged and live, checked in a browser
+  - [ ] Adebayo: Google Cloud project, OAuth consent screen, verify beyrictech.com in Search Console, mailboxes privacy@/legal@/security@
+  - [ ] Submit for verification (needs the working calendar flow and a demo video)
+- [ ] Written design (`docs/superpowers/specs/`), builder check, Adebayo's approval
+- [ ] Plan (superpowers:writing-plans)
+- [ ] Accounts: sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap
+- [ ] Calendar auto-join (Google): connect, upcoming list with per-meeting toggle, rules (all / only ones I organise / only when I turn it on), template for calendar meetings, scheduler in the worker
+- [ ] Instant Meet auto-join: Workspace Events subscription to the user's Meet spaces via Pub/Sub; first a throwaway spike, including whether personal Gmail accounts work
+- [ ] More than one bot at a time (overlapping meetings across users); measure how many the server can run
+- [ ] Clear "calendar disconnected" state (7-day expiry while Google is unverified)
 
 ## Backlog
 
-- [ ] Calendar auto-join (Google about 3-5 days, Outlook about 2-3 more; bot still joins as a guest)
+- [ ] Outlook calendar (after Google)
 - [ ] Microsoft Teams links (Vexa supports them; about a day plus a test call)
-- [ ] Notes in a chosen language, and an optional transcript translation (transcription already detects the language)
+- [ ] Languages: a default notes language, translation as a separate view (original stays the main version), a language for each share, names and vocabulary kept unchanged (designed in docs/ui). First test a French and English call
 - [ ] Mac app for capture without a bot
-- [ ] Sign-up, email verification and per-user meetings (only if others will use it)
+- [ ] Sharing notes by email (designed in docs/ui)
 
 ## Deferred follow-ups
 
 - [ ] Test paid Zoom accounts
 - [ ] Check Vexa licence exceptions before any commercial use
 - [ ] Choose a recording notice for meetings
-- [ ] Decide how long to keep audio
+- [x] Decide how long to keep audio: 7 days (`audio_retention_days`), stated in the privacy policy (2026-11-02)
 - [x] Create a private GitHub repo for this app (not a Vexa fork) so CI runs (2026-11-02: innocent98/beyric-note-taker, PR #1, CI green)
 - [ ] Vexa upgrade routine: read release notes, bump the pinned image tag, re-run one Meet and one Zoom call
 - [x] Raise the worker heartbeat warning from 5 to 20 minutes (2026-11-02)
