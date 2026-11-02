@@ -5,7 +5,7 @@ import httpx
 import openai
 import pytest
 
-from app import transcribe
+from app import retry
 from app.transcribe import TranscriptionFailed, transcribe_chunks
 
 
@@ -33,7 +33,7 @@ def status_error(cls, code):
 @pytest.fixture
 def fake_openai(monkeypatch):
     sleeps: list[float] = []
-    monkeypatch.setattr(transcribe.time, "sleep", sleeps.append)
+    monkeypatch.setattr(retry.time, "sleep", sleeps.append)
 
     def make(script):
         client = FakeOpenAI(script)

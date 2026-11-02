@@ -4,19 +4,15 @@ Live check (2026-11-02, gpt-transcribe): "Beyric" came back as "BIRIC" with no h
 "Biric" with `prompt`, but correctly with `keywords`. So vocabulary goes in `keywords`.
 """
 
-import time
 from pathlib import Path
 
-import openai
 from openai import OpenAI
 
 from app.config import get_settings
+from app.retry import call_with_retry
 
-MAX_ATTEMPTS = 3
-BACKOFF_SECONDS = (1.0, 3.0)
 REQUEST_TIMEOUT = 300.0
 _INVALID_KEYWORD_CHARS = ("<", ">", "\r", "\n")
-_RETRYABLE = (openai.RateLimitError, openai.APITimeoutError, openai.APIConnectionError)
 
 
 class TranscriptionFailed(Exception):
@@ -33,25 +29,13 @@ def _keywords(terms: list[str]) -> str:
     return "\n".join(seen)
 
 
-def _retryable(exc: Exception) -> bool:
-    if isinstance(exc, _RETRYABLE):
-        return True
-    return isinstance(exc, openai.APIStatusError) and exc.status_code >= 500
-
-
 def _transcribe_one(client, chunk: Path, model: str, keywords: str) -> str:
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        try:
-            with chunk.open("rb") as audio:
-                extra = {"keywords": keywords} if keywords else {}
-                return client.audio.transcriptions.create(model=model, file=audio, **extra).text
-        except openai.OpenAIError as exc:
-            if not _retryable(exc) or attempt == MAX_ATTEMPTS:
-                raise TranscriptionFailed(
-                    f"{chunk.name}: {type(exc).__name__} after {attempt} attempt(s): {exc}"
-                ) from exc
-            time.sleep(BACKOFF_SECONDS[attempt - 1])
-    raise AssertionError("unreachable")
+    def call() -> str:
+        with chunk.open("rb") as audio:
+            extra = {"keywords": keywords} if keywords else {}
+            return client.audio.transcriptions.create(model=model, file=audio, **extra).text
+
+    return call_with_retry(call, what=chunk.name, failure=TranscriptionFailed)
 
 
 def transcribe_chunks(chunks: list[Path], terms: list[str], *, client=None) -> str:
