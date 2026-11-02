@@ -59,9 +59,9 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 
 ## Found in live use (2026-11-02)
 
-- [ ] Zoom sometimes blocks the bot's browser (`zoom_requires_rtms`; 2 of 3 joins): retry automatically and show Vexa's reason instead of the generic message
+- [x] Zoom sometimes blocks the bot's browser (`zoom_requires_rtms`; 2 of 3 joins): retry automatically (up to 3 bots) and show Vexa's reason instead of the generic message (2026-11-02; not yet seen live)
 - [ ] Longer term, if Zoom keeps blocking: Zoom RTMS (needs a Zoom Marketplace app)
-- [ ] Log the database error code in the worker, not just the exception type (it hid the bigint bug)
+- [x] Log the database error code in the worker, not just the exception type (it hid the bigint bug) (2026-11-02)
 
 ## Backlog
 
