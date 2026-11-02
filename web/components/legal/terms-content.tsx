@@ -1,0 +1,89 @@
+import { AppLink } from "@/components/ui";
+
+// Text kept identical to app/templates/terms.html: Google compares the policy with the app, and
+// tests/legal.test.ts fails if the two drift.
+export function TermsContent() {
+  return (
+    <>
+      <h1>Terms of Service</h1>
+      <p className="meta">Effective 2 November 2026 &middot; Last updated 2 November 2026</p>
+      <p>These terms set out the rules for using Beyric Note Taker, including your responsibilities when recording meetings. Please read them carefully.</p>
+
+      <h2 id="accept">Agreement to these terms</h2>
+      <p>These Terms of Service ("Terms") are an agreement between you and Beyrichq LTD ("Beyric", "we", "us") for your use of Beyric Note Taker, including our website, web app and emails (the "Service"). By creating an account or using the Service, you agree to these Terms and to our <AppLink href="/privacy">Privacy Policy</AppLink>.</p>
+      <p>If you use the Service for an organisation, you confirm that you may accept these Terms for it, and "you" includes the organisation.</p>
+
+      <h2 id="account">Your account</h2>
+      <ul>
+        <li>You must be at least 16 years old and able to form a binding contract.</li>
+        <li>Give accurate information when you sign up and keep it up to date.</li>
+        <li>Keep your password secure. You are responsible for activity under your account.</li>
+        <li>Tell us right away at <a href="mailto:security@beyrictech.com">security@beyrictech.com</a> if you suspect someone else is using it.</li>
+      </ul>
+
+      <h2 id="service">The Service</h2>
+      <p>Beyric Note Taker joins online meetings on Google Meet and Zoom when you send it a link or, once you connect a calendar, when your rules say so. It records meeting audio and produces transcripts and notes that you can read, copy and rewrite.</p>
+      <p>The Service is in a pilot. We may change, add or remove features, and we may limit how many accounts or recorded hours are available.</p>
+
+      <h2 id="pilot">Pilot, fees and limits</h2>
+      <p>The Service is free during the pilot. Each pilot account has a limit on recorded hours, shown in the app; when it is used up, the note taker stops joining new meetings. If we introduce paid plans, we will tell you the price before anything is charged, and nothing will be charged without your agreement.</p>
+
+      <h2 id="recording">Recording laws and consent</h2>
+      <p>You are solely responsible for complying with every law that applies to recording conversations, including laws that require the consent of all participants. Before the note taker records, you must:</p>
+      <ul>
+        <li>Tell every participant that the meeting will be recorded and transcribed.</li>
+        <li>Get any consent required by law or by your organisation.</li>
+        <li>Remove the note taker if a participant objects and the law requires their consent.</li>
+      </ul>
+      <p>Do not use the Service to record meetings you are not allowed to record.</p>
+
+      <h2 id="content">Your content</h2>
+      <p>You keep ownership of the meeting audio, transcripts, notes, templates and other content that you or your meetings provide or produce through the Service ("Your Content").</p>
+      <p>You give Beyric a limited, worldwide, non-exclusive licence to host, process, transmit and display Your Content only as needed to provide and secure the Service and as described in the Privacy Policy. We do not use Your Content to train artificial intelligence models.</p>
+      <p>You confirm that you have the rights needed to give Your Content to us and that it does not break the law or anyone else's rights.</p>
+
+      <h2 id="accuracy">Accuracy of notes</h2>
+      <p>Transcripts and notes are produced automatically and may contain errors, omissions or the wrong speaker, especially with poor audio, overlapping speech or specialist terms. Review them before relying on them. Do not use the Service as the only record for legal, medical, financial or other high-stakes decisions.</p>
+
+      <h2 id="use">Acceptable use</h2>
+      <p>You agree not to:</p>
+      <ul>
+        <li>Record people secretly or in breach of recording, privacy or employment laws.</li>
+        <li>Use the Service to harass, defame or discriminate against anyone.</li>
+        <li>Upload or produce content that is unlawful or infringes intellectual property rights.</li>
+        <li>Interfere with, overload or try to get unauthorised access to the Service or other accounts.</li>
+        <li>Reverse engineer the Service, except where the law allows it.</li>
+        <li>Resell the Service or use it to build a competing product without our written permission.</li>
+      </ul>
+
+      <h2 id="third">Third-party services</h2>
+      <p>The Service works with platforms we do not control, including Google Meet, Google Calendar and Zoom. Your use of those platforms is governed by their own terms. We are not responsible for their availability or for changes that affect how the note taker can join or record.</p>
+
+      <h2 id="termination">Suspension and termination</h2>
+      <p>You may stop using the Service and ask us to close your account at any time. We may suspend or end your access if you seriously breach these Terms, if the law requires it, or if your use puts the Service or other users at risk. Where reasonable, we will tell you first.</p>
+      <p>After your account is closed, you can ask us for a copy of Your Content for 30 days, after which we delete it as described in the Privacy Policy.</p>
+
+      <h2 id="disclaimer">Disclaimers</h2>
+      <p>The Service is provided "as is" and "as available". To the fullest extent the law allows, we disclaim all warranties, express or implied, including warranties of merchantability, fitness for a particular purpose, accuracy and non-infringement. We do not promise that the Service will be uninterrupted or error free, or that every meeting will be joined or recorded.</p>
+
+      <h2 id="liability">Limitation of liability</h2>
+      <p>To the fullest extent the law allows, Beyric will not be liable for any indirect, incidental, special, consequential or punitive damages, or for lost profits, revenue, data or goodwill. Our total liability for any claim about the Service is limited to the greater of the amount you paid us in the 12 months before the claim or USD 100.</p>
+      <p>Nothing in these Terms limits liability that the law does not allow to be limited.</p>
+
+      <h2 id="indemnity">Indemnity</h2>
+      <p>You agree to defend and indemnify Beyric against claims, damages and costs, including reasonable legal fees, arising from Your Content, your breach of these Terms, or your failure to get consent the law requires to record a meeting.</p>
+
+      <h2 id="law">Governing law and disputes</h2>
+      <p>These Terms are governed by the laws of the Federal Republic of Nigeria, without regard to conflict of law rules. Any dispute will be decided in the courts of Lagos State, unless the law of your country of residence gives you the right to bring proceedings locally.</p>
+
+      <h2 id="changes">Changes to these terms</h2>
+      <p>We may update these Terms. If a change is material, we will tell you by email or in the app at least 30 days before it takes effect. If you keep using the Service after that date, you accept the updated Terms.</p>
+
+      <h2 id="general">General</h2>
+      <p>These Terms and the Privacy Policy are the whole agreement between you and Beyric about the Service. If any part is found unenforceable, the rest stays in effect. Not enforcing a part is not a waiver. You may not transfer these Terms without our consent; we may transfer them as part of a merger or sale of assets.</p>
+
+      <h2 id="contact">Contact us</h2>
+      <p>Beyrichq LTD, Lagos, Nigeria. Email: <a href="mailto:legal@beyrictech.com">legal@beyrictech.com</a>.</p>
+    </>
+  );
+}
