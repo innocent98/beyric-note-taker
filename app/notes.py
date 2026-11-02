@@ -112,6 +112,11 @@ def _complete(client, system: str, user: str, *, what: str, failure=NotesFailed)
     choice = response.choices[0]
     if choice.finish_reason == "length":
         raise failure(f"{what}: the reply was cut off at the model's output limit")
+    if choice.finish_reason != "stop":
+        # e.g. content_filter: the reply is partial or withheld, so it cannot be trusted.
+        raise failure(
+            f"{what}: the model did not finish normally (finish reason: {choice.finish_reason})"
+        )
     text = (choice.message.content or "").strip()
     if not text:
         raise failure(f"{what}: the model returned an empty reply")
@@ -210,22 +215,32 @@ def _drift(original: str, labelled: str) -> float:
 
 
 def label_speakers(transcript: str, segments: list[dict], *, client=None) -> str:
-    """Return `transcript` with "[Name]: " turns, or unchanged if it cannot be labelled safely.
+    """`label_transcript`, keeping only the text."""
+    return label_transcript(transcript, segments, client=client)[0]
+
+
+def label_transcript(transcript: str, segments: list[dict], *, client=None) -> tuple[str, bool]:
+    """Return (text, complete): `transcript` with "[Name]: " turns, and whether every section
+    was labelled.
 
     Long transcripts are labelled in sections and rejoined. A section whose words changed by more
     than 2%, or whose call failed, stays unlabelled (and is logged), so labelling never rewrites
-    what was said. Only labels naming a known speaker, at line start, are ignored in that check.
+    what was said; `complete` is then False. It is also False when the live segments name nobody,
+    so there is nothing to label with. Only labels naming a known speaker, at line start, are
+    ignored in the word-drift check.
     """
     turns = _clean_segments(segments)
-    if not transcript.strip() or not any(name != UNKNOWN_SPEAKER for name, _ in turns):
-        return transcript
+    if not transcript.strip():
+        return transcript, True
+    if not any(name != UNKNOWN_SPEAKER for name, _ in turns):
+        return transcript, False
     if client is None:
         client = _client()
 
     names = {name for name, _ in turns} | {UNKNOWN_SPEAKER}
     sections = _sections(transcript)
     total_words = sum(len(s.split()) for s in sections) or 1
-    done, out = 0, []
+    done, out, complete = 0, [], True
     for index, section in enumerate(sections, start=1):
         size = len(section.split())
         start, end = done / total_words, (done + size) / total_words
@@ -242,6 +257,7 @@ def label_speakers(transcript: str, segments: list[dict], *, client=None) -> str
                 type(exc.__cause__ or exc).__name__,
             )
             out.append(section)
+            complete = False
             continue
         labelled = _own_lines(labelled, names)
         drift = _drift(section, _strip_labels(labelled, names))
@@ -254,9 +270,10 @@ def label_speakers(transcript: str, segments: list[dict], *, client=None) -> str
                 len(sections),
             )
             out.append(section)
+            complete = False
             continue
         out.append(labelled)
-    return "\n".join(out)
+    return "\n".join(out), complete
 
 
 # ---- notes ----
@@ -272,29 +289,23 @@ def _heading_pattern(heading: str) -> re.Pattern:
     )
 
 
-def _ensure_headings(text: str) -> str:
-    """Normalise headings to "## X", guarantee every one exists, and fill empty sections."""
+def _normalise_headings(text: str) -> str:
+    """Rewrite each heading style to "## X". Raise NotesFailed if any required heading is missing.
+
+    Nothing is filled in: "None noted" may only be written by the model, so a reply with a
+    missing section is a failure, not something to patch into a convincing-looking page.
+    """
     lines = text.splitlines()
-    found: dict[str, int] = {}
+    found: set[str] = set()
     for index, line in enumerate(lines):
         for heading in HEADINGS:
             if heading not in found and _heading_pattern(heading).match(line):
-                found[heading] = index
+                found.add(heading)
                 lines[index] = f"## {heading}"
-    heading_lines = sorted(found.values())
-    fixed: list[str] = []
-    for index, line in enumerate(lines):
-        fixed.append(line)
-        if index in heading_lines:
-            nxt = next((h for h in heading_lines if h > index), len(lines))
-            if not any(body.strip() for body in lines[index + 1 : nxt]):
-                fixed.append(NONE_NOTED)
-                fixed.append("")
-    result = "\n".join(fixed).rstrip()
-    for heading in HEADINGS:
-        if heading not in found:
-            result += f"\n\n## {heading}\n{NONE_NOTED}"
-    return result + "\n"
+    missing = [heading for heading in HEADINGS if heading not in found]
+    if missing:
+        raise NotesFailed(f"notes: the reply is missing sections: {', '.join(missing)}")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def _vocabulary(terms: list[str]) -> list[str]:
@@ -324,4 +335,4 @@ def generate_notes(transcript: str, template: Template, terms: list[str], *, cli
         "Write the notes now, using only what the transcript supports.",
     ]
     user = "\n\n".join(part for part in parts if part)
-    return _ensure_headings(_complete(client, NOTES_SYSTEM, user, what="notes"))
+    return _normalise_headings(_complete(client, NOTES_SYSTEM, user, what="notes"))

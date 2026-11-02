@@ -7,7 +7,13 @@ import pytest
 
 from app import notes, retry
 from app.models import Template
-from app.notes import NotesFailed, _segments_for, generate_notes, label_speakers
+from app.notes import (
+    NotesFailed,
+    _segments_for,
+    generate_notes,
+    label_speakers,
+    label_transcript,
+)
 
 HEADINGS = ["Summary", "Key points", "Decisions", "Action items", "Open questions", "Please check"]
 TRANSCRIPT = "Hello everyone. Thanks for joining. I can ship it on Friday. Great, let us do that."
@@ -97,13 +103,31 @@ def test_notes_output_has_required_headings(fake_openai, template):
         assert f"## {heading}" in out
 
 
-def test_notes_adds_missing_headings_and_fills_empty_sections(fake_openai, template):
-    reply = "## Summary\nThey agreed.\n\n## Decisions\n\n## Action items\n- Ada: send deck"
-    out = generate_notes(TRANSCRIPT, template, [], client=fake_openai([reply]))
-    for heading in HEADINGS:
-        assert f"## {heading}" in out
-    assert "## Decisions\nNone noted" in out
-    assert "They agreed." in out and "- Ada: send deck" in out
+def test_notes_missing_heading_fails_instead_of_being_filled_in(fake_openai, template):
+    reply = "## Summary\nThey agreed.\n\n## Decisions\n- none\n\n## Action items\n- Ada: send deck"
+    with pytest.raises(NotesFailed, match="Key points"):
+        generate_notes(TRANSCRIPT, template, [], client=fake_openai([reply]))
+
+
+def test_notes_never_invent_none_noted(fake_openai, template):
+    """An empty section stays empty: only the model may say "None noted"."""
+    parts = [f"## {h}\n- item" for h in HEADINGS]
+    parts[2] = "## Decisions\n"
+    out = generate_notes(TRANSCRIPT, template, [], client=fake_openai(["\n\n".join(parts)]))
+    assert "None noted" not in out
+    assert "## Decisions" in out
+
+
+def test_notes_keep_none_noted_written_by_the_model(fake_openai, template):
+    out = generate_notes(TRANSCRIPT, template, [], client=fake_openai([full_notes()]))
+    assert out.count("None noted") == len(HEADINGS)
+
+
+@pytest.mark.parametrize("finish", ["content_filter", "tool_calls", "function_call", None])
+def test_notes_reply_that_did_not_stop_normally_fails(fake_openai, template, finish):
+    client = fake_openai([(full_notes("- x"), finish)])
+    with pytest.raises(NotesFailed, match="finish"):
+        generate_notes(TRANSCRIPT, template, [], client=client)
 
 
 def test_notes_prompt_says_items_without_owner_are_unassigned(fake_openai, template):
@@ -388,3 +412,40 @@ def test_name_that_becomes_empty_is_unknown_speaker(fake_openai):
     out = label_speakers("one two", segments, client=client)
     assert _live(client) == "Unknown speaker: one\nAda: two"
     assert out == "[Unknown speaker]: one\n[Ada]: two"
+
+
+# ---- label_transcript: does it report whether every section was labelled? ----
+
+
+def test_label_transcript_reports_complete_when_every_section_is_labelled(fake_openai):
+    labelled = f"[Ada]: {TRANSCRIPT}"
+    text, complete = label_transcript(TRANSCRIPT, SEGMENTS, client=fake_openai([labelled]))
+    assert (text, complete) == (labelled, True)
+
+
+@pytest.mark.parametrize("segments", [[], [{"speaker": "", "text": "hi"}], [{"speaker": "A"}]])
+def test_label_transcript_reports_incomplete_without_usable_speakers(fake_openai, segments):
+    client = fake_openai([])
+    assert label_transcript(TRANSCRIPT, segments, client=client) == (TRANSCRIPT, False)
+    assert client.calls == []
+
+
+def test_label_transcript_reports_incomplete_when_the_model_fails(fake_openai):
+    client = fake_openai([status_error(openai.BadRequestError, 400)])
+    assert label_transcript(TRANSCRIPT, SEGMENTS, client=client) == (TRANSCRIPT, False)
+
+
+def test_label_transcript_reports_incomplete_when_words_drift(fake_openai):
+    client = fake_openai(["[Ada]: totally different words here"])
+    assert label_transcript(TRANSCRIPT, SEGMENTS, client=client) == (TRANSCRIPT, False)
+
+
+def test_label_transcript_one_failed_section_makes_it_incomplete(fake_openai, monkeypatch):
+    monkeypatch.setattr(notes, "SECTION_WORDS", 5)
+    transcript = "one two three four five\nsix seven eight nine ten"
+    client = fake_openai(
+        ["[Ada]: one two three four five", status_error(openai.BadRequestError, 400)]
+    )
+    text, complete = label_transcript(transcript, SEGMENTS, client=client)
+    assert complete is False
+    assert text == "[Ada]: one two three four five\nsix seven eight nine ten"
