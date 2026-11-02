@@ -1,0 +1,44 @@
+[Adebayo]: Okay, I think everyone's here. Thanks for joining. This is the weekly sync for the Beyric client portal. We have Tunde, Amaka, and Grace from the client side. Grace, thanks for making time.
+[Grace]: Happy to be here. We've got a lot to get through, so let's go.
+[Adebayo]: Great. First item is the launch date. The plan was the twenty-eighth of February. Tunde, where are we?
+[Tunde]: Honestly, the twenty-eighth is not realistic anymore. The payment integration slipped by about two weeks because the provider changed their sandbox. I think we need to move it.
+[Grace]: How far?
+[Tunde]: I'd say the fourteenth of March. That gives us a week of buffer after the integration is done.
+[Grace]: I can live with the fourteenth of March, but not later. Our marketing campaign is booked for the week after.
+[Adebayo]: Okay, so we're agreed, launch moves to the fourteenth of March. I'll update the plan.
+[Grace]: Agreed.
+[Adebayo]: Second item, email provider for the notifications. Amaka, you looked into this.
+[Amaka]: Yes. I compared Postmark and Resend. Postmark has better deliverability numbers in the reports I read, Resend is cheaper and the developer experience is nicer. I'm leaning towards Postmark, but I haven't tested either with our domain yet.
+[Tunde]: I'd prefer Resend, to be honest. The API is cleaner.
+[Adebayo]: Let's not decide today. Amaka, can you send a test batch through both with our domain and we'll look at the results next week?
+[Amaka]: Sure, I can do that by Wednesday.
+[Adebayo]: Perfect.
+[Grace]: Can I ask about the budget? We approved the original quote, but with the delay I want to make sure it doesn't creep.
+[Adebayo]: Fair. The remaining budget for this phase is four thousand pounds. I'm happy to cap it there. If anything would push us past four thousand, we come back to you first.
+[Grace]: That works. Let's write that down: capped at four thousand, nothing above without my sign-off.
+[Adebayo]: Agreed, capped at four thousand pounds.
+[Tunde]: On the contract, I still owe Grace the revised version with the new dates.
+[Grace]: Yes, I need that. When can I have it?
+[Tunde]: I'll send the revised contract by Friday.
+[Grace]: Friday is fine.
+[Adebayo]: Next, the venue for the launch event. Amaka, are you handling that?
+[Amaka]: I can book it, yes. I'll look at the two options Grace mentioned.
+[Grace]: The one near Liverpool Street is my preference, but either is fine.
+[Adebayo]: Okay. Then there's the stock for the welcome packs. Grace, how many do you need?
+[Grace]: We said fifteen hundred originally. Actually, maybe fifty. No, sorry, I mean the boxes come in fifty, we need fifteen hundred packs. So thirty boxes.
+[Tunde]: Fifteen hundred packs, thirty boxes. Got it.
+[Adebayo]: Good. One thing that came up in the finance review: somebody needs to check whether VAT applies to the international customers. I don't know who owns that.
+[Grace]: Not me, that's for your side.
+[Tunde]: I'm not sure either, our accountant might know.
+[Adebayo]: Okay, let's leave it for now, but it needs an owner.
+[Grace]: Another question. Are we hiring the extra contractor for the mobile app, or doing it in-house?
+[Tunde]: We haven't decided. It depends on whether the March date holds.
+[Adebayo]: Let's park that until we see how the integration goes.
+[Grace]: Fine.
+[Adebayo]: Last thing from me. The name of the product on the login page still says Burek in one place. That's a typo, it should be Beyric.
+[Amaka]: I'll fix that today, it's a one-line change.
+[Adebayo]: Thanks. Anything else?
+[Grace]: Just that I'll be travelling next week, so send anything urgent before Thursday.
+[Adebayo]: Noted. Before Thursday for anything urgent. Okay, I think that's it. Thanks everyone.
+[Tunde]: Thanks.
+[Amaka]: Bye.

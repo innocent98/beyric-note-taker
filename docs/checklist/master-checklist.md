@@ -39,7 +39,7 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
   - [x] One backup and a scratch restore on the server (2026-11-02: 4 templates restored)
   - [ ] Nightly backup cron (Adebayo)
   - [x] CD key (forced command `deploy.sh`) and four GitHub secrets (2026-11-02)
-  - [ ] One deploy through CD after PR #1 merges
+  - [x] One deploy through CD: PR #1 merged as `b0eaea8`, CI then `deploy` succeeded, backup taken first (2026-11-02)
   - [ ] Step 9 verification, including Haven and Novex still healthy
 - [ ] Task 8: Real-world acceptance
 
@@ -49,6 +49,7 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
   - [ ] Choose a sending service (Resend or Postmark) and verify the domain
   - [ ] Send summary, action items and a link to the meeting page; never the audio
   - [ ] A failed email must not fail the meeting; show it on the meeting page
+- [x] Notes model switched to `gpt-6-luna` after a side-by-side eval (2026-11-02, see SOP)
 - [ ] Try `gpt-4o-mini-transcribe` for Vexa's live speaker hints on one acceptance call; switch if speaker names hold up (saves about $0.18/hour)
 
 ## Backlog

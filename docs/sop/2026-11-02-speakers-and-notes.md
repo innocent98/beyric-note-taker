@@ -16,7 +16,7 @@ The owner left his old tool for poor summaries and incoherent transcripts. Notes
 - **Retries.** `app.retry.call_with_retry` (3 attempts, 1 s / 3 s backoff, rate limit / timeout / connection / 5xx) is used by transcription and notes. Exhausted attempts raise `NotesFailed`; empty or length-truncated replies also raise it.
 
 ## What's involved
-`app/notes.py`, `app/retry.py`, `app/transcribe.py` (now uses the shared retry), `tests/test_notes.py`, `tests/test_transcribe.py` (patches `retry.time.sleep`), `tests/eval/sample_transcript.txt`. Model: `notes_model` (`gpt-5.4-mini`) via chat completions.
+`app/notes.py`, `app/retry.py`, `app/transcribe.py` (now uses the shared retry), `tests/test_notes.py`, `tests/test_transcribe.py` (patches `retry.time.sleep`), `tests/eval/sample_transcript.txt`. Model: `notes_model` via chat completions; `gpt-6-luna` since 2026-11-02 (was `gpt-5.4-mini`, see `2026-11-02-notes-model-gpt-6-luna.md`).
 
 ## Verification
 Unit tests use a fake client only. Live run on `tests/eval/sample_transcript.txt` (synthetic, includes an injection line): no invented facts, owners kept, injection ignored. Labelling run with deliberately wrong live text (flipped "can", invented "Berlin"): speakers right, words unchanged.
