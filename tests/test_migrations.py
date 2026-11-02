@@ -1,6 +1,7 @@
 import os
 
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -90,6 +91,19 @@ def test_final_fix_columns_are_added_and_dropped(scratch_url):
     assert "worker_heartbeat_at" not in {
         c["name"] for c in inspect(engine).get_columns("app_state")
     }
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_recording_id_widens_to_bigint_and_back(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    col = {c["name"]: c for c in inspect(engine).get_columns("meetings")}["vexa_recording_id"]
+    assert isinstance(col["type"], sa.BigInteger)
+    command.downgrade(cfg, "0003")
+    col = {c["name"]: c for c in inspect(engine).get_columns("meetings")}["vexa_recording_id"]
+    assert not isinstance(col["type"], sa.BigInteger)
     command.upgrade(cfg, "head")
     engine.dispose()
 
