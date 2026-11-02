@@ -17,6 +17,7 @@ from app import auth
 from app.db import get_session
 from app.models import Meeting, Template, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
+from app.pipeline import REASON_NO_SPEECH
 from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError, parse_meeting_url
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 MAX_URL_CHARS = 2000
+MAX_ID = 2**31 - 1  # ids are Postgres integers; anything larger cannot exist
 MAX_TEMPLATE_NAME_CHARS = 100
 MAX_INSTRUCTION_CHARS = 4000
 BAD_TERM_CHARS = ("<", ">", "\r", "\n")  # the same characters app/transcribe.py drops
@@ -61,6 +63,8 @@ def retry_block(meeting: Meeting) -> str | None:
         return "not_failed"
     if meeting.step == "waiting":
         return "no_audio"
+    if meeting.failure_reason == REASON_NO_SPEECH:
+        return "no_speech"  # the same audio would give the same result
     if meeting.transcript is None and meeting.audio_deleted_at is not None:
         return "audio_deleted"
     return None
@@ -102,6 +106,14 @@ def render(request: Request, name: str, status_code: int = 200, **context):
     return templates.TemplateResponse(request, name, context, status_code=status_code)
 
 
+def parse_id(value: str) -> int | None:
+    """A database id from form text, or None when it is not a plain number in range."""
+    if not (value.isascii() and value.isdigit()):
+        return None
+    number = int(value)
+    return number if 0 < number <= MAX_ID else None
+
+
 def see_other(url: str) -> RedirectResponse:
     return RedirectResponse(url, status_code=303)
 
@@ -117,23 +129,24 @@ def login_page(request: Request):
 
 
 @router.post("/login")
-def login(request: Request, password: str = Form("")):
+def login(request: Request, password: str = Form(""), session: Session = Depends(get_session)):
     limiter: auth.LoginLimiter = request.app.state.limiter
     client = request.client.host if request.client else "unknown"
-    if limiter.blocked(client):
+    if not limiter.try_acquire(client):  # counts this attempt; success clears it below
         error = "Too many failed attempts. Try again in 15 minutes."
         return render(request, "login.html", 429, error=error)
     if not auth.password_matches(request.app.state.settings, password):
-        limiter.record_failure(client)
         return render(request, "login.html", 401, error="That password is not right.")
     limiter.reset(client)
-    request.state.session = auth.new_session(auth=True)  # fresh token; never promote an old one
+    # A fresh token, never a promoted old one, stamped with the current epoch.
+    request.state.session = auth.new_session(auth=True, epoch=auth.current_epoch(session))
     request.state.session_changed = True
     return see_other("/")
 
 
 @router.post("/logout")
-def logout(request: Request):
+def logout(request: Request, session: Session = Depends(get_session)):
+    auth.bump_epoch(session)  # revokes this session and any copy of its cookie
     request.state.session = auth.new_session()
     request.state.session_changed = True
     return see_other("/login")
@@ -172,7 +185,8 @@ def create_meeting(
 
     def refuse(code: int, error: str):
         session.rollback()  # also releases the advisory lock
-        return _index(request, session, code, error=error, url=url, chosen=template_id)
+        # The submitted link is not echoed back: a Zoom link carries its meeting password.
+        return _index(request, session, code, error=error, chosen=template_id)
 
     try:
         if len(url) > MAX_URL_CHARS:
@@ -180,7 +194,8 @@ def create_meeting(
         platform, native_id = parse_meeting_url(url)
     except UnsupportedMeetingUrl:
         return refuse(400, "That is not a Google Meet or Zoom link. Paste the full meeting link.")
-    template = session.get(Template, int(template_id)) if template_id.isdigit() else None
+    template_pk = parse_id(template_id)
+    template = session.get(Template, template_pk) if template_pk else None
     if template is None:
         return refuse(400, "Choose a template for the notes.")
 
@@ -207,7 +222,7 @@ def create_meeting(
 
 
 def _meeting_or_404(session: Session, meeting_id: int) -> Meeting:
-    meeting = session.get(Meeting, meeting_id)
+    meeting = session.get(Meeting, meeting_id) if 0 < meeting_id <= MAX_ID else None
     if meeting is None:
         raise HTTPException(404, "No such meeting")
     return meeting
@@ -226,12 +241,12 @@ def _meeting_page(request, session: Session, meeting: Meeting, status_code=200, 
     )
 
 
-@router.get("/meetings/{meeting_id}")
+@router.get("/meetings/{meeting_id:int}")
 def meeting_page(meeting_id: int, request: Request, session: Session = Depends(get_session)):
     return _meeting_page(request, session, _meeting_or_404(session, meeting_id))
 
 
-@router.post("/meetings/{meeting_id}/regenerate")
+@router.post("/meetings/{meeting_id:int}/regenerate")
 def regenerate(
     meeting_id: int,
     request: Request,
@@ -243,7 +258,8 @@ def regenerate(
     if meeting.status != "ready":
         error = "Notes can only be rewritten once a meeting is ready."
         return _meeting_page(request, session, meeting, 409, error=error)
-    template = session.get(Template, int(template_id)) if template_id.isdigit() else None
+    template_pk = parse_id(template_id)
+    template = session.get(Template, template_pk) if template_pk else None
     if template is None:
         return _meeting_page(request, session, meeting, 400, error="Choose a template.")
     source = meeting.speaker_transcript or meeting.transcript or ""
@@ -260,13 +276,15 @@ def regenerate(
     return see_other(f"/meetings/{meeting.id}")
 
 
-@router.post("/meetings/{meeting_id}/retry")
+@router.post("/meetings/{meeting_id:int}/retry")
 def retry(meeting_id: int, request: Request, session: Session = Depends(get_session)):
     meeting = _meeting_or_404(session, meeting_id)
     if retry_block(meeting) is not None:
         error = "This meeting cannot be retried."
         return _meeting_page(request, session, meeting, 409, error=error)
-    meeting.status, meeting.failure_reason = "processing", None  # the step is kept
+    # The step is kept. A fresh polling start keeps the time limit from failing it at once.
+    meeting.status, meeting.failure_reason = "processing", None
+    meeting.started_polling_at = datetime.now(UTC)
     session.commit()
     return see_other(f"/meetings/{meeting.id}")
 
@@ -329,7 +347,7 @@ def add_template(
     return _save_template(request, session, None, name, instructions)
 
 
-@router.post("/templates/{template_id}")
+@router.post("/templates/{template_id:int}")
 def edit_template(
     template_id: int,
     request: Request,
@@ -337,7 +355,7 @@ def edit_template(
     instructions: str = Form(""),
     session: Session = Depends(get_session),
 ):
-    template = session.get(Template, template_id)
+    template = session.get(Template, template_id) if 0 < template_id <= MAX_ID else None
     if template is None:
         raise HTTPException(404, "No such template")
     return _save_template(request, session, template, name, instructions)
@@ -388,9 +406,9 @@ def add_term(request: Request, term: str = Form(""), session: Session = Depends(
     return see_other("/vocabulary")
 
 
-@router.post("/vocabulary/{term_id}/delete")
+@router.post("/vocabulary/{term_id:int}/delete")
 def delete_term(term_id: int, session: Session = Depends(get_session)):
-    term = session.get(VocabularyTerm, term_id)
+    term = session.get(VocabularyTerm, term_id) if 0 < term_id <= MAX_ID else None
     if term is not None:
         session.delete(term)
         session.commit()

@@ -133,6 +133,29 @@ def test_get_meeting_parses_fixture(httpx_mock, client):
     assert httpx_mock.get_requests()[0].headers["X-API-Key"] == "test-key"
 
 
+def test_get_meeting_by_id_uses_the_vexa_id_not_the_meeting_code(httpx_mock, client):
+    httpx_mock.add_response(url="http://vexa.test/transcripts/by-id/4242", json=fixture_data())
+    meeting = client.get_meeting_by_id("4242")
+    assert meeting.status == "completed"
+    assert meeting.recording_id == 7 and meeting.media_id == 9
+    assert [s["speaker"] for s in meeting.segments] == ["Alice Example", "Bob Sample"]
+    request = httpx_mock.get_requests()[0]
+    assert request.url.path == "/transcripts/by-id/4242"
+    assert request.headers["X-API-Key"] == "test-key"
+
+
+def test_get_meeting_by_id_http_error(httpx_mock, client):
+    httpx_mock.add_response(url="http://vexa.test/transcripts/by-id/4242", status_code=404)
+    with pytest.raises(VexaError):
+        client.get_meeting_by_id(4242)
+
+
+def test_get_meeting_by_id_rejects_non_numeric_id_without_request(httpx_mock, client):
+    with pytest.raises(ValueError):
+        client.get_meeting_by_id("../bots")
+    assert httpx_mock.get_requests() == []
+
+
 def test_get_meeting_without_recording(httpx_mock, client):
     body = fixture_data()
     body["recordings"] = []

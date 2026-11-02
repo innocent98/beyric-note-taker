@@ -28,17 +28,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.limiter = auth.LoginLimiter()
+    key = app.state.session_key = auth.signing_key(settings)
 
     @app.middleware("http")
     async def session_and_headers(request: Request, call_next):
-        loaded = auth.read_session(settings.session_secret, request.cookies.get(auth.COOKIE_NAME))
+        loaded = auth.read_session(key, request.cookies.get(auth.COOKIE_NAME))
         request.state.session = loaded or auth.new_session()
         request.state.session_changed = loaded is None
         response = await call_next(request)
         if request.url.path != "/health" and request.state.session_changed:
             response.set_cookie(
                 auth.COOKIE_NAME,
-                auth.sign_session(settings.session_secret, request.state.session),
+                auth.sign_session(key, request.state.session),
                 max_age=auth.SESSION_SECONDS,
                 httponly=True,
                 samesite="lax",

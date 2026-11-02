@@ -1,5 +1,6 @@
 import re
-from datetime import UTC, datetime
+import threading
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -7,11 +8,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.auth import LoginLimiter
 from app.config import Settings
 from app.db import get_session
 from app.main import create_app
 from app.models import Meeting, Template, VocabularyTerm
 from app.notes import HEADINGS
+from app.pipeline import REASON_NO_SPEECH
 from app.vexa import VexaError
 from app.web import get_openai_client, get_vexa
 
@@ -475,6 +478,7 @@ def test_post_without_valid_csrf_token_is_refused(client, template, session):
 
 def test_forged_session_cookie_is_rejected(app):
     other = create_app(make_settings(session_secret="y" * 40))
+    other.dependency_overrides = app.dependency_overrides
     with TestClient(other, follow_redirects=False) as stranger:
         token = token_from(stranger.get("/login").text)
         stranger.post("/login", data={"password": PASSWORD, "csrf_token": token})
@@ -514,3 +518,186 @@ def test_pages_have_viewport_and_no_external_resources(client, template, session
 
 def test_form_shows_recording_notice(client, template):
     assert "Tell participants that this meeting will be recorded." in client.get("/").text
+
+
+# ---- fix round 1 ----
+
+
+@pytest.mark.parametrize("env", ["prod", "Production", "staging", ""])
+def test_unknown_app_env_refuses_to_start_even_with_secrets(env):
+    with pytest.raises(RuntimeError, match="app_env"):
+        create_app(make_settings(app_env=env))
+
+
+@pytest.mark.parametrize("env", ["production", "prod"])
+def test_prod_style_env_with_empty_secrets_never_starts(env):
+    with pytest.raises(RuntimeError):
+        create_app(make_settings(app_env=env, owner_password="", session_secret=""))
+
+
+@pytest.mark.parametrize("env", ["development", "test"])
+def test_named_dev_environments_may_start_without_secrets(env):
+    create_app(make_settings(app_env=env, owner_password="", session_secret=""))
+
+
+def test_empty_password_never_logs_in_even_in_dev(engine):
+    app = create_app(make_settings(owner_password="", session_secret=""))
+    with TestClient(app, follow_redirects=False) as c:
+        token = token_from(c.get("/login").text)
+        response = c.post("/login", data={"password": "", "csrf_token": token})
+        assert response.status_code == 401
+
+
+@pytest.mark.parametrize("path", ["/health", "/login", "/"])
+def test_non_ascii_session_cookie_does_not_crash(anon_client, path):
+    response = anon_client.get(
+        path, headers={"cookie": "session=caf\u00e9.\u00e9\u00e9".encode("latin-1")}
+    )
+    assert response.status_code in (200, 303)
+
+
+def test_non_ascii_password_is_a_normal_failure(anon_client):
+    token = token_from(anon_client.get("/login").text)
+    response = anon_client.post("/login", data={"password": "p\u00e4ss\u2713", "csrf_token": token})
+    assert response.status_code == 401
+
+
+def test_logout_revokes_a_copied_session_cookie(app, client):
+    stolen = client.cookies.get("session")
+    assert post(client, "/logout").status_code == 303
+    with TestClient(app, follow_redirects=False) as thief:
+        thief.cookies.set("session", stolen)
+        assert thief.get("/").status_code == 303
+        assert thief.post("/meetings", data={}).status_code in (303, 403)
+
+
+def test_new_login_after_logout_works(client):
+    post(client, "/logout")
+    token = token_from(client.get("/login").text)
+    response = client.post("/login", data={"password": PASSWORD, "csrf_token": token})
+    assert response.status_code == 303
+    assert client.get("/").status_code == 200
+
+
+def test_changing_the_password_revokes_sessions(app, client):
+    old_cookie = client.cookies.get("session")
+    changed = create_app(make_settings(owner_password="a different password"))
+    changed.dependency_overrides = app.dependency_overrides
+    with TestClient(changed, follow_redirects=False) as c:
+        c.cookies.set("session", old_cookie)
+        assert c.get("/").status_code == 303
+
+
+def test_limiter_entries_expire():
+    limiter = LoginLimiter(limit=2, window=100)
+    assert limiter.try_acquire("a", now=0) and limiter.try_acquire("a", now=1)
+    assert not limiter.try_acquire("a", now=50)
+    assert limiter.try_acquire("b", now=50)  # per client
+    assert not limiter.try_acquire("a", now=100)  # oldest attempt (t=0) is exactly at the edge
+    assert limiter.try_acquire("a", now=101.5)  # t=0 and t=1 have both left the window
+    assert limiter.try_acquire("a", now=102)
+
+
+def test_limiter_forgets_idle_clients():
+    limiter = LoginLimiter(limit=2, window=10)
+    for client in ("a", "b", "c"):
+        limiter.try_acquire(client, now=0)
+    assert len(limiter) == 3
+    limiter.try_acquire("d", now=100)
+    assert len(limiter) == 1
+
+
+def test_limiter_is_safe_under_parallel_attempts():
+    limiter = LoginLimiter(limit=5, window=1000)
+    allowed: list[bool] = []
+
+    def attempt():
+        allowed.append(limiter.try_acquire("same"))
+
+    threads = [threading.Thread(target=attempt) for _ in range(40)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert allowed.count(True) == 5
+
+
+def test_successful_login_clears_the_limit(anon_client):
+    token = token_from(anon_client.get("/login").text)
+    for _ in range(4):
+        anon_client.post("/login", data={"password": "nope", "csrf_token": token})
+    ok = anon_client.post("/login", data={"password": PASSWORD, "csrf_token": token})
+    assert ok.status_code == 303
+
+
+def test_retry_restarts_the_polling_clock(client, template, session):
+    old = datetime.now(UTC) - timedelta(hours=20)
+    meeting = add_meeting(
+        session,
+        template,
+        status="failed",
+        step="notes",
+        failure_reason="x",
+        transcript=TRANSCRIPT,
+        started_polling_at=old,
+    )
+    post(client, f"/meetings/{meeting.id}/retry", page=f"/meetings/{meeting.id}")
+    session.refresh(meeting)
+    assert meeting.started_polling_at > datetime.now(UTC) - timedelta(minutes=5)
+
+
+def test_no_speech_failure_cannot_be_retried(client, template, session):
+    meeting = add_meeting(
+        session,
+        template,
+        status="failed",
+        step="transcribing",
+        failure_reason=REASON_NO_SPEECH,
+    )
+    page = client.get(f"/meetings/{meeting.id}").text
+    assert f"/meetings/{meeting.id}/retry" not in page
+    assert "no speech was found" in page
+    response = post(client, f"/meetings/{meeting.id}/retry", page=f"/meetings/{meeting.id}")
+    assert response.status_code == 409
+    session.refresh(meeting)
+    assert meeting.status == "failed"
+
+
+@pytest.mark.parametrize("bad", ["abc", "99999999999999999999", "-1", "0", "1.5"])
+def test_bad_ids_in_paths_are_a_clean_404(client, bad):
+    assert client.get(f"/meetings/{bad}").status_code == 404
+    assert post(client, f"/meetings/{bad}/retry").status_code == 404
+    assert post(client, f"/meetings/{bad}/regenerate", {"template_id": "1"}).status_code == 404
+    assert post(client, f"/templates/{bad}", {"name": "a", "instructions": "b"}).status_code == 404
+    assert post(client, f"/vocabulary/{bad}/delete", page="/vocabulary").status_code in (
+        303,
+        404,
+    )
+
+
+@pytest.mark.parametrize("bad", ["99999999999999999999", "\u00b2", "-3", "x", ""])
+def test_bad_template_ids_in_forms_are_a_plain_error(client, template, session, bad):
+    meeting = ready_meeting(session, template)
+    new = post(client, "/meetings", {"url": MEET, "template_id": bad})
+    assert new.status_code == 400
+    regen = post(
+        client,
+        f"/meetings/{meeting.id}/regenerate",
+        {"template_id": bad},
+        f"/meetings/{meeting.id}",
+    )
+    assert regen.status_code == 400
+
+
+def test_refused_submit_does_not_echo_a_zoom_password(client, template, session):
+    add_meeting(session, template, status="bot_sent")
+    response = post(client, "/meetings", {"url": ZOOM, "template_id": template.id})
+    assert response.status_code == 409
+    assert "SECRETPWD" not in response.text
+    bad = post(client, "/meetings", {"url": ZOOM + "&x=\x01", "template_id": template.id})
+    assert "SECRETPWD" not in bad.text
+
+
+def test_notes_code_blocks_scroll_inside_the_page():
+    css = open("app/static/app.css").read()
+    assert re.search(r"\.notes pre\s*\{[^}]*overflow-x:\s*auto", css)

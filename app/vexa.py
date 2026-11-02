@@ -97,9 +97,18 @@ class VexaClient:
             raise VexaError(f"send_bot failed: {exc}") from exc
 
     def get_meeting(self, platform: str, native_id: str) -> VexaMeeting:
+        """Look a meeting up by platform and meeting code. A reused link can match an older
+        meeting, so prefer `get_meeting_by_id` whenever the Vexa id is known."""
+        return self._fetch(f"/transcripts/{platform}/{native_id}")
+
+    def get_meeting_by_id(self, vexa_meeting_id: str | int) -> VexaMeeting:
+        """Look up exactly the meeting that `send_bot` returned the id of."""
+        return self._fetch(f"/transcripts/by-id/{int(vexa_meeting_id)}")
+
+    def _fetch(self, path: str) -> VexaMeeting:
         try:
             with self._client() as client:
-                response = client.get(f"/transcripts/{platform}/{native_id}")
+                response = client.get(path)
                 response.raise_for_status()
                 body = response.json()
         except (httpx.HTTPError, ValueError) as exc:

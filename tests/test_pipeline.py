@@ -30,6 +30,14 @@ class FakeVexa:
         self.downloads = 0
 
     def get_meeting(self, platform, native_id):
+        self.code_lookups = getattr(self, "code_lookups", 0) + 1
+        return self._next()
+
+    def get_meeting_by_id(self, vexa_meeting_id):
+        self.id_lookups = getattr(self, "id_lookups", []) + [vexa_meeting_id]
+        return self._next()
+
+    def _next(self):
         self.get_calls += 1
         item = self.polls[0] if len(self.polls) == 1 else self.polls.pop(0)
         if isinstance(item, Exception):
@@ -129,6 +137,25 @@ def test_failed_vexa_meeting_sets_reason_and_makes_no_openai_call(session, meeti
     assert meeting.status == "failed"
     assert meeting.failure_reason
     assert openai.transcriptions == 0 and openai.chats == 0
+
+
+def test_polls_and_fetches_segments_by_vexa_id(session, meeting):
+    """A reused link must not match an earlier meeting with the same code."""
+    meeting.vexa_meeting_id = "4242"
+    session.commit()
+    vexa = FakeVexa(DONE)
+    run(session, meeting, vexa)
+    assert meeting.status == "ready"
+    assert vexa.id_lookups and set(vexa.id_lookups) == {"4242"}
+    assert getattr(vexa, "code_lookups", 0) == 0
+
+
+def test_meeting_without_vexa_id_falls_back_to_the_meeting_code(session, meeting):
+    vexa = FakeVexa(DONE)
+    run(session, meeting, vexa)
+    assert meeting.status == "ready"
+    assert vexa.code_lookups >= 1
+    assert getattr(vexa, "id_lookups", []) == []
 
 
 def test_completed_without_recording_fails_with_admission_reason(session, meeting):

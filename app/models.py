@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 STATUSES = ("bot_sent", "processing", "ready", "failed")
@@ -52,3 +52,13 @@ class Meeting(Base):
     started_polling_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     audio_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AppState(Base):
+    """One row (id 1) of app-wide state. `session_epoch` is bumped to sign everyone out."""
+
+    __tablename__ = "app_state"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_app_state_single_row"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    session_epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

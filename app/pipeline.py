@@ -47,6 +47,14 @@ def audio_path(meeting_id: int) -> Path:
     return Path(get_settings().audio_dir) / str(meeting_id) / "source.webm"
 
 
+def _lookup(vexa, meeting: Meeting) -> VexaMeeting:
+    """Ask Vexa about this meeting by its Vexa id, so a reused link cannot pick up an earlier
+    recording. Rows without an id (made before it was stored) fall back to the meeting code."""
+    if meeting.vexa_meeting_id:
+        return vexa.get_meeting_by_id(meeting.vexa_meeting_id)
+    return vexa.get_meeting(meeting.platform, meeting.native_id)
+
+
 def _lock(session: Session, meeting_id: int) -> Meeting | None:
     """Re-read the meeting under a row lock. None if another worker holds it."""
     return session.scalars(
@@ -79,7 +87,7 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
     if meeting.started_polling_at is None:
         meeting.started_polling_at = now
     try:
-        info: VexaMeeting | None = vexa.get_meeting(meeting.platform, meeting.native_id)
+        info: VexaMeeting | None = _lookup(vexa, meeting)
     except VexaError as exc:
         logger.warning("meeting %s: Vexa unreachable (%s)", meeting.id, type(exc).__name__)
         info = None
@@ -116,7 +124,7 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
 def _step_audio(session: Session, meeting: Meeting, vexa) -> bool:
     path = audio_path(meeting.id)
     if not path.is_file():
-        info = vexa.get_meeting(meeting.platform, meeting.native_id)
+        info = _lookup(vexa, meeting)
         if info.recording_id is None or info.media_id is None:
             _fail(session, meeting, REASON_NOT_ADMITTED)
             return False
@@ -156,7 +164,7 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
 
 def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> bool:
     if meeting.speaker_transcript is None:
-        info = vexa.get_meeting(meeting.platform, meeting.native_id)
+        info = _lookup(vexa, meeting)
         meeting.speaker_transcript = label_speakers(
             meeting.transcript or "", info.segments, client=openai_client
         )

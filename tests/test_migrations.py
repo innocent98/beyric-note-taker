@@ -52,3 +52,19 @@ def test_upgrade_seeds_templates_and_downgrade_removes_tables(scratch_url):
         inspect(engine).get_table_names()
     )
     engine.dispose()
+
+
+def test_session_epoch_table_is_created_seeded_and_dropped(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    with engine.connect() as conn:
+        rows = conn.execute(text("select id, session_epoch from app_state")).all()
+    assert [tuple(r) for r in rows] == [(1, 0)]
+
+    command.downgrade(cfg, "0001")
+    assert "app_state" not in inspect(engine).get_table_names()
+    assert "meetings" in inspect(engine).get_table_names()
+    command.upgrade(cfg, "head")  # and back up again
+    assert "app_state" in inspect(engine).get_table_names()
+    engine.dispose()

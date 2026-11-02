@@ -36,5 +36,6 @@ form.inline { display: inline; }
 .card { padding: 12px 16px 16px; margin: 12px 0; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 .notes, .transcript { padding: 12px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); }
 .transcript { white-space: pre-wrap; font: inherit; margin: 8px 0; }
+.notes pre { overflow-x: auto; }
 .notes h2 { font-size: 1.1rem; }
 .regen { margin-top: 16px; }

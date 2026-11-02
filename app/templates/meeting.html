@@ -22,6 +22,8 @@
   </form>
   {% elif retry_block == "audio_deleted" %}
   <p class="muted">This meeting can't be retried: the audio has been deleted and no transcript was saved.</p>
+  {% elif retry_block == "no_speech" %}
+  <p class="muted">This meeting can't be retried: no speech was found, so trying again would give the same result.</p>
   {% else %}
   <p class="muted">This meeting can't be retried: nothing was captured. Send the bot again with a new link.</p>
   {% endif %}
