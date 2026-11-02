@@ -29,7 +29,14 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [x] Task 4: Speakers and notes (2026-11-02: label_speakers, generate_notes, shared retry; live-evaluated)
 - [x] Task 5: Worker pipeline (2026-11-02)
 - [x] Task 6: Web pages (2026-11-02: login, meetings, retry/regenerate, templates, vocabulary, `web` service; checked at 375 px)
-- [ ] Task 7: Deploy (2026-11-02: files ready and validated locally, `deploy/` + compose changes; server steps pending, needs an Ubuntu server and a domain)
+- [ ] Task 7: Deploy (server: Contabo `haven-respite`, shared with Haven and Novex; domain `notes.beyrictech.com`)
+  - [x] Deploy files for a shared server: Vexa inside compose on localhost, app on `127.0.0.1:8020`, prefixed nginx zones (2026-11-02, validated locally)
+  - [x] CD: `deploy.yml` after `ci` on `main`, forced-command SSH key, `deploy/deploy.sh` with rollback (2026-11-02, not yet run)
+  - [ ] Server: repo, `.env` and `.env.vexa`, Vexa up, key minted, app up
+  - [ ] HTTPS: nginx site and certificate (needs Adebayo's sudo)
+  - [ ] Backups scheduled and one restore practised
+  - [ ] CD secrets set and one deploy through CD
+  - [ ] Step 9 verification, including Haven and Novex still healthy
 - [ ] Task 8: Real-world acceptance
 
 ## Next, after deploy (agreed 2026-11-02)
@@ -52,6 +59,6 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [ ] Check Vexa licence exceptions before any commercial use
 - [ ] Choose a recording notice for meetings
 - [ ] Decide how long to keep audio
-- [ ] Create a private GitHub repo for this app (not a Vexa fork) so CI runs
+- [x] Create a private GitHub repo for this app (not a Vexa fork) so CI runs (2026-11-02: innocent98/beyric-note-taker, PR #1, CI green)
 - [ ] Vexa upgrade routine: read release notes, bump the pinned image tag, re-run one Meet and one Zoom call
 - [x] Raise the worker heartbeat warning from 5 to 20 minutes (2026-11-02)

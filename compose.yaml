@@ -1,8 +1,8 @@
 # Deployment model: nginx runs on the HOST (see deploy/README.md) and proxies to
-# 127.0.0.1:8000, the only published port. The project network is pinned so the address
-# nginx's connections arrive from inside the container (the bridge gateway, 172.28.0.1) is
-# known and can be the one trusted proxy. Vexa also runs on the host (port 8056) and is
-# reached as host.docker.internal.
+# 127.0.0.1:8020. The project network is pinned so the address nginx's connections arrive from
+# inside the container (the bridge gateway, 172.28.0.1) is known and can be the one trusted proxy.
+# The server is shared with other apps, so nothing here is published on a public interface: `web`
+# and Vexa's API are bound to 127.0.0.1, and Vexa's terminal and agent ports are not published.
 # TRUSTED_PROXY_IPS: unset means the bridge gateway above; set but EMPTY means trust no proxy
 # (`-` interpolation, not `:-`, so an empty value is kept rather than replaced by the default).
 services:
@@ -37,10 +37,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
-      # Vexa runs on the host, not in this compose project.
-      VEXA_BASE_URL: http://host.docker.internal:8056
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      VEXA_BASE_URL: http://vexa:8056
     volumes:
       - audiodata:/srv/data/audio
     restart: unless-stopped
@@ -64,11 +61,9 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
-      VEXA_BASE_URL: http://host.docker.internal:8056
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      VEXA_BASE_URL: http://vexa:8056
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8020:8000"
     healthcheck:
       test:
         - CMD
@@ -85,6 +80,90 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # ---- Vexa Lite (bots). Same containers as Vexa's deploy/lite Makefile at commit 31122f9, run
+  # here instead so no port is public and no host credentials file is ever mounted. ----
+
+  vexa-db:
+    image: postgres:17-alpine
+    command: ["postgres", "-c", "idle_in_transaction_session_timeout=60000"]
+    environment:
+      POSTGRES_DB: vexa
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres  # private network only, never published (as in Vexa's Makefile)
+      TZ: UTC
+      PGTZ: UTC
+    volumes:
+      - vexapgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vexa"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  vexa-storage:
+    image: versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - mkdir -p /srv/vexa-storage/data /srv/vexa-storage/iam && exec versitygw --port :9000 --health /health --iam-dir /srv/vexa-storage/iam --quiet posix /srv/vexa-storage/data
+    environment:
+      ROOT_ACCESS_KEY: vexa-access-key
+      ROOT_SECRET_KEY: vexa-secret-key
+    volumes:
+      - vexastorage:/srv/vexa-storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Creates the recordings bucket; "already owned" on later runs counts as success.
+  vexa-storage-init:
+    image: versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - out=$$(versitygw admin --endpoint-url http://vexa-storage:9000 create-bucket --bucket vexa --owner vexa-access-key 2>&1) || echo "$$out" | grep -q BucketAlreadyOwnedByYou || { echo "$$out"; exit 1; }
+    environment:
+      ADMIN_ACCESS_KEY: vexa-access-key
+      ADMIN_SECRET_KEY: vexa-secret-key
+    depends_on:
+      vexa-storage:
+        condition: service_healthy
+
+  vexa:
+    image: vexaai/vexa-lite:${VEXA_IMAGE_TAG:-v012}
+    shm_size: 2g
+    mem_limit: 3g  # a bot runs Chrome; cap it so a call cannot starve other apps on the server
+    env_file: .env.vexa
+    environment:
+      DB_HOST: vexa-db
+      DB_PORT: "5432"
+      DB_NAME: vexa
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      MINIO_ENDPOINT: vexa-storage:9000
+      MINIO_ACCESS_KEY: vexa-access-key
+      MINIO_SECRET_KEY: vexa-secret-key
+      MINIO_BUCKET: vexa
+      MINIO_SECURE: "false"
+      VEXA_PUBLIC_API_URL: http://localhost:18056
+      TERMINAL_PUBLIC_URL: http://localhost:3001
+    ports:
+      - "127.0.0.1:18056:8056"  # operator checks from the server only; the app uses vexa:8056
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf -o /dev/null http://127.0.0.1:8056/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 120s
+    depends_on:
+      vexa-db:
+        condition: service_healthy
+      vexa-storage-init:
+        condition: service_completed_successfully
+
 networks:
   default:
     ipam:
@@ -95,3 +174,5 @@ networks:
 volumes:
   dbdata:
   audiodata:
+  vexapgdata:
+  vexastorage:
