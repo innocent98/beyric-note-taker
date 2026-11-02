@@ -12,6 +12,7 @@ from markupsafe import Markup
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.convertors import Convertor, register_url_convertor
 
 from app import auth
 from app.db import get_session
@@ -26,6 +27,7 @@ router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 MAX_URL_CHARS = 2000
+MAX_ID_DIGITS = 10
 MAX_ID = 2**31 - 1  # ids are Postgres integers; anything larger cannot exist
 MAX_TEMPLATE_NAME_CHARS = 100
 MAX_INSTRUCTION_CHARS = 4000
@@ -106,9 +108,25 @@ def render(request: Request, name: str, status_code: int = 200, **context):
     return templates.TemplateResponse(request, name, context, status_code=status_code)
 
 
+class IdConvertor(Convertor):
+    """Path ids: 1 to 10 ASCII digits. Longer input never reaches `int()`, which raises on
+    numbers of more than 4300 digits."""
+
+    regex = r"[0-9]{1,10}"
+
+    def convert(self, value: str) -> int:
+        return int(value)
+
+    def to_string(self, value: int) -> str:
+        return str(value)
+
+
+register_url_convertor("id", IdConvertor())
+
+
 def parse_id(value: str) -> int | None:
     """A database id from form text, or None when it is not a plain number in range."""
-    if not (value.isascii() and value.isdigit()):
+    if not (value.isascii() and value.isdigit()) or len(value) > MAX_ID_DIGITS:
         return None
     number = int(value)
     return number if 0 < number <= MAX_ID else None
@@ -241,12 +259,12 @@ def _meeting_page(request, session: Session, meeting: Meeting, status_code=200, 
     )
 
 
-@router.get("/meetings/{meeting_id:int}")
+@router.get("/meetings/{meeting_id:id}")
 def meeting_page(meeting_id: int, request: Request, session: Session = Depends(get_session)):
     return _meeting_page(request, session, _meeting_or_404(session, meeting_id))
 
 
-@router.post("/meetings/{meeting_id:int}/regenerate")
+@router.post("/meetings/{meeting_id:id}/regenerate")
 def regenerate(
     meeting_id: int,
     request: Request,
@@ -276,7 +294,7 @@ def regenerate(
     return see_other(f"/meetings/{meeting.id}")
 
 
-@router.post("/meetings/{meeting_id:int}/retry")
+@router.post("/meetings/{meeting_id:id}/retry")
 def retry(meeting_id: int, request: Request, session: Session = Depends(get_session)):
     meeting = _meeting_or_404(session, meeting_id)
     if retry_block(meeting) is not None:
@@ -347,7 +365,7 @@ def add_template(
     return _save_template(request, session, None, name, instructions)
 
 
-@router.post("/templates/{template_id:int}")
+@router.post("/templates/{template_id:id}")
 def edit_template(
     template_id: int,
     request: Request,
@@ -406,7 +424,7 @@ def add_term(request: Request, term: str = Form(""), session: Session = Depends(
     return see_other("/vocabulary")
 
 
-@router.post("/vocabulary/{term_id:int}/delete")
+@router.post("/vocabulary/{term_id:id}/delete")
 def delete_term(term_id: int, session: Session = Depends(get_session)):
     term = session.get(VocabularyTerm, term_id) if 0 < term_id <= MAX_ID else None
     if term is not None:

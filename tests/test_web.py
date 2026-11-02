@@ -1,6 +1,7 @@
 import re
 import threading
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -699,5 +700,40 @@ def test_refused_submit_does_not_echo_a_zoom_password(client, template, session)
 
 
 def test_notes_code_blocks_scroll_inside_the_page():
-    css = open("app/static/app.css").read()
+    css = (Path(__file__).parent.parent / "app/static/app.css").read_text()
     assert re.search(r"\.notes pre\s*\{[^}]*overflow-x:\s*auto", css)
+
+
+HUGE = "9" * 5000
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        f"/meetings/{HUGE}",
+        f"/meetings/{HUGE}/retry",
+        f"/meetings/{HUGE}/regenerate",
+        f"/templates/{HUGE}",
+        f"/vocabulary/{HUGE}/delete",
+        "/meetings/12345678901",
+    ],
+)
+def test_huge_ids_in_paths_are_404_logged_in_or_out(client, anon_client, path):
+    assert client.get(path).status_code == 404
+    token = token_from(client.get("/").text)
+    assert client.post(path, data={"csrf_token": token, "template_id": "1"}).status_code == 404
+    with TestClient(client.app, follow_redirects=False) as outsider:
+        assert outsider.get(path).status_code == 404
+        assert outsider.post(path, data={}).status_code == 404
+
+
+def test_huge_template_id_in_forms_is_a_plain_400(client, template, session):
+    meeting = ready_meeting(session, template)
+    assert post(client, "/meetings", {"url": MEET, "template_id": HUGE}).status_code == 400
+    regen = post(
+        client,
+        f"/meetings/{meeting.id}/regenerate",
+        {"template_id": HUGE},
+        f"/meetings/{meeting.id}",
+    )
+    assert regen.status_code == 400
