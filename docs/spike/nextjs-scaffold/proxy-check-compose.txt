@@ -1,0 +1,18 @@
+PASS  GET /login (new visitor): page, CSRF token and Set-Cookie  ->  200  [Set-Cookie: session; httponly; max-age=2592000; path=/; samesite=lax]
+PASS  GET /templates without a login: 303 to /login  ->  303 /login  [Set-Cookie: session; httponly; max-age=2592000; path=/; samesite=lax]
+PASS  POST /login without a CSRF token: 403  ->  403
+PASS  POST /login wrong password: error page  ->  401
+PASS  POST /login correct password: 303 to / and a new session cookie  ->  303 /  [Set-Cookie: session; httponly; max-age=2592000; path=/; samesite=lax]
+PASS  GET /templates logged in: 200  ->  200
+PASS  GET / logged in: the meetings page  ->  200
+PASS  POST /templates (form body, CSRF): 303 to /templates  ->  303 /templates
+PASS  POST /templates with a name that exists: 400 with the app's message  ->  400
+PASS  POST /templates with a 300 KB body: FastAPI's own 400, not a proxy error  ->  400
+PASS  GET /static/tokens.css: same bytes and headers  ->  200
+PASS  GET /health: ok  ->  200
+PASS  GET /does-not-exist: FastAPI's 404  ->  404
+PASS  GET /meetings/999999 with a query string  ->  404
+PASS  login limit counts the visitor's address, not Next's:  via Next 401,401,401,401,401,429  direct 401,401,401,401,401,429
+PASS  POST /logout: 303 to /login  ->  303 /login  [Set-Cookie: session; httponly; max-age=2592000; path=/; samesite=lax]
+
+16/16 checks passed

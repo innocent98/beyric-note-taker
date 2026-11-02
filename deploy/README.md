@@ -15,16 +15,20 @@ so nothing here takes a public port except through nginx.
   8056, 3001 and 8100 on every interface and mounts `~/.claude/.credentials.json` if it exists.
   Here Vexa's terminal and agent ports are not published at all, and no host file is mounted.
 - `vexa` is capped at 3 GB of memory, so a bot running Chrome cannot starve other apps.
-- Three networks: `default` (web, worker, vexa; has internet), `appdb` (the app database; no
-  internet) and `vexainternal` (Vexa's database and storage; no internet). A bot runs Chrome on
+- Four networks: `default` (web, worker, vexa; has internet), `appdb` (the app database; no
+  internet), `vexainternal` (Vexa's database and storage; no internet) and `front` (`next` and `web`
+  only; pinned to `172.28.1.0/24`, so check the server has no other network on it: `docker network
+  inspect $(docker network ls -q) | grep Subnet`). A bot runs Chrome on
   untrusted meeting pages, so the Vexa container cannot reach the app database at all.
 - nginx connects to `127.0.0.1:8020`, which is `next`, and `next` connects to FastAPI as
   `http://web:8000`. `next` renders the few pages it owns (`/privacy`, `/terms` and some review
   pages) and proxies every other path to FastAPI unchanged, so the Jinja pages, `/health` and the
   login keep working as before. `compose.yaml` pins the network: FastAPI sees nginx as the Docker
-  bridge gateway `172.28.0.1` and `next` as `172.28.0.10`, and trusts both as proxies (`next`
-  passes the visitor's address on in `X-Forwarded-For`; without trusting it the login limit would
-  see every visitor as one address). Only processes on the server can reach ports 8020 and 8021,
+  bridge gateway `172.28.0.1` (on the `8021` rollback path) and `next` as `172.28.1.10`, and trusts
+  both as proxies (`next` passes the visitor's address on in `X-Forwarded-For`; without trusting it
+  the login limit would see every visitor as one address). `next` sits on its own network `front`
+  with `web` only, so Vexa, which shares `default` with `web`, cannot reach `next` and forge that
+  header. Only processes on the server can reach ports 8020 and 8021,
   so nobody outside can pose as a proxy.
 - `next` is capped at 512 MB of memory (`mem_limit`) and holds no secrets. Building its image
   (`next build`) needs about 1-2 GB for a minute or two, once per deploy.
@@ -131,7 +135,7 @@ Edit `.env`:
 | `OWNER_PASSWORD` | a long password |
 | `SESSION_SECRET` | `openssl rand -hex 48` |
 | `APP_ENV`, `COOKIE_SECURE` | `production`, `true` |
-| `TRUSTED_PROXY_IPS` | `172.28.0.1`. `next` (`172.28.0.10`) is always trusted on top of this, because every request passes through it; set it **empty** and nginx is not trusted, which makes every visitor look like the same address |
+| `TRUSTED_PROXY_IPS` | `172.28.0.1`. `next` (`172.28.1.10`) is always trusted on top of this, because every request passes through it; set it **empty** and nginx is not trusted, which makes every visitor look like the same address |
 | `AUDIO_RETENTION_DAYS` | Optional, default `7`. The same value is shown on `/privacy` (compose passes it to `next`) |
 
 ## 4. Start Vexa and create the app's key

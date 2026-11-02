@@ -1,9 +1,12 @@
 # Deployment model: nginx runs on the HOST (see deploy/README.md) and proxies to
 # 127.0.0.1:8020, which is the Next.js front door (`next`). Next renders the pages it owns and
 # proxies every other path to FastAPI (`web`, internal port 8000; also on 127.0.0.1:8021 for the
-# operator and for rollback). The project network is pinned so the addresses FastAPI's trusted
-# proxies arrive from are known: the bridge gateway 172.28.0.1 (nginx, through Docker) and
-# `next`, pinned to 172.28.0.10.
+# operator and for rollback). The project networks are pinned so the addresses FastAPI's trusted
+# proxies arrive from are known: the bridge gateway 172.28.0.1 (nginx, through Docker, on the 8021
+# rollback path) and `next`, pinned to 172.28.1.10 on its own network `front`, which only `next`
+# and `web` share. `next` passes X-Forwarded-For through unchanged, so it must not be reachable
+# from anything that could forge it: Vexa runs Chrome on untrusted meeting pages and shares
+# `default` with `web`, but cannot reach `next`.
 # The server is shared with other apps, so nothing here is published on a public interface: `next`,
 # `web` and Vexa's API are bound to 127.0.0.1, and Vexa's terminal and agent ports are not published.
 # TRUSTED_PROXY_IPS: unset means the bridge gateway above; set but EMPTY means trust no proxy
@@ -64,9 +67,9 @@ services:
       - --host=0.0.0.0
       - --port=8000
       - --proxy-headers
-      - --forwarded-allow-ips=${TRUSTED_PROXY_IPS-172.28.0.1},172.28.0.10
+      - --forwarded-allow-ips=${TRUSTED_PROXY_IPS-172.28.0.1},172.28.1.10
     user: app
-    networks: [default, appdb]
+    networks: [default, appdb, front]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
@@ -102,8 +105,8 @@ services:
       FASTAPI_INTERNAL_URL: http://web:8000
       AUDIO_RETENTION_DAYS: ${AUDIO_RETENTION_DAYS:-7}  # shown on /privacy; keep equal to the app's
     networks:
-      default:
-        ipv4_address: 172.28.0.10
+      front:
+        ipv4_address: 172.28.1.10
     ports:
       - "127.0.0.1:8020:3000"
     mem_limit: 512m
@@ -230,15 +233,22 @@ services:
       vexa-db:
         condition: service_healthy
 
-# Three networks, so a compromised bot (Chrome on untrusted meeting pages) cannot reach the app's
+# Four networks, so a compromised bot (Chrome on untrusted meeting pages) cannot reach the app's
 # database: `default` carries web, worker and vexa and has internet access; `appdb` (no internet)
-# holds the app database; `vexainternal` (no internet) holds Vexa's own database and storage.
+# holds the app database; `vexainternal` (no internet) holds Vexa's own database and storage;
+# `front` holds only `next` and `web`, so nothing else can send `web` a forged X-Forwarded-For
+# through the one proxy it trusts.
 networks:
   default:
     ipam:
       config:
         - subnet: 172.28.0.0/24
           gateway: 172.28.0.1
+  front:
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24
+          gateway: 172.28.1.1
   appdb:
     internal: true
   vexainternal:
