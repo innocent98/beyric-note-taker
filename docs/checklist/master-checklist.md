@@ -42,6 +42,11 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
   - [x] One deploy through CD: PR #1 merged as `b0eaea8`, CI then `deploy` succeeded, backup taken first (2026-11-02)
   - [ ] Step 9 verification, including Haven and Novex still healthy
 - [ ] Task 8: Real-world acceptance
+  - [x] First live Zoom meeting processed end to end: about 6 minutes, full speaker names, notes (2026-11-02, after the bigint fix, PR #3)
+  - [x] Meet bot joins and records; a muted call correctly fails as "No speech was found" (2026-11-02)
+  - [ ] Meet call with speech
+  - [ ] An hour-long meeting, rated against the old tool
+  - [ ] Real OpenAI spend per meeting hour
 
 ## Next, after deploy (agreed 2026-11-02)
 
@@ -52,9 +57,17 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [x] Notes model switched to `gpt-6-luna` after a side-by-side eval (2026-11-02, see SOP)
 - [ ] Try `gpt-4o-mini-transcribe` for Vexa's live speaker hints on one acceptance call; switch if speaker names hold up (saves about $0.18/hour)
 
+## Found in live use (2026-11-02)
+
+- [ ] Zoom sometimes blocks the bot's browser (`zoom_requires_rtms`; 2 of 3 joins): retry automatically and show Vexa's reason instead of the generic message
+- [ ] Longer term, if Zoom keeps blocking: Zoom RTMS (needs a Zoom Marketplace app)
+- [ ] Log the database error code in the worker, not just the exception type (it hid the bigint bug)
+
 ## Backlog
 
-- [ ] Calendar auto-join
+- [ ] Calendar auto-join (Google about 3-5 days, Outlook about 2-3 more; bot still joins as a guest)
+- [ ] Microsoft Teams links (Vexa supports them; about a day plus a test call)
+- [ ] Notes in a chosen language, and an optional transcript translation (transcription already detects the language)
 - [ ] Mac app for capture without a bot
 - [ ] Sign-up, email verification and per-user meetings (only if others will use it)
 
