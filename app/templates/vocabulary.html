@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Vocabulary - Beyric Notes{% endblock %}
+{% block content %}
+<h1>Vocabulary</h1>
+<p class="muted">Names and terms to spell correctly in transcripts and notes.</p>
+<form method="post" action="/vocabulary">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <label for="term">New term</label>
+  <input id="term" name="term" maxlength="100" autocomplete="off" required value="{{ term or '' }}">
+  <button type="submit">Add term</button>
+</form>
+{% if rows %}
+<ul class="list">
+  {% for r in rows %}
+  <li>
+    <span class="title">{{ r.term }}</span>
+    <form method="post" action="/vocabulary/{{ r.id }}/delete" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf }}">
+      <button type="submit" class="small danger">Delete</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">No terms yet.</p>
+{% endif %}
+{% endblock %}

@@ -51,11 +51,14 @@
 3. Use Vexa's speaker segments only to work out who said what.
 4. Generate notes with a custom template, using a model such as `gpt-5.4-mini`.
 
+## Live transcription check
+
+On 2026-11-02 a Zoom bot was sent with `transcribe_enabled: false`. The recording was saved, but Vexa returned no segments and no speaker data through its API. Live transcription therefore stays on, using `whisper-1`, for speaker names. This adds about $0.36/hour.
+
 ## Limits of this evidence
 
 - Three short calls of 2-3 minutes, all on hosts' `us05` Zoom accounts. Paid and enterprise Zoom accounts are untested.
 - Zoom joins depend on the web client, so a Zoom page change could break them.
 - Calls of an hour or more are untested for memory, stability and audio size.
 - Speaker hints worked at summary level, but timestamp-level matching is not built.
-- Whether speaker names survive with `transcribe_enabled: false` is untested. If they do, live transcription costs can be avoided.
 - Vexa's licensing should be checked in full before any commercial use. The repo is Apache-2.0 but also includes `license-exceptions.json`.

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Templates - Beyric Notes{% endblock %}
+{% block content %}
+<h1>Templates</h1>
+<p class="muted">Instructions tell the notes writer what to focus on.</p>
+{% for t in rows %}
+<form method="post" action="/templates/{{ t.id }}" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <label for="name-{{ t.id }}">Name</label>
+  <input id="name-{{ t.id }}" name="name" maxlength="100" required value="{{ t.name }}">
+  <label for="ins-{{ t.id }}">Instructions</label>
+  <textarea id="ins-{{ t.id }}" name="instructions" rows="5" maxlength="4000" required>{{ t.instructions }}</textarea>
+  <button type="submit">Save</button>
+</form>
+{% endfor %}
+<h2>Add a template</h2>
+<form method="post" action="/templates" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <label for="name-new">Name</label>
+  <input id="name-new" name="name" maxlength="100" required>
+  <label for="ins-new">Instructions</label>
+  <textarea id="ins-new" name="instructions" rows="5" maxlength="4000" required></textarea>
+  <button type="submit">Add template</button>
+</form>
+{% endblock %}

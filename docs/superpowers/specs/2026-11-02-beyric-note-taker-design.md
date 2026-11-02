@@ -67,6 +67,7 @@ Adebayo asked for sensible defaults, so these can be overruled.
 
 ## Constraints
 
+- Keep Vexa's live transcription on with `whisper-1`. It is needed for speaker names, confirmed by a live test.
 - Limit Vexa to one bot at a time for this version.
 - Only ports 22, 80 and 443 may be open, using the provider's firewall because Docker can bypass `ufw`.
 - Never place `~/.claude/.credentials.json` on the server, because Vexa Lite mounts it if present.
@@ -78,7 +79,6 @@ Adebayo asked for sensible defaults, so these can be overruled.
 
 | Risk | Handling |
 |---|---|
-| Speaker names may depend on Vexa's live transcription | Task 0 tests a call with it off. If names vanish, keep it on and accept about $0.36/hour extra |
 | Long calls are untested | Task 8 requires a real call of an hour or more |
 | Paid Zoom accounts are untested | Task 8 tests one if available |
 | A Zoom web change breaks joining | Failures are shown clearly. Recall.ai remains the fallback |
@@ -87,8 +87,8 @@ Adebayo asked for sensible defaults, so these can be overruled.
 
 ## Success
 
-On a real hour-long meeting, Adebayo can read the notes, trust them without replaying the call, and rate them better than his current tool. Each meeting should cost about $0.30–$0.70 an hour in OpenAI fees, excluding the server.
+On a real hour-long meeting, Adebayo can read the notes, trust them without replaying the call, and rate them better than his current tool. Each meeting should cost about $0.65 an hour in OpenAI fees, excluding the server.
 
 ## Timeline
 
-About 1–2 weeks to a deployed version, assuming the Task 0 check passes.
+About 1–2 weeks to a deployed version.
