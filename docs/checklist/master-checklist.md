@@ -44,8 +44,9 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [ ] Task 8: Real-world acceptance
   - [x] First live Zoom meeting processed end to end: about 6 minutes, full speaker names, notes (2026-11-02, after the bigint fix, PR #3)
   - [x] Meet bot joins and records; a muted call correctly fails as "No speech was found" (2026-11-02)
-  - [ ] Meet call with speech (meeting 5, 2026-11-02, in progress; live speaker hints fixed mid-call, see the Vexa language-column SOP)
-  - [ ] An hour-long meeting, rated against the old tool
+  - [x] Meet call with speech: meeting 5, about 56 min, ready 6 min after the call; 4 named speakers, all six note sections, useful "Please check" items; Adebayo: "it went well" (2026-11-02). Live speaker hints were fixed mid-call (see the Vexa language-column SOP)
+  - [ ] The same person can appear under two name orders ("Godstime America" / "America Godstime"); merge name variants in speaker labels
+  - [ ] An hour-long meeting, rated against the old tool (meeting 5 was 56 min and went well; a formal rating against Fireflies is still open)
   - [ ] Real OpenAI spend per meeting hour
 
 ## Next, after deploy (agreed 2026-11-02)
