@@ -856,13 +856,14 @@ STALE = "The background worker has not checked in"
 
 def test_home_page_warns_when_the_worker_has_not_checked_in(client, session):
     assert STALE in client.get("/").text  # no row, no heartbeat yet
-    session.add(AppState(id=1, worker_heartbeat_at=datetime.now(UTC) - timedelta(minutes=6)))
+    session.add(AppState(id=1, worker_heartbeat_at=datetime.now(UTC) - timedelta(minutes=21)))
     session.commit()
     assert STALE in client.get("/").text
 
 
-def test_home_page_has_no_warning_for_a_fresh_heartbeat(client, session):
-    session.add(AppState(id=1, worker_heartbeat_at=datetime.now(UTC) - timedelta(minutes=4)))
+def test_home_page_has_no_warning_during_a_long_worker_pass(client, session):
+    # Transcribing an hour-long meeting keeps the worker in one pass for several minutes.
+    session.add(AppState(id=1, worker_heartbeat_at=datetime.now(UTC) - timedelta(minutes=19)))
     session.commit()
     assert STALE not in client.get("/").text
 

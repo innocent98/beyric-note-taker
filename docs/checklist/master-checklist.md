@@ -44,3 +44,6 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [ ] Check Vexa licence exceptions before any commercial use
 - [ ] Choose a recording notice for meetings
 - [ ] Decide how long to keep audio
+- [ ] Create a private GitHub repo for this app (not a Vexa fork) so CI runs
+- [ ] Vexa upgrade routine: read release notes, bump the pinned image tag, re-run one Meet and one Zoom call
+- [x] Raise the worker heartbeat warning from 5 to 20 minutes (2026-11-02)

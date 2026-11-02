@@ -33,7 +33,9 @@ MAX_TEMPLATE_NAME_CHARS = 100
 MAX_INSTRUCTION_CHARS = 4000
 BAD_TERM_CHARS = ("<", ">", "\r", "\n")  # the same characters app/transcribe.py drops
 ACTIVE = ("bot_sent", "processing")
-WORKER_STALE_AFTER = timedelta(minutes=5)
+# One worker pass runs a whole recording through transcription and notes, and the heartbeat is
+# only stamped between passes, so an hour-long meeting can keep it quiet for several minutes.
+WORKER_STALE_AFTER = timedelta(minutes=20)
 NEW_MEETING_LOCK = 6001  # serialises "is a bot active?" + "send a bot" across requests
 
 STEP_TEXT = {

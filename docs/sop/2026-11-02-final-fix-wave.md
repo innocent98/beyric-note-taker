@@ -15,7 +15,7 @@ Sixteen fixes on `feature/note-taker-mvp` found in the last review: transcriptio
 | Removal | `completion_reason` unused | Stored; notice for `evicted` and `max_bot_time_exceeded`; never a failure |
 | Retry loops | Corrupt `source.webm` repeated forever; late Vexa blip failed a meeting that had a transcript | `AudioError` deletes the folder and returns to `audio`; the 6 h limit applies to waiting only |
 | Edge and docs | 60 s nginx timeout on regenerate; README spoof test lacked CSRF; `:-` default ignored an empty value | 300 s on that route; README fixed (`max_concurrent_bots: 1` too); `${VAR-default}` |
-| Heartbeat | Nothing showed a dead worker | `app_state.worker_heartbeat_at` each pass; home-page warning after 5 min |
+| Heartbeat | Nothing showed a dead worker | `app_state.worker_heartbeat_at` each pass; home-page warning after 20 min (was 5) |
 | Vexa shapes | Wrong-typed fields were iterated or ignored | Non-list or non-object fields raise `VexaError` |
 | Pins | `openai>=2.0` lacks `keywords`; ruff floating | `openai>=2.50` (first release with `keywords`, found by inspecting wheels); `ruff==0.17.3` |
 
@@ -29,6 +29,6 @@ Full suite, ruff check and format against a throwaway `postgres:17`; migration u
 Run `alembic upgrade head` (the `migrate` service does). Roll back with `alembic downgrade 0002` and revert the commits. Meetings that finished before this release have no stored recording id, so their Vexa copy is not deleted by cleanup.
 
 ## Follow-ups
-- A single worker step can take over 5 minutes, which shows the heartbeat warning during a long, healthy run.
+- Done 2026-11-02: the heartbeat warning threshold was raised from 5 to 20 minutes (`app/web.py` `WORKER_STALE_AFTER`), because a healthy pass on an hour-long recording outlasted 5. A pass longer than 20 minutes would still warn.
 - No lockfile (no `uv` or `pip-tools` here); only ruff is pinned exactly.
 - Task 7 server steps and Task 8 acceptance are still open.
