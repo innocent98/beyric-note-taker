@@ -6,6 +6,7 @@ and "Berlin"), so it is used solely to work out who said what.
 """
 
 import difflib
+import logging
 import re
 
 from openai import OpenAI
@@ -14,17 +15,19 @@ from app.config import get_settings
 from app.models import Template
 from app.retry import call_with_retry
 
+logger = logging.getLogger(__name__)
+
 REQUEST_TIMEOUT = 300.0
 # An hour of speech is about 12,000 tokens (~9,000 words). Label in sections of this many words
 # so each call stays small and the model never has to reproduce a huge text in one go.
 SECTION_WORDS = 4000
 SEGMENT_OVERLAP = 0.03  # share of the transcript, either side, whose segments are also sent
 MAX_WORD_DRIFT = 0.02
+MAX_TERM_CHARS = 100
+_BAD_TERM_CHARS = ("<", ">", "\r", "\n")
 UNKNOWN_SPEAKER = "Unknown speaker"
 NONE_NOTED = "None noted"
 HEADINGS = ("Summary", "Key points", "Decisions", "Action items", "Open questions", "Please check")
-
-_LABEL = re.compile(r"(?:(?<=\s)|^)\[[^\]\n]{1,80}\]:?(?=\s|$)")
 
 
 class NotesFailed(Exception):
@@ -161,33 +164,40 @@ def _segments_for(turns: list[tuple[str, str]], start: float, end: float) -> lis
     return chosen
 
 
-def _own_lines(labelled: str) -> str:
-    """Start every "[Name]: " turn on its own line, even if the model ran them together."""
-    return re.sub(r"[ \t]*(?<!^)(?<!\n)(\[[^\]\n]{1,80}\]: )", r"\n\1", labelled).strip()
+def _label_pattern(names: set[str]) -> str:
+    alternatives = "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+    return rf"\[(?:{alternatives})\]: "
 
 
-def _words(text: str) -> list[str]:
-    return _LABEL.sub(" ", text).split()
+def _own_lines(labelled: str, names: set[str]) -> str:
+    """Start every known "[Name]: " turn on its own line, even if the model ran them together."""
+    label = _label_pattern(names)
+    return re.sub(rf"[ \t]*(?<!^)(?<!\n)({label})", r"\n\1", labelled).strip()
 
 
-def _same_words(original: str, labelled: str) -> bool:
-    """True if `labelled` differs from `original` by at most MAX_WORD_DRIFT of its words."""
-    a, b = _words(original), _words(labelled)
+def _strip_labels(labelled: str, names: set[str]) -> str:
+    """Remove known labels at line start. Any other bracketed text stays and counts as drift."""
+    return re.sub(rf"(?m)^{_label_pattern(names)}", "", labelled)
+
+
+def _drift(original: str, labelled: str) -> float:
+    """Share of `original`'s words that differ in `labelled` (labels must already be stripped)."""
+    a, b = original.split(), labelled.split()
     if not a:
-        return not b
+        return 0.0 if not b else 1.0
     changed = 0
-    matcher = difflib.SequenceMatcher(None, a, b, autojunk=False)
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes():
         if tag != "equal":
             changed += max(i2 - i1, j2 - j1)
-    return changed <= MAX_WORD_DRIFT * len(a)
+    return changed / len(a)
 
 
 def label_speakers(transcript: str, segments: list[dict], *, client=None) -> str:
     """Return `transcript` with "[Name]: " turns, or unchanged if it cannot be labelled safely.
 
     Long transcripts are labelled in sections and rejoined. A section whose words changed by more
-    than 2%, or whose call failed, stays unlabelled, so labelling never rewrites what was said.
+    than 2%, or whose call failed, stays unlabelled (and is logged), so labelling never rewrites
+    what was said. Only labels naming a known speaker, at line start, are ignored in that check.
     """
     turns = _clean_segments(segments)
     if not transcript.strip() or not any(name != UNKNOWN_SPEAKER for name, _ in turns):
@@ -195,10 +205,11 @@ def label_speakers(transcript: str, segments: list[dict], *, client=None) -> str
     if client is None:
         client = _client()
 
+    names = {name for name, _ in turns} | {UNKNOWN_SPEAKER}
     sections = _sections(transcript)
     total_words = sum(len(s.split()) for s in sections) or 1
     done, out = 0, []
-    for section in sections:
+    for index, section in enumerate(sections, start=1):
         size = len(section.split())
         start, end = done / total_words, (done + size) / total_words
         done += size
@@ -206,10 +217,28 @@ def label_speakers(transcript: str, segments: list[dict], *, client=None) -> str
         user = f"{_fence(section, 'transcript')}\n\n{_fence(live, 'live_segments')}"
         try:
             labelled = _complete(client, LABEL_SYSTEM, user, what="speaker labelling")
-        except NotesFailed:
+        except NotesFailed as exc:
+            logger.warning(
+                "speaker labelling failed for section %d of %d (%s); left unlabelled",
+                index,
+                len(sections),
+                type(exc.__cause__ or exc).__name__,
+            )
             out.append(section)
             continue
-        out.append(_own_lines(labelled) if _same_words(section, labelled) else section)
+        labelled = _own_lines(labelled, names)
+        drift = _drift(section, _strip_labels(labelled, names))
+        if drift > MAX_WORD_DRIFT:
+            logger.warning(
+                "speaker labelling changed %.1f%% of the words in section %d of %d; "
+                "left unlabelled",
+                drift * 100,
+                index,
+                len(sections),
+            )
+            out.append(section)
+            continue
+        out.append(labelled)
     return "\n".join(out)
 
 
@@ -217,17 +246,24 @@ def label_speakers(transcript: str, segments: list[dict], *, client=None) -> str
 
 
 def _heading_pattern(heading: str) -> re.Pattern:
-    return re.compile(rf"^\s*#{{1,6}}\s*\**\s*{re.escape(heading)}\s*\**\s*:?\s*$", re.IGNORECASE)
+    """Matches "## X", "**X**", "**X:**", "X:", "1. X", "## 1. **X**" and similar on one line."""
+    mark = r"(?:\*\*|__)?"
+    return re.compile(
+        rf"^\s*(?:#{{1,6}}\s*)?{mark}\s*(?:\d+[.)]\s*)?{mark}\s*{re.escape(heading)}"
+        rf"\s*:?\s*{mark}\s*:?\s*$",
+        re.IGNORECASE,
+    )
 
 
 def _ensure_headings(text: str) -> str:
-    """Guarantee every required heading exists and no section is empty."""
+    """Normalise headings to "## X", guarantee every one exists, and fill empty sections."""
     lines = text.splitlines()
     found: dict[str, int] = {}
     for index, line in enumerate(lines):
         for heading in HEADINGS:
             if heading not in found and _heading_pattern(heading).match(line):
                 found[heading] = index
+                lines[index] = f"## {heading}"
     heading_lines = sorted(found.values())
     fixed: list[str] = []
     for index, line in enumerate(lines):
@@ -244,13 +280,23 @@ def _ensure_headings(text: str) -> str:
     return result + "\n"
 
 
+def _vocabulary(terms: list[str]) -> list[str]:
+    """Clean terms for the prompt: no newlines or angle brackets, at most 100 characters."""
+    clean = {
+        t.strip()[:MAX_TERM_CHARS]
+        for t in terms
+        if t and t.strip() and not any(c in t for c in _BAD_TERM_CHARS)
+    }
+    return sorted(clean)
+
+
 def generate_notes(transcript: str, template: Template, terms: list[str], *, client=None) -> str:
     """Write notes for `transcript` following `template`. `terms` are names to spell right."""
     if not transcript.strip():
         raise NotesFailed("notes: the transcript is empty")
     if client is None:
         client = _client()
-    vocabulary = sorted({t.strip() for t in terms if t and t.strip()})
+    vocabulary = _vocabulary(terms)
     parts = [
         f"Template: {template.name}\n{template.instructions}",
         "The following must be reproduced when they appear in the transcript. Spell these names "
