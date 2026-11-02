@@ -1,7 +1,17 @@
 from datetime import datetime
 
 import sqlalchemy as sa
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 STATUSES = ("bot_sent", "processing", "ready", "failed")
@@ -53,7 +63,7 @@ class Meeting(Base):
     started_polling_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     audio_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Vexa's id for the recording, kept when first seen so cleanup can delete Vexa's copy.
-    vexa_recording_id: Mapped[int | None] = mapped_column(Integer)
+    vexa_recording_id: Mapped[int | None] = mapped_column(BigInteger)
     # True when some part of the transcript could not be given speaker names.
     speakers_incomplete: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=sa.false()

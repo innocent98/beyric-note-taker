@@ -402,6 +402,20 @@ def test_first_sight_of_the_recording_stores_its_id(session, meeting):
     assert meeting.vexa_recording_id == 7
 
 
+def test_recording_ids_beyond_32_bits_are_stored(session, meeting):
+    # Seen live on 2026-11-02: Vexa recording 676401909012 failed every meeting at this step.
+    big = VexaMeeting(
+        status="active",
+        recording_id=676401909012,
+        media_id=729193055666,
+        recording_status="in_progress",
+    )
+    run(session, meeting, FakeVexa(big))
+    session.expire_all()
+    assert meeting.status == "bot_sent"
+    assert meeting.vexa_recording_id == 676401909012
+
+
 def test_cleanup_deletes_both_copies_before_marking_audio_deleted(session, meeting, env):
     folder = _expired_ready_meeting(session, meeting, env)
     vexa = FakeVexa(DONE)
