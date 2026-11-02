@@ -1,0 +1,15 @@
+Captured 2026-11-02, production builds of web/ (node .next/standalone/server.js) in front of a stub
+upstream on :8000 that sleeps for the number of seconds in the query string.
+
+A. next.config.ts as shipped (experimental.proxyTimeout: 310000), upstream sleeps 60 s
+   curl http://127.0.0.1:3001/slow?s=60  -> status 200 after 60.06 s
+
+B. the same config with the proxyTimeout line removed (Next's default), upstream sleeps 35 s
+   curl http://127.0.0.1:3002/slow?s=35  -> status 500 after 30.06 s; Next logged ECONNRESET
+   So the default is 30 s and it cuts off slow upstream responses; the explicit setting is needed.
+
+C. Stream B's JSON API through Next, merged main (local FastAPI on :8000), same answers both ways:
+   GET  /api/session            -> 200 {"authenticated":false,"csrf_token":"..."}, FastAPI's CSP
+   GET  /api/meetings           -> 401
+   POST /api/session, bad CSRF  -> 403 {"error":{"code":"csrf_rejected","message":"Missing or wrong X-CSRF-Token header. Read it from GET /api/session."}}
+   (a custom X-CSRF-Token request header and a JSON body pass through; FastAPI's own CSP is untouched)

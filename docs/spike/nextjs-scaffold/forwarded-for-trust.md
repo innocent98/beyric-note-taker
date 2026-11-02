@@ -33,3 +33,5 @@ cannot resolve `next` by name and must know its fixed address. This is obscurity
 2. A shared secret: Next adds `X-Proxy-Secret`, FastAPI honours `X-Forwarded-For` only when it is
    present (Python change, stream B's area). A compromised Vexa cannot read the secret.
 3. Accept the risk for the pilot (single owner, long password) and do 1 or 2 before open sign-up.
+
+**Decision (lead, 2026-11-02):** option 3 for the single-owner pilot. Blocker before open sign-up: option 1 or 2, Adebayo to choose.

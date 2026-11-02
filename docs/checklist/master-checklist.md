@@ -98,7 +98,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Container memory measured on a Mac: 37 MiB idle, 65 MiB peak after 240 requests (not yet on the server); `mem_limit` stays 512m as a ceiling
   - [ ] CI: `web` job with path filters (docs-only skips both, Python-only skips Node, web-only skips Python), always-reporting `ci` job
   - [ ] Adebayo's server steps (SOP "Operate"): subnet and memory check, deploy outside meetings, post-deploy checks, send back `docker stats` for `next`
-  - [ ] Decide X-Forwarded-For trust (`docs/spike/nextjs-scaffold/forwarded-for-trust.md`) before open sign-up
+  - [ ] **BLOCKER before open sign-up:** real fix for the forwarded-for trust gap (option 1: `next` bound to host loopback with FastAPI reached on `127.0.0.1:8021`, tested on Linux; or option 2: an edge secret that nginx sets and Next checks). Accepted for the single-owner pilot (2026-11-02); Adebayo to choose 1 or 2. Write-up: `docs/spike/nextjs-scaffold/forwarded-for-trust.md`
 - [x] Stream B, JSON API (`feature/json-api`, 2026-11-02, PR open, not merged): `/api/` for session, meetings, templates, vocabulary with a CSRF header; tests; captured responses; `docs/fe-integration-guide-*.md`
   - [x] Shared rules extracted to `app/services.py`; Jinja routes and all 338 earlier tests unchanged
   - [x] `/api/session` (get, login, logout), meetings (list, detail, create, cancel, retry, regenerate), templates (list, create, update), vocabulary (list, create, delete)
