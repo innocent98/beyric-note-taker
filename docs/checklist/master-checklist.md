@@ -32,11 +32,19 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [ ] Task 7: Deploy (2026-11-02: files ready and validated locally, `deploy/` + compose changes; server steps pending, needs an Ubuntu server and a domain)
 - [ ] Task 8: Real-world acceptance
 
+## Next, after deploy (agreed 2026-11-02)
+
+- [ ] Email the notes to the owner when a meeting is ready
+  - [ ] Choose a sending service (Resend or Postmark) and verify the domain
+  - [ ] Send summary, action items and a link to the meeting page; never the audio
+  - [ ] A failed email must not fail the meeting; show it on the meeting page
+- [ ] Try `gpt-4o-mini-transcribe` for Vexa's live speaker hints on one acceptance call; switch if speaker names hold up (saves about $0.18/hour)
+
 ## Backlog
 
 - [ ] Calendar auto-join
 - [ ] Mac app for capture without a bot
-- [ ] Email delivery of notes
+- [ ] Sign-up, email verification and per-user meetings (only if others will use it)
 
 ## Deferred follow-ups
 
