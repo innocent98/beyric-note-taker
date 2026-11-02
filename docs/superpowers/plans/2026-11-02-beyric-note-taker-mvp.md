@@ -44,12 +44,7 @@
 - `Meeting.status`: `bot_sent | processing | ready | failed`
 - `Meeting.step`: `waiting | audio | transcribing | speakers | notes | done`
 
-- [ ] **Step 1: Run the live check with Adebayo**
-
-Start Vexa Lite. Send a bot with `transcribe_enabled: false` to a Google Meet and a Zoom call with two display names.
-Expected: `GET /transcripts/{platform}/{id}` still returns named speakers, or the result shows they depend on live transcription.
-
-- [ ] **Step 2: Record the result in the spike report and set `VEXA_LIVE_TRANSCRIBE`**
+Live check done: Vexa needs live transcription for speaker names, so always send bots with it on.
 
 - [ ] **Step 3: Write the failing test**
 
@@ -383,7 +378,7 @@ Expected: he rates them better and spots no invented facts. Log any corrections.
 
 - [ ] **Step 4: Record actual OpenAI spend per meeting hour**
 
-Expected: about $0.30–$0.70. If it's higher, find out why before regular use.
+Expected: about $0.65. If it's higher, find out why before regular use.
 
 - [ ] **Step 5: Update the SOP and checklist, then commit**
 
