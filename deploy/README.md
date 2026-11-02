@@ -291,6 +291,11 @@ curl -s -o /dev/null -w '%{http_code}\n' https://notes.beyrictech.com/health    
       -d 'password=wrong' -d "csrf_token=$TOKEN" -H "X-Forwarded-For: 10.9.8.$i"
   done; rm -f "$JAR"
   ```
+
+  Run it in bash. To test the Cloudflare header, send `-H "CF-Connecting-IP: 10.7.7.$i"` straight
+  to the server (`--resolve notes.beyrictech.com:443:SERVER_IP`); through Cloudflare that header
+  gets a 403 from Cloudflare itself. Expect your own address in `docker compose logs web`. The test
+  locks your own address out of login for 15 minutes (the app's limit).
 - [ ] `docker compose ps`: `db`, `web`, `vexa` healthy; `worker` up; no Vexa errors in
       `docker compose logs worker`.
 - [ ] Other apps on the server still answer after the install.

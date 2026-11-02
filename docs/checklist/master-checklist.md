@@ -33,11 +33,12 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
   - [x] Deploy files for a shared server: Vexa inside compose on localhost, app on `127.0.0.1:8020`, prefixed nginx zones (2026-11-02, validated locally)
   - [x] CD: `deploy.yml` after `ci` on `main`, forced-command SSH key, `deploy/deploy.sh` with rollback (2026-11-02, not yet run)
   - [x] Server: repo (read-only deploy key), `.env` and `.env.vexa`, Vexa up, key minted, app up on `127.0.0.1:8020` (2026-11-02; only 22/80/443 open from outside; Haven and Novex still healthy)
-  - [ ] Cloudflare record switched to DNS only (it was proxied on 2026-11-02)
-  - [ ] HTTPS: nginx site and certificate (needs Adebayo's sudo)
+  - [x] Cloudflare: works proxied or DNS only; nginx restores the real address from `CF-Connecting-IP` (2026-11-02, still proxied at last check)
+  - [x] HTTPS: `sites-available/beyric-notes` + `certbot --nginx`, Let's Encrypt cert to 2027-01-31, HTTP redirects (2026-11-02)
+  - [x] Login limit spoof test: forged `X-Forwarded-For` and `CF-Connecting-IP` ignored, app logged the real address, nginx answered 429 (2026-11-02)
   - [x] One backup and a scratch restore on the server (2026-11-02: 4 templates restored)
   - [ ] Nightly backup cron (Adebayo)
-  - [ ] CD key and GitHub secrets (Adebayo; the commands are in `deploy/README.md` step 8)
+  - [x] CD key (forced command `deploy.sh`) and four GitHub secrets (2026-11-02)
   - [ ] One deploy through CD after PR #1 merges
   - [ ] Step 9 verification, including Haven and Novex still healthy
 - [ ] Task 8: Real-world acceptance
