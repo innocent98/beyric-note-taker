@@ -21,8 +21,10 @@ class Settings(BaseSettings):
     audio_retention_days: int = 7
     audio_dir: str = "data/audio"
 
+    app_env: str = "production"
     owner_password: str = ""
     session_secret: str = ""
+    cookie_secure: bool = True
 
 
 @lru_cache

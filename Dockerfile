@@ -11,6 +11,7 @@ COPY pyproject.toml ./
 COPY app ./app
 COPY alembic.ini ./
 COPY alembic ./alembic
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir . \
+    && useradd --system --no-create-home --shell /usr/sbin/nologin app
 
 CMD ["alembic", "upgrade", "head"]

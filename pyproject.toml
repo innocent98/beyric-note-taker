@@ -14,6 +14,7 @@ dependencies = [
     "httpx>=0.28",
     "python-multipart>=0.0.12",
     "openai>=2.0",
+    "markdown-it-py>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +29,9 @@ extend-exclude = ["spike"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Form"]
 
 [tool.ruff.lint.isort]
 known-third-party = ["alembic"]

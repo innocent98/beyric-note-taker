@@ -23,4 +23,4 @@ Joins Vexa, audio, transcription, speakers and notes into one resumable backgrou
 `docker compose up -d worker`. Revert the commit to remove.
 
 ## Follow-ups
-Retry action (reset status to `processing`) belongs to the web task. Nothing sets `started_polling_at` until the submit flow exists; the worker sets it on first poll if empty.
+Retry and `started_polling_at` are now handled by the web app (see `2026-11-02-web-pages.md`).

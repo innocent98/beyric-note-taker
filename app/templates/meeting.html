@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Meeting {{ meeting.native_id }} - Beyric Notes{% endblock %}
+{% block head %}{% if meeting.status in ("bot_sent", "processing") %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
+{% block content %}
+<p><a href="/">&larr; All meetings</a></p>
+<h1>{{ "Zoom" if meeting.platform == "zoom" else "Google Meet" }} {{ meeting.native_id }}</h1>
+<p class="meta">{{ meeting.created_at|local_time }}</p>
+<p><span class="badge {{ meeting.status }}">{{ status_text(meeting) }}</span></p>
+
+{% if meeting.status in ("bot_sent", "processing") %}
+<p class="muted">This page updates every 30 seconds.</p>
+{% endif %}
+
+{% if meeting.status == "failed" %}
+<section>
+  <h2>What went wrong</h2>
+  <p>{{ meeting.failure_reason or "Something went wrong while processing this meeting." }}</p>
+  {% if retry_block is none %}
+  <form method="post" action="/meetings/{{ meeting.id }}/retry">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <button type="submit">Try again</button>
+  </form>
+  {% elif retry_block == "audio_deleted" %}
+  <p class="muted">This meeting can't be retried: the audio has been deleted and no transcript was saved.</p>
+  {% else %}
+  <p class="muted">This meeting can't be retried: nothing was captured. Send the bot again with a new link.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if meeting.status == "ready" %}
+<section>
+  <div class="row">
+    <h2>Notes</h2>
+    <button type="button" class="small" data-copy="notes-raw" data-label="Copy notes">Copy notes</button>
+  </div>
+  <div class="notes">{{ (meeting.notes or "")|markdown }}</div>
+  <textarea id="notes-raw" hidden readonly>{{ meeting.notes or "" }}</textarea>
+
+  <form method="post" action="/meetings/{{ meeting.id }}/regenerate" class="regen">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label for="template_id">Rewrite the notes with a template</label>
+    <select id="template_id" name="template_id">
+      {% for t in templates %}
+      <option value="{{ t.id }}"{% if t.id == meeting.template_id %} selected{% endif %}>{{ t.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Rewrite notes</button>
+  </form>
+</section>
+{% endif %}
+
+{% set transcript = meeting.speaker_transcript or meeting.transcript %}
+{% if transcript %}
+<section>
+  <div class="row">
+    <h2>Transcript</h2>
+    <button type="button" class="small" data-copy="transcript-text" data-label="Copy transcript">Copy transcript</button>
+  </div>
+  <pre id="transcript-text" class="transcript">{{ transcript }}</pre>
+</section>
+{% endif %}
+{% endblock %}

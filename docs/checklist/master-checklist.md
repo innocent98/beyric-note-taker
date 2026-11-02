@@ -28,7 +28,7 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [ ] Task 3: Transcription with custom vocabulary
 - [x] Task 4: Speakers and notes (2026-11-02: label_speakers, generate_notes, shared retry; live-evaluated)
 - [x] Task 5: Worker pipeline (2026-11-02)
-- [ ] Task 6: Web pages
+- [x] Task 6: Web pages (2026-11-02: login, meetings, retry/regenerate, templates, vocabulary, `web` service; checked at 375 px)
 - [ ] Task 7: Deploy
 - [ ] Task 8: Real-world acceptance
 

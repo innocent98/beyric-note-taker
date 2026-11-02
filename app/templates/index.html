@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>New meeting</h1>
+<form method="post" action="/meetings">
+  <input type="hidden" name="csrf_token" value="{{ csrf }}">
+  <label for="url">Meeting link (Google Meet or Zoom)</label>
+  <input id="url" name="url" type="url" inputmode="url" autocomplete="off" required value="{{ url or '' }}">
+  <label for="template_id">Notes template</label>
+  <select id="template_id" name="template_id">
+    {% for t in templates %}
+    <option value="{{ t.id }}"{% if chosen == t.id|string %} selected{% endif %}>{{ t.name }}</option>
+    {% endfor %}
+  </select>
+  <p class="note">Tell participants that this meeting will be recorded.</p>
+  <button type="submit">Send bot</button>
+</form>
+
+<h2>Meetings</h2>
+{% if meetings %}
+<ul class="list">
+  {% for m in meetings %}
+  <li>
+    <a href="/meetings/{{ m.id }}">
+      <span class="title">{{ "Zoom" if m.platform == "zoom" else "Google Meet" }} {{ m.native_id }}</span>
+      <span class="meta">{{ m.created_at|local_time }}</span>
+    </a>
+    <span class="badge {{ m.status }}">{{ status_text(m) }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="muted">No meetings yet.</p>
+{% endif %}
+{% endblock %}
