@@ -72,6 +72,45 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
           </div>
         </section>
 
+        <sc-if value="{{ calOff }}" hint-placeholder-val="{{ true }}">
+          <section style="background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;padding:18px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div style="width:40px;height:40px;border-radius:10px;background:#E6F1EE;display:flex;align-items:center;justify-content:center;flex:none"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0E6B5E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg></div>
+            <div style="flex:1 1 260px">
+              <div style="font-size:15px;font-weight:600">Join meetings automatically</div>
+              <div style="font-size:13px;color:#5B6460">Connect your calendar and the note taker will join upcoming meetings that have a video link.</div>
+            </div>
+            <button onClick="{{ goSettings }}" style="height:36px;padding:0 14px;border:1px solid #D5DBD8;border-radius:8px;background:#FFFFFF;color:#141917;font-size:13px;font-weight:550;cursor:pointer" style-hover="background:#F6F7F6">Connect calendar</button>
+          </section>
+        </sc-if>
+
+        <sc-if value="{{ calOn }}" hint-placeholder-val="{{ false }}">
+          <section style="background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid #EDF0EE;flex-wrap:wrap">
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="font-size:15px;font-weight:600">Upcoming</div>
+                <span style="font-size:12px;color:#5B6460;background:#F0F2F1;padding:2px 8px;border-radius:999px">{{ calAccount }}</span>
+              </div>
+              <button onClick="{{ goSettings }}" style="border:0;background:transparent;padding:0;color:#0E6B5E;font-size:13px;font-weight:550;cursor:pointer">{{ autoRuleLabel }}</button>
+            </div>
+            <sc-for list="{{ upcoming }}" as="u" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:76px minmax(0,1fr) auto;align-items:center;gap:14px;padding:12px 20px;border-bottom:1px solid #EDF0EE">
+                <div>
+                  <div style="font-size:12px;color:#6E7772">{{ u.day }}</div>
+                  <div style="font-family:'Geist Mono',monospace;font-size:14px;font-weight:500">{{ u.time }}</div>
+                </div>
+                <div style="min-width:0">
+                  <div style="font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ u.title }}</div>
+                  <div style="font-size:13px;color:#6E7772;display:flex;gap:8px;flex-wrap:wrap"><span>{{ u.platformLabel }}</span><span style="color:#C3C9C6">·</span><span>{{ u.dur }}</span><span style="color:#C3C9C6">·</span><span>{{ u.peopleLabel }}</span></div>
+                </div>
+                <div onClick="{{ u.toggle }}" title="{{ u.hint }}" style="display:flex;align-items:center;gap:10px;cursor:{{ u.cursor }};opacity:{{ u.op }}">
+                  <span style="font-size:12px;color:#5B6460;white-space:nowrap">{{ u.state }}</span>
+                  <div style="width:36px;height:20px;border-radius:999px;background:{{ u.track }};position:relative;flex:none"><div style="position:absolute;top:2px;left:{{ u.knob }};width:16px;height:16px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(20,25,23,0.25)"></div></div>
+                </div>
+              </div>
+            </sc-for>
+          </section>
+        </sc-if>
+
         <section style="background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;overflow:hidden">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid #EDF0EE">
             <div style="font-size:15px;font-weight:600">Recent</div>
@@ -305,6 +344,52 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
           <h1 style="margin:0;font-size:24px;font-weight:650;letter-spacing:-0.02em">Settings</h1>
           <p style="margin:4px 0 0;color:#5B6460">Preferences for your notes and transcripts.</p>
         </div>
+        <section style="background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;overflow:hidden">
+          <div style="padding:22px 22px 18px">
+            <div style="font-size:15px;font-weight:600">Calendar</div>
+            <div style="font-size:13px;color:#5B6460;margin-top:4px;line-height:1.55">The note taker reads your calendar and joins meetings that have a Google Meet, Microsoft Teams or Zoom link.</div>
+          </div>
+          <sc-if value="{{ calOff }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:0 22px 22px;display:flex;gap:10px;flex-wrap:wrap">
+              <button onClick="{{ connectGoogle }}" style="height:40px;padding:0 16px;border:1px solid #D5DBD8;border-radius:8px;background:#FFFFFF;color:#141917;font-size:14px;font-weight:550;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#F6F7F6"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A524E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>{{ googleLabel }}</button>
+              <button onClick="{{ connectOutlook }}" style="height:40px;padding:0 16px;border:1px solid #D5DBD8;border-radius:8px;background:#FFFFFF;color:#141917;font-size:14px;font-weight:550;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#F6F7F6"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A524E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>{{ outlookLabel }}</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ calOn }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div style="margin:0 22px;padding:12px 14px;border:1px solid #E3E7E5;border-radius:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="width:34px;height:34px;border-radius:8px;background:#E6F1EE;display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0E6B5E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg></div>
+                  <div>
+                    <div style="font-size:14px;font-weight:550">{{ calProvider }}</div>
+                    <div style="font-size:12px;color:#6E7772">{{ calAccount }} · Connected</div>
+                  </div>
+                </div>
+                <button onClick="{{ disconnectCal }}" style="border:0;background:transparent;color:#B42318;font-size:13px;font-weight:500;cursor:pointer;padding:6px 0">Disconnect</button>
+              </div>
+              <div style="padding:20px 22px 22px;display:flex;flex-direction:column;gap:20px">
+                <div style="display:flex;flex-direction:column;gap:10px">
+                  <div style="font-size:13px;font-weight:550;color:#2E3532">Join automatically</div>
+                  <sc-for list="{{ autoRules }}" as="r">
+                    <div onClick="{{ r.pick }}" style="display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid {{ r.border }};background:{{ r.bg }};border-radius:10px;cursor:pointer">
+                      <div style="width:18px;height:18px;border-radius:50%;border:1.5px solid {{ r.ring }};display:flex;align-items:center;justify-content:center;flex:none;margin-top:1px"><div style="width:8px;height:8px;border-radius:50%;background:#0E6B5E;opacity:{{ r.dot }}"></div></div>
+                      <div>
+                        <div style="font-size:14px;font-weight:550">{{ r.label }}</div>
+                        <div style="font-size:12px;color:#6E7772">{{ r.desc }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+                <label style="display:flex;flex-direction:column;gap:6px;max-width:320px">
+                  <span style="font-size:13px;font-weight:550;color:#2E3532">Template for calendar meetings</span>
+                  <select value="{{ autoTpl }}" onChange="{{ onAutoTpl }}" style="height:40px;padding:0 36px 0 12px;border:1px solid #D5DBD8;border-radius:8px;background:#FFFFFF url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238A928E' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E&quot;) no-repeat right 12px center;appearance:none;font-size:14px;color:#141917;cursor:pointer">
+                    <sc-for list="{{ templateNames }}" as="t"><option value="{{ t }}">{{ t }}</option></sc-for>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </sc-if>
+        </section>
         <section style="background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;padding:22px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;justify-content:space-between">
           <div style="flex:1 1 260px">
             <div style="font-size:15px;font-weight:600">Default notes language</div>
@@ -537,6 +622,14 @@ class Component extends DCLogic {
     sel: 0, draftName: 'Client call', draftInstr: 'Focus on what the client asked for, commitments made, deadlines, concerns raised, and next steps. Group action items by who owns them.', saved: false,
     terms: ['Beyric', 'Adebayo', 'Ojebola Grace'], newTerm: '',
     lang: 'en', shownLang: 'en', defaultLang: 'en',
+    cal: null, connecting: null, autoRule: 'all', autoTpl: 'General', overrides: {},
+    events: [
+      { id: 'e1', day: 'Today', time: '14:00', dur: '30 min', title: 'Product sync', platform: 'Google Meet', people: 4, organizer: true },
+      { id: 'e2', day: 'Today', time: '16:30', dur: '45 min', title: 'Client call with Kora Foods', platform: 'Zoom', people: 3, organizer: false },
+      { id: 'e3', day: 'Tomorrow', time: '09:00', dur: '30 min', title: 'Weekly team update', platform: 'Microsoft Teams', people: 8, organizer: true },
+      { id: 'e4', day: 'Tomorrow', time: '11:00', dur: '1 hr', title: 'Interview: Backend engineer', platform: 'Google Meet', people: 3, organizer: false },
+      { id: 'e5', day: 'Wed 4 Nov', time: '10:00', dur: '1 hr', title: 'Design review', platform: null, people: 5, organizer: true },
+    ],
     shareOpen: false, picked: {}, extras: [], extraInput: '', withTranscript: false, shareMsg: '', toast: '', shared: {},
   };
 
@@ -610,6 +703,33 @@ class Component extends DCLogic {
       meetingCount: s.meetings.length + ' meetings',
       meetings: s.meetings.map((m) => ({ ...deco(m), open: () => this.setState({ screen: 'detail', cur: m.id, tab: 'notes', lang: s.defaultLang, shownLang: s.defaultLang }) })),
       isSettings: s.screen === 'settings',
+      goSettings: this.go('settings'),
+      calOn: !!s.cal, calOff: !s.cal,
+      calProvider: s.cal ? s.cal.provider : '', calAccount: s.cal ? s.cal.email : '',
+      googleLabel: s.connecting === 'g' ? 'Connecting...' : 'Connect Google Calendar',
+      outlookLabel: s.connecting === 'o' ? 'Connecting...' : 'Connect Microsoft Outlook',
+      connectGoogle: () => { this.setState({ connecting: 'g' }); setTimeout(() => this.setState({ connecting: null, cal: { provider: 'Google Calendar', email: 'adebayo@beyrictech.com' } }), 1000); },
+      connectOutlook: () => { this.setState({ connecting: 'o' }); setTimeout(() => this.setState({ connecting: null, cal: { provider: 'Microsoft Outlook', email: 'adebayo@beyrictech.com' } }), 1000); },
+      disconnectCal: () => this.setState({ cal: null, overrides: {} }),
+      autoRuleLabel: { all: 'Joining all meetings', organizer: 'Joining meetings you organise', none: 'Auto-join is off' }[s.autoRule],
+      autoRules: [
+        ['all', 'All meetings with a video link', 'Every event on your calendar with a meeting link.'],
+        ['organizer', 'Only meetings I organise', 'Skip meetings other people invited you to.'],
+        ['none', 'Only when I turn it on', 'Pick meetings one by one from the Upcoming list.'],
+      ].map(([k, label, desc]) => ({ label, desc, pick: () => this.setState({ autoRule: k, overrides: {} }), border: s.autoRule === k ? '#0E6B5E' : '#E3E7E5', bg: s.autoRule === k ? '#F3F9F7' : '#FFFFFF', ring: s.autoRule === k ? '#0E6B5E' : '#C3C9C6', dot: s.autoRule === k ? 1 : 0 })),
+      autoTpl: s.autoTpl, onAutoTpl: (e) => this.setState({ autoTpl: e.target.value }),
+      upcoming: s.events.map((ev) => {
+        const can = !!ev.platform;
+        const base = can && (s.autoRule === 'all' || (s.autoRule === 'organizer' && ev.organizer));
+        const on = can && (ev.id in s.overrides ? s.overrides[ev.id] : base);
+        return {
+          ...ev, platformLabel: ev.platform || 'No meeting link', peopleLabel: ev.people + ' people',
+          state: !can ? 'Cannot join' : on ? 'Will join' : 'Off',
+          track: on ? '#0E6B5E' : '#D5DBD8', knob: on ? '18px' : '2px', cursor: can ? 'pointer' : 'default', op: can ? 1 : 0.55,
+          hint: can ? '' : 'Add a meeting link to this event to record it',
+          toggle: () => { if (can) this.setState((st) => ({ overrides: { ...st.overrides, [ev.id]: !on } })); },
+        };
+      }),
       defaultLang: s.defaultLang,
       defaultLangs: [{ code: 'en', label: 'Original (no translation)' }, ...LANGS.slice(1)],
       onDefaultLang: (e) => {
