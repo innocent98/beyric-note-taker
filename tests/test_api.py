@@ -273,6 +273,20 @@ def test_malformed_json_is_422_before_the_login_check_and_leaks_nothing(anon):
     assert "{not json" not in response.text
 
 
+@pytest.mark.parametrize(
+    "host", ["x/api/session?", "x/health?", "x/login#", "evil.test/static/x?", "x\\api/session"]
+)
+def test_an_odd_host_header_cannot_change_which_path_is_guarded(anon, host):
+    """The guard decides from the matched path, never from the Host header."""
+    with TestClient(anon.client.app, follow_redirects=False) as visitor:
+        response = visitor.get("/api/meetings", headers={"Host": host})
+        error_of(response, 401, "not_authenticated")
+        page = visitor.get("/templates", headers={"Host": host})
+    assert page.status_code == 303 and page.headers["location"] == "/login"
+    response = anon.client.post("/api/vocabulary", json={"term": "x"}, headers={"Host": host})
+    assert response.status_code == 401  # no session: refused before anything is checked
+
+
 # ---- error shape ----
 
 

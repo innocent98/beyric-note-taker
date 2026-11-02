@@ -185,6 +185,12 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 CSRF_HEADER = "X-CSRF-Token"
 
 
+def request_path(request: Request) -> str:
+    """The path the client asked for. `request.url` is rebuilt from the Host header too, which a
+    client controls; the ASGI scope's path is what the router matched."""
+    return request.scope["path"]
+
+
 def _csrf_matches(given: object, session: dict) -> bool:
     return isinstance(given, str) and hmac.compare_digest(given.encode(), session["csrf"].encode())
 
@@ -195,7 +201,7 @@ async def guard(request: Request, db: Session = Depends(get_session)) -> None:
     Pages send the token as the `csrf_token` form field. `/api/` calls send it in the
     `X-CSRF-Token` header (no body is read here) on every method except GET, HEAD and OPTIONS.
     """
-    path = request.url.path
+    path = request_path(request)
     if path == "/health":
         return
     session = request.state.session

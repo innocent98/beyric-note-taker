@@ -63,7 +63,7 @@ HTTP_CODES = {
 
 
 def is_api_path(request: Request) -> bool:
-    path = request.url.path
+    path = auth.request_path(request)
     return path == "/api" or path.startswith(auth.API_PREFIX)
 
 

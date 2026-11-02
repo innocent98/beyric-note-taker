@@ -40,7 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request.state.session = loaded or auth.new_session()
         request.state.session_changed = loaded is None
         response = await call_next(request)
-        if request.url.path != "/health" and request.state.session_changed:
+        if auth.request_path(request) != "/health" and request.state.session_changed:
             response.set_cookie(
                 auth.COOKIE_NAME,
                 auth.sign_session(key, request.state.session),
@@ -53,7 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["Content-Security-Policy"] = CSP
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
-        if not request.url.path.startswith("/static/"):
+        if not auth.request_path(request).startswith("/static/"):
             response.headers["Cache-Control"] = "no-store"
         return response
 
