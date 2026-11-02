@@ -177,26 +177,51 @@ def check_start(settings: Settings) -> None:
 
 
 PUBLIC_PATHS = frozenset({"/login", "/privacy", "/terms"})
+# The JSON API is owner-only except the two calls that start a session. Everything else under
+# `/api/` needs a login, and every call that is not a read needs the CSRF header.
+API_PREFIX = "/api/"
+PUBLIC_API = frozenset({("GET", "/api/session"), ("POST", "/api/session")})
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+CSRF_HEADER = "X-CSRF-Token"
+
+
+def request_path(request: Request) -> str:
+    """The path the client asked for. `request.url` is rebuilt from the Host header too, which a
+    client controls; the ASGI scope's path is what the router matched."""
+    return request.scope["path"]
+
+
+def _csrf_matches(given: object, session: dict) -> bool:
+    return isinstance(given, str) and hmac.compare_digest(given.encode(), session["csrf"].encode())
 
 
 async def guard(request: Request, db: Session = Depends(get_session)) -> None:
-    """App-wide check: owner pages need a login, and every POST needs a valid CSRF token."""
-    path = request.url.path
+    """App-wide check: owner pages need a login, and every POST needs a valid CSRF token.
+
+    Pages send the token as the `csrf_token` form field. `/api/` calls send it in the
+    `X-CSRF-Token` header (no body is read here) on every method except GET, HEAD and OPTIONS.
+    """
+    path = request_path(request)
     if path == "/health":
         return
     session = request.state.session
     if session["auth"] and session["epoch"] != current_epoch(db):
         session = request.state.session = new_session()  # revoked by a logout
         request.state.session_changed = True
-    # The landing page (logged-out "/") and the legal pages must be readable without a login:
-    # Google's app review checks them. POSTs to them still need the CSRF token below.
-    public = path in PUBLIC_PATHS or (path == "/" and request.method in ("GET", "HEAD"))
+    api = path.startswith(API_PREFIX)
+    if api:
+        public = (request.method, path) in PUBLIC_API
+    else:
+        # The landing page (logged-out "/") and the legal pages must be readable without a login:
+        # Google's app review checks them. POSTs to them still need the CSRF token below.
+        public = path in PUBLIC_PATHS or (path == "/" and request.method in ("GET", "HEAD"))
     if not public and not session["auth"]:
         raise NotLoggedIn
-    if request.method == "POST":
+    if api:
+        if request.method not in SAFE_METHODS:
+            if not _csrf_matches(request.headers.get(CSRF_HEADER), session):
+                raise CsrfRejected
+    elif request.method == "POST":
         form = await request.form()
-        given = form.get("csrf_token")
-        if not isinstance(given, str) or not hmac.compare_digest(
-            given.encode(), session["csrf"].encode()
-        ):
+        if not _csrf_matches(form.get("csrf_token"), session):
             raise CsrfRejected

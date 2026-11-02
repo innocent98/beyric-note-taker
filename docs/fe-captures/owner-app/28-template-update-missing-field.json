@@ -1,0 +1,33 @@
+{
+  "note": "",
+  "request": {
+    "method": "PUT",
+    "path": "/api/templates/5",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "a"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "instructions",
+            "message": "Field required"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "note": "Sorted alphabetically.",
+  "request": {
+    "method": "GET",
+    "path": "/api/vocabulary",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "terms": [
+        {
+          "id": 2,
+          "term": "Acme Example"
+        },
+        {
+          "id": 1,
+          "term": "Beyric"
+        }
+      ]
+    }
+  }
+}

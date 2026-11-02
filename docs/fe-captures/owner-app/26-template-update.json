@@ -1,0 +1,27 @@
+{
+  "note": "",
+  "request": {
+    "method": "PUT",
+    "path": "/api/templates/5",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Standup",
+      "instructions": "Two lines per person."
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 5,
+      "name": "Standup",
+      "instructions": "Two lines per person."
+    }
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/10",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 10,
+      "title": "Google Meet abc-defg-hij",
+      "platform": "google_meet",
+      "native_id": "abc-defg-hij",
+      "status": "failed",
+      "step": "transcribing",
+      "status_text": "Failed",
+      "status_tone": "danger",
+      "template_id": 1,
+      "created_at": "2026-11-02T21:16:52.726490Z",
+      "failure_reason": "No speech was found in this recording.",
+      "retry_block": "no_speech",
+      "retry_block_message": "This meeting can't be retried: no speech was found, so trying again would give the same result.",
+      "can_cancel": false,
+      "can_retry": false,
+      "can_regenerate": false,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "notes": null,
+      "notes_html": null,
+      "transcript": null
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "url": "https://meet.google.com/abc-defg-hij",
+      "template_id": 9999
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "template_required",
+        "message": "Choose a template for the notes."
+      }
+    }
+  }
+}
