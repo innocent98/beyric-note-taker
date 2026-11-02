@@ -53,6 +53,15 @@ def test_parse_meet_url():
         "https://meet.google.com/",
         "not a url",
         "",
+        "https://user:pw@zoom.us/j/1",
+        "https://zoom.us@evil.example/j/1",
+        "https://zoom.us:8443/j/1",
+        "https://zoom.us:badport/j/1",
+        "https://zoom.us\\@evil.example/j/1",
+        "https://zoom.us/j/1\n2",
+        "https://zoom.us/j/1 2",
+        "https://meet.google.com/abc-defg-hij\x00",
+        "ftp://zoom.us/j/1",
     ],
 )
 def test_rejects_other_urls(url):
@@ -79,6 +88,23 @@ def test_send_bot_posts_full_url_and_returns_id(httpx_mock, client):
     req = httpx_mock.get_requests()[0]
     assert req.headers["X-API-Key"] == "test-key"
     assert json.loads(req.content) == {"meeting_url": url, "bot_name": "Test Bot"}
+
+
+@pytest.mark.parametrize(
+    ("raw", "canonical"),
+    [
+        (
+            "HTTP://US05WEB.Zoom.us/j/123456789?pwd=abc&x=1#frag",
+            "https://us05web.zoom.us/j/123456789?pwd=abc",
+        ),
+        ("https://zoom.us/j/123456789?other=1", "https://zoom.us/j/123456789"),
+        ("https://meet.google.com/abc-defg-hij?authuser=1", "https://meet.google.com/abc-defg-hij"),
+    ],
+)
+def test_send_bot_sends_canonical_url(httpx_mock, client, raw, canonical):
+    httpx_mock.add_response(method="POST", url="http://vexa.test/bots", json={"id": 1})
+    client.send_bot(raw)
+    assert json.loads(httpx_mock.get_requests()[0].content)["meeting_url"] == canonical
 
 
 def test_send_bot_rejects_unsupported_url_without_request(httpx_mock, client):
@@ -121,12 +147,15 @@ def test_get_meeting_without_recording(httpx_mock, client):
     assert meeting.completion_reason is None
 
 
-def test_get_meeting_recording_without_media(httpx_mock, client):
+@pytest.mark.parametrize(
+    "media_files", [[], [{"id": 3, "type": "video", "format": "mp4", "file_size_bytes": 1}]]
+)
+def test_get_meeting_recording_without_audio(httpx_mock, client, media_files):
     body = fixture_data()
-    body["recordings"] = [{"id": 7, "status": "in_progress", "media_files": []}]
+    body["recordings"] = [{"id": 7, "status": "in_progress", "media_files": media_files}]
     httpx_mock.add_response(url="http://vexa.test/transcripts/zoom/1", json=body)
     meeting = client.get_meeting("zoom", "1")
-    assert meeting.recording_id == 7
+    assert meeting.recording_id is None
     assert meeting.media_id is None
     assert meeting.recording_status == "in_progress"
 
@@ -186,6 +215,69 @@ def test_download_error_leaves_no_file(httpx_mock, client, tmp_path):
         url="http://vexa.test/recordings/1/media/2/raw?type=audio", status_code=404
     )
     dest = tmp_path / "out.wav"
+    with pytest.raises(VexaError):
+        client.download_audio(1, 2, dest)
+    assert not dest.exists()
+
+
+def test_get_meeting_non_object_body(httpx_mock, client):
+    httpx_mock.add_response(url="http://vexa.test/transcripts/zoom/1", json=[1, 2])
+    with pytest.raises(VexaError):
+        client.get_meeting("zoom", "1")
+
+
+def test_send_bot_non_object_body(httpx_mock, client):
+    httpx_mock.add_response(method="POST", url="http://vexa.test/bots", json=[1])
+    with pytest.raises(VexaError):
+        client.send_bot("https://meet.google.com/abc-defg-hij")
+
+
+def test_download_never_sends_key_on_scheme_downgrade(httpx_mock, monkeypatch, tmp_path):
+    monkeypatch.setenv("VEXA_BASE_URL", "https://vexa.test")
+    monkeypatch.setenv("VEXA_API_KEY", "test-key")
+    get_settings.cache_clear()
+    try:
+        c = VexaClient()
+        httpx_mock.add_response(
+            url="https://vexa.test/recordings/1/media/2/raw?type=audio",
+            status_code=302,
+            headers={"Location": "http://vexa.test/blob"},
+        )
+        httpx_mock.add_response(url="http://vexa.test/blob", content=b"d")
+        c.download_audio(1, 2, tmp_path / "o.wav")
+    finally:
+        get_settings.cache_clear()
+    first, second = httpx_mock.get_requests()
+    assert first.headers["X-API-Key"] == "test-key"
+    assert "X-API-Key" not in second.headers
+
+
+def test_download_redirect_without_location(httpx_mock, client, tmp_path):
+    httpx_mock.add_response(
+        url="http://vexa.test/recordings/1/media/2/raw?type=audio", status_code=302
+    )
+    dest = tmp_path / "out.wav"
+    with pytest.raises(VexaError):
+        client.download_audio(1, 2, dest)
+    assert not dest.exists()
+
+
+def test_download_oserror_becomes_vexa_error_and_cleans_up(
+    httpx_mock, client, tmp_path, monkeypatch
+):
+    httpx_mock.add_response(
+        url="http://vexa.test/recordings/1/media/2/raw?type=audio", content=b"abc"
+    )
+    dest = tmp_path / "out.wav"
+
+    real_open = Path.open
+
+    def boom(self, *a, **k):
+        with real_open(self, "wb") as f:
+            f.write(b"partial")
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "open", boom)
     with pytest.raises(VexaError):
         client.download_audio(1, 2, dest)
     assert not dest.exists()
