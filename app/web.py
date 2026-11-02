@@ -18,7 +18,7 @@ from app import auth
 from app.db import get_session
 from app.models import AppState, Meeting, Template, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
-from app.pipeline import REASON_CANCELLED, REASON_NO_SPEECH, REMOVAL_REASONS
+from app.pipeline import MAX_JOIN_ATTEMPTS, REASON_CANCELLED, REASON_NO_SPEECH, REMOVAL_REASONS
 from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError, parse_meeting_url
 
 logger = logging.getLogger(__name__)
@@ -263,6 +263,7 @@ def _meeting_page(request, session: Session, meeting: Meeting, status_code=200, 
         templates=all_templates,
         retry_block=retry_block(meeting) if meeting.status == "failed" else None,
         bot_left_early=meeting.completion_reason in REMOVAL_REASONS,
+        max_join_attempts=MAX_JOIN_ATTEMPTS,
         **context,
     )
 

@@ -69,6 +69,8 @@ class Meeting(Base):
         Boolean, default=False, server_default=sa.false()
     )
     completion_reason: Mapped[str | None] = mapped_column(String(64))
+    # How many bots have been sent for this meeting; Zoom sometimes turns one away.
+    join_attempts: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     # When a poll first saw Vexa report the meeting as over.
     terminal_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

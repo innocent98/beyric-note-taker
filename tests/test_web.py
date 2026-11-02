@@ -873,3 +873,11 @@ def test_regenerate_and_cancel_buttons_disable_on_submit(client, template, sessi
     assert "data-disable-on-submit" in client.get(f"/meetings/{ready.id}").text
     waiting = add_meeting(session, template)
     assert "data-disable-on-submit" in client.get(f"/meetings/{waiting.id}").text
+
+
+def test_meeting_page_says_when_a_new_bot_was_sent(client, template, session):
+    retrying = add_meeting(session, template, join_attempts=2)
+    page = client.get(f"/meetings/{retrying.id}").text
+    assert "Zoom turned the bot away, so a new one was sent (attempt 2 of 3)." in page
+    first = add_meeting(session, template)
+    assert "Zoom turned the bot away" not in client.get(f"/meetings/{first.id}").text

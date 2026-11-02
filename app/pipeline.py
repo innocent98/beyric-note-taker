@@ -39,6 +39,15 @@ REASON_NOTES = "The notes could not be written. The transcript was saved."
 REASON_UNEXPECTED = "Something went wrong while processing this meeting."
 REASON_DOWNLOAD = "The recording could not be downloaded from the meeting bot."
 REASON_CANCELLED = "You cancelled this meeting before it was recorded."
+REASON_NOT_LET_IN = (
+    "The bot was not let into the meeting. The host may have declined it, or the waiting room "
+    "timed out."
+)
+
+# Zoom sometimes refuses the bot's browser and lets the next one in (2 of 3 joins were refused
+# on 2026-11-02, the third got in), so a refusal is retried up to this many bots in total.
+MAX_JOIN_ATTEMPTS = 3
+ZOOM_BLOCKED = "zoom_requires_rtms"
 
 # A finished meeting whose recording is still "in progress" after this long is downloaded anyway:
 # Vexa builds the audio file when it is read (`GET /recordings/{id}/media/{id}/raw` assembles the
@@ -100,6 +109,51 @@ def _remember(meeting: Meeting, info: VexaMeeting) -> None:
         meeting.completion_reason = info.completion_reason
 
 
+def _zoom_blocked(info: VexaMeeting) -> bool:
+    return info.failure_reason is not None and ZOOM_BLOCKED in info.failure_reason
+
+
+def _zoom_blocked_reason(attempts: int, *, resend_failed: bool = False) -> str:
+    tries = "once" if attempts == 1 else f"{attempts} times in a row"
+    tail = (
+        " A new bot could not be sent."
+        if resend_failed
+        else " Send the bot again in a minute, or ask the host whether the meeting blocks bots."
+    )
+    return f"Zoom blocked the bot from joining: it refused the bot's browser {tries}.{tail}"
+
+
+def bot_failure_reason(meeting: Meeting, info: VexaMeeting) -> str:
+    """Plain words for a failed bot, from what Vexa reported."""
+    if _zoom_blocked(info):
+        return _zoom_blocked_reason(meeting.join_attempts)
+    if info.completion_reason == "awaiting_admission_rejected":
+        return REASON_NOT_LET_IN
+    if info.failure_reason:
+        return f"{REASON_BOT_FAILED} The bot reported: {info.failure_reason}"
+    return REASON_BOT_FAILED
+
+
+def _resend(session: Session, meeting: Meeting, vexa) -> None:
+    """Send a fresh bot to the same link after Zoom refused the last one."""
+    try:
+        vexa_id = vexa.send_bot(meeting.url)
+    except VexaError as exc:
+        logger.warning("meeting %s: resending the bot failed (%s)", meeting.id, type(exc).__name__)
+        _fail(session, meeting, _zoom_blocked_reason(meeting.join_attempts, resend_failed=True))
+        return
+    meeting.join_attempts += 1
+    meeting.vexa_meeting_id = str(vexa_id)
+    meeting.vexa_recording_id = None
+    meeting.completion_reason = None
+    meeting.terminal_seen_at = None
+    _no_audio_polls.pop(meeting.id, None)
+    logger.info(
+        "meeting %s: Zoom refused the bot; sent attempt %s", meeting.id, meeting.join_attempts
+    )
+    session.commit()
+
+
 def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
     """One look at Vexa while waiting. True once the recording is ready to download."""
     if meeting.started_polling_at is None:
@@ -118,7 +172,10 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
     if info is None:
         pass
     elif info.status == "failed":
-        _fail(session, meeting, REASON_BOT_FAILED)
+        if _zoom_blocked(info) and meeting.join_attempts < MAX_JOIN_ATTEMPTS:
+            _resend(session, meeting, vexa)
+        else:
+            _fail(session, meeting, bot_failure_reason(meeting, info))
         return False
     elif info.status == "completed":
         if info.recording_status == "failed":
@@ -295,7 +352,11 @@ def advance_meeting(
 
 def _fail_with(session: Session, meeting_id: int, exc: Exception) -> None:
     session.rollback()
-    logger.error("meeting %s failed: %s", meeting_id, type(exc).__name__)
+    # The database's error code (e.g. 22003, a number out of range) names the cause without
+    # logging the statement, whose parameters can hold transcript text.
+    code = getattr(getattr(exc, "orig", None), "sqlstate", None)
+    detail = f" (database error {code})" if code else ""
+    logger.error("meeting %s failed: %s%s", meeting_id, type(exc).__name__, detail)
     if isinstance(exc, NoSpeechError):
         reason = REASON_NO_SPEECH
     elif isinstance(exc, TranscriptionFailed):
