@@ -69,13 +69,15 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 
 ## Module 2: Pilot, accounts plus calendar auto-join (designing, 2026-11-02)
 
-Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per account for the whole pilot (admin uncapped); the frontend stays server-rendered (Jinja, plus htmx/Alpine where needed, PWA possible); company is Beyrichq LTD, Lagos, Nigeria. Design: `docs/ui/Beyric Note Taker redesign/` (Calendar card, Upcoming list, Settings → Calendar, legal pages).
+Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per account for the whole pilot (admin uncapped); the frontend is server-rendered Jinja for now, **under review** (see the frontend item below); company is Beyrichq LTD, Lagos, Nigeria. Design: `docs/ui/Beyric Note Taker redesign/` (Calendar card, Upcoming list, Settings → Calendar, legal pages).
 
 - [ ] Public pages for Google verification
   - [x] Landing, Privacy and Terms built and tested, text true to the app (`feature/public-pages`, 2026-11-02; see SOP)
-  - [ ] Merged and live, checked in a browser
+  - [x] Merged and live (PR #10, 2026-11-02): `/`, `/privacy`, `/terms` return 200
+  - [ ] Checked in a browser, light and dark
   - [ ] Adebayo: Google Cloud project, OAuth consent screen, verify beyrictech.com in Search Console, mailboxes privacy@/legal@/security@
   - [ ] Submit for verification (needs the working calendar flow and a demo video)
+- [ ] **Decide the frontend approach**: stay on Jinja, add islands, or move to Next.js. Comparison and open measurements in `docs/superpowers/specs/2026-11-02-frontend-approach.md`. Decide before building accounts and the team, tasks and sprints screens, since the switching cost grows with every screen
 - [ ] Written design (`docs/superpowers/specs/`), builder check, Adebayo's approval
 - [ ] Plan (superpowers:writing-plans)
 - [ ] Accounts: sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap
