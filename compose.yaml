@@ -173,6 +173,25 @@ services:
       vexa-storage-init:
         condition: service_completed_successfully
 
+  # Widens Vexa's transcriptions.language column (see deploy/vexa-schema-fix.sh). Runs once per
+  # `up`, waits for Vexa to create the table, and does nothing when the column is already wide.
+  # Nothing depends on it, so a failure shows in `docker compose ps -a` without stopping a deploy.
+  vexa-schema-fix:
+    image: postgres:17-alpine
+    entrypoint: ["/bin/sh", "/vexa-schema-fix.sh"]
+    environment:
+      PGHOST: vexa-db
+      PGUSER: postgres
+      PGPASSWORD: ${VEXA_DB_PASSWORD}
+      PGDATABASE: vexa
+    volumes:
+      - ./deploy/vexa-schema-fix.sh:/vexa-schema-fix.sh:ro
+    networks: [vexainternal]
+    restart: "no"
+    depends_on:
+      vexa-db:
+        condition: service_healthy
+
 # Three networks, so a compromised bot (Chrome on untrusted meeting pages) cannot reach the app's
 # database: `default` carries web, worker and vexa and has internet access; `appdb` (no internet)
 # holds the app database; `vexainternal` (no internet) holds Vexa's own database and storage.

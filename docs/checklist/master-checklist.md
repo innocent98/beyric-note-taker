@@ -64,7 +64,8 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [ ] Longer term, if Zoom keeps blocking: Zoom RTMS (needs a Zoom Marketplace app)
 - [x] Log the database error code in the worker, not just the exception type (it hid the bigint bug) (2026-11-02)
 - [x] Vexa dropped live segments: whisper's language names ("haitian creole") overflow Vexa's `varchar(10)`. Widened to 32 live on the server (2026-11-02, meeting 5)
-- [ ] Make the Vexa column fix permanent (deploy step plus the upgrade routine), and report it upstream
+- [x] Make the Vexa column fix permanent: one-shot `vexa-schema-fix` compose service, runs on every deploy (branch `fix/vexa-language-column`, 2026-11-02)
+- [ ] Report the narrow `language` column upstream to Vexa
 
 ## Module 2: Pilot, accounts plus calendar auto-join (designing, 2026-11-02)
 
