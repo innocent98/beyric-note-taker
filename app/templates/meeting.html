@@ -11,6 +11,10 @@
 <p class="muted">This page updates every 30 seconds.</p>
 {% endif %}
 
+{% if meeting.status == "bot_sent" and meeting.join_attempts > 1 %}
+<p class="notice" role="note">Zoom turned the bot away, so a new one was sent (attempt {{ meeting.join_attempts }} of {{ max_join_attempts }}).</p>
+{% endif %}
+
 {% if meeting.status == "bot_sent" %}
 <form method="post" action="/meetings/{{ meeting.id }}/cancel" data-disable-on-submit>
   <input type="hidden" name="csrf_token" value="{{ csrf }}">

@@ -31,6 +31,24 @@ class VexaMeeting:
     media_id: int | None = None
     recording_status: str | None = None
     completion_reason: str | None = None
+    # Vexa's own words for why the bot failed, e.g. "[Zoom Web] zoom_requires_rtms: ...".
+    failure_reason: str | None = None
+
+
+MAX_FAILURE_REASON_CHARS = 300
+
+
+def _failure_reason(data: dict) -> str | None:
+    """Vexa's reason for a failed bot: `data.reason`, else `data.last_error.reason`. Anything
+    that is not text is ignored rather than refused, because it is only ever shown, never used
+    to decide."""
+    reason = data.get("reason")
+    if not isinstance(reason, str):
+        last_error = data.get("last_error")
+        reason = last_error.get("reason") if isinstance(last_error, dict) else None
+    if not isinstance(reason, str) or not reason.strip():
+        return None
+    return reason.strip()[:MAX_FAILURE_REASON_CHARS]
 
 
 def _parse(url: str) -> tuple[str, str, str]:
@@ -162,6 +180,7 @@ class VexaClient:
             media_id=media_id,
             recording_status=recording_status,
             completion_reason=completion_reason,
+            failure_reason=_failure_reason(data),
         )
 
     def delete_recording(self, recording_id: int) -> None:

@@ -344,6 +344,37 @@ def test_get_meeting_null_fields_are_treated_as_absent(httpx_mock, client):
     assert meeting.completion_reason is None
 
 
+# Captured live on 2026-11-02 when Zoom refused the bot.
+ZOOM_RTMS_REASON = (
+    "[Zoom Web] zoom_requires_rtms: meeting/account blocks automa"
+    "ted browser joins and requires Zoom RTMS (Realtime Media Streams); route to the RTMS path"
+)
+
+
+def test_get_meeting_reads_the_failure_reason(httpx_mock, client):
+    data = {"reason": ZOOM_RTMS_REASON, "completion_reason": "awaiting_admission_rejected"}
+    meeting = _fetch_with(httpx_mock, client, status="failed", data=data)
+    assert meeting.failure_reason == ZOOM_RTMS_REASON
+
+
+def test_get_meeting_falls_back_to_the_last_error_reason(httpx_mock, client):
+    data = {"last_error": {"reason": "  bot crashed  ", "exit_code": 1}}
+    meeting = _fetch_with(httpx_mock, client, status="failed", data=data)
+    assert meeting.failure_reason == "bot crashed"
+
+
+@pytest.mark.parametrize(
+    "data", [{}, {"reason": 42}, {"reason": "   "}, {"last_error": "oops"}, {"last_error": {}}]
+)
+def test_get_meeting_failure_reason_absent_or_odd_is_none(httpx_mock, client, data):
+    assert _fetch_with(httpx_mock, client, data=data).failure_reason is None
+
+
+def test_get_meeting_failure_reason_is_capped(httpx_mock, client):
+    meeting = _fetch_with(httpx_mock, client, data={"reason": "x" * 1000})
+    assert len(meeting.failure_reason) == 300
+
+
 def test_delete_recording_calls_the_recording_route(httpx_mock, client):
     httpx_mock.add_response(method="DELETE", url="http://vexa.test/recordings/7", json={})
     client.delete_recording(7)

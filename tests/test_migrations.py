@@ -108,6 +108,17 @@ def test_recording_id_widens_to_bigint_and_back(scratch_url):
     engine.dispose()
 
 
+def test_join_attempts_column_is_added_and_dropped(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    assert "join_attempts" in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    command.downgrade(cfg, "0004")
+    assert "join_attempts" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
 def test_migration_matches_models(scratch_url):
     from alembic.autogenerate import compare_metadata
     from alembic.migration import MigrationContext

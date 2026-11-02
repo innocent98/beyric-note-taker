@@ -45,6 +45,16 @@ class FakeVexa:
         return item
 
     fail_download = False
+    send_error: Exception | None = None
+    next_bot_id = 100
+
+    def send_bot(self, meeting_url):
+        self.sent = getattr(self, "sent", []) + [meeting_url]
+        if self.send_error:
+            raise self.send_error
+        self.next_bot_id += 1
+        return self.next_bot_id
+
     recording_deletes: list
     delete_error: Exception | None = None
 
@@ -144,6 +154,85 @@ def test_failed_vexa_meeting_sets_reason_and_makes_no_openai_call(session, meeti
     assert meeting.status == "failed"
     assert meeting.failure_reason
     assert openai.transcriptions == 0 and openai.chats == 0
+
+
+# ---- Zoom refusing the bot ----
+
+ZOOM_RTMS = (
+    "[Zoom Web] zoom_requires_rtms: meeting/account blocks automated browser joins and "
+    "requires Zoom RTMS (Realtime Media Streams); route to the RTMS path"
+)
+ZOOM_REFUSED = VexaMeeting(
+    status="failed",
+    completion_reason="awaiting_admission_rejected",
+    failure_reason=ZOOM_RTMS,
+)
+
+
+@pytest.fixture
+def zoom_meeting(session, meeting):
+    meeting.url = "https://us05web.zoom.us/j/88205679674?pwd=abc"
+    meeting.platform, meeting.native_id = "zoom", "88205679674"
+    meeting.vexa_meeting_id = "1"
+    session.commit()
+    return meeting
+
+
+def test_zoom_refusal_sends_a_new_bot(session, zoom_meeting):
+    vexa = FakeVexa(ZOOM_REFUSED)
+    openai = run(session, zoom_meeting, vexa)
+    assert (zoom_meeting.status, zoom_meeting.step) == ("bot_sent", "waiting")
+    assert zoom_meeting.join_attempts == 2
+    assert zoom_meeting.vexa_meeting_id == "101"
+    assert vexa.sent == [zoom_meeting.url]
+    assert zoom_meeting.completion_reason is None and zoom_meeting.failure_reason is None
+    assert openai.transcriptions == 0
+
+
+def test_zoom_refusal_after_the_last_attempt_fails_with_the_reason(session, zoom_meeting):
+    zoom_meeting.join_attempts = pipeline.MAX_JOIN_ATTEMPTS
+    session.commit()
+    vexa = FakeVexa(ZOOM_REFUSED)
+    run(session, zoom_meeting, vexa)
+    assert zoom_meeting.status == "failed"
+    assert zoom_meeting.failure_reason.startswith("Zoom blocked the bot from joining")
+    assert "3 times in a row" in zoom_meeting.failure_reason
+    assert not getattr(vexa, "sent", [])
+
+
+def test_zoom_refusal_when_a_new_bot_cannot_be_sent(session, zoom_meeting):
+    vexa = FakeVexa(ZOOM_REFUSED)
+    vexa.send_error = VexaError("connection refused")
+    run(session, zoom_meeting, vexa)
+    assert zoom_meeting.status == "failed"
+    assert "A new bot could not be sent." in zoom_meeting.failure_reason
+    assert zoom_meeting.join_attempts == 1
+
+
+def test_three_refusals_then_admission_records_normally(session, zoom_meeting):
+    vexa = FakeVexa(ZOOM_REFUSED)
+    run(session, zoom_meeting, vexa)
+    run(session, zoom_meeting, vexa)
+    assert zoom_meeting.join_attempts == 3 and zoom_meeting.status == "bot_sent"
+    vexa.polls = [DONE]
+    run(session, zoom_meeting, vexa)
+    assert (zoom_meeting.status, zoom_meeting.step) == ("ready", "done")
+    assert vexa.id_lookups[-1] == "102"  # the bot that got in, not the refused ones
+
+
+def test_host_declining_is_not_retried(session, meeting):
+    vexa = FakeVexa(VexaMeeting(status="failed", completion_reason="awaiting_admission_rejected"))
+    run(session, meeting, vexa)
+    assert meeting.status == "failed"
+    assert meeting.failure_reason == pipeline.REASON_NOT_LET_IN
+    assert not getattr(vexa, "sent", [])
+
+
+def test_unknown_bot_failure_shows_vexa_reason(session, meeting):
+    run(session, meeting, FakeVexa(VexaMeeting(status="failed", failure_reason="Chrome crashed")))
+    assert meeting.failure_reason == (
+        pipeline.REASON_BOT_FAILED + " The bot reported: Chrome crashed"
+    )
 
 
 def test_polls_and_fetches_segments_by_vexa_id(session, meeting):
