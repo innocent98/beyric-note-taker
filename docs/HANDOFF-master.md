@@ -54,6 +54,7 @@ Earlier decisions stand (summarised in memory `beyric-note-taker-decisions`): mo
 **Decisions and approvals**
 - Merge PRs as they come: `docs/handoff-4`'s docs PR, then stream A's PR after its review (he says "merge #N"). Check no meeting is active first.
 - Approve (or change) the auto-join and pilot spec once stream E's draft is in (the open questions are listed in it): recording notice, overlapping bots, join timing, Outlook now or later, who is told on failure.
+- **Before open sign-up** (not now): choose how to close the forwarded-for trust gap found by stream A (`docs/spike/nextjs-scaffold/forwarded-for-trust.md`, on its branch): through Next, a container on the server can forge the address FastAPI rate-limits logins on (a compromised Vexa container could reset the login limit). Option 1: `next` on the host loopback and FastAPI reached on `127.0.0.1:8021`, needs a Linux test; option 2: an edge secret that nginx sets and Next checks. Accepted for the single-owner pilot; the long owner password is the mitigation.
 - Vexa licence for commercial use; launch capacity budget (bot machines) and whether to use a vendor instead.
 - Vercel later: needs a paid plan, a public API hostname, a privacy-policy update (Vercel becomes a processor).
 
