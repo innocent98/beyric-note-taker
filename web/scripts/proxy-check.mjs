@@ -27,6 +27,9 @@ for (const k of ["next", "direct", "password"]) {
 
 // Different "visitor addresses" (what nginx would put in X-Forwarded-For) per side, so the login
 // limit counts them separately and the check also proves the address survives the extra hop.
+// Never the real password; random so it cannot be mistaken for a credential.
+const BAD_GUESS = `not-it-${Math.random().toString(36).slice(2)}`;
+
 const SIDES = [
   { name: "next", base: values.next.replace(/\/$/, ""), ip: "10.20.0.1", tag: "via-next" },
   { name: "direct", base: values.direct.replace(/\/$/, ""), ip: "10.20.0.2", tag: "direct" },
@@ -109,10 +112,10 @@ void login0;
 await step("GET /templates without a login: 303 to /login", each((s) => send(s, "GET", "/templates", { jar: new Map() })));
 
 // 3. A POST with no CSRF token is refused with the app's own 403 page.
-await step("POST /login without a CSRF token: 403", each((s) => send(s, "POST", "/login", { form: { password: "x" } })));
+await step("POST /login without a CSRF token: 403", each((s) => send(s, "POST", "/login", { form: { password: BAD_GUESS } })));
 
 // 4. A wrong password, with a token: the form comes back with an error.
-await step("POST /login wrong password: error page", each((s) => send(s, "POST", "/login", { form: { password: "wrong-password", csrf_token: tokens.get(s.name) } })));
+await step("POST /login wrong password: error page", each((s) => send(s, "POST", "/login", { form: { password: BAD_GUESS, csrf_token: tokens.get(s.name) } })));
 
 // 5. The right password: 303 to /, a fresh session cookie.
 await step("POST /login correct password: 303 to / and a new session cookie", each((s) => send(s, "POST", "/login", { form: { password: values.password, csrf_token: tokens.get(s.name) } })), { body: false });
@@ -149,7 +152,7 @@ for (let i = 0; i < 6; i++) {
   for (const s of SIDES) {
     const jar = new Map();
     const page = await send(s, "GET", "/login", { jar, headers: { "X-Forwarded-For": `10.30.0.${s.name === "next" ? 1 : 2}` } });
-    const r = await send(s, "POST", "/login", { jar, form: { password: "nope", csrf_token: csrfIn(page.body.toString()) }, headers: { "X-Forwarded-For": `10.30.0.${s.name === "next" ? 1 : 2}` } });
+    const r = await send(s, "POST", "/login", { jar, form: { password: BAD_GUESS, csrf_token: csrfIn(page.body.toString()) }, headers: { "X-Forwarded-For": `10.30.0.${s.name === "next" ? 1 : 2}` } });
     limitStatuses[s.name].push(r.status);
   }
 }

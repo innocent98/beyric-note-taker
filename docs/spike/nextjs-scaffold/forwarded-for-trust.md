@@ -34,4 +34,14 @@ cannot resolve `next` by name and must know its fixed address. This is obscurity
    present (Python change, stream B's area). A compromised Vexa cannot read the secret.
 3. Accept the risk for the pilot (single owner, long password) and do 1 or 2 before open sign-up.
 
+**Same problem on the gateway the app already trusted (Opus review of PR #19, 2026-11-02).** The
+default `TRUSTED_PROXY_IPS=172.28.0.1` in `compose.yaml` has the same masquerade problem: Docker
+rewrites the source of host-to-published-port and cross-network traffic to the bridge gateway, so any
+process on the shared server that reaches `127.0.0.1:8021` (and possibly other apps' containers that
+can reach `web`) arrives as the trusted gateway and can choose `X-Forwarded-For`. That predates
+`next` for the 8020 path but `next` does not fix it. Forging also works against the owner: burning
+the limit for the owner's address locks them out of login for 15 minutes. Option 2 (a shared secret
+that nginx sets, Next forwards and FastAPI checks before it believes `X-Forwarded-For`) closes both
+paths; option 1 only closes the `next` path.
+
 **Decision (lead, 2026-11-02):** option 3 for the single-owner pilot. Blocker before open sign-up: option 1 or 2, Adebayo to choose.

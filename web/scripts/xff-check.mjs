@@ -13,8 +13,10 @@ if (!values.url || !["separate", "shared"].includes(values.expect ?? "")) {
   process.exit(2);
 }
 
+// Never the real password; random so it cannot be mistaken for a credential.
+const badGuess = `not-it-${Math.random().toString(36).slice(2)}`;
+
 async function wrongPassword(ip) {
-  const jar = new Map();
   const page = await fetch(values.url + "/login", { headers: { "X-Forwarded-For": ip } });
   const cookie = page.headers.getSetCookie()[0].split(";")[0];
   const token = /name="csrf_token" value="([^"]+)"/.exec(await page.text())[1];
@@ -22,9 +24,8 @@ async function wrongPassword(ip) {
     method: "POST",
     redirect: "manual",
     headers: { "X-Forwarded-For": ip, Cookie: cookie, "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ password: "wrong", csrf_token: token }).toString(),
+    body: new URLSearchParams([["password", badGuess], ["csrf_token", token]]).toString(),
   });
-  void jar;
   return res.status;
 }
 

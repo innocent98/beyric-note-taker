@@ -7,7 +7,10 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Only superseded pull-request runs are cancelled. A run on main is never cancelled: the
+  # `changes` job diffs against the push's own `before`, so a cancelled run could leave untested
+  # code that the next run no longer looks at.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Cheap and always runs: decides which heavy jobs are needed from the files the change touches,

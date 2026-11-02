@@ -3,10 +3,13 @@
 # proxies every other path to FastAPI (`web`, internal port 8000; also on 127.0.0.1:8021 for the
 # operator and for rollback). The project networks are pinned so the addresses FastAPI's trusted
 # proxies arrive from are known: the bridge gateway 172.28.0.1 (nginx, through Docker, on the 8021
-# rollback path) and `next`, pinned to 172.28.1.10 on its own network `front`, which only `next`
-# and `web` share. `next` passes X-Forwarded-For through unchanged, so it must not be reachable
-# from anything that could forge it: Vexa runs Chrome on untrusted meeting pages and shares
-# `default` with `web`, but cannot reach `next`.
+# rollback path) and `next`, pinned to 172.28.1.10 on its own network `front`. `next` passes
+# X-Forwarded-For through unchanged and FastAPI believes it from those two addresses, so this is
+# a known gap, not a protection: anything that can reach `next` by IP (Docker allows that across
+# networks for a published port) or reach 127.0.0.1:8021 arrives as a trusted address and can pick
+# the address the login limit counts. `front` only stops Vexa resolving the name `next`; it is NOT
+# a security boundary. See docs/spike/nextjs-scaffold/forwarded-for-trust.md; the real fix is
+# required before open sign-up.
 # The server is shared with other apps, so nothing here is published on a public interface: `next`,
 # `web` and Vexa's API are bound to 127.0.0.1, and Vexa's terminal and agent ports are not published.
 # TRUSTED_PROXY_IPS: unset means the bridge gateway above; set but EMPTY means trust no proxy
@@ -236,8 +239,8 @@ services:
 # Four networks, so a compromised bot (Chrome on untrusted meeting pages) cannot reach the app's
 # database: `default` carries web, worker and vexa and has internet access; `appdb` (no internet)
 # holds the app database; `vexainternal` (no internet) holds Vexa's own database and storage;
-# `front` holds only `next` and `web`, so nothing else can send `web` a forged X-Forwarded-For
-# through the one proxy it trusts.
+# `front` holds only `next` and `web` so Vexa cannot resolve `next` by name. It is NOT a security
+# boundary: Docker still lets other containers reach `next`'s published port by IP.
 networks:
   default:
     ipam:

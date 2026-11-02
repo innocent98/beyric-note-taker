@@ -8,6 +8,9 @@ const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   reactStrictMode: true,
+  // No page uses next/image, so switch off the /_next/image optimiser endpoint (an open image
+  // proxy and a memory cost nobody needs).
+  images: { unoptimized: true },
   // FastAPI redirects between "/x" and "/x/" itself; Next must not add its own trailing-slash
   // redirect in front of a path it does not own.
   skipTrailingSlashRedirect: true,

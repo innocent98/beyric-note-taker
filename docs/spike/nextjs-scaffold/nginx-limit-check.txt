@@ -1,0 +1,17 @@
+### control: the nginx.conf on main (expects the trailing-slash gap)
+PASS  POST /login x6:  200 200 200 200 429 429
+PASS  POST /login/ x6:  200 200 200 200 200 200
+PASS  POST /api/session x6:  200 200 200 200 429 429
+PASS  POST /api/session/ x6:  200 200 200 200 200 200
+PASS  mixed spellings share the limit: 200 200 200 200 200
+PASS  GET /login/ x6 is not counted:  200 200 200 200 200 200
+exit 0
+
+### the shipped deploy/nginx.conf
+PASS  POST /login x6:  200 200 200 200 429 429
+PASS  POST /login/ x6:  200 200 200 200 429 429
+PASS  POST /api/session x6:  200 200 200 200 429 429
+PASS  POST /api/session/ x6:  200 200 200 200 429 429
+PASS  mixed spellings share the limit: 200 200 200 200 429
+PASS  GET /login/ x6 is not counted:  200 200 200 200 200 200
+exit 0
