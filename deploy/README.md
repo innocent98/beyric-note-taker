@@ -118,7 +118,7 @@ Edit `.env`:
 |---|---|
 | `POSTGRES_PASSWORD`, `VEXA_DB_PASSWORD`, `VEXA_STORAGE_SECRET` | each `openssl rand -hex 24` |
 | `VEXA_API_KEY` | from step 4 |
-| `VEXA_BASE_URL` | leave; compose sets `http://vexa:8056` |
+| `DATABASE_URL`, `VEXA_BASE_URL` | leave commented; compose sets both |
 | `OPENAI_API_KEY` | the OpenAI key |
 | `OWNER_PASSWORD` | a long password |
 | `SESSION_SECRET` | `openssl rand -hex 48` |
