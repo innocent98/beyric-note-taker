@@ -710,7 +710,7 @@ def test_refused_submit_does_not_echo_a_zoom_password(client, template, session)
 
 
 def test_notes_code_blocks_scroll_inside_the_page():
-    css = (Path(__file__).parent.parent / "app/static/app.css").read_text()
+    css = (Path(__file__).parent.parent / "app/static/components.css").read_text()
     assert re.search(r"\.notes pre\s*\{[^}]*overflow-x:\s*auto", css)
 
 
@@ -943,3 +943,55 @@ def test_legal_pages_are_public_for_get_only(anon_client, path):
 def test_public_pages_do_not_open_other_owner_paths(anon_client):
     for path in ("/meetings/1", "/templates", "/vocabulary", "/privacy/../templates"):
         assert anon_client.get(path).status_code in (303, 404), path
+
+
+# ---- design system ----
+
+
+def test_styleguide_needs_a_login(anon_client):
+    response = anon_client.get("/styleguide")
+    assert response.status_code == 303
+    assert response.headers["location"] == "/login"
+
+
+def test_styleguide_renders_and_is_never_indexed(client):
+    response = client.get("/styleguide")
+    assert response.status_code == 200
+    assert response.headers["x-robots-tag"] == "noindex, nofollow"
+    assert '<meta name="robots" content="noindex, nofollow">' in response.text
+    for heading in ("Colour tokens", "Buttons", "Form fields", "Menu and dialog"):
+        assert heading in response.text
+
+
+def test_pages_load_the_shared_stylesheets_and_font(anon_client):
+    login = anon_client.get("/login").text  # logged out: the centred auth layout
+    privacy = anon_client.get("/privacy").text  # public layout
+    token = token_from(login)
+    anon_client.post("/login", data={"password": PASSWORD, "csrf_token": token})
+    app_page = anon_client.get("/templates").text  # logged in: the sidebar shell
+    for html in (login, privacy, app_page):
+        for asset in ("/static/tokens.css", "/static/components.css", "/static/app.css"):
+            assert asset in html
+        assert "/static/fonts/geist-latin-wght-normal.woff2" in html
+
+
+def test_csp_allows_only_our_own_fonts(client):
+    csp = client.get("/templates").headers["content-security-policy"]
+    assert "font-src 'self'" in csp
+    assert "'unsafe-inline'" not in csp
+
+
+def test_static_fonts_and_favicon_are_served(client):
+    for path in (
+        "/static/fonts/geist-latin-wght-normal.woff2",
+        "/static/fonts/geist-latin-ext-wght-normal.woff2",
+        "/static/fonts/geist-mono-latin-wght-normal.woff2",
+        "/static/favicon.svg",
+    ):
+        assert client.get(path).status_code == 200, path
+
+
+def test_the_app_shell_marks_the_current_page(client):
+    html = client.get("/templates").text
+    assert re.search(r'<a class="nav-link" href="/templates" aria-current="page">', html)
+    assert not re.search(r'href="/" aria-current="page"', html)

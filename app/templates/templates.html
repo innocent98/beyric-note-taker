@@ -1,25 +1,27 @@
 {% extends "base.html" %}
+{% import "components.html" as ui %}
 {% block title %}Templates - Beyric Notes{% endblock %}
 {% block content %}
-<h1>Templates</h1>
-<p class="muted">Instructions tell the notes writer what to focus on.</p>
-{% for t in rows %}
-<form method="post" action="/templates/{{ t.id }}" class="card">
-  <input type="hidden" name="csrf_token" value="{{ csrf }}">
-  <label for="name-{{ t.id }}">Name</label>
-  <input id="name-{{ t.id }}" name="name" maxlength="100" required value="{{ t.name }}">
-  <label for="ins-{{ t.id }}">Instructions</label>
-  <textarea id="ins-{{ t.id }}" name="instructions" rows="5" maxlength="4000" required>{{ t.instructions }}</textarea>
-  <button type="submit">Save</button>
-</form>
-{% endfor %}
-<h2>Add a template</h2>
-<form method="post" action="/templates" class="card">
-  <input type="hidden" name="csrf_token" value="{{ csrf }}">
-  <label for="name-new">Name</label>
-  <input id="name-new" name="name" maxlength="100" required>
-  <label for="ins-new">Instructions</label>
-  <textarea id="ins-new" name="instructions" rows="5" maxlength="4000" required></textarea>
-  <button type="submit">Add template</button>
-</form>
+<div class="stack measure">
+  {{ ui.page_head("Templates", "Instructions tell the notes writer what to focus on.") }}
+  {% for t in rows %}
+  {% call ui.card() %}
+  <form method="post" action="/templates/{{ t.id }}" class="stack-sm">
+    {{ ui.csrf_field(csrf) }}
+    {{ ui.field("name-" ~ t.id, "Name", name="name", value=t.name, required=true, attrs='maxlength="100"') }}
+    {{ ui.textarea_field("ins-" ~ t.id, "Instructions", name="instructions", value=t.instructions, required=true, attrs='maxlength="4000"') }}
+    <div>{{ ui.button("Save") }}</div>
+  </form>
+  {% endcall %}
+  {% endfor %}
+  <h2>Add a template</h2>
+  {% call ui.card() %}
+  <form method="post" action="/templates" class="stack-sm">
+    {{ ui.csrf_field(csrf) }}
+    {{ ui.field("name-new", "Name", name="name", required=true, attrs='maxlength="100"') }}
+    {{ ui.textarea_field("ins-new", "Instructions", name="instructions", required=true, attrs='maxlength="4000"') }}
+    <div>{{ ui.button("Add template") }}</div>
+  </form>
+  {% endcall %}
+</div>
 {% endblock %}

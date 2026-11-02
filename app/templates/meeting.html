@@ -1,83 +1,84 @@
 {% extends "base.html" %}
+{% import "components.html" as ui %}
 {% block title %}Meeting {{ meeting.native_id }} - Beyric Notes{% endblock %}
 {% block head %}{% if meeting.status in ("bot_sent", "processing") %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
 {% block content %}
-<p><a href="/">&larr; All meetings</a></p>
-<h1>{{ "Zoom" if meeting.platform == "zoom" else "Google Meet" }} {{ meeting.native_id }}</h1>
-<p class="meta">{{ meeting.created_at|local_time }}</p>
-<p><span class="badge {{ meeting.status }}">{{ status_text(meeting) }}</span></p>
-
-{% if meeting.status in ("bot_sent", "processing") %}
-<p class="muted">This page updates every 30 seconds.</p>
-{% endif %}
-
-{% if meeting.status == "bot_sent" and meeting.join_attempts > 1 %}
-<p class="notice" role="note">Zoom turned the bot away, so a new one was sent (attempt {{ meeting.join_attempts }} of {{ max_join_attempts }}).</p>
-{% endif %}
-
-{% if meeting.status == "bot_sent" %}
-<form method="post" action="/meetings/{{ meeting.id }}/cancel" data-disable-on-submit>
-  <input type="hidden" name="csrf_token" value="{{ csrf }}">
-  <button type="submit">Cancel and remove the bot</button>
-</form>
-{% endif %}
-
-{% if meeting.status == "ready" and bot_left_early %}
-<p class="notice" role="note">The bot left the meeting early or was removed. The notes may be incomplete.</p>
-{% endif %}
-
-{% if meeting.status == "failed" %}
-<section>
-  <h2>What went wrong</h2>
-  <p>{{ meeting.failure_reason or "Something went wrong while processing this meeting." }}</p>
-  {% if retry_block is none %}
-  <form method="post" action="/meetings/{{ meeting.id }}/retry">
-    <input type="hidden" name="csrf_token" value="{{ csrf }}">
-    <button type="submit">Try again</button>
-  </form>
-  {% elif retry_block == "audio_deleted" %}
-  <p class="muted">This meeting can't be retried: the audio has been deleted and no transcript was saved.</p>
-  {% elif retry_block == "no_speech" %}
-  <p class="muted">This meeting can't be retried: no speech was found, so trying again would give the same result.</p>
-  {% else %}
-  <p class="muted">This meeting can't be retried: nothing was captured. Send the bot again with a new link.</p>
-  {% endif %}
-</section>
-{% endif %}
-
-{% if meeting.status == "ready" %}
-<section>
-  <div class="row">
-    <h2>Notes</h2>
-    <button type="button" class="small" data-copy="notes-raw" data-label="Copy notes">Copy notes</button>
+{% set template_options = [] %}{% for t in templates %}{% set _ = template_options.append((t.id, t.name)) %}{% endfor %}
+<div class="stack">
+  <div>
+    <p class="meta"><a href="/">&larr; All meetings</a></p>
+    {% set head_end %}{{ ui.badge(status_text(meeting), status_tone(meeting)) }}{% endset %}
+    {% call ui.page_head("Zoom " ~ meeting.native_id if meeting.platform == "zoom" else "Google Meet " ~ meeting.native_id, meeting.created_at|local_time) %}{{ head_end }}{% endcall %}
   </div>
-  <div class="notes">{{ (meeting.notes or "")|markdown }}</div>
-  <textarea id="notes-raw" hidden readonly>{{ meeting.notes or "" }}</textarea>
 
-  <form method="post" action="/meetings/{{ meeting.id }}/regenerate" class="regen" data-disable-on-submit>
-    <input type="hidden" name="csrf_token" value="{{ csrf }}">
-    <label for="template_id">Rewrite the notes with a template</label>
-    <select id="template_id" name="template_id">
-      {% for t in templates %}
-      <option value="{{ t.id }}"{% if t.id == meeting.template_id %} selected{% endif %}>{{ t.name }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit">Rewrite notes</button>
-  </form>
-</section>
-{% endif %}
-
-{% set transcript = meeting.speaker_transcript or meeting.transcript %}
-{% if transcript %}
-<section>
-  <div class="row">
-    <h2>Transcript</h2>
-    <button type="button" class="small" data-copy="transcript-text" data-label="Copy transcript">Copy transcript</button>
-  </div>
-  {% if meeting.speakers_incomplete %}
-  <p class="notice" role="note">Speaker names unavailable for part of this transcript.</p>
+  {% if meeting.status in ("bot_sent", "processing") %}
+  <p class="muted">This page updates every 30 seconds.</p>
   {% endif %}
-  <pre id="transcript-text" class="transcript">{{ transcript }}</pre>
-</section>
-{% endif %}
+
+  {% if meeting.status == "bot_sent" and meeting.join_attempts > 1 %}
+  {% call ui.alert("notice") %}Zoom turned the bot away, so a new one was sent (attempt {{ meeting.join_attempts }} of {{ max_join_attempts }}).{% endcall %}
+  {% endif %}
+
+  {% if meeting.status == "bot_sent" %}
+  <form method="post" action="/meetings/{{ meeting.id }}/cancel" data-disable-on-submit>
+    {{ ui.csrf_field(csrf) }}
+    {{ ui.button("Cancel and remove the bot", kind="secondary") }}
+  </form>
+  {% endif %}
+
+  {% if meeting.status == "ready" and bot_left_early %}
+  {% call ui.alert("notice") %}The bot left the meeting early or was removed. The notes may be incomplete.{% endcall %}
+  {% endif %}
+
+  {% if meeting.status == "failed" %}
+  {% call ui.card("What went wrong") %}
+    <p>{{ meeting.failure_reason or "Something went wrong while processing this meeting." }}</p>
+    {% if retry_block is none %}
+    <form method="post" action="/meetings/{{ meeting.id }}/retry">
+      {{ ui.csrf_field(csrf) }}
+      {{ ui.button("Try again") }}
+    </form>
+    {% elif retry_block == "audio_deleted" %}
+    <p class="muted">This meeting can't be retried: the audio has been deleted and no transcript was saved.</p>
+    {% elif retry_block == "no_speech" %}
+    <p class="muted">This meeting can't be retried: no speech was found, so trying again would give the same result.</p>
+    {% else %}
+    <p class="muted">This meeting can't be retried: nothing was captured. Send the bot again with a new link.</p>
+    {% endif %}
+  {% endcall %}
+  {% endif %}
+
+  {% if meeting.status == "ready" %}
+  <section class="stack-sm">
+    <div class="row">
+      <h2>Notes</h2>
+      {{ ui.button("Copy notes", kind="secondary", size="sm", type="button", attrs='data-copy="notes-raw" data-label="Copy notes"') }}
+    </div>
+    <div class="prose-box notes">{{ (meeting.notes or "")|markdown }}</div>
+    <textarea id="notes-raw" hidden readonly>{{ meeting.notes or "" }}</textarea>
+
+    {% call ui.card() %}
+    <form method="post" action="/meetings/{{ meeting.id }}/regenerate" class="row-wrap" data-disable-on-submit>
+      {{ ui.csrf_field(csrf) }}
+      <div class="field-grow">{{ ui.select_field("template_id", "Rewrite the notes with a template", template_options, meeting.template_id) }}</div>
+      {{ ui.button("Rewrite notes") }}
+    </form>
+    {% endcall %}
+  </section>
+  {% endif %}
+
+  {% set transcript = meeting.speaker_transcript or meeting.transcript %}
+  {% if transcript %}
+  <section class="stack-sm">
+    <div class="row">
+      <h2>Transcript</h2>
+      {{ ui.button("Copy transcript", kind="secondary", size="sm", type="button", attrs='data-copy="transcript-text" data-label="Copy transcript"') }}
+    </div>
+    {% if meeting.speakers_incomplete %}
+    {% call ui.alert("notice") %}Speaker names unavailable for part of this transcript.{% endcall %}
+    {% endif %}
+    <div class="prose-box"><pre id="transcript-text" class="transcript">{{ transcript }}</pre></div>
+  </section>
+  {% endif %}
+</div>
 {% endblock %}

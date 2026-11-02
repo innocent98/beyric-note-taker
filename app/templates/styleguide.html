@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% import "components.html" as ui %}
+{% block title %}Style guide - Beyric Notes{% endblock %}
+{% block head %}<meta name="robots" content="noindex, nofollow">{% endblock %}
+{% block content %}
+{% set swatches = [("sw-bg", "bg", "App background"), ("sw-surface", "surface", "Cards, sidebar, inputs"), ("sw-text", "text", "Headings, body"), ("sw-text-2", "text-2", "Secondary text"), ("sw-text-3", "text-3", "Small meta text"), ("sw-border", "border", "Borders, dividers"), ("sw-border-strong", "border-strong", "Input borders"), ("sw-primary", "primary", "Primary actions, logo"), ("sw-primary-hover", "primary-hover", "Hover, pressed"), ("sw-primary-tint", "primary-tint", "Selected, avatars"), ("sw-danger", "danger", "Errors, destructive"), ("sw-warning", "warning", "Notices"), ("sw-success", "success", "Ready"), ("sw-info", "info", "Working")] %}
+<div class="stack">
+  {{ ui.page_head("Style guide", "Every shared component and design token, in the current light or dark theme. Change the theme in your system settings; narrow the window to check phones.") }}
+
+  <section class="sg-section"><h2>Colour tokens</h2>
+    <div class="swatches">
+      {% for cls, name, use in swatches %}<div class="swatch"><div class="swatch-chip {{ cls }}"></div><div class="swatch-name"><strong>--{{ name }}</strong>{{ use }}</div></div>{% endfor %}
+    </div>
+  </section>
+
+  <section class="sg-section"><h2>Type</h2>
+    <div class="card sg-type-sample">
+      <h1>Page title, Geist 24px</h1>
+      <h2>Card or section title, Geist 15px</h2>
+      <p>Body text sits at 14px with generous line height, so notes read like a document, not a dashboard.</p>
+      <p class="meta">Meta text, 13px, for dates and hints.</p>
+      <p class="mono">Geist Mono for timestamps 00:02:48</p>
+    </div>
+  </section>
+
+  <section class="sg-section"><h2>Logo</h2>
+    <div class="card sg-demo">{{ ui.logo(link=none) }}{{ ui.logo(large=true, link=none) }}{{ ui.logo(link=none, label=false) }}</div>
+  </section>
+
+  <section class="sg-section"><h2>Buttons</h2>
+    <div class="card sg-demo">
+      {{ ui.button("Primary", type="button") }}
+      {{ ui.button("Secondary", kind="secondary", type="button") }}
+      {{ ui.button("Danger", kind="danger", type="button") }}
+      {{ ui.button("Ghost", kind="ghost", type="button") }}
+      {{ ui.button("Link", kind="link", type="button") }}
+      {{ ui.button("Small", size="sm", type="button") }}
+      {{ ui.button("Large", size="lg", type="button") }}
+      {{ ui.button("Disabled", disabled=true, type="button") }}
+      {{ ui.button("As a link", href="#") }}
+    </div>
+    <div class="card">{{ ui.button("Full width", block=true, type="button") }}</div>
+  </section>
+
+  <section class="sg-section"><h2>Badges</h2>
+    <div class="card sg-demo">{{ ui.badge("Neutral") }}{{ ui.badge("Ready", "success") }}{{ ui.badge("Failed", "danger") }}{{ ui.badge("Waiting", "warning") }}{{ ui.badge("Processing", "info") }}{{ ui.badge("Brand", "brand") }}</div>
+  </section>
+
+  <section class="sg-section"><h2>Alerts</h2>
+    {% call ui.alert("info") %}Information: something worth knowing.{% endcall %}
+    {% call ui.alert("notice") %}Notice: the notes may be incomplete.{% endcall %}
+    {% call ui.alert("error") %}Error: something went wrong.{% endcall %}
+  </section>
+
+  <section class="sg-section"><h2>Form fields</h2>
+    {% call ui.card() %}
+    <form class="stack-sm" method="get" action="/styleguide">
+      {{ ui.csrf_field("styleguide") }}
+      {{ ui.field("sg-text", "Text field", value="", hint="A hint sits under the field.", attrs='placeholder="Placeholder"') }}
+      {{ ui.field("sg-bad", "Field with an error", value="oops", error="This value is not valid.") }}
+      {{ ui.select_field("sg-select", "Select", [("a", "First option"), ("b", "Second option")], "b") }}
+      {{ ui.textarea_field("sg-area", "Text area", hint="Several lines.") }}
+      {{ ui.segmented("sg-seg", [("one", "One"), ("two", "Two"), ("three", "Three")], "two", "Example choice") }}
+    </form>
+    {% endcall %}
+  </section>
+
+  <section class="sg-section"><h2>Navigation</h2>
+    <div class="card stack-sm">
+      {{ ui.tabs([("#", "Overview", true), ("#", "Details", false), ("#", "History", false)]) }}
+      <nav class="nav measure" aria-label="Sidebar example">{{ ui.nav_link("#", "Current page", true) }}{{ ui.nav_link("#", "Another page") }}</nav>
+    </div>
+  </section>
+
+  <section class="sg-section"><h2>Menu and dialog</h2>
+    <div class="card sg-demo">
+      {% call ui.menu("Download") %}{{ ui.menu_item("PDF", "#", "Best for reading and printing") }}{{ ui.menu_item("Word document", "#", "Edit in Word or Google Docs") }}{% endcall %}
+      {{ ui.button("Open a dialog", kind="secondary", type="button", attrs='data-dialog-open="sg-dialog"') }}
+    </div>
+    {% call ui.dialog("sg-dialog", "Are you sure?") %}
+      <p>A dialog asks for a decision before something happens.</p>
+      <div class="dialog-actions">{{ ui.button("Cancel", kind="secondary", type="button", attrs="data-dialog-close") }}{{ ui.button("Confirm", type="button", attrs="data-dialog-close") }}</div>
+    {% endcall %}
+  </section>
+
+  <section class="sg-section"><h2>Cards, lists and empty states</h2>
+    {% call ui.card("A card with a title") %}<p>Card content goes here.</p>{% endcall %}
+    {% call ui.card(flush=true) %}
+    <ul class="list">
+      {% set end %}{{ ui.badge("Ready", "success") }}{% endset %}
+      {% call ui.list_row(href="#", end=end) %}<span class="list-title">A row that links somewhere</span><span class="meta">2 Nov 2026, 15:20 UTC</span>{% endcall %}
+      {% call ui.list_row() %}<span class="list-title">A row without a link</span>{% endcall %}
+    </ul>
+    {% endcall %}
+    {% call ui.card(flush=true) %}{{ ui.empty_state("Nothing here yet.", "An empty state says what will appear and how to start.") }}{% endcall %}
+  </section>
+</div>
+{% endblock %}

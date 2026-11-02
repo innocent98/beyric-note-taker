@@ -1,0 +1,117 @@
+{#- Shared UI components. Import with: {% import "components.html" as ui %}
+    Each macro emits classes from app/static/components.css and appears in /styleguide
+    (tests/test_ui_guards.py fails if one is missing there). Macros are pure: pass in anything
+    they need, they read no request state. -#}
+
+{% macro logo(large=false, link="/", label=true) -%}
+{%- set mark -%}
+<svg width="{{ 40 if large else 28 }}" height="{{ 40 if large else 28 }}" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="logo-tile"></rect><path d="M9 8H23a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H15L10.5 24.5V21H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" class="logo-bubble"></path><path d="M11 12.5h10M11 16.5h6" class="logo-lines"></path></svg>
+{%- endset -%}
+{%- set word -%}{% if label %}<span class="logo-word"><span>Beyric</span><span class="logo-sub">Note Taker</span></span>{% endif %}{%- endset -%}
+{%- if link %}<a class="logo{{ ' logo-lg' if large }}" href="{{ link }}">{{ mark }}{{ word }}</a>
+{%- else %}<span class="logo{{ ' logo-lg' if large }}">{{ mark }}{{ word }}</span>{% endif %}
+{%- endmacro %}
+
+{#- kind: primary | secondary | danger | ghost | link.  size: sm | lg | none.
+    Renders a <button>, or an <a> when href is given. -#}
+{% macro button(label, kind="primary", size="", type="submit", href=none, block=false, disabled=false, attrs="") -%}
+{%- set cls = "btn" ~ ("" if kind == "primary" else " btn-" ~ kind) ~ (" btn-" ~ size if size else "") ~ (" btn-block" if block else "") -%}
+{%- if href %}<a class="{{ cls }}" href="{{ href }}"{% if disabled %} aria-disabled="true"{% endif %} {{ attrs|safe }}>{{ label }}</a>
+{%- else %}<button class="{{ cls }}" type="{{ type }}"{% if disabled %} disabled{% endif %} {{ attrs|safe }}>{{ label }}</button>{% endif %}
+{%- endmacro %}
+
+{#- tone: neutral | success | danger | warning | info | brand -#}
+{% macro badge(text, tone="neutral") -%}
+<span class="badge{{ '' if tone == 'neutral' else ' badge-' ~ tone }}">{{ text }}</span>
+{%- endmacro %}
+
+{#- kind: error | notice | info. Use with {% call ui.alert("notice") %}text{% endcall %} -#}
+{% macro alert(kind="info", role="note") -%}
+<div class="alert alert-{{ kind }}" role="{{ 'alert' if kind == 'error' else role }}">{{ caller() }}</div>
+{%- endmacro %}
+
+{% macro card(title=none, flush=false) -%}
+<section class="card{{ ' card-flush' if flush }}">{% if title %}<div class="card-title">{{ title }}</div>{% endif %}{{ caller() }}</section>
+{%- endmacro %}
+
+{% macro csrf_field(token) -%}
+<input type="hidden" name="csrf_token" value="{{ token }}">
+{%- endmacro %}
+
+{#- A labelled text input. error is shown as the hint in the error colour. -#}
+{% macro field(id, label, name=none, type="text", value="", hint=none, error=none, required=false, attrs="") -%}
+<div class="field{{ ' field-error' if error }}">
+  <label class="field-label" for="{{ id }}">{{ label }}</label>
+  <input class="input" id="{{ id }}" name="{{ name or id }}" type="{{ type }}" value="{{ value }}"{% if required %} required{% endif %} {{ attrs|safe }}>
+  {% if error or hint %}<span class="field-hint">{{ error or hint }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{#- options is a list of (value, label) pairs. -#}
+{% macro select_field(id, label, options, selected=none, name=none, hint=none) -%}
+<div class="field">
+  <label class="field-label" for="{{ id }}">{{ label }}</label>
+  <select class="select" id="{{ id }}" name="{{ name or id }}">
+    {% for v, text in options %}<option value="{{ v }}"{% if selected is not none and selected|string == v|string %} selected{% endif %}>{{ text }}</option>{% endfor %}
+  </select>
+  {% if hint %}<span class="field-hint">{{ hint }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro textarea_field(id, label, value="", name=none, rows=5, hint=none, error=none, required=false, attrs="") -%}
+<div class="field{{ ' field-error' if error }}">
+  <label class="field-label" for="{{ id }}">{{ label }}</label>
+  <textarea class="textarea" id="{{ id }}" name="{{ name or id }}" rows="{{ rows }}"{% if required %} required{% endif %} {{ attrs|safe }}>{{ value }}</textarea>
+  {% if error or hint %}<span class="field-hint">{{ error or hint }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{#- Radio buttons drawn as a segmented control. options: list of (value, label). -#}
+{% macro segmented(name, options, selected, legend) -%}
+<fieldset class="segmented" aria-label="{{ legend }}">
+  {% for v, text in options %}<label class="segmented-opt"><input type="radio" name="{{ name }}" value="{{ v }}"{% if selected|string == v|string %} checked{% endif %}><span>{{ text }}</span></label>{% endfor %}
+</fieldset>
+{%- endmacro %}
+
+{#- A dropdown that opens without JavaScript. Fill it with menu_item calls. -#}
+{% macro menu(label) -%}
+<details class="menu"><summary class="btn btn-secondary">{{ label }}</summary><div class="menu-panel">{{ caller() }}</div></details>
+{%- endmacro %}
+
+{% macro menu_item(label, href, sub=none) -%}
+<a class="menu-item" href="{{ href }}">{{ label }}{% if sub %}<small>{{ sub }}</small>{% endif %}</a>
+{%- endmacro %}
+
+{#- items: list of (href, label, current). Each tab is a real link. -#}
+{% macro tabs(items) -%}
+<nav class="tabs" aria-label="Sections">{% for href, text, current in items %}<a class="tab" href="{{ href }}"{% if current %} aria-current="page"{% endif %}>{{ text }}</a>{% endfor %}</nav>
+{%- endmacro %}
+
+{% macro nav_link(href, label, current=false) -%}
+<a class="nav-link" href="{{ href }}"{% if current %} aria-current="page"{% endif %}>{{ label }}</a>
+{%- endmacro %}
+
+{#- One row of a list: a link area on the left (caller fills it), an action area on the right. -#}
+{% macro list_row(href=none, end=none) -%}
+<li class="list-row">
+  {% if href %}<a class="list-row-link" href="{{ href }}">{{ caller() }}</a>{% else %}<div class="list-row-link">{{ caller() }}</div>{% endif %}
+  {% if end %}{{ end }}{% endif %}
+</li>
+{%- endmacro %}
+
+{% macro empty_state(title, text=none) -%}
+<div class="empty"><strong>{{ title }}</strong>{% if text %}{{ text }}{% endif %}</div>
+{%- endmacro %}
+
+{#- Page title with an optional subtitle; the caller block holds actions on the right. -#}
+{% macro page_head(title, subtitle=none) -%}
+<div class="page-head"><div><h1>{{ title }}</h1>{% if subtitle %}<p>{{ subtitle }}</p>{% endif %}</div>{% if caller is defined %}{{ caller() }}{% endif %}</div>
+{%- endmacro %}
+
+{#- A native <dialog>. Open it with a button carrying data-dialog-open="<id>"; app.js does the rest. -#}
+{% macro dialog(id, title) -%}
+<dialog class="dialog" id="{{ id }}" aria-labelledby="{{ id }}-title">
+  <h2 class="dialog-title" id="{{ id }}-title">{{ title }}</h2>
+  {{ caller() }}
+</dialog>
+{%- endmacro %}

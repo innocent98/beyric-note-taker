@@ -1,0 +1,132 @@
+/* Design tokens: the one place colours, type, spacing and radii are defined.
+   Values come from the designer's prototypes in docs/ui (Brand.dc.html and the app screens).
+   Nothing else in app/static or app/templates may contain a colour literal; tests/test_ui_guards.py
+   enforces that. Add a token here, then use var(--name). */
+
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/static/fonts/geist-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/static/fonts/geist-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/static/fonts/geist-mono-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  color-scheme: light dark;
+
+  /* Brand palette (Brand.dc.html) */
+  --teal: #0E6B5E;
+  --teal-deep: #0A5248;
+  --teal-light: #1A9483;
+  --teal-tint: #E6F1EE;
+
+  /* Semantic colours, light */
+  --bg: #F6F7F6;            /* app background ("Paper") */
+  --surface: #FFFFFF;       /* cards, sidebar, inputs */
+  --surface-hover: #F0F2F1;
+  --text: #141917;          /* headings, body ("Ink") */
+  --text-2: #5B6460;        /* secondary text ("Slate") */
+  --text-3: #6E7772;        /* small meta text */
+  --text-faint: #8A928E;    /* icons, placeholders, section labels */
+  --border: #E3E7E5;        /* borders, dividers ("Line") */
+  --border-strong: #D5DBD8; /* input borders */
+  --primary: var(--teal);
+  --primary-hover: var(--teal-deep);
+  --primary-tint: var(--teal-tint);
+  --on-primary: #FFFFFF;
+  --link: var(--teal);
+  --logo-tile: var(--teal);
+  --logo-bubble: #FFFFFF;
+  --focus: var(--teal-light);
+
+  --danger: #B42318;
+  --danger-tint: #FEF3F2;
+  --danger-text: #7A271A;
+  --warning: #B54708;
+  --warning-tint: #FFFAEB;
+  --warning-text: #7A2E0E;
+  --success: #1A7F37;
+  --success-tint: #E8F5EC;
+  --info: #3C4A7A;
+  --info-tint: #EEF0F7;
+
+  /* Type */
+  --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --text-xs: 0.75rem;   /* 12px */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-base: 0.875rem;/* 14px: body text in the app */
+  --text-md: 0.9375rem; /* 15px */
+  --text-lg: 1.125rem;
+  --text-xl: 1.5rem;    /* 24px: page titles */
+  --text-hero: clamp(2rem, 5vw, 3rem);
+  --leading: 1.5;
+
+  /* Space, radius, elevation */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --radius-sm: 7px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --shadow-pop: 0 12px 32px rgba(20, 25, 23, 0.14);
+  --control-height: 40px;
+  --sidebar-width: 232px;
+  --page-width: 1160px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111513;
+    --surface: #1A1F1D;
+    --surface-hover: #232A27;
+    --text: #ECEFED;
+    --text-2: #A9B3AF;
+    --text-3: #A3ABA7;
+    --text-faint: #7C8682;
+    --border: #2E3532;
+    --border-strong: #3B4440;
+    --primary: #4FB8A6;
+    --primary-hover: #7FD0C2;
+    --primary-tint: #16302B;
+    --on-primary: #0B1412;
+    --link: #7FD0C2;
+    --logo-tile: var(--teal-light);
+    --focus: #7FD0C2;
+
+    --danger: #F97066;
+    --danger-tint: #3A1B18;
+    --danger-text: #FDA29B;
+    --warning: #FDB022;
+    --warning-tint: #3A2A0E;
+    --warning-text: #FEC84B;
+    --success: #47CD89;
+    --success-tint: #12301F;
+    --info: #A4B1E6;
+    --info-tint: #1E2438;
+    --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5);
+  }
+}

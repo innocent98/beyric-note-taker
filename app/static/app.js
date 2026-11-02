@@ -39,3 +39,32 @@ window.addEventListener("pageshow", function (event) {
     button.disabled = false;
   });
 });
+
+// Native <dialog>: a button with data-dialog-open="<id>" opens it, data-dialog-close closes the
+// dialog it sits in. Clicking the backdrop closes it too.
+document.addEventListener("click", function (event) {
+  var opener = event.target.closest("[data-dialog-open]");
+  if (opener) {
+    var dialog = document.getElementById(opener.dataset.dialogOpen);
+    if (dialog && dialog.showModal) dialog.showModal();
+    return;
+  }
+  var closer = event.target.closest("[data-dialog-close]");
+  if (closer) {
+    var host = closer.closest("dialog");
+    if (host) host.close();
+    return;
+  }
+  if (event.target.tagName === "DIALOG") event.target.close();
+});
+
+// A details.menu closes when you click anywhere else or press Escape.
+document.addEventListener("click", function (event) {
+  document.querySelectorAll("details.menu[open]").forEach(function (menu) {
+    if (!menu.contains(event.target)) menu.removeAttribute("open");
+  });
+});
+document.addEventListener("keydown", function (event) {
+  if (event.key !== "Escape") return;
+  document.querySelectorAll("details.menu[open]").forEach(function (menu) { menu.removeAttribute("open"); });
+});

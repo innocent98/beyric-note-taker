@@ -15,7 +15,7 @@ from app.db import get_session
 
 STATIC = Path(__file__).parent / "static"
 CSP = (
-    "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; "
+    "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; "
     "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
 )
 
