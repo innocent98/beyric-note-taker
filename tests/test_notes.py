@@ -85,7 +85,7 @@ def test_notes_prompt_treats_transcript_as_source_of_truth(fake_openai, template
     assert "never" in system.lower()  # never state anything the transcript does not support
     assert "data" in system.lower() and "instructions" in system.lower()
     assert "<transcript>" in prompt_text(client) and TRANSCRIPT in prompt_text(client)
-    assert client.calls[0]["model"] == "gpt-5.4-mini"
+    assert client.calls[0]["model"] == "gpt-6-luna"
 
 
 def test_notes_prompt_includes_template_and_vocabulary(fake_openai, template):

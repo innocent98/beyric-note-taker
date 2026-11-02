@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     openai_api_key: str = ""
     transcription_model: str = "gpt-transcribe"
-    notes_model: str = "gpt-5.4-mini"
+    notes_model: str = "gpt-6-luna"
 
     audio_retention_days: int = 7
     audio_dir: str = "data/audio"
