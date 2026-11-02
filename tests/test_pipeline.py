@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy.exc import OperationalError
 
 from app import audio, pipeline
 from app.config import Settings
@@ -35,8 +36,13 @@ class FakeVexa:
             raise item
         return item
 
+    fail_download = False
+
     def download_audio(self, recording_id, media_id, path):
         self.downloads += 1
+        if self.fail_download:
+            Path(path).write_bytes(b"trunc")
+            raise VexaError("connection dropped")
         Path(path).write_bytes(b"audio")
 
 
@@ -202,12 +208,13 @@ def test_tiny_transcript_counts_as_no_speech(session, meeting):
     assert openai.chats == 0
 
 
-def test_failure_reason_never_contains_exception_text(session, meeting):
+def test_failure_reason_never_contains_exception_text(session, meeting, env):
     openai = FakeOpenAI(fail_notes=RuntimeError("sk-secret-key"))
     run(session, meeting, FakeVexa(DONE), openai)
     assert meeting.status == "failed"
     assert "sk-secret" not in meeting.failure_reason
     assert meeting.audio_deleted_at is None
+    assert (env / "a" / str(meeting.id) / "source.webm").is_file()
 
 
 def test_audio_redownloaded_when_missing_on_resume(session, meeting, env):
@@ -218,6 +225,79 @@ def test_audio_redownloaded_when_missing_on_resume(session, meeting, env):
     session.commit()
     run(session, meeting, vexa)
     assert vexa.downloads == 2 and meeting.status == "ready"
+
+
+def test_interrupted_download_is_not_kept_and_is_retried(session, meeting, env):
+    folder = env / "a" / str(meeting.id)
+    vexa = FakeVexa(DONE)
+    vexa.fail_download = True
+    run(session, meeting, vexa)
+    assert (meeting.status, meeting.step) == ("processing", "audio")
+    assert not (folder / "source.webm").exists()
+    assert not (folder / "source.webm.part").exists()
+    vexa.fail_download = False
+    openai = run(session, meeting, vexa)
+    assert vexa.downloads == 2
+    assert meeting.status == "ready"
+    assert openai.transcriptions == 1
+    assert (folder / "source.webm").read_bytes() == b"audio"
+
+
+def test_redownload_clears_audio_deleted_at(session, meeting):
+    meeting.audio_deleted_at = NOW - timedelta(days=1)
+    meeting.status, meeting.step = "processing", "audio"
+    session.commit()
+    run(session, meeting, FakeVexa(DONE))
+    assert meeting.status == "ready"
+    assert meeting.audio_deleted_at is None
+
+
+def test_vexa_error_in_audio_step_keeps_step(session, meeting):
+    run(session, meeting, FakeVexa(DONE, VexaError("down")))
+    assert (meeting.status, meeting.step) == ("processing", "audio")
+    assert meeting.failure_reason is None
+    run(session, meeting, FakeVexa(DONE))
+    assert meeting.status == "ready"
+
+
+def test_vexa_error_in_speakers_step_keeps_saved_transcript(session, meeting):
+    first = run(session, meeting, FakeVexa(DONE, DONE, VexaError("down")))
+    assert (meeting.status, meeting.step) == ("processing", "speakers")
+    assert meeting.transcript == TRANSCRIPT
+    second = run(session, meeting, FakeVexa(DONE))
+    assert meeting.status == "ready"
+    assert first.transcriptions == 1 and second.transcriptions == 0
+
+
+def test_unknown_step_fails_instead_of_looping(session, meeting):
+    meeting.status, meeting.step = "processing", "done"
+    session.commit()
+    run(session, meeting, FakeVexa(DONE))
+    assert meeting.status == "failed"
+    assert meeting.failure_reason
+
+
+def _db_error(*_a, **_k):
+    raise OperationalError("select", {}, Exception("connection reset"))
+
+
+def test_database_error_while_processing_leaves_status_alone(session, meeting, monkeypatch):
+    meeting.status, meeting.step = "processing", "notes"
+    session.commit()
+    monkeypatch.setattr(pipeline, "_step_notes", _db_error)
+    run(session, meeting, FakeVexa(DONE))
+    assert (meeting.status, meeting.step) == ("processing", "notes")
+    assert meeting.failure_reason is None
+
+
+def test_database_error_while_waiting_retries_then_gives_up(session, meeting, monkeypatch):
+    monkeypatch.setattr(pipeline, "_poll", _db_error)
+    run(session, meeting, FakeVexa(DONE))
+    assert (meeting.status, meeting.failure_reason) == ("bot_sent", None)
+    meeting.started_polling_at = NOW - timedelta(hours=7)
+    session.commit()
+    run(session, meeting, FakeVexa(DONE))
+    assert meeting.status == "failed"
 
 
 def test_audio_deleted_after_seven_days(session, meeting, env):
@@ -263,3 +343,4 @@ def test_worker_pass_survives_unexpected_error(session, meeting, monkeypatch):
 
     monkeypatch.setattr(worker, "advance_meeting", boom)
     assert worker.run_pass(session, 0) == meeting.id
+    assert session.get(Meeting, meeting.id) is not None  # session still usable after rollback

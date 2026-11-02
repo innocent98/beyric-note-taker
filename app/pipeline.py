@@ -8,11 +8,13 @@ errors can carry key fragments or request details); only the exception type is l
 """
 
 import logging
+import os
 import shutil
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app import audio
@@ -119,7 +121,15 @@ def _step_audio(session: Session, meeting: Meeting, vexa) -> bool:
             _fail(session, meeting, REASON_NOT_ADMITTED)
             return False
         path.parent.mkdir(parents=True, exist_ok=True)
-        vexa.download_audio(info.recording_id, info.media_id, path)
+        # Download beside the target and rename on success, so an interrupted download can never
+        # be mistaken for the whole recording.
+        partial = path.with_name(path.name + ".part")
+        try:
+            vexa.download_audio(info.recording_id, info.media_id, partial)
+            os.replace(partial, path)
+        finally:
+            partial.unlink(missing_ok=True)
+        meeting.audio_deleted_at = None  # audio is back, so cleanup must remove it again
     meeting.step = "transcribing"
     session.commit()
     return True
@@ -197,6 +207,8 @@ def advance_meeting(
             elif meeting.step == "notes":
                 proceed = _step_notes(session, meeting, openai_client)
             else:
+                _fail(session, meeting, REASON_UNEXPECTED)
+                logger.error("meeting %s: unknown step %r", meeting_id, meeting.step)
                 return
             if not proceed:
                 return
@@ -208,6 +220,16 @@ def advance_meeting(
         meeting = session.get(Meeting, meeting_id)
         if meeting is not None and _expired(meeting, now):
             _give_up(session, meeting)
+    except OperationalError as exc:
+        # Transient database trouble: do not fail the meeting, try again on the next pass.
+        logger.warning("meeting %s: database error (%s)", meeting_id, type(exc).__name__)
+        try:
+            session.rollback()
+            meeting = session.get(Meeting, meeting_id)
+            if meeting is not None and meeting.status == "bot_sent" and _expired(meeting, now):
+                _give_up(session, meeting)
+        except OperationalError as inner:
+            logger.warning("meeting %s: database still down (%s)", meeting_id, type(inner).__name__)
     except (TranscriptionFailed, NotesFailed, AudioError) as exc:
         # Audio stays on disk so the meeting can be retried.
         _fail_with(session, meeting_id, exc)
