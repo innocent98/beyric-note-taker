@@ -22,7 +22,7 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 
 ## Module 1: MVP (planned, see `docs/superpowers/plans/2026-11-02-beyric-note-taker-mvp.md`)
 
-- [ ] Task 0: Vexa check and project setup
+- [x] Task 0: Vexa check and project setup (2026-11-02: settings, models, first migration with seeded templates, CI)
 - [ ] Task 1: Vexa client
 - [ ] Task 2: Audio preparation
 - [ ] Task 3: Transcription with custom vocabulary
