@@ -182,7 +182,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] D14, Emails in the designer's layout (needs W0.3): replace the plain mails (`Emails.dc.html` applies to all eight)
   - [ ] D15, template delete (needs `DELETE /api/templates/{id}`, not yet built, and a `template_in_use` refusal for a template still used by a meeting or the calendar setting; both are planned in the accounts spec, neither exists in code yet)
   - [ ] D16, shell leftovers: toast component, PWA basics
-- [x] W5, Download and export (AI workspace spec section 9; branch `feature/notes-export-w5`, 2026-11-03; SOP `docs/sop/2026-11-03-notes-export-w5.md`; FE guide `docs/fe-integration-guide-export.md` with 18 live captures; PR open, not merged)
+- [x] W5, Download and export (AI workspace spec section 9; branch `feature/notes-export-w5`, 2026-11-03; SOP `docs/sop/2026-11-03-notes-export-w5.md`; FE guide `docs/fe-integration-guide-export.md` with 18 live captures; PR #48 open, not merged)
   - [x] Spike EX1: WeasyPrint fits the image (Pango already comes with ffmpeg; one 103 MB pip layer) and the memory (renderer peak 91 MiB for a 1-hour transcript, 120 MiB for 40,000 words; 1.9 s and 9.0 s on a loaded arm64 VM): `docs/spike/export-pdf-memory.md`
   - [x] `NotesDocument` render model from the stored notes and, when asked, the transcript (`app/notes_document.py`)
   - [x] PDF (WeasyPrint, Geist, A4, footer, page numbers) and Word (python-docx: headings, nested bullets, transcript after a page break)

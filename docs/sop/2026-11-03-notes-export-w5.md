@@ -1,7 +1,7 @@
 # SOP: download the notes as PDF or Word (AI workspace phase W5)
 
 ## What shipped
-The meeting page has a **Download** menu (PDF, Word, "Include the full transcript") and the API has `GET /api/meetings/{id}/export?format=pdf|docx&transcript=true|false`, which builds the file when asked and never stores it. Branch `feature/notes-export-w5`, PR to `main` (number in the PR list). No table, no column, no setting, no migration. Spike EX1 (WeasyPrint against the image and memory) came first: `docs/spike/export-pdf-memory.md`, verdict "fits".
+The meeting page has a **Download** menu (PDF, Word, "Include the full transcript") and the API has `GET /api/meetings/{id}/export?format=pdf|docx&transcript=true|false`, which builds the file when asked and never stores it. Branch `feature/notes-export-w5`, PR [#48](https://github.com/innocent98/beyric-note-taker/pull/48) to `main`. No table, no column, no setting, no migration. Spike EX1 (WeasyPrint against the image and memory) came first: `docs/spike/export-pdf-memory.md`, verdict "fits".
 
 ## Why
 The designer's prototype has a Download menu that the app lacked, and the AI workspace spec (section 9, decision D9) made it pilot work: the notes are the product and people want them in a document. W5 is independent of the other phases: it renders the notes as stored, with no extraction, no team and no translation.
