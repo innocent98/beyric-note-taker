@@ -327,3 +327,15 @@ def test_0007_downgrade_fails_when_two_users_share_a_template_name(scratch_url):
     with pytest.raises(sa.exc.IntegrityError):
         command.downgrade(cfg, "0006")
     engine.dispose()
+
+
+def test_bot_state_seen_at_is_added_and_dropped(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    assert "bot_state_seen_at" in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    command.downgrade(cfg, "0007")
+    assert "bot_state_seen_at" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    command.upgrade(cfg, "head")
+    assert "bot_state_seen_at" in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    engine.dispose()

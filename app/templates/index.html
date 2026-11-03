@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% import "components.html" as ui %}
+{% block head %}{% if refresh %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
 {% block content %}
 {% set template_options = [] %}{% for t in templates %}{% set _ = template_options.append((t.id, t.name)) %}{% endfor %}
 {% if worker_stale %}

@@ -117,6 +117,9 @@ class MeetingDetail(MeetingSummary):
     # Seconds until the page should ask again; null once the meeting is ready or failed, except
     # while a failed join counts down its wait before it can be sent again.
     refresh_after_seconds: int | None
+    # True while the meeting is bot_sent or processing and the background worker has not checked
+    # in for over 20 minutes, so nothing will move until it is running again. False otherwise.
+    worker_stale: bool
     # While Google has refused the first bot and the worker is pausing before it sends the second:
     # about when that happens (the status is still "bot_sent"). Null otherwise.
     join_retry_at: UtcDatetime | None
@@ -134,6 +137,9 @@ class MeetingList(BaseModel):
     next_before_id: int | None
     # True when the background worker has not checked in for over 20 minutes.
     worker_stale: bool
+    # Seconds until the list should ask again: set while any listed meeting is bot_sent or
+    # processing (its status text can change), null otherwise. The same cadence as the meeting.
+    refresh_after_seconds: int | None
 
 
 # ---- templates ----

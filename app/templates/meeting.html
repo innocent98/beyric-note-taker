@@ -11,6 +11,10 @@
     {% call ui.page_head("Zoom " ~ meeting.native_id if meeting.platform == "zoom" else "Google Meet " ~ meeting.native_id, meeting.created_at|local_time) %}{{ head_end }}{% endcall %}
   </div>
 
+  {% if worker_stale %}
+  {% call ui.alert("notice", role="alert") %}The background worker has not checked in for over 20 minutes. This meeting will not move forward until it is running again.{% endcall %}
+  {% endif %}
+
   {% if meeting.status in ("bot_sent", "processing") or refused_wait %}
   <p class="muted">This page updates every 30 seconds.</p>
   {% endif %}

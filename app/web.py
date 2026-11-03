@@ -80,11 +80,13 @@ def logout(request: Request, session: Session = Depends(get_session)):
 
 
 def _index(request, session: Session, user: User, status_code=200, **context):
+    meetings = services.list_meetings(session, user)
     return render(
         request,
         "index.html",
         status_code,
-        meetings=services.list_meetings(session, user),
+        meetings=meetings,
+        refresh=any(m.status in services.ACTIVE for m in meetings),
         templates=services.list_templates(session, user),
         worker_stale=services.worker_is_stale(session),
         **context,
@@ -147,6 +149,7 @@ def _meeting_page(request, session: Session, meeting, status_code=200, **context
         status_code,
         meeting=meeting,
         templates=services.list_templates(session, request.state.user),
+        worker_stale=meeting.status in services.ACTIVE and services.worker_is_stale(session),
         retry_block=block,
         refused_wait=block is not None and is_join_failure(meeting),
         retry_block_message=services.retry_block_message(meeting, block),
