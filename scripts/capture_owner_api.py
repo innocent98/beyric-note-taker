@@ -623,8 +623,8 @@ def run_accounts(app, base, engine, ids, admin_general_id) -> None:
         create_user_defaults(session, pilot)
         pilot_id = pilot.id
 
-    def body(email, password=PILOT_PASSWORD):
-        return {"email": email, "password": password}
+    def body(email):
+        return {"email": email, "password": PILOT_PASSWORD}
 
     guest = Recorder(base)
     guest.call("accounts-session-anonymous", "GET", "/api/session")
