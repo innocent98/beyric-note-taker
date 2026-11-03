@@ -132,7 +132,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated
 - [ ] Measure Next.js memory on the server (Adebayo runs the SSH steps)
 
-## Module 2: Pilot, accounts plus calendar auto-join (designing, 2026-11-02)
+## Module 2: Pilot, accounts plus calendar auto-join (designed and planned 2026-11-03; build in progress)
 
 Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per account for the whole pilot (admin uncapped); the frontend moves to Next.js (decided 2026-11-02 evening, superseding the Jinja decision; see Module 2b); company is Beyrichq LTD, Lagos, Nigeria. Design: `docs/ui/Beyric Note Taker redesign/` (Calendar card, Upcoming list, Settings → Calendar, legal pages).
 
@@ -143,18 +143,50 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] Adebayo: Google Cloud project, OAuth consent screen, verify beyrictech.com in Search Console, mailboxes privacy@/legal@/security@
   - [ ] Submit for verification (needs the working calendar flow and a demo video)
 - [x] Frontend approach decided: stay on Jinja, with parity and flexibility as conditions (`docs/superpowers/specs/2026-11-02-frontend-approach.md`, 2026-11-02)
-- [ ] Written design (`docs/superpowers/specs/2026-11-03-pilot-accounts-calendar-design.md`): **draft written and builder-checked 2026-11-03, awaiting Adebayo's approval** (23 open questions with recommended answers at the top of the spec; personal-Gmail support for instant-Meet events is undocumented, spike P0.2 decides)
-  - [ ] Adebayo answers Q1 to Q23
-  - [ ] Phase 0 (parallel): Google Cloud project and billing; instant-Meet spike S1 to S7; Vexa chat and per-key limit check; mail provider and DNS; bots-per-machine measurement
-- [ ] Plan (superpowers:writing-plans)
-- [ ] Accounts: sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap
+- [x] Written design (`docs/superpowers/specs/2026-11-03-pilot-accounts-calendar-design.md`): drafted, builder-checked and **answered by Adebayo 2026-11-03** (section 0a overrides the older question table)
+- [x] Implementation plan: `docs/superpowers/plans/2026-11-03-pilot-accounts-calendar.md` (2026-11-03; open as `docs/pilot-plan`). Per-task files, tests, reviewer, dependencies and the single "Needs Adebayo" table are there; the lists below mirror its task IDs
+- [ ] Phase 0, prerequisites and spikes (parallel, no app code)
+  - [ ] P0.1 Google console state: **branding verified only; the sensitive scopes are NOT verified** (Adebayo's correction of spec 0a Q7). Record Audience, Data Access and Verification Center; declare the scopes (`docs/spike/pilot-google-console.md`)
+  - [ ] P0.2 Instant-Meet spike S1 to S7 and S9 on a personal Gmail first (gate outcome G1 to G4 decides Phase I)
+  - [ ] P0.3 Vexa checks: chat posting, per-key limit, bot listing, health endpoint
+  - [ ] P0.4 Resend state: domain, SPF/DKIM/DMARC, a delivered test mail, `ADMIN_ALERT_EMAIL`
+  - [ ] P0.5 Bots per machine (M1): `docker stats` during live meetings (Adebayo)
+  - [ ] P0.6 Second bot machine rented, private link up (Adebayo)
+  - [ ] P0.7 Teams spike with a real Teams meeting (Q17)
+  - [ ] P0.8 Join-time measurement fixes `AUTOJOIN_LEAD_SECONDS` (default 60)
+  - [ ] P0.9 Cloud project already In production (Adebayo, 2026-11-03); remaining: Adebayo sets `GOOGLE_OAUTH_TESTING=false`; session records the unverified-app screen and the day-8 token check
+- [ ] Phase A, accounts: **in progress, owned by other sessions** (`feature/pilot-accounts-core`, then `feature/pilot-accounts-signup`; tasks A1 to A20 in spec section 15, not re-planned): sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap, admin API
   - [x] Phase A core (PR `feature/pilot-accounts-core`, 2026-11-03; SOP `docs/sop/2026-11-03-pilot-accounts-core.md`; open, not merged): A1 migration 0006 (users, tokens, oauth flows, waitlist, notifications, mail outbox, settings, admin from `OWNER_EMAIL`), A2 argon2id and password rules, A4 session cookie `{uid, csrf, iat, epoch, gepoch}` and guard, A5 email login with per-email limiter, A6 migration 0007 (ownership, usage ledger), A7/A8 meetings, templates, vocabulary scoped by user (foreign id 404), A9 hours formula, gate and `usage` in `/api/session`
   - [ ] **Deploy step for Adebayo:** add `OWNER_EMAIL` to the server `.env` before merging (the owner then signs in with email plus the same password)
   - [ ] A3 mailer; A10 sign-up with the cap lock and `GET /api/pilot`; A11 verification; A12 reset; A13/A14 Google sign-in; A15 waitlist; A16/A17 admin API; A18 notifications API; A19 nginx zones and deploy order; A20 privacy and terms rows (second PR)
-- [ ] Calendar auto-join (Google): connect, upcoming list with per-meeting toggle, rules (all / only ones I organise / only when I turn it on), template for calendar meetings, scheduler in the worker
-- [ ] Instant Meet auto-join: Workspace Events subscription to the user's Meet spaces via Pub/Sub; first a throwaway spike, including whether personal Gmail accounts work
-- [ ] More than one bot at a time (overlapping meetings across users); measure how many the server can run
-- [ ] Clear "calendar disconnected" state (7-day expiry while Google is unverified)
+- [ ] Phase C, Google Calendar auto-join plus the ICS source (needs A6, A9, A13, A18 for most tasks)
+  - [ ] C1 migration for connections, events, scheduled joins
+  - [ ] C2 token vault (AES-GCM, Opus review)
+  - [ ] C3 connect flow with incremental consent (Opus review)
+  - [ ] C4 disconnect flow
+  - [ ] C5 calendar client and `CalendarSource` protocol; live check that `calendar.events.readonly` covers `events.list` and `events.get`
+  - [ ] C6 event parsing
+  - [ ] C7 `will_join` rule function
+  - [ ] C8 materialiser (events to rows); C8b sync job
+  - [ ] C9 key re-encryption script
+  - [ ] C10 scheduler skeleton (leader lock, two loops, heartbeat, compose service); C10b periodic sweeps and mail tick
+  - [ ] C11 `place_bot()` single host (Opus review); C11b alerts helper (admin email via Resend)
+  - [ ] C12 join runner (dispatch at start minus `AUTOJOIN_LEAD_SECONDS`, no-capacity retry, catch-up)
+  - [ ] C13 connection states and refresh failures; C14 disconnected notifications and email
+  - [ ] C15a calendar API part 1 (state, settings, upcoming, override); C15b send now and not recorded
+  - [ ] C16 deploy gate (Q19)
+  - [ ] C17 close-out: policy rows, SOP, FE guide with live captures, phase Opus review
+  - [ ] C18 recording notice (chat line if P0.3 allows)
+  - [ ] Paste-a-link (ICS) calendar source for Outlook, Microsoft 365 and others (**in**, Adebayo 2026-11-03; no Microsoft OAuth app): C19 staleness spike (Google secret feed and Outlook publish), C20 SSRF-safe fetcher (Opus review), C21 parser with our own recurrence expansion, C22 connection, encrypted masked link and first-sync result, C23 source and API with the "updates can take a while" label, C24 close-out. No Outlook wording anywhere until C24 is live and verified (list in the plan)
+- [ ] Phase C-T, Teams (Q17, gated by P0.7): T1 pasted Teams link, T2 Teams events from the calendar, T3 Teams wording in policy, terms, landing
+- [ ] Phase I, instant-Meet auto-join (gated by P0.2; the Settings switch is drawn by the designer)
+  - [ ] I1 incremental Meet consent, mode resolution, switch; I2 `pubsub_inbox` and the push endpoint (Opus review); I3 Meet client and subscription manager
+  - [ ] I4 inbox processor and ownership rule; I5 `poll` mode (only if the spike says so); I6 manual routes and PWA share-target note; I7 close-out
+- [ ] Phase D, several bots at once (do not invite more than one or two testers before D9b)
+  - [ ] D1 `bot_hosts` migration; D2 `vexa_for(host)`; D3 health checker; D4 `place_bot()` generalised (Opus review); D5 per-user limit across hosts
+  - [ ] D6 forecast and capacity endpoint; D7 admin host endpoints; D8 second host files; D9a worker concurrency; D9b load test (M2) and `max_bots`; D10 close-out
+- [ ] Phase V, Google verification: **a real sensitive-scope submission** (review up to 10 days; scope changes after approval need a new review). V0 revisit the landing and sign-in copy (decision from 2026-11-03 ends here), V0a freeze the final scope list (Meet only if the instant-Meet spike passes), V1 consent screen versus policy and app, V2 demo video (Adebayo records), V3 scope justifications, V4 submit as early as the flow works and answer the reviewer; the pilot runs meanwhile on the unverified-app screen (100-user cap)
+- [ ] Clear "calendar disconnected" state (built in C13 and C14; the 7-day expiry path stays dormant while the Google app is verified)
 
 ## Backlog
 
@@ -173,9 +205,34 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [ ] Neutral `bot_busy` message instead of the global `bot_already_active` (Phase C, before more than one or two testers)
 - [ ] Run the updated `web/scripts/owner-e2e.mjs`, `owner-browser-check.mjs` and `docs/spike/edge-secret/e2e.sh` once against a compose stack (changed for email login, not run)
 - [ ] Test paid Zoom accounts
-- [ ] Check Vexa licence exceptions before any commercial use
+- [x] Vexa licence for commercial use: Adebayo confirmed 2026-11-03 that Vexa allows it (his statement; the licence text itself was not re-read here)
 - [ ] Choose a recording notice for meetings
 - [x] Decide how long to keep audio: 7 days (`audio_retention_days`), stated in the privacy policy (2026-11-02)
 - [x] Create a private GitHub repo for this app (not a Vexa fork) so CI runs (2026-11-02: innocent98/beyric-note-taker, PR #1, CI green)
 - [ ] Vexa upgrade routine: read release notes, bump the pinned image tag, re-run one Meet and one Zoom call
 - [x] Raise the worker heartbeat warning from 5 to 20 minutes (2026-11-02)
+
+## Known gaps recorded 2026-11-03 (found while reconciling the handoff; none block the pilot work, each has an owner)
+
+Code and product
+- [ ] Live authenticated pass over the Next screens (meetings, meeting detail, templates, vocabulary): sessions must not enter the owner's production password, so Adebayo signs in once in the Browser pane and a session drives it read-only (stream C "not verified")
+- [ ] Real Vexa bot plus real OpenAI rewrite through the new screens; Safari and Firefox; long titles and many rows (stream C and P "not verified")
+- [ ] Speaker names appear under two name orders ("Godstime America" / "America Godstime"): merge variants in speaker labels
+- [ ] Measure real OpenAI spend per meeting hour (spike and Task 8 both open)
+- [ ] Stream D "needs backend, not built" list in `docs/ui/parity-report.md` (sign-up, forgot password, SSO, calendar card, team, tasks, share, download, translation, agenda, template delete, Emails) is the screen build order; also pending: toast component, PWA basics, retiring Jinja and `app/static/tokens.css`
+- [ ] Login lockout alert to the owner (log line only today); optionally log the resolved client address on failed logins
+- [ ] In-memory login counters reset on restart and are per process: move to the database or Redis with the accounts work
+
+Adebayo (server and accounts)
+- [x] `RESEND_API_KEY` added to the server `.env` (2026-11-03, reported by Adebayo)
+- [ ] Nightly backup cron (privacy policy promises 14-day deletion, so it must exist); Cloudflare proxy on or off
+- [ ] `docker stats --no-stream` and `free -h` during a live meeting, and during two overlapping ones (turns the capacity estimates into numbers; also the `next` container's memory)
+- [ ] Mark the 2 GitGuardian findings from #19 as false positives (test placeholders; nobody rewrites history)
+- [x] Google project is **In production** (Adebayo, 2026-11-03, so no 7-day token expiry) and the calendar scope is added to the consent screen, but only branding is verified and the sensitive-scope review has NOT been submitted (nothing to demo until the calendar flow exists)
+- [ ] Fix the final scope list (`calendar.events.readonly`; Meet only if the instant-Meet spike passes), then submit the sensitive-scope verification once the calendar flow works (Phase V); Search Console TXT for `beyrictech.com`
+
+Legal and business
+- [ ] Mailboxes `privacy@`, `legal@`, `security@beyrictech.com` confirmed; hosting country (France per IP lookup; check the Contabo panel); a DPO decision; a lawyer reads privacy and terms
+- [ ] Hour-long meeting rated against Fireflies; a French plus English call; rate the Zoom #3 notes; merge Novex-News#10
+- [ ] Launch capacity: bot-machine budget, or a per-hour vendor instead
+- [ ] Revisit the designer's landing and sign-in copy before the Google verification submission (decided 2026-11-03)
