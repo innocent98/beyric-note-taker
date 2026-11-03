@@ -133,6 +133,8 @@ form.inline { display: inline; }
 .input-wrap .input { padding-left: 36px; }
 .input-wrap-end .input { padding-left: 14px; padding-right: 64px; }
 .input-wrap-end > .btn { position: absolute; right: 6px; top: 6px; }
+/* A touch screen makes every button 44px tall; the Show / Hide button then fills the field's height. */
+@media (pointer: coarse) { .input-wrap-end > .btn { top: 0; right: 0; border-radius: 0 9px 9px 0; } }
 .input-lg { height: 44px; padding: 0 14px; border-radius: 9px; font-size: var(--text-md); }
 /* The designer's focus: a teal border and a soft 3px ring, no outline. */
 .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--teal); box-shadow: 0 0 0 3px var(--teal-ring); }
@@ -272,3 +274,14 @@ main > .alert { margin-bottom: var(--space-4); }
   .list-title { white-space: normal; }
   .list-row-chevron { display: none; }
 }
+
+/* ---- Label row (a link beside the label) and checkbox ---- */
+.field-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.field-label-row a, .field-label-row .btn-link { font-size: var(--text-sm); font-weight: 550; }
+.check { display: flex; flex-direction: column; gap: 6px; }
+.check-row { display: flex; align-items: flex-start; gap: 10px; }
+.check-input { appearance: none; flex: none; width: 18px; height: 18px; margin: 1px 0 0; border: 1.5px solid var(--separator); border-radius: var(--radius-xs); background: var(--surface) no-repeat center / 12px; cursor: pointer; }
+.check-input:checked { border-color: var(--teal); background-color: var(--teal); background-image: url("/icons/check-white.svg"); }
+.check-input:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--teal-ring); }
+.check-label { font-size: var(--text-sm); line-height: 1.45; color: var(--ink-2); cursor: pointer; }
+.check-error .check-input { border-color: var(--danger); }

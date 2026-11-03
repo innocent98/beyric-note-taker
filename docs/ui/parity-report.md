@@ -2,6 +2,8 @@
 
 **Date:** 2026-11-03. **Branch:** `feature/nextjs-ui-parity`. **Against:** `docs/ui/Beyric Note Taker redesign/` as merged in PR #23 (Auth, Landing, Brand, Emails, logo files). SOP: `docs/sop/2026-11-03-ui-parity.md`.
 
+**Update, stream D (accounts pages, branch `feature/stream-d-auth-pages`, SOP `docs/sop/2026-11-03-accounts-auth-pages.md`):** the account screens that have a backend now exist and follow `Auth.dc.html`: sign-up, confirm email, forgot and reset password, "pilot full", and the sign-in form with email, Forgot password? and Google. The tables below are updated; the section "Account screens (stream D)" has the screen-by-screen account. The screens without a backend stay unbuilt (workspace setup, team invite, Microsoft, keep me signed in, the 6-digit code).
+
 Adebayo looked at https://notes.beyrictech.com after the Next.js front door and the owner screens went live and said it was not in parity. This report lists what differed (screen by screen), what was changed, what was left out on purpose, and what cannot be built until the backend exists.
 
 ## How it was checked
@@ -54,7 +56,7 @@ Two facts about the designs shaped the work. **The designs are light only**: no 
 | **Meeting states with no prototype** (waiting, processing, failed, not found) | Used the old tokens | Use the designer's empty-state card (44 px tile, 16 px title, `#5B6460` text) with the new tokens | Matches the designer's empty-state pattern; the words are the app's (they describe real states the prototype does not have) |
 | **Templates** | Add template and Save were 40 px / 14 px (design 36 / 13); page stack gap 28 (design 24); template rows 61 px (design 56); selected row colours | `btn-md`, `stack-md`, `line-height: normal` on the rows, selected row `#EEF5F3` with `#0A5248` name | Matches, except "Delete template" |
 | **Vocabulary** | The whole page was centred in a 720 px column (design: left-aligned, content 720 px wide); count line and dividers | Left-aligned 720 px measure, soft dividers, `#FAFBFA` count line | Matches |
-| **Sign in (`/login`)** | A centred card on grey with a different mark and title | The prototype's layout: form on the left (logo, "Welcome back", password with Show / Hide, Sign in button 46 px, footer links), teal panel on the right with the product preview; the panel drops below the form on a phone | Matches (see "Left out of the form") |
+| **Sign in (`/login`)** | A centred card on grey with a different mark and title | The prototype's layout: form on the left (logo, "Welcome back", password with Show / Hide, Sign in button 46 px, footer links), teal panel on the right with the product preview; the panel drops below the form on a phone | Matches (see "Account screens (stream D)" for the form's later additions) |
 | **Landing (`/`)** | A different page: centred hero, pilot wording, three steps | `Landing.dc.html` section by section: sticky header, hero with the product window and floating cards, tools strip, three "how it works" cards, dark "Beyond the notes" section, security grid, FAQ (native `<details>`, one open at a time, no JavaScript), teal closing band, footer. Words are the designer's (one data file, `components/landing/content.ts`) | Matches (see "Copy that runs ahead of the product") |
 | **Privacy and Terms** | No header tabs, no "On this page", a small type scale | The prototype's frame: sticky header with Privacy / Terms tabs, sticky "On this page" list (ids from the real headings, test-enforced), 40 px title, 17 px introduction, 20 px section titles, teal bullets, "Questions about this page?" box, footer | Matches the layout; the words are the live legal text |
 | **404 and error pages** | Used the old header and an auth card | Built from the legal header and footer and the empty-state card | No prototype; matches the design language |
@@ -71,12 +73,28 @@ Two facts about the designs shaped the work. **The designs are light only**: no 
 | Phone layout of the app | Not responsive (crushed at 390) | Top bar and stacked panes from stream C, new tokens | See "Which file wins" |
 | Meeting link placeholder | "Paste a Google Meet, Microsoft Teams or Zoom link" | "Paste a Google Meet or Zoom link" | Teams links are refused by the backend |
 | Status words | Ready, Failed, Joining, Recording | The API's own (Ready, Failed, Bot sent, step names) | They are real states of the pipeline |
-| Landing and sign-in buttons that lead to sign-up | "Get started", "Get started free", "Create your account", "Create account" | Not drawn; the hero and closing band say "Sign in" | Accounts do not exist (needs backend) |
+| Landing buttons that lead to sign-up | "Get started", "Get started free", "Create your account", "Create account" | Not drawn on the landing page; the hero and closing band say "Sign in". The sign-in page now has "Create account" | Sign-up is closed; the landing page is not part of stream D |
 | "See the app" | A link to the prototype file | Not drawn | It is not a page |
 
-## Left out of the sign-in form (needs backend)
+## Account screens (stream D)
 
-The API's `POST /api/session` takes one password. So the form has no **Work email**, no **Google** and **Microsoft** buttons, no **Forgot password?**, no **Keep me signed in for 30 days**, and no **Create account** link. Each belongs to the accounts work in the pilot design.
+Checked in a real Chromium-based browser pane at 375 and 1280 px against `web/scripts/mock-api.mjs`, which replays the responses captured from the running API (`docs/fe-captures/pilot-accounts/`). Against `Auth.dc.html` (the source of truth). Sign-up is **closed** in the real pilot, so `/signup` draws the closed screen by default.
+
+| Screen (route) | Designed | Built | Differences from the design, and why |
+|---|---|---|---|
+| Sign in (`/login`) | Google and Microsoft buttons, "or sign in with email", work email, password with "Forgot password?", "Keep me signed in for 30 days", "New to Beyric? Create account" in the header | Google button (only when `GET /api/pilot` says `google_signin: true`), the divider, email, password with Show / Hide and "Forgot password?", "New to Beyric? Create account" (leads to the closed or full screen while the pilot is closed or full). `?error=<code>` shows a message for `google_denied`, `google_failed`, `terms_required`, `pilot_closed`, `account_suspended`, `email_unsupported`; any other code gets a general line | **No Microsoft button** (no backend), **no "Keep me signed in"** (the session lifetime is not optional). The Google button is full width (one button, not two columns). A wrong password adds "If you have just signed up, confirm your email first", because the API answers an unconfirmed account like a wrong password |
+| Create account (`/signup`) | Google and Microsoft, full name, work email, password with a 3-rule meter (8+ characters, a number, an uppercase letter), "By creating an account you agree to..." sentence | Google (when available), full name, work email, password, a **Terms and Privacy checkbox** (the API needs `accept_terms: true`; Google sign-up sends `accept_terms=true` only once it is ticked), "Create account" | **Password rules:** the designed meter says a number and an uppercase letter are required; the API requires neither (8 to 128 characters, not a common password), so the screen shows one live rule ("8 to 128 characters") and the note "Not a common password" (only the server has the list). The terms sentence became the checkbox the API requires |
+| Pilot closed and pilot full (`/signup`, `/pilot-full`, after a 403 `pilot_closed` or 409 `pilot_full`) | not drawn | Icon tile, title ("Sign-up is not open yet", "The pilot is full"), one line (the API's own words), the waiting-list form (email, optional name) pre-filled from `prefill_email` or the address typed, then "You are on the list" | Built from the design's pieces; there is no prototype to compare with |
+| Check your email after sign-up (design: "Verify email", a 6-digit code) | six code boxes, "Resend code" after 30 s, "Change it" | "Check your email", "We will email a confirmation link to...", Open Gmail / Open Outlook, "Did not get it? ... resend in 1:00" (60 s: the server drops a second mail inside a minute), "Change it" | **No code boxes**: the API confirms with a link and the password, not a code. The words never say whether the address was already registered |
+| Confirm email (`/verify-email?token=`) | none | Password field ("the password you chose when you signed up"), "Confirm email", then "Email confirmed" and "Go to sign in"; a dead link shows "This link does not work" with a "Send a new link" form; a full pilot shows the pilot-full screen and says the link was not used up | No prototype. A GET never confirms (mail scanners open links): the button posts |
+| Forgot password and "check your email" (`/forgot-password`) | Reset your password; Check your email with Open Gmail / Outlook and "resend in 0:30" | As drawn, with the 30-minute expiry in the text and a 60 s resend wait | Resend waits 60 s, not 30 |
+| New password and "Password updated" (`/reset-password?token=`) | New password with the 3-rule meter, confirm, "Update password", "Password updated" | As drawn; one rule instead of three (see sign-up); the sub line says "You will be signed out on every device" (the API signs the user out everywhere); "For {email}" is dropped because the link carries only a token; a dead link shows "Ask for a new link" | |
+
+**Not built, no backend:** "Set up your workspace" (workspace name, calendar connect), "Join your team" (team invite acceptance), the Microsoft buttons, "Keep me signed in", the 6-digit email code.
+
+**Two small layout fixes made on the way:** the sign-in header no longer wraps the logo and the link on a 375 px screen (the sentence before the link hides below 480 px), and the Show / Hide button fills the field's height on a touch screen (it sat low).
+
+**Safety:** every account form has `method="post"`, so a submit before the page is interactive can never put a password in the URL (the guard test checks every form, the sign-in form included).
 
 ## Copy that runs ahead of the product
 
@@ -96,10 +114,10 @@ The words are in one file (`web/components/landing/content.ts`) plus the two pre
 
 | Designed element | Where | Needs |
 |---|---|---|
-| Sign up, verify email code, set up workspace, accept invite | `Auth.dc.html` | Accounts, email sending, workspaces, invites |
-| Forgot password, check email, new password, "password updated" | `Auth.dc.html` | Accounts, password reset tokens, email sending |
-| Google and Microsoft sign-in buttons | `Auth.dc.html` | OAuth sign-in, accounts |
-| Email field and "Keep me signed in" on sign-in | `Auth.dc.html` | Accounts with email login; a session lifetime option |
+| ~~Sign up, verify email code~~ (built as link and password: see "Account screens (stream D)"); set up workspace, accept (team) invite | `Auth.dc.html` | Workspaces, team invites |
+| ~~Forgot password, check email, new password, "password updated"~~ | `Auth.dc.html` | built in stream D |
+| Microsoft sign-in button (Google is built) | `Auth.dc.html` | Microsoft OAuth |
+| "Keep me signed in" on sign-in (the email field is built) | `Auth.dc.html` | A session lifetime option |
 | Sidebar name and email ("Adebayo Tosin") | App shell | Identity on `GET /api/session` (the sidebar says "Owner") |
 | Sidebar: Tasks (with count), Projects, Decisions, Review (with count), Team, Settings | App shell | Tasks, projects, decision log, review queue, team and settings APIs |
 | "Join meetings automatically" card, Connect calendar, Upcoming list and toggles | Meetings | Calendar connection and auto-join (pilot design, PR #20) |
@@ -114,7 +132,7 @@ The words are in one file (`web/components/landing/content.ts`) plus the two pre
 | Delete template | Templates | `DELETE /api/templates/<id>` |
 | Projects, Tasks board, Decisions, Review, Team (invite), Settings screens | Main app prototype | Everything above |
 | Emails: reminders, notes shared, invitations, verification | `Emails.dc.html` | Mail provider (pilot design Q6), HTML templates, scheduling |
-| Sign-up and "See the app" buttons on the landing page | `Landing.dc.html` | Accounts |
+| Sign-up buttons and "See the app" on the landing page | `Landing.dc.html` | Not part of stream D's account screens; left as it was (the sign-up pages exist, but sign-up is closed) |
 
 No page and no control was faked for any of these.
 
@@ -125,3 +143,4 @@ No page and no control was faked for any of these.
 - Real data: long meeting titles, many meetings, a very long transcript were checked in the mock's seven meetings only.
 - Print styles, reduced-motion, and high-contrast modes.
 - The FAQ uses `<details name="faq">` (exclusive group). Browsers older than 2024 open several at once; nothing breaks.
+- Account screens (stream D): not run against real FastAPI, a real mail, or a real Google round trip; the mock replays captures and applies a few magic values (see the header of `web/scripts/mock-api.mjs`). The `prefill_email` cookie (path `/api/pilot`) is not in the mock, so that path was checked with the mock's own value, not with the real cookie. No side-by-side screenshots were committed for these screens (Playwright is not installed here, so `parity-shots.mjs` could not run); they were looked at in the built-in browser at 375 and 1280 px.

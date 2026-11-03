@@ -6,6 +6,11 @@
 export const NEXT_PAGES = [
   "/",
   "/login",
+  "/signup",
+  "/verify-email",
+  "/forgot-password",
+  "/reset-password",
+  "/pilot-full",
   "/meetings/[id]",
   "/templates",
   "/vocabulary",
@@ -30,6 +35,11 @@ export function isNextPage(href: string): boolean {
 // Paths of the owner app that crawlers must not visit.
 export const APP_PATHS = [
   "/login",
+  "/signup",
+  "/verify-email",
+  "/forgot-password",
+  "/reset-password",
+  "/pilot-full",
   "/logout",
   "/meetings",
   "/templates",

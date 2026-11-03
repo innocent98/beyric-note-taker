@@ -167,6 +167,24 @@ describe("api client", () => {
     expect(writes).toBe(1);
   });
 
+  it("retries a logged-out write once when the token really changed (a login or logout in another tab)", async () => {
+    let writes = 0;
+    let reads = 0;
+    const { api, calls } = setup((url, init) => {
+      if (init.method === "GET") {
+        reads += 1;
+        const body = JSON.stringify({ authenticated: false, csrf_token: reads === 1 ? "token-1" : "token-2", user: null, usage: null, unread_notifications: null });
+        return new Response(body, { status: 200, headers: { "content-type": "application/json" } });
+      }
+      writes += 1;
+      return writes === 1 ? respond(capture("03-login-without-csrf.json")) : respond(capture("22-template-create.json"));
+    });
+    await api.templates.create({ name: "Standup", instructions: "One line per person." });
+    expect(writes).toBe(2);
+    const sent = calls.filter((c) => c.init.method !== "GET").map((c) => header(c.init, "X-CSRF-Token"));
+    expect(sent).toEqual(["token-1", "token-2"]);
+  });
+
   it("returns nothing for a 204", async () => {
     const { api } = setup((url, init) => (init.method === "GET" ? respond(capture("09-session-logged-in.json")) : respond(capture("20-vocabulary-delete.json"))));
     await expect(api.vocabulary.remove(1)).resolves.toBeUndefined();
