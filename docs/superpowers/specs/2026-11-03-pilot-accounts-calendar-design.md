@@ -1,11 +1,28 @@
 # Pilot accounts and calendar auto-join: design
 
-**Status:** DRAFT for Adebayo's approval (written overnight, 2026-11-03). Design only: no application code.
+**Status:** ANSWERED 2026-11-03 by Adebayo: "all recommended" except the changes in the table directly below. Design only: no application code. Where a later section still says "ASSUMED, confirm (Qn)", the answer below wins.
 **Evidence base:** `docs/HANDOFF-master.md` (sections 2, 3, 5, 6), `docs/checklist/master-checklist.md` (Modules 2 and 2b), the MVP design, the Next.js migration plan, the current code (`app/models.py`, `app/worker.py`, `app/web.py`, `app/auth.py`, `app/api.py`, `app/services.py`, `app/vexa.py`), the public-pages SOP, the designer's screens in `docs/ui/Beyric Note Taker redesign/`, and Google's own documentation (sources at the end).
 
 How to read this: every choice I had to make myself is marked **`ASSUMED, confirm (Qn)`** and points at a question in the list below. Everything marked "decided" was settled by Adebayo earlier and is not reopened here. Nothing in this document was run against Google; every Google behaviour is quoted from documentation or marked unverified.
 
 ---
+
+## 0a. Adebayo's answers (2026-11-03) — these override the table below
+
+| Q | Answer | Consequence |
+|---|---|---|
+| all others | "All recommended" | Q1, Q3 to Q6 (mail), Q8 to Q10, Q12 to Q14, Q16, Q18, Q21, Q23 stand as written |
+| Q2 join time | Dispatch the bot **1 minute before the start** (a bot needs about a minute to open Chrome and ask to join, so it arrives at about the start time; dispatching at the start would make it about a minute late and miss the opening). Re-check the event 2 minutes before; keep trying until 15 minutes after the start. Make the lead time a setting (`AUTOJOIN_LEAD_SECONDS`, default 60) and **measure** real join times in the spike before fixing the number | replaces "2 minutes" |
+| Q6 mail | **Resend is ready**; email verification and password reset use it from day one | the "Google sign-in only until mail works" fallback is dropped; needs `RESEND_API_KEY` and the sending domain in the server `.env` (Adebayo) |
+| Q7 Google expiry | The Google OAuth app is **verified** | no 7-day expiry; `GOOGLE_OAUTH_TESTING` stays off. **Confirm the approved scopes include everything this design reads** (Calendar read-only, and the Meet scopes if the instant-Meet spike works): adding a scope later means a new verification |
+| Q11 instant-Meet | **Add the control** (a Settings switch, "Also join Google Meet calls I start myself", off until turned on) | designer to draw it; build after the spike |
+| Q15 passwords | **Minimum 8 characters**, argon2id, plus a check against a list of common and breached passwords, no composition rules (NIST 800-63B). Security stays tight where it is cheap: rate limits, Google sign-in as the easy path | the design's "10 characters" recommendation is dropped. The stakes are not money but confidential meeting transcripts, so the blocklist and the limits stay |
+| Q17 Teams | **Investigate and build it**: a spike with a real Teams meeting (Vexa supports Teams); if it works, Teams links join like Meet and Zoom, from a pasted link and from Google Calendar events that carry a Teams link. Outlook calendar stays later. The privacy policy and terms must then name Teams | replaces "Can't join yet" |
+| Q19 deploy gate | Not clear to Adebayo; explained: auto-join starts bots with nobody pressing anything, so a deploy that restarts the stack at 09:59 could miss a 10:00 meeting. The gate makes the deploy refuse (or wait) when a join is due within 10 minutes. **Recommended: keep it** | stands |
+| Q20 Workspace | `beyrictech.com` is **not** Google Workspace | Instant-Meet detection through the Workspace Events API may not work for Gmail accounts; the spike runs on a personal Gmail first, and the design needs a fallback if it fails (paste a link, or join calendar meetings only) |
+| Q22 alerts | **Email via Resend** | no Telegram |
+| Login rate limit | Change from 5 tries in 15 minutes to **5 tries in 5 minutes per address, plus 10 failures per hour per account** (the per-account cap stops guessing spread over many addresses) | see `docs/sop/` for the shipped change |
+| Forwarded-for gap | **Close it now**, properly: an edge secret set by nginx that the app checks before trusting a forwarded address | in progress as its own PR |
 
 ## 0. Open questions for Adebayo (answer in one pass)
 
