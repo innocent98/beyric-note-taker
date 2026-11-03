@@ -29,6 +29,12 @@ describe("notes sections", () => {
     expect(out.replace(/<section class="notes-sec ">|<\/section>/g, "")).toBe(hostile);
   });
 
+  it("gives a heading named like an Object property no class", () => {
+    for (const name of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+      expect(wrapSections(`<h2>${name}</h2><p>x</p>`)).toBe(`<section class="notes-sec "><h2>${name}</h2><p>x</p></section>`);
+    }
+  });
+
   it("leaves text before the first heading, and notes with no heading, as they are", () => {
     expect(wrapSections("<p>Just text</p>")).toBe("<p>Just text</p>");
     expect(wrapSections("<p>Intro</p><h2>Summary</h2><p>x</p>")).toBe(

@@ -24,7 +24,10 @@ export function wrapSections(html: string): string {
       const heading = /^<h2[^>]*>([\s\S]*?)<\/h2>/.exec(part)?.[1];
       if (heading === undefined) return part;
       const name = heading.replace(/<[^>]*>/g, "").trim().toLowerCase();
-      return `<section class="notes-sec ${SECTION_CLASS[name] ?? ""}">${part}</section>`;
+      // hasOwn, so a heading such as "constructor" or "__proto__" finds nothing instead of a
+      // property of Object.prototype.
+      const known = Object.hasOwn(SECTION_CLASS, name) ? SECTION_CLASS[name] : "";
+      return `<section class="notes-sec ${known}">${part}</section>`;
     })
     .join("");
 }
