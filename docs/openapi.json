@@ -731,21 +731,6 @@
         "title": "TermOut",
         "type": "object"
       },
-      "TokenIn": {
-        "additionalProperties": false,
-        "properties": {
-          "token": {
-            "maxLength": 2000,
-            "title": "Token",
-            "type": "string"
-          }
-        },
-        "required": [
-          "token"
-        ],
-        "title": "TokenIn",
-        "type": "object"
-      },
       "UsageOut": {
         "properties": {
           "cap_seconds": {
@@ -818,6 +803,27 @@
           "status"
         ],
         "title": "Verified",
+        "type": "object"
+      },
+      "VerifyIn": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 2000,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 2000,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "VerifyIn",
         "type": "object"
       }
     }
@@ -1724,7 +1730,7 @@
     },
     "/api/signup": {
       "post": {
-        "description": "Create an account with a password. Public (needs the X-CSRF-Token).\n\nAnswers 202 `check_your_email` for a new address AND for one that already has an account (a\nverified one gets a \"you already have an account\" mail), so it cannot be used to find out who\nis registered. The account cannot sign in until the emailed link is confirmed. Errors that do\nnot depend on the address: 403 `pilot_closed`, 409 `pilot_full`, 403\n`password_signup_disabled`, 400 `invite_invalid`, 422 `password_too_weak`, `invalid_email`,\n`invalid_name`, `terms_required`, 429 `too_many_requests` (5 sign-ups per hour per address)\nand `server_busy`. `accept_terms` must be true: the account records the version accepted.",
+        "description": "Create an account with a password. Public (needs the X-CSRF-Token).\n\nAnswers 202 `check_your_email` for a new address AND for one that already has an account (a\nverified one gets a \"you already have an account\" mail), so it cannot be used to find out who\nis registered. The account cannot sign in until the emailed link is confirmed. Errors that do\nnot depend on the address: 403 `pilot_closed`, 409 `pilot_full`, 403\n`password_signup_disabled`, 400 `invite_invalid`, 422 `password_too_weak`, `invalid_email`,\n`invalid_name`, `terms_required`, 429 `too_many_requests` (5 sign-ups per hour per address)\nand `server_busy`. `accept_terms` must be true: the account records the version accepted.\nA second sign-up for the same address within a minute is answered 202 and does nothing.",
         "operationId": "sign_up",
         "requestBody": {
           "content": {
@@ -2092,13 +2098,13 @@
     },
     "/api/verify-email": {
       "post": {
-        "description": "Confirm an email with the token from the link. Public. The page the link opens must\nshow a button that calls this (mail scanners open links, and a GET must not verify). Does not\nsign the user in. 400 `token_invalid_or_expired`: wrong, used or older than 24 hours.",
+        "description": "Confirm an email with the token from the link and the password chosen at sign-up.\nPublic. The page the link opens must show a password field and a button that calls this\n(mail scanners open links, and a GET must not verify). Does not sign the user in.\n400 `token_invalid_or_expired`: wrong, used or older than 24 hours. 400 `password_mismatch`:\nnot the password submitted with this link's sign-up; the link stays usable.",
         "operationId": "verify_email",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TokenIn"
+                "$ref": "#/components/schemas/VerifyIn"
               }
             }
           },
@@ -2154,6 +2160,16 @@
               }
             },
             "description": "Malformed request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
           }
         },
         "summary": "Verify Email",

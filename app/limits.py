@@ -36,6 +36,7 @@ class Limit:
 class PublicLimits:
     def __init__(self) -> None:
         self.signup_address = Limit(5, HOUR)
+        self.signup_email = Limit(1, 60.0)
         self.resend_email = Limit(1, 60.0)
         self.resend_address = Limit(5, HOUR)
         self.forgot_email = Limit(1, 60.0)

@@ -11,13 +11,19 @@ session: the person signs in afterwards, so the code that issues sessions stays 
 (`services.log_in`). A password reset bumps the user's `session_epoch`, which signs that user out
 everywhere.
 
-Re-submitting the sign-up form for an address that is still unverified replaces the stored name
-and password with the new ones and kills the old verification link. Otherwise someone could
-pre-register a victim's address with a password they know and wait for the victim to confirm it.
+Pre-registration. Anyone can submit the sign-up form with someone else's address. A password
+stored at sign-up and "activated" by whoever clicks the mailed link would then hand the account to
+the person who chose it. So each verification token carries the hash of the password from ITS OWN
+submission (`auth_tokens.pending_password_hash`), and `verify_email` needs that password typed
+again: the real owner of the mailbox knows the one they chose, a link produced by anyone else's
+submission refuses it, and the account's password becomes the verified one. A later submission
+never invalidates an earlier link and never changes what an earlier link will confirm.
+`users.password_hash` of an unverified row only serves the "confirm your email" answer at sign-in.
 """
 
 import logging
 import re
+from collections.abc import Callable
 from datetime import datetime
 
 from sqlalchemy import func, select, text, update
@@ -109,11 +115,19 @@ def _link(settings: Settings, path: str, token: str | None = None) -> str:
     return f"{base}{path}" + (f"?token={token}" if token else "")
 
 
-def _send_verification(session: Session, settings: Settings, user: User, now: datetime) -> None:
-    """A new verification token (older ones stop working) and its mail, in the caller's
-    transaction."""
-    tokens.revoke(session, "verify_email", user.id, now)
-    raw = tokens.issue(session, purpose="verify_email", email=user.email, user_id=user.id, now=now)
+def _send_verification(
+    session: Session, settings: Settings, user: User, password_hash: str, now: datetime
+) -> None:
+    """A verification token bound to `password_hash` and its mail, in the caller's transaction.
+    Earlier tokens stay valid for their own passwords (see the module docstring)."""
+    raw = tokens.issue(
+        session,
+        purpose="verify_email",
+        email=user.email,
+        user_id=user.id,
+        now=now,
+        pending_password_hash=password_hash,
+    )
     mail.enqueue(
         session,
         user.email,
@@ -146,10 +160,14 @@ def sign_up(
     accept_terms: bool,
     invite_token: str | None,
     now: datetime,
+    mail_allowed: Callable[[str], bool] = lambda address: True,
 ) -> None:
     """Create an unverified account and queue its verification mail, or do the quiet equivalent
     for an address that already has one. Commits. Raises `Refused` for what the person can fix
-    (a weak password, no terms) and for the pilot's state; never for who has an account."""
+    (a weak password, no terms) and for the pilot's state; never for who has an account.
+    `mail_allowed(address)` is asked once the request would touch an account or send a mail, and
+    answers whether this address may be mailed now (the caller's per-email limit); when it says
+    no, nothing happens and the caller still answers 202."""
     address = normalise_email(email)
     name = name.strip()
     if address is None:
@@ -164,7 +182,9 @@ def sign_up(
     password_hash = _hash(password)  # always, so an existing address costs the same time
     try:
         session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": SIGNUP_LOCK})
-        _sign_up_locked(session, settings, name, address, password_hash, invite_token, now)
+        _sign_up_locked(
+            session, settings, name, address, password_hash, invite_token, now, mail_allowed
+        )
         session.commit()
     except IntegrityError:  # lost a race on the unique email: the address has an account now
         session.rollback()
@@ -181,6 +201,7 @@ def _sign_up_locked(
     password_hash: str,
     invite_token: str | None,
     now: datetime,
+    mail_allowed: Callable[[str], bool],
 ) -> None:
     invite = None
     if invite_token:
@@ -200,6 +221,8 @@ def _sign_up_locked(
             "password_signup_disabled",
             "Creating an account with a password is not available yet. Use Google to sign up.",
         )
+    if not mail_allowed(address):
+        return
     existing = session.scalars(select(User).where(User.email == address)).first()
     if existing is None:
         user = User(
@@ -217,12 +240,13 @@ def _sign_up_locked(
             session.execute(
                 update(WaitlistEntry).where(WaitlistEntry.email == address).values(status="joined")
             )
-        _send_verification(session, settings, user, now)
+        _send_verification(session, settings, user, password_hash, now)
     elif existing.status == "active" and existing.email_verified_at is None:
-        # Still unconfirmed: the newest submission wins (see the module docstring).
+        # Still unconfirmed: the sign-in answer follows the newest submission, but what a link
+        # confirms is decided by that link's own token (see the module docstring).
         existing.name, existing.password_hash = name, password_hash
         existing.terms_accepted_at, existing.terms_version = now, TERMS_VERSION
-        _send_verification(session, settings, existing, now)
+        _send_verification(session, settings, existing, password_hash, now)
     elif existing.status != "deleted":
         mail.enqueue(
             session,
@@ -232,27 +256,50 @@ def _sign_up_locked(
         )
 
 
-def verify_email(session: Session, raw_token: str, now: datetime) -> None:
-    """Confirm the email the token was sent to. Commits."""
-    token = tokens.consume(session, raw_token, "verify_email", now)
+def verify_email(session: Session, raw_token: str, password: str, now: datetime) -> None:
+    """Confirm the email the token was sent to, given the password chosen with that sign-up.
+    Commits. The token is used up only when the password is right, so a typo can be fixed."""
+    token = tokens.find_live(session, raw_token, "verify_email", now)
     user = session.get(User, token.user_id) if token else None
     if user is None or user.status == "deleted" or user.email != token.email:
+        raise _bad_token()
+    try:
+        right = passwords.verify_password(token.pending_password_hash, password)
+    except passwords.HashBusy:
+        raise Refused(429, "server_busy", "The server is busy. Try again in a moment.") from None
+    if not right:
+        raise Refused(
+            400,
+            "password_mismatch",
+            "That is not the password you chose when you signed up. "
+            "If you do not remember it, create the account again.",
+        )
+    if tokens.consume(session, raw_token, "verify_email", now) is None:  # used a moment ago
         session.rollback()
         raise _bad_token()
-    if user.email_verified_at is None:
-        user.email_verified_at = now
+    user.email_verified_at = user.email_verified_at or now
+    user.password_hash = token.pending_password_hash
     tokens.revoke(session, "verify_email", user.id, now)
     session.commit()
 
 
 def resend_verification(session: Session, settings: Settings, email: str, now: datetime) -> None:
-    """Mail a new verification link to an unverified account; nothing at all otherwise.
-    Commits. The caller answers 202 either way."""
+    """Mail a new verification link to an unverified account; nothing at all otherwise. The new
+    link confirms the same password as the newest link before it (a resend never takes a
+    password), so with none to copy there is nothing to send. Commits. The caller answers 202
+    either way."""
     address = normalise_email(email)
     user = session.scalars(select(User).where(User.email == address)).first() if address else None
     if user is None or user.status != "active" or user.email_verified_at is not None:
         return
-    _send_verification(session, settings, user, now)
+    newest = session.scalars(
+        select(AuthToken)
+        .where(AuthToken.user_id == user.id, AuthToken.purpose == "verify_email")
+        .order_by(AuthToken.id.desc())
+    ).first()
+    if newest is None or newest.pending_password_hash is None:
+        return
+    _send_verification(session, settings, user, newest.pending_password_hash, now)
     session.commit()
 
 

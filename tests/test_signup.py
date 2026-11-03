@@ -24,6 +24,7 @@ from tests.test_web import (  # noqa: F401
 )
 
 GOOD = "-".join(["correct", "horse", "battery", "9"])
+ATTACKER = "-".join(["attackers", "own", "pass", "1"])
 NEW_EMAIL = "ada@example.test"
 
 
@@ -62,6 +63,15 @@ def token_of(row: MailOutbox) -> str:
 
 def sign_up(api, **over):
     return api.post("/api/signup", form(**over))
+
+
+def a_minute_later(api):
+    """Let the same address sign up again: the per-email limit is one a minute."""
+    api.client.app.state.public_limits.reset()
+
+
+def verify(api, token, password=GOOD):
+    return api.post("/api/verify-email", {"token": token, "password": password})
 
 
 def user_of(session, email=NEW_EMAIL) -> User | None:
@@ -228,20 +238,55 @@ def test_an_existing_verified_email_gets_the_same_answer_and_an_already_register
 
 def test_an_unverified_email_gets_a_fresh_mail_and_the_newest_password_and_name(anon, session):
     open_pilot(session)
-    sign_up(anon, name="Planted", password="-".join(["attackers", "own", "pass", "1"]))
-    first = token_of(queued(session)[0])
-    response = sign_up(anon)  # the real owner of the address signs up
-    assert response.status_code == 202
+    sign_up(anon, name="Planted", password=ATTACKER)
+    a_minute_later(anon)
+    sign_up(anon)  # the real owner of the address signs up
     user = user_of(session)
     assert user.name == "Ada Lovelace" and passwords.verify_password(user.password_hash, GOOD)
     assert session.scalar(select(func.count()).select_from(User)) == 1
     assert (
         len(session.scalars(select(Template).where(Template.owner_user_id == user.id)).all()) == 4
     )
-    rows = queued(session, "verify_email")
-    assert len(rows) == 2
-    error_of(anon.post("/api/verify-email", {"token": first}), 400, "token_invalid_or_expired")
-    assert anon.post("/api/verify-email", {"token": token_of(rows[1])}).status_code == 200
+    assert len(queued(session, "verify_email")) == 2
+
+
+def test_each_link_confirms_only_the_password_of_its_own_submission(anon, session):
+    """Pre-registering a victim's address with a password you know must not work: the victim
+    types the password they chose, and a link made by someone else's submission refuses it."""
+    open_pilot(session)
+    sign_up(anon, name="Planted", password=ATTACKER)
+    a_minute_later(anon)
+    sign_up(anon)  # the victim, later
+    attackers_link, victims_link = (token_of(row) for row in queued(session, "verify_email"))
+    error_of(verify(anon, attackers_link, GOOD), 400, "password_mismatch")  # victim clicked it
+    assert user_of(session).email_verified_at is None
+    assert verify(anon, victims_link, GOOD).status_code == 200
+    user = user_of(session)
+    assert passwords.verify_password(user.password_hash, GOOD)
+    assert not passwords.verify_password(user.password_hash, ATTACKER)
+    error_of(verify(anon, attackers_link, ATTACKER), 400, "token_invalid_or_expired")
+
+
+def test_the_attackers_password_never_becomes_the_accounts_even_if_the_attacker_signed_up_last(
+    anon, session
+):
+    open_pilot(session)
+    sign_up(anon)  # the victim
+    a_minute_later(anon)
+    sign_up(anon, password=ATTACKER)  # the attacker re-submits afterwards
+    victims_link, attackers_link = (token_of(row) for row in queued(session, "verify_email"))
+    session.expire_all()
+    a_minute_later(anon)
+    assert verify(anon, victims_link, GOOD).status_code == 200
+    user = user_of(session)
+    assert passwords.verify_password(user.password_hash, GOOD)
+    assert not passwords.verify_password(user.password_hash, ATTACKER)
+
+
+def test_the_wrong_password_does_not_use_up_the_link(anon, session):
+    token = make_unverified(anon, session)
+    error_of(verify(anon, token, "-".join(["not", "it", "at", "all"])), 400, "password_mismatch")
+    assert verify(anon, token).status_code == 200
 
 
 def test_a_suspended_account_is_told_nothing_new(anon, session):
@@ -301,6 +346,22 @@ def test_sign_up_is_limited_per_address(app, session):
     assert codes[:5] == [202] * 5 and codes[5:] == [429, 429]
 
 
+def test_a_second_sign_up_for_one_address_within_a_minute_sends_no_second_mail(app, session):
+    """A third party's inbox cannot be flooded through the form. The answer stays the same 202."""
+    open_pilot(session, max_accounts=None)
+    for i in range(4):
+        response = visitor(app, f"198.51.100.{i + 1}").post("/api/signup", form())
+        assert (response.status_code, response.json()) == (202, {"status": "check_your_email"})
+    assert len(queued(session)) == 1
+
+
+def test_a_failed_attempt_does_not_use_up_the_minute(anon, session):
+    open_pilot(session)
+    error_of(sign_up(anon, password="short"), 422, "password_too_weak")
+    assert sign_up(anon).status_code == 202
+    assert len(queued(session)) == 1
+
+
 def test_a_busy_hasher_is_a_429_and_creates_nothing(anon, session, monkeypatch):
     open_pilot(session)
 
@@ -328,7 +389,7 @@ def make_unverified(anon, session):
 
 def test_the_token_verifies_the_account_and_then_the_user_can_log_in(anon, session):
     token = make_unverified(anon, session)
-    response = anon.post("/api/verify-email", {"token": token})
+    response = verify(anon, token)
     assert (response.status_code, response.json()) == (200, {"status": "verified"})
     assert user_of(session).email_verified_at is not None
     assert anon.log_in(GOOD, NEW_EMAIL).status_code == 200
@@ -336,14 +397,14 @@ def test_the_token_verifies_the_account_and_then_the_user_can_log_in(anon, sessi
 
 def test_verifying_does_not_log_anyone_in(anon, session):
     token = make_unverified(anon, session)
-    anon.post("/api/verify-email", {"token": token})
+    verify(anon, token)
     assert anon.get("/api/session").json()["authenticated"] is False
 
 
 def test_a_token_works_once(anon, session):
     token = make_unverified(anon, session)
-    assert anon.post("/api/verify-email", {"token": token}).status_code == 200
-    error_of(anon.post("/api/verify-email", {"token": token}), 400, "token_invalid_or_expired")
+    assert verify(anon, token).status_code == 200
+    error_of(verify(anon, token), 400, "token_invalid_or_expired")
 
 
 def test_an_expired_token_is_refused(anon, session):
@@ -351,14 +412,14 @@ def test_an_expired_token_is_refused(anon, session):
     row = session.scalars(select(AuthToken)).one()
     row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
     session.commit()
-    error_of(anon.post("/api/verify-email", {"token": token}), 400, "token_invalid_or_expired")
+    error_of(verify(anon, token), 400, "token_invalid_or_expired")
     assert user_of(session).email_verified_at is None
 
 
 @pytest.mark.parametrize("token", ["", "nonsense", "A" * 43, "x" * 500])
 def test_a_wrong_token_is_refused(anon, session, token):
     make_unverified(anon, session)
-    error_of(anon.post("/api/verify-email", {"token": token}), 400, "token_invalid_or_expired")
+    error_of(verify(anon, token), 400, "token_invalid_or_expired")
 
 
 def test_a_reset_token_does_not_verify_an_email(anon, session):
@@ -373,7 +434,7 @@ def test_a_reset_token_does_not_verify_an_email(anon, session):
         now=datetime.now(UTC),
     )
     session.commit()
-    error_of(anon.post("/api/verify-email", {"token": raw}), 400, "token_invalid_or_expired")
+    error_of(verify(anon, raw), 400, "token_invalid_or_expired")
 
 
 def test_a_deleted_user_cannot_be_verified(anon, session):
@@ -381,25 +442,39 @@ def test_a_deleted_user_cannot_be_verified(anon, session):
     user = user_of(session)
     user.status = "deleted"
     session.commit()
-    error_of(anon.post("/api/verify-email", {"token": token}), 400, "token_invalid_or_expired")
+    error_of(verify(anon, token), 400, "token_invalid_or_expired")
 
 
 def test_verify_needs_the_csrf_token_and_a_token_field(anon, session):
-    error_of(anon.post("/api/verify-email", {"token": "x"}, csrf=False), 403, "csrf_rejected")
-    error_of(anon.post("/api/verify-email", {}), 422, "validation_error")
+    error_of(
+        anon.post("/api/verify-email", {"token": "x", "password": GOOD}, csrf=False),
+        403,
+        "csrf_rejected",
+    )
+    error_of(anon.post("/api/verify-email", {"token": "x"}), 422, "validation_error")
+    error_of(anon.post("/api/verify-email", {"password": GOOD}), 422, "validation_error")
 
 
 # ---- resend ----
 
 
-def test_resend_sends_a_new_mail_and_kills_the_old_token(anon, session):
+def test_resend_mails_a_new_link_that_confirms_the_same_password_as_the_last_one(anon, session):
     old = make_unverified(anon, session)
     response = anon.post("/api/signup/resend", {"email": NEW_EMAIL})
     assert (response.status_code, response.json()) == (202, {"status": "check_your_email"})
     rows = queued(session, "verify_email")
     assert len(rows) == 2
-    error_of(anon.post("/api/verify-email", {"token": old}), 400, "token_invalid_or_expired")
-    assert anon.post("/api/verify-email", {"token": token_of(rows[1])}).status_code == 200
+    fresh = token_of(rows[1])
+    assert fresh != old
+    error_of(verify(anon, fresh, ATTACKER), 400, "password_mismatch")
+    assert verify(anon, fresh).status_code == 200
+    error_of(verify(anon, old), 400, "token_invalid_or_expired")  # a confirmed account used them up
+
+
+def test_resend_never_takes_a_password_and_sends_nothing_without_one_to_copy(anon, session):
+    make_user(session, NEW_EMAIL, email_verified_at=None)  # no sign-up behind it, so no link
+    assert anon.post("/api/signup/resend", {"email": NEW_EMAIL}).status_code == 202
+    assert queued(session) == []
 
 
 @pytest.mark.parametrize("email", ["nobody@example.test", "not-an-email", ""])
@@ -426,7 +501,16 @@ def test_resend_is_one_a_minute_per_email_and_still_202(anon, session):
 def test_resend_is_five_an_hour_per_address(app, session):
     open_pilot(session, max_accounts=None)
     for i in range(7):
-        make_user(session, f"u{i}@example.test", email_verified_at=None)
+        user = make_user(session, f"u{i}@example.test", email_verified_at=None)
+        tokens.issue(
+            session,
+            purpose="verify_email",
+            email=user.email,
+            user_id=user.id,
+            now=datetime.now(UTC),
+            pending_password_hash=user.password_hash,
+        )
+    session.commit()
     client = visitor(app, "203.0.113.50")
     for i in range(7):
         assert client.post("/api/signup/resend", {"email": f"u{i}@example.test"}).status_code == 202

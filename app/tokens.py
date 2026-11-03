@@ -35,6 +35,7 @@ def issue(
     user_id: int | None,
     now: datetime,
     ttl: timedelta | None = None,
+    pending_password_hash: str | None = None,
 ) -> str:
     """Add a token row and return the raw token, shown once (in a mail or to the admin)."""
     raw = secrets.token_urlsafe(32)
@@ -45,6 +46,7 @@ def issue(
             purpose=purpose,
             token_hash=digest(raw),
             expires_at=now + (ttl or TTL[purpose]),
+            pending_password_hash=pending_password_hash,
         )
     )
     session.flush()

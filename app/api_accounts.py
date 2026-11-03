@@ -22,8 +22,8 @@ from app.api_schemas import (
     PilotOut,
     ResetIn,
     SignUp,
-    TokenIn,
     Verified,
+    VerifyIn,
 )
 from app.db import get_session
 
@@ -66,6 +66,7 @@ def sign_up(body: SignUp, request: Request, session: Session = Depends(get_sessi
     `password_signup_disabled`, 400 `invite_invalid`, 422 `password_too_weak`, `invalid_email`,
     `invalid_name`, `terms_required`, 429 `too_many_requests` (5 sign-ups per hour per address)
     and `server_busy`. `accept_terms` must be true: the account records the version accepted.
+    A second sign-up for the same address within a minute is answered 202 and does nothing.
     """
     if not _limits(request).signup_address.hit(_address(request)):
         raise signup.Refused(429, "too_many_requests", "Too many attempts. Try again later.")
@@ -78,6 +79,7 @@ def sign_up(body: SignUp, request: Request, session: Session = Depends(get_sessi
         accept_terms=body.accept_terms,
         invite_token=body.invite_token,
         now=_now(),
+        mail_allowed=lambda address: _limits(request).signup_email.hit(limits.email_key(address)),
     )
     return CHECK_YOUR_EMAIL
 
@@ -100,13 +102,15 @@ def resend_verification(
 @router.post(
     "/verify-email",
     tags=["signup"],
-    responses={400: {"model": ErrorResponse}},
+    responses={code: {"model": ErrorResponse} for code in (400, 429)},
 )
-def verify_email(body: TokenIn, session: Session = Depends(get_session)) -> Verified:
-    """Confirm an email with the token from the link. Public. The page the link opens must
-    show a button that calls this (mail scanners open links, and a GET must not verify). Does not
-    sign the user in. 400 `token_invalid_or_expired`: wrong, used or older than 24 hours."""
-    signup.verify_email(session, body.token, _now())
+def verify_email(body: VerifyIn, session: Session = Depends(get_session)) -> Verified:
+    """Confirm an email with the token from the link and the password chosen at sign-up.
+    Public. The page the link opens must show a password field and a button that calls this
+    (mail scanners open links, and a GET must not verify). Does not sign the user in.
+    400 `token_invalid_or_expired`: wrong, used or older than 24 hours. 400 `password_mismatch`:
+    not the password submitted with this link's sign-up; the link stays usable."""
+    signup.verify_email(session, body.token, body.password, _now())
     return Verified(status="verified")
 
 

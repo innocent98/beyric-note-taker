@@ -93,8 +93,10 @@ class EmailIn(Body):
     email: str = Field(max_length=2000)
 
 
-class TokenIn(Body):
+class VerifyIn(Body):
     token: str = Field(max_length=2000)
+    # The password chosen at sign-up: a verification link confirms only that one.
+    password: str = Field(max_length=2000)
 
 
 class ResetIn(Body):

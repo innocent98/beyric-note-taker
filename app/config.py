@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     # stays in the outbox and password sign-up stays off).
     mail_provider: str = ""
     resend_api_key: str = ""
+    # The OAuth client for "Sign in with Google". Both set = the feature exists; either empty =
+    # the routes answer 404 and `GET /api/pilot` says `google_signin: false`.
+    google_client_id: str = ""
+    google_client_secret: str = ""
     mail_from: str = "Beyric Note Taker <no-reply@beyrictech.com>"
 
 
