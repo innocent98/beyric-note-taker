@@ -155,6 +155,52 @@ describe("meeting list", () => {
     expect(within(first).queryByText("Bot sent")).toBeNull();
   });
 
+  it("asks the server for a fresh list every refresh_after_seconds while a meeting is being worked on", async () => {
+    vi.useFakeTimers();
+    try {
+      const busy = captured<MeetingListData>("110-meetings-list-bot-needs-help.json");
+      expect(busy.refresh_after_seconds).toBe(30);
+      render(<MeetingList initial={busy} templates={templates} />);
+      await act(async () => vi.advanceTimersByTime(29_000));
+      expect(mocks.refresh).not.toHaveBeenCalled();
+      await act(async () => vi.advanceTimersByTime(1_500));
+      expect(mocks.refresh).toHaveBeenCalledTimes(1);
+      await act(async () => vi.advanceTimersByTime(30_000));
+      expect(mocks.refresh).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops asking once nothing listed is being worked on", async () => {
+    vi.useFakeTimers();
+    try {
+      const idle = captured<MeetingListData>("54-meetings-list-page-1.json"); // all failed
+      expect(idle.refresh_after_seconds).toBeNull();
+      render(<MeetingList initial={idle} templates={templates} />);
+      await act(async () => vi.advanceTimersByTime(120_000));
+      expect(mocks.refresh).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not ask while the tab is hidden, and asks when it comes back", async () => {
+    vi.useFakeTimers();
+    try {
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      render(<MeetingList initial={captured<MeetingListData>("110-meetings-list-bot-needs-help.json")} templates={templates} />);
+      await act(async () => vi.advanceTimersByTime(90_000));
+      expect(mocks.refresh).not.toHaveBeenCalled();
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+      await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+      expect(mocks.refresh).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+      Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    }
+  });
+
   it("shows the empty state", () => {
     render(<MeetingList initial={captured<MeetingListData>("10-meetings-empty.json")} templates={templates} />);
     expect(screen.getByText("No meetings yet.")).toBeTruthy();

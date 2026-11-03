@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MeetingView } from "@/components/app/meeting-view";
@@ -14,10 +14,13 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   retry: vi.fn(),
   cancel: vi.fn(),
+  end: vi.fn(),
   regenerate: vi.fn(),
 }));
 vi.mock("@/lib/api/browser", () => ({
-  api: { meetings: { get: mocks.get, retry: mocks.retry, cancel: mocks.cancel, regenerate: mocks.regenerate } },
+  api: {
+    meetings: { get: mocks.get, retry: mocks.retry, cancel: mocks.cancel, end: mocks.end, regenerate: mocks.regenerate },
+  },
 }));
 
 const templates: Template[] = [
@@ -79,7 +82,7 @@ describe("ready meeting", () => {
     expect(mocks.regenerate).toHaveBeenCalledWith(7, 2);
     const busy = screen.getByRole("button", { name: "Rewriting..." }) as HTMLButtonElement;
     expect(busy.disabled).toBe(true);
-    expect(screen.getByRole("status").textContent).toMatch(/can take a few minutes/);
+    expect(screen.getByText(/can take a few minutes/).getAttribute("role")).toBe("status");
     await act(async () => finish({ ...m, template_id: 2, notes_html: "<h2>New</h2>" }));
     expect(screen.getByRole("heading", { level: 2, name: "New" })).toBeTruthy();
     expect((screen.getByRole("button", { name: "Rewrite notes" }) as HTMLButtonElement).disabled).toBe(false);
@@ -118,8 +121,8 @@ describe("waiting and working", () => {
     ["104-meeting-detail-bot-state-unknown.json", "Bot sent"],
   ])("says what the bot is doing (%s), in the badge and in the wait card", (file, words) => {
     show(meeting(file));
-    expect(screen.getAllByText(words)).toHaveLength(2); // the badge and the card heading
-    expect(screen.getByRole("heading", { level: 2, name: words })).toBeTruthy();
+    expect(screen.getAllByText(words)).toHaveLength(2); // the badge and the card title
+    expect(document.querySelector(".state-title")?.textContent).toMatch(words);
     expect(screen.queryByText("Waiting for the note taker to join")).toBeNull();
     expect(screen.getByText("This page updates every 30 seconds.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Cancel and remove the bot" })).toBeTruthy();
@@ -128,7 +131,7 @@ describe("waiting and working", () => {
   it("does not claim a recording before one exists", () => {
     show(meeting("107-meeting-detail-bot-in-meeting.json"));
     expect(document.querySelector(".detail-title")?.textContent).not.toMatch(/record/i); // the badge
-    expect(screen.getByRole("heading", { level: 2 }).textContent).not.toMatch(/record/i);
+    expect(document.querySelector(".state-title")?.textContent).not.toMatch(/record/i);
     expect(document.querySelector(".state-title + p")?.textContent).not.toMatch(/record/i);
   });
 
@@ -147,6 +150,46 @@ describe("waiting and working", () => {
     await act(async () => vi.advanceTimersByTime(30_000));
     expect(screen.getAllByText("Recording").length).toBeGreaterThan(0);
     expect(screen.queryByText("Bot is in the meeting")).toBeNull();
+  });
+
+  it("renders a short state as the card's heading and a long sentence as a paragraph", () => {
+    show(meeting("107-meeting-detail-bot-in-meeting.json"));
+    expect(screen.getByRole("heading", { level: 2, name: "Bot is in the meeting" })).toBeTruthy();
+    cleanup();
+    show(meeting("109-meeting-detail-bot-needs-help.json"));
+    expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
+    const title = document.querySelector(".state-title")!;
+    expect(title.tagName).toBe("P");
+    expect(title.textContent).toMatch(/waiting on a prompt in the meeting/);
+    cleanup();
+    show(meeting("106-meeting-detail-bot-awaiting-admission.json"));
+    expect(document.querySelector(".state-title")!.tagName).toBe("P");
+  });
+
+  it("announces a change of the bot's state to a screen reader without moving focus", () => {
+    show(meeting("107-meeting-detail-bot-in-meeting.json"));
+    const badge = document.querySelector(".detail-title .badge")!;
+    expect(badge.getAttribute("role")).toBe("status");
+    expect(badge.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it.each([
+    ["111-meeting-detail-bot-requested.json", "Starting the bot"],
+    ["116-meeting-detail-bot-leaving.json", "The bot is leaving the meeting. The notes start once it has gone"],
+    ["117-meeting-detail-call-ended-finishing-recording.json", "The call ended; finishing the recording"],
+    ["121-meeting-detail-bot-state-stale.json", "Checking on the bot..."],
+  ])("says %s in words the page can show", (file, words) => {
+    show(meeting(file));
+    expect(screen.getAllByText(words).length).toBeGreaterThan(0);
+    expect(screen.getByText("This page updates every 30 seconds.")).toBeTruthy();
+  });
+
+  it("warns when the worker has gone quiet while the meeting is waiting on it", () => {
+    show(meeting("122-meeting-detail-worker-stale.json"));
+    expect(screen.getByRole("alert").textContent).toMatch(/background worker has not checked in for over 20 minutes/);
+    cleanup();
+    show(meeting("112-meeting-detail-bot-recording-can-end.json"));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("shows the attempt notice on a second Zoom attempt", () => {
@@ -215,6 +258,68 @@ describe("waiting and working", () => {
     await userEvent.click(confirm);
     expect(mocks.cancel).toHaveBeenCalledWith(1);
     expect(await screen.findByText("What went wrong")).toBeTruthy();
+  });
+});
+
+describe("end now and write the notes", () => {
+  it("offers the button only while the bot can be ended, next to Cancel", () => {
+    show(meeting("112-meeting-detail-bot-recording-can-end.json"));
+    expect(screen.getByRole("button", { name: "End now and write the notes" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel and remove the bot" })).toBeTruthy();
+    cleanup();
+    for (const file of ["111-meeting-detail-bot-requested.json", "114-meeting-end.json", "117-meeting-detail-call-ended-finishing-recording.json"]) {
+      show(meeting(file));
+      expect(screen.queryByRole("button", { name: "End now and write the notes" })).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("asks first, says what will happen, and does nothing until confirmed", async () => {
+    mocks.end.mockResolvedValue(meeting("114-meeting-end.json"));
+    show(meeting("112-meeting-detail-bot-recording-can-end.json"));
+    fireEvent.click(screen.getByRole("button", { name: "End now and write the notes" }));
+    expect(mocks.end).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("The bot will leave the meeting now and the notes will be written from what it heard so far.", { exact: false }),
+    ).toBeTruthy();
+    const confirm = screen.getAllByRole("button", { name: "End now and write the notes", hidden: true }).pop()!;
+    await userEvent.click(confirm);
+    expect(mocks.end).toHaveBeenCalledWith(meeting("112-meeting-detail-bot-recording-can-end.json").id);
+    expect(await screen.findAllByText(/The bot is leaving the meeting\. The notes start once it has gone/)).not.toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "End now and write the notes" })).toBeNull();
+  });
+
+  it("keeps the dialog's keep-waiting choice from ending anything", async () => {
+    show(meeting("112-meeting-detail-bot-recording-can-end.json"));
+    fireEvent.click(screen.getByRole("button", { name: "End now and write the notes" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "Keep recording", hidden: true })[0]);
+    expect(mocks.end).not.toHaveBeenCalled();
+  });
+
+  it("shows the API's message when Vexa could not stop the bot, and leaves the button there", async () => {
+    mocks.end.mockRejectedValue(new ApiError(502, "bot_stop_failed", "The bot could not be stopped. Please try again in a moment."));
+    show(meeting("112-meeting-detail-bot-recording-can-end.json"));
+    fireEvent.click(screen.getByRole("button", { name: "End now and write the notes" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "End now and write the notes", hidden: true }).pop()!);
+    expect(await screen.findByText("The bot could not be stopped. Please try again in a moment.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "End now and write the notes" })).toBeTruthy();
+  });
+
+  it("refetches after a 409 so the screen follows the server", async () => {
+    mocks.end.mockRejectedValue(new ApiError(409, "already_ending", "The bot has already been told to leave. The notes start once it has gone."));
+    mocks.get.mockResolvedValue(meeting("114-meeting-end.json"));
+    show(meeting("112-meeting-detail-bot-recording-can-end.json"));
+    fireEvent.click(screen.getByRole("button", { name: "End now and write the notes" }));
+    await userEvent.click(screen.getAllByRole("button", { name: "End now and write the notes", hidden: true }).pop()!);
+    expect(await screen.findByText(/already been told to leave/)).toBeTruthy();
+    await waitFor(() => expect(mocks.get).toHaveBeenCalled());
+  });
+
+  it("shows the reason when the meeting was ended before anything was recorded", () => {
+    const m = meeting("120-meeting-detail-ended-nothing-recorded.json");
+    show(m);
+    expect(screen.getByText(m.failure_reason!)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "End now and write the notes" })).toBeNull();
   });
 });
 
