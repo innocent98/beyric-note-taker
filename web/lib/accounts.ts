@@ -6,6 +6,13 @@ import { ApiError, errorMessage } from "@/lib/api/client";
 export const PASSWORD_MIN = 8;
 export const PASSWORD_MAX = 128;
 
+// The length message for a password, or undefined when the length is fine.
+export function lengthProblem(value: string): string | undefined {
+  if (value.length < PASSWORD_MIN) return `Use at least ${PASSWORD_MIN} characters.`;
+  if (value.length > PASSWORD_MAX) return `Use at most ${PASSWORD_MAX} characters.`;
+  return undefined;
+}
+
 export function validEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }

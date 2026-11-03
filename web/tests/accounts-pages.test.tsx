@@ -224,9 +224,9 @@ describe("confirm email", () => {
     mocks.verifyEmail.mockResolvedValue(accountBody("24-verify-ok.json"));
     const user = userEvent.setup();
     render(<VerifyEmailForm token="tok" />);
-    await user.type(screen.getByLabelText("Your password"), "the-one-i-chose");
+    await user.type(screen.getByLabelText("Your password"), "pw-placeholder");
     await user.click(screen.getByRole("button", { name: "Confirm email" }));
-    expect(mocks.verifyEmail).toHaveBeenCalledWith("tok", "the-one-i-chose");
+    expect(mocks.verifyEmail).toHaveBeenCalledWith("tok", "pw-placeholder");
     expect(await screen.findByRole("heading", { name: "Email confirmed" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Go to sign in" }).getAttribute("href")).toBe("/login");
     expect(mocks.replace).not.toHaveBeenCalled();

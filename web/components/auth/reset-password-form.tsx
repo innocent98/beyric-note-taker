@@ -3,7 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { Alert, Button } from "@/components/ui";
 import { api } from "@/lib/api/browser";
-import { PASSWORD_MAX, PASSWORD_MIN, accountError, fieldOf, isCode } from "@/lib/accounts";
+import { accountError, fieldOf, isCode, lengthProblem } from "@/lib/accounts";
 import { AuthHead } from "./auth-head";
 import { PasswordField, PasswordRules } from "./password-field";
 
@@ -30,8 +30,8 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
     if (pending || !token) return;
     setFormError(null);
     const found: { password?: string; confirm?: string } = {};
-    if (password.length < PASSWORD_MIN) found.password = `Use at least ${PASSWORD_MIN} characters.`;
-    else if (password.length > PASSWORD_MAX) found.password = `Use at most ${PASSWORD_MAX} characters.`;
+    const tooShortOrLong = lengthProblem(password);
+    if (tooShortOrLong) found.password = tooShortOrLong;
     if (!confirm) found.confirm = "Type the password again.";
     else if (confirm !== password) found.confirm = "Passwords do not match.";
     setErrors(found);

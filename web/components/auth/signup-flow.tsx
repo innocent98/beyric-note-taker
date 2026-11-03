@@ -4,8 +4,7 @@ import { useRef, useState, type FormEvent } from "react";
 import { Alert, AppLink, Button, Checkbox, Field } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import {
-  PASSWORD_MAX,
-  PASSWORD_MIN,
+  lengthProblem,
   RESEND_WAIT_SECONDS,
   accountError,
   fieldOf,
@@ -63,8 +62,8 @@ export function SignupFlow({
     if (!name.trim()) found.name = "Enter your name.";
     if (!email.trim()) found.email = "Enter your work email.";
     else if (!validEmail(email)) found.email = "Enter a valid email, like you@company.com.";
-    if (password.length < PASSWORD_MIN) found.password = `Use at least ${PASSWORD_MIN} characters.`;
-    else if (password.length > PASSWORD_MAX) found.password = `Use at most ${PASSWORD_MAX} characters.`;
+    const tooShortOrLong = lengthProblem(password);
+    if (tooShortOrLong) found.password = tooShortOrLong;
     if (!accepted) found.terms = TERMS_MESSAGE;
     return found;
   }
