@@ -1,0 +1,24 @@
+{
+  "note": "302 to `/pilot-full`, no address in the URL; sets a 15-minute cookie.",
+  "client": "google-visitor-2",
+  "request": {
+    "method": "GET",
+    "path": "/api/auth/google/callback?code=abc&state=<state>",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 302,
+    "headers": {
+      "cache-control": "no-store",
+      "location": "/pilot-full",
+      "set-cookie": [
+        "pilot_email=<cookie>; HttpOnly; Max-Age=900; Path=/api/pilot; SameSite=lax",
+        "google_flow=<cookie>; expires=Tue, 03 Nov 2026 12:04:04 GMT; Max-Age=0; Path=/api/auth/google; SameSite=lax"
+      ]
+    },
+    "body": ""
+  }
+}

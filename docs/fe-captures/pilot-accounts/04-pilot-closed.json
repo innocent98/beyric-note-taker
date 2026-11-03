@@ -1,0 +1,24 @@
+{
+  "note": "The pilot starts closed; Google is on because the client is configured.",
+  "client": "visitor",
+  "request": {
+    "method": "GET",
+    "path": "/api/pilot",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "state": "closed",
+      "prefill_email": null,
+      "google_signin": true
+    }
+  }
+}

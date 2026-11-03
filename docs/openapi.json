@@ -1924,7 +1924,7 @@
     },
     "/api/admin/users/{user_id}/reset-link": {
       "post": {
-        "description": "A one-time password-reset link (30 minutes) for the admin to give the person, for when\nmail is not working. Shown once, never mailed, and replaces any earlier reset link. 409\n`user_not_verified` or `account_suspended`.",
+        "description": "A one-time password-reset link (30 minutes) for the admin to give the person, for when\nmail is not working. Shown once, never mailed; replaces any earlier reset link and tells the\nuser in the app. Not for admin accounts. 409 `admin_account`, `user_not_verified` or\n`account_suspended`.",
         "operationId": "reset_link",
         "parameters": [
           {

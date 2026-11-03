@@ -1,0 +1,25 @@
+{
+  "note": "Within the minute: the same 202, and no new mail (1 per minute per email).",
+  "client": "ben",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup/resend",
+    "headers": {
+      "X-CSRF-Token": "<csrf-G>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "ben@example.test"
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "check_your_email"
+    }
+  }
+}

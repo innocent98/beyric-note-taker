@@ -1,0 +1,25 @@
+{
+  "note": "Identical to the answers above.",
+  "client": "ben",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup/resend",
+    "headers": {
+      "X-CSRF-Token": "<csrf-G>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "nobody@example.test"
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "check_your_email"
+    }
+  }
+}

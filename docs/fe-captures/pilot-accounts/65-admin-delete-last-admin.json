@@ -1,0 +1,26 @@
+{
+  "note": "",
+  "client": "admin",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/admin/users/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "last_admin",
+        "message": "This is the only active admin account, so it cannot be suspended or deleted."
+      }
+    }
+  }
+}

@@ -16,6 +16,7 @@ an exception message can hold the address, the link or the API key.
 
 import html
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -130,8 +131,18 @@ def _lines(*parts: str | None) -> str:
     return "\n\n".join(part for part in parts if part)
 
 
+# A name goes into the greeting only when it is plainly a name: letters, then letters, spaces,
+# apostrophes and hyphens, at most 60. The waitlist form takes a name from anyone, and mail goes
+# to whatever address they typed, so a name is never allowed to carry a line break, a link or
+# any text of its own into an email from us.
+PLAIN_NAME = re.compile(r"[^\W\d_](?:[^\W\d_]|[ '\u2019-]){0,59}")
+
+
 def _hello(payload: dict) -> str:
-    return f"Hello {payload['name']}," if payload.get("name") else "Hello,"
+    name = payload.get("name")
+    if isinstance(name, str) and PLAIN_NAME.fullmatch(name.strip()):
+        return f"Hello {name.strip()},"
+    return "Hello,"
 
 
 def _verify(payload: dict) -> tuple[str, str, str]:

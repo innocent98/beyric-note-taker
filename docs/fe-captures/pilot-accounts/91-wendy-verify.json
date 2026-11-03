@@ -1,0 +1,26 @@
+{
+  "note": "",
+  "client": "wendy",
+  "request": {
+    "method": "POST",
+    "path": "/api/verify-email",
+    "headers": {
+      "X-CSRF-Token": "<csrf-K>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "token": "<token-6>",
+      "password": "<password>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "verified"
+    }
+  }
+}

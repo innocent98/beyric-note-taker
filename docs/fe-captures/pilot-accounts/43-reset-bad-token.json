@@ -1,0 +1,29 @@
+{
+  "note": "",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/password/reset",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "token": "nonsense",
+      "password": "<password>"
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "token_invalid_or_expired",
+        "message": "This link has expired or was already used. Ask for a new one."
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "note": "The admin signs in like anyone.",
+  "client": "admin",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "admin@example.test",
+      "password": "<password>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": [
+        "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax",
+        "device=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax"
+      ]
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-C>",
+      "user": {
+        "email": "admin@example.test",
+        "name": null,
+        "is_admin": true,
+        "email_verified": true
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": null
+      },
+      "unread_notifications": 0
+    }
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "note": "",
+  "client": "admin",
+  "request": {
+    "method": "PUT",
+    "path": "/api/admin/pilot",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "signups_open": true,
+      "max_accounts": -1,
+      "default_hours_cap_seconds": 18000,
+      "password_signup_enabled": true
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "max_accounts",
+            "message": "Input should be greater than or equal to 0"
+          }
+        ]
+      }
+    }
+  }
+}

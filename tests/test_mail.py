@@ -240,11 +240,18 @@ def test_every_template_renders_with_text_and_html(template):
     assert message.to == "ada@example.test"
 
 
-def test_templates_escape_the_name_in_html():
+def test_a_hostile_name_appears_nowhere_in_the_mail():
     message = mail.render(
         "verify_email", {"link": LINK, "name": "<script>x</script>"}, "a@b.test", make_settings()
     )
-    assert "<script>" not in message.html and "<script>" in message.text
+    assert "<script>" not in message.html and "script" not in message.text
+
+
+def test_the_link_is_escaped_in_the_html_part():
+    message = mail.render(
+        "verify_email", {"link": 'https://x.test/?a=1&b="2"'}, "a@b.test", make_settings()
+    )
+    assert "&amp;b=&quot;2&quot;" in message.html
 
 
 def test_the_reset_mail_says_it_expires_in_30_minutes():
@@ -268,3 +275,30 @@ def test_the_worker_sends_due_mail_and_does_nothing_without_a_mailer(session, mo
     assert worker.send_mail(session, FakeMailer(), NOW) == 1
     session.refresh(row)
     assert row.status == "sent"
+
+
+@pytest.mark.parametrize("name", ["Ada Lovelace", "O'Neil", "Zoë-Marie", "李雷"])
+def test_a_plain_name_is_used_in_the_greeting(name):
+    message = mail.render("verify_email", {"link": LINK, "name": name}, "a@b.test", make_settings())
+    assert message.text.startswith(f"Hello {name},")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Ada\n\nYour account is locked, open https://evil.test/x",
+        "visit evil.test",
+        "<b>x</b>",
+        "a@b.test",
+        "Ada 5",
+        "x" * 61,
+        "",
+        None,
+    ],
+)
+def test_a_name_that_is_not_just_a_name_is_dropped_from_the_greeting(name):
+    message = mail.render(
+        "waitlist_invite", {"link": LINK, "name": name}, "a@b.test", make_settings()
+    )
+    assert message.text.startswith("Hello,\n\n")
+    assert "evil" not in message.text and "evil" not in message.html

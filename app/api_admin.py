@@ -130,14 +130,18 @@ def delete_user(user_id: int, session: Session = Depends(get_session)) -> AdminD
     responses={code: {"model": ErrorResponse} for code in (404, 409)},
 )
 def reset_link(
-    user_id: int, request: Request, session: Session = Depends(get_session)
+    user_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    acting: User = Depends(require_admin),
 ) -> AdminResetLink:
     """A one-time password-reset link (30 minutes) for the admin to give the person, for when
-    mail is not working. Shown once, never mailed, and replaces any earlier reset link. 409
-    `user_not_verified` or `account_suspended`."""
+    mail is not working. Shown once, never mailed; replaces any earlier reset link and tells the
+    user in the app. Not for admin accounts. 409 `admin_account`, `user_not_verified` or
+    `account_suspended`."""
     user = admin.user_or_404(session, user_id)
     return AdminResetLink(
-        reset_url=admin.reset_link(session, request.app.state.settings, user, _now())
+        reset_url=admin.reset_link(session, request.app.state.settings, user, _now(), acting.id)
     )
 
 

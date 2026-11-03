@@ -72,4 +72,33 @@ check "client X-Edge-Secret is replaced by nginx's" ok "$ok"
 if [[ "$got" =~ ^dummy-secret-for-the-check\|[0-9a-f.:]+$ && "$got" != *203.0.113.66* ]]; then ok=ok; else ok="$got"; fi
 check "client X-Forwarded-For is replaced by the peer address" ok "$ok"
 
+# The public account routes (see the comment in nginx.conf): one shared counter of 1 + burst 10,
+# counted for every method, and the waitlist's own of 1 + burst 5.
+get() { curl -s -o /dev/null -w '%{http_code}' -H 'Host: notes.beyrictech.com' "http://127.0.0.1:$port$1"; }
+auth_paths="/api/signup /api/signup/resend /api/verify-email /api/password/forgot /api/password/reset"
+for path in $auth_paths /api/auth/google/start /api/signup/; do
+  restart
+  got=""; for _ in $(seq 1 13); do got="$got $(post "$path")"; done
+  check "POST $path x13" " 200 200 200 200 200 200 200 200 200 200 200 429 429" "$got"
+done
+restart
+got=""; for _ in $(seq 1 13); do got="$got $(get /api/auth/google/start)"; done
+check "GET /api/auth/google/start x13 is counted" " 200 200 200 200 200 200 200 200 200 200 200 429 429" "$got"
+restart
+got=""
+for path in /api/signup /api/verify-email /api/password/forgot /api/signup/resend /api/password/reset; do
+  for _ in 1 2 3; do got="$got $(post "$path")"; done
+done
+check "the account routes share one counter" " 200 200 200 200 200 200 200 200 200 200 200 429 429 429 429" "$got"
+check "the waitlist has its own counter" " 200" " $(post /api/waitlist)"
+restart
+got=""; for _ in $(seq 1 8); do got="$got $(post /api/waitlist)"; done
+check "POST /api/waitlist x8" " 200 200 200 200 200 200 429 429" "$got"
+restart
+got=""; for _ in $(seq 1 13); do got="$got $(get /api/auth/google/callback)"; done
+check "the Google callback is not in the account zone" " 200 200 200 200 200 200 200 200 200 200 200 200 200" "$got"
+restart
+got=""; for _ in $(seq 1 13); do got="$got $(get /api/pilot)"; done
+check "GET /api/pilot is not counted" " 200 200 200 200 200 200 200 200 200 200 200 200 200" "$got"
+
 exit $fail

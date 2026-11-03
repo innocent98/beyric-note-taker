@@ -1,0 +1,26 @@
+{
+  "note": "",
+  "client": "admin",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/admin/users/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Send `status` or `hours_cap_seconds`."
+      }
+    }
+  }
+}

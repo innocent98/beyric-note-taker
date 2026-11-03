@@ -1,0 +1,30 @@
+{
+  "note": "Repeating keeps the first read time.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/notifications/1/read",
+    "headers": {
+      "X-CSRF-Token": "<csrf-I>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "kind": "account.reset_link_issued",
+      "severity": "warning",
+      "title": "A password reset link was made for your account",
+      "body": "An administrator made a one-time password reset link for your account. If you did not ask for this, tell us at once.",
+      "meeting_id": null,
+      "created_at": "2026-11-03T12:04:03.778665Z",
+      "read_at": "2026-11-03T12:04:04.235930Z"
+    }
+  }
+}

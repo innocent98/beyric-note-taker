@@ -5,6 +5,7 @@ admin can see and change accounts and the pilot, and nothing of any user's meeti
 calendar: there is no function in this module that reads them.
 """
 
+import logging
 from datetime import datetime
 
 from fastapi import HTTPException
@@ -13,10 +14,13 @@ from sqlalchemy.orm import Session
 
 from app import mail, signup, tokens, usage
 from app.config import Settings
-from app.models import AppState, AuthToken, MailOutbox, User, WaitlistEntry
+from app.models import AppState, AuthToken, MailOutbox, Notification, User, WaitlistEntry
 from app.services import Refused
 
+logger = logging.getLogger(__name__)
+
 MAIL_FAILURES_SHOWN = 50
+ADMIN_LOCK = 6003  # serialises "is this the last admin?" with the change that depends on it
 
 
 # ---- users ----
@@ -57,15 +61,26 @@ def _refuse_last_admin() -> Refused:
     )
 
 
-def update_user(
-    session: Session, user: User, changes: dict, *, now: datetime | None = None
-) -> User:
+def _lock_admins(session: Session, user: User) -> None:
+    """Take the admin lock and re-read `user`, so the last-admin check and the change that
+    follows it cannot interleave with another admin's (two admins removing each other at once)."""
+    session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": ADMIN_LOCK})
+    session.refresh(user)
+
+
+def update_user(session: Session, user: User, changes: dict) -> User:
     """Apply `changes` (only `status`, between active and suspended, and `hours_cap_seconds`).
-    Commits. The last active admin cannot be suspended."""
-    if changes.get("status") == "suspended" and _is_last_admin(session, user):
-        session.rollback()
-        raise _refuse_last_admin()
-    if "status" in changes and changes["status"] is not None:
+    Commits. The last active admin cannot be suspended. Suspending also signs the user out for
+    good (their `session_epoch` moves on), so reactivating them later does not bring an old
+    cookie back to life."""
+    suspending = changes.get("status") == "suspended"
+    if suspending:
+        _lock_admins(session, user)
+        if _is_last_admin(session, user):
+            session.rollback()
+            raise _refuse_last_admin()
+        user.session_epoch = User.session_epoch + 1
+    if changes.get("status") is not None:
         user.status = changes["status"]
     if "hours_cap_seconds" in changes:
         user.hours_cap_seconds = changes["hours_cap_seconds"]
@@ -76,21 +91,44 @@ def update_user(
 def schedule_deletion(session: Session, user: User) -> None:
     """Mark the user `deleted`: out at once, slot free, the worker purges them
     (`app/deletion.py`). Commits. The last active admin cannot be deleted."""
+    _lock_admins(session, user)
     if _is_last_admin(session, user):
+        session.rollback()
         raise _refuse_last_admin()
     user.status = "deleted"
     session.commit()
 
 
-def reset_link(session: Session, settings: Settings, user: User, now: datetime) -> str:
+def reset_link(
+    session: Session, settings: Settings, user: User, now: datetime, by: int | None = None
+) -> str:
     """A one-time password-reset link for the admin to hand over (the no-mail fallback). Only for
-    a verified, active account: a link is not proof of the address."""
+    a verified, active, ordinary account: a link is not proof of the address, and an admin must
+    never be able to take over another admin's account. The user is told in the app, and the
+    admin's act is logged (ids only, never the link). Commits."""
+    if user.is_admin:
+        raise Refused(409, "admin_account", "A reset link cannot be made for an admin account.")
     if user.status != "active":
         raise Refused(409, "account_suspended", "This account is suspended.")
     if user.email_verified_at is None:
         raise Refused(409, "user_not_verified", "This account has not confirmed its email yet.")
     link = signup.issue_reset(session, settings, user, now)
+    session.add(
+        Notification(
+            user_id=user.id,
+            kind="account.reset_link_issued",
+            severity="warning",
+            title="A password reset link was made for your account",
+            body=(
+                "An administrator made a one-time password reset link for your account. If you "
+                "did not ask for this, tell us at once."
+            ),
+            dedupe_key=f"reset_link:{now.timestamp()}",
+            created_at=now,
+        )
+    )
     session.commit()
+    logger.info("admin %s made a reset link for user %s", by, user.id)
     return link
 
 

@@ -1,0 +1,33 @@
+{
+  "note": "",
+  "client": "admin",
+  "request": {
+    "method": "PUT",
+    "path": "/api/admin/pilot",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "signups_open": true,
+      "max_accounts": 5,
+      "default_hours_cap_seconds": 18000,
+      "password_signup_enabled": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "signups_open": true,
+      "max_accounts": 5,
+      "default_hours_cap_seconds": 18000,
+      "password_signup_enabled": true,
+      "slots_taken": 3,
+      "state": "open"
+    }
+  }
+}

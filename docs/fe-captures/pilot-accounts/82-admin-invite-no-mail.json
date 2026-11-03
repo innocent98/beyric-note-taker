@@ -1,0 +1,25 @@
+{
+  "note": "No mail provider: the link is returned for the admin to hand over.",
+  "client": "admin",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/waitlist/2/invite",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "emailed": false,
+      "invite_url": "https://notes.example.test/signup?invite=<token-5>",
+      "expires_at": "2026-11-10T12:04:03.994032Z"
+    }
+  }
+}

@@ -291,6 +291,55 @@ def test_suspending_a_suspended_admin_does_not_count_as_a_second_admin(boss, adm
     )
 
 
+def test_suspending_ends_old_sessions_for_good_even_after_reactivation(app, boss, session, owner):
+    web = visitor(app, "198.51.100.50")
+    web.log_in()
+    boss.call("PATCH", f"/api/admin/users/{owner.id}", {"status": "suspended"})
+    boss.call("PATCH", f"/api/admin/users/{owner.id}", {"status": "active"})
+    error_of(web.get("/api/templates"), 401, "not_authenticated")  # the old cookie stays dead
+    assert visitor(app, "198.51.100.51").log_in().status_code == 200
+
+
+def test_two_admins_cannot_remove_each_other_at_the_same_moment(app, session, monkeypatch):
+    """The last-admin check and the change happen under one lock, so exactly one succeeds."""
+    import threading
+    import time
+
+    from app import admin as admin_module
+
+    a = make_user(session, "a@example.test", admin=True)
+    b = make_user(session, "b@example.test", admin=True)
+    real = admin_module._is_last_admin
+
+    def slow(db, user):
+        answer = real(db, user)
+        time.sleep(0.2)  # widen the gap between the check and the change
+        return answer
+
+    monkeypatch.setattr(admin_module, "_is_last_admin", slow)
+    outcomes: dict[str, int] = {}
+    ready = threading.Barrier(2)
+
+    def go(email, victim):
+        web = visitor(app, f"198.51.100.{60 + len(outcomes)}")
+        web.log_in(email=email)
+        ready.wait()
+        outcomes[email] = web.call("DELETE", f"/api/admin/users/{victim.id}").status_code
+
+    threads = [
+        threading.Thread(target=go, args=("a@example.test", b)),
+        threading.Thread(target=go, args=("b@example.test", a)),
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sorted(outcomes.values()) == [202, 401] or sorted(outcomes.values()) == [202, 409]
+    session.expire_all()
+    active = session.scalars(select(User).where(User.is_admin, User.status == "active")).all()
+    assert len(active) == 1
+
+
 def test_deleting_marks_the_user_deleted_at_once_and_signs_them_out(app, boss, session, owner):
     web = visitor(app, "198.51.100.30")
     web.log_in()
@@ -326,6 +375,25 @@ def test_a_reset_link_replaces_the_one_before_it(boss, session, owner):
     boss.call("POST", f"/api/admin/users/{owner.id}/reset-link")
     live = session.scalars(select(AuthToken).where(AuthToken.used_at.is_(None))).all()
     assert len(live) == 1 and live[0].token_hash != tokens.digest(first)
+
+
+def test_a_reset_link_tells_the_user_and_logs_no_token(boss, session, owner, caplog):
+    caplog.set_level("INFO")
+    url = boss.call("POST", f"/api/admin/users/{owner.id}/reset-link").json()["reset_url"]
+    token = re.search(r"token=([\w-]+)", url)[1]
+    [note] = session.scalars(select(Notification).where(Notification.user_id == owner.id)).all()
+    assert note.kind == "account.reset_link_issued" and note.severity == "warning"
+    assert "administrator" in note.body
+    ours = " ".join(r.getMessage() for r in caplog.records if r.name.startswith("app"))
+    assert token not in ours and OWNER_EMAIL not in ours
+    assert f"user {owner.id}" in ours
+
+
+def test_no_reset_link_for_an_admin_account(boss, admin, session):
+    second = make_user(session, "second@example.test", admin=True)
+    error_of(boss.call("POST", f"/api/admin/users/{second.id}/reset-link"), 409, "admin_account")
+    error_of(boss.call("POST", f"/api/admin/users/{admin.id}/reset-link"), 409, "admin_account")
+    assert session.scalars(select(AuthToken)).all() == []
 
 
 def test_no_reset_link_for_an_unverified_or_suspended_account(boss, session):

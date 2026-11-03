@@ -1,0 +1,25 @@
+{
+  "note": "An ordinary user: 403 on every admin route.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/admin/users",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "forbidden",
+        "message": "This is for the administrator only."
+      }
+    }
+  }
+}
