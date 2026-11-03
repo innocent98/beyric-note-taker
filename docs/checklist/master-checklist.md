@@ -154,7 +154,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] P0.6 Second bot machine rented, private link up (Adebayo)
   - [ ] P0.7 Teams spike with a real Teams meeting (Q17)
   - [ ] P0.8 Join-time measurement fixes `AUTOJOIN_LEAD_SECONDS` (default 60)
-  - [ ] P0.9 Before testers: Adebayo moves the Cloud project from Testing to "In production" (still unverified), sets `GOOGLE_OAUTH_TESTING=false`; session records the unverified-app screen and the day-8 token check
+  - [ ] P0.9 Cloud project already In production (Adebayo, 2026-11-03); remaining: Adebayo sets `GOOGLE_OAUTH_TESTING=false`; session records the unverified-app screen and the day-8 token check
 - [ ] Phase A, accounts: **in progress, owned by other sessions** (`feature/pilot-accounts-core`, then `feature/pilot-accounts-signup`; tasks A1 to A20 in spec section 15, not re-planned): sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap, admin API
 - [ ] Phase C, Google Calendar auto-join plus the ICS source (needs A6, A9, A13, A18 for most tasks)
   - [ ] C1 migration for connections, events, scheduled joins
