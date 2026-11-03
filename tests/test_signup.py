@@ -186,6 +186,15 @@ def test_a_live_invite_for_an_unconfirmed_account_lets_it_confirm_and_is_not_cou
     web, link, _ = invited_with_an_unconfirmed_account(app, session)
     assert verify(web, link).status_code == 200
     assert user_of(session).email_verified_at is not None
+    # the reserved place moved to the account: it is counted once, and the invite is used up
+    session.expire_all()
+    assert signup.slots_taken(session, datetime.now(UTC)) == 3
+    assert session.scalars(select(WaitlistEntry)).one().status == "joined"
+    assert (
+        session.scalars(select(AuthToken).where(AuthToken.purpose == "waitlist_invite"))
+        .one()
+        .used_at
+    )
 
 
 def test_signing_up_again_with_the_invite_redeems_it_for_the_existing_account(app, session):

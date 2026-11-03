@@ -21,6 +21,7 @@ from app.google_oauth import GoogleError, Identity
 from app.main import create_app
 from app.models import (
     AuthToken,
+    MailOutbox,
     OAuthFlow,
     Template,
     User,
@@ -30,6 +31,7 @@ from app.models import (
 from app.services import get_openai_client, get_vexa
 from tests.test_api import Api, error_of
 from tests.test_signup import ATTACKER, GOOD, open_pilot
+from tests.test_signup import form as signup_form
 from tests.test_web import (  # noqa: F401
     app,
     fake_openai,
@@ -551,6 +553,51 @@ def test_google_redeems_the_invite_of_an_unconfirmed_account_when_the_pilot_is_f
     assert user.email_verified_at is not None and user.google_sub == "g-ada-1"
     assert session.scalars(select(WaitlistEntry)).one().status == "joined"
     assert session.scalars(select(AuthToken).where(AuthToken.used_at.is_(None))).all() == []
+
+
+def test_a_confirmation_and_a_google_link_for_one_account_at_once_do_not_deadlock(
+    gapp, session, monkeypatch
+):
+    """Both take the sign-up lock and touch the account's verification tokens. If the confirmation
+    took the token row before the lock, each would wait for the other and one would get a 500."""
+    import threading
+
+    from tests.test_signup import token_of, verify
+
+    open_pilot(session)
+    owner_browser = browser(gapp, "198.51.100.1")
+    assert owner_browser.post("/api/signup", signup_form()).status_code == 202
+    link = token_of(session.scalars(select(MailOutbox)).first())
+    real = tokens.revoke
+
+    def slow(*args, **kwargs):  # Google holds the lock while it revokes: a wide gap
+        time.sleep(0.6)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(tokens, "revoke", slow)
+    results, errors = {}, []
+
+    def google():
+        try:
+            results["google"] = sign_in(browser(gapp, "198.51.100.2")).headers["location"]
+        except Exception as exc:  # a deadlock surfaces as a server error
+            errors.append(exc)
+
+    def confirm():
+        try:
+            time.sleep(0.2)  # the Google flow already holds the lock
+            results["verify"] = verify(owner_browser, link, GOOD).status_code
+        except Exception as exc:
+            errors.append(exc)
+
+    threads = [threading.Thread(target=google), threading.Thread(target=confirm)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert errors == []
+    assert results["google"] == "/" and results["verify"] in (200, 400)
+    assert user_by(session, email="ada@example.test").email_verified_at is not None
 
 
 def test_a_password_account_already_linked_to_another_google_account_is_not_relinked(gapp, session):

@@ -361,18 +361,23 @@ def verify_email(
             "That is not the password you chose when you signed up. "
             "If you do not remember it, create the account again.",
         )
+    # The sign-up lock FIRST, then the token row (consume), then the account row: every path that
+    # holds this lock and then touches this account's tokens (sign-up, the Google link) waits here
+    # instead of deadlocking against a confirmation that already holds the token.
+    session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": SIGNUP_LOCK})
     if tokens.consume(session, raw_token, "verify_email", now) is None:  # used a moment ago
         session.rollback()
         raise _bad_token()
-    # Under the sign-up lock (the same order as sign-up: this lock, then the account row), lock the
-    # account and look again: a sign-up for this address may have held it, and a place is only
-    # taken here, at confirmation, so it is counted once and ten at once cannot overfill the pilot.
-    session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": SIGNUP_LOCK})
+    # Under the sign-up lock (taken above), lock the account and look again: a sign-up for this
+    # address may have held it, and a place is only taken here, at confirmation, so it is counted
+    # once and ten at once cannot overfill the pilot.
     user = session.get(User, user.id, with_for_update=True, populate_existing=True)
     if user is None or user.status == "deleted":
         session.rollback()
         raise _bad_token()
-    if user.email_verified_at is None and not may_confirm(session, user, now):
+    if user.email_verified_at is None and may_confirm(session, user, now):
+        redeem_invite(session, user.email, now)  # a live invitation's place becomes the account's
+    elif user.email_verified_at is None:
         session.rollback()  # the link is not used up: it works when a place opens
         raise Refused(
             409,
