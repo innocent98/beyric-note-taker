@@ -145,6 +145,7 @@ Edit `.env`:
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional until Sign in with Google is wanted (both empty = the feature is off). The OAuth client's redirect address is `https://notes.beyrictech.com/api/auth/google/callback` |
 | `MAX_ACTIVE_BOTS` | Optional, default `1`. Bots on meetings at once across all users; a new meeting past it answers `409 bot_busy` |
 | `AUDIO_RETENTION_DAYS` | Optional, default `7`. The same value is shown on `/privacy` (compose passes it to `next`) |
+| `SCHEDULER_DISPATCH_SECONDS`, `SCHEDULER_SYNC_SECONDS` | Optional, defaults `10` and `60`: how often the `scheduler` service's two loops run (and how often a standby retries the leader lock). Leave them alone unless told to |
 
 ## 4. Start Vexa and create the app's key
 
@@ -457,6 +458,16 @@ Operating notes: the worker sends the mail and removes deleted accounts (`docker
 worker`; a mail provider that is down only delays mail, and `GET /api/admin/mail-failures` lists
 what failed). Delete one account for good with
 `docker compose exec web python scripts/delete_user.py someone@example.com` (it asks first).
+
+The `scheduler` service (`python -m app.scheduler`, same image as `worker`, limited to 256 MB) does
+the time-critical work of the calendar features; see `docs/sop/2026-11-03-phase-c-scheduler.md`.
+Only one copy acts, through a Postgres advisory lock on its own connection, so a second replica
+is a standby and takes over within about 10 seconds. It needs no setting and nothing depends on
+it: if it cannot start, `web` and `next` are unaffected. `deploy/deploy.sh` waits up to 60
+seconds after `up` for a heartbeat newer than the deploy (`app_state.scheduler_heartbeat_at`) and
+rolls back when there is none. Check it by hand with `docker compose logs --tail 20 scheduler` and
+`docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA' <<< "select now() - scheduler_heartbeat_at from app_state;"`
+(a few seconds when healthy).
 
 ## Follow-ups
 

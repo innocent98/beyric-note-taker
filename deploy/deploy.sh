@@ -5,8 +5,8 @@
 #
 # Steps: check the SHA is on origin/main, back up the database, check out the SHA, build, start,
 # and wait until both services answer: FastAPI (`web`, 127.0.0.1:8021) and the Next.js front door
-# (`next`, 127.0.0.1:8020), including the path between them. If the new version never turns
-# healthy, the previous commit is started again. A migration that already ran is NOT undone; see
+# (`next`, 127.0.0.1:8020), including the path between them, and until the scheduler has written a
+# fresh heartbeat. If the new version never turns healthy, the previous commit is started again. A migration that already ran is NOT undone; see
 # deploy/README.md "Updating and rolling back".
 #
 # Everything runs inside main(), which bash reads in full before running it, so checking out a
@@ -45,7 +45,9 @@ main() {
     docker compose build --quiet
     docker compose up -d --remove-orphans
 
-    if wait_healthy; then
+    # The rollback below waits for the web and next health only: it must work for a commit that
+    # has no scheduler, and a scheduler problem is a reason to roll back, not to wait.
+    if wait_healthy && wait_scheduler_beat; then
         echo "deployed $sha"
         return 0
     fi
@@ -59,6 +61,34 @@ main() {
     docker compose up -d --remove-orphans
     wait_healthy || echo "previous version is not healthy either; check the server" >&2
     return 1
+}
+
+# A commit with a `scheduler` service must show a heartbeat newer than the moment `up` returned
+# (the old scheduler is stopped by then, so an old beat cannot count). The scheduler is not in
+# anyone's depends_on, so a crash-looping one never fails `up` or the web and next checks above;
+# this is the only place it is noticed. Bounded (60 s: a start, plus a standby's takeover tick of
+# up to 10 s), and skipped for a commit whose compose file has no scheduler.
+wait_scheduler_beat() {
+    docker compose config --services 2>/dev/null | grep -qx scheduler || return 0
+    local since
+    since="$(date +%s)"
+    for _ in $(seq 1 15); do
+        if [ "$(scheduler_beat_since "$since")" = "1" ]; then
+            return 0
+        fi
+        sleep 4
+    done
+    echo "the scheduler wrote no heartbeat within 60 s" >&2
+    docker compose logs --tail 30 scheduler >&2 || true
+    return 1
+}
+
+scheduler_beat_since() {
+    # SQL on stdin (quoting through `sh -c` is fragile). Prints 1 when a beat is newer than $1 + 1:
+    # `date +%s` truncates, and the old scheduler's last beat can fall in the same second.
+    docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tA' 2>/dev/null <<SQL | tr -d '[:space:]'
+select count(*) from app_state where scheduler_heartbeat_at > to_timestamp($1 + 1);
+SQL
 }
 
 # Both services, and the hop between them. A commit from before the Next.js front door has no

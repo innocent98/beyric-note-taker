@@ -237,7 +237,8 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [x] C7 `will_join` rule function (2026-11-03, same PR; full rule x organiser x response x platform x override matrix; an unanswered invite from outside your organisation does not auto-join under `all`: **decision for Adebayo**, see the SOP)
   - [ ] C8 materialiser (events to rows); C8b sync job
   - [ ] C9 key re-encryption script
-  - [ ] C10 scheduler skeleton (leader lock, two loops, heartbeat, compose service); C10b periodic sweeps and mail tick
+  - [x] C10 scheduler skeleton (2026-11-03, `feature/c10-scheduler`; leader advisory lock on its own connection, dispatch and sync loops, injected clock, heartbeat, compose service, `deploy.sh` heartbeat wait; no migration, no required setting; SOP `docs/sop/2026-11-03-phase-c-scheduler.md`). Verified on a real Postgres and with two real processes (failover, clean stop). Not yet run on the server; the four `deploy.sh` stub tests join `tests/test_deploy_script.py` after #47 merges
+  - [ ] C10b periodic sweeps and mail tick
   - [ ] C11 `place_bot()` single host (Opus review); C11b alerts helper (admin email via Resend)
   - [ ] C12 join runner (dispatch at start minus `AUTOJOIN_LEAD_SECONDS`, no-capacity retry, catch-up)
   - [ ] C13 connection states and refresh failures; C14 disconnected notifications and email

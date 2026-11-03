@@ -76,6 +76,11 @@ class Settings(BaseSettings):
     # once `google_client_id` is set.
     calendar_enabled: bool = False
 
+    # The scheduler's two loops (spec section 9.7): dispatch every 10 s (which is also how often
+    # a standby retries the leader lock), the sync loop wakes every 60 s. Not required.
+    scheduler_dispatch_seconds: int = 10
+    scheduler_sync_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:
