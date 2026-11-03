@@ -170,6 +170,26 @@ class FakeChat:
         )
 
 
+def test_running_the_eval_leaves_the_process_settings_as_they_were(tmp_path, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.delenv("NOTES_MODEL", raising=False)
+    get_settings.cache_clear()
+    before = get_settings().notes_model
+    notes = "\n\n".join(f"## {h}\nNone noted" for h in ev.notes_module.HEADINGS)
+    ev.run_cases(
+        [CASE],
+        FakeChat(notes, {}),
+        notes_model="some-other-model",
+        extract_model="m",
+        out_dir=tmp_path,
+    )
+    import os
+
+    assert "NOTES_MODEL" not in os.environ
+    assert get_settings().notes_model == before
+
+
 def test_run_cases_end_to_end_with_a_fake_model(tmp_path):
     notes = "\n\n".join(
         f"## {h}\n{body}"

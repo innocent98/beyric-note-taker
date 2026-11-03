@@ -19,6 +19,7 @@ Writes, into OUT_DIR, `<case>.notes.md` (reused by later runs, so two models see
 """
 
 import argparse
+import contextlib
 import json
 import os
 import pathlib
@@ -222,6 +223,23 @@ TEMPLATE = Template(
 )
 
 
+@contextlib.contextmanager
+def _notes_model(model: str):
+    """`generate_notes` reads the model from the settings; set it for one call, then put the
+    environment and the settings cache back exactly as they were."""
+    before = os.environ.get("NOTES_MODEL")
+    os.environ["NOTES_MODEL"] = model
+    notes_module.get_settings.cache_clear()
+    try:
+        yield
+    finally:
+        if before is None:
+            os.environ.pop("NOTES_MODEL", None)
+        else:
+            os.environ["NOTES_MODEL"] = before
+        notes_module.get_settings.cache_clear()
+
+
 def run_cases(
     cases, client, *, notes_model: str, extract_model: str, out_dir: pathlib.Path
 ) -> dict:
@@ -233,14 +251,13 @@ def run_cases(
         if notes_path.exists():
             text = notes_path.read_text()
         else:
-            os.environ["NOTES_MODEL"] = notes_model
-            notes_module.get_settings.cache_clear()
-            text = notes_module.generate_notes(
-                case.transcript,
-                TEMPLATE,
-                case.vocabulary,
-                client=Counting(client, tally, "notes"),
-            )
+            with _notes_model(notes_model):
+                text = notes_module.generate_notes(
+                    case.transcript,
+                    TEMPLATE,
+                    case.vocabulary,
+                    client=Counting(client, tally, "notes"),
+                )
             notes_path.write_text(text)
         parsed = parse_notes(text)
         record = dict(case=case.name, extraction_failed=False)
