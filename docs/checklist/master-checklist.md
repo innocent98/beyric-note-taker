@@ -146,7 +146,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [x] Written design (`docs/superpowers/specs/2026-11-03-pilot-accounts-calendar-design.md`): drafted, builder-checked and **answered by Adebayo 2026-11-03** (section 0a overrides the older question table)
 - [x] Implementation plan: `docs/superpowers/plans/2026-11-03-pilot-accounts-calendar.md` (2026-11-03; open as `docs/pilot-plan`). Per-task files, tests, reviewer, dependencies and the single "Needs Adebayo" table are there; the lists below mirror its task IDs
 - [ ] Phase 0, prerequisites and spikes (parallel, no app code)
-  - [ ] P0.1 Google console: approved scopes cover `calendar.events.readonly` and, if the spike works, the Meet scopes (Adebayo pastes, session writes `docs/spike/pilot-google-console.md`)
+  - [ ] P0.1 Google console state: **branding verified only; the sensitive scopes are NOT verified** (Adebayo's correction of spec 0a Q7). Record Audience, Data Access and Verification Center; declare the scopes (`docs/spike/pilot-google-console.md`)
   - [ ] P0.2 Instant-Meet spike S1 to S7 and S9 on a personal Gmail first (gate outcome G1 to G4 decides Phase I)
   - [ ] P0.3 Vexa checks: chat posting, per-key limit, bot listing, health endpoint
   - [ ] P0.4 Resend state: domain, SPF/DKIM/DMARC, a delivered test mail, `ADMIN_ALERT_EMAIL`
@@ -154,6 +154,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] P0.6 Second bot machine rented, private link up (Adebayo)
   - [ ] P0.7 Teams spike with a real Teams meeting (Q17)
   - [ ] P0.8 Join-time measurement fixes `AUTOJOIN_LEAD_SECONDS` (default 60)
+  - [ ] P0.9 Before testers: Adebayo moves the Cloud project from Testing to "In production" (still unverified), sets `GOOGLE_OAUTH_TESTING=false`; session records the unverified-app screen and the day-8 token check
 - [ ] Phase A, accounts: **in progress, owned by other sessions** (`feature/pilot-accounts-core`, then `feature/pilot-accounts-signup`; tasks A1 to A20 in spec section 15, not re-planned): sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap, admin API
 - [ ] Phase C, Google Calendar auto-join plus the ICS source (needs A6, A9, A13, A18 for most tasks)
   - [ ] C1 migration for connections, events, scheduled joins
@@ -181,7 +182,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [ ] Phase D, several bots at once (do not invite more than one or two testers before D9b)
   - [ ] D1 `bot_hosts` migration; D2 `vexa_for(host)`; D3 health checker; D4 `place_bot()` generalised (Opus review); D5 per-user limit across hosts
   - [ ] D6 forecast and capacity endpoint; D7 admin host endpoints; D8 second host files; D9a worker concurrency; D9b load test (M2) and `max_bots`; D10 close-out
-- [ ] Phase V, Google verification: V0 revisit the landing and sign-in copy (decision from 2026-11-03 ends here), V1 consent screen versus policy and app, V2 demo video (Adebayo records), V3 scope justifications, V4 submit and answer the reviewer (shape set by P0.1)
+- [ ] Phase V, Google verification: **a real sensitive-scope submission** (review up to 10 days; scope changes after approval need a new review). V0 revisit the landing and sign-in copy (decision from 2026-11-03 ends here), V0a freeze the final scope list (Meet only if the instant-Meet spike passes), V1 consent screen versus policy and app, V2 demo video (Adebayo records), V3 scope justifications, V4 submit as early as the flow works and answer the reviewer; the pilot runs meanwhile on the unverified-app screen (100-user cap)
 - [ ] Clear "calendar disconnected" state (built in C13 and C14; the 7-day expiry path stays dormant while the Google app is verified)
 
 ## Backlog

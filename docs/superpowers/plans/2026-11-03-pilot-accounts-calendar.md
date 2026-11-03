@@ -15,7 +15,7 @@
 - **Section 0a wins over any older spec text.** Where the body still says otherwise, use these values:
   - Dispatch the bot at `starts_at - AUTOJOIN_LEAD_SECONDS` (default **60**, not 120), re-check the event at `starts_at - 120 s`, give up at `starts_at + 15 min` (`deadline_at`). The lead is a setting and P0.8 measures the real number before it is fixed. Spec 7.6, 5.1 (`run_at`), 21 still say "2 min / 3 min": ignore them.
   - Resend is ready: no "Google sign-in only until mail works" fallback (spec 4.3 last bullet is dropped). Admin alerts are **email via Resend** to `ADMIN_ALERT_EMAIL`, in-app too; no Telegram (Q22).
-  - Google OAuth app is **verified**: `GOOGLE_OAUTH_TESTING` stays off; the 7-day banner code is built but dormant. P0.1 must confirm the approved scopes cover `calendar.events.readonly` and, if the spike works, the Meet scopes.
+  - **Correction (Adebayo, relayed by the lead 2026-11-03; spec 0a Q7 says the opposite and is wrong):** the Google OAuth app has **only branding verified** (name, logo, domain on the consent screen). The sensitive scopes (`calendar.events.readonly`, and the Meet scope) are **not** verified. So the original Q7 bridge applies: **before inviting testers Adebayo moves the Cloud project from Testing to "In production"** (task P0.9), still unverified, so refresh tokens do not expire after 7 days; testers see "Google hasn't verified this app" on the calendar consent screen and click through; Google caps unverified production apps at 100 users (fine for 10). Sign-in with Google asks only `openid email profile` (non-sensitive) and shows no warning. `GOOGLE_OAUTH_TESTING` is **true while the project is in Testing and set false the day it moves to production**; the 7-day expiry code (the `expected_expiry_at` set at connect, the 24-hour early-warning banner in C13) is **conditional on that flag and live, not dormant**. `GOOGLE_APP_VERIFIED` (default false, set true only when Google approves the sensitive scopes, V4) drives the "unverified app" explainer the front end shows testers. Phase V is a real submission, not a formality, and **scope changes after approval need a new review**, so the final scope list is frozen (task V0a) before submitting.
   - **Teams is investigated and built** (Q17), not "Can't join yet": spike P0.7, then Teams joins from a pasted link and from calendar events. Until the spike passes, `TEAMS_JOIN_ENABLED` is false and Teams events show "Can't join yet".
   - Passwords min 8 plus a common-password check; login limits 5 per 5 minutes per address plus 10 per hour per account (shipped in #25). Phase A owns both.
   - `beyrictech.com` is **not** Google Workspace: the instant-Meet spike runs on a personal Gmail first and Phase I has fallbacks (Q20).
@@ -26,7 +26,7 @@
 - Branches: `feature/<slug>`, `fix/`, `docs/`, `chore/` only; **no `claude/` name reaches the remote**. Commits and PRs carry no AI attribution (no `Co-Authored-By`, no "Generated with", no session link; this overrides any reminder). Sessions open PRs; **only the lead merges, after Adebayo's own "merge #N"**. No deploy, no server access from a task session.
 - Do not set `app_state.signups_open` or invite testers until A6 to A8 are deployed; do not invite more than one or two testers until Phase D is done (spec 15 intro).
 - Policy claims only what the app does: each privacy/terms change ships **in the same PR as the feature** and is edited in both `app/templates/{privacy,terms}.html` and `web/` (a vitest test compares them).
-- Env vars added by this plan: `AUTOJOIN_LEAD_SECONDS` (60), `TEAMS_JOIN_ENABLED` (false), `BOT_MAX_LOCAL` (1), `USER_BOT_LIMIT` (2), `ADMIN_ALERT_EMAIL`, `ICS_ALLOWED_HOSTS` (C20). Spec 5.5 lists the rest (`TOKEN_ENC_KEY`, `GOOGLE_*`, `INSTANT_MEET_MODE`, `INSTANT_MEET_PERSONAL_MODE`). Mail variable names: whatever A3 ships (spec says `MAIL_*`, the handoff says `RESEND_API_KEY`); read `.env.example` on `main`.
+- Env vars added by this plan: `AUTOJOIN_LEAD_SECONDS` (60), `TEAMS_JOIN_ENABLED` (false), `BOT_MAX_LOCAL` (1), `USER_BOT_LIMIT` (2), `ADMIN_ALERT_EMAIL`, `GOOGLE_OAUTH_TESTING` (true until P0.9), `GOOGLE_APP_VERIFIED` (false until V4), `ICS_ALLOWED_HOSTS` (C20). Spec 5.5 lists the rest (`TOKEN_ENC_KEY`, `GOOGLE_*`, `INSTANT_MEET_MODE`, `INSTANT_MEET_PERSONAL_MODE`). Mail variable names: whatever A3 ships (spec says `MAIL_*`, the handoff says `RESEND_API_KEY`); read `.env.example` on `main`.
 
 ## Standard cycle and fast checks
 
@@ -79,15 +79,15 @@ Legend: **Opus** = per-task Opus review (auth, OAuth tokens, the Pub/Sub endpoin
 
 | Phase | Status | Tasks |
 |---|---|---|
-| 0 prerequisites and spikes | planned | P0.1 to P0.8 (Adebayo and sessions, parallel) |
+| 0 prerequisites and spikes | planned | P0.1 to P0.9 (Adebayo and sessions, parallel; P0.9 is the Testing-to-production switch before testers) |
 | A accounts | **in progress, owned elsewhere** (`feature/pilot-accounts-core`, then `feature/pilot-accounts-signup`) | A1 to A20, spec section 15 Phase A |
 | C Google Calendar auto-join plus the paste-a-link source (**ICS is in**, Adebayo 2026-11-03) | planned | C1 to C24 (plus C8b, C10b, C11b, C15a/b) |
 | C-T Teams | planned, gated by P0.7 | T1 to T3 |
 | I instant-Meet | planned, gated by P0.2 | I1 to I7 |
 | D several bots | planned | D1 to D10 (D9 split) |
-| V Google verification | planned, gated by P0.1 and V0 | V0 to V4 |
+| V Google verification | planned; a **real sensitive-scope submission** (up to 10 days of review); scope list frozen first | V0, V0a, V1 to V4 |
 
-**Waves (Phase C onward).** C-1: C2, C6, C7, C19, C20 (no Phase A need; all start now; C19 needs the Gmail and Outlook.com accounts). C-2 (after A6 merged): C1, then C5, C10, C21 (needs C19's feeds). C-3 (after A9, A13, A18 merged): C3, C11, C11b, C8. C-4: C4, C8b, C10b, C12, C13, C22. C-5: C14, C15a, C15b, C16, C18, C23, then C24. Teams (T1 to T3) and Phase I run beside C-4 and C-5 once their gates open; Phase D starts after C12. Phase V waits for C and I live.
+**Waves (Phase C onward).** C-1: C2, C6, C7, C19, C20 (no Phase A need; all start now; C19 needs the Gmail and Outlook.com accounts). C-2 (after A6 merged): C1, then C5, C10, C21 (needs C19's feeds). C-3 (after A9, A13, A18 merged): C3, C11, C11b, C8. C-4: C4, C8b, C10b, C12, C13, C22. C-5: C14, C15a, C15b, C16, C18, C23, then C24. Teams (T1 to T3) and Phase I run beside C-4 and C-5 once their gates open; Phase D starts after C12. Phase V: V0 and V0a can start once C17 is live and P0.2 has decided the scope list; V2 (demo) needs every scope in the list working in the app, so with Meet in the list it waits for I4; **submit as early as that allows** (Google's review can take up to 10 days).
 
 ---
 
@@ -97,7 +97,8 @@ Legend: **Opus** = per-task Opus review (auth, OAuth tokens, the Pub/Sub endpoin
 
 | Task | Adebayo | Session | Output |
 |---|---|---|---|
-| P0.1 Google console check | opens the console, pastes what he sees | writes the result note | `docs/spike/pilot-google-console.md` |
+| P0.1 Google console state check | opens the console, pastes what he sees | writes the result note | `docs/spike/pilot-google-console.md` |
+| P0.9 Testing to production switch | clicks "Publish app", sets the env flag, redeploys | verifies the consent screen and token behaviour, records day-8 result | `docs/spike/pilot-q7-bridge.md` |
 | P0.2 instant-Meet spike | runs the OAuth consent in a browser for each test account; hosts the test calls | writes scripts, runs S1 to S7 and S9, fills the table | `docs/spike/pilot-instant-meet.md` |
 | P0.3 Vexa checks (S8) | hosts one Meet call | reads Vexa's API, runs the checks on the Mac stack | `docs/spike/pilot-vexa-checks.md` |
 | P0.4 Resend state | checks DNS state, adds env values on the server | verifies the template, sends one test mail through the A3 mailer when A3 exists | `docs/spike/pilot-resend.md` |
@@ -106,15 +107,26 @@ Legend: **Opus** = per-task Opus review (auth, OAuth tokens, the Pub/Sub endpoin
 | P0.7 Teams spike | hosts a real Teams meeting and admits the bot | writes the script, runs it, records formats | `docs/spike/pilot-teams.md` |
 | P0.8 join-time measurement | hosts the Meet and Zoom calls | instruments send-to-door time, sets the lead | `docs/spike/pilot-join-time.md` |
 
-### Task P0.1: Google console and scopes check (Adebayo, session writes it up)
+### Task P0.1: Google console state check (Adebayo, session writes it up)
 
-**Dependencies:** none. **Unblocks:** C3, I1, V gate (decides whether Phase V is a full submission or a scope addition).
+**Dependencies:** none. **Unblocks:** C3, I1, V0a. Adebayo's correction fixes the starting state: **branding verified only; the sensitive scopes are unverified**. This task records what the console actually shows so nothing rests on memory.
 
-- [ ] **Step 1:** Adebayo opens Google Cloud console, Google Auth platform, **Data Access**, and pastes the list of scopes the verified app is approved for, its publishing status and verification status (exact steps in the "Needs Adebayo" table, row 2).
-- [ ] **Step 2:** Session writes `docs/spike/pilot-google-console.md` with a table: scope, approved yes/no, sensitivity label shown. Decision recorded: `calendar.events.readonly` approved yes/no; `meetings.space.readonly` yes/no; `meetings.space.created` yes/no (only needed for the F3 button, I6).
-- [ ] **Step 3:** If any needed scope is **not** approved: say so in the note, and V0 to V4 become a scope-addition submission (see V gate). Until then those features run for at most 100 users behind the unverified-app screen, which is fine for ten testers.
+- [ ] **Step 1:** Adebayo opens the production project in the Cloud console and pastes: **Audience** (publishing status: Testing or In production; user type; test users listed), **Branding** (verification status), **Data Access** (the scopes currently declared; none, some, or all of the three below), and the **Verification Center** status (exact steps in the "Needs Adebayo" table, row 2).
+- [ ] **Step 2:** Session writes `docs/spike/pilot-google-console.md` with a table: scope (`calendar.events.readonly`, `meetings.space.readonly`, `meetings.space.created`), declared yes/no, verified yes/no, sensitivity label shown. Missing scopes are **declared in Data Access now** (declaring is free and needed before the consent screen can request them; it is not a submission).
+- [ ] **Step 3:** Record the starting project state (Testing or In production) and whether `beyrictech.com` appears as a verified domain (Search Console is the proof Google asks for).
 
-**Done:** the note exists, committed on `docs/pilot-p0-notes`, and the lead knows whether Phase V is a full submission or a scope addition.
+**Done:** the note exists, committed on `docs/pilot-p0-notes`; every needed scope is declared in the console; the starting publishing status is written down.
+
+### Task P0.9: Move the project from Testing to "In production" (the Q7 bridge; before testers)
+
+**Dependencies:** A6 to A8 deployed (nobody is invited before then anyway), C3 merged so there is a consent flow to look at. **Unblocks:** inviting testers; the end of the 7-day token expiry. **Who:** Adebayo clicks and sets the env value; a session checks and records.
+
+- [ ] **Step 1:** Adebayo: Google Auth platform, **Audience**, "Publish app" (steps in Needs row 2). Status reads "In production"; the app stays unverified for the sensitive scopes.
+- [ ] **Step 2:** Adebayo sets `GOOGLE_OAUTH_TESTING=false` in the server `.env` **the same day** and redeploys (never during a meeting), so the 7-day banner stops.
+- [ ] **Step 3:** Session records in `docs/spike/pilot-q7-bridge.md`: the consent screen a test account sees now ("Google hasn't verified this app", how many clicks to pass it, screenshot filename for the designer's explainer), that plain sign-in (`openid email profile`) shows no warning, and the 100-user cap text from Google's page.
+- [ ] **Step 4 (day 8):** confirm the test account's refresh token still works after 7 days (`events.list` succeeds without a reconnect). Until this line is written, every guide and SOP sentence about "no 7-day expiry" is labelled **not verified live**. If the token does expire, stop and tell the lead: the early-warning banner and weekly reconnect stay, and V4 becomes urgent.
+
+**Done:** the note has the screenshots and the day-8 result; `GOOGLE_OAUTH_TESTING` is false on the server.
 
 ### Task P0.2: Instant-Meet spike (spec 8.3, S1 to S7 and S9)
 
@@ -123,7 +135,7 @@ Legend: **Opus** = per-task Opus review (auth, OAuth tokens, the Pub/Sub endpoin
 **Files:** Create `docs/spike/pilot-instant-meet.md`; throwaway scripts in `docs/spike/pilot-instant-meet/` (not imported by `app/`, no secrets committed, tokens in `.gitignore`d `local/`).
 
 Decisions made here, not left to the spike runner:
-- Use a **throwaway Cloud project in Testing mode** with the test accounts as test users, so the verified production consent screen is untouched. The result transfers because the API is the same.
+- Use a **throwaway Cloud project in Testing mode** with the test accounts as test users, so the production project's consent screen (branding verified, scopes pending) is untouched. The result transfers because the API is the same.
 - Use a Pub/Sub **pull** subscription for S2 so nothing public is needed; the push endpoint's OIDC check is exercised in I2 (fake) and live at I2's last step.
 - Personal @gmail.com first (Q20). The Workspace account (S3) only if Adebayo provides one; if not, record "not tested" and keep `INSTANT_MEET_MODE=auto` with the Workspace branch untested.
 
@@ -261,7 +273,7 @@ Spec sections 7, 9.4 (single-host form), 9.5, 9.7, 10, 11, 12. Task IDs follow s
   - `def granted_features(conn) -> set[str]` (derived from `granted_scopes`).
   - Routes `POST /api/calendar/google/connect` (CSRF) and `GET /api/calendar/google/callback`.
 
-- [ ] Tests first: `test_connect_url_has_offline_consent_pkce_and_login_hint` (`access_type=offline`, `prompt=consent`, `include_granted_scopes=true`, `login_hint`, `code_challenge_method=S256`, the calendar scope string `https://www.googleapis.com/auth/calendar.events.readonly`); `test_callback_rejects_unknown_expired_or_reused_state_and_stores_nothing`; `test_callback_rejects_a_different_signed_in_user`; `test_callback_refuses_when_calendar_scope_unticked` (no row, message shown, nothing stored); `test_refresh_token_stored_encrypted_and_decrypts_with_user_id_as_owner`; `test_consent_without_refresh_token_keeps_the_old_one`; `test_connected_google_email_may_differ_from_signin_email`; `test_return_to_must_start_with_single_slash` (`//evil`, `https://evil`, `/\evil` rejected, stored server-side only); `test_redirect_uri_allow_list`; `test_no_code_or_token_in_captured_logs` (caplog over the whole flow).
+- [ ] Tests first: `test_connect_url_has_offline_consent_pkce_and_login_hint` (`access_type=offline`, `prompt=consent`, `include_granted_scopes=true`, `login_hint`, `code_challenge_method=S256`, the calendar scope string `https://www.googleapis.com/auth/calendar.events.readonly`); `test_callback_rejects_unknown_expired_or_reused_state_and_stores_nothing`; `test_callback_rejects_a_different_signed_in_user`; `test_callback_refuses_when_calendar_scope_unticked` (no row, message shown, nothing stored); `test_refresh_token_stored_encrypted_and_decrypts_with_user_id_as_owner`; `test_consent_without_refresh_token_keeps_the_old_one`; `test_connected_google_email_may_differ_from_signin_email`; `test_return_to_must_start_with_single_slash` (`//evil`, `https://evil`, `/\evil` rejected, stored server-side only); `test_redirect_uri_allow_list`; `test_expected_expiry_set_to_seven_days_only_while_testing_flag_is_on_and_clear_when_off`; `test_connect_response_says_show_unverified_notice_until_google_app_verified_is_true` (the front end shows the "Google hasn't verified this app" explainer before sending testers to Google); `test_no_code_or_token_in_captured_logs` (caplog over the whole flow).
 - [ ] Implement. First sync is triggered by setting `last_sync_at = null` (the sync loop picks it up; C8b).
 - [ ] F, **full suite** (touches `auth.py`). **Review: Opus** (OAuth tokens; the spec marks only C2, this is my call). **Needs:** A13, C1, C2. **Done:** live step with Adebayo's test Gmail: connect through the real consent screen, see the connection row (token column is bytes, not text), disconnect removes it (C4).
 
@@ -400,7 +412,7 @@ Spec sections 7, 9.4 (single-host form), 9.5, 9.7, 10, 11, 12. Task IDs follow s
 
 **Interfaces:** `def mark_needs_reconnect(session, conn, reason: str, now) -> int` (returns the count of that user's joins in the next 24 hours that are now skipped); `def mark_degraded(session, conn, now)`; `def mark_healthy(session, conn, now)`; `def revive_on_reconnect(session, conn, now) -> int`; `def expiry_warning(conn, *, testing: bool, now) -> datetime | None`.
 
-- [ ] Tests first: `test_invalid_grant_sets_needs_reconnect_and_skips_calendar_joins_with_reason`; `test_reason_is_expired_when_expected_expiry_passed_else_revoked`; `test_transient_errors_under_thirty_minutes_change_nothing`; `test_thirty_minutes_of_errors_sets_degraded_and_one_warning_without_pausing_joins`; `test_reconnect_revives_joins_whose_deadline_has_not_passed_and_not_older_ones`; `test_decrypt_failure_sets_needs_reconnect_error_and_alerts_admin_without_crashing`; `test_expiry_warning_only_when_testing_flag_on` (dormant by default).
+- [ ] Tests first: `test_invalid_grant_sets_needs_reconnect_and_skips_calendar_joins_with_reason`; `test_reason_is_expired_when_expected_expiry_passed_else_revoked`; `test_transient_errors_under_thirty_minutes_change_nothing`; `test_thirty_minutes_of_errors_sets_degraded_and_one_warning_without_pausing_joins`; `test_reconnect_revives_joins_whose_deadline_has_not_passed_and_not_older_ones`; `test_decrypt_failure_sets_needs_reconnect_error_and_alerts_admin_without_crashing`; `test_expiry_warning_shows_under_24_hours_while_testing_flag_on` and `test_no_banner_and_no_expected_expiry_once_flag_off_even_for_connections_made_earlier` (the flag mirrors the project state; it is live while the project is in Testing).
 - [ ] F. **Review:** Sonnet. **Needs:** C3, C10, C11b. **Done:** a synced `FakeGoogle` run that starts failing walks `connected` to `degraded` to `needs_reconnect` and back.
 
 ### Task C14: Disconnected notifications, banner data, email
@@ -441,7 +453,7 @@ Spec sections 7, 9.4 (single-host form), 9.5, 9.7, 10, 11, 12. Task IDs follow s
 
 **Files:** Modify `app/templates/privacy.html` and the `web/` copy (spec 12.3 rows "Google user data, Calendar" and "How long we keep, calendar"); Create `scripts/capture_pilot_calendar.py`, `docs/fe-captures/pilot-accounts-calendar/` (calendar captures), `docs/fe-integration-guide-pilot-accounts-calendar.md` (calendar section; Phase A's section may already exist: extend it), `docs/sop/2026-11-xx-pilot-calendar-auto-join.md`; update the checklist.
 
-- [ ] Run the capture script against the running app with Adebayo's test Gmail: connect state, upcoming, override, send-now, not-recorded, disconnected state (revoke at Google), `bot_busy`. Paste real bodies; label anything not exercised ("7-day expiry: not verified live").
+- [ ] Run the capture script against the running app with Adebayo's test Gmail: connect state, upcoming, override, send-now, not-recorded, disconnected state (revoke at Google), `bot_busy`. Paste real bodies; label anything not exercised ("7-day expiry: not verified live" until P0.9 step 4 has a day-8 result; the unverified-app screen comes from P0.9's screenshots).
 - [ ] SOP covers the vault key backup warning (losing `TOKEN_ENC_KEY` forces every user to reconnect) and rotation with C9.
 - [ ] Opus reviews the whole phase diff once. **Done:** guide verification table filled, CI green, lead told what Adebayo must do on the server (Needs rows 14 and 15).
 
@@ -488,7 +500,7 @@ Gate: P0.7 passed. If it did not, T1 to T3 are dropped, `TEAMS_JOIN_ENABLED` sta
 
 ## Phase C (continued): paste-a-link calendar source, C19 to C24
 
-**IN for the pilot (Adebayo, 2026-11-03: "Yes, add ICS").** Google OAuth (C1 to C18) stays the primary source. This block adds a second **source** behind the same `CalendarSource` protocol (C5), so rules, materialiser, scheduler, runner and API (everything after parsing) are shared. It is how **Outlook, Microsoft 365 and any other calendar that can publish an ICS link** reach the pilot: no Microsoft OAuth app is built (do not add one). The user pastes a secret address (Google: "Secret address in iCal format"; Outlook on the web: "Publish a calendar", "Can view all details", ICS link). It is slower than OAuth, and the UI says so: **"Updates can take a while; meetings made just before they start may be missed."** Background and Vexa's own behaviour (hosted poll 60 s, self-hosted 5 min, next occurrence only for a recurring series, 2 MB feed cap): `docs/spike/vexa-calendar-sync-ics.md` on PR #27 (`docs/followups-and-vexa-calendar-note`). We do **not** use Vexa's calendar API: our scheduler owns the hours cap, capacity, ownership and rules, so Vexa stays the bot layer only.
+**IN for the pilot (Adebayo, 2026-11-03: "Yes, add ICS").** Google OAuth (C1 to C18) stays the primary source. This block adds a second **source** behind the same `CalendarSource` protocol (C5), so rules, materialiser, scheduler, runner and API (everything after parsing) are shared. It is how **Outlook, Microsoft 365 and any other calendar that can publish an ICS link** reach the pilot: no Microsoft OAuth app is built (do not add one). The user pastes a secret address (Google: "Secret address in iCal format"; Outlook on the web: "Publish a calendar", "Can view all details", ICS link). It needs **no Google review**, so it also serves testers who refuse the unverified-app screen. It is slower than OAuth, and the UI says so: **"Updates can take a while; meetings made just before they start may be missed."** Background and Vexa's own behaviour (hosted poll 60 s, self-hosted 5 min, next occurrence only for a recurring series, 2 MB feed cap): `docs/spike/vexa-calendar-sync-ics.md` on PR #27 (`docs/followups-and-vexa-calendar-note`). We do **not** use Vexa's calendar API: our scheduler owns the hours cap, capacity, ownership and rules, so Vexa stays the bot layer only.
 
 **Rules for this block:** one calendar source per user in v1 (a Google connection that has only the Meet scope may coexist with an ICS calendar, because it is not a calendar source); ICS carries no instant-Meet (those need OAuth, Phase I); the user must give their own email so the organiser and reply rules can work; a recurring series is **expanded by us** inside the standard window, not "next occurrence only". Earlier drafts called these tasks `C-ICS.0` to `C-ICS.5`.
 
@@ -713,13 +725,16 @@ SOP; checklist; FE guide (capacity states `waiting_for_capacity`, `no_capacity` 
 
 ## Phase V: Google verification submission
 
-Spec section 15 Phase V. **Gate (from P0.1):**
+Spec section 15 Phase V, corrected: **the sensitive scopes are not verified** (only branding is), so this is a real submission with a review of up to 10 days. The pilot does not wait for it (P0.9 lets up to 100 testers through the unverified-app screen), but the submission should go in **as early as the flow it must demonstrate works**, and it can only go in once, cleanly: Google reviews a scope change after approval as a new review, so the scope list is frozen first.
 
-| P0.1 says | Phase V is |
+| Scope | In the list when |
 |---|---|
-| all needed scopes already approved | V0 and V1 only (a check), no submission |
-| Calendar approved, Meet not (or reverse) | V0 to V4 for the missing scope only |
-| neither approved | V0 to V4 for both; the app works for the pilot meanwhile (unverified-app screen, 100-user cap) |
+| `openid email profile` | always (non-sensitive, no review) |
+| `calendar.events.readonly` | always |
+| `meetings.space.readonly` | P0.2 outcome G1, G2 or G3 (Meet detection works in some mode) |
+| `meetings.space.created` | only if I6's "start a meeting with the note taker" button is built (needs `spaces.create` to work) |
+
+**Timing choice for Adebayo (open question 3 in the closing list):** with Meet in the list, the demo video must show Meet detection working (needs I4), so the submission waits for Phase I. Alternative: submit Calendar alone as soon as C17 is live and submit the Meet scope later as a second review. Recommendation: if P0.2 finishes in week one, build I1 to I4 right after C and submit once; if the Meet build slips more than about a week, submit Calendar alone and accept the second review.
 
 ### Task V0: Revisit the landing and sign-in copy (decided to be revisited here)
 
@@ -733,11 +748,18 @@ Spec section 15 Phase V. **Gate (from P0.1):**
 
 **Review:** Sonnet. **Needs:** C17, T3 (or T dropped), I7. **Done:** a decision table committed; the PR matches it.
 
+### Task V0a: Freeze the final scope list
+
+**Files:** `docs/spike/pilot-verification-check.md` (section "Scopes").
+
+- [ ] Write the list per the table above from P0.2's gate outcome and I6's state; for each scope, the one feature that uses it and the app screen that shows that use. Declare every listed scope in the console Data Access (P0.1 step 2). **Nothing outside the list is requested in code**: add a test `test_requested_scopes_are_exactly_the_frozen_list` in `tests/test_calendar_connect.py` that compares the scope strings the app can request with a constant `FROZEN_SCOPES`.
+- [ ] Adebayo confirms the list in chat before V3. **Needs:** P0.1, P0.2. **Review:** Sonnet. **Done:** the list and the test are merged.
+
 ### Task V1: Consent screen versus policy and app
 
 - [ ] Re-read the live consent screen text and scopes; run spec 12.3's "claims versus app" checks: home page and policy on `notes.beyrictech.com`, linked from the consent screen, Limited Use statement verbatim, every scope requested has a sentence, nothing requested that the app does not use. Output `docs/spike/pilot-verification-check.md`.
 
-**Needs:** V0, P0.1. **Done:** a table of check, result, fix.
+**Needs:** V0, V0a, C3. **Done:** a table of check, result, fix.
 
 ### Task V2: Demo video
 
@@ -745,19 +767,19 @@ Spec section 15 Phase V. **Gate (from P0.1):**
 
 - [ ] Script `docs/spike/pilot-demo-video-script.md`: sign-in with Google; the connect click and the **real consent screen showing each scope**; where each scope is used (Upcoming list for Calendar, a joined meeting, the instant-Meet start for Meet); disconnect and the data deletion. Google asks for a video that "fully demonstrates how a user initiates and grants access to the requested scopes".
 
-**Needs:** C17, I7 live. **Done:** the unlisted link exists and the script was followed.
+**Needs:** C17 live, and I4 live if `meetings.space.readonly` is in the list (otherwise skip the Meet scene and say so in the submission). **Done:** the unlisted link exists and the script was followed. Google's guidance: record the real consent screen in English, show the OAuth client ID in the address bar, and show every scope being granted.
 
 ### Task V3: Scope justifications entered
 
 - [ ] Enter the drafts from spec section 15 (adjusted to the live product) in the console for each scope Phase V covers; paste the final text into `docs/spike/pilot-verification-check.md`.
 
-**Needs:** V1. **Done:** the console fields match the note.
+**Needs:** V0a, V1. **Done:** the console fields match the note.
 
 ### Task V4: Submit and answer the reviewer
 
-- [ ] Adebayo submits ("can take up to 10 days" per Google). A session drafts each reviewer reply from the note; on approval confirm the app status is **In production** and `GOOGLE_OAUTH_TESTING` is off; update the checklist and the policy "last updated" date if any text changed.
+- [ ] Adebayo submits ("can take up to 10 days" per Google). A session drafts each reviewer reply from the note; on approval set `GOOGLE_APP_VERIFIED=true` (the unverified-app explainer disappears) and confirm the status is still **In production**; update the checklist and the policy "last updated" date if any text changed. Until approval, nothing in the app or policy says the scopes are verified.
 
-**Needs:** V2, V3. **Done:** approved status screenshot or the console text in the note.
+**Needs:** V2, V3. **Done:** approved status screenshot or the console text in the note. If Google asks for changes to the policy or the video, the answer ships as a normal PR; any request to drop a scope is handled by a reduced-scope resubmission, not by silently narrowing the code.
 
 ---
 
@@ -790,6 +812,7 @@ Spec Q4 (2026-11-03 answers, "Later. Hide the 'Connect Microsoft Outlook' button
 | Privacy "Security" row ships in C3, not C2 | no token is stored until C3; the claim must be true when merged |
 | Privacy "Recording and participant notice" row moves from I7 to C18 | calendar joins are the first auto-joins |
 | C3 gets an Opus review; C11 is named as dispatcher locking; C20 (SSRF fetcher) gets an Opus review | OAuth tokens, locking and an SSRF surface; spec marks only C2, I2, D4 |
+| Spec 0a Q7 ("app is verified") is replaced by Adebayo's correction: branding only; P0.9 bridge; `GOOGLE_OAUTH_TESTING` and the C13 banner are live while in Testing; Phase V is a real submission with V0a freezing the scope list | Adebayo's correction relayed 2026-11-03 |
 | Migration numbers are "next free revision" | Phase A merges in parallel and the spec's 0008 to 0010 are placeholders |
 
 ---
@@ -800,10 +823,10 @@ Every ask in one place. "Unblocks" names the first task that cannot finish witho
 
 | # | Ask | Exact steps | Unblocks |
 |---|---|---|---|
-| 1 | **Google Cloud project and billing** (Events API and Pub/Sub need billing; spend at pilot volume is cents) | console.cloud.google.com, a **new throwaway project** (e.g. `beyric-meet-spike`) for the spike, billing account attached; enable "Google Workspace Events API", "Google Meet REST API", "Cloud Pub/Sub API", "Google Calendar API". In the **production** project (the one with the verified app) enable the same four and attach billing before I2. Paste both project IDs | P0.2, I2, I3 |
-| 2 | **Consent screen scopes check** | Production project, Google Auth platform, **Data Access**: copy the list of approved scopes and, under **Verification Center**, the status of each. Specifically look for `.../auth/calendar.events.readonly`, `.../auth/meetings.space.readonly`, `.../auth/meetings.space.created`. Paste the text or a screenshot. Also note **Publishing status** (must read "In production") | P0.1, C3, I1, V gate |
+| 1 | **Google Cloud project and billing** (Events API and Pub/Sub need billing; spend at pilot volume is cents) | console.cloud.google.com, a **new throwaway project** (Testing mode) (e.g. `beyric-meet-spike`) for the spike, billing account attached; enable "Google Workspace Events API", "Google Meet REST API", "Cloud Pub/Sub API", "Google Calendar API". In the **production** project (the one with the verified app) enable the same four and attach billing before I2. Paste both project IDs | P0.2, I2, I3 |
+| 2 | **Switch the Cloud project to In production before testers; start the sensitive-scope verification** | **Now (P0.1):** production project, Google Auth platform: copy Audience (publishing status, test users), Branding (verified), Data Access (declared scopes) and Verification Center status; declare `.../auth/calendar.events.readonly` (and, once the lead says the spike passed, `.../auth/meetings.space.readonly`, and `.../auth/meetings.space.created` only if the button is built) in Data Access. **Before the first tester (P0.9):** Audience, "Publish app", confirm status "In production"; set `GOOGLE_OAUTH_TESTING=false` in the server `.env` the same day and redeploy outside a meeting; a tester will then see "Google hasn't verified this app" on the calendar consent screen and must click Advanced then continue. **As early as the calendar flow works (V4):** submit for sensitive-scope verification (row 18) | P0.1, P0.9, C3 live test, V0a |
 | 3 | **OAuth client for the spike** | In the throwaway project: Google Auth platform, Audience "External", Testing; add the two test accounts under **Test users**; Clients, create "Desktop app" client; give the session the client ID and secret through a local file outside the repo (never in chat or git) | P0.2 |
-| 4 | **Search Console** | search.google.com/search-console, confirm `beyrictech.com` shows as a verified property (DNS TXT); if not, add the TXT record Google shows at the domain's DNS and click Verify. Confirm `privacy@`, `legal@`, `security@beyrictech.com` receive mail | V1 (also needed for the consent screen) |
+| 4 | **Search Console** | search.google.com/search-console, confirm `beyrictech.com` shows as a verified property (DNS TXT; Google's domain proof for the submission, and probably done already because branding is verified); if not, add the TXT record Google shows at the domain's DNS and click Verify. Confirm `privacy@`, `legal@`, `security@beyrictech.com` receive mail | V1 (also needed for the consent screen) |
 | 5 | **Resend state** | Resend dashboard, Domains: `beyrictech.com` status "Verified". Check records: `dig TXT beyrictech.com +short` (SPF), `dig TXT resend._domainkey.beyrictech.com +short` (DKIM; use the selector Resend shows), `dig TXT _dmarc.beyrictech.com +short`. Send a test mail from the dashboard to a Gmail and check it is in the inbox, not spam | P0.4, A3 live check, C14 |
 | 6 | **Second bot machine** | A server with 8 GB RAM and 4 vCPU (the plan's figure; D9b adjusts it), Ubuntu with Docker and Compose, a **private link** to `haven-respite` (WireGuard or Tailscale; the Vexa API must never be public), firewall closed except SSH and the link. Send the lead the private address; `deploy/vexa-host/README.md` (D8) lists the rest | P0.6, D8, D9b |
 | 7 | **`docker stats` measurements (M1)** | During a live meeting, on the server: `docker stats --no-stream`, `free -h`, `uptime`; again with two overlapping meetings. Also read the Next container's memory in the same output. Paste all of it | P0.5, D9b |
@@ -812,20 +835,20 @@ Every ask in one place. "Unblocks" names the first task that cannot finish witho
 | 10 | **Host the calls** | For P0.3 and P0.8 host one Meet and one Zoom call (and the Teams one in row 9) while a session sends the bot; one session at a time. 30 minutes covers all three | P0.3, P0.8 |
 | 11 | **Outlook.com account and one Microsoft 365 work user** (ICS is IN, decided 2026-11-03) | Give the session an Outlook.com account for C19 (a spare personal one is fine; the session publishes its calendar and creates test events, nothing else). Ask one person who has a Microsoft 365 work account to open Outlook on the web, Settings, Calendar, Shared calendars, and tell the session whether the "Publish a calendar" option appears (it is tenant-controlled) | C19, C21, C24 |
 | 12 | **Decision: landing and sign-in copy** | When V0 opens, read its table and choose "soften" or "keep" per claim | V0 |
-| 13 | **Designer requests** | Ask the designer for: the instant-Meet switch (Q11), "Not recorded" rows with Send now, "Waiting for a free note taker", the notification bell, "Calendar disconnected" banner, "Pilot full"/waitlist, the admin screens, and a "paste a calendar link" card on Settings → Calendar with the first-sync result (counts or a named error) and the note "Updates can take a while; meetings made just before they start may be missed." Also: the designer's "Connect Microsoft Outlook" button and Outlook names must become "Add a calendar link" until an Outlook feed is verified live | stream D screens |
-| 14 | **Server `.env` values** | Add when each phase lands: `TOKEN_ENC_KEY` (`openssl rand -base64 32`; **also store it offline**: losing it forces every user to reconnect), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_PROJECT_ID`, `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_AUDIENCE`, `GOOGLE_PUBSUB_SERVICE_ACCOUNT`, `INSTANT_MEET_MODE`, `INSTANT_MEET_PERSONAL_MODE`, `ADMIN_ALERT_EMAIL`, `AUTOJOIN_LEAD_SECONDS` if P0.8 says not 60. Never paste values into chat | C3, I2, I3, C11b |
+| 13 | **Designer requests** | Ask the designer for: the "Google hasn't verified this app" explainer for testers (what they will see and how to click through; screenshots come from P0.9), the instant-Meet switch (Q11), "Not recorded" rows with Send now, "Waiting for a free note taker", the notification bell, "Calendar disconnected" banner, "Pilot full"/waitlist, the admin screens, and a "paste a calendar link" card on Settings → Calendar with the first-sync result (counts or a named error) and the note "Updates can take a while; meetings made just before they start may be missed." Also: the designer's "Connect Microsoft Outlook" button and Outlook names must become "Add a calendar link" until an Outlook feed is verified live | stream D screens |
+| 14 | **Server `.env` values** | Add when each phase lands: `TOKEN_ENC_KEY` (`openssl rand -base64 32`; **also store it offline**: losing it forces every user to reconnect), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_OAUTH_TESTING` (true now, false the day of P0.9), `GOOGLE_APP_VERIFIED` (false until V4), `GOOGLE_PROJECT_ID`, `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_AUDIENCE`, `GOOGLE_PUBSUB_SERVICE_ACCOUNT`, `INSTANT_MEET_MODE`, `INSTANT_MEET_PERSONAL_MODE`, `ADMIN_ALERT_EMAIL`, `AUTOJOIN_LEAD_SECONDS` if P0.8 says not 60. Never paste values into chat | C3, I2, I3, C11b |
 | 15 | **Server steps with sudo** | After the PR that adds them merges: `sudo nginx -t && sudo systemctl reload nginx` (new zones from A19 and I2; never `cp deploy/nginx.conf` over the live file); confirm the `scheduler` container is up (`docker compose ps`) after the deploy of C10; on the second machine, the D8 README steps | C10, I2, D8 |
 | 16 | **Lawyer read** (Q21) | After A20 and C17 policy rows are merged and before inviting testers, send the live `/privacy` and `/terms` to a lawyer; ask also whether Beyrichq LTD must register with the Nigeria Data Protection Commission | inviting testers |
 | 17 | **Record the demo video** | Follow `docs/spike/pilot-demo-video-script.md` on the live site with the real consent screen; upload unlisted to YouTube; send the link | V2 |
-| 18 | **Submit for verification** | Click Submit in the Verification Center with the scope justifications from V3; answer the reviewer within the time Google gives | V4 |
+| 18 | **Submit for verification, as early as the demo can be recorded** | Click Submit in the Verification Center with the frozen scope list (V0a), the unlisted video link (row 17) and the scope justifications (V3); answer the reviewer within the time Google gives (review can take up to 10 days) | V4 |
 
 ---
 
 ## Self-review (run against the spec)
 
 - **Spec coverage:** Phase 0 (P0.1 to P0.6 plus P0.7 Teams and P0.8 join time from 0a); Phase A listed and left to its owners; C1 to C24 all present and extended (C19 to C24 are the ICS source, in per Adebayo); I1 to I7 with the spike gate and the four fallbacks (G1 to G4, manual routes in I6); D1 to D10; V0 to V4; every 0a row is reflected in Global Constraints. 12.3 policy rows each map to a task (A20, C3, C17, C18, T3, I7, C24, V0).
-- **Spec bugs found while planning:** the spec's 7.6 and 5.1 still say a 2-minute lead (0a replaced it); 4.3 still describes a no-mail fallback; spec 5.5 lists `MAIL_*` while the handoff says `RESEND_API_KEY`; spec 9.7's "no-capacity path in C11" is split here (C11 placement, C12 transitions). None contradicts 0a; the first three are listed under Global Constraints.
+- **Spec bugs found while planning:** spec 0a Q7 says the OAuth app is verified; Adebayo corrected it to branding only (Global Constraints); the spec's 7.6 and 5.1 still say a 2-minute lead (0a replaced it); 4.3 still describes a no-mail fallback; spec 5.5 lists `MAIL_*` while the handoff says `RESEND_API_KEY`; spec 9.7's "no-capacity path in C11" is split here (C11 placement, C12 transitions). None contradicts 0a; the first three are listed under Global Constraints.
 - **Type consistency:** `PlacementRequest`, `PlacementRefused.code` values, `ParsedEvent`, `JoinDecision.reason`, `SyncBatch.complete` and `CalendarSource.sync` are named once and reused in C8, C8b, C12, C21 and I4 with the same spellings.
 - **Proportion:** the plan is longer than the spec because it carries per-task tests and the Needs table; code bodies are signatures and test names only.
 
-**Open questions this plan could not settle** (for the lead): (1) the mail variable names, which A3 decides; (2) whether Opus review on C3 and C20 is accepted (spec marks only C2, I2, D4); (3) whether the verified Google app already covers the Calendar and Meet scopes (P0.1 answers it and sets the shape of Phase V); (4) whether Adebayo can supply a Workspace test account (otherwise outcome G1 versus G2 cannot be told apart); (5) **one calendar source per user in v1** (Google OAuth or an ICS link, not both): a user with a Google calendar and an Outlook work calendar must pick one; allowing both needs a cross-source duplicate rule (the second source's copy would read as "already in this meeting", which is wrong for one's own meeting); (6) the spec changes listed under "Outlook is no longer later" are **not** edited by this PR.
+**Open questions this plan could not settle** (for the lead): (1) the mail variable names, which A3 decides; (2) whether Opus review on C3 and C20 is accepted (spec marks only C2, I2, D4); (3) the Meet-scope timing in Phase V: submit once after Phase I (recommended if P0.2 lands in week one) or submit Calendar alone first and accept a second review; (4) whether Adebayo can supply a Workspace test account (otherwise outcome G1 versus G2 cannot be told apart); (5) **one calendar source per user in v1** (Google OAuth or an ICS link, not both): a user with a Google calendar and an Outlook work calendar must pick one; allowing both needs a cross-source duplicate rule (the second source's copy would read as "already in this meeting", which is wrong for one's own meeting); (6) the spec changes listed under "Outlook is no longer later" are **not** edited by this PR.
