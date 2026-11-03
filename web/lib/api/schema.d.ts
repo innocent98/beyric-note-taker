@@ -67,6 +67,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{meeting_id}/end": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * End Meeting
+         * @description "End now and write the notes": take the bot out of the call and write the notes from what
+         *     it recorded. Only when `can_end` is true (409 `not_endable` otherwise, 409 `already_ending`
+         *     when it was asked already). The meeting stays `bot_sent` while the bot leaves, then follows
+         *     the usual steps; it is not a cancel and nothing is discarded.
+         */
+        post: operations["end_meeting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{meeting_id}/regenerate": {
         parameters: {
             query?: never;
@@ -263,6 +286,8 @@ export interface components {
             bot_left_early: boolean;
             /** Can Cancel */
             can_cancel: boolean;
+            /** Can End */
+            can_end: boolean;
             /** Can Regenerate */
             can_regenerate: boolean;
             /** Can Retry */
@@ -324,6 +349,8 @@ export interface components {
             title: string;
             /** Transcript */
             transcript: string | null;
+            /** Worker Stale */
+            worker_stale: boolean;
         };
         /** MeetingList */
         MeetingList: {
@@ -333,6 +360,8 @@ export interface components {
             meetings: components["schemas"]["MeetingSummary"][];
             /** Next Before Id */
             next_before_id: number | null;
+            /** Refresh After Seconds */
+            refresh_after_seconds: number | null;
             /** Worker Stale */
             worker_stale: boolean;
         };
@@ -638,6 +667,82 @@ export interface operations {
         };
     };
     cancel_meeting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDetail"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    end_meeting: {
         parameters: {
             query?: never;
             header?: never;

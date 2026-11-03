@@ -1,0 +1,25 @@
+{
+  "note": "A second press (a double click) is refused and stops nothing a second time.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/16/end",
+    "headers": {
+      "X-CSRF-Token": "<csrf-I>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "already_ending",
+        "message": "The bot has already been told to leave. The notes start once it has gone."
+      }
+    }
+  }
+}

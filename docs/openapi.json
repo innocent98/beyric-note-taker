@@ -92,6 +92,10 @@
             "title": "Can Cancel",
             "type": "boolean"
           },
+          "can_end": {
+            "title": "Can End",
+            "type": "boolean"
+          },
           "can_regenerate": {
             "title": "Can Regenerate",
             "type": "boolean"
@@ -272,6 +276,10 @@
               }
             ],
             "title": "Transcript"
+          },
+          "worker_stale": {
+            "title": "Worker Stale",
+            "type": "boolean"
           }
         },
         "required": [
@@ -289,6 +297,7 @@
           "retry_block",
           "retry_block_message",
           "can_cancel",
+          "can_end",
           "can_retry",
           "can_regenerate",
           "join_attempts",
@@ -296,6 +305,7 @@
           "bot_left_early",
           "speakers_incomplete",
           "refresh_after_seconds",
+          "worker_stale",
           "join_retry_at",
           "notes",
           "notes_html",
@@ -328,6 +338,17 @@
             ],
             "title": "Next Before Id"
           },
+          "refresh_after_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refresh After Seconds"
+          },
           "worker_stale": {
             "title": "Worker Stale",
             "type": "boolean"
@@ -337,7 +358,8 @@
           "meetings",
           "has_more",
           "next_before_id",
-          "worker_stale"
+          "worker_stale",
+          "refresh_after_seconds"
         ],
         "title": "MeetingList",
         "type": "object"
@@ -998,6 +1020,99 @@
           }
         },
         "summary": "Cancel Meeting",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/end": {
+      "post": {
+        "description": "\"End now and write the notes\": take the bot out of the call and write the notes from what\nit recorded. Only when `can_end` is true (409 `not_endable` otherwise, 409 `already_ending`\nwhen it was asked already). The meeting stays `bot_sent` while the bot leaves, then follows\nthe usual steps; it is not a cancel and nothing is discarded.",
+        "operationId": "end_meeting",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "End Meeting",
         "tags": [
           "meetings"
         ]

@@ -1,0 +1,25 @@
+{
+  "note": "The bot is still joining, so there is nothing to end: 409 `not_endable` (Cancel is the way out). The same 409 comes for a meeting that is processing, ready or failed.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/17/end",
+    "headers": {
+      "X-CSRF-Token": "<csrf-I>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_endable",
+        "message": "The bot can only be ended while it is in the call or waiting to be let in."
+      }
+    }
+  }
+}

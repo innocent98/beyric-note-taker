@@ -1,0 +1,47 @@
+{
+  "note": "The bot has gone (Vexa: `completed`, reason `stopped`) and its recording is still being finished. After this the worker downloads it and the meeting goes through `processing` to `ready` like any other.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/16",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 16,
+      "title": "Google Meet abc-defg-hij",
+      "platform": "google_meet",
+      "native_id": "abc-defg-hij",
+      "status": "bot_sent",
+      "step": "waiting",
+      "status_text": "The call ended; finishing the recording",
+      "status_tone": "warning",
+      "template_id": 1,
+      "created_at": "2026-11-03T14:09:48.776398Z",
+      "failure_reason": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": true,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": false,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": 30,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "notes": null,
+      "notes_html": null,
+      "transcript": null
+    }
+  }
+}

@@ -601,6 +601,7 @@ def run(app, base, engine, vexa, openai_client) -> None:
     run_accounts(app, base, engine, ids, general["id"])
     run_refusal(owner, engine, general["id"])
     run_live_state(owner, engine, general["id"])
+    run_end_controls(owner, engine, general["id"], vexa)
 
 
 def run_accounts(app, base, engine, ids, admin_general_id) -> None:
@@ -897,6 +898,157 @@ def run_live_state(owner, engine, general_id) -> None:
         "GET",
         "/api/meetings?limit=2",
         note="The list rows carry the same `status_text`.",
+    )
+
+
+def run_end_controls(owner, engine, general_id, vexa) -> None:
+    """ "End now and write the notes", the words for the in-between states, a state the worker has
+    not renewed, and a quiet worker. As above, each state is the real `pipeline.advance_meeting`
+    fed one Vexa answer; the endpoint and the reads are real HTTP."""
+    from app import pipeline
+
+    def new_meeting(vexa_id: str) -> int:
+        with Session(engine) as session:
+            session.execute(
+                text(
+                    "update meetings set status = 'ready', step = 'done' where status in "
+                    "('bot_sent', 'processing')"
+                )
+            )
+            meeting = Meeting(
+                owner_user_id=owner_id_of(engine),
+                url=MEET,
+                platform="google_meet",
+                native_id="abc-defg-hij",
+                template_id=general_id,
+                vexa_meeting_id=vexa_id,
+            )
+            session.add(meeting)
+            session.commit()
+            return meeting.id
+
+    def poll(meeting_id: int, answer, when: datetime | None = None) -> None:
+        with Session(engine) as session:
+            pipeline.advance_meeting(
+                session, meeting_id, vexa=BotAs(answer), now=when or datetime.now(UTC)
+            )
+
+    def heartbeat(minutes_ago: int) -> None:
+        with Session(engine) as session:
+            state = session.get(AppState, 1)
+            state.worker_heartbeat_at = datetime.now(UTC) - timedelta(minutes=minutes_ago)
+            session.commit()
+
+    segment = {"speaker": "Ada Example", "text": "Hello everyone, thanks for joining."}
+    left = {"completion_reason": "stopped"}
+    heartbeat(0)  # a worker that is alive; the captures above were made with none
+
+    mid = new_meeting("4260")
+    poll(mid, VexaMeeting(status="requested"))
+    owner.call(
+        "meeting-detail-bot-requested",
+        "GET",
+        f"/api/meetings/{mid}",
+        note="Vexa reports `requested`: the bot has been asked for and is not in the call yet. "
+        "`can_end` is false: nothing to end yet (Cancel is still offered).",
+    )
+    poll(mid, VexaMeeting(status="active", segments=[segment]))
+    owner.call(
+        "meeting-detail-bot-recording-can-end",
+        "GET",
+        f"/api/meetings/{mid}",
+        note='The bot is recording. `can_end` is true: the page may offer "End now and write '
+        'the notes". `worker_stale` is false: the worker checked in a moment ago.',
+    )
+    vexa.stop_error = True
+    owner.call(
+        "meeting-end-vexa-down",
+        "POST",
+        f"/api/meetings/{mid}/end",
+        note="Vexa could not stop the bot. 502, nothing changed, and the owner may try again. "
+        "The message never carries Vexa's own text.",
+    )
+    vexa.stop_error = False
+    owner.call(
+        "meeting-end",
+        "POST",
+        f"/api/meetings/{mid}/end",
+        note="The bot is told to leave. The response is the full meeting (like Cancel): still "
+        "`bot_sent`, `can_end` false, `status_text` says the bot is leaving. The worker carries "
+        "on from here; nothing is discarded.",
+    )
+    owner.call(
+        "meeting-end-again",
+        "POST",
+        f"/api/meetings/{mid}/end",
+        note="A second press (a double click) is refused and stops nothing a second time.",
+    )
+    poll(mid, VexaMeeting(status="stopping"))
+    owner.call(
+        "meeting-detail-bot-leaving",
+        "GET",
+        f"/api/meetings/{mid}",
+        note="Vexa reports `stopping`. The words stay the same until the bot has gone.",
+    )
+    poll(
+        mid,
+        VexaMeeting(
+            status="completed",
+            segments=[segment],
+            recording_id=7,
+            media_id=9,
+            recording_status="in_progress",
+            **left,
+        ),
+    )
+    owner.call(
+        "meeting-detail-call-ended-finishing-recording",
+        "GET",
+        f"/api/meetings/{mid}",
+        note="The bot has gone (Vexa: `completed`, reason `stopped`) and its recording is still "
+        "being finished. After this the worker downloads it and the meeting goes through "
+        "`processing` to `ready` like any other.",
+    )
+
+    joining = new_meeting("4261")
+    poll(joining, VexaMeeting(status="joining"))
+    owner.call(
+        "meeting-end-not-endable",
+        "POST",
+        f"/api/meetings/{joining}/end",
+        note="The bot is still joining, so there is nothing to end: 409 `not_endable` (Cancel "
+        "is the way out). The same 409 comes for a meeting that is processing, ready or failed.",
+    )
+
+    empty = new_meeting("4262")
+    poll(empty, VexaMeeting(status="active"))
+    owner.call("meeting-end-before-anything-recorded", "POST", f"/api/meetings/{empty}/end")
+    for _ in range(pipeline.NO_AUDIO_GRACE_POLLS):  # the few polls a recording gets to appear
+        poll(empty, VexaMeeting(status="completed", **left))
+    owner.call(
+        "meeting-detail-ended-nothing-recorded",
+        "GET",
+        f"/api/meetings/{empty}",
+        note="Ended before anything was recorded: the usual failed meeting (`retry_block` "
+        "`no_audio`, nothing to retry), with its own reason.",
+    )
+
+    stale = new_meeting("4263")
+    poll(stale, VexaMeeting(status="active"), when=datetime.now(UTC) - timedelta(minutes=5))
+    owner.call(
+        "meeting-detail-bot-state-stale",
+        "GET",
+        f"/api/meetings/{stale}",
+        note="The worker last saw the bot 5 minutes ago, which is over 2 poll intervals, so the "
+        "page does not claim to know: `Checking on the bot...`. `can_end` is still true.",
+    )
+    heartbeat(30)
+    owner.call(
+        "meeting-detail-worker-stale",
+        "GET",
+        f"/api/meetings/{stale}",
+        note="The worker has not checked in for 30 minutes: `worker_stale` is true on the "
+        "meeting (it is false once the meeting is ready or failed).",
     )
 
 
