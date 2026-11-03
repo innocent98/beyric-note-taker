@@ -331,6 +331,25 @@ def hours_cap_message(cap_seconds: int) -> str:
     )
 
 
+def _require_bot_room(session: Session, user: User, settings: Settings) -> None:
+    """Refuse when no bot may be sent for `user` now. Two different refusals, so one user's
+    activity is never visible to another: your own running meeting is named as yours
+    (`bot_already_active`); a full note taker is only "busy" (`bot_busy`) and says nothing about
+    whose meeting holds it. Call under `NEW_MEETING_LOCK`."""
+    own = session.scalars(
+        select(Meeting.id).where(Meeting.owner_user_id == user.id, Meeting.status.in_(ACTIVE))
+    ).first()
+    if own is not None:
+        raise Refused(
+            409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."
+        )
+    busy = session.scalar(select(func.count()).where(Meeting.status.in_(ACTIVE)))
+    if busy >= settings.max_active_bots:
+        raise Refused(
+            409, "bot_busy", "The note taker is busy right now. Try again in a few minutes."
+        )
+
+
 def create_meeting(
     session: Session,
     vexa: VexaClient,
@@ -378,21 +397,7 @@ def _create_meeting(
         >= cap
     ):
         raise Refused(403, "hours_cap_reached", hours_cap_message(cap))
-    # Two different refusals, so one user's activity is never visible to another: your own
-    # running meeting is named as yours; a full note taker is only "busy" and says nothing about
-    # whose meeting holds it.
-    own = session.scalars(
-        select(Meeting.id).where(Meeting.owner_user_id == user.id, Meeting.status.in_(ACTIVE))
-    ).first()
-    if own is not None:
-        raise Refused(
-            409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."
-        )
-    busy = session.scalar(select(func.count()).where(Meeting.status.in_(ACTIVE)))
-    if busy >= settings.max_active_bots:
-        raise Refused(
-            409, "bot_busy", "The note taker is busy right now. Try again in a few minutes."
-        )
+    _require_bot_room(session, user, settings)
     try:
         vexa_id = vexa.send_bot(url)
     except VexaError as exc:
@@ -505,12 +510,11 @@ def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Mee
     ):
         session.rollback()
         raise Refused(403, "hours_cap_reached", hours_cap_message(cap))
-    active = session.scalars(select(Meeting.id).where(Meeting.status.in_(ACTIVE)).limit(1)).first()
-    if active is not None:
+    try:
+        _require_bot_room(session, owner, get_settings())
+    except Refused:
         session.rollback()
-        raise Refused(
-            409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."
-        )
+        raise
     if not send_again(meeting, vexa):
         session.rollback()
         raise Refused(
