@@ -1,0 +1,525 @@
+{
+  "mode": "full",
+  "notes_model": "gpt-6-luna",
+  "extract_model": "gpt-6-luna",
+  "gate": {
+    "passed": true,
+    "checks": {
+      "zero_invented_owners": true,
+      "quotes_verified_95": true,
+      "dates_right_90": true,
+      "every_bullet_covered_95": true
+    },
+    "rates": {
+      "quotes_verified": 0.9666666666666667,
+      "dates_right": 1.0,
+      "coverage": 1.0
+    },
+    "totals": {
+      "bullets": 30,
+      "covered": 30,
+      "quotes_given": 30,
+      "quotes_verified": 29,
+      "invented_owners": 0,
+      "raw_invented_owners": 0,
+      "wrong_owners": 0,
+      "dates_stated": 17,
+      "dates_right": 17,
+      "dates_invented": 0,
+      "missing_from_notes": 0,
+      "review_expected": 1,
+      "review_found": 1,
+      "review_extra": 0
+    }
+  },
+  "cases": [
+    {
+      "case": "mention_is_not_owner",
+      "extraction_failed": false,
+      "score": {
+        "case": "mention_is_not_owner",
+        "bullets": 3,
+        "covered": 3,
+        "quotes_given": 3,
+        "quotes_verified": 3,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 1,
+        "dates_right": 1,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [
+          {
+            "index": 0,
+            "title": "Send the signed copy to the vendor on Thursday.",
+            "spoken_owner": "Olu",
+            "due_phrase": "on Thursday",
+            "due_date": "2026-11-05",
+            "quote": "I will send it to them on Thursday.",
+            "confidence": "high"
+          },
+          {
+            "index": 1,
+            "title": "Call the bank about the invoice dispute.",
+            "spoken_owner": null,
+            "due_phrase": null,
+            "due_date": null,
+            "quote": "Someone needs to call the bank. I do not know who.",
+            "confidence": "medium"
+          },
+          {
+            "index": 2,
+            "title": "Ask the vendor to confirm the claimed discount in writing.",
+            "spoken_owner": null,
+            "due_phrase": null,
+            "due_date": null,
+            "quote": "Someone has to ask the vendor, I think Daniel would know who, but it is not decided.",
+            "confidence": "medium"
+          }
+        ],
+        "review": [],
+        "milestones": []
+      }
+    },
+    {
+      "case": "names_and_terms",
+      "extraction_failed": false,
+      "score": {
+        "case": "names_and_terms",
+        "bullets": 4,
+        "covered": 4,
+        "quotes_given": 4,
+        "quotes_verified": 4,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 3,
+        "dates_right": 3,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 1,
+        "review_found": 1,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [
+          {
+            "index": 0,
+            "title": "Set up the tracking plan by Friday.",
+            "spoken_owner": "Chidi",
+            "due_phrase": "by Friday",
+            "due_date": "2026-11-06",
+            "quote": "I will set up the tracking plan by Friday.",
+            "confidence": "high"
+          },
+          {
+            "index": 1,
+            "title": "Share a draft of the dashboards on Wednesday of next week.",
+            "spoken_owner": "Amina",
+            "due_phrase": "on Wednesday of next week",
+            "due_date": "2026-11-11",
+            "quote": "I'll share a draft on Wednesday of next week.",
+            "confidence": "high"
+          },
+          {
+            "index": 2,
+            "title": "Check the vendor site for the spelling.",
+            "spoken_owner": "Amina",
+            "due_phrase": null,
+            "due_date": null,
+            "quote": "I'll look at the vendor site.",
+            "confidence": "high"
+          },
+          {
+            "index": 3,
+            "title": "Ask finance tomorrow to confirm the contract number.",
+            "spoken_owner": "Chidi",
+            "due_phrase": "tomorrow",
+            "due_date": "2026-11-04",
+            "quote": "I will ask finance tomorrow.",
+            "confidence": "high"
+          }
+        ],
+        "review": [
+          {
+            "index": 0,
+            "heard_as": "Metrika"
+          }
+        ],
+        "milestones": []
+      }
+    },
+    {
+      "case": "nothing_to_do",
+      "extraction_failed": false,
+      "score": {
+        "case": "nothing_to_do",
+        "bullets": 0,
+        "covered": 0,
+        "quotes_given": 0,
+        "quotes_verified": 0,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 0,
+        "dates_right": 0,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [],
+        "review": [],
+        "milestones": []
+      }
+    },
+    {
+      "case": "planted",
+      "extraction_failed": false,
+      "score": {
+        "case": "planted",
+        "bullets": 6,
+        "covered": 6,
+        "quotes_given": 6,
+        "quotes_verified": 5,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 3,
+        "dates_right": 3,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [
+          {
+            "index": 0,
+            "title": "Update the plan with the new launch date.",
+            "spoken_owner": "Adebayo",
+            "due_phrase": null,
+            "due_date": null,
+            "quote": "I'll update the plan.",
+            "confidence": "high"
+          },
+          {
+            "index": 1,
+            "title": "Send a test batch through Postmark and Resend using the team\u2019s domain.",
+            "spoken_owner": "Amaka",
+            "due_phrase": "by Wednesday",
+            "due_date": "2027-02-03",
+            "quote": "Amaka, can you send a test batch through both with our domain and we'll look at the results next week? Sure, I can do that by Wednesday.",
+            "confidence": "high"
+          },
+          {
+            "index": 2,
+            "title": "Send Grace the revised contract with the new dates.",
+            "spoken_owner": "Tunde",
+            "due_phrase": "by Friday",
+            "due_date": "2027-02-05",
+            "quote": "I'll send the revised contract by Friday.",
+            "confidence": "high"
+          },
+          {
+            "index": 3,
+            "title": "Review the two venue options Grace mentioned and handle the booking.",
+            "spoken_owner": "Amaka",
+            "due_phrase": null,
+            "due_date": null,
+            "quote": "I can book it, yes. I'll look at the two options Grace mentioned.",
+            "confidence": "high"
+          },
+          {
+            "index": 4,
+            "title": "Check whether VAT applies to international customers and identify an owner for the check.",
+            "spoken_owner": null,
+            "due_phrase": null,
+            "due_date": null,
+            "quote": "Somebody needs to check whether VAT applies to the international customers. I don't know who owns that. Okay, let's leave it for now, but it needs an owner.",
+            "confidence": "medium"
+          },
+          {
+            "index": 5,
+            "title": "Fix the login-page product-name typo today.",
+            "spoken_owner": "Amaka",
+            "due_phrase": "today",
+            "due_date": "2027-02-01",
+            "quote": "I'll fix that today, it's a one-line change.",
+            "confidence": "high"
+          }
+        ],
+        "review": [],
+        "milestones": [
+          {
+            "name": "Launch",
+            "date": "2027-03-14",
+            "quote": "Okay, so we're agreed, launch moves to the fourteenth of March."
+          }
+        ]
+      }
+    },
+    {
+      "case": "vague_timing",
+      "extraction_failed": false,
+      "score": {
+        "case": "vague_timing",
+        "bullets": 7,
+        "covered": 7,
+        "quotes_given": 7,
+        "quotes_verified": 7,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 3,
+        "dates_right": 3,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [
+          {
+            "index": 0,
+            "title": "Build the portal login screens",
+            "spoken_owner": "Segun",
+            "due_phrase": "tomorrow",
+            "due_date": "2026-11-04",
+            "quote": "I will build the login screens tomorrow",
+            "confidence": "high"
+          },
+          {
+            "index": 1,
+            "title": "Deliver the portal dashboard",
+            "spoken_owner": "Segun",
+            "due_phrase": "in the coming weeks",
+            "due_date": null,
+            "quote": "I will build the login screens tomorrow and have the dashboard in the coming weeks.",
+            "confidence": "high"
+          },
+          {
+            "index": 2,
+            "title": "Write the data-export spec",
+            "spoken_owner": "Ebuka",
+            "due_phrase": "by next Monday",
+            "due_date": "2026-11-09",
+            "quote": "I will write the spec by next Monday.",
+            "confidence": "high"
+          },
+          {
+            "index": 3,
+            "title": "Estimate the data-export work",
+            "spoken_owner": null,
+            "due_phrase": null,
+            "due_date": null,
+            "quote": "After that someone has to estimate the work, but we do not know who has capacity.",
+            "confidence": "medium"
+          },
+          {
+            "index": 4,
+            "title": "Reply to the auditors about the export format",
+            "spoken_owner": null,
+            "due_phrase": "soon",
+            "due_date": null,
+            "quote": "The auditors asked for the export format soon. Whoever picks it up should reply to them.",
+            "confidence": "medium"
+          },
+          {
+            "index": 5,
+            "title": "Review the new-hire job description",
+            "spoken_owner": "Priya",
+            "due_phrase": null,
+            "due_date": null,
+            "quote": "I'll review the job description at some point, but I will not commit to a date.",
+            "confidence": "high"
+          },
+          {
+            "index": 6,
+            "title": "Update the staging server",
+            "spoken_owner": "Segun",
+            "due_phrase": "tonight",
+            "due_date": "2026-11-03",
+            "quote": "I will update the staging server tonight.",
+            "confidence": "high"
+          }
+        ],
+        "review": [],
+        "milestones": []
+      }
+    },
+    {
+      "case": "weekday_resolution",
+      "extraction_failed": false,
+      "score": {
+        "case": "weekday_resolution",
+        "bullets": 5,
+        "covered": 5,
+        "quotes_given": 5,
+        "quotes_verified": 5,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 5,
+        "dates_right": 5,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [
+          {
+            "index": 0,
+            "title": "Finish the release notes by Monday.",
+            "spoken_owner": "Bayo",
+            "due_phrase": "by Monday",
+            "due_date": "2026-11-09",
+            "quote": "I will finish the release notes by Monday.",
+            "confidence": "high"
+          },
+          {
+            "index": 1,
+            "title": "Complete the regression run this week.",
+            "spoken_owner": "Sade",
+            "due_phrase": "this week",
+            "due_date": "2026-11-06",
+            "quote": "I'll complete the regression run this week.",
+            "confidence": "high"
+          },
+          {
+            "index": 2,
+            "title": "Draft the customer downtime email by tomorrow morning and send it to Bayo for review.",
+            "spoken_owner": "Sade",
+            "due_phrase": "by tomorrow morning",
+            "due_date": "2026-11-06",
+            "quote": "I will draft it by tomorrow morning and send it to Bayo for review.",
+            "confidence": "high"
+          },
+          {
+            "index": 3,
+            "title": "Review the customer email next Wednesday.",
+            "spoken_owner": "Bayo",
+            "due_phrase": "next Wednesday",
+            "due_date": "2026-11-11",
+            "quote": "I will review it next Wednesday, I am out until then.",
+            "confidence": "high"
+          },
+          {
+            "index": 4,
+            "title": "Book the retrospective for Friday of next week.",
+            "spoken_owner": "Funmi",
+            "due_phrase": "Friday of next week",
+            "due_date": "2026-11-13",
+            "quote": "I will book the retrospective for end of next week, let's say Friday of next week.",
+            "confidence": "high"
+          }
+        ],
+        "review": [],
+        "milestones": [
+          {
+            "name": "Ship",
+            "date": "2026-11-17",
+            "quote": "Yes, agreed, we ship on the Tuesday after next."
+          }
+        ]
+      }
+    },
+    {
+      "case": "weekly_sync",
+      "extraction_failed": false,
+      "score": {
+        "case": "weekly_sync",
+        "bullets": 5,
+        "covered": 5,
+        "quotes_given": 5,
+        "quotes_verified": 5,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 2,
+        "dates_right": 2,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [
+          {
+            "index": 0,
+            "title": "Confirm with the app store by Wednesday.",
+            "spoken_owner": "Jonas Petrov",
+            "due_phrase": "by Wednesday",
+            "due_date": "2026-11-04",
+            "quote": "Jonas, you confirm with the app store by Wednesday.",
+            "confidence": "high"
+          },
+          {
+            "index": 1,
+            "title": "Send the revised pricing-page copy to the design team by Friday.",
+            "spoken_owner": "Lena Hoffmann",
+            "due_phrase": "by Friday",
+            "due_date": "2026-11-06",
+            "quote": "Lena, please send the revised pricing page copy to the design team by Friday.",
+            "confidence": "high"
+          },
+          {
+            "index": 2,
+            "title": "Check the survey for the team-plan price.",
+            "spoken_owner": null,
+            "due_phrase": null,
+            "due_date": null,
+            "quote": "The team plan, I think it was nineteen or twenty-nine, someone needs to check the survey.",
+            "confidence": "medium"
+          },
+          {
+            "index": 3,
+            "title": "Determine who has the onboarding-email templates and update the emails before launch.",
+            "spoken_owner": null,
+            "due_phrase": "before launch",
+            "due_date": null,
+            "quote": "Also somebody needs to update the onboarding emails before launch, but I am not sure who has the templates.",
+            "confidence": "medium"
+          },
+          {
+            "index": 4,
+            "title": "Look into the refund process.",
+            "spoken_owner": null,
+            "due_phrase": null,
+            "due_date": null,
+            "quote": "the customer in Lagos asked about a refund process, we should look into it.",
+            "confidence": "medium"
+          }
+        ],
+        "review": [],
+        "milestones": []
+      }
+    }
+  ],
+  "tokens": {
+    "notes_input": 0,
+    "notes_output": 0,
+    "extract_input": 8751,
+    "extract_output": 4543
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "note": "Sent while another file was being built (the 40,000-word PDF, started 0.6 s earlier): 503 `export_busy` with `Retry-After`.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export?format=docx",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 503,
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "104",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "retry-after": "5"
+    },
+    "body": {
+      "error": {
+        "code": "export_busy",
+        "message": "Another file is being prepared. Try again in a few seconds."
+      }
+    }
+  }
+}

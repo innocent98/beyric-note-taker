@@ -20,7 +20,32 @@
 .stack-lg { display: flex; flex-direction: column; gap: 20px; }
 .send-note { display: flex; align-items: center; gap: var(--space-2); margin: 14px 0 0; color: var(--text-2); font-size: var(--text-sm); }
 .send-note .icon { color: var(--text-faint); }
+.detail-bar { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-3) var(--space-4); }
+.detail-bar > .detail-head { flex: 1 1 320px; min-width: 0; }
 .detail-head { display: flex; flex-direction: column; gap: 4px; }
+/* Download menu (components/app/download-menu.tsx): the button, its panel and the status row */
+.dl { flex: none; }
+.dl-status { flex: 1 0 100%; }
+.dl-panel { width: 290px; }
+@media (min-width: 640px) { .dl-panel { left: auto; right: 0; } }
+.dl-option {
+  display: flex; align-items: center; gap: var(--space-3); width: 100%; padding: 10px; border: 0; border-radius: var(--radius);
+  background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.dl-option:hover:not(:disabled) { background: var(--surface-menu); }
+.dl-option:disabled { opacity: 0.55; cursor: not-allowed; }
+.dl-tile {
+  display: flex; flex: none; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: var(--radius);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+}
+.dl-tile-pdf { background: var(--danger-tint); color: var(--danger); }
+.dl-tile-docx { background: var(--info-tint); color: var(--info); }
+.dl-text { display: flex; flex-direction: column; }
+.dl-label { font-size: var(--text-base); font-weight: 550; }
+.dl-sub { color: var(--text-3); font-size: var(--text-xs); }
+.dl-rule { height: 1px; margin: 6px 4px; border: 0; background: var(--border-soft); }
+.dl-check { display: flex; align-items: center; gap: 10px; padding: 8px 10px; color: var(--ink-2); font-size: var(--text-sm); cursor: pointer; }
+.dl-check input { width: 16px; height: 16px; accent-color: var(--teal); }
 .detail-title { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .detail-grid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px; }
 .detail-main { flex: 1 1 560px; min-width: 0; }

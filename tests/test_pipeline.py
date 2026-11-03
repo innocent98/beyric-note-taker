@@ -160,6 +160,16 @@ def test_completed_meeting_reaches_ready(session, meeting, env):
     assert (env / "a" / str(meeting.id) / "source.webm").exists()
 
 
+def test_a_ready_meeting_is_queued_for_extraction_in_the_same_commit(session, meeting, env):
+    run(session, meeting, FakeVexa(DONE))
+    assert (meeting.extraction_status, meeting.extraction_attempts) == ("pending", 0)
+
+
+def test_a_meeting_that_failed_never_reaches_extraction(session, meeting):
+    run(session, meeting, FakeVexa(VexaMeeting(status="failed")))
+    assert meeting.extraction_status is None
+
+
 def test_failed_vexa_meeting_sets_reason_and_makes_no_openai_call(session, meeting):
     openai = run(session, meeting, FakeVexa(VexaMeeting(status="failed")))
     assert meeting.status == "failed"

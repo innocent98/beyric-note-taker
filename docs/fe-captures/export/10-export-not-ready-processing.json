@@ -1,0 +1,26 @@
+{
+  "note": "The notes are not written yet: 409 `not_ready`.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/3/export?format=pdf",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "71",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "body": {
+      "error": {
+        "code": "not_ready",
+        "message": "The notes are not ready yet."
+      }
+    }
+  }
+}

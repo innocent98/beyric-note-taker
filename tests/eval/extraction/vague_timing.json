@@ -1,0 +1,17 @@
+{
+  "transcript": "vague_timing.txt",
+  "meeting_date": "2026-11-03",
+  "timezone": "Africa/Lagos",
+  "vocabulary": [],
+  "action_items": [
+    {"match": ["login"], "owner": "Segun", "due_date": "2026-11-04"},
+    {"match": ["dashboard"], "owner": "Segun", "due_date": null},
+    {"match": ["spec"], "owner": "Ebuka", "due_date": "2026-11-09"},
+    {"match": ["estimate"], "owner": null, "due_date": null},
+    {"match": ["auditors"], "owner": null, "due_date": null},
+    {"match": ["job description"], "owner": "Priya", "due_date": null},
+    {"match": ["staging"], "owner": "Segun", "due_date": "2026-11-03"}
+  ],
+  "review": [],
+  "forbidden_owners": []
+}

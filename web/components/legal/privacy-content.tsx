@@ -15,7 +15,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h3>Information you give us</h3>
       <ul>
         <li>Account details: your name and email address, and a password (stored only in hashed form) or, if you sign in with Google, your Google account identifier. We also keep a count of the hours of meetings recorded for your account, and, if you join the waiting list, your email address.</li>
-        <li>Settings and content you create: notes templates and vocabulary terms.</li>
+        <li>Settings and content you create: notes templates and vocabulary terms. From each set of notes we also keep the lists of decisions, open questions and Please check items it contains, so you can search and tick them off, and, for a Please check item about a name or term that may have been misheard, the word as it was transcribed.</li>
         <li>Messages you send us, such as support requests.</li>
       </ul>
       <h3>Meeting content</h3>
@@ -25,6 +25,7 @@ export function PrivacyContent({ days }: { days: number }) {
         <li>The transcript produced from that audio.</li>
         <li>Notes, summaries, decisions and action items produced from the transcript.</li>
         <li>Meeting details such as the platform, meeting link or ID, date, time and duration.</li>
+        <li>Files you export (a PDF or Word file of your notes, and of the transcript if you choose it) are built when you ask and are not stored.</li>
       </ul>
       <p>We do not record video or screen sharing.</p>
       <h3>Information collected automatically</h3>
@@ -62,7 +63,7 @@ export function PrivacyContent({ days }: { days: number }) {
 
       <h2 id="share">Who we share information with</h2>
       <ul>
-        <li><strong>OpenAI</strong> turns meeting audio into a transcript and writes notes from it. Under OpenAI's API terms, data sent through its API is not used to train its models.</li>
+        <li><strong>OpenAI</strong> turns meeting audio into a transcript, writes notes from it, and checks the notes against the transcript to find names and terms that may have been misheard. Under OpenAI's API terms, data sent through its API is not used to train its models.</li>
         <li><strong>Resend</strong> sends our service emails (account verification, password resets, waiting-list invitations and notices that an address already has an account). It receives the email address and, if given, the name on each of those emails, and their content, which includes one-time links.</li>
         <li><strong>Contabo</strong> hosts our server, in France.</li>
         <li><strong>Cloudflare</strong> provides our domain's DNS and may carry traffic to the site.</li>
@@ -80,7 +81,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h2 id="retention">How long we keep information</h2>
       <ul>
         <li>Meeting audio: deleted automatically {days} days after the meeting.</li>
-        <li>Transcripts and notes: kept until you ask us to delete them or close your account.</li>
+        <li>Transcripts and notes, and the lists of decisions, open questions and Please check items taken from them: kept until you ask us to delete them or close your account.</li>
         <li>Calendar data: we keep only what is needed for upcoming meetings, and delete it when you disconnect your calendar.</li>
         <li>Account information: kept while your account is active and deleted within 30 days of closing it, except where the law requires us to keep records.</li>
         <li>An account whose email address is not confirmed within 48 hours is deleted.</li>

@@ -1,0 +1,27 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export?format=docx",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "content-disposition": "attachment; filename=\"Google Meet abc-defg-hij.docx\"; filename*=UTF-8''Google%20Meet%20abc-defg-hij.docx",
+      "content-length": "37771",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "file": {
+      "saved_as": "files/07-export-docx.docx",
+      "bytes": 37771,
+      "first_bytes": "PK\u0003\u0004\u0014\u0000\u0000\u0000",
+      "sha256": "4f98492394c89a6d3f8cfef0246fa8702de4e76e6c5cce574a1f99f8533abb83"
+    }
+  }
+}

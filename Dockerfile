@@ -1,7 +1,9 @@
 FROM python:3.13-slim
 
+# Pango is what the PDF export (WeasyPrint) draws text with. ffmpeg already pulls it in; naming it
+# keeps the export working if ffmpeg's dependencies ever change.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg libpango-1.0-0 libpangoft2-1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv

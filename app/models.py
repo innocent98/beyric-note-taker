@@ -49,6 +49,12 @@ JOIN_STATES = (
 )
 # A join in one of these states holds its meeting code: only one bot per code at a time.
 LIVE_JOIN_STATES = ("dispatching", "no_capacity", "joined")
+AI_RUN_KINDS = ("extract", "translate")
+AI_RUN_STATUSES = ("ok", "failed")
+# `pending` waits for the worker (or for a retry), `running` is being worked on, `done` is finished,
+# `failed` gave up after the retries, `skipped` means only the decisions were read from the notes
+# and the model was not asked (an old meeting, per the backfill rules). Null = notes not written.
+EXTRACTION_STATUSES = ("pending", "running", "done", "failed", "skipped")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -396,6 +402,10 @@ class Meeting(Base):
         CheckConstraint(_in("status", STATUSES), name="ck_meetings_status"),
         CheckConstraint(_in("step", STEPS), name="ck_meetings_step"),
         CheckConstraint(_in("source", MEETING_SOURCES), name="ck_meetings_source"),
+        CheckConstraint(
+            "extraction_status is null or " + _in("extraction_status", EXTRACTION_STATUSES),
+            name="ck_meetings_extraction_status",
+        ),
         Index("ix_meetings_owner_user_id", "owner_user_id", "id"),
     )
 
@@ -433,6 +443,13 @@ class Meeting(Base):
     title: Mapped[str | None] = mapped_column(Text)
     # Length of the recording the pipeline prepared, in seconds; the unit of the hours cap.
     recorded_seconds: Mapped[int | None] = mapped_column(Integer)
+    # Where the extraction of decisions, open questions and review items from the notes stands
+    # (app/workspace.py). It never fails the meeting: the notes are the deliverable.
+    extraction_status: Mapped[str | None] = mapped_column(String(16))
+    extraction_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    extraction_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The prompt version of the last finished extraction (app/ai_versions.py).
+    extraction_version: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -455,6 +472,96 @@ class UsageEntry(Base):
     )
     seconds: Mapped[int] = mapped_column(Integer)
     counted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Decision(Base):
+    """One bullet of a meeting's "Decisions" section. Read from the notes by code (no model call).
+    `fingerprint` is the identity across a re-run, so a decision the owner hid stays hidden."""
+
+    __tablename__ = "decisions"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "fingerprint", name="uq_decisions_meeting_fp"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(
+        ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    text: Mapped[str] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(Integer)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OpenQuestion(Base):
+    """One bullet of a meeting's "Open questions" section."""
+
+    __tablename__ = "open_questions"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "fingerprint", name="uq_open_questions_meeting_fp"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(
+        ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    text: Mapped[str] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(Integer)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ReviewItem(Base):
+    """One bullet of a meeting's "Please check" section, for the Review screen. Owner only, like
+    vocabulary: `owner_user_id` is the meeting's owner. `heard_as` is set only when the extraction
+    call says the bullet is about a possibly misheard name or term and that word is in the
+    transcript."""
+
+    __tablename__ = "review_items"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "fingerprint", name="uq_review_items_meeting_fp"),
+        Index("ix_review_items_owner_checked", "owner_user_id", "checked_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(
+        ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    owner_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE")
+    )
+    text: Mapped[str] = mapped_column(Text)
+    position: Mapped[int] = mapped_column(Integer)
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    heard_as: Mapped[str | None] = mapped_column(String(100))
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AiRun(Base):
+    """One model call made for the AI workspace, kept so the real cost per meeting hour can be
+    read off. Like `usage_entries` it outlives the meeting (`meeting_id` is nulled, not cascaded),
+    and `error` is the exception class name only: exception text can hold transcript words."""
+
+    __tablename__ = "ai_runs"
+    __table_args__ = (
+        CheckConstraint(_in("kind", AI_RUN_KINDS), name="ck_ai_runs_kind"),
+        CheckConstraint(_in("status", AI_RUN_STATUSES), name="ck_ai_runs_status"),
+        Index("ix_ai_runs_meeting_id", "meeting_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="SET NULL"))
+    kind: Mapped[str] = mapped_column(String(16))
+    model: Mapped[str] = mapped_column(String(100))
+    prompt_version: Mapped[str | None] = mapped_column(String(32))
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="ok", server_default="ok")
+    error: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AppState(Base):

@@ -1,0 +1,27 @@
+{
+  "note": "A meeting with no speaker-labelled transcript: the plain one is exported instead.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/2/export?format=docx&transcript=true",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "content-disposition": "attachment; filename=\"Google Meet abc-defg-hij.docx\"; filename*=UTF-8''Google%20Meet%20abc-defg-hij.docx",
+      "content-length": "37855",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "file": {
+      "saved_as": "files/09-export-docx-transcript-unlabelled.docx",
+      "bytes": 37855,
+      "first_bytes": "PK\u0003\u0004\u0014\u0000\u0000\u0000",
+      "sha256": "5a1d1cff05d3aa1b10b272c3129ca9239ad9550f71bbf66f47a60e986c0fe63c"
+    }
+  }
+}

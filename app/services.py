@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
-from app import auth, edge, passwords, usage
+from app import auth, edge, passwords, usage, workspace
 from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
@@ -359,6 +359,10 @@ def list_meetings(
     return list(session.scalars(query))
 
 
+def meeting_title(meeting: Meeting) -> str:
+    return f"{'Zoom' if meeting.platform == 'zoom' else 'Google Meet'} {meeting.native_id}"
+
+
 def meeting_or_404(session: Session, user: User, meeting_id: int) -> Meeting:
     meeting = None
     if _in_range(meeting_id):
@@ -497,6 +501,7 @@ def regenerate_notes(
         ) from None
     meeting.notes = notes
     meeting.template_id = template.id
+    workspace.mark_pending(meeting)  # the lists read from the notes follow the new ones
     session.commit()
     return meeting
 
@@ -783,6 +788,30 @@ def add_term(session: Session, user: User, term: str) -> VocabularyTerm:
     except IntegrityError:
         session.rollback()
         raise Refused(400, "duplicate_term", "That term is already in the list.") from None
+    return row
+
+
+def add_term_from_review(session: Session, user: User, item, term: str) -> VocabularyTerm:
+    """Add `term` to the caller's vocabulary and mark the review item checked. The term is
+    checked before anything changes (400 `invalid_term`). A term that exists already is 409
+    `duplicate_term`, but the item is still checked: the person has dealt with it."""
+    term = term.strip()
+    _check_term(term)
+    workspace.set_checked(session, item, True)
+    taken = session.scalars(
+        select(VocabularyTerm).where(
+            VocabularyTerm.owner_user_id == user.id, VocabularyTerm.term == term
+        )
+    ).first()
+    if taken:
+        raise Refused(409, "duplicate_term", "That term is already in your vocabulary.")
+    row = VocabularyTerm(owner_user_id=user.id, term=term)
+    session.add(row)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise Refused(409, "duplicate_term", "That term is already in your vocabulary.") from None
     return row
 
 
