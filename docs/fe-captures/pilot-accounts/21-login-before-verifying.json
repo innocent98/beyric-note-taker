@@ -1,0 +1,29 @@
+{
+  "note": "A correct password for an unconfirmed account: the same 401 as a wrong password or an unknown email (it must not reveal the account), no session.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "ada@example.test",
+      "password": "<password>"
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_credentials",
+        "message": "That email or password is not right."
+      }
+    }
+  }
+}

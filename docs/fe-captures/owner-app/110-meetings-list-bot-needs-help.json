@@ -26,7 +26,7 @@
           "status_text": "The bot is waiting on a prompt in the meeting, such as a consent or verification screen. Check the meeting for a prompt.",
           "status_tone": "warning",
           "template_id": 1,
-          "created_at": "2026-11-03T14:09:48.700604Z"
+          "created_at": "2026-11-03T14:26:34.413065Z"
         },
         {
           "id": 14,
@@ -38,7 +38,7 @@
           "status_text": "Ready",
           "status_tone": "success",
           "template_id": 1,
-          "created_at": "2026-11-03T14:09:48.682988Z"
+          "created_at": "2026-11-03T14:26:34.400157Z"
         }
       ],
       "has_more": true,

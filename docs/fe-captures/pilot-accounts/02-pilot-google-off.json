@@ -1,0 +1,24 @@
+{
+  "note": "No Google client configured: `google_signin` is false.",
+  "client": "visitor",
+  "request": {
+    "method": "GET",
+    "path": "/api/pilot",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "state": "closed",
+      "prefill_email": null,
+      "google_signin": false
+    }
+  }
+}

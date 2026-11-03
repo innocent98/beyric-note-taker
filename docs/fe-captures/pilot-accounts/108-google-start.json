@@ -1,0 +1,21 @@
+{
+  "note": "302 to Google's consent screen (the real URL the app builds); sets the flow cookie.",
+  "client": "google-visitor",
+  "request": {
+    "method": "GET",
+    "path": "/api/auth/google/start?accept_terms=true&return_to=/meetings",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 302,
+    "headers": {
+      "cache-control": "no-store",
+      "location": "https://accounts.google.com/o/oauth2/v2/auth?client_id=capture-client-id.apps.example.test&redirect_uri=https%3A%2F%2Fnotes.example.test%2Fapi%2Fauth%2Fgoogle%2Fcallback&response_type=code&scope=openid+email+profile&state=<state>&nonce=<nonce>&code_challenge=<code_challenge>&code_challenge_method=S256&prompt=select_account",
+      "set-cookie": "google_flow=<cookie>; HttpOnly; Max-Age=600; Path=/api/auth/google; SameSite=lax"
+    },
+    "body": ""
+  }
+}

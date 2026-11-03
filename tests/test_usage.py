@@ -334,6 +334,20 @@ def test_a_recording_with_no_speech_still_counts(session, meeting, monkeypatch):
     assert [row.seconds for row in session.scalars(select(UsageEntry))] == [120]
 
 
+def test_a_failed_transcription_still_counts_the_recording(session, meeting, monkeypatch):
+    """The OpenAI cost is spent whether or not the transcript comes back: the ledger row is
+    committed before transcription, so the failure's rollback cannot take it away."""
+
+    def refuse(*args, **kwargs):
+        raise pipeline.TranscriptionFailed("openai down")
+
+    monkeypatch.setattr(pipeline, "transcribe_chunks", refuse)
+    run(session, meeting, FakeVexa(DONE))
+    assert meeting.status == "failed"
+    assert [row.seconds for row in session.scalars(select(UsageEntry))] == [RECORDED_SECONDS]
+    assert meeting.recorded_seconds == RECORDED_SECONDS
+
+
 def pipeline_chunks(out_dir):
     from tests.test_pipeline import _good_chunks
 

@@ -26,7 +26,8 @@
       "usage": {
         "used_seconds": 18000,
         "cap_seconds": 18000
-      }
+      },
+      "unread_notifications": 0
     }
   }
 }

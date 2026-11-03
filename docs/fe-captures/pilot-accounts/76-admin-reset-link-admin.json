@@ -1,0 +1,26 @@
+{
+  "note": "",
+  "client": "admin",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/users/1/reset-link",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "admin_account",
+        "message": "A reset link cannot be made for an admin account."
+      }
+    }
+  }
+}

@@ -654,7 +654,10 @@ def run_accounts(app, base, engine, ids, admin_general_id) -> None:
         "POST",
         "/api/session",
         body=body("unverified@example.test"),
-        note="Right password, but the email was never confirmed: no session.",
+        note=(
+            "Right password, but the email was never confirmed: the same 401 as a wrong "
+            "password (the answer must not reveal the account), no session."
+        ),
     )
     guest.call(
         "login-suspended",

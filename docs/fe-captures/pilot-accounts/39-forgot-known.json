@@ -1,0 +1,25 @@
+{
+  "note": "",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/password/forgot",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "ada@example.test"
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "check_your_email"
+    }
+  }
+}

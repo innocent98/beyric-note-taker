@@ -1,0 +1,27 @@
+{
+  "note": "Ada's old session is dead.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax"
+    },
+    "body": {
+      "authenticated": false,
+      "csrf_token": "<csrf-H>",
+      "user": null,
+      "usage": null,
+      "unread_notifications": null
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "note": "`prefill_email` comes from that cookie.",
+  "client": "google-visitor-2",
+  "request": {
+    "method": "GET",
+    "path": "/api/pilot",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "state": "full",
+      "prefill_email": "latecomer@example.test",
+      "google_signin": true
+    }
+  }
+}

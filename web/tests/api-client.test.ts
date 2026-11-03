@@ -36,7 +36,13 @@ const header = (init: RequestInit, name: string) => (init.headers as Record<stri
 describe("api client", () => {
   it("reads the session and the CSRF token", async () => {
     const { api } = setup(() => anonymous());
-    expect(await api.session()).toEqual({ authenticated: false, csrf_token: "<csrf-A>", user: null, usage: null });
+    expect(await api.session()).toEqual({
+      authenticated: false,
+      csrf_token: "<csrf-A>",
+      user: null,
+      usage: null,
+      unread_notifications: null,
+    });
   });
 
   it("sends the token from GET /api/session on a write, fetching it only once", async () => {

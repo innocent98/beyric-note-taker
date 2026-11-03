@@ -1,0 +1,31 @@
+{
+  "note": "Sign-up before the admin opens the pilot.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ada Example",
+      "email": "ada@example.test",
+      "password": "<password>",
+      "accept_terms": true
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "pilot_closed",
+        "message": "Sign-up is not open yet. Check back soon or join the waiting list."
+      }
+    }
+  }
+}

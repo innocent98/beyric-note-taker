@@ -19,6 +19,11 @@ class VexaError(Exception):
     """HTTP failure or connection problem talking to Vexa. Treat as retryable."""
 
 
+class VexaNotFound(VexaError):
+    """Vexa answered 404 for a meeting: it does not know it. Still a `VexaError`, so every caller
+    that retries is unchanged; `app/deletion.py` reads it as "nothing there to wait for"."""
+
+
 class UnsupportedMeetingUrl(ValueError):
     """The URL is not a Google Meet or Zoom meeting link."""
 
@@ -153,6 +158,10 @@ class VexaClient:
                 response = client.get(path)
                 response.raise_for_status()
                 body = response.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise VexaNotFound(f"get_meeting failed: {exc}") from exc
+            raise VexaError(f"get_meeting failed: {exc}") from exc
         except (httpx.HTTPError, ValueError) as exc:
             raise VexaError(f"get_meeting failed: {exc}") from exc
         if not isinstance(body, dict):

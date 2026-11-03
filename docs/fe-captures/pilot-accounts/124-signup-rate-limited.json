@@ -1,0 +1,31 @@
+{
+  "note": "The 6th sign-up call in an hour from one address (5 allowed; counted before anything else).",
+  "client": "rate-limited-visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-P>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "R",
+      "email": "rate@example.test",
+      "password": "<password>",
+      "accept_terms": true
+    }
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "too_many_requests",
+        "message": "Too many attempts. Try again later."
+      }
+    }
+  }
+}

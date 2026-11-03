@@ -51,7 +51,7 @@ Rejected: reusing Cancel (it discards by design); setting `status` to `processin
 ### C. Follow-ups from the review of #40
 | Item | What changed |
 |---|---|
-| Staleness | New column `meetings.bot_state_seen_at` (migration `0008_bot_state_seen_at`, nullable, downgrade drops it; no existing column fitted: `started_polling_at` and `terminal_seen_at` mean other things). The worker stamps it on every poll that sees a live state. `services.status_text(meeting, now)` shows a live state only if it was seen within `BOT_STATE_STALE_POLLS` (2) times `POLL_INTERVAL_SECONDS` (60 s with the default); older, or with no time, it reads "Checking on the bot...". A meeting with no state at all still reads "Bot sent" |
+| Staleness | New column `meetings.bot_state_seen_at` (migration `0009_bot_state_seen_at`, nullable, downgrade drops it; no existing column fitted: `started_polling_at` and `terminal_seen_at` mean other things). The worker stamps it on every poll that sees a live state. `services.status_text(meeting, now)` shows a live state only if it was seen within `BOT_STATE_STALE_POLLS` (2) times `POLL_INTERVAL_SECONDS` (60 s with the default); older, or with no time, it reads "Checking on the bot...". A meeting with no state at all still reads "Bot sent" |
 | Worker looks stale | `MeetingDetail.worker_stale` (true only while the meeting is `bot_sent` or `processing` and the heartbeat is over 20 minutes old, the same rule as the home page). Banner on the Jinja and Next meeting pages |
 | FE guide claim | The guide said the worker looks every 30 seconds. Corrected: the worker sweeps meetings one after another and rests 30 s after a sweep, so a meeting being transcribed holds up the others for as long as it takes |
 | List polling | `MeetingList.refresh_after_seconds` (30 while any listed meeting is `bot_sent` or `processing`, else null). The Jinja list has a 30 s meta refresh under the same condition; the Next list calls `router.refresh()` at that interval, skips hidden tabs and stops when it becomes null |
@@ -68,7 +68,7 @@ Rejected: reusing Cancel (it discards by design); setting `status` to `processin
 
 ## Verification
 - Tests written first and watched failing, then green. The full Python suite, `ruff check`, `ruff format --check`, and in `web/`: `npm run lint`, `npm run typecheck`, `npx vitest run` (counts in the PR).
-- The migration round trip (`0007` down and up) is a test (`test_bot_state_seen_at_is_added_and_dropped`).
+- The migration round trip (`0008` down and up) is a test (`test_bot_state_seen_at_is_added_and_dropped`).
 - The captures `111` to `122` come from the real app over HTTP with the real `pipeline.advance_meeting` fed one fake Vexa answer per state: starting, recording with `can_end`, End (200, the repeat 409, the 409 for a joining bot, the 502), leaving, the call ended with the recording being finished, ended before anything was recorded (the worker's real three polls ending `failed` / `no_audio`), a state seen five minutes ago ("Checking on the bot..."), and a heartbeat 30 minutes old (`worker_stale` true). Every body in the FE guide is copied from them.
 - The good path after End (recording downloaded, transcript, speaker labels, notes, `ready`) is a test with the real pipeline and fake Vexa and OpenAI, not a capture (the worker does not run in the capture script).
 
@@ -83,8 +83,8 @@ Nothing in this change has run against a real call, Vexa or OpenAI.
 ## Operate / roll back
 - **Deploy order**: the migration adds one nullable column, so the new code can start before or after it only if the column exists: the `migrate` service runs it first, as usual. Deploy with no meeting `bot_sent` or `processing` (the repo's rule); a restart mid-call only loses the in-memory hysteresis counters.
 - **Change the window**: edit `BOT_LEFT_ALONE_SECONDS` in `.env`, recreate `web` and `worker` (see above).
-- **Roll back**: revert the PR. `alembic downgrade 0007` drops `bot_state_seen_at` (nothing else reads it). Rows that hold `end_requested` read as "Bot sent" on the old code, are never replaced by the old worker (it only overwrites live states and `None`), and are replaced by Vexa's own reason once the bot is gone. To stop sending `automatic_leave` without a rollback: `BOT_LEFT_ALONE_SECONDS=0`.
-- **Migration number**: `0008` here assumes it lands before #37's migration; if #37 merges first, this one is renumbered `0009` with `down_revision = "0008"` (the single-head test fails loudly if two heads exist).
+- **Roll back**: revert the PR. `alembic downgrade 0008` drops `bot_state_seen_at` (nothing else reads it). Rows that hold `end_requested` read as "Bot sent" on the old code, are never replaced by the old worker (it only overwrites live states and `None`), and are replaced by Vexa's own reason once the bot is gone. To stop sending `automatic_leave` without a rollback: `BOT_LEFT_ALONE_SECONDS=0`.
+- **Migration number**: `0009`, chained after #37's `0008_signup_columns` (the single-head test fails loudly if two heads exist).
 
 ## Follow-ups
 - Watch one real call: press End, then time it to `ready` and update this SOP with the real sequence and delay; confirm Vexa takes `automatic_leave` and measure a few windows.

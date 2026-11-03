@@ -141,6 +141,9 @@ Edit `.env`:
 | `APP_ENV`, `COOKIE_SECURE` | `production`, `true` |
 | `EDGE_SHARED_SECRET` | `openssl rand -hex 32`, the **same value** nginx sends as `X-Edge-Secret` (section 6, "Edge secret"). Empty = not configured: the app starts and logs a warning, and every client is limited as the proxy's address (one shared login limit for all visitors, so set it). `X-Forwarded-For` is never believed without it |
 | `BOT_LEFT_ALONE_SECONDS` | Optional, default `300`. How long the bot stays in a call after the last other person stops speaking before it leaves on its own (sent to Vexa as `automatic_leave.max_time_left_alone`, in milliseconds; Vexa's own default is 10 minutes, and `0` sends nothing so Vexa's default applies). **It is a silence rule, not a headcount**: a short window can cut a quiet meeting (a long screen-share with no talking, a reading break), and the notes then cover only what the bot heard. Change it by editing `.env` and recreating `web` and `worker` (`docker compose up -d --force-recreate web worker`, with no meeting `bot_sent` or `processing`): no image rebuild, no code deploy. It applies to bots sent after that; a bot already in a call keeps the window it was sent with |
+| `PUBLIC_BASE_URL`, `MAIL_PROVIDER`, `RESEND_API_KEY`, `MAIL_FROM` | Pilot accounts, section 10. `RESEND_API_KEY` from Resend (the sending domain verified there); leave `MAIL_PROVIDER` empty. Without a key the app runs, no mail goes out and password sign-up stays off |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional until Sign in with Google is wanted (both empty = the feature is off). The OAuth client's redirect address is `https://notes.beyrictech.com/api/auth/google/callback` |
+| `MAX_ACTIVE_BOTS` | Optional, default `1`. Bots on meetings at once across all users; a new meeting past it answers `409 bot_busy` |
 | `AUDIO_RETENTION_DAYS` | Optional, default `7`. The same value is shown on `/privacy` (compose passes it to `next`) |
 
 ## 4. Start Vexa and create the app's key
@@ -404,6 +407,56 @@ curl -s -o /dev/null -w '%{http_code}\n' https://notes.beyrictech.com/health    
 - [ ] A backup exists and the scratch restore shows meetings and notes.
 - [ ] A merge to `main` deploys through CD.
 - [ ] Task 8 acceptance: a real meeting end to end.
+
+## 10. Pilot accounts: deploy and open
+
+Sign-up exists in the code but **stays closed**: `app_state.signups_open` is `false` and nothing in
+a deploy changes it. The order matters:
+
+1. **Ownership scoping must already be live** (accounts core, migrations 0006 and 0007). Check:
+   `GET /api/session` as the admin shows `user.is_admin: true`.
+2. **Add the mail and Google variables to `.env`** (section 3) *before* the deploy. A missing
+   `RESEND_API_KEY` is not an error; it only means no mail and no password sign-up. Never put these
+   values in a message or a commit.
+3. **Migration `0008`** (one nullable column on `auth_tokens`) runs with the deploy. It is
+   additive: old code ignores the column. Roll back with
+   `docker compose run --rm migrate alembic downgrade 0007` before starting old code (it only
+   drops that column; verification links not yet used then stop working).
+4. **nginx, by hand** (never copy `deploy/nginx.conf` over the live file: it would drop certbot's
+   lines). In `/etc/nginx/sites-available/beyric-notes`, add the two `limit_req_zone` lines next to
+   the existing ones (they sit above `server {`), and the two `location` blocks for the account
+   routes and the waitlist next to the login location, exactly as in `deploy/nginx.conf`
+   (the comments there say what each does). Then `sudo nginx -t && sudo systemctl reload nginx`.
+   Prove it without touching the server: `deploy/nginx-limit-check.sh` runs the repository's file in
+   a throwaway container (the account routes share one counter of 11 requests, then 429; the
+   waitlist 6; the Google callback and `GET /api/pilot` are not counted).
+5. **Check**: `curl -s https://notes.beyrictech.com/api/pilot` answers
+   `{"state":"closed","prefill_email":null,"google_signin":false}` (`true` once the Google variables
+   are set).
+6. **Open the pilot** only when you decide to, as the admin, with a signed-in session. Until the
+   admin screens exist, use curl with a cookie jar (the CSRF token comes from `GET /api/session`;
+   placeholders in capitals):
+
+   ```bash
+   J=$(mktemp); H=https://notes.beyrictech.com
+   CSRF=$(curl -s -c $J -b $J $H/api/session | python3 -c 'import json,sys;print(json.load(sys.stdin)["csrf_token"])')
+   CSRF=$(curl -s -c $J -b $J -H "X-CSRF-Token: $CSRF" -H 'content-type: application/json' \
+     -d '{"email":"ADMIN_EMAIL","password":"ADMIN_PASSWORD"}' $H/api/session \
+     | python3 -c 'import json,sys;print(json.load(sys.stdin)["csrf_token"])')
+   curl -s -b $J -H "X-CSRF-Token: $CSRF" -H 'content-type: application/json' -X PUT $H/api/admin/pilot \
+     -d '{"signups_open":true,"max_accounts":10,"default_hours_cap_seconds":18000,"password_signup_enabled":false}'
+   ```
+
+   Keep `password_signup_enabled` `false` until a real verification mail has been delivered once
+   (sign up with Google, or hand out reset links, until then). Do not invite more than one or two
+   testers until several bots at once are supported (spec section 15, phase D).
+7. **Close it again** with the same call and `"signups_open":false`, or in the database:
+   `update app_state set signups_open = false;`.
+
+Operating notes: the worker sends the mail and removes deleted accounts (`docker compose logs
+worker`; a mail provider that is down only delays mail, and `GET /api/admin/mail-failures` lists
+what failed). Delete one account for good with
+`docker compose exec web python scripts/delete_user.py someone@example.com` (it asks first).
 
 ## Follow-ups
 

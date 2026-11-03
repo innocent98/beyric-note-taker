@@ -20,7 +20,8 @@
       "authenticated": false,
       "csrf_token": "<csrf-D>",
       "user": null,
-      "usage": null
+      "usage": null,
+      "unread_notifications": null
     }
   }
 }

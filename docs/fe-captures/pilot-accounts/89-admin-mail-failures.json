@@ -1,0 +1,22 @@
+{
+  "note": "Empty: the worker is not running here, so nothing has failed.",
+  "client": "admin",
+  "request": {
+    "method": "GET",
+    "path": "/api/admin/mail-failures",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "failures": []
+    }
+  }
+}

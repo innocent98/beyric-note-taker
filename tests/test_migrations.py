@@ -128,6 +128,32 @@ def test_join_attempts_column_is_added_and_dropped(scratch_url):
     engine.dispose()
 
 
+def test_0008_adds_the_pending_password_to_auth_tokens_and_drops_it(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    assert "pending_password_hash" in {
+        c["name"] for c in inspect(engine).get_columns("auth_tokens")
+    }
+    command.downgrade(cfg, "0007")
+    assert "pending_password_hash" not in {
+        c["name"] for c in inspect(engine).get_columns("auth_tokens")
+    }
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0008_adds_deleted_at_to_users_and_drops_it(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    assert "deleted_at" in {c["name"] for c in inspect(engine).get_columns("users")}
+    command.downgrade(cfg, "0007")
+    assert "deleted_at" not in {c["name"] for c in inspect(engine).get_columns("users")}
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
 def test_migration_matches_models(scratch_url):
     from alembic.autogenerate import compare_metadata
     from alembic.migration import MigrationContext
@@ -334,7 +360,7 @@ def test_bot_state_seen_at_is_added_and_dropped(scratch_url):
     command.upgrade(cfg, "head")
     engine = create_engine(scratch_url)
     assert "bot_state_seen_at" in {c["name"] for c in inspect(engine).get_columns("meetings")}
-    command.downgrade(cfg, "0007")
+    command.downgrade(cfg, "0008")
     assert "bot_state_seen_at" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
     command.upgrade(cfg, "head")
     assert "bot_state_seen_at" in {c["name"] for c in inspect(engine).get_columns("meetings")}

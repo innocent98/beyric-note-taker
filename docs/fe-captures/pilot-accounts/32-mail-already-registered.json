@@ -1,0 +1,11 @@
+{
+  "note": "Queued instead of a verification mail.",
+  "content": {
+    "to_email": "ada@example.test",
+    "template": "already_registered",
+    "payload": {
+      "link": "https://notes.example.test/login",
+      "name": "Ada Example"
+    }
+  }
+}

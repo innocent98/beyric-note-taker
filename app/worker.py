@@ -12,9 +12,10 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import deletion, mail, maintenance
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import AppState, Meeting
+from app.models import AppState, Meeting, User
 from app.pipeline import advance_meeting, delete_expired_audio
 from app.vexa import VexaClient
 
@@ -30,10 +31,15 @@ def next_meeting_id(session: Session, after_id: int) -> int | None:
     """
     return session.scalars(
         select(Meeting.id)
-        .where(Meeting.status.in_(("bot_sent", "processing")), Meeting.id > after_id)
+        .where(
+            Meeting.status.in_(("bot_sent", "processing")),
+            Meeting.id > after_id,
+            # a meeting of an account being deleted is not worked on (app/deletion.py purges it)
+            Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
+        )
         .order_by(Meeting.id)
         .limit(1)
-        .with_for_update(skip_locked=True)
+        .with_for_update(skip_locked=True, of=Meeting)
     ).first()
 
 
@@ -66,8 +72,61 @@ def run_pass(session: Session, after_id: int) -> int | None:
     return meeting_id
 
 
+def send_mail(session: Session, mailer: mail.Mailer | None, now: datetime) -> int:
+    """Send the mail that is due. With no mailer (production without a provider) mail waits in
+    the outbox until the next sweep fails it."""
+    if mailer is None:
+        return 0
+    return mail.deliver_pending(session, mailer, get_settings(), now)
+
+
+def purge_deleted(session: Session, vexa=None) -> int:
+    """Remove the data of accounts the admin deleted (`app/deletion.py`)."""
+    return deletion.purge_deleted(session, vexa or VexaClient())
+
+
+def background_jobs(session: Session, mailer: mail.Mailer | None, now: datetime) -> None:
+    """The jobs that run before each meeting pass: send due mail, purge deleted accounts. Each is
+    on its own, and whatever one throws is logged by type only (an exception can hold an address
+    or a link) and never reaches the loop, so a mail or purge problem cannot stall meetings."""
+    for name, job in (
+        ("mail", lambda: send_mail(session, mailer, now)),
+        ("purge", lambda: purge_deleted(session)),
+    ):
+        try:
+            job()
+        except Exception as exc:
+            session.rollback()
+            logger.warning("%s job failed (%s)", name, type(exc).__name__)
+
+
+def hourly_jobs(session: Session, now: datetime, vexa=None) -> None:
+    """The hourly jobs, each on its own: deleting expired audio, and the housekeeping of
+    `app/maintenance.py` (the unverified-account sweep, the mail outbox scrub and the rest). One
+    that fails every time (Vexa down for the audio cleanup, say) must not stop the other, so each
+    is caught and logged by type only."""
+
+    def audio() -> None:
+        removed = delete_expired_audio(session, now, vexa=vexa or VexaClient())
+        if removed:
+            logger.info("deleted audio for %s meetings", removed)
+
+    for name, job in (
+        ("audio cleanup", audio),
+        ("maintenance", lambda: maintenance.run_hourly(session, now)),
+    ):
+        try:
+            job()
+        except Exception as exc:
+            session.rollback()
+            logger.warning("hourly %s failed (%s)", name, type(exc).__name__)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    mailer = mail.build_mailer(get_settings())
+    if mailer is None:
+        logger.warning("no mail provider is configured: mail stays in the outbox")
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -79,12 +138,11 @@ def main() -> None:
         try:
             with SessionLocal() as session:
                 record_heartbeat(session, datetime.now(UTC))
+                background_jobs(session, mailer, datetime.now(UTC))
                 found = run_pass(session, cursor)
                 if time.monotonic() - last_cleanup >= CLEANUP_EVERY_SECONDS:
-                    removed = delete_expired_audio(session, datetime.now(UTC), vexa=VexaClient())
+                    hourly_jobs(session, datetime.now(UTC))
                     last_cleanup = time.monotonic()
-                    if removed:
-                        logger.info("deleted audio for %s meetings", removed)
         except Exception as exc:  # e.g. database briefly down
             logger.error("pass failed: %s", type(exc).__name__)
             found = None

@@ -3,16 +3,16 @@
 The state itself lives in `meetings.completion_reason` while a meeting is `bot_sent`; this is the
 time of the poll that wrote it, so the page can stop trusting a state the worker has not renewed.
 
-Revision ID: 0008
-Revises: 0007
+Revision ID: 0009
+Revises: 0008
 Create Date: 2026-11-03
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0008"
-down_revision = "0007"
+revision = "0009"
+down_revision = "0008"
 branch_labels = None
 depends_on = None
 

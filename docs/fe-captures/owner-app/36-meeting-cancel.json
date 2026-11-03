@@ -25,7 +25,7 @@
       "status_text": "Failed",
       "status_tone": "danger",
       "template_id": 1,
-      "created_at": "2026-11-03T14:09:47.473431Z",
+      "created_at": "2026-11-03T14:26:33.245644Z",
       "failure_reason": "You cancelled this meeting before it was recorded.",
       "retry_block": "no_audio",
       "retry_block_message": "This meeting can't be retried: nothing was captured. Send the bot again with a new link.",

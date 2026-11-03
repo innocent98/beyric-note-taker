@@ -190,6 +190,18 @@ def test_get_meeting_by_id_http_error(httpx_mock, client):
         client.get_meeting_by_id(4242)
 
 
+def test_a_404_for_a_meeting_is_told_apart_from_other_errors(httpx_mock, client):
+    from app.vexa import VexaNotFound
+
+    httpx_mock.add_response(url="http://vexa.test/transcripts/by-id/4242", status_code=404)
+    with pytest.raises(VexaNotFound):
+        client.get_meeting_by_id(4242)  # a VexaError too: callers that retry are unchanged
+    httpx_mock.add_response(url="http://vexa.test/transcripts/by-id/4243", status_code=500)
+    with pytest.raises(VexaError) as other:
+        client.get_meeting_by_id(4243)
+    assert not isinstance(other.value, VexaNotFound)
+
+
 def test_get_meeting_by_id_rejects_non_numeric_id_without_request(httpx_mock, client):
     with pytest.raises(ValueError):
         client.get_meeting_by_id("../bots")

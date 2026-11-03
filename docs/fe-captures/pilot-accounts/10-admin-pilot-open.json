@@ -1,0 +1,33 @@
+{
+  "note": "Open, 3 accounts so that 'full' can be shown, password sign-up on.",
+  "client": "admin",
+  "request": {
+    "method": "PUT",
+    "path": "/api/admin/pilot",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "signups_open": true,
+      "max_accounts": 3,
+      "default_hours_cap_seconds": 18000,
+      "password_signup_enabled": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "signups_open": true,
+      "max_accounts": 3,
+      "default_hours_cap_seconds": 18000,
+      "password_signup_enabled": true,
+      "slots_taken": 0,
+      "state": "open"
+    }
+  }
+}
