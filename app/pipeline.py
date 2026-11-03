@@ -20,7 +20,7 @@ from sqlalchemy.orm import Session
 from app import audio, usage
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
-from app.models import Meeting, Template, VocabularyTerm
+from app.models import Meeting, Template, User, VocabularyTerm
 from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
 from app.vexa import VexaClient, VexaError, VexaMeeting
@@ -300,6 +300,14 @@ def _step_notes(session: Session, meeting: Meeting, openai_client) -> bool:
     return True
 
 
+def _owner_deleted(session: Session, meeting: Meeting) -> bool:
+    """Whether the meeting's owner is being deleted. Such a meeting is left exactly as it is:
+    nothing is downloaded, transcribed, written or counted for an account that is going away
+    (`app/deletion.py` stops the bot and removes the rows and the recordings)."""
+    status = session.scalar(select(User.status).where(User.id == meeting.owner_user_id))
+    return status == "deleted"
+
+
 def advance_meeting(
     session: Session,
     meeting_id: int,
@@ -319,6 +327,9 @@ def advance_meeting(
     meeting = _lock(session, meeting_id)
     try:
         while meeting is not None and meeting.status in ("bot_sent", "processing"):
+            if _owner_deleted(session, meeting):
+                session.rollback()  # looked at on every step, so a deletion mid-run stops it
+                return
             if meeting.step == "waiting":
                 proceed = _poll(session, meeting, vexa, now)
                 if proceed:

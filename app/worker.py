@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app import deletion, mail, maintenance
 from app.config import get_settings
 from app.db import SessionLocal
-from app.models import AppState, Meeting
+from app.models import AppState, Meeting, User
 from app.pipeline import advance_meeting, delete_expired_audio
 from app.vexa import VexaClient
 
@@ -31,10 +31,15 @@ def next_meeting_id(session: Session, after_id: int) -> int | None:
     """
     return session.scalars(
         select(Meeting.id)
-        .where(Meeting.status.in_(("bot_sent", "processing")), Meeting.id > after_id)
+        .where(
+            Meeting.status.in_(("bot_sent", "processing")),
+            Meeting.id > after_id,
+            # a meeting of an account being deleted is not worked on (app/deletion.py purges it)
+            Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
+        )
         .order_by(Meeting.id)
         .limit(1)
-        .with_for_update(skip_locked=True)
+        .with_for_update(skip_locked=True, of=Meeting)
     ).first()
 
 
