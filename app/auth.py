@@ -22,6 +22,7 @@ from fastapi import Depends, Request
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from app import vault
 from app.config import Settings
 from app.db import get_session
 from app.models import AppState, User
@@ -364,6 +365,7 @@ def check_start(settings: Settings) -> None:
             f"session_secret must be at least {MIN_SESSION_SECRET} characters "
             f"(generate one with: openssl rand -hex 48); it signs every session cookie"
         )
+    vault.check_settings(settings)
 
 
 PUBLIC_PATHS = frozenset({"/login", "/privacy", "/terms"})

@@ -92,6 +92,12 @@ def parse_meeting_url(url: str) -> tuple[str, str]:
     return platform, native_id
 
 
+def canonical_meeting_url(url: str) -> str:
+    """The URL the bot is sent to: https, rebuilt from its parsed parts, the Zoom passcode kept and
+    every other query parameter dropped. Raises `UnsupportedMeetingUrl` like `parse_meeting_url`."""
+    return _parse(url)[2]
+
+
 def _list_of_dicts(container: dict, key: str) -> list[dict[str, Any]]:
     """`container[key]` as a list of objects. Absent or null is an empty list; any other shape
     means Vexa changed its response, which we refuse to guess about."""
