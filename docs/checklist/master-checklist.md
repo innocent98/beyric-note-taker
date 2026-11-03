@@ -148,6 +148,9 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] Phase 0 (parallel): Google Cloud project and billing; instant-Meet spike S1 to S7; Vexa chat and per-key limit check; mail provider and DNS; bots-per-machine measurement
 - [ ] Plan (superpowers:writing-plans)
 - [ ] Accounts: sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap
+  - [x] Phase A core (PR `feature/pilot-accounts-core`, 2026-11-03; SOP `docs/sop/2026-11-03-pilot-accounts-core.md`; open, not merged): A1 migration 0006 (users, tokens, oauth flows, waitlist, notifications, mail outbox, settings, admin from `OWNER_EMAIL`), A2 argon2id and password rules, A4 session cookie `{uid, csrf, iat, epoch, gepoch}` and guard, A5 email login with per-email limiter, A6 migration 0007 (ownership, usage ledger), A7/A8 meetings, templates, vocabulary scoped by user (foreign id 404), A9 hours formula, gate and `usage` in `/api/session`
+  - [ ] **Deploy step for Adebayo:** add `OWNER_EMAIL` to the server `.env` before merging (the owner then signs in with email plus the same password)
+  - [ ] A3 mailer; A10 sign-up with the cap lock and `GET /api/pilot`; A11 verification; A12 reset; A13/A14 Google sign-in; A15 waitlist; A16/A17 admin API; A18 notifications API; A19 nginx zones and deploy order; A20 privacy and terms rows (second PR)
 - [ ] Calendar auto-join (Google): connect, upcoming list with per-meeting toggle, rules (all / only ones I organise / only when I turn it on), template for calendar meetings, scheduler in the worker
 - [ ] Instant Meet auto-join: Workspace Events subscription to the user's Meet spaces via Pub/Sub; first a throwaway spike, including whether personal Gmail accounts work
 - [ ] More than one bot at a time (overlapping meetings across users); measure how many the server can run
@@ -165,7 +168,10 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 
 - [x] Remove the default trusted-proxy fallback (`172.28.0.1`, `trusted_proxy_ips`, hard-coded `next` trust) once `EDGE_SHARED_SECRET` is live on the server (done 2026-11-03, `chore/remove-trusted-proxy-fallback`; Opus review finding 6; `docs/sop/2026-11-03-edge-secret-and-login-limits.md`)
 - [ ] Run `deploy/nginx-limit-check.sh` (and, if cheap, `docs/spike/edge-secret/e2e.sh`) in CI
-- [ ] Alert the owner on an account lockout (today a log line only); per-account device cookie with the accounts work
+- [ ] Alert the owner on an account lockout (today a log line only). The device cookie is per account (email) since the accounts core PR
+- [ ] Replace `app/data/common-passwords.txt` (384 entries) with the 10,000-entry list; add a breached-password lookup
+- [ ] Neutral `bot_busy` message instead of the global `bot_already_active` (Phase C, before more than one or two testers)
+- [ ] Run the updated `web/scripts/owner-e2e.mjs`, `owner-browser-check.mjs` and `docs/spike/edge-secret/e2e.sh` once against a compose stack (changed for email login, not run)
 - [ ] Test paid Zoom accounts
 - [ ] Check Vexa licence exceptions before any commercial use
 - [ ] Choose a recording notice for meetings

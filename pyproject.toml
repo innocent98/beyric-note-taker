@@ -28,6 +28,9 @@ dev = ["pytest>=8", "pytest-httpx>=0.35", "ruff==0.17.3"]
 [tool.setuptools]
 packages = ["app"]
 
+[tool.setuptools.package-data]
+app = ["data/*.txt"]
+
 [tool.ruff]
 line-length = 100
 extend-exclude = ["spike"]
