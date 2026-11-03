@@ -10,7 +10,7 @@ const eslintConfig = defineConfig([
     files: ["components/legal/**"],
     rules: { "react/no-unescaped-entities": "off" },
   },
-  globalIgnores([".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts"]),
+  globalIgnores(["lib/api/schema.d.ts", ".next/**", "out/**", "build/**", "coverage/**", "next-env.d.ts"]),
 ]);
 
 export default eslintConfig;
