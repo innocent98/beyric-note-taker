@@ -3,7 +3,7 @@
 // log in, create a template, create and delete a vocabulary term, list meetings, load every owner
 // page, log out. Vexa and OpenAI are not involved: nothing here sends a bot or rewrites notes.
 //
-//   node scripts/owner-e2e.mjs --next http://127.0.0.1:8020 --password "$OWNER_PASSWORD"
+//   node scripts/owner-e2e.mjs --next http://127.0.0.1:8020 --email "$OWNER_EMAIL" --password "$OWNER_PASSWORD"
 //
 // It writes one template and one term into whichever database FastAPI uses (the term is deleted
 // again; the template stays, the API cannot delete one) and exits 1 on the first failed check.
@@ -11,9 +11,14 @@ import { parseArgs } from "node:util";
 import { randomBytes } from "node:crypto";
 
 const { values } = parseArgs({
-  options: { next: { type: "string" }, password: { type: "string" }, json: { type: "boolean", default: false } },
+  options: {
+    next: { type: "string" },
+    email: { type: "string" },
+    password: { type: "string" },
+    json: { type: "boolean", default: false },
+  },
 });
-for (const key of ["next", "password"]) {
+for (const key of ["next", "email", "password"]) {
   if (!values[key]) {
     console.error(`missing --${key}`);
     process.exit(2);
@@ -89,10 +94,11 @@ check("GET /login: the sign-in page", r.status === 200 && r.text.includes("Welco
 r = await send("GET", "/api/session");
 csrf = r.body?.csrf_token;
 check("GET /api/session through Next: anonymous, with a token and a cookie", r.body?.authenticated === false && !!csrf && jar.has("session"), JSON.stringify(r.body));
-r = await write("POST", "/api/session", { password: WRONG });
-check("login with a wrong password: 401 invalid_password", r.status === 401 && r.body?.error?.code === "invalid_password", `${r.status} ${r.text}`);
-r = await write("POST", "/api/session", { password: values.password });
+r = await write("POST", "/api/session", { email: values.email, password: WRONG });
+check("login with a wrong password: 401 invalid_credentials", r.status === 401 && r.body?.error?.code === "invalid_credentials", `${r.status} ${r.text}`);
+r = await write("POST", "/api/session", { email: values.email, password: values.password });
 check("login: 200 authenticated, new token and cookie", r.status === 200 && r.body?.authenticated === true && r.body.csrf_token !== csrf && r.headers.getSetCookie().length > 0, `${r.status} ${r.text}`);
+check("login: the response names the user and their usage", typeof r.body?.user?.email === "string" && typeof r.body?.usage?.used_seconds === "number", JSON.stringify(r.body));
 csrf = r.body?.csrf_token;
 const loggedIn = new Map(jar);
 
@@ -167,7 +173,7 @@ check("POST /logout: 303 to /login with a new cookie", r.status === 303 && loc(r
 r = await send("GET", "/templates");
 check("after logout the browser's new cookie is anonymous", [307, 308, 303].includes(r.status) && loc(r).endsWith("/login"), `${r.status} ${loc(r)}`);
 r = await send("GET", "/templates", { cookies: loggedIn });
-check("the old cookie is revoked (logout signs out every device)", [307, 308, 303].includes(r.status) && loc(r).endsWith("/login"), `${r.status} ${loc(r)}`);
+check("the old cookie is revoked (logout signs this user out on every device)", [307, 308, 303].includes(r.status) && loc(r).endsWith("/login"), `${r.status} ${loc(r)}`);
 r = await send("GET", "/api/templates", { cookies: loggedIn });
 check("the old cookie gets 401 from the API too", r.status === 401 && r.body?.error?.code === "not_authenticated", `${r.status} ${r.text}`);
 r = await send("GET", "/logout");

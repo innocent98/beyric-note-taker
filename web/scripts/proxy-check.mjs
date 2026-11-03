@@ -4,7 +4,7 @@
 // agree on status, redirect target, headers that matter, Set-Cookie attributes and body.
 //
 //   node scripts/proxy-check.mjs --next http://127.0.0.1:8020 --direct http://127.0.0.1:8021 \
-//        --password "$OWNER_PASSWORD"
+//        --email "$OWNER_EMAIL" --password "$OWNER_PASSWORD"
 //
 // It logs in and creates two templates (one per side) in whichever database FastAPI uses, so run
 // it against a scratch stack, never the pilot. It creates nothing with Vexa.
@@ -14,11 +14,12 @@ const { values } = parseArgs({
   options: {
     next: { type: "string" },
     direct: { type: "string" },
+    email: { type: "string" },
     password: { type: "string" },
     json: { type: "boolean", default: false },
   },
 });
-for (const k of ["next", "direct", "password"]) {
+for (const k of ["next", "direct", "email", "password"]) {
   if (!values[k]) {
     console.error(`missing --${k}`);
     process.exit(2);
@@ -112,13 +113,13 @@ void login0;
 await step("GET /templates without a login: 303 to /login", each((s) => send(s, "GET", "/templates", { jar: new Map() })));
 
 // 3. A POST with no CSRF token is refused with the app's own 403 page.
-await step("POST /login without a CSRF token: 403", each((s) => send(s, "POST", "/login", { form: { password: BAD_GUESS } })));
+await step("POST /login without a CSRF token: 403", each((s) => send(s, "POST", "/login", { form: { email: values.email, password: BAD_GUESS } })));
 
 // 4. A wrong password, with a token: the form comes back with an error.
-await step("POST /login wrong password: error page", each((s) => send(s, "POST", "/login", { form: { password: BAD_GUESS, csrf_token: tokens.get(s.name) } })));
+await step("POST /login wrong password: error page", each((s) => send(s, "POST", "/login", { form: { email: values.email, password: BAD_GUESS, csrf_token: tokens.get(s.name) } })));
 
 // 5. The right password: 303 to /, a fresh session cookie.
-await step("POST /login correct password: 303 to / and a new session cookie", each((s) => send(s, "POST", "/login", { form: { password: values.password, csrf_token: tokens.get(s.name) } })), { body: false });
+await step("POST /login correct password: 303 to / and a new session cookie", each((s) => send(s, "POST", "/login", { form: { email: values.email, password: values.password, csrf_token: tokens.get(s.name) } })), { body: false });
 
 // 6. Logged in: pages render with the cookie forwarded.
 await step("GET /templates logged in: 200", each((s) => send(s, "GET", "/templates")));
@@ -152,7 +153,7 @@ for (let i = 0; i < 6; i++) {
   for (const s of SIDES) {
     const jar = new Map();
     const page = await send(s, "GET", "/login", { jar, headers: { "X-Forwarded-For": `10.30.0.${s.name === "next" ? 1 : 2}` } });
-    const r = await send(s, "POST", "/login", { jar, form: { password: BAD_GUESS, csrf_token: csrfIn(page.body.toString()) }, headers: { "X-Forwarded-For": `10.30.0.${s.name === "next" ? 1 : 2}` } });
+    const r = await send(s, "POST", "/login", { jar, form: { email: values.email, password: BAD_GUESS, csrf_token: csrfIn(page.body.toString()) }, headers: { "X-Forwarded-For": `10.30.0.${s.name === "next" ? 1 : 2}` } });
     limitStatuses[s.name].push(r.status);
   }
 }

@@ -120,7 +120,7 @@ export function createApi(options: ApiOptions = {}) {
     return (await res.json()) as T;
   }
 
-  // GET /api/session: whether the visitor is the owner, and the token that goes with the cookie.
+  // GET /api/session: whether the visitor is signed in (and as whom), and the token that goes with the cookie.
   async function readSession(): Promise<SessionState> {
     const state = await request<SessionState>("GET", "/api/session");
     csrf = state.csrf_token;
@@ -130,8 +130,11 @@ export function createApi(options: ApiOptions = {}) {
   return {
     session: readSession,
     // The token changes at login and at logout; both responses carry the new one.
-    async login(password: string): Promise<SessionState> {
-      const state = await request<SessionState>("POST", "/api/session", { body: { password }, write: true });
+    async login(email: string, password: string): Promise<SessionState> {
+      const state = await request<SessionState>("POST", "/api/session", {
+        body: { email, password },
+        write: true,
+      });
       csrf = state.csrf_token;
       return state;
     },

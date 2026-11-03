@@ -1,0 +1,28 @@
+{
+  "note": "",
+  "request": {
+    "method": "PUT",
+    "path": "/api/templates/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-H>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Mine now",
+      "instructions": "x"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such template"
+      }
+    }
+  }
+}

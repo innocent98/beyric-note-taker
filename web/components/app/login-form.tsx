@@ -9,10 +9,11 @@ import { ApiError, errorMessage } from "@/lib/api/client";
 // POST /api/session from the browser, so the session cookie FastAPI sets lands in the browser by
 // itself. The button stays locked after a 429: the lockout lasts 5 minutes to an hour with no
 // countdown, so there is nothing to retry for now (docs/fe-integration-guide-owner-app.md section 8).
-// The sign-in is one password: the API has no email, "forgot password" or "keep me signed in"
-// (docs/ui/parity-report.md), so the form does not draw them.
+// The sign-in is an email and a password. The API has no "forgot password", Google sign-in or
+// "keep me signed in" yet (docs/ui/parity-report.md), so the form does not draw them.
 export function LoginForm() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +23,10 @@ export function LoginForm() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || locked) return;
+    if (email.trim() === "") {
+      setError("Enter your email.");
+      return;
+    }
     if (password === "") {
       setError("Enter your password.");
       return;
@@ -29,7 +34,7 @@ export function LoginForm() {
     setPending(true);
     setError(null);
     try {
-      await api.login(password);
+      await api.login(email.trim(), password);
       router.replace("/");
       router.refresh();
     } catch (caught) {
@@ -47,11 +52,21 @@ export function LoginForm() {
       </div>
       {error ? <Alert kind="error">{error}</Alert> : null}
       <Field
+        id="email"
+        label="Work email"
+        type="email"
+        large
+        autoFocus
+        autoComplete="email"
+        placeholder="you@company.com"
+        value={email}
+        onChange={(event) => setEmail(event.target.value)}
+      />
+      <Field
         id="password"
         label="Password"
         type={show ? "text" : "password"}
         large
-        autoFocus
         autoComplete="current-password"
         placeholder="Your password"
         value={password}

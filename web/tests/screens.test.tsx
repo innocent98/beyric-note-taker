@@ -43,8 +43,9 @@ beforeEach(() => {
 });
 
 describe("login", () => {
-  it("shows and hides the password, and asks for one before calling the API", async () => {
+  it("shows and hides the password, and asks for the email and the password before calling the API", async () => {
     render(<LoginForm />);
+    expect(screen.getByLabelText("Work email")).toHaveProperty("type", "email");
     const field = screen.getByLabelText("Password");
     expect(field).toHaveProperty("type", "password");
     await userEvent.click(screen.getByRole("button", { name: "Show" }));
@@ -52,25 +53,30 @@ describe("login", () => {
     await userEvent.click(screen.getByRole("button", { name: "Hide" }));
     expect(field).toHaveProperty("type", "password");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(screen.getByRole("alert").textContent).toContain("Enter your email.");
+    await userEvent.type(screen.getByLabelText("Work email"), "owner@example.test");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(screen.getByRole("alert").textContent).toContain("Enter your password.");
     expect(mocks.login).not.toHaveBeenCalled();
   });
 
-  it("signs in and goes to the app", async () => {
-    mocks.login.mockResolvedValue({ authenticated: true, csrf_token: "x" });
+  it("signs in with the email and password, and goes to the app", async () => {
+    mocks.login.mockResolvedValue({ authenticated: true, csrf_token: "x", user: null, usage: null });
     render(<LoginForm />);
+    await userEvent.type(screen.getByLabelText("Work email"), "  owner@example.test ");
     await userEvent.type(screen.getByLabelText("Password"), "hunter2");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    expect(mocks.login).toHaveBeenCalledWith("hunter2");
+    expect(mocks.login).toHaveBeenCalledWith("owner@example.test", "hunter2");
     expect(mocks.replace).toHaveBeenCalledWith("/");
   });
 
-  it("shows the captured wrong-password message and lets the owner try again", async () => {
-    mocks.login.mockRejectedValue(new ApiError(401, "invalid_password", "That password is not right."));
+  it("shows the captured wrong-credentials message and lets the user try again", async () => {
+    mocks.login.mockRejectedValue(new ApiError(401, "invalid_credentials", "That email or password is not right."));
     render(<LoginForm />);
+    await userEvent.type(screen.getByLabelText("Work email"), "owner@example.test");
     await userEvent.type(screen.getByLabelText("Password"), "nope");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("That password is not right.");
+    expect((await screen.findByRole("alert")).textContent).toBe("That email or password is not right.");
     expect((screen.getByRole("button", { name: "Sign in" }) as HTMLButtonElement).disabled).toBe(false);
     expect(mocks.replace).not.toHaveBeenCalled();
   });
@@ -78,6 +84,7 @@ describe("login", () => {
   it("locks the form after the 15-minute lockout", async () => {
     mocks.login.mockRejectedValue(new ApiError(429, "too_many_attempts", "Too many failed attempts. Try again later."));
     render(<LoginForm />);
+    await userEvent.type(screen.getByLabelText("Work email"), "owner@example.test");
     await userEvent.type(screen.getByLabelText("Password"), "nope");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect((await screen.findByRole("alert")).textContent).toMatch(/try again later/i);

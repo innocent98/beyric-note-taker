@@ -136,7 +136,7 @@ Edit `.env`:
 | `VEXA_API_KEY` | from step 4 |
 | `DATABASE_URL`, `VEXA_BASE_URL` | leave commented; compose sets both |
 | `OPENAI_API_KEY` | the OpenAI key |
-| `OWNER_PASSWORD` | a long password |
+| `OWNER_EMAIL`, `OWNER_PASSWORD` | The admin account's email and a long password. Migration `0006` creates the account from them (once; later changes to these two do nothing), and the sign-in is then email plus password. **Both must be in `.env` before the first deploy that contains migration `0006`**, or that migration fails and rolls back. `OWNER_PASSWORD` can be removed after it has run |
 | `SESSION_SECRET` | `openssl rand -hex 48` |
 | `APP_ENV`, `COOKIE_SECURE` | `production`, `true` |
 | `EDGE_SHARED_SECRET` | `openssl rand -hex 32`, the **same value** nginx sends as `X-Edge-Secret` (section 6, "Edge secret"). Empty = not configured: the app starts, logs a warning, and falls back to `TRUSTED_PROXY_IPS`, which a container on the server can forge |

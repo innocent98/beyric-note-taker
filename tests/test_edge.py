@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 
-from app import auth, edge, services
+from app import auth, edge, services, usage
 from app.auth import LoginLimiter
 from app.main import create_app
 from tests.test_web import (  # noqa: F401  (fixtures used by name)
@@ -637,6 +637,8 @@ def test_an_account_lockout_is_logged_without_password_material(secured, caplog)
     lines = [r.getMessage() for r in caplog.records if r.name == "app.services"]
     assert len(lines) == 1 and "account" in lines[0] and "198.51.100.77" in lines[0]
     assert "guess-that-must-not-leak" not in " ".join(lines) and PASSWORD not in " ".join(lines)
+    # The account is a short hash, never the email address itself.
+    assert OWNER_EMAIL not in lines[0] and usage.email_hash(OWNER_EMAIL)[:12] in lines[0]
 
 
 # ---- a request through next without the secret is noticed ----

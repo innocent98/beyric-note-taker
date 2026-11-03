@@ -2,12 +2,12 @@
 // A stand-in for FastAPI's JSON API, for looking at the owner screens without Docker, a database
 // or a worker. It replays the captures in docs/fe-captures/owner-app/ as meetings 1 to 10, so every
 // meeting state has a page. Nothing here is the real backend: writes answer with the capture shape
-// and change nothing, and any password signs in.
+// and change nothing, and any email and password sign in.
 //
 //   node scripts/mock-api.mjs --port 8031
 //   FASTAPI_INTERNAL_URL=http://127.0.0.1:8031 npm run dev        (or build, then start)
 //
-// Visit /login and sign in with any password. Start with --empty for the empty list, --stale for
+// Visit /login and sign in with any email and password. Start with --empty for the empty list, --stale for
 // the worker banner.
 import http from "node:http";
 import { readFileSync } from "node:fs";
@@ -52,6 +52,8 @@ function json(res, status, payload, headers = {}) {
   res.end(JSON.stringify(payload));
 }
 
+const MOCK_USER = { email: "owner@example.test", name: null, is_admin: false, email_verified: true };
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
   const path = url.pathname.replace(/\/$/, "");
@@ -61,12 +63,12 @@ const server = http.createServer((req, res) => {
 
   if (path === "/api/session") {
     if (method === "POST") {
-      return json(res, 200, { authenticated: true, csrf_token: "mock-csrf" }, { "set-cookie": "session=owner; Path=/; HttpOnly; SameSite=Lax" });
+      return json(res, 200, { authenticated: true, csrf_token: "mock-csrf", user: MOCK_USER, usage: { used_seconds: 0, cap_seconds: 18000 } }, { "set-cookie": "session=owner; Path=/; HttpOnly; SameSite=Lax" });
     }
     if (method === "DELETE") {
-      return json(res, 200, { authenticated: false, csrf_token: "mock-csrf" }, { "set-cookie": "session=; Path=/; Max-Age=0" });
+      return json(res, 200, { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null }, { "set-cookie": "session=; Path=/; Max-Age=0" });
     }
-    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf" } : { authenticated: false, csrf_token: "mock-csrf" });
+    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: MOCK_USER, usage: { used_seconds: 0, cap_seconds: 18000 } } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
   }
   if (path.startsWith("/api/") && !loggedIn) {
     return json(res, 401, { error: { code: "not_authenticated", message: "Log in to continue." } });

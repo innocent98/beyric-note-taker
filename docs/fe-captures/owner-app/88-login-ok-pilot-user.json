@@ -1,0 +1,37 @@
+{
+  "note": "An ordinary account: a capped `usage`, not an admin.",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-G>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "pilot@example.test",
+      "password": "pilot-password-placeholder"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": "session=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-H>",
+      "user": {
+        "email": "pilot@example.test",
+        "name": "Pilot Example",
+        "is_admin": false,
+        "email_verified": true
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 18000
+      }
+    }
+  }
+}

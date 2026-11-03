@@ -565,6 +565,7 @@ def run(app, base, engine, vexa, openai_client) -> None:
         "/api/templates",
         note="The same cookie, replayed after logout: 401.",
     )
+    app.state.limiter = LoginLimiter()  # the failures captured above are not part of this count
     guest = Recorder(base)
     guest.call("limit-session", "GET", "/api/session")
     for attempt in range(1, 6):

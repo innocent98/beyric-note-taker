@@ -1,0 +1,28 @@
+{
+  "note": "Same status, code and message as a wrong password: no account is revealed.",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "nobody@example.test",
+      "password": "pilot-password-placeholder"
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_credentials",
+        "message": "That email or password is not right."
+      }
+    }
+  }
+}

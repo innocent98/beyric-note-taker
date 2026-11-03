@@ -101,11 +101,14 @@ def log_in(request: Request, session: Session, email: str, password: str) -> Non
     refused = limiter.check(client, account, device=device)  # counts this attempt
     if refused:
         if refused != "address" and lockout_log_throttle.ready():
+            # The account is logged as a short hash (the ledger's `email_hash`, first 12 hex
+            # characters), not the address itself: an email is personal data and logs outlive
+            # the account. The operator can hash a suspected address to match it.
             logger.warning(
                 "login refused: too many failed attempts in the last hour on the %s limit "
-                "(account %r, client %s); further refusals are not logged for a minute",
+                "(account %s, client %s); further refusals are not logged for a minute",
                 refused,
-                account[:80],
+                usage.email_hash(account)[:12],
                 client,
             )
         raise Refused(429, "too_many_attempts", "Too many failed attempts. Try again later.")

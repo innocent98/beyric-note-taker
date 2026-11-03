@@ -1,0 +1,32 @@
+{
+  "note": "Five recorded hours are in the ledger (inserted by SQL: the worker is not running).",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-H>",
+      "user": {
+        "email": "pilot@example.test",
+        "name": "Pilot Example",
+        "is_admin": false,
+        "email_verified": true
+      },
+      "usage": {
+        "used_seconds": 18000,
+        "cap_seconds": 18000
+      }
+    }
+  }
+}

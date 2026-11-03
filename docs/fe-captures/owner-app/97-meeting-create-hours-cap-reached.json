@@ -1,0 +1,28 @@
+{
+  "note": "Checked before the bot is sent. The hours in the text follow the user's own cap.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-H>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "url": "https://meet.google.com/abc-defg-hij",
+      "template_id": 6
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "hours_cap_reached",
+        "message": "You have used your 5 recorded hours for the pilot, so the note taker will not join new meetings. Write to us at hello@beyrictech.com if you need more."
+      }
+    }
+  }
+}

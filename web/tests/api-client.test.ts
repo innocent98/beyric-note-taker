@@ -36,7 +36,7 @@ const header = (init: RequestInit, name: string) => (init.headers as Record<stri
 describe("api client", () => {
   it("reads the session and the CSRF token", async () => {
     const { api } = setup(() => anonymous());
-    expect(await api.session()).toEqual({ authenticated: false, csrf_token: "<csrf-A>" });
+    expect(await api.session()).toEqual({ authenticated: false, csrf_token: "<csrf-A>", user: null, usage: null });
   });
 
   it("sends the token from GET /api/session on a write, fetching it only once", async () => {
@@ -45,11 +45,13 @@ describe("api client", () => {
         ? anonymous()
         : respond(capture("08-login-ok.json")),
     );
-    const state = await api.login("pw");
-    expect(state).toEqual({ authenticated: true, csrf_token: "<csrf-C>" });
+    const state = await api.login("owner@example.test", "pw");
+    expect(state).toMatchObject({ authenticated: true, csrf_token: "<csrf-C>" });
+    expect(state.user).toEqual({ email: "owner@example.test", name: null, is_admin: true, email_verified: true });
+    expect(state.usage).toEqual({ used_seconds: 0, cap_seconds: null });
     expect(calls.map((c) => `${c.init.method} ${c.url}`)).toEqual(["GET /api/session", "POST /api/session"]);
     expect(header(calls[1].init, "X-CSRF-Token")).toBe("<csrf-A>");
-    expect(JSON.parse(String(calls[1].init.body))).toEqual({ password: "pw" });
+    expect(JSON.parse(String(calls[1].init.body))).toEqual({ email: "owner@example.test", password: "pw" });
     expect(header(calls[1].init, "Content-Type")).toBe("application/json");
 
     // The login response carried a new token; the next write uses it without another GET.
@@ -86,7 +88,7 @@ describe("api client", () => {
   });
 
   it.each([
-    ["05-login-wrong-password.json", 401, "invalid_password", "That password is not right."],
+    ["05-login-wrong-password.json", 401, "invalid_credentials", "That email or password is not right."],
     ["23-template-duplicate-name.json", 400, "duplicate_name", "A template with that name already exists."],
     ["34-meeting-create-while-active.json", 409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."],
     ["62-meeting-regenerate-openai-down.json", 502, "notes_failed", "The notes could not be written. The old notes were kept."],
@@ -95,7 +97,7 @@ describe("api client", () => {
     const c = capture(file);
     const { api } = setup((url, init) => (init.method === "GET" ? anonymous() : respond(c)));
     const error = await (c.request.path.startsWith("/api/session")
-      ? api.login("x")
+      ? api.login("owner@example.test", "x")
       : c.request.path.startsWith("/api/templates")
         ? api.templates.create({ name: "a", instructions: "b" })
         : c.request.path.endsWith("regenerate")
@@ -110,8 +112,11 @@ describe("api client", () => {
   it("keeps the field list of a 422 and shows our own copy, not the developer text", async () => {
     const c = capture("06-login-missing-password.json");
     const { api } = setup((url, init) => (init.method === "GET" ? anonymous() : respond(c)));
-    const error = (await api.login("").catch((e: unknown) => e)) as ApiError;
-    expect(error.fields).toEqual([{ field: "password", message: "Field required" }]);
+    const error = (await api.login("", "").catch((e: unknown) => e)) as ApiError;
+    expect(error.fields).toEqual([
+      { field: "email", message: "Field required" },
+      { field: "password", message: "Field required" },
+    ]);
     expect(errorMessage(error)).toBe("Something went wrong. Please try again.");
   });
 
@@ -128,7 +133,7 @@ describe("api client", () => {
       (url, init) => (init.method === "GET" ? anonymous() : respond(capture("05-login-wrong-password.json"))),
       { onUnauthorized },
     );
-    await expect(api.login("nope")).rejects.toMatchObject({ code: "invalid_password" });
+    await expect(api.login("owner@example.test", "nope")).rejects.toMatchObject({ code: "invalid_credentials" });
     expect(onUnauthorized).not.toHaveBeenCalled();
   });
 
