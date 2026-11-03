@@ -6,7 +6,7 @@
 #   docs/spike/edge-secret/e2e.sh | tee docs/spike/edge-secret/e2e-output.txt
 #
 # The network is 172.28.1.0/24 with next at 172.28.1.10, as in compose.yaml, because the app
-# recognises next by that address. Visitors are containers with fixed addresses on it, so nginx sees a different
+# recognises next by that address (for its missing-secret warning). Visitors are containers with fixed addresses on it, so nginx sees a different
 # $remote_addr for each. The "hostile" container is any other container on the host: it talks to
 # `next` (or `web`) directly, skipping nginx, and forges X-Forwarded-For.
 # All passwords and secrets here are throwaway values generated for this run.
@@ -128,17 +128,17 @@ check "no startup warning with the secret set" "0" \
   "$("${compose[@]}" logs web 2>&1 | grep -c 'EDGE_SHARED_SECRET is not set' || true)"
 
 echo
-echo "== B. secret NOT set in the app (the state of the server until the operator sets it) =="
+echo "== B. secret NOT set in the app (every client is limited as the proxy's address) =="
 export E2E_EDGE_SECRET_BACKUP="$E2E_EDGE_SECRET"; export E2E_EDGE_SECRET=""
-export E2E_TRUSTED_PROXY_IPS="172.28.0.1"   # the server's TRUSTED_PROXY_IPS (next, 172.28.1.10, is always trusted)
 reset
 "${compose[@]}" logs web 2>&1 | grep -m1 'EDGE_SHARED_SECRET is not set' | sed 's/^[^|]*| //'
 check "startup warning is logged" "1" \
   "$("${compose[@]}" logs web 2>&1 | grep -c 'EDGE_SHARED_SECRET is not set' || true)"
-check "as before: visitor 1 limited through nginx" "401,401,401,401,401,429" "$(client 172.28.1.101 $NGINX 6)"
-check "as before: visitor 2 not affected" "401" "$(client 172.28.1.102 $NGINX 1)"
+check "visitor 1 limited through nginx" "401,401,401,401,401,429" "$(client 172.28.1.101 $NGINX 6)"
+check "visitor 2 shares visitor 1's limit: through nginx every client is the proxy" "429" \
+  "$(client 172.28.1.102 $NGINX 1)"
 reset
-check "as before (the gap the secret closes): a hostile container's forged addresses are believed, so it is never limited" \
-  "401,401,401,401,401,401" "$(client 172.28.1.103 $NEXT 6 --xff-from 1)"
+check "a hostile container's forged addresses are not believed, so it is limited like anyone else" \
+  "401,401,401,401,401,429" "$(client 172.28.1.103 $NEXT 6 --xff-from 1)"
 
 exit $fail

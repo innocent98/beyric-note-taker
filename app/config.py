@@ -26,13 +26,9 @@ class Settings(BaseSettings):
     session_secret: str = ""
     cookie_secure: bool = True
     # The secret nginx sends in X-Edge-Secret. The app believes X-Forwarded-For only on a request
-    # that carries it (app/edge.py). Empty = not configured yet: the app warns at startup and
-    # falls back to `trusted_proxy_ips` below.
+    # that carries it (app/edge.py). Empty = not configured: the app warns at startup and treats
+    # every client as the socket peer (the proxy), so all visitors share one login limit.
     edge_shared_secret: str = ""
-    # TRANSITIONAL, used only while `edge_shared_secret` is empty: peer addresses whose
-    # X-Forwarded-For is believed ("" = none; the Next.js container is always on top of this).
-    # Forgeable through Docker's NAT, so it is ignored once the secret is set.
-    trusted_proxy_ips: str = "172.28.0.1"
 
 
 @lru_cache
