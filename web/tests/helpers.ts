@@ -26,3 +26,8 @@ export function filesUnder(dir: string, exts: string[]): string[] {
 export function rel(path: string): string {
   return relative(WEB, path).split(sep).join("/");
 }
+
+// A response body captured from the running API (docs/fe-captures/owner-app/<file>).
+export function captured<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/owner-app", file))).response.body as T;
+}

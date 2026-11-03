@@ -44,11 +44,29 @@ describe("design guards", () => {
     expect(BRAND.bgDark.toUpperCase()).toBe(value("bg", darkStart));
   });
 
-  it("uses no inline style prop or attribute, and no inline event handlers", () => {
+  it("uses no inline style prop or attribute, and no inline HTML event handler attributes", () => {
     // The CSP forbids inline styles, and inline styling is how screens drift from the components.
+    const files = filesUnder("app", [".tsx"]).concat(filesUnder("components", [".tsx"]));
+    const offenders = files
+      .filter((p) => /\bstyle\s*=|\bon[a-z]+\s*=/.test(read(p)) && !rel(p).endsWith("behaviors.tsx"))
+      .map(rel);
+    expect(offenders).toEqual([]);
+  });
+
+  it("puts React event props (onClick, onSubmit) only in client components", () => {
+    // A server component cannot take one (Next fails the build); this names the rule for a reader.
     const offenders = filesUnder("app", [".tsx"])
       .concat(filesUnder("components", [".tsx"]))
-      .filter((p) => /\bstyle\s*=|\bon[A-Z][A-Za-z]*\s*=/.test(read(p)) && !rel(p).endsWith("behaviors.tsx"))
+      .filter((p) => /\bon[A-Z][A-Za-z]*\s*=/.test(read(p)) && !/^\s*"use client"/.test(read(p)))
+      .map(rel);
+    expect(offenders).toEqual([]);
+  });
+
+  it("uses dangerouslySetInnerHTML only for the sanitised notes and the JSON-LD block", () => {
+    const allowed = ["components/app/notes-html.tsx", "components/site/json-ld.tsx"];
+    const offenders = filesUnder("app", [".tsx"])
+      .concat(filesUnder("components", [".tsx"]))
+      .filter((p) => read(p).includes("dangerouslySetInnerHTML") && !allowed.includes(rel(p)))
       .map(rel);
     expect(offenders).toEqual([]);
   });

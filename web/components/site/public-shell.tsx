@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { AppLink, Button, Logo } from "@/components/ui";
+import { getSession } from "@/lib/api/server";
 import { LEGAL_NAME } from "@/lib/site";
 
-// Header, footer and main landmark for the public pages. "Sign in" is always shown: a logged-in
-// owner is only recognised by FastAPI today (the header switches to "Open the app" once
-// GET /api/session exists).
-export function PublicShell({ children, mainClass = "pub-main" }: { children: ReactNode; mainClass?: string }) {
+// Header, footer and main landmark for the public pages. The header offers "Open the app" to the
+// logged-in owner (GET /api/session) and "Sign in" to everyone else, FastAPI being unreachable
+// included.
+export async function PublicShell({ children, mainClass = "pub-main" }: { children: ReactNode; mainClass?: string }) {
+  const owner = (await getSession())?.authenticated === true;
   return (
     <div className="bg-surface">
       <a className="skip-link" href="#main">
@@ -14,7 +16,7 @@ export function PublicShell({ children, mainClass = "pub-main" }: { children: Re
       <header className="pub-bar">
         <Logo />
         <nav className="pub-bar-actions" aria-label="Account">
-          <Button href="/login">Sign in</Button>
+          {owner ? <Button href="/">Open the app</Button> : <Button href="/login">Sign in</Button>}
         </nav>
       </header>
       <main id="main" className={mainClass}>

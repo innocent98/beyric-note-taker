@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { getSession } from "@/lib/api/server";
 import {
   Alert,
   Badge,
@@ -8,6 +9,8 @@ import {
   Dialog,
   EmptyState,
   Field,
+  Icon,
+  IconButton,
   ListRow,
   Logo,
   Menu,
@@ -16,6 +19,7 @@ import {
   PageHead,
   Segmented,
   SelectField,
+  TabButtons,
   Tabs,
   TextareaField,
 } from "@/components/ui";
@@ -42,12 +46,14 @@ const swatches = [
   ["sw-info", "info", "Working"],
 ] as const;
 
-// Every component and token in the current theme: the parity reference for the designer. Until
-// GET /api/session exists to say who is the owner, it is shown outside production only (404 in
-// production). STYLEGUIDE_PREVIEW=1 lets a local production build show it, to check the page under
-// the production CSP; compose.yaml never sets it.
-export default function StyleGuidePage() {
-  if (process.env.NODE_ENV === "production" && process.env.STYLEGUIDE_PREVIEW !== "1") notFound();
+// Every component and token in the current theme: the parity reference for the designer. In
+// production only the logged-in owner sees it (404 for anyone else, as if it did not exist), and
+// outside production anyone does. STYLEGUIDE_PREVIEW=1 lets a local production build show it
+// without a login, to check the page under the production CSP; compose.yaml never sets it.
+export default async function StyleGuidePage() {
+  if (process.env.NODE_ENV === "production" && process.env.STYLEGUIDE_PREVIEW !== "1") {
+    if (!(await getSession())?.authenticated) notFound();
+  }
   return (
     <div className="page">
       <div className="stack">
@@ -119,6 +125,12 @@ export default function StyleGuidePage() {
             <Badge tone="info">Processing</Badge>
             <Badge tone="brand">Brand</Badge>
           </div>
+          <div className="card sg-demo">
+            <Badge tone="success" dot>Ready</Badge>
+            <Badge tone="danger" dot>Failed</Badge>
+            <Badge tone="warning" dot>Bot sent</Badge>
+            <Badge tone="info" dot>Writing the notes</Badge>
+          </div>
         </section>
 
         <section className="sg-section">
@@ -133,6 +145,7 @@ export default function StyleGuidePage() {
           <Card>
             <form className="stack-sm" method="get" action="/styleguide">
               <Field id="sg-text" label="Text field" hint="A hint sits under the field." placeholder="Placeholder" />
+              <Field id="sg-icon" label="Field with an icon" icon="link" placeholder="Paste a link" />
               <Field id="sg-bad" label="Field with an error" defaultValue="oops" error="This value is not valid." />
               <SelectField
                 id="sg-select"
@@ -161,10 +174,26 @@ export default function StyleGuidePage() {
                 { href: "#", label: "History" },
               ]}
             />
+            <TabButtons
+              items={[{ id: "sg-notes", label: "Notes" }, { id: "sg-transcript", label: "Transcript" }]}
+              defaultId="sg-notes"
+              label="Tabs that switch a panel"
+            />
             <nav className="nav measure" aria-label="Sidebar example">
               <NavLink href="#" label="Current page" current />
               <NavLink href="#" label="Another page" />
             </nav>
+          </div>
+        </section>
+
+        <section className="sg-section">
+          <h2>Icons</h2>
+          <div className="card sg-demo">
+            <Icon name="link" /><Icon name="video" /><Icon name="copy" /><Icon name="check" /><Icon name="plus" />
+            <Icon name="chevron" /><Icon name="back" /><Icon name="info" /><Icon name="warning" />
+            <Icon name="trash" /><Icon name="logout" />
+            <IconButton icon="copy" label="Copy" />
+            <IconButton icon="trash" label="Delete" tone="danger" />
           </div>
         </section>
 

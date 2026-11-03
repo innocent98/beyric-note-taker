@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
     // Next's default proxy timeout is 30 s and would cut those requests off.
     proxyTimeout: 310_000,
   },
+  // The review copy of the landing page (stream A) lived at /welcome; the landing is `/` now.
+  async redirects() {
+    return [{ source: "/welcome", destination: "/", permanent: false }];
+  },
   async rewrites() {
     return {
       beforeFiles: [],

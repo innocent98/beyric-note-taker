@@ -11,7 +11,8 @@
     "start": "node .next/standalone/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gen:api": "openapi-typescript ../docs/openapi.json -o lib/api/schema.d.ts"
   },
   "dependencies": {
     "next": "16.4.4",
@@ -19,11 +20,16 @@
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.4",
+    "jsdom": "^26.1.0",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5",
     "vitest": "^3"
   }

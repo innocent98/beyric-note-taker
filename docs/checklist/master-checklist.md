@@ -93,7 +93,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Fallback proxy proven for the Jinja pages: cookies, `Set-Cookie`, 303, POST bodies, CSRF, headers, long requests, the visitor's address (`web/scripts/proxy-check.mjs`)
   - [x] Nonce CSP for Next-rendered pages, no `unsafe-inline`, zero console errors in a real browser (`web/scripts/browser-check.mjs`; 2026-11-02)
   - [x] Tokens, fonts, `components.css` ported; React components for every Jinja macro; `/styleguide` (non-production); guard tests ported
-  - [x] Public pages in Next: `/privacy`, `/terms` live (text equal to the Jinja templates, test-enforced); landing at `/welcome` (noindex) until `GET /api/session` exists
+  - [x] Public pages in Next: `/privacy`, `/terms` live (text equal to the Jinja templates, test-enforced); the landing moved from `/welcome` to `/` in stream C
   - [x] SEO basics: metadata, canonical, Open Graph, JSON-LD, `sitemap.ts`, `robots.ts`, `llms.txt`, favicon, manifest and icons
   - [x] Container memory measured on a Mac: 37 MiB idle, 65 MiB peak after 240 requests (not yet on the server); `mem_limit` stays 512m as a ceiling
   - [ ] CI: `web` job with path filters (docs-only skips both, Python-only skips Node, web-only skips Python), always-reporting `ci` job
@@ -108,7 +108,14 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Live captures (`scripts/capture_owner_api.py`, 81 files) and `docs/fe-integration-guide-owner-app.md`; SOP `docs/sop/2026-11-02-json-api.md`
   - [ ] Opus review of the auth path before merge (lead)
   - [ ] Follow-ups for stream A and the lead: nginx `/api/` locations (regenerate 300 s timeout, login limit zone), real visitor address through the Next proxy, TypeScript type generation
-- [ ] Stream C, owner app screens to designer parity: login, meetings list and detail, templates, vocabulary
+- [ ] Stream C, owner app screens to designer parity (`feature/nextjs-app-screens`, 2026-11-03, PR open against `feature/nextjs-scaffold`, not merged; SOP `docs/sop/2026-11-03-nextjs-owner-screens.md`)
+  - [x] Typed API client generated from `docs/openapi.json`; one error shape, CSRF on every write, 401 to `/login`; tested against the captured responses
+  - [x] Next owns `/`, `/login`, `/logout`, `/meetings/[id]`, `/templates`, `/vocabulary`; `/styleguide` owner-only; `/welcome` redirects to `/`; the rest still falls through to FastAPI (rollback: SOP "Operate")
+  - [x] App shell (sidebar, phone top bar), Meetings (new meeting, list, paging, stale-worker alert, empty state), meeting page (notes, transcript, copy, rewrite, cancel with confirm, retry, notices, 30 s polling), Templates, Vocabulary, login; light and dark
+  - [x] 89 vitest tests, 41-check end-to-end through Next on a compose stack, real-browser pass at 375 and 1280 px in both themes
+  - [ ] CI green on the PR (runs on GitHub)
+  - [ ] Not built, waiting on the API (stream D): Download menu, Share dialog, translation, template delete, participants and duration
+  - [ ] Not verified: real Vexa bot and real OpenAI rewrite through the screens, Safari and Firefox, the live server
 - [ ] Stream D, new designed screens: accounts and pilot, calendar and auto-join, team, tasks, sprints, share and download, translation
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated
 - [ ] Measure Next.js memory on the server (Adebayo runs the SSH steps)
