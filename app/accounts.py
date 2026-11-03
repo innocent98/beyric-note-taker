@@ -4,10 +4,17 @@ migration 0007 gave the existing owner the same four templates."""
 
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Template, User, UserSettings, VocabularyTerm
+from app.models import (
+    AuthToken,
+    Template,
+    User,
+    UserSettings,
+    VocabularyTerm,
+    WaitlistEntry,
+)
 
 # The four templates migration 0001 seeded, as (name, instructions). Each new user gets their
 # own copies: templates are never shared (spec section 0, Q13). A test keeps this equal to the
@@ -59,22 +66,36 @@ UNVERIFIED_GRACE = timedelta(hours=48)
 
 
 def sweep_unverified(session: Session, now: datetime) -> int:
-    """Delete password accounts that never confirmed their email within 48 hours, which frees
-    their slot. Admins are never swept. An unverified account has no meetings, so only its
-    templates, vocabulary and settings (and its tokens, by cascade) go with it. Returns how many."""
-    ids = list(
-        session.scalars(
-            select(User.id)
+    """Delete password accounts that never confirmed their email within 48 hours of their LAST
+    submission (the newest verification link, else creation). Admins are never swept. An
+    unverified account has no meetings, so only its templates, vocabulary and settings (and its
+    tokens, by cascade) go with it. A person who came in with an invitation is put back on the
+    waiting list, so the place is not lost with the account. Returns how many."""
+    last_submission = func.coalesce(
+        select(func.max(AuthToken.created_at))
+        .where(AuthToken.user_id == User.id, AuthToken.purpose == "verify_email")
+        .scalar_subquery(),
+        User.created_at,
+    )
+    rows = list(
+        session.execute(
+            select(User.id, User.email)
             .where(
                 User.email_verified_at.is_(None),
                 User.is_admin.is_(False),
-                User.created_at < now - UNVERIFIED_GRACE,
+                last_submission < now - UNVERIFIED_GRACE,
             )
-            .with_for_update(skip_locked=True)
+            .with_for_update(skip_locked=True, of=User)
         )
     )
-    if not ids:
+    if not rows:
         return 0
+    ids, emails = [r[0] for r in rows], [r[1] for r in rows]
+    session.execute(
+        update(WaitlistEntry)
+        .where(WaitlistEntry.email.in_(emails), WaitlistEntry.status == "joined")
+        .values(status="waiting", invite_token_id=None)
+    )
     session.execute(delete(VocabularyTerm).where(VocabularyTerm.owner_user_id.in_(ids)))
     session.execute(delete(UserSettings).where(UserSettings.user_id.in_(ids)))
     session.execute(delete(Template).where(Template.owner_user_id.in_(ids)))

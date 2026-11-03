@@ -501,6 +501,17 @@ def test_two_b_an_unverified_account_is_verified_linked_and_loses_its_password(g
     assert logged_in(web)["authenticated"] is True
 
 
+def test_google_cannot_confirm_an_unconfirmed_account_when_the_pilot_has_filled_up(gapp, session):
+    open_pilot(session, max_accounts=1)
+    make_user(session, "member@example.test")
+    planted = make_user(session, "ada@example.test", password=ATTACKER, email_verified_at=None)
+    web = browser(gapp)
+    assert sign_in(web).headers["location"] == "/pilot-full"
+    user = user_by(session, id=planted.id)
+    assert user.email_verified_at is None and user.google_sub is None
+    assert logged_in(web)["authenticated"] is False
+
+
 def test_a_password_account_already_linked_to_another_google_account_is_not_relinked(gapp, session):
     make_user(session, "ada@example.test", google_sub="g-someone-else")
     web = browser(gapp)

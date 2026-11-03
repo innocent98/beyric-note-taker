@@ -178,6 +178,8 @@ def _link_by_email(session: Session, user: User, identity: Identity, now: dateti
         return refused
     if user.google_sub is not None:  # linked to another Google account (ours was not found by sub)
         return Outcome(error="google_failed")
+    if user.email_verified_at is None and not signup.may_confirm(session, user, now):
+        return Outcome(full=True, email=user.email)  # confirming would take a place that is gone
     user.google_sub = identity.sub
     if user.email_verified_at is None:
         # Pre-registration defence: the password on an unverified row may be someone else's.

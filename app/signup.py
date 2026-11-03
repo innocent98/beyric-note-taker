@@ -26,7 +26,7 @@ import re
 from collections.abc import Callable
 from datetime import datetime
 
-from sqlalchemy import func, select, text, update
+from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -43,6 +43,9 @@ logger = logging.getLogger(__name__)
 TERMS_VERSION = "2026-11-03"
 SIGNUP_LOCK = 6002  # serialises "count the slots" + "take one" (next to services.NEW_MEETING_LOCK)
 MAX_NAME_CHARS = 200
+# Unconfirmed password accounts that may exist at once, so the form cannot be used to fill the
+# database; each is swept 48 hours after its last submission (`accounts.sweep_unverified`).
+MAX_UNVERIFIED = 100
 MAX_EMAIL_CHARS = 254
 
 _LOCAL = r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+"
@@ -63,13 +66,24 @@ def normalise_email(raw: str) -> str | None:
 # ---- the pilot ----
 
 
+def _invited_emails():
+    """Addresses whose waiting-list entry was redeemed with an invitation."""
+    return select(WaitlistEntry.email).where(WaitlistEntry.status == "joined")
+
+
 def slots_taken(session: Session, now: datetime) -> int:
-    """Accounts that hold one of the pilot's slots: every user who is not an admin and not
-    deleted (suspended and unverified ones too), plus invitations still waiting to be used."""
+    """Places in use: confirmed accounts (admins and deleted ones excluded, suspended ones kept),
+    accounts made from an invitation that are not confirmed yet (the place was promised), and
+    invitations still waiting to be used. A plain unconfirmed account holds no place until it is
+    confirmed, so a flood of sign-ups cannot starve real ones (confirming checks for room again)."""
     users = session.scalar(
         select(func.count())
         .select_from(User)
-        .where(User.is_admin.is_(False), User.status != "deleted")
+        .where(
+            User.is_admin.is_(False),
+            User.status != "deleted",
+            or_(User.email_verified_at.is_not(None), User.email.in_(_invited_emails())),
+        )
     )
     invites = session.scalar(
         select(func.count())
@@ -83,12 +97,39 @@ def slots_taken(session: Session, now: datetime) -> int:
     return users + invites
 
 
+def has_room(session: Session, now: datetime) -> bool:
+    """Whether a place is free under the cap (no cap, or no settings row: nothing to run out of)."""
+    state = session.get(AppState, 1)
+    if state is None or state.max_accounts is None:
+        return True
+    return slots_taken(session, now) < state.max_accounts
+
+
+def may_confirm(session: Session, user: User, now: datetime) -> bool:
+    """Whether an unconfirmed account may become confirmed (take a place) now: it was made from an
+    invitation (its place is already counted), or a place is free."""
+    invited = session.scalars(
+        select(WaitlistEntry.id).where(
+            WaitlistEntry.email == user.email, WaitlistEntry.status == "joined"
+        )
+    ).first()
+    return invited is not None or has_room(session, now)
+
+
+def unverified_count(session: Session) -> int:
+    return session.scalar(
+        select(func.count())
+        .select_from(User)
+        .where(User.is_admin.is_(False), User.email_verified_at.is_(None), User.status == "active")
+    )
+
+
 def pilot_state(session: Session, now: datetime) -> str:
     """`closed` (the admin has not opened sign-up), `full` (the cap is reached) or `open`."""
     state = session.get(AppState, 1)
     if state is None or not state.signups_open:
         return "closed"
-    if state.max_accounts is not None and slots_taken(session, now) >= state.max_accounts:
+    if not has_room(session, now):
         return "full"
     return "open"
 
@@ -223,6 +264,9 @@ def _sign_up_locked(
             "password_signup_disabled",
             "Creating an account with a password is not available yet. Use Google to sign up.",
         )
+    if invite is None and unverified_count(session) >= MAX_UNVERIFIED:
+        # Before the lookup, so a new address and an existing one get the same answer.
+        raise Refused(429, "too_many_requests", "Too many attempts. Try again later.")
     if not mail_allowed(address):
         return
     # The row is locked from here to the commit: `verify_email` takes the same lock before it
@@ -296,11 +340,22 @@ def verify_email(
     if tokens.consume(session, raw_token, "verify_email", now) is None:  # used a moment ago
         session.rollback()
         raise _bad_token()
-    # Lock the account before writing and look again: a sign-up for this address may have held it.
+    # Under the sign-up lock (the same order as sign-up: this lock, then the account row), lock the
+    # account and look again: a sign-up for this address may have held it, and a place is only
+    # taken here, at confirmation, so it is counted once and ten at once cannot overfill the pilot.
+    session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": SIGNUP_LOCK})
     user = session.get(User, user.id, with_for_update=True, populate_existing=True)
     if user is None or user.status == "deleted":
         session.rollback()
         raise _bad_token()
+    if user.email_verified_at is None and not may_confirm(session, user, now):
+        session.rollback()  # the link is not used up: it works when a place opens
+        raise Refused(
+            409,
+            "pilot_full",
+            "The pilot filled up before this account was confirmed. Join the waiting list and "
+            "we will write when a place opens.",
+        )
     user.email_verified_at = user.email_verified_at or now
     user.password_hash = token.pending_password_hash
     tokens.revoke(session, "verify_email", user.id, now)

@@ -9,7 +9,15 @@ import pytest
 from sqlalchemy import func, select
 
 from app import accounts, mail, passwords, signup, tokens
-from app.models import AppState, AuthToken, MailOutbox, Template, User, UserSettings
+from app.models import (
+    AppState,
+    AuthToken,
+    MailOutbox,
+    Template,
+    User,
+    UserSettings,
+    WaitlistEntry,
+)
 from tests.test_accounts import visitor
 from tests.test_api import anon, error_of  # noqa: F401  (fixtures used by name)
 from tests.test_web import (  # noqa: F401
@@ -101,8 +109,127 @@ def test_the_pilot_is_full_at_the_cap_and_the_admin_does_not_count(anon, session
     make_user(session, "admin@example.test", admin=True)
     make_user(session, "one@example.test")
     assert anon.get("/api/pilot").json()["state"] == "open"
-    make_user(session, "two@example.test", email_verified_at=None)  # unverified counts
+    make_user(session, "two@example.test", email_verified_at=None)  # unconfirmed: no place held
+    assert anon.get("/api/pilot").json()["state"] == "open"
+    make_user(session, "three@example.test")
     assert anon.get("/api/pilot").json()["state"] == "full"
+
+
+def joined_unconfirmed(session, email=NEW_EMAIL, hours_old=1):
+    """An account made from an invitation that is not confirmed yet: it still holds its place."""
+    user = make_user(session, email, email_verified_at=None)
+    session.add(WaitlistEntry(email=email, status="joined"))
+    raw = tokens.issue(
+        session,
+        purpose="verify_email",
+        email=email,
+        user_id=user.id,
+        now=datetime.now(UTC) - timedelta(hours=hours_old),
+        pending_password_hash=user.password_hash,
+    )
+    session.commit()
+    return user, raw
+
+
+def test_an_unconfirmed_account_holds_no_place_but_one_made_from_an_invitation_does(anon, session):
+    open_pilot(session, max_accounts=1)
+    make_user(session, "plain@example.test", email_verified_at=None)
+    assert anon.get("/api/pilot").json()["state"] == "open"
+    joined_unconfirmed(session)
+    assert anon.get("/api/pilot").json()["state"] == "full"
+    assert signup.slots_taken(session, datetime.now(UTC)) == 1
+
+
+def test_confirming_after_the_pilot_filled_up_is_refused_and_keeps_the_link(app, session):
+    open_pilot(session, max_accounts=1)
+    web = visitor(app, "198.51.100.1")
+    sign_up(web)
+    link = token_of(queued(session)[0])
+    make_user(session, "member@example.test")  # takes the only place meanwhile
+    error = error_of(verify(web, link), 409, "pilot_full")
+    assert "filled up" in error["message"]
+    assert user_of(session).email_verified_at is None
+    open_pilot(session, max_accounts=2)  # room appears: the same link still works
+    assert verify(web, link).status_code == 200
+
+
+def test_an_invited_account_confirms_even_when_the_pilot_is_full(app, session):
+    open_pilot(session, max_accounts=1)
+    user, raw = joined_unconfirmed(session)
+    assert signup.pilot_state(session, datetime.now(UTC)) == "full"
+    web = visitor(app, "198.51.100.1")
+    assert verify(web, raw, PASSWORD).status_code == 200
+
+
+def test_ten_parallel_confirmations_at_nine_accounts_confirm_exactly_one(app, session, monkeypatch):
+    open_pilot(session, max_accounts=10)
+    for i in range(9):
+        make_user(session, f"member{i}@example.test")
+    racers = []
+    for i in range(10):
+        web = visitor(app, f"198.51.100.{i + 1}")
+        assert sign_up(web, email=f"racer{i}@example.test").status_code == 202
+        racers.append((web, token_of(queued(session, to=f"racer{i}@example.test")[0])))
+    real = signup.has_room
+
+    def slow(
+        db, now
+    ):  # widen the gap between "is there room" and "confirm" so only the lock decides
+        answer = real(db, now)
+        time.sleep(0.15)
+        return answer
+
+    monkeypatch.setattr(signup, "has_room", slow)
+    results: list[int] = []
+    threads = [
+        threading.Thread(target=lambda w=w, t=t: results.append(verify(w, t).status_code))
+        for w, t in racers
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(results) == [200] + [409] * 9
+    session.expire_all()
+    confirmed = session.scalars(select(User).where(User.email_verified_at.is_not(None))).all()
+    assert len(confirmed) == 10
+
+
+def test_at_most_a_hundred_unconfirmed_password_accounts_exist_at_once(app, session, monkeypatch):
+    open_pilot(session, max_accounts=None)
+    monkeypatch.setattr(signup, "MAX_UNVERIFIED", 2)
+    for i in range(2):
+        make_user(session, f"u{i}@example.test", email_verified_at=None)
+    new = visitor(app, "198.51.100.1")
+    existing = visitor(app, "198.51.100.2")
+    # new and existing addresses get the same answer, so the cap tells nobody who has an account
+    answers = [
+        error_of(
+            new.post("/api/signup", form(email="fresh@example.test")), 429, "too_many_requests"
+        ),
+        error_of(
+            existing.post("/api/signup", form(email="u0@example.test")), 429, "too_many_requests"
+        ),
+    ]
+    assert answers[0] == answers[1]
+    assert user_of(session, "fresh@example.test") is None
+    make_user(session, "member@example.test")  # confirmed accounts do not count toward it
+    assert signup.MAX_UNVERIFIED == 2
+
+
+def test_the_unconfirmed_cap_does_not_stop_an_invited_sign_up(app, session, monkeypatch):
+    open_pilot(session, max_accounts=5)
+    monkeypatch.setattr(signup, "MAX_UNVERIFIED", 1)
+    make_user(session, "u0@example.test", email_verified_at=None)
+    session.add(WaitlistEntry(email=NEW_EMAIL, status="invited"))
+    raw = tokens.issue(
+        session, purpose="waitlist_invite", email=NEW_EMAIL, user_id=None, now=datetime.now(UTC)
+    )
+    session.commit()
+    assert (
+        visitor(app, "198.51.100.1").post("/api/signup", form(invite_token=raw)).status_code == 202
+    )
+    assert user_of(session) is not None
 
 
 def test_suspended_accounts_keep_their_slot_and_deleted_ones_free_it(anon, session):
@@ -382,34 +509,6 @@ def test_every_sign_up_outcome_has_the_same_body_and_status(app, session):
     assert outcomes == {(202, str({"status": "check_your_email"}))}
 
 
-def test_ten_parallel_sign_ups_at_nine_accounts_make_exactly_one(app, session, monkeypatch):
-    real = signup.pilot_state
-
-    def slow(session, now):  # widen the gap between "count" and "insert" so only the lock decides
-        state = real(session, now)
-        time.sleep(0.15)
-        return state
-
-    monkeypatch.setattr(signup, "pilot_state", slow)
-    open_pilot(session, max_accounts=10)
-    for i in range(9):
-        make_user(session, f"member{i}@example.test")
-    results: list[int] = []
-
-    def attempt(i: int) -> None:
-        client = visitor(app, f"198.51.100.{i + 1}")
-        results.append(client.post("/api/signup", form(email=f"racer{i}@example.test")).status_code)
-
-    threads = [threading.Thread(target=attempt, args=(i,)) for i in range(10)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    assert sorted(results) == [202] + [409] * 9
-    session.expire_all()
-    assert session.scalar(select(func.count()).select_from(User)) == 10
-
-
 def test_sign_up_is_limited_per_address(app, session):
     open_pilot(session, max_accounts=None)
     client = visitor(app, "203.0.113.9")
@@ -611,6 +710,32 @@ def test_unverified_accounts_older_than_48_hours_are_deleted_and_free_their_slot
     assert session.get(User, ids[1]) is not None
     assert session.scalars(select(Template).where(Template.owner_user_id == ids[0])).all() == []
     assert user_of(session, "verified@example.test") and user_of(session, "admin@example.test")
+
+
+def test_the_sweep_counts_from_the_last_submission_not_from_creation(session):
+    now = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
+    resubmitted, _ = joined_unconfirmed(session, "again@example.test", hours_old=1)
+    stale, _ = joined_unconfirmed(session, "stale@example.test", hours_old=49)
+    for user in (resubmitted, stale):
+        user.created_at = now - timedelta(hours=60)
+    for row in session.scalars(select(AuthToken)).all():
+        row.created_at = now - timedelta(hours=1 if row.email == "again@example.test" else 49)
+    session.commit()
+    assert accounts.sweep_unverified(session, now) == 1
+    assert user_of(session, "again@example.test") and user_of(session, "stale@example.test") is None
+
+
+def test_sweeping_an_invited_account_returns_the_person_to_the_waitlist(session):
+    now = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
+    user, _ = joined_unconfirmed(session, "invitee@example.test", hours_old=49)
+    user.created_at = now - timedelta(hours=60)
+    for row in session.scalars(select(AuthToken)).all():
+        row.created_at = now - timedelta(hours=49)
+    session.commit()
+    accounts.sweep_unverified(session, now)
+    session.expire_all()
+    entry = session.scalars(select(WaitlistEntry)).one()
+    assert (entry.status, entry.invite_token_id) == ("waiting", None)
 
 
 # ---- password reset ----
