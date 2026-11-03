@@ -327,3 +327,26 @@ def test_a_manual_send_that_cannot_reach_vexa_keeps_the_meeting_failed(session, 
         retry_meeting(session, meeting, vexa)
     assert caught.value.status == 502
     assert meeting.status == "failed" and meeting.failure_reason == pipeline.REASON_JOIN_REFUSED
+
+
+def test_a_manual_send_respects_the_hours_cap(session, meeting, owner):
+    from app.models import UsageEntry, User
+    from app.usage import email_hash
+
+    refused_meeting(session, meeting, ago=10 * MINUTE)
+    user = session.get(User, meeting.owner_user_id)
+    user.is_admin, user.hours_cap_seconds = False, 3600
+    session.add(
+        UsageEntry(
+            user_id=user.id,
+            email_hash=email_hash(user.email),
+            seconds=3600,
+            counted_at=datetime.now(UTC),
+        )
+    )
+    session.commit()
+    vexa = FakeVexa()
+    with pytest.raises(Refused) as caught:
+        retry_meeting(session, meeting, vexa)
+    assert (caught.value.status, caught.value.code) == (403, "hours_cap_reached")
+    assert not getattr(vexa, "sent", []) and meeting.status == "failed"

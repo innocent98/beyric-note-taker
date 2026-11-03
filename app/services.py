@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
 from app import auth, edge, passwords, usage
-from app.config import Settings
+from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
@@ -477,6 +477,14 @@ def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Mee
     if retry_block(meeting, now) is not None:
         session.rollback()
         raise Refused(409, "not_retryable", "This meeting cannot be retried.")
+    owner = session.get(User, meeting.owner_user_id)
+    cap = usage.effective_cap(session, owner)
+    if (
+        cap is not None
+        and usage.hours_used(session, owner, now, get_settings().max_poll_hours * 3600) >= cap
+    ):
+        session.rollback()
+        raise Refused(403, "hours_cap_reached", hours_cap_message(cap))
     active = session.scalars(select(Meeting.id).where(Meeting.status.in_(ACTIVE)).limit(1)).first()
     if active is not None:
         session.rollback()
