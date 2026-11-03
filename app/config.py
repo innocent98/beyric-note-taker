@@ -55,6 +55,14 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     mail_from: str = "Beyric Note Taker <no-reply@beyrictech.com>"
 
+    # The key that encrypts stored secrets (calendar refresh tokens, a pasted calendar link): 32
+    # random bytes, base64 (`openssl rand -base64 32`). It lives only in the server .env, never in
+    # the database or a backup. Rotation: new key here, old key in `token_enc_key_previous`, raise
+    # `token_enc_key_version` by one, re-encrypt, then drop the previous key (app/vault.py).
+    token_enc_key: str = ""
+    token_enc_key_previous: str = ""
+    token_enc_key_version: int = 1
+
 
 @lru_cache
 def get_settings() -> Settings:
