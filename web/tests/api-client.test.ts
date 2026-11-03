@@ -90,7 +90,7 @@ describe("api client", () => {
     ["23-template-duplicate-name.json", 400, "duplicate_name", "A template with that name already exists."],
     ["34-meeting-create-while-active.json", 409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."],
     ["62-meeting-regenerate-openai-down.json", 502, "notes_failed", "The notes could not be written. The old notes were kept."],
-    ["80-limit-sixth-attempt.json", 429, "too_many_attempts", "Too many failed attempts. Try again in 15 minutes."],
+    ["80-limit-sixth-attempt.json", 429, "too_many_attempts", "Too many failed attempts. Try again later."],
   ])("turns %s into an ApiError with the captured code and message", async (file, status, code, message) => {
     const c = capture(file);
     const { api } = setup((url, init) => (init.method === "GET" ? anonymous() : respond(c)));

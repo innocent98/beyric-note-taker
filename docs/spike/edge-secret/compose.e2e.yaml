@@ -1,0 +1,60 @@
+# A cut-down copy of the production topology for scripts/e2e.sh: nginx (the real deploy/nginx.conf)
+# -> next -> web (FastAPI) -> db. No Vexa, worker or OpenAI. Values are throwaway test values.
+name: edgee2e
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: ${E2E_DB_PASSWORD}
+      POSTGRES_DB: notetaker
+    networks: [appdb]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      retries: 30
+  migrate:
+    build: ../../..
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:${E2E_DB_PASSWORD}@db:5432/notetaker
+    networks: [appdb]
+    depends_on:
+      db: {condition: service_healthy}
+  web:
+    build: ../../..
+    # The same uvicorn flags as compose.yaml (a test in tests/test_edge.py guards those).
+    command: [uvicorn, "app.main:create_app", --factory, --host=0.0.0.0, --port=8000, --no-proxy-headers]
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:${E2E_DB_PASSWORD}@db:5432/notetaker
+      APP_ENV: production
+      OWNER_PASSWORD: ${E2E_OWNER_PASSWORD}
+      SESSION_SECRET: ${E2E_SESSION_SECRET}
+      COOKIE_SECURE: "false"
+      EDGE_SHARED_SECRET: ${E2E_EDGE_SECRET-}
+      TRUSTED_PROXY_IPS: ${E2E_TRUSTED_PROXY_IPS-}
+    networks:
+      appdb: {}
+      front: {ipv4_address: 172.31.77.20}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+  next:
+    build:
+      context: ../../../web
+      args: {FASTAPI_INTERNAL_URL: "http://web:8000"}
+    environment:
+      FASTAPI_INTERNAL_URL: "http://web:8000"
+    networks:
+      front: {ipv4_address: 172.31.77.10}
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ${E2E_WORK}/site.conf:/etc/nginx/conf.d/site.conf:ro
+      - ${E2E_WORK}/edge-secret.conf:/etc/nginx/snippets/beyric-edge-secret.conf:ro
+    command: sh -c "rm -f /etc/nginx/conf.d/default.conf; nginx -g 'daemon off;'"
+    networks:
+      front: {ipv4_address: 172.31.77.5}
+networks:
+  appdb: {internal: true}
+  front:
+    ipam:
+      config: [{subnet: 172.31.77.0/24}]

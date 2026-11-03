@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import api, auth, web
+from app import api, auth, edge, web
 from app.config import Settings, get_settings
 from app.db import get_session
 
@@ -23,6 +23,7 @@ CSP = (
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     auth.check_start(settings)
+    edge.warn_if_unsafe(settings)
     app = FastAPI(
         title="Beyric Note Taker",
         dependencies=[Depends(auth.guard)],

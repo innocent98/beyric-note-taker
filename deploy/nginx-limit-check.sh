@@ -8,6 +8,10 @@
 # With the shipped config every POST beyond the allowance (1 + burst 3) is 429, whichever spelling
 # is used, and the spellings share one counter. `--expect-bug` inverts the check, for running an
 # old config as a control (the trailing-slash spellings must then be uncounted).
+#
+# It also proves the edge secret: every proxied request carries the configured X-Edge-Secret and
+# the visitor's address in X-Forwarded-For, and a client-sent copy of either is replaced, not
+# passed on or appended to. The secret here is a dummy written to the file nginx.conf includes.
 set -euo pipefail
 
 conf="${1:-$(dirname "$0")/nginx.conf}"
@@ -19,12 +23,15 @@ trap 'docker rm -f "$net-up" "$net-nginx" >/dev/null 2>&1 || true; docker networ
 
 # The config proxies to 127.0.0.1:8020; point it at the upstream container instead.
 sed "s#http://127.0.0.1:8020#http://$net-up:8020#" "$conf" > "$work/site.conf"
-printf 'server { listen 8020; location / { return 200 ok; } }\n' > "$work/upstream.conf"
+# The upstream answers with the two headers the app trusts, so the check can read them back.
+printf 'server { listen 8020; location / { return 200 "$http_x_edge_secret|$http_x_forwarded_for"; } }\n' > "$work/upstream.conf"
+printf 'proxy_set_header X-Edge-Secret "dummy-secret-for-the-check";\n' > "$work/edge-secret.conf"
 
 port="${CHECK_PORT:-18099}"
 docker network create "$net" >/dev/null
 docker run -d --name "$net-up" --network "$net" -v "$work/upstream.conf:/etc/nginx/conf.d/default.conf:ro" nginx:alpine >/dev/null
 docker run -d --name "$net-nginx" --network "$net" -p "127.0.0.1:$port:80" -v "$work/site.conf:/etc/nginx/conf.d/site.conf:ro" \
+  -v "$work/edge-secret.conf:/etc/nginx/snippets/beyric-edge-secret.conf:ro" \
   nginx:alpine sh -c "rm -f /etc/nginx/conf.d/default.conf; nginx -g 'daemon off;'" >/dev/null
 wait_ready() { for _ in $(seq 1 30); do curl -s -o /dev/null "http://127.0.0.1:$port/" -H 'Host: notes.beyrictech.com' && return 0; sleep 0.5; done; echo "nginx did not start" >&2; return 1; }
 wait_ready
@@ -55,5 +62,14 @@ check "mixed spellings share the limit" "$want" "$got"
 restart
 got=""; for _ in 1 2 3 4 5 6; do got="$got $(curl -s -o /dev/null -w '%{http_code}' -H 'Host: notes.beyrictech.com' "http://127.0.0.1:$port/login/")"; done
 check "GET /login/ x6 is not counted" " 200 200 200 200 200 200" "$got"
+
+# The edge secret is set by nginx; a client cannot supply its own or choose the forwarded address.
+restart
+got="$(curl -s -H 'Host: notes.beyrictech.com' -H 'X-Edge-Secret: attacker' -H 'X-Forwarded-For: 203.0.113.66' "http://127.0.0.1:$port/login")"
+if [[ "$got" == "dummy-secret-for-the-check|"* ]]; then ok=ok; else ok="$got"; fi
+check "client X-Edge-Secret is replaced by nginx's" ok "$ok"
+# One address (nginx's own view of the client), not the one the client claimed, not a list.
+if [[ "$got" =~ ^dummy-secret-for-the-check\|[0-9a-f.:]+$ && "$got" != *203.0.113.66* ]]; then ok=ok; else ok="$got"; fi
+check "client X-Forwarded-For is replaced by the peer address" ok "$ok"
 
 exit $fail

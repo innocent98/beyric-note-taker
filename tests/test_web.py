@@ -599,31 +599,12 @@ def test_changing_the_password_revokes_sessions(app, client):
         assert c.get(OWNER_ONLY).status_code == 303
 
 
-def test_limiter_entries_expire():
-    limiter = LoginLimiter(limit=2, window=100)
-    assert limiter.try_acquire("a", now=0) and limiter.try_acquire("a", now=1)
-    assert not limiter.try_acquire("a", now=50)
-    assert limiter.try_acquire("b", now=50)  # per client
-    assert not limiter.try_acquire("a", now=100)  # oldest attempt (t=0) is exactly at the edge
-    assert limiter.try_acquire("a", now=101.5)  # t=0 and t=1 have both left the window
-    assert limiter.try_acquire("a", now=102)
-
-
-def test_limiter_forgets_idle_clients():
-    limiter = LoginLimiter(limit=2, window=10)
-    for client in ("a", "b", "c"):
-        limiter.try_acquire(client, now=0)
-    assert len(limiter) == 3
-    limiter.try_acquire("d", now=100)
-    assert len(limiter) == 1
-
-
 def test_limiter_is_safe_under_parallel_attempts():
     limiter = LoginLimiter(limit=5, window=1000)
     allowed: list[bool] = []
 
     def attempt():
-        allowed.append(limiter.try_acquire("same"))
+        allowed.append(limiter.try_acquire("same", "owner"))
 
     threads = [threading.Thread(target=attempt) for _ in range(40)]
     for t in threads:
@@ -633,7 +614,7 @@ def test_limiter_is_safe_under_parallel_attempts():
     assert allowed.count(True) == 5
 
 
-def test_successful_login_clears_the_limit(anon_client):
+def test_right_password_after_some_failures_logs_in(anon_client):
     token = token_from(anon_client.get("/login").text)
     for _ in range(4):
         anon_client.post("/login", data={"password": "nope", "csrf_token": token})

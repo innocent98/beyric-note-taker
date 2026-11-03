@@ -27,8 +27,13 @@ from app.models import AppState
 
 COOKIE_NAME = "session"
 SESSION_SECONDS = 30 * 24 * 3600
+# Failed logins: per client address, and per account so that guessing spread over many addresses
+# is capped too. Both are in-memory sliding windows.
 MAX_FAILURES = 5
-FAILURE_WINDOW_SECONDS = 15 * 60
+FAILURE_WINDOW_SECONDS = 5 * 60
+ACCOUNT_MAX_FAILURES = 10
+ACCOUNT_FAILURE_WINDOW_SECONDS = 60 * 60
+MAX_ACCOUNT_KEY = 254
 
 
 class NotLoggedIn(Exception):
@@ -116,45 +121,85 @@ def password_matches(settings: Settings, given: str) -> bool:
     return bool(expected) and hmac.compare_digest(given.encode(), expected)
 
 
-class LoginLimiter:
-    """Login attempts per client in a sliding window. In memory: a restart resets it.
+class _Window:
+    """Timestamps of recent attempts per key; entries older than `window` seconds expire."""
 
-    An attempt is counted *before* the password is checked (under a lock, so parallel requests
-    cannot all slip through) and cleared again on success. After `limit` attempts without a
-    success the client gets 429 until the oldest one leaves the window.
-    """
-
-    def __init__(self, limit: int = MAX_FAILURES, window: float = FAILURE_WINDOW_SECONDS) -> None:
+    def __init__(self, limit: int, window: float) -> None:
         self.limit = limit
         self.window = window
-        self._attempts: dict[str, deque[float]] = {}
-        self._lock = threading.Lock()
+        self.attempts: dict[str, deque[float]] = {}
 
-    def _prune(self, now: float) -> None:
-        for client in list(self._attempts):
-            attempts = self._attempts[client]
+    def prune(self, now: float) -> None:
+        for key in list(self.attempts):
+            attempts = self.attempts[key]
             while attempts and now - attempts[0] > self.window:
                 attempts.popleft()
             if not attempts:
-                del self._attempts[client]
+                del self.attempts[key]
 
-    def try_acquire(self, client: str, now: float | None = None) -> bool:
-        """Count an attempt. False means the client is over the limit and must wait."""
+    def full(self, key: str) -> bool:
+        return len(self.attempts.get(key, ())) >= self.limit
+
+    def add(self, key: str, now: float) -> None:
+        self.attempts.setdefault(key, deque()).append(now)
+
+    def refund(self, key: str) -> None:
+        attempts = self.attempts.get(key)
+        if attempts:
+            attempts.pop()
+            if not attempts:
+                del self.attempts[key]
+
+
+class LoginLimiter:
+    """Login attempts in sliding windows: `limit` per client address in `window` seconds, and
+    `account_limit` per account in `account_window` seconds. In memory: a restart resets it.
+
+    An attempt is counted *before* the password is checked (under a lock, so parallel requests
+    cannot all slip through) and is only counted when neither limit is already full: a locked
+    client that keeps hammering does not extend its wait, and an address over its limit does not
+    spend the account's budget. On success `succeeded` gives this client's attempt back and
+    clears the account's failures. It must not clear the client's other failures: a visitor with
+    an account of their own could otherwise log in to it between guesses at someone else's.
+
+    Unknown accounts are limited exactly like known ones: the key is only the name given.
+    """
+
+    def __init__(
+        self,
+        limit: int = MAX_FAILURES,
+        window: float = FAILURE_WINDOW_SECONDS,
+        account_limit: int = ACCOUNT_MAX_FAILURES,
+        account_window: float = ACCOUNT_FAILURE_WINDOW_SECONDS,
+    ) -> None:
+        self._clients = _Window(limit, window)
+        self._accounts = _Window(account_limit, account_window)
+        self._lock = threading.Lock()
+
+    @staticmethod
+    def _account_key(account: str) -> str:
+        return account.strip().lower()[:MAX_ACCOUNT_KEY]
+
+    def try_acquire(self, client: str, account: str, now: float | None = None) -> bool:
+        """Count an attempt. False means the client or the account is over its limit."""
         now = time.monotonic() if now is None else now
+        account = self._account_key(account)
         with self._lock:
-            self._prune(now)
-            attempts = self._attempts.setdefault(client, deque())
-            if len(attempts) >= self.limit:
+            self._clients.prune(now)
+            self._accounts.prune(now)
+            if self._clients.full(client) or self._accounts.full(account):
                 return False
-            attempts.append(now)
+            self._clients.add(client, now)
+            self._accounts.add(account, now)
             return True
 
-    def reset(self, client: str) -> None:
+    def succeeded(self, client: str, account: str) -> None:
         with self._lock:
-            self._attempts.pop(client, None)
+            self._clients.refund(client)
+            self._accounts.attempts.pop(self._account_key(account), None)
 
     def __len__(self) -> int:
-        return len(self._attempts)
+        return len(self._clients.attempts) + len(self._accounts.attempts)
 
 
 DEV_ENVS = ("development", "test")

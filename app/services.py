@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
-from app import auth
+from app import auth, edge
 from app.models import AppState, Meeting, Template, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import REASON_CANCELLED, REASON_NO_SPEECH
@@ -73,17 +73,19 @@ def get_openai_client():
 # ---- login ----
 
 
-def log_in(request: Request, session: Session, password: str) -> None:
-    """Check the owner password and give the request a fresh logged-in session."""
+OWNER_ACCOUNT = "owner"  # the login form has no username yet; accounts will pass the email
+
+
+def log_in(request: Request, session: Session, password: str, account: str = OWNER_ACCOUNT) -> None:
+    """Check the password and give the request a fresh logged-in session."""
+    settings = request.app.state.settings
     limiter: auth.LoginLimiter = request.app.state.limiter
-    client = request.client.host if request.client else "unknown"
-    if not limiter.try_acquire(client):  # counts this attempt; success clears it below
-        raise Refused(
-            429, "too_many_attempts", "Too many failed attempts. Try again in 15 minutes."
-        )
-    if not auth.password_matches(request.app.state.settings, password):
+    client = edge.client_address(request, settings)
+    if not limiter.try_acquire(client, account):  # counts this attempt; success gives it back
+        raise Refused(429, "too_many_attempts", "Too many failed attempts. Try again later.")
+    if not auth.password_matches(settings, password):
         raise Refused(401, "invalid_password", "That password is not right.")
-    limiter.reset(client)
+    limiter.succeeded(client, account)
     # A fresh token, never a promoted old one, stamped with the current epoch.
     request.state.session = auth.new_session(auth=True, epoch=auth.current_epoch(session))
     request.state.session_changed = True

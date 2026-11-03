@@ -1,0 +1,31 @@
+== build and start ==
+ Container edgee2e-migrate-1  Exited
+ Container edgee2e-web-1  Starting
+ Container edgee2e-web-1  Started
+
+== A. EDGE_SHARED_SECRET set in the app and in nginx ==
+PASS  visitor 1, six wrong passwords through nginx: 401,401,401,401,401,429
+PASS  visitor 2 is not affected (own address reaches the app): 401
+PASS  forged X-Forwarded-For and X-Edge-Secret sent to nginx change nothing: 401,401,401,401,401,429
+PASS  visitor 2 still has its own count: 401
+PASS  hostile container -> next, a new forged address each time, no secret: 401,401,401,401,401,429
+PASS  hostile container -> next with a wrong secret: 401,401,401,401,401,429
+PASS  hostile container -> web directly (the rollback port's shape): 401,401,401,401,401,429
+-- account limit: three visitors, four wrong passwords each (10 allowed per account per hour)
+PASS  visitors 1 and 2 are all 401; visitor 3 runs into the account limit: 401,401,401,401|401,401,401,401|401,401,429,429
+PASS  a fresh visitor with the RIGHT password is refused too: 429
+PASS  after a restart the owner can log in through nginx: 200
+-- live captures of the JSON login limit for the FE guide (docs/fe-captures/owner-app/)
+79-limit-wrong-password-5 401 {'error': {'code': 'invalid_password', 'message': 'That password is not right.'}}
+80-limit-sixth-attempt 429 {'error': {'code': 'too_many_attempts', 'message': 'Too many failed attempts. Try again later.'}}
+81-limit-right-password-while-locked 429 {'error': {'code': 'too_many_attempts', 'message': 'Too many failed attempts. Try again later.'}}
+-- the secret never reaches the browser
+PASS  responses through nginx contain no copy of the secret: 0
+PASS  no startup warning with the secret set: 0
+
+== B. secret NOT set in the app (the state of the server until the operator sets it) ==
+EDGE_SHARED_SECRET is not set: the client address for login limits is believed from X-Forwarded-For when the connection comes from the Docker bridge gateway or the Next.js container, and any container or process on this server can forge it. Set the same secret in .env and in nginx (deploy/README.md, 'Edge secret').
+PASS  startup warning is logged: 1
+PASS  as before: visitor 1 limited through nginx: 401,401,401,401,401,429
+PASS  as before: visitor 2 not affected: 401
+PASS  as before (the gap the secret closes): a hostile container's forged addresses are believed, so it is never limited: 401,401,401,401,401,401

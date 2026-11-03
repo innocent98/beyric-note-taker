@@ -149,7 +149,7 @@ def test_login_is_rate_limited_and_shares_the_pages_limit(anon):
     for _ in range(5):
         error_of(anon.log_in("nope"), 401, "invalid_password")
     error = error_of(anon.log_in("nope"), 429, "too_many_attempts")
-    assert "15 minutes" in error["message"]
+    assert error["message"] == "Too many failed attempts. Try again later."
     error_of(anon.log_in(), 429, "too_many_attempts")  # even the right password waits
     # The login page counts the same client.
     token = re.search(r'name="csrf_token" value="([^"]+)"', anon.client.get("/login").text)[1]
@@ -157,13 +157,13 @@ def test_login_is_rate_limited_and_shares_the_pages_limit(anon):
     assert page.status_code == 429
 
 
-def test_a_good_login_clears_the_failures(anon):
+def test_a_good_login_gives_back_its_own_attempt_not_the_earlier_failures(anon):
     for _ in range(4):
         anon.log_in("nope")
-    assert anon.log_in().status_code == 200
+    assert anon.log_in().status_code == 200  # counted, then given back: four failures remain
     anon.delete("/api/session")
-    for _ in range(5):
-        error_of(anon.log_in("nope"), 401, "invalid_password")
+    error_of(anon.log_in("nope"), 401, "invalid_password")  # the fifth failure is still allowed
+    error_of(anon.log_in("nope"), 429, "too_many_attempts")
 
 
 def test_login_body_must_be_valid(anon):
