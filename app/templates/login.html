@@ -6,7 +6,8 @@
 <h1>Log in</h1>
 <form method="post" action="/login" class="stack-sm">
   {{ ui.csrf_field(csrf) }}
-  {{ ui.field("password", "Password", type="password", required=true, attrs='autocomplete="current-password" autofocus') }}
+  {{ ui.field("email", "Email", type="email", value=email|default(""), required=true, attrs='autocomplete="username" autofocus') }}
+  {{ ui.field("password", "Password", type="password", required=true, attrs='autocomplete="current-password"') }}
   {{ ui.button("Log in", block=true) }}
 </form>
 {% endcall %}

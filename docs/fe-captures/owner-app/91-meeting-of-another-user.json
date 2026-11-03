@@ -1,0 +1,24 @@
+{
+  "note": "A meeting that exists but is someone else's: 404, as if it did not exist.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/7",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

@@ -5,6 +5,8 @@ import type { components } from "./schema";
 type Schemas = components["schemas"];
 
 export type SessionState = Schemas["SessionState"];
+export type SessionUser = Schemas["UserOut"];
+export type Usage = Schemas["UsageOut"];
 export type MeetingSummary = Schemas["MeetingSummary"];
 export type MeetingList = Schemas["MeetingList"];
 export type Meeting = Schemas["MeetingDetail"];

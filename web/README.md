@@ -33,6 +33,6 @@ Adding a page: create `app/<path>/page.tsx`, add `"/<path>"` to `NEXT_PAGES` and
 `proxy.ts`. Until then the path is served by FastAPI.
 
 Owner screens: `docs/sop/2026-11-03-nextjs-owner-screens.md`. To try them against a scratch compose stack:
-`node scripts/owner-e2e.mjs --next http://127.0.0.1:8020 --password "$OWNER_PASSWORD"` (HTTP flow) and
+`node scripts/owner-e2e.mjs --next http://127.0.0.1:8020 --email "$OWNER_EMAIL" --password "$OWNER_PASSWORD"` (HTTP flow) and
 `scripts/owner-browser-check.mjs` (Chromium, screenshots); seed the states with `scripts/seed-owner-states.sql`.
 Never against the pilot: both write to the database.

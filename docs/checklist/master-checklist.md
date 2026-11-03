@@ -166,6 +166,9 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] P0.8 Join-time measurement fixes `AUTOJOIN_LEAD_SECONDS` (default 60)
   - [ ] P0.9 Cloud project already In production (Adebayo, 2026-11-03); remaining: Adebayo sets `GOOGLE_OAUTH_TESTING=false`; session records the unverified-app screen and the day-8 token check
 - [ ] Phase A, accounts: **in progress, owned by other sessions** (`feature/pilot-accounts-core`, then `feature/pilot-accounts-signup`; tasks A1 to A20 in spec section 15, not re-planned): sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap, admin API
+  - [x] Phase A core (PR `feature/pilot-accounts-core`, 2026-11-03; SOP `docs/sop/2026-11-03-pilot-accounts-core.md`; open, not merged): A1 migration 0006 (users, tokens, oauth flows, waitlist, notifications, mail outbox, settings, admin from `OWNER_EMAIL`), A2 argon2id and password rules, A4 session cookie `{uid, csrf, iat, epoch, gepoch}` and guard, A5 email login with per-email limiter, A6 migration 0007 (ownership, usage ledger), A7/A8 meetings, templates, vocabulary scoped by user (foreign id 404), A9 hours formula, gate and `usage` in `/api/session`
+  - [ ] **Deploy step for Adebayo:** add `OWNER_EMAIL` to the server `.env` before merging (the owner then signs in with email plus the same password)
+  - [ ] A3 mailer; A10 sign-up with the cap lock and `GET /api/pilot`; A11 verification; A12 reset; A13/A14 Google sign-in; A15 waitlist; A16/A17 admin API; A18 notifications API; A19 nginx zones and deploy order; A20 privacy and terms rows (second PR)
 - [ ] Phase C, Google Calendar auto-join plus the ICS source (needs A6, A9, A13, A18 for most tasks)
   - [ ] C1 migration for connections, events, scheduled joins
   - [ ] C2 token vault (AES-GCM, Opus review)
@@ -207,7 +210,11 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 
 - [x] Remove the default trusted-proxy fallback (`172.28.0.1`, `trusted_proxy_ips`, hard-coded `next` trust) once `EDGE_SHARED_SECRET` is live on the server (done 2026-11-03, `chore/remove-trusted-proxy-fallback`; Opus review finding 6; `docs/sop/2026-11-03-edge-secret-and-login-limits.md`)
 - [ ] Run `deploy/nginx-limit-check.sh` (and, if cheap, `docs/spike/edge-secret/e2e.sh`) in CI
-- [ ] Alert the owner on an account lockout (today a log line only); per-account device cookie with the accounts work
+- [ ] Alert the owner on an account lockout (today a log line only). The device cookie is per account (email) since the accounts core PR
+- [ ] Accounts core review follow-ups (`docs/sop/2026-11-03-pilot-accounts-core.md`): (3) `bot_already_active` is global and leaks other users' activity, **fix before sign-up opens**; (4) `record_usage` not committed before `transcribe_chunks`, a failed transcription loses the ledger row, **fix before sign-up opens or in the second PR**; (5) cap checked only at meeting start (overshoot up to `max_poll_hours`); (6) IDOR test covers `/api` only, add Jinja regenerate, cancel and vocabulary delete; (7) non-ASCII `OWNER_EMAIL` can fail `ck_users_email_lower`
+- [ ] Replace `app/data/common-passwords.txt` (384 entries) with the 10,000-entry list; add a breached-password lookup
+- [ ] Neutral `bot_busy` message instead of the global `bot_already_active` (Phase C, before more than one or two testers)
+- [ ] Run the updated `web/scripts/owner-e2e.mjs`, `owner-browser-check.mjs` and `docs/spike/edge-secret/e2e.sh` once against a compose stack (changed for email login, not run)
 - [ ] Test paid Zoom accounts
 - [x] Vexa licence for commercial use: Adebayo confirmed 2026-11-03 that Vexa allows it (his statement; the licence text itself was not re-read here)
 - [ ] Choose a recording notice for meetings

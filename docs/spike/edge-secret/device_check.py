@@ -11,6 +11,8 @@ import sys
 import urllib.error
 import urllib.request
 
+OWNER_EMAIL = "owner@example.test"  # the account the e2e stack's migration creates
+
 base, password = sys.argv[1:3]
 device = sys.argv[3] if len(sys.argv) > 3 else None
 
@@ -28,7 +30,9 @@ headers = {"Cookie": cookie, "X-CSRF-Token": token, "Content-Type": "application
 if device:
     headers["Cookie"] += f"; device={device}"
 request = urllib.request.Request(
-    base + "/api/session", data=json.dumps({"password": password}).encode(), headers=headers
+    base + "/api/session",
+    data=json.dumps({"email": OWNER_EMAIL, "password": password}).encode(),
+    headers=headers,
 )
 try:
     response = opener.open(request)

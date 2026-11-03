@@ -14,17 +14,20 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 
-from app import auth, edge, services
+from app import auth, edge, services, usage
 from app.auth import LoginLimiter
 from app.config import Settings
 from app.main import create_app
 from tests.test_web import (  # noqa: F401  (fixtures used by name)
+    OWNER_EMAIL,
     PASSWORD,
     anon_client,
     app,
     fake_openai,
     fake_vexa,
+    login_data,
     make_settings,
+    owner,
     token_from,
 )
 
@@ -211,12 +214,12 @@ def bad_login(client, forwarded=None, secret=None, password="nope", token=None):
         headers["X-Forwarded-For"] = forwarded
     if secret:
         headers[edge.SECRET_HEADER] = secret
-    return client.post("/login", data={"password": password, "csrf_token": token}, headers=headers)
+    return client.post("/login", data=login_data(token, password=password), headers=headers)
 
 
 @pytest.fixture
-def secured(app, engine):  # noqa: F811
-    """The app with a secret configured."""
+def secured(app, engine, owner):  # noqa: F811
+    """The app with a secret configured, and the owner's account in the database."""
     secured = create_app(make_settings(edge_shared_secret=SECRET))
     secured.dependency_overrides = app.dependency_overrides
     return secured
@@ -494,16 +497,19 @@ def test_a_device_cookie_only_counts_for_its_own_account():
 
 def test_a_session_cookie_is_not_a_device_cookie_and_the_reverse():
     settings = device_settings()
-    session_cookie = auth.sign_session(auth.signing_key(settings), auth.new_session(auth=True))
+    session_cookie = auth.sign_session(auth.signing_key(settings), auth.new_session(uid=1))
     assert not known(auth.device_key(settings), session_cookie, "owner")
     device_cookie = auth.sign_device(auth.device_key(settings), "owner")
     assert auth.read_session(auth.signing_key(settings), device_cookie) is None
 
 
-def test_a_new_owner_password_retires_every_device_cookie():
+def test_a_new_session_secret_retires_every_device_cookie_and_no_password_is_involved():
     old = auth.sign_device(auth.device_key(device_settings()), "owner")
-    changed = auth.device_key(device_settings(owner_password="a different password"))
+    changed = auth.device_key(device_settings(session_secret="z" * 40))
     assert not known(changed, old, "owner")
+    # The owner password is read once by migration 0006; it is not part of any key.
+    same = auth.device_key(device_settings(owner_password="-".join(["another", "value"])))
+    assert known(same, old, "owner")
 
 
 def test_known_device_skips_the_account_window_but_not_the_address_window():
@@ -592,10 +598,10 @@ def test_the_owner_gets_a_device_cookie_only_by_logging_in(secured):
     low = cookie.lower()
     assert "httponly" in low and "samesite=lax" in low and "path=/" in low
     assert f"max-age={auth.DEVICE_SECONDS}" in low
-    assert known(secured.state.device_key, jar.get(auth.DEVICE_COOKIE_NAME), "owner")
+    assert known(secured.state.device_key, jar.get(auth.DEVICE_COOKIE_NAME), OWNER_EMAIL)
 
 
-def test_the_device_cookie_is_secure_when_the_site_is_https_only(app, engine):  # noqa: F811
+def test_the_device_cookie_is_secure_when_the_site_is_https_only(app, engine, owner):  # noqa: F811
     app_ = create_app(make_settings(edge_shared_secret=SECRET, cookie_secure=True))
     app_.dependency_overrides = app.dependency_overrides
     with TestClient(
@@ -626,8 +632,8 @@ def test_a_forged_or_expired_device_cookie_gets_no_bypass(secured):
     lock_the_account(secured)
     key = secured.state.device_key
     other = auth.device_key(make_settings(session_secret="y" * 40))
-    expired = auth.sign_device(key, "owner", now=1)
-    for forged in ("garbage", auth.sign_device(other, "owner"), expired, "x." + "y" * 43):
+    expired = auth.sign_device(key, OWNER_EMAIL, now=1)
+    for forged in ("garbage", auth.sign_device(other, OWNER_EMAIL), expired, "x." + "y" * 43):
         response, _ = owner_logs_in(secured, "198.51.100.77", {auth.DEVICE_COOKIE_NAME: forged})
         assert response.status_code == 429, forged
 
@@ -643,13 +649,11 @@ def test_the_device_cookie_does_not_bypass_the_address_limit(secured):
         assert bad_login(c, "203.0.113.50", SECRET, password=PASSWORD).status_code == 429
 
 
-def test_a_device_cookie_from_before_a_password_change_is_ignored(secured, app):  # noqa: F811
+def test_a_device_cookie_from_before_a_new_session_secret_is_ignored(secured, app):  # noqa: F811
     _, jar = owner_logs_in(secured)
     device = jar.get(auth.DEVICE_COOKIE_NAME)
     changed = create_app(
-        make_settings(
-            edge_shared_secret=SECRET, owner_password="a different password", app_env="test"
-        )
+        make_settings(edge_shared_secret=SECRET, session_secret="z" * 40, app_env="test")
     )
     changed.dependency_overrides = app.dependency_overrides
     lock_the_account(changed)
@@ -683,6 +687,8 @@ def test_an_account_lockout_is_logged_without_password_material(secured, caplog)
     lines = [r.getMessage() for r in caplog.records if r.name == "app.services"]
     assert len(lines) == 1 and "account" in lines[0] and "198.51.100.77" in lines[0]
     assert "guess-that-must-not-leak" not in " ".join(lines) and PASSWORD not in " ".join(lines)
+    # The account is a short hash, never the email address itself.
+    assert OWNER_EMAIL not in lines[0] and usage.email_hash(OWNER_EMAIL)[:12] in lines[0]
 
 
 # ---- a request through next without the secret is noticed ----
@@ -804,10 +810,10 @@ def test_a_device_keeps_its_id_when_it_logs_in_again_and_new_browsers_get_new_on
     first, _ = owner_logs_in(secured, "198.51.100.20")
     other, _ = owner_logs_in(secured, "198.51.100.21")
     cookie = issued_device_cookie(first)
-    id_first = auth.device_id(key, cookie, "owner")
-    assert id_first and id_first != auth.device_id(key, issued_device_cookie(other), "owner")
+    id_first = auth.device_id(key, cookie, OWNER_EMAIL)
+    assert id_first and id_first != auth.device_id(key, issued_device_cookie(other), OWNER_EMAIL)
     again, _ = owner_logs_in(secured, "198.51.100.20", {auth.DEVICE_COOKIE_NAME: cookie})
-    assert auth.device_id(key, issued_device_cookie(again), "owner") == id_first
+    assert auth.device_id(key, issued_device_cookie(again), OWNER_EMAIL) == id_first
 
 
 def test_lockout_warnings_are_rate_limited(secured, caplog):

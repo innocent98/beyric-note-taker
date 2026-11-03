@@ -66,12 +66,17 @@
       "Login": {
         "additionalProperties": false,
         "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
           "password": {
             "title": "Password",
             "type": "string"
           }
         },
         "required": [
+          "email",
           "password"
         ],
         "title": "Login",
@@ -464,11 +469,33 @@
           "csrf_token": {
             "title": "Csrf Token",
             "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UsageOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "authenticated",
-          "csrf_token"
+          "csrf_token",
+          "user",
+          "usage"
         ],
         "title": "SessionState",
         "type": "object"
@@ -564,6 +591,66 @@
         ],
         "title": "TermOut",
         "type": "object"
+      },
+      "UsageOut": {
+        "properties": {
+          "cap_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Seconds"
+          },
+          "used_seconds": {
+            "title": "Used Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "used_seconds",
+          "cap_seconds"
+        ],
+        "title": "UsageOut",
+        "type": "object"
+      },
+      "UserOut": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "email_verified": {
+            "title": "Email Verified",
+            "type": "boolean"
+          },
+          "is_admin": {
+            "title": "Is Admin",
+            "type": "boolean"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "is_admin",
+          "email_verified"
+        ],
+        "title": "UserOut",
+        "type": "object"
       }
     }
   },
@@ -576,7 +663,7 @@
   "paths": {
     "/api/meetings": {
       "get": {
-        "description": "Newest first. For the next page pass `before_id` = `next_before_id`.",
+        "description": "The caller's meetings, newest first. For the next page pass `before_id` =\n`next_before_id`.",
         "operationId": "list_meetings",
         "parameters": [
           {
@@ -658,7 +745,7 @@
         ]
       },
       "post": {
-        "description": "Send the bot to a Google Meet or Zoom link. One bot at a time: 409 while one is active.",
+        "description": "Send the bot to a Google Meet or Zoom link. One bot at a time: 409 while one is active.\n403 `hours_cap_reached` once the account has used its recorded hours.",
         "operationId": "create_meeting",
         "requestBody": {
           "content": {
@@ -709,7 +796,7 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "Forbidden"
           },
           "409": {
             "content": {
@@ -1101,7 +1188,7 @@
     },
     "/api/session": {
       "delete": {
-        "description": "Log out everywhere: every session cookie issued so far stops working.",
+        "description": "Log this user out everywhere: every session cookie they were issued stops working.\nOther users are not affected.",
         "operationId": "log_out",
         "responses": {
           "200": {
@@ -1151,7 +1238,7 @@
         ]
       },
       "get": {
-        "description": "Whether the cookie is a logged-in session, plus the CSRF token to send on writes.\n\nPublic. Call it first: it also gives a logged-out visitor a cookie to log in with.",
+        "description": "Whether the cookie is a logged-in session, plus the CSRF token to send on writes.\n\nPublic. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,\nit names the user and reports their recorded hours (`usage`).",
         "operationId": "read_session",
         "responses": {
           "200": {
@@ -1201,7 +1288,7 @@
         ]
       },
       "post": {
-        "description": "Log in with the owner password. Public, but needs the X-CSRF-Token from `GET /session`.\n\nThe login limits are the page's: 5 failed attempts per client address in 5 minutes and 10 per\naccount in an hour, then 429. The response carries the new session's CSRF token: it replaces\nthe one from before login.",
+        "description": "Log in with email and password. Public, but needs the X-CSRF-Token from `GET /session`.\n\n401 `invalid_credentials` for a wrong password or an unknown email (the same answer for\nboth). 403 `email_not_verified` or `account_suspended` when the password was right but the\naccount may not sign in. The login limits are the page's: 5 failed attempts per client\naddress in 5 minutes and 10 per email in an hour, then 429. The response carries the new\nsession's CSRF token: it replaces the one from before login.",
         "operationId": "log_in",
         "requestBody": {
           "content": {
@@ -1242,7 +1329,7 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "Forbidden"
           },
           "422": {
             "content": {
@@ -1273,7 +1360,7 @@
     },
     "/api/templates": {
       "get": {
-        "description": "Sorted by name.",
+        "description": "The caller's templates, sorted by name.",
         "operationId": "list_templates",
         "responses": {
           "200": {
@@ -1487,7 +1574,7 @@
     },
     "/api/vocabulary": {
       "get": {
-        "description": "Sorted alphabetically.",
+        "description": "The caller's terms, sorted alphabetically.",
         "operationId": "list_terms",
         "responses": {
           "200": {

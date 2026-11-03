@@ -24,7 +24,7 @@ async function wrongPassword(ip) {
     method: "POST",
     redirect: "manual",
     headers: { "X-Forwarded-For": ip, Cookie: cookie, "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams([["password", badGuess], ["csrf_token", token]]).toString(),
+    body: new URLSearchParams([["email", "xff-check@example.test"], ["password", badGuess], ["csrf_token", token]]).toString(),
   });
   return res.status;
 }

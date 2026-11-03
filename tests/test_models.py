@@ -2,10 +2,14 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.models import Meeting, Template, VocabularyTerm
+from tests.test_web import make_user
 
 
 def make_template(session) -> Template:
-    template = Template(name="General", instructions="Summarise the meeting.")
+    owner = make_user(session)
+    template = Template(
+        owner_user_id=owner.id, name="General", instructions="Summarise the meeting."
+    )
     session.add(template)
     session.commit()
     return template
@@ -14,6 +18,7 @@ def make_template(session) -> Template:
 def test_new_meeting_defaults(session):
     template = make_template(session)
     m = Meeting(
+        owner_user_id=template.owner_user_id,
         url="https://meet.google.com/abc-defg-hij",
         platform="google_meet",
         native_id="abc-defg-hij",
@@ -33,7 +38,14 @@ def test_new_meeting_defaults(session):
 def test_meeting_rejects_unknown_status(session):
     template = make_template(session)
     session.add(
-        Meeting(url="u", platform="zoom", native_id="1", template_id=template.id, status="bogus")
+        Meeting(
+            owner_user_id=template.owner_user_id,
+            url="u",
+            platform="zoom",
+            native_id="1",
+            template_id=template.id,
+            status="bogus",
+        )
     )
     with pytest.raises(IntegrityError):
         session.commit()
@@ -42,16 +54,26 @@ def test_meeting_rejects_unknown_status(session):
 def test_meeting_rejects_unknown_step(session):
     template = make_template(session)
     session.add(
-        Meeting(url="u", platform="zoom", native_id="1", template_id=template.id, step="bogus")
+        Meeting(
+            owner_user_id=template.owner_user_id,
+            url="u",
+            platform="zoom",
+            native_id="1",
+            template_id=template.id,
+            step="bogus",
+        )
     )
     with pytest.raises(IntegrityError):
         session.commit()
 
 
-def test_vocabulary_term_is_unique(session):
-    session.add(VocabularyTerm(term="Beyric"))
+def test_vocabulary_term_is_unique_per_owner(session):
+    owner, other = make_user(session), make_user(session, "other@example.test")
+    session.add(VocabularyTerm(owner_user_id=owner.id, term="Beyric"))
     session.commit()
-    session.add(VocabularyTerm(term="Beyric"))
+    session.add(VocabularyTerm(owner_user_id=other.id, term="Beyric"))  # another owner: fine
+    session.commit()
+    session.add(VocabularyTerm(owner_user_id=owner.id, term="Beyric"))
     with pytest.raises(IntegrityError):
         session.commit()
 

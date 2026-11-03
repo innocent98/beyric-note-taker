@@ -1,0 +1,28 @@
+{
+  "note": "Right password, but the email was never confirmed: no session.",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "unverified@example.test",
+      "password": "pilot-password-placeholder"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "email_not_verified",
+        "message": "Confirm your email first: open the link we sent you."
+      }
+    }
+  }
+}

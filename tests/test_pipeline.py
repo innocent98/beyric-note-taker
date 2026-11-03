@@ -10,8 +10,10 @@ from app.config import Settings
 from app.models import AppState, Meeting, Template, VocabularyTerm
 from app.notes import HEADINGS
 from app.vexa import VexaError, VexaMeeting
+from tests.test_web import owner  # noqa: F401  (fixture used by name)
 
 NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
+RECORDED_SECONDS = 1830  # what the fake audio step reports for every recording
 TRANSCRIPT = "Hello everyone thanks for joining. I can ship it on Friday. Great let us do that."
 NOTES = "\n\n".join(f"## {h}\nNone noted" for h in HEADINGS)
 DONE = VexaMeeting(
@@ -104,21 +106,19 @@ def env(monkeypatch, tmp_path):
     pipeline._no_audio_polls.clear()
 
     def fake_prepare(source, out_dir):
-        Path(out_dir).mkdir(parents=True, exist_ok=True)
-        chunk = Path(out_dir) / "chunk_000.webm"
-        chunk.write_bytes(b"x")
-        return [chunk]
+        return audio.Recording(_good_chunks(out_dir), RECORDED_SECONDS)
 
-    monkeypatch.setattr(audio, "prepare_chunks", fake_prepare)
+    monkeypatch.setattr(audio, "prepare_recording", fake_prepare)
     return tmp_path
 
 
 @pytest.fixture
-def meeting(session):
-    template = Template(name="General", instructions="Be brief.")
+def meeting(session, owner):
+    template = Template(owner_user_id=owner.id, name="General", instructions="Be brief.")
     session.add(template)
     session.flush()
     m = Meeting(
+        owner_user_id=owner.id,
         url="https://meet.google.com/abc-defg-hij",
         platform="google_meet",
         native_id="abc-defg-hij",
@@ -138,7 +138,7 @@ def run(session, meeting, vexa, openai=None, now=NOW):
 
 
 def test_completed_meeting_reaches_ready(session, meeting, env):
-    session.add(VocabularyTerm(term="Beyric"))
+    session.add(VocabularyTerm(owner_user_id=meeting.owner_user_id, term="Beyric"))
     session.commit()
     run(session, meeting, FakeVexa(DONE))
     assert (meeting.status, meeting.step) == ("ready", "done")
@@ -317,7 +317,7 @@ def test_no_speech_sets_clear_reason(session, meeting, monkeypatch):
     def silent(source, out_dir):
         raise audio.NoSpeechError("silent")
 
-    monkeypatch.setattr(audio, "prepare_chunks", silent)
+    monkeypatch.setattr(audio, "prepare_recording", silent)
     openai = run(session, meeting, FakeVexa(DONE))
     assert meeting.status == "failed"
     assert meeting.failure_reason == "No speech was found in this recording."
@@ -431,7 +431,12 @@ def test_audio_deleted_after_seven_days(session, meeting, env):
     meeting.status, meeting.transcript, meeting.notes = "ready", "t", "n"
     meeting.created_at = NOW - timedelta(days=8)
     young = Meeting(
-        url="u", platform="zoom", native_id="1", template_id=meeting.template_id, status="ready"
+        owner_user_id=meeting.owner_user_id,
+        url="u",
+        platform="zoom",
+        native_id="1",
+        template_id=meeting.template_id,
+        status="ready",
     )
     young.created_at = NOW - timedelta(days=2)
     session.add(young)
@@ -448,7 +453,13 @@ def test_audio_deleted_after_seven_days(session, meeting, env):
 def test_worker_pass_walks_meetings_without_starving(session, meeting, monkeypatch):
     from app import worker
 
-    second = Meeting(url="u", platform="zoom", native_id="2", template_id=meeting.template_id)
+    second = Meeting(
+        owner_user_id=meeting.owner_user_id,
+        url="u",
+        platform="zoom",
+        native_id="2",
+        template_id=meeting.template_id,
+    )
     session.add(second)
     session.commit()
     seen = []
@@ -598,7 +609,7 @@ def test_corrupt_audio_is_deleted_so_retry_downloads_again(session, meeting, env
     def corrupt(source, out_dir):
         raise audio.AudioError("ffmpeg exited with 1")
 
-    monkeypatch.setattr(audio, "prepare_chunks", corrupt)
+    monkeypatch.setattr(audio, "prepare_recording", corrupt)
     vexa = FakeVexa(DONE)
     run(session, meeting, vexa)
     assert meeting.status == "failed"
@@ -606,7 +617,9 @@ def test_corrupt_audio_is_deleted_so_retry_downloads_again(session, meeting, env
     assert meeting.step == "audio"
     assert not (env / "a" / str(meeting.id) / "source.webm").exists()
 
-    monkeypatch.setattr(audio, "prepare_chunks", lambda s, o: _good_chunks(o))
+    monkeypatch.setattr(
+        audio, "prepare_recording", lambda s, o: audio.Recording(_good_chunks(o), RECORDED_SECONDS)
+    )
     meeting.status = "processing"  # what the Try again button does
     session.commit()
     run(session, meeting, vexa)

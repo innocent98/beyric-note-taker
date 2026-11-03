@@ -49,12 +49,30 @@ class ErrorResponse(BaseModel):
 # ---- session ----
 
 
+class UserOut(BaseModel):
+    email: str
+    name: str | None
+    is_admin: bool
+    email_verified: bool
+
+
+class UsageOut(BaseModel):
+    # Seconds of recorded audio counted against the account, including meetings still running.
+    used_seconds: int
+    # The most the account may record in total; null when there is no cap (an admin).
+    cap_seconds: int | None
+
+
 class SessionState(BaseModel):
     authenticated: bool
     csrf_token: str
+    # Both null while logged out.
+    user: UserOut | None
+    usage: UsageOut | None
 
 
 class Login(Body):
+    email: str
     password: str
 
 

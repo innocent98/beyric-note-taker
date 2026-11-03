@@ -1,0 +1,86 @@
+# SOP: pilot accounts, core (Phase A, tasks A1, A2, A4 to A9)
+
+## What shipped
+Real user accounts under the single owner login: every meeting, template and vocabulary term now belongs to a user; the sign-in is **email plus password** (argon2id) on both the Jinja `/login` and the Next login form; the session cookie carries a user id and per-user and global epochs; the 5 recorded hours per account are counted and enforced; `/api/session` reports the user and their usage. The existing owner becomes the **admin user** (created by migration `0006` from `OWNER_EMAIL` and `OWNER_PASSWORD`), so the live owner keeps logging in, now with email plus the same password. Branch `feature/pilot-accounts-core`, PR: see the PR list (opened after this SOP). **Not in this PR** (second PR later): sign-up, email verification, password reset, Google sign-in, the waitlist, the admin API, the mailer, the notifications API, privacy and terms edits (tasks A3, A10 to A20). `app_state.signups_open` is `false` and there is no sign-up endpoint, so nobody can create an account yet.
+
+## Why
+The pilot (10 open accounts, 5 recorded hours each) needs every row to have an owner before anyone else can sign in, and the login to name a person. Spec: `docs/superpowers/specs/2026-11-03-pilot-accounts-calendar-design.md` sections 4, 5, 6 and 13, task list in section 15 (Phase A). Deploying ownership scoping **before** sign-up opens is the rule from section 15.
+
+## How
+| Piece | Decision |
+|---|---|
+| Users | `users` (bigint id, email stored lower-case with a check so the plain unique is unique-on-lower, `password_hash` null for a future Google-only account, `status` active/suspended/deleted, `session_epoch`, `hours_cap_seconds` override). Admin is `is_admin`, set only by the migration |
+| Passwords | `app/passwords.py`: argon2id with the library defaults; 8 to 128 characters (characters, not bytes); not on `app/data/common-passwords.txt`; no composition rules (NIST 800-63B). `verify_password` always costs one hash check (a fixed dummy hash when there is no account or no password), so timing does not say whether an email has an account. A login password over 1024 characters is refused without hashing. **Cost bound (Opus review):** parameters stay at the library defaults (argon2id t=3, m=64 MiB, p=4, the RFC 9106 low-memory profile, well above OWASP's minimum; weaker parameters would protect nothing), but at most `MAX_CONCURRENT = 3` hash checks run at once (a semaphore, about 192 MiB worst case instead of about 2.5 GB for 40 parallel logins). A request that gets no slot within 5 seconds answers **429 `server_busy`** ("The server is busy. Try again in a moment.") and gives its limiter attempt back (`LoginLimiter.refund`), so a busy server never counts against a user. The dummy-hash path shares the same bound. The dummy hash is of a random password made at every start |
+| Cookie | `{uid, csrf, iat, epoch, gepoch}`, HMAC key from `session_secret` only (no owner password). **`create_app` refuses to start when `session_secret` is shorter than 32 characters in any `APP_ENV` except `test`** (an empty key is public: anyone could forge an admin session). Old-format cookies fail to parse, so everyone is signed out once at deploy. `uid` must be a positive int or null; booleans are rejected for every number |
+| Guard | `auth.guard` loads the user by `uid` (one primary-key lookup) and sets `request.state.user`. The session is dropped (anonymous, new cookie) when the user is missing, not `active` (suspended or deleted), `epoch` differs from `users.session_epoch` (logout, password change: that user only) or `gepoch` differs from `app_state.session_epoch` (`auth.bump_epoch`: everyone). Routes get the user through `Depends(auth.current_user)`; it raises `NotLoggedIn` if there is none |
+| Login | `services.log_in(request, session, email, password)`: counts the attempt (per address 5 per 5 min; per **email** 10 per hour; device cookie bound to the email), looks the user up, verifies against the hash or the dummy, and answers one 401 `invalid_credentials` for unknown email, wrong password and no-password account. Only after the password is proven right does it say 403 `email_not_verified` or `account_suspended`, and it then gives the limiter attempt back. A `deleted` account looks unknown. The lockout log line carries `sha256(email)[:12]`, not the address (security review) |
+| Logout | Bumps only that user's `session_epoch` |
+| Scoping | Every service function that touches meetings, templates or vocabulary takes the `User` and filters by `owner_user_id`; a foreign id is 404 (never 403). A foreign `template_id` in a body is 400 `template_required`. Uniqueness is per owner (`uq_templates_owner_name`, `uq_vocabulary_owner_term`). The worker reads the meeting owner's vocabulary (`pipeline._terms`). The IDOR guard is a test that signs in as a second user and calls **every** route with an id in its path against the first user's rows; a new id route that is not classified fails it |
+| Defaults for new users | `app/accounts.py`: `DEFAULT_TEMPLATES` (equal to migration 0001's seed, a test checks) and `create_user_defaults` (four template copies plus the `user_settings` row pointing at "General"). Sign-up will call it |
+| Hours | `app/usage.py`. Unit: seconds of recorded audio, from `audio.prepare_recording` (new, returns `Recording(chunks, seconds)`, rounded up; `prepare_chunks` is kept as a wrapper). The pipeline writes one `usage_entries` row right after the audio is prepared (idempotent per meeting; a recording with no speech still counts; a bot that never recorded counts zero). `hours_used` = ledger (rows of the user **or** the same email hash) + for each of the user's running meetings without a ledger row, `min(now - started_polling_at, max_poll_hours)`. `create_meeting` checks it under the existing advisory lock, before the "bot is busy" rule: 403 `hours_cap_reached` at or over the cap. Cap = user override, else `app_state.default_hours_cap_seconds` (18000), admin never capped, `NULL` default = no cap, no `app_state` row = 18000. At 80 % an info `notifications` row `usage.hours_low` is written once (no API to read it yet) |
+| Session API | `GET`/`POST /api/session` add `user` (`email`, `name`, `is_admin`, `email_verified`) and `usage` (`used_seconds`, `cap_seconds`); both `null` when logged out. `POST` body is `{email, password}`; error `invalid_password` became `invalid_credentials` |
+| Migrations | `0006` creates the tables and the admin; `0007` adds nullable `owner_user_id`, backfills every row to the admin, sets NOT NULL, swaps the unique constraints, adds `meetings.source/title/recorded_seconds`, `usage_entries`, and points the admin's calendar template at their "General". Both are transactional; `env.py` now disposes its engine when a migration raises |
+
+Rejected: a cheaper common-password list loaded at runtime from the network (no download without a decision; the file is a drop-in replacement); one `get_session` query joining user and epoch (two primary-key lookups are easier to read in an auth path); keeping the owner password in the cookie key (it made every password change a global logout, wrong with several users).
+
+## What's involved
+Auth-critical files for the Opus review: `app/auth.py` (cookie, `load_user`, `guard`, `current_user`, `bump_user_epoch`, device key), `app/services.py` (`log_in`, `log_out`, scoping helpers `meeting_or_404`, `_own_template`, the hours gate in `_create_meeting`), `app/passwords.py`, `app/api.py` (`_session_state`, session routes), `app/web.py` (`login`), `app/main.py` (one line), `alembic/versions/0006_users_and_auth.py`, `alembic/versions/0007_ownership_and_usage.py`, `app/usage.py`, `app/pipeline.py` (`_step_transcribing`, `_terms`).
+
+| Path | Change |
+|---|---|
+| `app/models.py` | `User`, `AuthToken`, `OAuthFlow`, `WaitlistEntry`, `Notification`, `MailOutbox`, `UserSettings`, `UsageEntry`; ownership and new columns; `AppState` pilot columns |
+| `app/config.py` | `owner_email` (read only by migration 0006) |
+| `app/api_schemas.py`, `docs/openapi.json`, `web/lib/api/schema.d.ts`, `web/lib/api/types.ts` | `Login.email`, `UserOut`, `UsageOut`, `SessionState.user/usage` |
+| `app/templates/login.html` | email field (keeps the typed email on an error, never the password) |
+| `web/components/app/login-form.tsx`, `web/lib/api/client.ts` | Work email field (designer's sign-in wording), `login(email, password)` |
+| `web/tests/*`, `web/scripts/*` (`owner-e2e`, `owner-browser-check`, `proxy-check`, `xff-check`, `mock-api`, `seed-owner-states.sql`) | email on every login; seed rows owned by the admin |
+| `scripts/capture_owner_api.py`, `docs/fe-captures/owner-app/` (97 files), `docs/fe-integration-guide-owner-app.md` | recaptured live; new captures `82` to `97` from a second ordinary account |
+| `docs/spike/edge-secret/` | compose and clients send the owner email (not rerun) |
+| `.env.example`, `deploy/README.md`, `web/README.md` | `OWNER_EMAIL` |
+| `tests/` | `test_accounts.py`, `test_usage.py`, `test_passwords.py` new; `test_migrations.py` extended; `test_web/api/edge/pipeline/models/audio` adapted, none deleted |
+
+## Deploy order and risk (read before saying "merge")
+This deploy runs two migrations and changes how the owner logs in.
+
+1. **Before merging: add `OWNER_EMAIL=<the address you will sign in with>` to the server `/opt/beyric-note-taker/.env`.** `OWNER_PASSWORD` is already there and stays. If `OWNER_EMAIL` is missing, migration `0006` raises before touching anything, the `migrate` container exits non-zero, `web`/`worker` do not start, `deploy.sh` times out on health and starts the previous commit again. Nothing is lost, but the deploy fails.
+2. **The owner signs in with email plus the same password** after the deploy. Everyone is signed out once (the cookie format and key changed), and the old device cookie stops counting. No meeting is affected.
+3. **Do not deploy while a meeting is `bot_sent` or `processing`** (standing rule). The migrations take a second or two; `deploy.sh` backs up the database first.
+4. `/` and the API keep working throughout; for a few seconds during the rollout the old Next login page could post a password-only body to the new API (422). Reload.
+5. **Sign-up stays closed**: there is no sign-up route and `signups_open` is `false`. Opening it is a later PR and a deliberate step.
+6. **Keep `OWNER_PASSWORD` in `.env`** until the pilot is stable: the previous release's code reads it, and a rollback needs it. The new code never reads it after migration `0006` has run.
+7. **Rolling back after the migrations ran is not automatic.** `deploy.sh` restarts the old code but does not undo migrations; old code on the new schema can log in and read, but creating a meeting, template or term fails (`owner_user_id` is NOT NULL). To roll back properly, **before** starting old code: `docker compose run --rm migrate alembic downgrade 0005`. That drops `users` and the usage ledger (only the admin exists until sign-up opens) and restores the global unique names; it fails (nothing changes) if two users hold the same template name, which cannot happen before sign-up. Or restore the backup `deploy.sh` took.
+8. **Confirm the live `SESSION_SECRET` is at least 32 characters before merging** (the new startup check refuses shorter): `grep ^SESSION_SECRET= .env | cut -d= -f2 | tr -d '\n' | wc -c` prints the length without showing it. The README has always said `openssl rand -hex 48` (96 characters). If it is short, replace it (that signs everyone out, which this deploy does anyway).
+9. Check after deploy: `GET /health` is 200; log in at `/login` and on the Next login page; list meetings (all existing ones are there); `GET /api/session` shows `user.is_admin: true` and `usage.cap_seconds: null`.
+
+## Verification
+| Claim | How | Result |
+|---|---|---|
+| Migrations: single head, upgrade and downgrade round trip, models match, backfill gives every existing row to the admin, NOT NULL after, per-owner uniques, downgrade restores globals and fails on a clash, missing `OWNER_EMAIL`/`OWNER_PASSWORD` fails loudly in production and rolls back | `tests/test_migrations.py` on a scratch database with seeded single-owner data | pass |
+| Cookie shape, per-user and global epoch, suspended/deleted/missing user dropped, forged uid, signing key independent of the owner password | `tests/test_accounts.py` | pass |
+| Login: email plus password, case and space insensitive, unknown email equals wrong password, one hash check for an unknown email, unverified/suspended/deleted/no-password accounts, per-email limit across addresses | `tests/test_accounts.py` | pass |
+| Every id route is 404 for another user's row; lists show only own rows; foreign template ids refused | `tests/test_accounts.py` (including the route-enumeration test) | pass |
+| Hours: formula, cap sources, gate and message, admin uncapped, ledger survives deleting a meeting or the account, 80 % notice once, pipeline counts once and also no-speech, nothing for a bot that never recorded | `tests/test_usage.py` | pass |
+| Live API behaviour and shapes | `scripts/capture_owner_api.py` against a real app and migrations; captures `01`–`97` | recorded, guide updated |
+| Web | `npm run lint`, `typecheck`, `npx vitest run` | pass (98 tests) |
+| Not exercised | the real server migration (needs `OWNER_EMAIL` set), the Next login form in a browser and `web/scripts/owner-e2e.mjs` / `owner-browser-check.mjs` against a compose stack (updated, **not run**), `docs/spike/edge-secret/e2e.sh` (updated, **not run**), Docker image build | reasoned only |
+
+## Operate / roll back
+See "Deploy order and risk". Operating notes: an account is suspended by `update users set status = 'suspended' where email = '...'` (a signed-in session ends on its next request); to sign one user out everywhere `update users set session_epoch = session_epoch + 1 where ...`; to sign everyone out `update app_state set session_epoch = session_epoch + 1`. Change a user's hours with `update users set hours_cap_seconds = ...`; remove the cap for all with `update app_state set default_hours_cap_seconds = null`. Passwords can only be changed from the database until the reset flow ships (hash with `app.passwords.hash_password`).
+
+## Follow-ups
+From the Opus review of this PR, none fixed here:
+- **(3) `bot_already_active` is still global**: one user's bot blocks every other user's meeting and the 409 leaks that someone is recording. **Must be fixed before sign-up opens** (Phase C `place_bot()` with the neutral `bot_busy`).
+- **(4) `record_usage` is not committed before `transcribe_chunks`**: a `TranscriptionFailed` rolls the ledger row back, so OpenAI cost already spent is not counted and a retry counts it later. Fix before sign-up opens (or in the second PR): commit the usage row first.
+- **(5) The cap is checked only when a meeting starts**, so a user at 4.9 h can record one more meeting up to `max_poll_hours` (6 h). The overshoot grows once per-user concurrency replaces the global one-bot lock.
+- **(6) The IDOR route-enumeration test covers `/api` routes only.** Add tests for the Jinja routes (regenerate, cancel, vocabulary delete) with another user's id; the page routes are scoped by the same service calls but only meetings, templates and vocabulary pages are tested.
+- **(7) A non-ASCII `OWNER_EMAIL`** can fail the `ck_users_email_lower` check (Python and Postgres lower-case differently): the migration fails safely and the deploy rolls back. Use an ASCII address, or normalise (casefold in the app and the check) before sign-up accepts international addresses.
+Other:
+- Second PR: tasks A3, A10 to A20 (mailer, sign-up with the cap lock and waitlist, verification, reset, Google sign-in, admin API, notifications API, nginx zones, privacy and terms rows, the 4-hour notice shown in the app).
+- `app/data/common-passwords.txt` is a curated 384-entry list, not the 10,000-entry list the spec names: replace it with a larger file (one lower-case entry per line, 8 characters or longer; the loader reads whatever is there). No breached-password (k-anonymity) lookup.
+- The one-time-token utility from task A2 (generate, hash, compare, expire) ships with verification and reset.
+- `template_in_use` (task A8) has nothing to guard: there is still no template delete route.
+- `bot_already_active` is still the global "a bot is on a meeting" message and now also reveals other users' activity; Phase C replaces it with the neutral `bot_busy` before sign-up opens to more than one or two testers.
+- The device cookie is no longer retired by a password change (there is no password change yet; the cookie only skips the per-email window and grants no access). Revisit with the reset flow.
+- Login limiter state is still in memory (one `web` replica).
+- The Jinja pages do not show hours used; the Next screens will (`usage` in `/api/session`).
+- `docs/spike/edge-secret/e2e.sh` and the two web e2e scripts should be run once against a compose stack.

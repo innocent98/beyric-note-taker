@@ -10,6 +10,8 @@ import sys
 import urllib.error
 import urllib.request
 
+OWNER_EMAIL = "owner@example.test"  # the account the e2e stack's migration creates
+
 base, outdir, owner_password = sys.argv[1:4]
 
 
@@ -35,14 +37,16 @@ csrf = json.loads(start.read())["csrf_token"]
 
 def attempt(name, password, note=""):
     shown = "nope" if password == "nope" else "capture-password-placeholder"
-    response = call("POST", "/api/session", {"password": password}, csrf, cookie)
+    response = call(
+        "POST", "/api/session", {"email": OWNER_EMAIL, "password": password}, csrf, cookie
+    )
     capture = {
         "note": note,
         "request": {
             "method": "POST",
             "path": "/api/session",
             "headers": {"X-CSRF-Token": "<csrf-E>", "Cookie": "session=<cookie>"},
-            "body": {"password": shown},
+            "body": {"email": OWNER_EMAIL, "password": shown},
         },
         "response": {
             "status": response.status if hasattr(response, "status") else response.code,
@@ -60,7 +64,7 @@ def attempt(name, password, note=""):
 
 
 for _ in range(4):
-    call("POST", "/api/session", {"password": "nope"}, csrf, cookie)
+    call("POST", "/api/session", {"email": OWNER_EMAIL, "password": "nope"}, csrf, cookie)
 attempt("79-limit-wrong-password-5", "nope")
 attempt("80-limit-sixth-attempt", "nope")
 attempt(

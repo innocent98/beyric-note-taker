@@ -14,13 +14,16 @@ from app.auth import LoginLimiter
 from app.config import Settings
 from app.db import get_session
 from app.main import create_app
-from app.models import AppState, Meeting, Template, VocabularyTerm
+from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import HEADINGS
+from app.passwords import hash_password
 from app.pipeline import REASON_NO_SPEECH
 from app.vexa import VexaError
 from app.web import get_openai_client, get_vexa
 
-PASSWORD = "correct horse battery"
+PASSWORD = " ".join(["correct", "horse", "battery"])
+OWNER_EMAIL = "owner@example.test"  # placeholder addresses, never real ones
+OTHER_EMAIL = "other@example.test"
 MEET = "https://meet.google.com/abc-defg-hij"
 OWNER_ONLY = "/templates"  # "/" is the public landing page when logged out
 ZOOM = "https://us02web.zoom.us/j/12345678901?pwd=SECRETPWD"
@@ -30,7 +33,6 @@ TRANSCRIPT = "Ada: Hello everyone thanks for joining. I can ship it on Friday."
 
 def make_settings(**overrides) -> Settings:
     values = {
-        "owner_password": PASSWORD,
         "session_secret": "x" * 40,
         "cookie_secure": False,
         "app_env": "test",
@@ -90,9 +92,45 @@ def fake_openai():
     return FakeOpenAI()
 
 
+_hashes: dict[str, str] = {}
+
+
+def make_user(session, email=OWNER_EMAIL, password=PASSWORD, *, admin=False, **fields) -> User:
+    """A verified, active account. The hash is cached: argon2 is slow on purpose."""
+    values = {
+        "email": email,
+        "password_hash": _hashes.setdefault(password, hash_password(password))
+        if password
+        else None,
+        "email_verified_at": datetime.now(UTC),
+        "is_admin": admin,
+        **fields,
+    }
+    user = User(**values)
+    session.add(user)
+    session.commit()
+    return user
+
+
+def login_data(token, email=OWNER_EMAIL, password=PASSWORD) -> dict:
+    return {"email": email, "password": password, "csrf_token": token}
+
+
 @pytest.fixture
-def template(session):
-    template = Template(name="General", instructions="Write general notes.")
+def owner(session):
+    """The account whose data most tests use: an ordinary user, not an admin."""
+    return make_user(session)
+
+
+@pytest.fixture
+def stranger(session):
+    """A second account, to prove one user never sees another's data."""
+    return make_user(session, OTHER_EMAIL)
+
+
+@pytest.fixture
+def template(session, owner):
+    template = Template(owner_user_id=owner.id, name="General", instructions="Write general notes.")
     session.add(template)
     session.commit()
     return template
@@ -130,15 +168,16 @@ def post(client, url, data=None, page="/"):
 
 
 @pytest.fixture
-def client(anon_client):
+def client(anon_client, owner):
     token = token_from(anon_client.get("/login").text)
-    response = anon_client.post("/login", data={"password": PASSWORD, "csrf_token": token})
+    response = anon_client.post("/login", data=login_data(token))
     assert response.status_code == 303
     return anon_client
 
 
 def add_meeting(session, template, **fields) -> Meeting:
     values = {
+        "owner_user_id": template.owner_user_id,
         "url": MEET,
         "platform": "google_meet",
         "native_id": "abc-defg-hij",
@@ -220,7 +259,9 @@ def test_status_text_says_bot_sent_not_recording(client, template, session):
 
 
 def test_regenerate_makes_no_transcription_call(client, fake_openai, template, session):
-    other = Template(name="Short", instructions="Three bullet points only.")
+    other = Template(
+        owner_user_id=template.owner_user_id, name="Short", instructions="Three bullet points only."
+    )
     session.add(other)
     session.commit()
     meeting = ready_meeting(session, template)
@@ -449,18 +490,18 @@ def test_health_needs_no_login(anon_client):
 
 def test_wrong_password_is_refused(anon_client):
     token = token_from(anon_client.get("/login").text)
-    response = anon_client.post("/login", data={"password": "nope", "csrf_token": token})
+    response = anon_client.post("/login", data=login_data(token, password="nope"))
     assert response.status_code == 401
     assert anon_client.get(OWNER_ONLY).status_code == 303
 
 
-def test_login_cookie_flags(app):
+def test_login_cookie_flags(app, owner):
     secure_app = create_app(make_settings(cookie_secure=True))
     secure_app.dependency_overrides = app.dependency_overrides
     for application, expect_secure in ((app, False), (secure_app, True)):
         with TestClient(application, base_url="https://testserver", follow_redirects=False) as c:
             token = token_from(c.get("/login").text)
-            response = c.post("/login", data={"password": PASSWORD, "csrf_token": token})
+            response = c.post("/login", data=login_data(token))
             cookie = response.headers["set-cookie"].lower()
             assert "httponly" in cookie
             assert "samesite=lax" in cookie
@@ -470,10 +511,10 @@ def test_login_cookie_flags(app):
 def test_login_is_rate_limited(anon_client):
     token = token_from(anon_client.get("/login").text)
     for _ in range(5):
-        response = anon_client.post("/login", data={"password": "nope", "csrf_token": token})
+        response = anon_client.post("/login", data=login_data(token, password="nope"))
         assert response.status_code == 401
     # Even the right password is refused once the limit is hit.
-    response = anon_client.post("/login", data={"password": PASSWORD, "csrf_token": token})
+    response = anon_client.post("/login", data=login_data(token))
     assert response.status_code == 429
 
 
@@ -492,7 +533,7 @@ def test_forged_session_cookie_is_rejected(app):
     other.dependency_overrides = app.dependency_overrides
     with TestClient(other, follow_redirects=False) as stranger:
         token = token_from(stranger.get("/login").text)
-        stranger.post("/login", data={"password": PASSWORD, "csrf_token": token})
+        stranger.post("/login", data=login_data(token))
         forged = stranger.cookies.get("session")
     assert forged
     with TestClient(app, follow_redirects=False) as c:
@@ -506,10 +547,22 @@ def test_logout_ends_the_session(client):
     assert client.get(OWNER_ONLY).status_code == 303
 
 
-@pytest.mark.parametrize("field", ["owner_password", "session_secret"])
-def test_production_refuses_to_start_without_secrets(field):
-    with pytest.raises(RuntimeError, match=field):
-        create_app(make_settings(app_env="production", **{field: ""}))
+def test_production_refuses_to_start_without_a_session_secret():
+    with pytest.raises(RuntimeError, match="session_secret"):
+        create_app(make_settings(app_env="production", session_secret=""))
+
+
+@pytest.mark.parametrize("env", ["production", "development"])
+@pytest.mark.parametrize("secret", ["", "short", "x" * 31])
+def test_a_short_session_secret_never_starts_outside_the_test_environment(env, secret):
+    """An empty or short key is a public key: anyone could forge an admin session."""
+    with pytest.raises(RuntimeError, match=r"session_secret.*at least 32 characters"):
+        create_app(make_settings(app_env=env, session_secret=secret))
+
+
+@pytest.mark.parametrize("env", ["production", "development"])
+def test_a_32_character_session_secret_starts(env):
+    assert create_app(make_settings(app_env=env, session_secret="x" * 32)) is not None
 
 
 def test_security_headers(anon_client):
@@ -540,22 +593,24 @@ def test_unknown_app_env_refuses_to_start_even_with_secrets(env):
         create_app(make_settings(app_env=env))
 
 
-@pytest.mark.parametrize("env", ["production", "prod"])
+@pytest.mark.parametrize("env", ["production", "prod", "development"])
 def test_prod_style_env_with_empty_secrets_never_starts(env):
     with pytest.raises(RuntimeError):
-        create_app(make_settings(app_env=env, owner_password="", session_secret=""))
+        create_app(make_settings(app_env=env, session_secret=""))
 
 
-@pytest.mark.parametrize("env", ["development", "test"])
-def test_named_dev_environments_may_start_without_secrets(env):
-    create_app(make_settings(app_env=env, owner_password="", session_secret=""))
+def test_only_the_test_environment_may_start_without_a_secret():
+    create_app(make_settings(app_env="test", session_secret=""))
 
 
-def test_empty_password_never_logs_in_even_in_dev(engine):
-    app = create_app(make_settings(owner_password="", session_secret=""))
+def test_empty_password_never_logs_in_even_in_dev(app, session):
+    make_user(session, password=None)  # an account with no password (Google-only)
+    dev = create_app(make_settings(session_secret=""))
+    dev.dependency_overrides = app.dependency_overrides
+    app = dev
     with TestClient(app, follow_redirects=False) as c:
         token = token_from(c.get("/login").text)
-        response = c.post("/login", data={"password": "", "csrf_token": token})
+        response = c.post("/login", data=login_data(token, password=""))
         assert response.status_code == 401
 
 
@@ -569,7 +624,7 @@ def test_non_ascii_session_cookie_does_not_crash(anon_client, path):
 
 def test_non_ascii_password_is_a_normal_failure(anon_client):
     token = token_from(anon_client.get("/login").text)
-    response = anon_client.post("/login", data={"password": "p\u00e4ss\u2713", "csrf_token": token})
+    response = anon_client.post("/login", data=login_data(token, password="p\u00e4ss\u2713"))
     assert response.status_code == 401
 
 
@@ -585,14 +640,14 @@ def test_logout_revokes_a_copied_session_cookie(app, client):
 def test_new_login_after_logout_works(client):
     post(client, "/logout")
     token = token_from(client.get("/login").text)
-    response = client.post("/login", data={"password": PASSWORD, "csrf_token": token})
+    response = client.post("/login", data=login_data(token))
     assert response.status_code == 303
     assert client.get("/").status_code == 200
 
 
-def test_changing_the_password_revokes_sessions(app, client):
+def test_changing_the_session_secret_revokes_sessions(app, client):
     old_cookie = client.cookies.get("session")
-    changed = create_app(make_settings(owner_password="a different password"))
+    changed = create_app(make_settings(session_secret="z" * 40))
     changed.dependency_overrides = app.dependency_overrides
     with TestClient(changed, follow_redirects=False) as c:
         c.cookies.set("session", old_cookie)
@@ -614,11 +669,11 @@ def test_limiter_is_safe_under_parallel_attempts():
     assert allowed.count(True) == 5
 
 
-def test_right_password_after_some_failures_logs_in(anon_client):
+def test_right_password_after_some_failures_logs_in(anon_client, owner):
     token = token_from(anon_client.get("/login").text)
     for _ in range(4):
-        anon_client.post("/login", data={"password": "nope", "csrf_token": token})
-    ok = anon_client.post("/login", data={"password": PASSWORD, "csrf_token": token})
+        anon_client.post("/login", data=login_data(token, password="nope"))
+    ok = anon_client.post("/login", data=login_data(token))
     assert ok.status_code == 303
 
 
@@ -944,11 +999,11 @@ def test_styleguide_renders_and_is_never_indexed(client):
         assert heading in response.text
 
 
-def test_pages_load_the_shared_stylesheets_and_font(anon_client):
+def test_pages_load_the_shared_stylesheets_and_font(anon_client, owner):
     login = anon_client.get("/login").text  # logged out: the centred auth layout
     privacy = anon_client.get("/privacy").text  # public layout
     token = token_from(login)
-    anon_client.post("/login", data={"password": PASSWORD, "csrf_token": token})
+    anon_client.post("/login", data=login_data(token))
     app_page = anon_client.get("/templates").text  # logged in: the sidebar shell
     for html in (login, privacy, app_page):
         for asset in ("/static/tokens.css", "/static/components.css", "/static/app.css"):

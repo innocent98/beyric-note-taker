@@ -15,7 +15,9 @@
     },
     "body": {
       "authenticated": false,
-      "csrf_token": "<csrf-A>"
+      "csrf_token": "<csrf-A>",
+      "user": null,
+      "usage": null
     }
   }
 }

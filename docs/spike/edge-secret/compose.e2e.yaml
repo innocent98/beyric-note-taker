@@ -17,6 +17,10 @@ services:
     command: ["alembic", "upgrade", "head"]
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${E2E_DB_PASSWORD}@db:5432/notetaker
+      # Migration 0006 creates the admin account (the one that logs in) from these two.
+      APP_ENV: production
+      OWNER_EMAIL: owner@example.test
+      OWNER_PASSWORD: ${E2E_OWNER_PASSWORD}
     networks: [appdb]
     depends_on:
       db: {condition: service_healthy}
@@ -27,7 +31,6 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${E2E_DB_PASSWORD}@db:5432/notetaker
       APP_ENV: production
-      OWNER_PASSWORD: ${E2E_OWNER_PASSWORD}
       SESSION_SECRET: ${E2E_SESSION_SECRET}
       COOKIE_SECURE: "false"
       EDGE_SHARED_SECRET: ${E2E_EDGE_SECRET-}

@@ -5,7 +5,7 @@
 // horizontal scrolling at 375 px, or a screen that does not show what it should.
 //
 //   PLAYWRIGHT=/path/to/playwright/index.mjs node scripts/owner-browser-check.mjs \
-//     --next http://127.0.0.1:8020 --password "$OWNER_PASSWORD" --shots /tmp/shots [--send-check] [--poll-check]
+//     --next http://127.0.0.1:8020 --email "$OWNER_EMAIL" --password "$OWNER_PASSWORD" --shots /tmp/shots [--send-check] [--poll-check]
 //
 // Run it against a scratch stack seeded with scripts/seed-owner-states.sql. The seed has a meeting
 // in "processing", which locks the new-meeting form (a bot is already on a meeting); --send-check
@@ -18,13 +18,14 @@ import { join } from "node:path";
 const { values } = parseArgs({
   options: {
     next: { type: "string" },
+    email: { type: "string" },
     password: { type: "string" },
     shots: { type: "string" },
     "send-check": { type: "boolean", default: false },
     "poll-check": { type: "boolean", default: false },
   },
 });
-for (const key of ["next", "password", "shots"]) {
+for (const key of ["next", "email", "password", "shots"]) {
   if (!values[key]) {
     console.error(`missing --${key}`);
     process.exit(2);
@@ -77,9 +78,10 @@ for (const scheme of ["light", "dark"]) {
     // Login through the form (wrong password first)
     await page.goto(`${BASE}/login`);
     await shot("login");
+    await page.getByLabel("Work email").fill(values.email);
     await page.getByLabel("Password").fill(`wrong-${tag}`);
     await page.getByRole("button", { name: "Sign in" }).click();
-    await page.getByRole("alert").filter({ hasText: "That password is not right." }).waitFor();
+    await page.getByRole("alert").filter({ hasText: "That email or password is not right." }).waitFor();
     check(`${name} login: wrong password shows the API's message`, true);
     await shot("login-error");
     await page.getByLabel("Password").fill(values.password);

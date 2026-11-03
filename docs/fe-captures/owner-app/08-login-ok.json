@@ -8,6 +8,7 @@
       "Cookie": "session=<cookie>"
     },
     "body": {
+      "email": "owner@example.test",
       "password": "capture-password-placeholder"
     }
   },
@@ -16,11 +17,21 @@
     "headers": {
       "content-type": "application/json",
       "cache-control": "no-store",
-      "set-cookie": "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax"
+      "set-cookie": "session=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax"
     },
     "body": {
       "authenticated": true,
-      "csrf_token": "<csrf-C>"
+      "csrf_token": "<csrf-C>",
+      "user": {
+        "email": "owner@example.test",
+        "name": null,
+        "is_admin": true,
+        "email_verified": true
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": null
+      }
     }
   }
 }

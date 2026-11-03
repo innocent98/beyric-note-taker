@@ -13,13 +13,15 @@ export interface paths {
         };
         /**
          * List Meetings
-         * @description Newest first. For the next page pass `before_id` = `next_before_id`.
+         * @description The caller's meetings, newest first. For the next page pass `before_id` =
+         *     `next_before_id`.
          */
         get: operations["list_meetings"];
         put?: never;
         /**
          * Create Meeting
          * @description Send the bot to a Google Meet or Zoom link. One bot at a time: 409 while one is active.
+         *     403 `hours_cap_reached` once the account has used its recorded hours.
          */
         post: operations["create_meeting"];
         delete?: never;
@@ -116,22 +118,26 @@ export interface paths {
          * Read Session
          * @description Whether the cookie is a logged-in session, plus the CSRF token to send on writes.
          *
-         *     Public. Call it first: it also gives a logged-out visitor a cookie to log in with.
+         *     Public. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,
+         *     it names the user and reports their recorded hours (`usage`).
          */
         get: operations["read_session"];
         put?: never;
         /**
          * Log In
-         * @description Log in with the owner password. Public, but needs the X-CSRF-Token from `GET /session`.
+         * @description Log in with email and password. Public, but needs the X-CSRF-Token from `GET /session`.
          *
-         *     The login limits are the page's: 5 failed attempts per client address in 5 minutes and 10 per
-         *     account in an hour, then 429. The response carries the new session's CSRF token: it replaces
-         *     the one from before login.
+         *     401 `invalid_credentials` for a wrong password or an unknown email (the same answer for
+         *     both). 403 `email_not_verified` or `account_suspended` when the password was right but the
+         *     account may not sign in. The login limits are the page's: 5 failed attempts per client
+         *     address in 5 minutes and 10 per email in an hour, then 429. The response carries the new
+         *     session's CSRF token: it replaces the one from before login.
          */
         post: operations["log_in"];
         /**
          * Log Out
-         * @description Log out everywhere: every session cookie issued so far stops working.
+         * @description Log this user out everywhere: every session cookie they were issued stops working.
+         *     Other users are not affected.
          */
         delete: operations["log_out"];
         options?: never;
@@ -148,7 +154,7 @@ export interface paths {
         };
         /**
          * List Templates
-         * @description Sorted by name.
+         * @description The caller's templates, sorted by name.
          */
         get: operations["list_templates"];
         put?: never;
@@ -189,7 +195,7 @@ export interface paths {
         };
         /**
          * List Terms
-         * @description Sorted alphabetically.
+         * @description The caller's terms, sorted alphabetically.
          */
         get: operations["list_terms"];
         put?: never;
@@ -244,6 +250,8 @@ export interface components {
         };
         /** Login */
         Login: {
+            /** Email */
+            email: string;
             /** Password */
             password: string;
         };
@@ -385,6 +393,8 @@ export interface components {
             authenticated: boolean;
             /** Csrf Token */
             csrf_token: string;
+            usage: components["schemas"]["UsageOut"] | null;
+            user: components["schemas"]["UserOut"] | null;
         };
         /** TemplateIn */
         TemplateIn: {
@@ -418,6 +428,24 @@ export interface components {
             id: number;
             /** Term */
             term: string;
+        };
+        /** UsageOut */
+        UsageOut: {
+            /** Cap Seconds */
+            cap_seconds: number | null;
+            /** Used Seconds */
+            used_seconds: number;
+        };
+        /** UserOut */
+        UserOut: {
+            /** Email */
+            email: string;
+            /** Email Verified */
+            email_verified: boolean;
+            /** Is Admin */
+            is_admin: boolean;
+            /** Name */
+            name: string | null;
         };
     };
     responses: never;
@@ -518,7 +546,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description Forbidden */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -915,7 +943,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description Forbidden */
             403: {
                 headers: {
                     [name: string]: unknown;

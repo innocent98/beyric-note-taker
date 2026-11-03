@@ -1,4 +1,4 @@
-"""The JSON API under `/api/`: everything the owner pages do, for the Next.js frontend.
+"""The JSON API under `/api/`: everything the pages do, for the Next.js frontend.
 
 Same session cookie, same login limit and same rules as the pages (the work is in
 `app/services.py`). What differs is the wire format:
@@ -8,6 +8,8 @@ Same session cookie, same login limit and same rules as the pages (the work is i
 - Every error has one shape, `{"error": {"code": "...", "message": "..."}}`; see `install_errors`.
 """
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
@@ -15,7 +17,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, services
+from app import auth, services, usage
 from app.api_schemas import (
     ErrorResponse,
     Login,
@@ -31,9 +33,11 @@ from app.api_schemas import (
     TemplateOut,
     TermList,
     TermOut,
+    UsageOut,
+    UserOut,
 )
 from app.db import get_session
-from app.models import Meeting
+from app.models import Meeting, User
 from app.pipeline import MAX_JOIN_ATTEMPTS, REASON_UNEXPECTED, REMOVAL_REASONS
 from app.services import Refused, get_openai_client, get_vexa
 
@@ -120,41 +124,63 @@ def install_errors(app: FastAPI) -> None:
 # ---- session ----
 
 
-def _session_state(request: Request) -> SessionState:
-    current = request.state.session
-    return SessionState(authenticated=current["auth"], csrf_token=current["csrf"])
+def _session_state(request: Request, db: Session) -> SessionState:
+    current, user = request.state.session, request.state.user
+    if user is None:
+        return SessionState(authenticated=False, csrf_token=current["csrf"], user=None, usage=None)
+    settings = request.app.state.settings
+    used = usage.hours_used(db, user, datetime.now(UTC), settings.max_poll_hours * 3600)
+    return SessionState(
+        authenticated=True,
+        csrf_token=current["csrf"],
+        user=UserOut(
+            email=user.email,
+            name=user.name,
+            is_admin=user.is_admin,
+            email_verified=user.email_verified_at is not None,
+        ),
+        usage=UsageOut(used_seconds=used, cap_seconds=usage.effective_cap(db, user)),
+    )
 
 
 @router.get("/session", tags=["session"])
-def read_session(request: Request) -> SessionState:
+def read_session(request: Request, session: Session = Depends(get_session)) -> SessionState:
     """Whether the cookie is a logged-in session, plus the CSRF token to send on writes.
 
-    Public. Call it first: it also gives a logged-out visitor a cookie to log in with.
+    Public. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,
+    it names the user and reports their recorded hours (`usage`).
     """
-    return _session_state(request)
+    return _session_state(request, session)
 
 
 @router.post(
     "/session",
     tags=["session"],
-    responses={401: {"model": ErrorResponse}, 429: {"model": ErrorResponse}},
+    responses={
+        401: {"model": ErrorResponse},
+        403: {"model": ErrorResponse},
+        429: {"model": ErrorResponse},
+    },
 )
 def log_in(body: Login, request: Request, session: Session = Depends(get_session)) -> SessionState:
-    """Log in with the owner password. Public, but needs the X-CSRF-Token from `GET /session`.
+    """Log in with email and password. Public, but needs the X-CSRF-Token from `GET /session`.
 
-    The login limits are the page's: 5 failed attempts per client address in 5 minutes and 10 per
-    account in an hour, then 429. The response carries the new session's CSRF token: it replaces
-    the one from before login.
+    401 `invalid_credentials` for a wrong password or an unknown email (the same answer for
+    both). 403 `email_not_verified` or `account_suspended` when the password was right but the
+    account may not sign in. The login limits are the page's: 5 failed attempts per client
+    address in 5 minutes and 10 per email in an hour, then 429. The response carries the new
+    session's CSRF token: it replaces the one from before login.
     """
-    services.log_in(request, session, body.password)
-    return _session_state(request)
+    services.log_in(request, session, body.email, body.password)
+    return _session_state(request, session)
 
 
 @router.delete("/session", tags=["session"])
 def log_out(request: Request, session: Session = Depends(get_session)) -> SessionState:
-    """Log out everywhere: every session cookie issued so far stops working."""
+    """Log this user out everywhere: every session cookie they were issued stops working.
+    Other users are not affected."""
     services.log_out(request, session)
-    return _session_state(request)
+    return _session_state(request, session)
 
 
 # ---- meetings ----
@@ -208,9 +234,11 @@ def list_meetings(
     limit: int = Query(LIST_DEFAULT, ge=1, le=LIST_MAX),
     before_id: int | None = Query(None, ge=1, le=services.MAX_ID),
     session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> MeetingList:
-    """Newest first. For the next page pass `before_id` = `next_before_id`."""
-    rows = services.list_meetings(session, limit + 1, before_id)
+    """The caller's meetings, newest first. For the next page pass `before_id` =
+    `next_before_id`."""
+    rows = services.list_meetings(session, user, limit + 1, before_id)
     page = rows[:limit]
     return MeetingList(
         meetings=[_summary(meeting) for meeting in page],
@@ -221,24 +249,33 @@ def list_meetings(
 
 
 @router.get("/meetings/{meeting_id:id}", tags=["meetings"])
-def get_meeting(meeting_id: int, session: Session = Depends(get_session)) -> MeetingDetail:
-    return _detail(services.meeting_or_404(session, meeting_id))
+def get_meeting(
+    meeting_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingDetail:
+    return _detail(services.meeting_or_404(session, user, meeting_id))
 
 
 @router.post(
     "/meetings",
     status_code=201,
     tags=["meetings"],
-    responses={code: {"model": ErrorResponse} for code in (400, 409, 502)},
+    responses={code: {"model": ErrorResponse} for code in (400, 403, 409, 502)},
 )
 def create_meeting(
     body: NewMeeting,
+    request: Request,
     response: Response,
     session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
     vexa=Depends(get_vexa),
 ) -> MeetingDetail:
-    """Send the bot to a Google Meet or Zoom link. One bot at a time: 409 while one is active."""
-    meeting = services.create_meeting(session, vexa, body.url, body.template_id)
+    """Send the bot to a Google Meet or Zoom link. One bot at a time: 409 while one is active.
+    403 `hours_cap_reached` once the account has used its recorded hours."""
+    meeting = services.create_meeting(
+        session, vexa, user, body.url, body.template_id, request.app.state.settings
+    )
     response.headers["Location"] = f"/api/meetings/{meeting.id}"
     return _detail(meeting)
 
@@ -249,10 +286,13 @@ def create_meeting(
     responses={code: {"model": ErrorResponse} for code in (404, 409, 502)},
 )
 def cancel_meeting(
-    meeting_id: int, session: Session = Depends(get_session), vexa=Depends(get_vexa)
+    meeting_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+    vexa=Depends(get_vexa),
 ) -> MeetingDetail:
     """Take the bot out of a meeting that is still `bot_sent`."""
-    meeting = services.meeting_or_404(session, meeting_id)
+    meeting = services.meeting_or_404(session, user, meeting_id)
     return _detail(services.cancel_meeting(session, vexa, meeting))
 
 
@@ -261,9 +301,13 @@ def cancel_meeting(
     tags=["meetings"],
     responses={code: {"model": ErrorResponse} for code in (404, 409)},
 )
-def retry_meeting(meeting_id: int, session: Session = Depends(get_session)) -> MeetingDetail:
+def retry_meeting(
+    meeting_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingDetail:
     """Resume a failed meeting at the step that failed. Only when `can_retry` is true."""
-    meeting = services.meeting_or_404(session, meeting_id)
+    meeting = services.meeting_or_404(session, user, meeting_id)
     return _detail(services.retry_meeting(session, meeting))
 
 
@@ -276,10 +320,11 @@ def regenerate_notes(
     meeting_id: int,
     body: Regenerate,
     session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
     openai_client=Depends(get_openai_client),
 ) -> MeetingDetail:
     """Rewrite the notes of a `ready` meeting with a template. Runs in the request: allow 5 min."""
-    meeting = services.meeting_or_404(session, meeting_id)
+    meeting = services.meeting_or_404(session, user, meeting_id)
     return _detail(services.regenerate_notes(session, meeting, body.template_id, openai_client))
 
 
@@ -287,9 +332,11 @@ def regenerate_notes(
 
 
 @router.get("/templates", tags=["templates"])
-def list_templates(session: Session = Depends(get_session)) -> TemplateList:
-    """Sorted by name."""
-    rows = services.list_templates(session)
+def list_templates(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> TemplateList:
+    """The caller's templates, sorted by name."""
+    rows = services.list_templates(session, user)
     return TemplateList(templates=[TemplateOut.model_validate(row) for row in rows])
 
 
@@ -300,9 +347,12 @@ def list_templates(session: Session = Depends(get_session)) -> TemplateList:
     responses={400: {"model": ErrorResponse}},
 )
 def create_template(
-    body: TemplateIn, response: Response, session: Session = Depends(get_session)
+    body: TemplateIn,
+    response: Response,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> TemplateOut:
-    template = services.save_template(session, None, body.name, body.instructions)
+    template = services.save_template(session, user, None, body.name, body.instructions)
     response.headers["Location"] = f"/api/templates/{template.id}"
     return TemplateOut.model_validate(template)
 
@@ -313,11 +363,14 @@ def create_template(
     responses={code: {"model": ErrorResponse} for code in (400, 404)},
 )
 def update_template(
-    template_id: int, body: TemplateIn, session: Session = Depends(get_session)
+    template_id: int,
+    body: TemplateIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> TemplateOut:
     """Replace the name and instructions."""
-    template = services.template_or_404(session, template_id)
-    services.save_template(session, template, body.name, body.instructions)
+    template = services.template_or_404(session, user, template_id)
+    services.save_template(session, user, template, body.name, body.instructions)
     return TemplateOut.model_validate(template)
 
 
@@ -325,10 +378,12 @@ def update_template(
 
 
 @router.get("/vocabulary", tags=["vocabulary"])
-def list_terms(session: Session = Depends(get_session)) -> TermList:
-    """Sorted alphabetically."""
+def list_terms(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> TermList:
+    """The caller's terms, sorted alphabetically."""
     return TermList(
-        terms=[TermOut(id=row.id, term=row.term) for row in services.list_terms(session)]
+        terms=[TermOut(id=row.id, term=row.term) for row in services.list_terms(session, user)]
     )
 
 
@@ -338,8 +393,12 @@ def list_terms(session: Session = Depends(get_session)) -> TermList:
     tags=["vocabulary"],
     responses={400: {"model": ErrorResponse}},
 )
-def add_term(body: NewTerm, session: Session = Depends(get_session)) -> TermOut:
-    row = services.add_term(session, body.term)
+def add_term(
+    body: NewTerm,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> TermOut:
+    row = services.add_term(session, user, body.term)
     return TermOut(id=row.id, term=row.term)
 
 
@@ -349,7 +408,11 @@ def add_term(body: NewTerm, session: Session = Depends(get_session)) -> TermOut:
     tags=["vocabulary"],
     responses={404: {"model": ErrorResponse}},
 )
-def delete_term(term_id: int, session: Session = Depends(get_session)) -> Response:
-    if not services.delete_term(session, term_id):
+def delete_term(
+    term_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> Response:
+    if not services.delete_term(session, user, term_id):
         raise StarletteHTTPException(404, "No such term")
     return Response(status_code=204)

@@ -1,8 +1,12 @@
-"""Owner actions shared by the Jinja pages (`app/web.py`) and the JSON API (`app/api.py`).
+"""User actions shared by the Jinja pages (`app/web.py`) and the JSON API (`app/api.py`).
 
 Each action does the work and commits, or raises `Refused` with the HTTP status, a stable code
-and the message the owner reads. The callers only decide how to show that: a page with a notice,
+and the message the user reads. The callers only decide how to show that: a page with a notice,
 or a JSON error. Keeping the rules here means the two can never disagree.
+
+Every function that touches meetings, templates or vocabulary takes the acting `User` and filters
+by `owner_user_id`. A row that belongs to someone else is "no such row" (404, never 403: ids are
+sequential, so a 403 would confirm that the row exists).
 """
 
 import logging
@@ -16,8 +20,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
-from app import auth, edge
-from app.models import AppState, Meeting, Template, VocabularyTerm
+from app import auth, edge, passwords, usage
+from app.config import Settings
+from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import REASON_CANCELLED, REASON_NO_SPEECH
 from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError, parse_meeting_url
@@ -73,15 +78,21 @@ def get_openai_client():
 # ---- login ----
 
 
-OWNER_ACCOUNT = "owner"  # the login form has no username yet; accounts will pass the email
 lockout_log_throttle = edge.Throttle()
 
 
-def log_in(request: Request, session: Session, password: str, account: str = OWNER_ACCOUNT) -> None:
-    """Check the password and give the request a fresh logged-in session."""
+def log_in(request: Request, session: Session, email: str, password: str) -> None:
+    """Check the email and password and give the request a fresh logged-in session.
+
+    The attempt is counted against the client address and the email (`auth.LoginLimiter`) before
+    the password is looked at. An unknown email, an account with no password and a wrong password
+    are the same answer, and each costs one hash check, so neither the reply nor its timing says
+    whether an account exists.
+    """
     settings = request.app.state.settings
     limiter: auth.LoginLimiter = request.app.state.limiter
     client = edge.client_address(request, settings)
+    account = auth.account_key(email)
     device = auth.device_id(
         request.app.state.device_key,
         request.cookies.get(auth.device_cookie_name(settings)),
@@ -90,29 +101,57 @@ def log_in(request: Request, session: Session, password: str, account: str = OWN
     refused = limiter.check(client, account, device=device)  # counts this attempt
     if refused:
         if refused != "address" and lockout_log_throttle.ready():
+            # The account is logged as a short hash (the ledger's `email_hash`, first 12 hex
+            # characters), not the address itself: an email is personal data and logs outlive
+            # the account. The operator can hash a suspected address to match it.
             logger.warning(
                 "login refused: too many failed attempts in the last hour on the %s limit "
-                "(account %r, client %s); further refusals are not logged for a minute",
+                "(account %s, client %s); further refusals are not logged for a minute",
                 refused,
-                auth.account_key(account)[:80],
+                usage.email_hash(account)[:12],
                 client,
             )
         raise Refused(429, "too_many_attempts", "Too many failed attempts. Try again later.")
-    if not auth.password_matches(settings, password):
-        raise Refused(401, "invalid_password", "That password is not right.")
-    limiter.succeeded(client, account, device)
-    # A fresh token, never a promoted old one, stamped with the current epoch.
-    request.state.session = auth.new_session(auth=True, epoch=auth.current_epoch(session))
+    user = session.scalars(select(User).where(User.email == account)).first()
+    if user is not None and user.status == "deleted":
+        user = None  # a deleted account is an unknown one
+    try:
+        right = passwords.verify_password(user.password_hash if user else None, password)
+    except passwords.HashBusy:
+        limiter.refund(client, account, device)  # the password was never checked: not a failure
+        raise Refused(429, "server_busy", "The server is busy. Try again in a moment.") from None
+    if user is None or not right:
+        raise Refused(401, "invalid_credentials", "That email or password is not right.")
+    limiter.succeeded(client, account, device)  # the password was right, whatever happens next
+    if user.email_verified_at is None:
+        raise Refused(
+            403,
+            "email_not_verified",
+            "Confirm your email first: open the link we sent you.",
+        )
+    if user.status != "active":
+        raise Refused(403, "account_suspended", "This account has been suspended.")
+    user.last_login_at = datetime.now(UTC)
+    session.commit()
+    # A fresh token, never a promoted old one, stamped with this user's and the global epoch.
+    request.state.session = auth.new_session(
+        uid=user.id, epoch=user.session_epoch, gepoch=auth.current_epoch(session)
+    )
     request.state.session_changed = True
+    request.state.user = user
     # A device cookie for this account, only now that the password was right; a known device
     # keeps its id so its failures stay on one counter.
     request.state.device_cookie = (account, device)
 
 
 def log_out(request: Request, session: Session) -> None:
-    auth.bump_epoch(session)  # revokes this session and any copy of its cookie
+    """Sign this user out everywhere (their epoch is bumped), and nobody else."""
+    user: User | None = getattr(request.state, "user", None)
+    if user is not None:
+        auth.bump_user_epoch(session, user.id)
     request.state.session = auth.new_session()
     request.state.session_changed = True
+    request.state.user = None
 
 
 # ---- ids ----
@@ -216,31 +255,70 @@ def worker_is_stale(session: Session) -> bool:
 # ---- meetings ----
 
 
-def list_meetings(session: Session, limit: int = 50, before_id: int | None = None) -> list[Meeting]:
-    query = select(Meeting).order_by(Meeting.id.desc()).limit(limit)
+def list_meetings(
+    session: Session, user: User, limit: int = 50, before_id: int | None = None
+) -> list[Meeting]:
+    query = (
+        select(Meeting)
+        .where(Meeting.owner_user_id == user.id)
+        .order_by(Meeting.id.desc())
+        .limit(limit)
+    )
     if before_id is not None:
         query = query.where(Meeting.id < before_id)
     return list(session.scalars(query))
 
 
-def meeting_or_404(session: Session, meeting_id: int) -> Meeting:
-    meeting = session.get(Meeting, meeting_id) if _in_range(meeting_id) else None
+def meeting_or_404(session: Session, user: User, meeting_id: int) -> Meeting:
+    meeting = None
+    if _in_range(meeting_id):
+        meeting = session.scalars(
+            select(Meeting).where(Meeting.id == meeting_id, Meeting.owner_user_id == user.id)
+        ).first()
     if meeting is None:
         raise HTTPException(404, "No such meeting")
     return meeting
 
 
+def _own_template(session: Session, user_id: int, template_id: int | None) -> Template | None:
+    if not _in_range(template_id):
+        return None
+    return session.scalars(
+        select(Template).where(Template.id == template_id, Template.owner_user_id == user_id)
+    ).first()
+
+
+def hours_cap_message(cap_seconds: int) -> str:
+    hours = f"{cap_seconds / 3600:.1f}".removesuffix(".0")
+    return (
+        f"You have used your {hours} recorded hours for the pilot, so the note taker will not "
+        "join new meetings. Write to us at hello@beyrictech.com if you need more."
+    )
+
+
 def create_meeting(
-    session: Session, vexa: VexaClient, url: str, template_id: int | None
+    session: Session,
+    vexa: VexaClient,
+    user: User,
+    url: str,
+    template_id: int | None,
+    settings: Settings,
 ) -> Meeting:
     try:
-        return _create_meeting(session, vexa, url.strip(), template_id)
+        return _create_meeting(session, vexa, user, url.strip(), template_id, settings)
     except Refused:
         session.rollback()  # also releases the advisory lock
         raise
 
 
-def _create_meeting(session: Session, vexa, url: str, template_id: int | None) -> Meeting:
+def _create_meeting(
+    session: Session,
+    vexa,
+    user: User,
+    url: str,
+    template_id: int | None,
+    settings: Settings,
+) -> Meeting:
     # The submitted link is never echoed back: a Zoom link carries its meeting password.
     try:
         if len(url) > MAX_URL_CHARS:
@@ -252,11 +330,19 @@ def _create_meeting(session: Session, vexa, url: str, template_id: int | None) -
             "invalid_meeting_url",
             "That is not a Google Meet or Zoom link. Paste the full meeting link.",
         ) from None
-    template = session.get(Template, template_id) if _in_range(template_id) else None
-    if template is None:
+    template = _own_template(session, user.id, template_id)
+    if template is None:  # also a template that is someone else's: it looks like a missing one
         raise Refused(400, "template_required", "Choose a template for the notes.")
 
     session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": NEW_MEETING_LOCK})
+    # Checked under the lock, before the bot is sent, and before the "bot is busy" rule.
+    cap = usage.effective_cap(session, user)
+    if (
+        cap is not None
+        and usage.hours_used(session, user, datetime.now(UTC), settings.max_poll_hours * 3600)
+        >= cap
+    ):
+        raise Refused(403, "hours_cap_reached", hours_cap_message(cap))
     active = session.scalars(select(Meeting.id).where(Meeting.status.in_(ACTIVE)).limit(1)).first()
     if active is not None:
         raise Refused(
@@ -270,6 +356,7 @@ def _create_meeting(session: Session, vexa, url: str, template_id: int | None) -
             502, "bot_send_failed", "The bot could not be sent. Please try again in a moment."
         ) from None
     meeting = Meeting(
+        owner_user_id=user.id,
         url=url,
         platform=platform,
         native_id=native_id,
@@ -287,11 +374,15 @@ def regenerate_notes(
 ) -> Meeting:
     if meeting.status != "ready":
         raise Refused(409, "not_ready", "Notes can only be rewritten once a meeting is ready.")
-    template = session.get(Template, template_id) if _in_range(template_id) else None
+    template = _own_template(session, meeting.owner_user_id, template_id)
     if template is None:
         raise Refused(400, "template_required", "Choose a template.")
     source = meeting.speaker_transcript or meeting.transcript or ""
-    terms = list(session.scalars(select(VocabularyTerm.term)))
+    terms = list(
+        session.scalars(
+            select(VocabularyTerm.term).where(VocabularyTerm.owner_user_id == meeting.owner_user_id)
+        )
+    )
     try:
         notes = generate_notes(source, template, terms, client=openai_client)
     except NotesFailed as exc:
@@ -346,12 +437,16 @@ def retry_meeting(session: Session, meeting: Meeting) -> Meeting:
 # ---- templates ----
 
 
-def list_templates(session: Session) -> list[Template]:
-    return list(session.scalars(select(Template).order_by(Template.name)))
+def list_templates(session: Session, user: User) -> list[Template]:
+    return list(
+        session.scalars(
+            select(Template).where(Template.owner_user_id == user.id).order_by(Template.name)
+        )
+    )
 
 
-def template_or_404(session: Session, template_id: int) -> Template:
-    template = session.get(Template, template_id) if _in_range(template_id) else None
+def template_or_404(session: Session, user: User, template_id: int) -> Template:
+    template = _own_template(session, user.id, template_id)
     if template is None:
         raise HTTPException(404, "No such template")
     return template
@@ -379,25 +474,27 @@ def _duplicate_template() -> Refused:
 
 
 def save_template(
-    session: Session, template: Template | None, name: str, instructions: str
+    session: Session, user: User, template: Template | None, name: str, instructions: str
 ) -> Template:
-    """Create a template, or replace the name and instructions of `template`."""
+    """Create a template of `user`'s, or replace the name and instructions of `template`."""
     try:
-        return _save_template(session, template, name.strip(), instructions.strip())
+        return _save_template(session, user, template, name.strip(), instructions.strip())
     except Refused:
         session.rollback()
         raise
 
 
 def _save_template(
-    session: Session, template: Template | None, name: str, instructions: str
+    session: Session, user: User, template: Template | None, name: str, instructions: str
 ) -> Template:
     _check_template(name, instructions)
-    taken = session.scalars(select(Template.id).where(Template.name == name)).first()
+    taken = session.scalars(
+        select(Template.id).where(Template.owner_user_id == user.id, Template.name == name)
+    ).first()
     if taken is not None and (template is None or taken != template.id):
         raise _duplicate_template()
     if template is None:
-        template = Template(name=name, instructions=instructions)
+        template = Template(owner_user_id=user.id, name=name, instructions=instructions)
         session.add(template)
     else:
         template.name, template.instructions = name, instructions
@@ -411,8 +508,14 @@ def _save_template(
 # ---- vocabulary ----
 
 
-def list_terms(session: Session) -> list[VocabularyTerm]:
-    return list(session.scalars(select(VocabularyTerm).order_by(VocabularyTerm.term)))
+def list_terms(session: Session, user: User) -> list[VocabularyTerm]:
+    return list(
+        session.scalars(
+            select(VocabularyTerm)
+            .where(VocabularyTerm.owner_user_id == user.id)
+            .order_by(VocabularyTerm.term)
+        )
+    )
 
 
 def _check_term(term: str) -> None:
@@ -426,12 +529,17 @@ def _check_term(term: str) -> None:
         )
 
 
-def add_term(session: Session, term: str) -> VocabularyTerm:
+def add_term(session: Session, user: User, term: str) -> VocabularyTerm:
     term = term.strip()
     _check_term(term)
-    if session.scalars(select(VocabularyTerm.id).where(VocabularyTerm.term == term)).first():
+    taken = session.scalars(
+        select(VocabularyTerm.id).where(
+            VocabularyTerm.owner_user_id == user.id, VocabularyTerm.term == term
+        )
+    ).first()
+    if taken:
         raise Refused(400, "duplicate_term", "That term is already in the list.")
-    row = VocabularyTerm(term=term)
+    row = VocabularyTerm(owner_user_id=user.id, term=term)
     session.add(row)
     try:
         session.commit()
@@ -441,9 +549,15 @@ def add_term(session: Session, term: str) -> VocabularyTerm:
     return row
 
 
-def delete_term(session: Session, term_id: int) -> bool:
-    """Remove a term. False when there was no such term."""
-    term = session.get(VocabularyTerm, term_id) if _in_range(term_id) else None
+def delete_term(session: Session, user: User, term_id: int) -> bool:
+    """Remove one of `user`'s terms. False when they have no such term."""
+    term = None
+    if _in_range(term_id):
+        term = session.scalars(
+            select(VocabularyTerm).where(
+                VocabularyTerm.id == term_id, VocabularyTerm.owner_user_id == user.id
+            )
+        ).first()
     if term is None:
         return False
     session.delete(term)

@@ -14,6 +14,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+OWNER_EMAIL = "owner@example.test"  # the account the e2e stack's migration creates
+
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
@@ -39,7 +41,7 @@ def main():
         token = json.loads(page.read())["csrf_token"]
         request = urllib.request.Request(
             base + "/api/session",
-            data=json.dumps({"password": password}).encode(),
+            data=json.dumps({"email": OWNER_EMAIL, "password": password}).encode(),
             headers={
                 **headers,
                 "Cookie": cookie,
