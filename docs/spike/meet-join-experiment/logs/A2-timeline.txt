@@ -1,0 +1,10 @@
+11:31:07 attempt 2 POST /bots
+11:31:08 POST status 201 body {...}
+11:31:08 t+  0.3s status=requested reason=None stage=None
+11:31:11 t+  3.3s status=joining reason=None stage=None
+11:33:52 t+164.3s status=failed reason=join_failure stage=joining
+11:33:52 first-seen offsets {"requested": 0.3, "joining": 3.3, "failed": 164.3}
+11:33:53 screens before stop: 3
+11:33:53 DELETE status 404 body {"detail": "No active meeting for this bot"}
+11:33:53 bot gone: True
+11:33:58 screens after stop: 3

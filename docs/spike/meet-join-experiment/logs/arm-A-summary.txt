@@ -1,0 +1,16 @@
+11:20:29 ARM A start; image: vexaai/vexa-lite:v012; code tip-mhbx-fcp
+11:20:29 attempt 1 start 2026-11-03T11:20:29.649162+00:00
+11:23:38 attempt 1 done: first-seen {"requested": 0.7, "joining": 6.9}; bot gone True
+11:23:38 waiting 450s before attempt 2
+11:31:07 attempt 2 start 2026-11-03T11:31:07.992767+00:00
+11:33:58 attempt 2 done: first-seen {"requested": 0.3, "joining": 3.3, "failed": 164.3}; bot gone True
+11:33:58 waiting 442s before attempt 3
+11:41:20 attempt 3 start 2026-11-03T11:41:20.607220+00:00
+11:44:27 attempt 3 done: first-seen {"requested": 0.2, "joining": 3.3, "awaiting_admission": 18.4}; bot gone True
+11:44:27 waiting 472s before attempt 4
+11:52:18 attempt 4 start 2026-11-03T11:52:18.926065+00:00
+11:55:25 attempt 4 done: first-seen {"requested": 0.2, "joining": 3.3, "awaiting_admission": 21.4}; bot gone True
+11:55:25 waiting 461s before attempt 5
+12:03:07 attempt 5 start 2026-11-03T12:03:07.159045+00:00
+12:06:16 attempt 5 done: first-seen {"requested": 0.2, "joining": 3.3, "awaiting_admission": 85.4}; bot gone True
+12:06:16 ARM A finished
