@@ -7,10 +7,58 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Only superseded pull-request runs are cancelled. A run on main is never cancelled: the
+  # `changes` job diffs against the push's own `before`, so a cancelled run could leave untested
+  # code that the next run no longer looks at.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Cheap and always runs: decides which heavy jobs are needed from the files the change touches,
+  # so a docs-only change skips both, a Python-only change skips the Node job, and a web-only
+  # change skips the Python job. `ci` below always reports, so branch protection and the deploy
+  # workflow (which waits for this workflow) see a result for every change.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      python: ${{ steps.filter.outputs.python }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then base="$PR_BASE"; else base="$PUSH_BEFORE"; fi
+          # A new branch or a force push has no usable base: run everything.
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "python=true" >> "$GITHUB_OUTPUT"; echo "web=true" >> "$GITHUB_OUTPUT"
+            echo "no usable base commit: running every job"; exit 0
+          fi
+          files="$(git diff --name-only "$base" "${{ github.sha }}")"
+          echo "$files"
+          # Python: the app, its tests, migrations and packaging. The Dockerfile and compose file
+          # shape how it runs, so they count too.
+          if echo "$files" | grep -Eq '^(app/|tests/|alembic/|alembic\.ini$|pyproject\.toml$|Dockerfile$|compose\.yaml$|\.github/workflows/ci\.yml$)'; then
+            echo "python=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "python=false" >> "$GITHUB_OUTPUT"
+          fi
+          # Web: the Next.js app, and the Python-side files its tests compare against (the legal
+          # text in the Jinja templates, the design tokens, the retention setting).
+          if echo "$files" | grep -Eq '^(web/|app/templates/(privacy|terms)\.html$|app/static/(tokens|components)\.css$|app/config\.py$|compose\.yaml$|\.github/workflows/ci\.yml$)'; then
+            echo "web=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "web=false" >> "$GITHUB_OUTPUT"
+          fi
+
   test:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -38,3 +86,37 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -v
+
+  # The Next.js front door: lint, types, unit tests (design guards, CSP, the legal text equal to
+  # the Jinja templates) and the production build. One job, so dependencies install once.
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  # Always runs and always reports. Skipped jobs count as passing; failed or cancelled ones fail it.
+  ci:
+    needs: [changes, test, web]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "changes=${{ needs.changes.result }} test=${{ needs.test.result }} web=${{ needs.web.result }}"
+          case "${{ needs.changes.result }}${{ needs.test.result }}${{ needs.web.result }}" in
+            *failure*|*cancelled*) exit 1 ;;
+          esac

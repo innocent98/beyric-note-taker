@@ -1,0 +1,11 @@
+Captured 2026-11-02, production build of web/ on :3000 in front of a local FastAPI on :8000 (peer of FastAPI = Next at 127.0.0.1).
+
+## FastAPI trusts the Next peer (--forwarded-allow-ips=127.0.0.1; in compose: TRUSTED_PROXY_IPS,172.28.1.10)
+visitor A, 6 wrong passwords: 401,401,401,401,401,429
+visitor B, first wrong password: 401
+PASS  limit is per visitor; expected separate
+
+## FastAPI does NOT trust the Next peer (--forwarded-allow-ips=10.99.99.99): the lock-out bug the compose change prevents
+visitor A, 6 wrong passwords: 401,401,401,401,401,429
+visitor B, first wrong password: 429
+PASS  limit is shared by everyone (one address seen); expected shared

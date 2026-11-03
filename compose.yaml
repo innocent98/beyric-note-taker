@@ -1,10 +1,21 @@
 # Deployment model: nginx runs on the HOST (see deploy/README.md) and proxies to
-# 127.0.0.1:8020. The project network is pinned so the address nginx's connections arrive from
-# inside the container (the bridge gateway, 172.28.0.1) is known and can be the one trusted proxy.
-# The server is shared with other apps, so nothing here is published on a public interface: `web`
-# and Vexa's API are bound to 127.0.0.1, and Vexa's terminal and agent ports are not published.
+# 127.0.0.1:8020, which is the Next.js front door (`next`). Next renders the pages it owns and
+# proxies every other path to FastAPI (`web`, internal port 8000; also on 127.0.0.1:8021 for the
+# operator and for rollback). The project networks are pinned so the addresses FastAPI's trusted
+# proxies arrive from are known: the bridge gateway 172.28.0.1 (nginx, through Docker, on the 8021
+# rollback path) and `next`, pinned to 172.28.1.10 on its own network `front`. `next` passes
+# X-Forwarded-For through unchanged and FastAPI believes it from those two addresses, so this is
+# a known gap, not a protection: anything that can reach `next` by IP (Docker allows that across
+# networks for a published port) or reach 127.0.0.1:8021 arrives as a trusted address and can pick
+# the address the login limit counts. `front` only stops Vexa resolving the name `next`; it is NOT
+# a security boundary. See docs/spike/nextjs-scaffold/forwarded-for-trust.md; the real fix is
+# required before open sign-up.
+# The server is shared with other apps, so nothing here is published on a public interface: `next`,
+# `web` and Vexa's API are bound to 127.0.0.1, and Vexa's terminal and agent ports are not published.
 # TRUSTED_PROXY_IPS: unset means the bridge gateway above; set but EMPTY means trust no proxy
-# (`-` interpolation, not `:-`, so an empty value is kept rather than replaced by the default).
+# beyond `next` (`-` interpolation, not `:-`, so an empty value is kept rather than replaced by the
+# default). `next` is always trusted: it is the one hop every request now passes through, so
+# without it the login limit would see every visitor as the same address.
 services:
   db:
     image: postgres:17
@@ -59,15 +70,15 @@ services:
       - --host=0.0.0.0
       - --port=8000
       - --proxy-headers
-      - --forwarded-allow-ips=${TRUSTED_PROXY_IPS-172.28.0.1}
+      - --forwarded-allow-ips=${TRUSTED_PROXY_IPS-172.28.0.1},172.28.1.10
     user: app
-    networks: [default, appdb]
+    networks: [default, appdb, front]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
       VEXA_BASE_URL: http://vexa:8056
     ports:
-      - "127.0.0.1:8020:8000"
+      - "127.0.0.1:8021:8000"  # operator and rollback access; visitors reach FastAPI through `next`
     healthcheck:
       test:
         - CMD
@@ -83,6 +94,39 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+
+  # The front door (see docs/superpowers/specs/2026-11-02-nextjs-migration-plan.md). Renders the
+  # pages Next owns and proxies every other path to FastAPI. It holds no secrets and no env_file.
+  # FASTAPI_INTERNAL_URL is baked into the image at build time (Next stores rewrites in its build
+  # output), so it is a build argument; the environment entry below only documents it at runtime.
+  next:
+    build:
+      context: ./web
+      args:
+        FASTAPI_INTERNAL_URL: http://web:8000
+    environment:
+      FASTAPI_INTERNAL_URL: http://web:8000
+      AUDIO_RETENTION_DAYS: ${AUDIO_RETENTION_DAYS:-7}  # shown on /privacy; keep equal to the app's
+    networks:
+      front:
+        ipv4_address: 172.28.1.10
+    ports:
+      - "127.0.0.1:8020:3000"
+    mem_limit: 512m
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
 
   # ---- Vexa Lite (bots). Same containers as Vexa's deploy/lite Makefile at commit 31122f9, run
   # here instead so no port is public, no host credentials file is ever mounted, and Vexa's own
@@ -192,15 +236,22 @@ services:
       vexa-db:
         condition: service_healthy
 
-# Three networks, so a compromised bot (Chrome on untrusted meeting pages) cannot reach the app's
+# Four networks, so a compromised bot (Chrome on untrusted meeting pages) cannot reach the app's
 # database: `default` carries web, worker and vexa and has internet access; `appdb` (no internet)
-# holds the app database; `vexainternal` (no internet) holds Vexa's own database and storage.
+# holds the app database; `vexainternal` (no internet) holds Vexa's own database and storage;
+# `front` holds only `next` and `web` so Vexa cannot resolve `next` by name. It is NOT a security
+# boundary: Docker still lets other containers reach `next`'s published port by IP.
 networks:
   default:
     ipam:
       config:
         - subnet: 172.28.0.0/24
           gateway: 172.28.0.1
+  front:
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24
+          gateway: 172.28.1.1
   appdb:
     internal: true
   vexainternal:

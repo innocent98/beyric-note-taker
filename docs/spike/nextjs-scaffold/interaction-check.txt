@@ -1,0 +1,7 @@
+dialog open after click: true
+dialog closed after Cancel: true
+menu open: true
+menu closed on Escape: true
+injected inline script ran: true | violations: []
+console messages: []
+horizontal overflow at 375px: false

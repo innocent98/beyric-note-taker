@@ -1,0 +1,22 @@
+Measured 2026-11-02 on a MacBook (Docker Desktop, arm64, Linux engine 29.1.3). The server is x86_64;
+resident memory of a Node process is close but not identical. Re-measure on the server (see SOP).
+
+Image: next 16.4.4, node:22-alpine, non-root user node, standalone output: 303 MB.
+
+docker stats (compose service next, mem_limit 512m; "MemUsage" excludes page cache):
+  idle, 40 s after start                           36.9 MiB
+  after 240 requests (8 at a time, 12 paths,       peak sample 65.1 MiB, 54.9 MiB right after
+    Next pages, FastAPI pass-through, 404s)
+  30 s after the load                              44.0 MiB
+  OOMKilled=false, restarts=0
+  (FastAPI `web` for comparison: 85.8 MiB idle)
+
+Build: `next build` peaks at 792 MB resident for its largest process (/usr/bin/time -l, 10-core Mac,
+5.5 s wall, warm cache). Docker builds with the same.
+
+deploy.sh pieces, run against a scratch compose project (the whole script needs a SHA on origin/main):
+  front_door_healthy, new layout, all up                      -> OK
+  front_door_healthy, new layout, web stopped                 -> unhealthy
+  rollback: `up -d --remove-orphans` with the previous commit's compose.yaml (no next service):
+    next stopped and removed, web recreated on 127.0.0.1:8020, /health 200, /healthz 404 (Next gone)
+  front_door_healthy on that old layout                       -> OK (falls back to the /health check)
