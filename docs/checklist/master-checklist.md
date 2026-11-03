@@ -83,6 +83,12 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
     - E2 run 2026-11-03 (Mac, home connection; `docs/spike/meet-join-experiment.md`): v0.12.28 reached the lobby 0 of 5 (refused before or at the click), v0.12.29 3 of 3 (stopped early; one rescued by the re-knock). Upgrade the server to the pinned `v0.12.29`; do not change the address yet, re-measure on the server after the upgrade
   - [ ] Recognise Google's "You can't join this video call" screen in the worker's log or screenshot reading, and fail at once with that reason instead of polling a dead page (Partly done 2026-11-03: Vexa v0.12.29 recognises the screen and reports `google_meet_join_refused`, and the worker maps that and `needs_help` to a fast failure; v0.12.28 reads as `needs_help`. Left open until production runs v0.12.29 and a real refusal is seen.)
 
+- [ ] **The bot stays in the call about 10 minutes after everyone else leaves** (found live 2026-11-03, meeting 12): the bot was admitted at 12:58:38 UTC, the last remote audio was at 13:05:49, the bot left itself at 13:15:51 with reason `left_alone` from Vexa's silence rule (default window 600,000 ms, `BOT_ALONE_SILENCE_WINDOW_MS`; log line "aloneness: silence verdict"). Notes only start once the bot has left, so the owner waits those 10 minutes. The Vexa bot request accepts `automatic_leave` with `max_time_left_alone` (read in `meeting_api/bot_spawn/router.py`, positive integer, milliseconds as the bot's other timeouts)
+  - [ ] Send `automatic_leave` from `app/vexa.py` with a configurable default (`BOT_LEFT_ALONE_SECONDS`; the rule is silence, not headcount, so too short a window can cut a quiet meeting such as a long screen-share: start around 300 s and measure)
+  - [ ] An **"End now and write the notes"** button: stop the bot (`DELETE /bots/...`) and let the pipeline process the recording, separate from "Cancel" (which discards). Check what Vexa returns for a stopped active bot before building
+  - [ ] Cost and capacity note recorded: `docs/spike/cost-and-capacity-2026-11-03.md` (OpenAI USD 1.54 since 11-01, Contabo about USD 70 a year, one bot about 1.4 cores; self-host the pilot, own bot machine soon, vendor as fallback)
+  - [ ] OpenAI "group by line item" export to split audio from chat cost; re-run the cost note after a month of real use
+
 ## Module 2a: UI foundation (before accounts; decided 2026-11-02)
 
 Goal: one look everywhere (the logged-in app is still blue and system-ui while the public pages are teal), and parts every later screen reuses. Plan in the frontend-approach spec.
