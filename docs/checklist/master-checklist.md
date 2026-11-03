@@ -196,6 +196,12 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] D1 `bot_hosts` migration; D2 `vexa_for(host)`; D3 health checker; D4 `place_bot()` generalised (Opus review); D5 per-user limit across hosts
   - [ ] D6 forecast and capacity endpoint; D7 admin host endpoints; D8 second host files; D9a worker concurrency; D9b load test (M2) and `max_bots`; D10 close-out
 - [ ] Phase V, Google verification: **a real sensitive-scope submission** (review up to 10 days; scope changes after approval need a new review). V0 revisit the landing and sign-in copy (decision from 2026-11-03 ends here), V0a freeze the final scope list (Meet only if the instant-Meet spike passes), V1 consent screen versus policy and app, V2 demo video (Adebayo records), V3 scope justifications, V4 submit as early as the flow works and answer the reviewer; the pilot runs meanwhile on the unverified-app screen (100-user cap)
+- [ ] Meet join plan B (plan: `docs/superpowers/plans/2026-11-03-meet-signed-in-bot-and-vendor.md`, PR `docs/meet-join-plan-b`; research done 2026-11-03, nothing built). Order and triggers are in its section 4; start B1 regardless, the rest by the Mac experiment and v0.12.29 results
+  - [ ] B1 `BotProvider` seam behind `VexaClient`, a fake provider and contract tests, no behaviour change (also the Phase D seam)
+  - [ ] B2 `RecallProvider` behind a flag, one live bot on Adebayo's own Meet (needs his Recall account)
+  - [ ] B3 fallback placement, spend guard and policy text (needs Adebayo's yes on Recall as a sub-processor)
+  - [ ] A1 measure the full Vexa stack with a bot built from PR #1873 on the Mac, and settle two questions (Zoom on an authenticated deployment, a signed-in bot on an invited event)
+  - [ ] A2 to A7, only if A1 passes: signed-in host files, `auth_session_missing` handling and alert, provisioning runbook, keep-warm job, invite path (`bot_invited`, Upcoming row, Settings address), policy and terms rows
 - [ ] Clear "calendar disconnected" state (built in C13 and C14; the 7-day expiry path stays dormant while the Google app is verified)
 
 ## Backlog
