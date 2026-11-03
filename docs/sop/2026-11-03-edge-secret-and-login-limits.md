@@ -85,6 +85,5 @@ If the PR deploys **before** steps 1 to 3, nothing breaks: the app logs the warn
 - Add `deploy/nginx-limit-check.sh` (needs Docker, about 15 s) to CI, and the full `docs/spike/edge-secret/e2e.sh` if it can be made cheap (it builds two images, about 4 minutes cold); neither runs in CI today, they were run by hand and their output is committed.
 - Accounts work: pass the email as `account` to `log_in`; run the password hash against a dummy hash for unknown accounts so response time does not reveal whether an account exists (today there is only the owner, so there is nothing to enumerate); min password length 8 with accounts (Adebayo: later); decide whether a remembered-device cookie should be per account.
 - Optionally email or otherwise alert the owner on an account lockout (today it is a log line).
-- `web/components/app/login-form.tsx` has a comment saying "15 minutes" (UI file, owned by the parity branch): update it there.
 - Optionally log the resolved client address for failed logins.
 - nginx `limit_req` keys on `$binary_remote_addr` (per `/128` for IPv6); switch to a `/64` key with a `map`/`geo` only if the edge limit ever has to be tight for IPv6.

@@ -7,8 +7,8 @@ import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 
 // POST /api/session from the browser, so the session cookie FastAPI sets lands in the browser by
-// itself. The button stays locked after a 429: the lockout is 15 minutes with no countdown, so
-// there is nothing to retry for now (docs/fe-integration-guide-owner-app.md section 8).
+// itself. The button stays locked after a 429: the lockout lasts 5 minutes to an hour with no
+// countdown, so there is nothing to retry for now (docs/fe-integration-guide-owner-app.md section 8).
 // The sign-in is one password: the API has no email, "forgot password" or "keep me signed in"
 // (docs/ui/parity-report.md), so the form does not draw them.
 export function LoginForm() {
