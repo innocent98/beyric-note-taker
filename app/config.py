@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     token_enc_key: str = ""
     token_enc_key_previous: str = ""
     token_enc_key_version: int = 1
+    # Set true where the calendar features (Google connect, pasted calendar links) are switched
+    # on. In production the app then refuses to start without `token_enc_key`, as it already does
+    # once `google_client_id` is set.
+    calendar_enabled: bool = False
 
 
 @lru_cache

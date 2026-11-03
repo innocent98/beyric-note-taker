@@ -13,6 +13,7 @@ Nothing here logs, and no error message holds a key, a plaintext or a blob.
 
 import base64
 import binascii
+import json
 import os
 
 from cryptography.exceptions import InvalidTag
@@ -20,6 +21,9 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.config import Settings, get_settings
 
+# Every kind of secret the vault holds. Part of the authenticated data, so a blob made for one
+# purpose never opens for another; a new kind is added here on purpose.
+PURPOSES = ("refresh_token", "ics_url", "host_api_key")
 NONCE_BYTES = 12
 KEY_BYTES = 32
 TAG_BYTES = 16
@@ -80,7 +84,14 @@ def _key_for(version: int, settings: Settings) -> bytes:
 
 
 def _aad(purpose: str, owner: str | int) -> bytes:
-    return f"{purpose}:{owner}".encode()
+    """Authenticated data: a JSON array of the purpose and the owner, so no choice of text can run
+    one field into the other, and an int owner (a user id) differs from a str owner (a host name)
+    that spells the same."""
+    if purpose not in PURPOSES:
+        raise ValueError(f"unknown vault purpose: {purpose!r}")
+    if isinstance(owner, bool) or not isinstance(owner, (int, str)):
+        raise ValueError("the vault owner must be a user id (int) or a name (str)")
+    return json.dumps([purpose, owner], separators=(",", ":")).encode()
 
 
 def encrypt(plaintext: str, *, purpose: str, owner: str | int) -> tuple[bytes, int]:
@@ -110,8 +121,10 @@ def needs_reencrypt(key_version: int) -> bool:
 
 
 def check_settings(settings: Settings) -> None:
-    """Refuse to start on a key that is set but unusable, and in production without a key once
-    Google is configured (the first thing stored is a Google refresh token)."""
+    """Refuse to start on a key setup that cannot work: a key that is set but unusable, a version
+    below 1, a previous key that is the current one (or has no version before it to belong to),
+    and, in production, no key at all once Google or the calendar features are switched on (the
+    first thing stored is a refresh token or a pasted link)."""
     for value, name in (
         (settings.token_enc_key, "TOKEN_ENC_KEY"),
         (settings.token_enc_key_previous, "TOKEN_ENC_KEY_PREVIOUS"),
@@ -121,12 +134,20 @@ def check_settings(settings: Settings) -> None:
                 _load_key(value, name)
             except VaultUnavailable as exc:
                 raise RuntimeError(f"{exc} (generate one with: openssl rand -base64 32)") from None
-    if (
-        settings.app_env == "production"
-        and settings.google_client_id
-        and not settings.token_enc_key
-    ):
+    if settings.token_enc_key_version < 1:
+        raise RuntimeError("TOKEN_ENC_KEY_VERSION must be 1 or more")
+    if settings.token_enc_key_previous:
+        if settings.token_enc_key_previous == settings.token_enc_key:
+            raise RuntimeError("TOKEN_ENC_KEY_PREVIOUS must be a different key from TOKEN_ENC_KEY")
+        if settings.token_enc_key_version < 2:
+            raise RuntimeError(
+                "TOKEN_ENC_KEY_VERSION must be 2 or more when TOKEN_ENC_KEY_PREVIOUS is set "
+                "(the previous key is the one before the current version)"
+            )
+    wants_key = settings.google_client_id or settings.calendar_enabled
+    if settings.app_env == "production" and wants_key and not settings.token_enc_key:
         raise RuntimeError(
-            "TOKEN_ENC_KEY is required when GOOGLE_CLIENT_ID is set: it encrypts the calendar "
-            "refresh tokens (generate one with: openssl rand -base64 32)"
+            "TOKEN_ENC_KEY is required when GOOGLE_CLIENT_ID is set or CALENDAR_ENABLED is true: "
+            "it encrypts the calendar refresh tokens and pasted calendar links "
+            "(generate one with: openssl rand -base64 32)"
         )

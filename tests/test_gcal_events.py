@@ -64,6 +64,7 @@ def test_a_real_shaped_meet_event_is_parsed_in_full():
         status="confirmed",
         event_type="default",
         all_day=False,
+        organizer_same_org=False,
     )
 
 
@@ -84,6 +85,7 @@ def test_parsed_event_has_no_description_location_or_address_field():
         "status",
         "event_type",
         "all_day",
+        "organizer_same_org",
     }
     with pytest.raises(dataclasses.FrozenInstanceError):
         parse_event(event()).title = "changed"
@@ -159,6 +161,21 @@ def test_no_link_gives_platform_none():
     ):
         got = parse_event(raw)
         assert (got.platform, got.meeting_url, got.native_id) == (None, None, None)
+
+
+def test_the_stored_link_is_the_canonical_one_not_the_raw_text():
+    raw = "http://us02web.zoom.us/j/81234567890?pwd=abc&utm_source=cal&uname=Ada#top"
+    got = parse_event(event(description=f"Join {raw}"))
+    assert got.meeting_url == "https://us02web.zoom.us/j/81234567890?pwd=abc"  # https, pwd only
+    meet = parse_event(event(hangoutLink="http://meet.google.com/abc-defg-hij?authuser=1&hs=1"))
+    assert meet.meeting_url == "https://meet.google.com/abc-defg-hij"
+    padded = parse_event(event(conferenceData={"entryPoints": [entry(f"  {MEET}  ")]}))
+    assert padded.meeting_url == MEET
+    teams = parse_event(event(description="http://teams.microsoft.com/meet/9876543210?p=abc"))
+    assert teams.meeting_url == "https://teams.microsoft.com/meet/9876543210?p=abc"
+    assert parse_event(event(description="https://us02web.zoom.us/j/123456789")).meeting_url == (
+        "https://us02web.zoom.us/j/123456789"
+    )
 
 
 # ---- Zoom passcodes (Review Focus 3) ----
@@ -258,6 +275,23 @@ def test_organizer_and_response_rules():
     assert parse_event(no_self_attendee).self_response is None
     odd = event(attendees=[{"self": True, "responseStatus": "something-new"}])
     assert parse_event(odd).self_response is None  # an unknown value is not guessed
+
+
+def test_same_org_is_true_only_for_the_connected_workspace_domain():
+    def organized_by(email, hosted_domain):
+        raw = event(organizer={"email": email})
+        return parse_event(raw, hosted_domain=hosted_domain).organizer_same_org
+
+    assert organized_by("boss@corp.example", "corp.example") is True
+    assert organized_by("Boss@CORP.Example", "Corp.Example") is True  # case never matters
+    assert organized_by("boss@corp.example", None) is False  # a personal account has no domain
+    assert organized_by("boss@gmail.com", None) is False  # never "same domain" for gmail.com
+    assert organized_by("boss@sub.corp.example", "corp.example") is False  # exact, not a suffix
+    assert organized_by("boss@evilcorp.example", "corp.example") is False
+    assert organized_by("boss@corp.example.evil.test", "corp.example") is False
+    assert organized_by("not-an-address", "corp.example") is False
+    assert parse_event(event(), hosted_domain="corp.example").organizer_same_org is False
+    assert "corp.example" not in repr(parse_event(event(organizer={"email": "a@corp.example"})))
 
 
 # ---- time zones (Review Focus 2) ----

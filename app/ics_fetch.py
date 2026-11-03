@@ -58,6 +58,7 @@ TOTAL_TIMEOUT = 10.0
 READ_TIMEOUT = 5.0
 MAX_ADDRESSES_TRIED = 2
 HTTPS_PORT = 443
+MAX_URL_CHARS = 2048
 # A plain DNS name: letters, digits and hyphens in dot-separated labels. Anything else (a
 # backslash, an underscore, brackets, a trailing garbage label) is refused before the allowlist
 # is consulted, so no odd spelling can pass a suffix entry.
@@ -163,8 +164,12 @@ def _reject(reason: str, host: str) -> IcsRejected:
 
 def _check_url(url: str) -> tuple[str, str]:
     """(host, path-and-query to request), or an `IcsRejected`."""
-    if not isinstance(url, str) or not url.strip() or any(c.isspace() or ord(c) < 32 for c in url):
+    url = url.strip() if isinstance(url, str) else ""
+    if not url or len(url) > MAX_URL_CHARS or any(c.isspace() or ord(c) < 32 for c in url):
         raise _reject("scheme", "unknown")
+    for webcal in ("webcal://", "webcals://"):  # what iCloud and Outlook hand out: plain https
+        if url[: len(webcal)].lower() == webcal:
+            url = "https://" + url[len(webcal) :]
     try:
         parts = urlsplit(url)
         host = (parts.hostname or "").lower().rstrip(".")
@@ -242,16 +247,39 @@ def _read_body(response: httpx.Response, host: str, deadline: float) -> bytes:
 
 def fetch_ics(url: str, *, resolver=socket.getaddrinfo, transport=None) -> bytes:
     """The calendar feed behind `url`, or `IcsRejected` with the reason. `resolver` and
-    `transport` exist for tests; production uses the system resolver and a verified TLS client."""
-    _quiet.active.on = True
-    try:
-        return _fetch(url, resolver, transport)
-    finally:
-        _quiet.active.on = False
+    `transport` exist for tests; production uses the system resolver and a verified TLS client.
 
-
-def _fetch(url: str, resolver, transport) -> bytes:
+    Everything after the URL check (name lookup included, which has no timeout of its own) runs in
+    a worker thread, and the caller waits at most `TOTAL_TIMEOUT` for it: a hung lookup or a server
+    that holds the connection open frees the caller at the limit. The abandoned thread ends on its
+    own, bounded by the connect and read timeouts, and its result is discarded."""
     host, target = _check_url(url)
+    outcome: dict = {}
+
+    def work() -> None:
+        _quiet.active.on = True
+        try:
+            outcome["body"] = _fetch(host, target, resolver, transport)
+        except IcsRejected as exc:
+            outcome["error"] = exc
+        except Exception as exc:
+            # The type only: the message of an HTTP-library error can quote the URL.
+            logger.error("ics fetch failed unexpectedly type=%s host=%s", type(exc).__name__, host)
+            outcome["error"] = IcsRejected("unreachable")
+        finally:
+            _quiet.active.on = False
+
+    worker = threading.Thread(target=work, name="ics-fetch", daemon=True)
+    worker.start()
+    worker.join(TOTAL_TIMEOUT)
+    if worker.is_alive():
+        raise _reject("timeout", host)
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["body"]
+
+
+def _fetch(host: str, target: str, resolver, transport) -> bytes:
     addresses = _resolve(host, resolver)
     deadline = time.monotonic() + TOTAL_TIMEOUT
     headers = {
@@ -273,13 +301,13 @@ def _fetch(url: str, resolver, transport) -> bytes:
             if time.monotonic() > deadline:
                 raise _reject("timeout", host)
             literal = f"[{ip.compressed}]" if ip.version == 6 else ip.compressed
-            request = client.build_request(
-                "GET",
-                f"https://{literal}{target}",
-                headers=headers,
-                extensions={"sni_hostname": host},
-            )
             try:
+                request = client.build_request(
+                    "GET",
+                    f"https://{literal}{target}",
+                    headers=headers,
+                    extensions={"sni_hostname": host},
+                )
                 response = client.send(request, stream=True)
             except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
                 if index + 1 < len(addresses):

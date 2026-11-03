@@ -8,8 +8,10 @@ points at its meeting, never the other way round).
 Differences from the spec text, all deliberate (plan task C1): `source_event_id` and
 `source_updated_at` replace the Google-named columns so the pasted-link (ICS) source needs no
 rename; `provider` allows `google` and `ics`; `scheduled_joins.rechecked_at` lets the 2-minute
-re-check run once; `calendar_events.all_day` and `event_type` are kept so a rule change can re-run
-`will_join` from the stored row alone.
+re-check run once; `calendar_events.all_day`, `event_type` and `organizer_same_org` are kept so a
+rule change can re-run `will_join` from the stored row alone. The one-live-join-per-meeting-code
+index includes `user_id`: a global one would let an account block another's join by registering
+the same link first.
 
 Revision ID: 0010
 Revises: 0009
@@ -98,6 +100,7 @@ def upgrade() -> None:
         sa.Column("meeting_url", sa.Text()),
         sa.Column("native_id", sa.String(200)),
         sa.Column("organizer_self", sa.Boolean()),
+        sa.Column("organizer_same_org", sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column("attendee_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("self_response", sa.String(16)),
         sa.Column("status", sa.String(16), nullable=False, server_default="confirmed"),
@@ -176,7 +179,7 @@ def upgrade() -> None:
     op.create_index(
         "uq_scheduled_joins_live_code",
         "scheduled_joins",
-        ["platform", "native_id"],
+        ["user_id", "platform", "native_id"],
         unique=True,
         postgresql_where=sa.text("state in ('dispatching', 'no_capacity', 'joined')"),
     )

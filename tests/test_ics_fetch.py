@@ -118,6 +118,18 @@ def test_a_query_string_is_kept_and_the_fragment_dropped():
     assert recorder.requests[0].url.fragment == ""
 
 
+@pytest.mark.parametrize("scheme", ["webcal", "WEBCAL", "webcals"])
+def test_webcal_links_are_read_as_https(scheme):
+    body, recorder = fetch(f"{scheme}://{HOST}/calendar/ical/x/private-{TOKEN}/basic.ics")
+    assert body == FEED and recorder.requests[0].url.scheme == "https"
+    assert rejected("webcal://evil.test/feed.ics")[0].reason == "host_not_allowed"
+    assert rejected("webcal://10.0.0.1/feed.ics")[0].reason == "host_not_allowed"
+
+
+def test_pasted_whitespace_around_the_link_is_trimmed():
+    assert fetch(f"  {URL}\n")[0] == FEED
+
+
 def test_a_byte_order_mark_and_lowercase_header_are_accepted():
     assert fetch(respond=ok(b"\xef\xbb\xbfbegin:vcalendar\r\nEND:VCALENDAR"))[0].endswith(
         b"VCALENDAR"
@@ -387,6 +399,59 @@ def test_slow_response_times_out(monkeypatch):
     error, _ = rejected(respond=lambda request: httpx.Response(200, content=drip()))
     assert error.reason == "timeout"
     assert time.monotonic() - started < 2
+
+
+def test_a_server_that_never_sends_headers_is_cut_off_at_the_total_limit(monkeypatch):
+    monkeypatch.setattr(ics_fetch, "TOTAL_TIMEOUT", 0.3)
+
+    def respond(request):
+        time.sleep(2)  # holds the connection open before any header
+        return httpx.Response(200, content=streamed(FEED))
+
+    started = time.monotonic()
+    error, _ = rejected(respond=respond)
+    assert error.reason == "timeout"
+    assert time.monotonic() - started < 1.0  # the caller is freed at the limit, not at 2 s
+
+
+def test_a_resolver_that_hangs_is_cut_off_at_the_total_limit(monkeypatch):
+    monkeypatch.setattr(ics_fetch, "TOTAL_TIMEOUT", 0.3)
+
+    def hanging(host, port, *args, **kwargs):
+        time.sleep(2)
+        return answer(PUBLIC_IP)
+
+    recorder = Recorder(ok())
+    started = time.monotonic()
+    with pytest.raises(IcsRejected) as raised:
+        fetch_ics(URL, resolver=hanging, transport=recorder.transport())
+    assert raised.value.reason == "timeout" and time.monotonic() - started < 1.0
+    assert recorder.requests == []
+
+
+def test_an_unexpected_failure_inside_the_fetch_is_unreachable_and_leaks_nothing(caplog):
+    def respond(request):
+        raise RuntimeError(f"boom {URL}")
+
+    error, _ = rejected(respond=respond)
+    assert error.reason == "unreachable"
+    assert TOKEN not in caplog.text and TOKEN not in repr(error) + repr(error.__cause__)
+
+
+def test_a_url_httpx_refuses_is_rejected_not_raised(monkeypatch):
+    def refuse(self, *args, **kwargs):
+        raise httpx.InvalidURL(f"bad {URL}")
+
+    monkeypatch.setattr(httpx.Client, "build_request", refuse)
+    error, _ = rejected()
+    assert error.reason == "unreachable" and TOKEN not in f"{error!r} {error.__cause__!r}"
+
+
+def test_an_overlong_link_is_refused_before_anything_happens():
+    long_url = f"https://{HOST}/" + "a" * 2100
+    error, recorder = rejected(long_url)
+    assert error.reason == "scheme" and recorder.requests == []
+    assert fetch(f"https://{HOST}/" + "a" * 1900)[0] == FEED
 
 
 def test_a_transport_timeout_is_a_timeout_and_the_limits_are_the_documented_ones():

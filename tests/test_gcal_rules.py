@@ -56,6 +56,10 @@ TABLE = [
     ("organizer", True, ANY, ANY, None, (True, "ok")),
     ("organizer", False, ANY, ANY, None, (False, "not_organizer")),
     ("organizer", None, ANY, ANY, None, (False, "not_organizer")),
+    # An invite nobody has answered is joined only when it is the user's own meeting (the organiser
+    # is the user) or comes from their own organisation; a stranger's invite waits for a switch.
+    ("all", False, "needsAction", ANY, None, (False, "not_accepted")),
+    ("all", None, "needsAction", ANY, None, (False, "not_accepted")),
     ("all", ANY, ANY, ANY, None, (True, "ok")),
 ]
 
@@ -96,7 +100,14 @@ def test_the_matrix_spot_checks_read_as_the_spec_says():
         (make(organizer_self=False), None, settings("organizer"), False, "not_organizer"),
         (make(organizer_self=True), None, settings("organizer"), True, "ok"),
         (make(self_response="tentative"), None, settings("all"), True, "ok"),
-        (make(self_response="needsAction"), None, settings("all"), True, "ok"),
+        (make(self_response="needsAction"), None, settings("all"), True, "ok"),  # you organise it
+        (
+            make(self_response="needsAction", organizer_self=False),
+            None,
+            settings("all"),
+            False,
+            "not_accepted",
+        ),
         (make(platform=None), None, settings("all"), False, "no_link"),
         (make(platform="teams"), None, settings("all", teams=False), False, "teams_unsupported"),
         (make(platform="teams"), None, settings("all", teams=True), True, "ok"),
@@ -104,6 +115,30 @@ def test_the_matrix_spot_checks_read_as_the_spec_says():
     ]
     for event, override, join_settings, join, reason in cases:
         assert will_join(event, override, join_settings, now=NOW) == JoinDecision(join, reason)
+
+
+# ---- unanswered invites (a stranger must not be able to send the bot) ----
+
+
+def test_an_unanswered_invite_from_the_users_own_organisation_is_joined():
+    invite = make(self_response="needsAction", organizer_self=False, organizer_same_org=True)
+    assert will_join(invite, None, settings("all"), now=NOW) == JoinDecision(True, "ok")
+    stranger = make(self_response="needsAction", organizer_self=False, organizer_same_org=False)
+    assert will_join(stranger, None, settings("all"), now=NOW) == JoinDecision(
+        False, "not_accepted"
+    )
+
+
+@pytest.mark.parametrize("response", ["accepted", "tentative", None])
+def test_only_an_unanswered_invite_waits_for_the_user(response):
+    event = make(self_response=response, organizer_self=False, organizer_same_org=False)
+    assert will_join(event, None, settings("all"), now=NOW) == JoinDecision(True, "ok")
+
+
+def test_the_one_click_override_joins_an_unanswered_invite_from_a_stranger():
+    stranger = make(self_response="needsAction", organizer_self=False, organizer_same_org=False)
+    assert will_join(stranger, True, settings("all"), now=NOW) == JoinDecision(True, "ok")
+    assert will_join(stranger, None, settings("none"), now=NOW).reason == "rule_none"
 
 
 # ---- what an override can never beat ----
@@ -181,6 +216,7 @@ def test_the_reasons_are_exactly_the_documented_set():
             (make(all_day=True), None, settings()),
             (make(event_type="focusTime"), None, settings()),
             (make(organizer_self=False), None, settings("organizer")),
+            (make(organizer_self=False, self_response="needsAction"), None, settings("all")),
             (make(), None, settings("none")),
             (make(), False, settings()),
         ]
@@ -196,6 +232,7 @@ def test_the_reasons_are_exactly_the_documented_set():
         "all_day",
         "event_type",
         "not_organizer",
+        "not_accepted",
         "rule_none",
         "override_off",
     }

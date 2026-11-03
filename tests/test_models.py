@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.models import Meeting, Template, VocabularyTerm
+from app.models import Meeting, ScheduledJoin, Template, VocabularyTerm
 from tests.test_web import make_user
 
 
@@ -255,22 +255,31 @@ def test_instant_joins_without_an_event_do_not_collide_on_the_event_index(sessio
 
 def test_live_join_unique_per_meeting_code(session):
     user = make_user(session)
-    other = make_user(session, "other@example.test")
     session.add(_scheduled_join(user, state="joined"))
     session.commit()
-    session.add(_scheduled_join(other, state="joined"))  # same (platform, native_id)
-    with pytest.raises(IntegrityError):
-        session.commit()
-    session.rollback()
-    for state in ("dispatching", "no_capacity"):  # every live state holds the code
-        session.add(_scheduled_join(other, state=state))
+    for state in ("joined", "dispatching", "no_capacity"):  # every live state holds the code
+        session.add(_scheduled_join(user, state=state))
         with pytest.raises(IntegrityError):
             session.commit()
         session.rollback()
     # A finished or waiting join does not hold the code: a recurring Meet code is free again.
-    session.add(_scheduled_join(other, state="completed"))
-    session.add(_scheduled_join(other, state="scheduled", source="instant_meet"))
+    session.add(_scheduled_join(user, state="completed"))
+    session.add(_scheduled_join(user, state="scheduled", source="instant_meet"))
     session.commit()
+
+
+def test_one_users_live_join_never_blocks_another_users_join_of_the_same_link(session):
+    # The index is per user: registering someone else's link first cannot lock them out. Two users
+    # in one meeting each get a join until C12's dispatcher decides how sharing works.
+    user = make_user(session)
+    other = make_user(session, "other@example.test")
+    session.add(_scheduled_join(user, state="joined"))
+    session.commit()
+    for state in ("joined", "dispatching", "no_capacity"):
+        session.add(_scheduled_join(other, state=state))
+        session.commit()
+        session.query(ScheduledJoin).filter_by(user_id=other.id).delete()
+        session.commit()
 
 
 def test_deleting_a_user_removes_their_calendar_rows_and_keeps_meetings(session):

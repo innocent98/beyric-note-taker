@@ -13,7 +13,7 @@ from datetime import UTC, date, datetime
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.vexa import UnsupportedMeetingUrl, parse_meeting_url
+from app.vexa import UnsupportedMeetingUrl, canonical_meeting_url, parse_meeting_url
 
 # A cancelled event in an incremental sync can come back as just `{"id", "status"}`, with no times.
 # It parses to this instant for both ends; only its id and status mean anything.
@@ -51,6 +51,10 @@ class ParsedEvent:
     status: str
     event_type: str
     all_day: bool
+    # True only when the organiser's address is in the connected Workspace domain. An address is
+    # never kept: this is the one fact the join rule needs from it. Always False for a personal
+    # Google account (no domain to share) and for a pasted link.
+    organizer_same_org: bool = False
 
 
 def _obj(container: object, key: str) -> dict:
@@ -58,28 +62,35 @@ def _obj(container: object, key: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def _teams(url: str) -> bool:
+def _teams_url(url: str) -> str | None:
+    """The https form of a Teams meeting link, or None when `url` is not one."""
     try:
         parts = urlsplit(url)
         host = (parts.hostname or "").lower()
     except ValueError:
-        return False
+        return None
     prefixes = TEAMS_HOSTS.get(host)
-    return (
-        parts.scheme in ("http", "https")
-        and prefixes is not None
-        and parts.path.startswith(prefixes)
-    )
+    if (
+        parts.scheme not in ("http", "https")
+        or prefixes is None
+        or not parts.path.startswith(prefixes)
+    ):
+        return None
+    # Path and query stay: the query carries the meeting context a Teams join needs.
+    return f"https://{host}{parts.path}" + (f"?{parts.query}" if parts.query else "")
 
 
-def _classify(url: str) -> tuple[str, str | None] | None:
-    """(platform, native_id) when `url` is a link we can join (or, for Teams, recognise)."""
+def _classify(url: str) -> tuple[str, str | None, str] | None:
+    """(platform, native_id, canonical link) when `url` is a link we can join (or, for Teams,
+    recognise). The canonical form is https, without tracking parameters."""
     url = url.strip()
     try:
-        return parse_meeting_url(url)
+        platform, native_id = parse_meeting_url(url)
+        return platform, native_id, canonical_meeting_url(url)
     except UnsupportedMeetingUrl:
         pass
-    return ("teams", None) if _teams(url) else None
+    teams = _teams_url(url)
+    return ("teams", None, teams) if teams else None
 
 
 def _urls_in_text(text: object) -> list[str]:
@@ -109,7 +120,7 @@ def _link(raw: dict) -> tuple[str | None, str | None, str | None]:
     for url in _candidate_links(raw):
         found = _classify(url)
         if found:
-            return found[0], url.strip(), found[1]
+            return found[0], found[2], found[1]
     return None, None, None
 
 
@@ -140,7 +151,15 @@ def _instant(point: object, *, cancelled_stub_ok: bool) -> tuple[datetime, bool]
     raise EventParseError("the event time has neither dateTime nor date")
 
 
-def parse_event(raw: dict) -> ParsedEvent:
+def _same_org(organizer: object, hosted_domain: str | None) -> bool:
+    email = organizer.get("email") if isinstance(organizer, dict) else None
+    if not hosted_domain or not isinstance(email, str) or email.count("@") != 1:
+        return False
+    return email.rsplit("@", 1)[1].strip().lower() == hosted_domain.strip().lower()
+
+
+def parse_event(raw: dict, *, hosted_domain: str | None = None) -> ParsedEvent:
+    """`hosted_domain` is the connection's Workspace domain (`google_hosted_domain`), or None."""
     event_id = raw.get("id") if isinstance(raw, dict) else None
     if not isinstance(event_id, str) or not event_id:
         raise EventParseError("the event has no id")
@@ -176,4 +195,5 @@ def parse_event(raw: dict) -> ParsedEvent:
         status=status,
         event_type=event_type if isinstance(event_type, str) and event_type else "default",
         all_day=all_day,
+        organizer_same_org=_same_org(organizer, hosted_domain),
     )

@@ -201,12 +201,12 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
     - [ ] **Before sign-up opens:** the frontend pages the mail links open (`/verify-email`, `/reset-password`, `/signup?invite=`, `/pilot-full`, `/login?error=`) must exist (stream D); Adebayo confirms a real verification mail is delivered, then turns `password_signup_enabled` on; a real Google round trip with a test account
 - [ ] Phase C, Google Calendar auto-join plus the ICS source (needs A6, A9, A13, A18 for most tasks)
   - [x] C1 migration for connections, events, scheduled joins (2026-11-03, `feature/phase-c-foundations`; migration `0010`, SOP `docs/sop/2026-11-03-phase-c-foundations.md`; open, not merged)
-  - [x] C2 token vault (AES-GCM, Opus review) (2026-11-03, same PR; **Opus review still to do**; the privacy "Security" row waits for C3)
+  - [x] C2 token vault (AES-GCM, Opus review) (2026-11-03, same PR #45; Opus reviewed, no Critical or High, its fixes applied; the privacy "Security" row waits for C3)
   - [ ] C3 connect flow with incremental consent (Opus review)
   - [ ] C4 disconnect flow
   - [ ] C5 calendar client and `CalendarSource` protocol; live check that `calendar.events.readonly` covers `events.list` and `events.get`
   - [x] C6 event parsing (2026-11-03, same PR; synthetic fixtures until C5's live captures exist)
-  - [x] C7 `will_join` rule function (2026-11-03, same PR; full rule x organiser x response x platform x override matrix)
+  - [x] C7 `will_join` rule function (2026-11-03, same PR; full rule x organiser x response x platform x override matrix; an unanswered invite from outside your organisation does not auto-join under `all`: **decision for Adebayo**, see the SOP)
   - [ ] C8 materialiser (events to rows); C8b sync job
   - [ ] C9 key re-encryption script
   - [ ] C10 scheduler skeleton (leader lock, two loops, heartbeat, compose service); C10b periodic sweeps and mail tick
@@ -218,7 +218,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] C17 close-out: policy rows, SOP, FE guide with live captures, phase Opus review
   - [ ] C18 recording notice (chat line if P0.3 allows)
   - [ ] Paste-a-link (ICS) calendar source for Outlook, Microsoft 365 and others (**in**, Adebayo 2026-11-03; no Microsoft OAuth app): C19 staleness spike (Google secret feed and Outlook publish), C20 SSRF-safe fetcher (Opus review), C21 parser with our own recurrence expansion, C22 connection, encrypted masked link and first-sync result, C23 source and API with the "updates can take a while" label, C24 close-out. No Outlook wording anywhere until C24 is live and verified (list in the plan)
-    - [x] C20 SSRF-safe fetcher (2026-11-03, `feature/phase-c-foundations`; **Opus review still to do**; the three default hosts in `ICS_ALLOWED_HOSTS` are unconfirmed until C19; TLS by pinned IP and SNI checked against the three real hosts)
+    - [x] C20 SSRF-safe fetcher (2026-11-03, PR #45; Opus reviewed, no Critical or High, its fixes applied (hard time limit, `webcal://`, URL cap); the three default hosts in `ICS_ALLOWED_HOSTS` are unconfirmed until C19; TLS by pinned IP and SNI checked against the three real hosts)
 - [ ] Phase C-T, Teams (Q17, gated by P0.7): T1 pasted Teams link, T2 Teams events from the calendar, T3 Teams wording in policy, terms, landing
 - [ ] Phase I, instant-Meet auto-join (gated by P0.2; the Settings switch is drawn by the designer)
   - [ ] I1 incremental Meet consent, mode resolution, switch; I2 `pubsub_inbox` and the push endpoint (Opus review); I3 Meet client and subscription manager

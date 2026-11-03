@@ -319,6 +319,10 @@ class CalendarEvent(Base):
     meeting_url: Mapped[str | None] = mapped_column(Text)
     native_id: Mapped[str | None] = mapped_column(String(200))
     organizer_self: Mapped[bool | None] = mapped_column(Boolean)
+    # The organiser is in the user's own Workspace domain (the address itself is never kept).
+    organizer_same_org: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
     attendee_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     self_response: Mapped[str | None] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16), default="confirmed", server_default="confirmed")
@@ -344,9 +348,12 @@ class ScheduledJoin(Base):
         CheckConstraint(_in("state", JOIN_STATES), name="ck_scheduled_joins_state"),
         UniqueConstraint("user_id", "calendar_event_id", name="uq_scheduled_joins_user_event"),
         Index("ix_scheduled_joins_state_run_at", "state", "run_at"),
-        # One bot per meeting code: a join that holds the code (a live state) excludes any other.
+        # One live join per user per meeting code. Per user on purpose: a global index would let one
+        # account block another's join by registering the same link first. Two users in one
+        # meeting each get a join until C12's dispatcher decides how sharing works.
         Index(
             "uq_scheduled_joins_live_code",
+            "user_id",
             "platform",
             "native_id",
             unique=True,
