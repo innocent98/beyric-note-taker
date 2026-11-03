@@ -140,7 +140,7 @@ know and wait for it to be confirmed.
 |---|---|---|---|
 | 400 | `password_mismatch` | That is not the password you chose when you signed up. If you do not remember it, create the account again. | The link stays usable (#22). After **5** wrong passwords the link is dead (next row; not captured live, tested) |
 | 400 | `token_invalid_or_expired` | This link has expired or was already used. Ask for a new one. | Wrong, used (#25), expired (24 h; **not captured live**, tested) or dead after 5 wrong passwords. Offer "Send a new link" (section 6) |
-| 409 | `pilot_full` | The pilot filled up before this account was confirmed. Join the waiting list and we will write when a place opens. | #58: the link is **not** used up and works when a place opens (the pilot is `full` only because other people confirmed first). Show the pilot-full screen with the waitlist form. Accounts made from an invitation always confirm |
+| 409 | `pilot_full` | The pilot filled up before this account was confirmed. Join the waiting list and we will write when a place opens. | #58: the link is **not** used up and works when a place opens (the pilot is `full` only because other people confirmed first). Show the pilot-full screen with the waitlist form. An account made from an invitation, or whose own invitation is live, confirms even when the pilot is full (the invitation is redeemed by confirming) |
 | 422 | `validation_error` | … | missing `token` or `password` |
 
 If the person signed up twice (say a typo the first time) both links exist and each works only with
@@ -341,7 +341,7 @@ off until a real verification mail has been delivered once.
 - no free place → 409 `pilot_full` — "There is no free place to reserve. Raise the limit first." (#63);
 - someone who already joined or was removed → 409 `waitlist_entry_closed` (**not captured live**, tested).
 
-Inviting again replaces the earlier link and holds one place. The invited address signs up with
+Inviting again replaces the earlier link and holds one place. If the invited person already has an **unconfirmed** account, they can confirm it with their original link even when the pilot is full (the invitation's place is theirs), or sign up again with `invite_token`, or sign in with Google: each redeems the invitation for that account and the entry becomes `joined`. The invited address signs up with
 `invite_token` (#83) even while the pilot is `full` or `closed`; for any other address it is 400
 `invite_invalid` (#82) and it works once (#84); the entry then shows `joined` (#85).
 `DELETE /api/admin/waitlist/{id}` → 204: removes the person and frees any reserved place (#88).
@@ -355,7 +355,7 @@ created_at}`, never a link. **Item shape not captured live** (tested).
 - **Account:** `unverified` (created, cannot sign in: it gets the ordinary 401) → `active` (verified;
   a place is taken now) ⇄ `suspended` (cannot sign in; signed out at once) → deleted (looks unknown).
   An unverified account is **deleted automatically 48 hours after its last sign-up submission** (a
-  resend does not extend it; the worker; not run live). It held no place, so nothing is freed.
+  resend does not extend it; the worker; not run live). It held no place, so nothing is freed, **except** for a person who came in with an invitation: their place was held, the sweep deletes the account and puts them back on the waitlist (`waiting`), and the place is free again.
 - **Waitlist entry:** `waiting` → `invited` (a place is held 7 days) → `joined`; or `removed`.
 - **Pilot:** `closed` ⇄ `open` ⇄ `full`, by the admin's settings and the number of places taken.
 - **Polling:** the bell: read `unread_notifications` from `GET /api/session` (call it on page load and

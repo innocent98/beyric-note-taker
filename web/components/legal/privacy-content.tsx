@@ -54,7 +54,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <ul>
         <li>To provide the service: joining meetings, recording audio, and producing transcripts and notes for you.</li>
         <li>To apply your templates and vocabulary so notes follow your format and spell names correctly.</li>
-        <li>To send service emails, such as account verification and password resets.</li>
+        <li>To send service emails, such as account verification, password resets, waiting-list invitations and notices that an address already has an account.</li>
         <li>To keep the service secure, prevent abuse and fix problems.</li>
         <li>To meet legal obligations and enforce our Terms of Service.</li>
       </ul>
@@ -63,7 +63,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h2 id="share">Who we share information with</h2>
       <ul>
         <li><strong>OpenAI</strong> turns meeting audio into a transcript and writes notes from it. Under OpenAI's API terms, data sent through its API is not used to train its models.</li>
-        <li><strong>Resend</strong> sends our service emails (account verification and password resets). It receives your name and email address, and the content of those emails, which include one-time links.</li>
+        <li><strong>Resend</strong> sends our service emails (account verification, password resets, waiting-list invitations and notices that an address already has an account). It receives the email address and, if given, the name on each of those emails, and their content, which includes one-time links.</li>
         <li><strong>Contabo</strong> hosts our server, in France.</li>
         <li><strong>Cloudflare</strong> provides our domain's DNS and may carry traffic to the site.</li>
         <li><strong>Meeting and calendar platforms</strong> (Google and Zoom), as needed to join meetings and to read calendar events you have authorised.</li>

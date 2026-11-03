@@ -46,7 +46,10 @@ def test_google_sign_in_is_described_as_identity_only(anon_client):
 
 def test_the_email_use_names_only_the_mail_that_is_sent(anon_client):
     page = text(anon_client, PRIVACY)
-    assert "To send service emails, such as account verification and password resets." in page
+    assert (
+        "To send service emails, such as account verification, password resets, waiting-list "
+        "invitations and notices that an address already has an account." in page
+    )
     assert "notices about meetings" not in page  # not sent yet: calendar auto-join is later
 
 
@@ -77,9 +80,10 @@ def test_nothing_is_claimed_about_calendar_features_that_are_not_built(anon_clie
 def test_resend_is_named_as_a_recipient_with_what_it_receives(anon_client):
     page = text(anon_client, PRIVACY)
     assert (
-        "Resend sends our service emails (account verification and password resets). It "
-        "receives your name and email address, and the content of those emails, which include "
-        "one-time links." in page
+        "Resend sends our service emails (account verification, password resets, waiting-list "
+        "invitations and notices that an address already has an account). It receives the email "
+        "address and, if given, the name on each of those emails, and their content, which "
+        "includes one-time links." in page
     )
     assert "and Resend the email addresses and names it sends mail to" in page
 

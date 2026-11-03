@@ -3,7 +3,7 @@
 The token handed out is 32 random bytes (URL-safe text); `auth_tokens` holds only its SHA-256 hash,
 so a leaked copy of that table cannot be used to verify an account or reset a password. The raw
 token also exists, briefly, in the link inside `mail_outbox.payload` until the mail is sent (see
-`app/mail.py`: scrubbed on send, on final failure, and after an hour). A token works
+`app/mail.py`: scrubbed on send, on final failure, and by the hourly sweep once a row is over an hour old: up to about two hours). A token works
 once (`consume` marks it used in the same statement that finds it, so two parallel requests
 cannot both win) and until its expiry. Nothing here commits: the caller's transaction decides.
 """

@@ -7,8 +7,9 @@ the action. The worker sends pending rows (`deliver_pending`) and tidies up (`sw
 A row holds the link in its `payload` while the mail is pending, because the link carries the RAW
 token (`auth_tokens` keeps only its hash): that is the one place a usable token is stored. The
 payload is replaced by `{}` the moment the mail is sent or has failed for good (normally within
-seconds), and any row still unsent an hour after it was queued is failed and scrubbed too, so a
-backup taken in between can hold a live link for at most that hour. When no mail provider is
+seconds), and any row still unsent an hour after it was queued is failed and scrubbed too (by
+the hourly sweep, so a row can wait up to about two hours), so a backup taken in between can hold a
+live link for that long at most. When no mail provider is
 configured (`is_configured`) callers do not make a token or a row at all.
 
 Errors are recorded by kind only (`HTTP 500`, an exception's class name): a provider's reply or
