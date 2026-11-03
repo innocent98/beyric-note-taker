@@ -121,7 +121,9 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
 
       {m.status === "bot_sent" && m.join_attempts > 1 ? (
         <Alert kind="notice">
-          Zoom turned the bot away, so a new one was sent (attempt {m.join_attempts} of {m.max_join_attempts}).
+          {m.platform === "zoom"
+            ? `Zoom turned the bot away, so a new one was sent (attempt ${m.join_attempts} of ${m.max_join_attempts}).`
+            : `Google turned the bot away, so a new one was sent (attempt ${m.join_attempts}).`}
         </Alert>
       ) : null}
       {m.status === "ready" && m.bot_left_early ? (

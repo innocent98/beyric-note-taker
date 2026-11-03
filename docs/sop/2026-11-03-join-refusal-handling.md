@@ -1,0 +1,38 @@
+# SOP: fail fast when Google refuses the bot's join, and retry politely
+
+## What shipped
+A Google Meet join that Google refuses (or leaves stuck) now ends in about 2 to 3 minutes with a plain reason, the bot is stopped at once, and retries are paced: one automatic second bot, 4 to 5 minutes after the refusal, and a manual "Try again" no sooner than 5 minutes after it. Branch `fix/join-refusal-handling`, PR linked from the checklist item "Fail fast when Google refuses the bot's join request". This is the non-calendar part of task C12b in `docs/spike/meet-join-resilience.md` (section 5).
+
+## Why
+On 2026-11-03 Google refused the bot's "Ask to join" (HTTP 403, "You can't join this video call"). Vexa v0.12.28, which production runs, then sat in a dead lobby for 8 to 10 minutes and the meeting stayed `bot_sent` with no explanation (meetings 8 to 11). Vexa moved to `needs_help` about 2 minutes after the knock, which the worker ignored; meeting 10 failed with "Could not locate join button ... workspace.google.com/products/meet". Vexa v0.12.29 (PR #1921, not yet deployed) reports `google_meet_join_refused` after re-knocking up to 3 times by itself. The change has to work on both.
+
+## How
+| Piece | Decision |
+|---|---|
+| Recognising a refusal (`pipeline._join_refused`, Google Meet only) | Any one of: completion reason or reason text containing `google_meet_join_refused` (v0.12.29); a failure text with both "could not locate join button" and `workspace.google.com/products/meet` (the Meet marketing page the bot lands on, meeting 10); Vexa status `needs_help` for 30 s (v0.12.28, meeting 8 and 11). `needs_help` is ignored when the bot already has live segments or a recording id, so a bot that is really recording is never ended; it is also ignored for Zoom, whose `needs_help` is not understood |
+| Fail fast | `_on_refusal` calls `stop_bot` first (a failed stop is logged and does not block the failure), then either fails the meeting with `REASON_JOIN_REFUSED` or pauses for the retry |
+| The reason | "Google would not let the bot ask to join this meeting. This sometimes happens; try sending the bot again in a few minutes. If it keeps happening, the host's Meet settings may be blocking guests." (`REASON_JOIN_REFUSED`) |
+| Automatic pacing | `REFUSAL_MAX_SENDS = 2`. The first refusal leaves the meeting `bot_sent` and paused; after `REFUSAL_RETRY_GAP` (4 min) plus a 0 to 60 s jitter that is a pure function of meeting id and send number (`refusal_retry_gap`, so every poll agrees and nothing extra is stored) the worker sends a new bot. While paused it does not ask Vexa about the old bot. A second refusal fails the meeting. The jitter and the 4 minutes are counted from the refusal, so the retry is never inside Vexa's own re-knocks (v0.12.29 reports only after its 3 knocks) |
+| Manual pacing | `services.retry_block` returns the existing `no_audio` block for a refused meeting for 5 minutes (`MANUAL_RETRY_GAP`) and `retry_block_message` says how long is left; after that `can_retry` is true and `POST .../retry` sends a new bot (`services._send_refused_meeting_again`: same one-bot-at-a-time lock and `bot_already_active` rule as creating a meeting; row lock so a double click sends one). Manual sends are not capped |
+| Reusing the Zoom machinery | `send_again` is the old `_resend` body, shared; the Zoom retry (up to 3 bots, `MAX_JOIN_ATTEMPTS`) is unchanged and uses the same `join_attempts` counter. Refusal state reuses existing columns: `completion_reason = google_meet_join_refused` marks it and `terminal_seen_at` is the time of the refusal, so **no migration** |
+| Pages | The Jinja page shows "Google would not let the bot ask to join ... A new bot will be sent in a few minutes (attempt 2 of 2)" during the pause and the wait message on a failed meeting; the Next.js page now says Google, not Zoom, for a second Google bot |
+
+Rejected: failing the meeting at the first refusal and resending from `failed` (a failed meeting would flip back to `bot_sent`); a new `retry_block` value for the wait (it would change the OpenAPI enum and break the Next.js `Record<RetryBlock, string>`, so the existing `no_audio` is kept and only the message differs); a migration for a "retry at" column (conflicts with other sessions' migrations, and two existing columns carry it).
+
+## What's involved
+`app/pipeline.py` (constants, `_join_refused`, `_on_refusal`, `send_again`, `refusal_retry_gap`, `is_refusal_failure`, `manual_retry_wait`, `_poll`), `app/services.py` (`retry_block`, `retry_block_message`, `retry_meeting`, `_send_refused_meeting_again`), `app/api.py` and `app/web.py` (pass Vexa to retry, new message field), `app/templates/meeting.html`, `web/components/app/meeting-view.tsx`, `tests/test_join_refusal.py` (new), `tests/test_pipeline.py` (a `stop_bot` on the fake), `tests/test_web.py`, `tests/test_api.py`, `pyproject.toml` (F811 ignore for the new test file), `scripts/capture_owner_api.py` and captures `98` to `102`, `docs/fe-integration-guide-owner-app.md` (section 5.5 and the verification table), the master checklist. **The API shape is unchanged** (`python scripts/export_openapi.py --check` passes; `docs/openapi.json` and `schema.d.ts` were not regenerated); only the values of `failure_reason`, `retry_block_message` and `can_retry` are new.
+
+## Verification
+- 27 new tests in `tests/test_join_refusal.py` plus 4 page and API tests, using fake Vexa answers built from the 2026-11-03 evidence (v0.12.28 `joining`, `awaiting_admission`, `needs_help`; meeting 10's exact error; the v0.12.29 reason text as read from the PR). They include a 30-second-poll timeline for each version: **every refused knock is settled (failed, or paused with the bot stopped) within 3 minutes**. The deliberate 4 to 5 minute pause before the automatic second bot is the one time a meeting is `bot_sent` for longer, and it is not a knock.
+- Fast checks: `ruff check .`, `ruff format --check .`, the full suite (674 tests) on a scratch Postgres 17, `export_openapi.py --check`.
+- Live API captures `99` to `102` with the real app, migrations and HTTP and a fake Vexa.
+- **NOT verified live:** a real Google refusal, the real worker stopping a real bot, the exact field names of v0.12.29 (read from PR #1921 and `spike/vexa` at `31122f9`: `GOOGLE_JOIN_REFUSED` in `refusal.ts`, the error message starts with that code; I did not run the image), that `DELETE /bots/google_meet/{id}` frees the slot on both versions, and the Next.js change (`web/node_modules` was absent, so the web tests and type check were not run; the Zoom text is unchanged).
+
+## Operate / roll back
+Tune with the constants at the top of `app/pipeline.py`: `REFUSAL_MAX_SENDS`, `REFUSAL_RETRY_GAP`, `REFUSAL_JITTER_SECONDS`, `MANUAL_RETRY_GAP`, `NEEDS_HELP_GRACE`. The `needs_help` grace is in memory, so a worker restart gives it a fresh 30 s. No migration: roll back by reverting the PR. A meeting paused for its retry when the old code comes back is polled as before (it reads the old, stopped bot and fails with the generic reason).
+
+## Follow-ups
+- **TODO: circuit breaker** (spike section 5: 3 refusals in 30 minutes per egress address pauses auto-sending for 30 minutes and alerts the admin once). It needs calendar auto-join and the admin alert (C11b), so it is not here.
+- The pause before the automatic second bot has no API field; add one (for example a `join_retry_at`) if the Next.js page should show it.
+- Deploy Vexa v0.12.29 (P0.11), then watch one real refusal and confirm the reason, the timing and that `stop_bot` frees the slot; update this SOP.
+- A refusal is not told apart from a host who never admits the bot: that stays Vexa's 10 minute lobby budget (`awaiting_admission`) and is not changed here.

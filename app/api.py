@@ -214,7 +214,7 @@ def _detail(meeting: Meeting) -> MeetingDetail:
         **_summary(meeting).model_dump(),
         failure_reason=(meeting.failure_reason or REASON_UNEXPECTED) if failed else None,
         retry_block=block,
-        retry_block_message=services.RETRY_BLOCK_TEXT.get(block),
+        retry_block_message=services.retry_block_message(meeting, block),
         can_cancel=meeting.status == "bot_sent",
         can_retry=failed and block is None,
         can_regenerate=ready,
@@ -305,10 +305,13 @@ def retry_meeting(
     meeting_id: int,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    vexa=Depends(get_vexa),
 ) -> MeetingDetail:
     """Resume a failed meeting at the step that failed. Only when `can_retry` is true."""
+    # A meeting Google refused the bot for sends a new bot instead (see services.retry_meeting).
+    # The docstring above is the published API description, so that note lives here.
     meeting = services.meeting_or_404(session, user, meeting_id)
-    return _detail(services.retry_meeting(session, meeting))
+    return _detail(services.retry_meeting(session, meeting, vexa))
 
 
 @router.post(

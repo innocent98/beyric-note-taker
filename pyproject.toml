@@ -45,6 +45,7 @@ select = ["E", "F", "I", "UP", "B"]
 "tests/test_usage.py" = ["F811"]
 "tests/test_edge.py" = ["F811"]
 "tests/test_pipeline.py" = ["F811"]
+"tests/test_join_refusal.py" = ["F811"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Form"]

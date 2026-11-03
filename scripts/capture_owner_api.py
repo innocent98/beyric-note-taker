@@ -65,7 +65,12 @@ from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import AppState, Meeting, UsageEntry, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
-from app.pipeline import REASON_DOWNLOAD, REASON_NO_SPEECH, REASON_NOT_ADMITTED  # noqa: E402
+from app.pipeline import (  # noqa: E402
+    REASON_DOWNLOAD,
+    REASON_JOIN_REFUSED,
+    REASON_NO_SPEECH,
+    REASON_NOT_ADMITTED,
+)
 from app.services import get_openai_client, get_vexa  # noqa: E402
 from app.vexa import VexaError  # noqa: E402
 
@@ -205,6 +210,11 @@ def prepare_database() -> None:
         connection.execute(text(f"create database {DB_NAME}"))
     admin.dispose()
     command.upgrade(Config(str(ROOT / "alembic.ini")), "head")  # the real migrations and seeds
+
+
+def owner_id_of(engine) -> int:
+    with Session(engine) as session:
+        return session.scalars(select(User.id).where(User.email == OWNER_EMAIL)).one()
 
 
 def seed(engine, general: int, owner_id: int) -> dict[str, int]:
@@ -589,6 +599,7 @@ def run(app, base, engine, vexa, openai_client) -> None:
         note="While locked out even the right password gets 429.",
     )
     run_accounts(app, base, engine, ids, general["id"])
+    run_refusal(owner, engine, general["id"])
 
 
 def run_accounts(app, base, engine, ids, admin_general_id) -> None:
@@ -712,6 +723,68 @@ def run_accounts(app, base, engine, ids, admin_general_id) -> None:
         "/api/meetings",
         body={"url": MEET, "template_id": pilot_general["id"]},
         note="Checked before the bot is sent. The hours in the text follow the user's own cap.",
+    )
+
+
+def run_refusal(owner, engine, general_id) -> None:
+    """A join Google refused: the wait and the send-again are paced. Numbered after the rest."""
+    owner.call("session-login-after-logout", "POST", "/api/session", body=LOGIN)
+    with Session(engine) as session:
+        # Finish every other meeting by SQL, so no bot is active and only the pacing decides.
+        session.execute(
+            text(
+                "update meetings set status = 'ready', step = 'done' where status in "
+                "('bot_sent', 'processing')"
+            )
+        )
+        refused = Meeting(
+            owner_user_id=owner_id_of(engine),
+            url=MEET,
+            platform="google_meet",
+            native_id="abc-defg-hij",
+            template_id=general_id,
+            status="failed",
+            step="waiting",
+            failure_reason=REASON_JOIN_REFUSED,
+            completion_reason="google_meet_join_refused",
+            terminal_seen_at=datetime.now(UTC) - timedelta(minutes=1),
+            join_attempts=2,
+            vexa_meeting_id="4241",
+        )
+        session.add(refused)
+        session.commit()
+        refused_id = refused.id
+    owner.call(
+        "meeting-detail-refused-waiting",
+        "GET",
+        f"/api/meetings/{refused_id}",
+        note="Google refused the bot a minute ago. Same fields as any block: `retry_block` is "
+        "`no_audio` (its existing value), only `retry_block_message` says how long is left.",
+    )
+    owner.call(
+        "meeting-retry-refused-too-early",
+        "POST",
+        f"/api/meetings/{refused_id}/retry",
+        note="A send-again inside the 5 minutes is the ordinary 409 `not_retryable`, with the "
+        "wait in the message.",
+    )
+    with Session(engine) as session:
+        session.execute(
+            text("update meetings set terminal_seen_at = :t where id = :id"),
+            {"t": datetime.now(UTC) - timedelta(minutes=6), "id": refused_id},
+        )
+        session.commit()
+    owner.call(
+        "meeting-detail-refused-can-send-again",
+        "GET",
+        f"/api/meetings/{refused_id}",
+        note="Six minutes after the refusal: no block, `can_retry` is true.",
+    )
+    owner.call(
+        "meeting-retry-refused-sends-a-new-bot",
+        "POST",
+        f"/api/meetings/{refused_id}/retry",
+        note="Sends a NEW bot (fake Vexa here) and puts the meeting back to `bot_sent`.",
     )
 
 

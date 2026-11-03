@@ -1072,6 +1072,51 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/57-meeting-retry-blocked-no-speech.json`_
 
+**Retry of a meeting Google refused (added 2026-11-03, `fix/join-refusal-handling`).** When Google will not let the bot ask to join a Google Meet, the meeting ends `failed`, step `waiting`, with a plain `failure_reason`. The API shape is unchanged; only the values are new. Until 5 minutes after the refusal the meeting is blocked with the **existing** `retry_block: "no_audio"` but a different `retry_block_message` that says how long is left (use the message; do not fall back to your own `no_audio` text for this case). After the wait `retry_block` is `null` and `can_retry` is `true`; `POST .../retry` then **sends a new bot** (it does not resume a step) and returns the meeting as `bot_sent` with `join_attempts` raised by one. `max_join_attempts` stays 3 (the Zoom cap); a Google refusal is auto-retried only once (2 bots), manual sends are not capped.
+
+```json
+{
+  "id": 13,
+  "status": "failed",
+  "step": "waiting",
+  "failure_reason": "Google would not let the bot ask to join this meeting. This sometimes happens; try sending the bot again in a few minutes. If it keeps happening, the host's Meet settings may be blocking guests.",
+  "retry_block": "no_audio",
+  "retry_block_message": "Google refused the bot a moment ago. To be polite to Google, you can send it again in 4 minutes.",
+  "can_retry": false,
+  "join_attempts": 2,
+  "max_join_attempts": 3
+}
+```
+_Response trimmed to the fields that matter here; the capture file has all of them._
+_Capture: `docs/fe-captures/owner-app/99-meeting-detail-refused-waiting.json`_
+
+Sending again too early is the ordinary 409, with the wait in the message:
+
+```json
+{"error": {"code": "not_retryable", "message": "Google refused the bot a moment ago. To be polite to Google, you can send it again in 4 minutes."}}
+```
+_Capture: `docs/fe-captures/owner-app/100-meeting-retry-refused-too-early.json`_
+
+After the wait (`101-meeting-detail-refused-can-send-again.json`: `retry_block` and `retry_block_message` are `null`, `can_retry` is `true`), the send succeeds (`102-meeting-retry-refused-sends-a-new-bot.json`):
+
+```json
+{
+  "id": 13,
+  "status": "bot_sent",
+  "step": "waiting",
+  "failure_reason": null,
+  "retry_block": null,
+  "can_cancel": true,
+  "can_retry": false,
+  "join_attempts": 3,
+  "refresh_after_seconds": 30
+}
+```
+
+Other errors of this retry: `409 bot_already_active` ("A bot is already on a meeting. Wait for it to finish first.") when another meeting has a bot, and `502 bot_send_failed` ("The bot could not be sent. Please try again in a moment.") when Vexa cannot take it; both from the same code as creating a meeting (**not captured for this route; the strings come from `POST /api/meetings`, capture `31` and `39`, and the route is covered by `tests/test_join_refusal.py`**).
+
+**UX the frontend must surface.** (1) The wait is real: show `retry_block_message` as it is, and refresh the meeting while it is shown (the minutes in it are computed at read time) or the number goes stale. (2) A bot that Google refused is stopped at once, so the meeting turns `failed` about 2 to 3 minutes after the knock, not 10. (3) On the **first** refusal the worker pauses 4 to 5 minutes and sends one more bot by itself; during that pause the meeting is still `bot_sent` with `join_attempts` 1 and **the API has no field that says so** (the Jinja page does), so the page just looks like a normal wait. Do not call that a bug. (4) For a Google meeting with `join_attempts` above 1, the text "turned the bot away" must say Google, not Zoom.
+
 **Regenerate** rewrites the notes of a `ready` meeting with a template, from the saved transcript. No audio is processed. Body: `{"template_id": number}`.
 
 ```http
@@ -1684,6 +1729,9 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | Real Vexa sending a bot, stopping a bot | **NOT EXERCISED** | shapes come from `app/vexa.py` and its tests |
 | Cancel: ok, wrong state, Vexa failure | Verified live (fake Vexa) | `36`, `37`, `42` |
 | Retry: ok and the blocked case | Verified live | `38`, `57`, `58` |
+| Retry of a Google-refused meeting: the wait message, the 409, the unblocked state, the new bot | Verified live (fake Vexa; the refusal row is inserted by SQL) | `99`–`102` |
+| A real Google refusal, the real worker stopping the bot and pausing for the auto retry | **NOT EXERCISED** (fake Vexa; no real refusal was provoked) | `tests/test_join_refusal.py` |
+| The pause before the auto retry is invisible in the API | By design (no field); the Jinja page shows it | `test_meeting_page_says_a_refused_meet_bot_is_paused_before_one_retry` |
 | Regenerate: ok, not ready, no template, OpenAI failure | Verified live **with a fake OpenAI** | `59`–`62` |
 | Real OpenAI regenerate, its duration, edge timeouts | **NOT EXERCISED** | `deploy/nginx.conf` |
 | Template create, update, duplicate, empty, too long, unknown | Verified live | `22`–`28` |
