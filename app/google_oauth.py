@@ -84,7 +84,7 @@ def _claims(id_token: str) -> dict:
 class GoogleOAuth:
     def __init__(self, settings: Settings, transport: httpx.BaseTransport | None = None) -> None:
         self._settings = settings
-        self._client = httpx.Client(timeout=TIMEOUT_SECONDS, transport=transport)
+        self._transport = transport
 
     def authorize_url(self, *, state: str, nonce: str, code_challenge: str) -> str:
         query = urlencode(
@@ -105,17 +105,18 @@ class GoogleOAuth:
     def exchange(self, *, code: str, code_verifier: str, nonce: str, now: datetime) -> Identity:
         """Trade the authorization code for the person's identity, or raise `GoogleError`."""
         try:
-            response = self._client.post(
-                TOKEN_URL,
-                data={
-                    "code": code,
-                    "client_id": self._settings.google_client_id,
-                    "client_secret": self._settings.google_client_secret,
-                    "redirect_uri": redirect_uri(self._settings),
-                    "grant_type": "authorization_code",
-                    "code_verifier": code_verifier,
-                },
-            )
+            with httpx.Client(timeout=TIMEOUT_SECONDS, transport=self._transport) as client:
+                response = client.post(
+                    TOKEN_URL,
+                    data={
+                        "code": code,
+                        "client_id": self._settings.google_client_id,
+                        "client_secret": self._settings.google_client_secret,
+                        "redirect_uri": redirect_uri(self._settings),
+                        "grant_type": "authorization_code",
+                        "code_verifier": code_verifier,
+                    },
+                )
             body = response.json() if response.status_code == 200 else None
         except (httpx.HTTPError, ValueError) as exc:
             logger.warning("google token exchange failed (%s)", type(exc).__name__)

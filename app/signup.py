@@ -258,15 +258,19 @@ def _sign_up_locked(
     else:
         _refuse_by_state(pilot_state(session, now))
     state = session.get(AppState, 1)
-    if state is None or not state.password_signup_enabled:
+    if state is None or not state.password_signup_enabled or not mail.is_configured(settings):
         raise Refused(
             403,
             "password_signup_disabled",
             "Creating an account with a password is not available yet. Use Google to sign up.",
         )
     if invite is None and unverified_count(session) >= MAX_UNVERIFIED:
-        # Before the lookup, so a new address and an existing one get the same answer.
-        raise Refused(429, "too_many_requests", "Too many attempts. Try again later.")
+        # Rows nobody came back to for an hour make room first, so a flood cannot lock everyone
+        # out. Refused only when they are all fresh, and before the lookup, so a new address and an
+        # existing one get the same answer.
+        accounts.purge_unverified(session, now, accounts.ABANDONED_AFTER, include_invited=False)
+        if unverified_count(session) >= MAX_UNVERIFIED:
+            raise Refused(429, "too_many_requests", "Too many attempts. Try again later.")
     if not mail_allowed(address):
         return
     # The row is locked from here to the commit: `verify_email` takes the same lock before it
@@ -362,11 +366,22 @@ def verify_email(
     session.commit()
 
 
+def _can_mail(settings: Settings) -> bool:
+    """With no mail provider configured no token is made at all (it would sit in the outbox with
+    nothing to send it): the caller answers 202 as ever, and the admin's reset link is the way."""
+    if mail.is_configured(settings):
+        return True
+    logger.warning("mail is not configured: no verification or reset mail was queued")
+    return False
+
+
 def resend_verification(session: Session, settings: Settings, email: str, now: datetime) -> None:
     """Mail a new verification link to an unverified account; nothing at all otherwise. The new
     link confirms the same password as the newest link before it (a resend never takes a
     password), so with none to copy there is nothing to send. Commits. The caller answers 202
     either way."""
+    if not _can_mail(settings):
+        return
     address = normalise_email(email)
     user = session.scalars(select(User).where(User.email == address)).first() if address else None
     if user is None or user.status != "active" or user.email_verified_at is not None:
@@ -406,6 +421,8 @@ def issue_reset(session: Session, settings: Settings, user: User, now: datetime)
 def request_reset(session: Session, settings: Settings, email: str, now: datetime) -> None:
     """Mail a reset link to a verified, active account; nothing otherwise. Commits. The caller
     answers 202 either way."""
+    if not _can_mail(settings):
+        return
     address = normalise_email(email)
     user = session.scalars(select(User).where(User.email == address)).first() if address else None
     if user is None or user.status != "active" or user.email_verified_at is None:

@@ -8,7 +8,6 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.models import (
-    AuthToken,
     Template,
     User,
     UserSettings,
@@ -63,31 +62,30 @@ def create_user_defaults(session: Session, user: User) -> list[Template]:
 
 
 UNVERIFIED_GRACE = timedelta(hours=48)
+ABANDONED_AFTER = timedelta(hours=1)  # at the unconfirmed cap, rows older than this make room
 
 
-def sweep_unverified(session: Session, now: datetime) -> int:
-    """Delete password accounts that never confirmed their email within 48 hours of their LAST
-    submission (the newest verification link, else creation). Admins are never swept. An
-    unverified account has no meetings, so only its templates, vocabulary and settings (and its
-    tokens, by cascade) go with it. A person who came in with an invitation is put back on the
-    waiting list, so the place is not lost with the account. Returns how many."""
-    last_submission = func.coalesce(
-        select(func.max(AuthToken.created_at))
-        .where(AuthToken.user_id == User.id, AuthToken.purpose == "verify_email")
-        .scalar_subquery(),
-        User.created_at,
+def purge_unverified(
+    session: Session, now: datetime, grace: timedelta, *, include_invited: bool = True
+) -> int:
+    """Delete unconfirmed password accounts whose LAST SIGN-UP SUBMISSION (`terms_accepted_at`,
+    set at every submission, else creation) is older than `grace`. A resend does not count: it
+    would let one address keep a row alive for ever. Admins are never touched. An unconfirmed
+    account has no meetings, so only its templates, vocabulary and settings (and its tokens, by
+    cascade) go with it. Someone who came in with an invitation goes back on the waiting list so
+    the place is not lost with the account; `include_invited=False` leaves those rows alone.
+    Does not commit (the sign-up lock is held by callers). Returns how many."""
+    last_submission = func.coalesce(User.terms_accepted_at, User.created_at)
+    query = select(User.id, User.email).where(
+        User.email_verified_at.is_(None),
+        User.is_admin.is_(False),
+        last_submission < now - grace,
     )
-    rows = list(
-        session.execute(
-            select(User.id, User.email)
-            .where(
-                User.email_verified_at.is_(None),
-                User.is_admin.is_(False),
-                last_submission < now - UNVERIFIED_GRACE,
-            )
-            .with_for_update(skip_locked=True, of=User)
+    if not include_invited:
+        query = query.where(
+            User.email.not_in(select(WaitlistEntry.email).where(WaitlistEntry.status == "joined"))
         )
-    )
+    rows = list(session.execute(query.with_for_update(skip_locked=True, of=User)))
     if not rows:
         return 0
     ids, emails = [r[0] for r in rows], [r[1] for r in rows]
@@ -100,5 +98,11 @@ def sweep_unverified(session: Session, now: datetime) -> int:
     session.execute(delete(UserSettings).where(UserSettings.user_id.in_(ids)))
     session.execute(delete(Template).where(Template.owner_user_id.in_(ids)))
     session.execute(delete(User).where(User.id.in_(ids)))
-    session.commit()
     return len(ids)
+
+
+def sweep_unverified(session: Session, now: datetime) -> int:
+    """The hourly sweep: unconfirmed accounts 48 hours after their last submission. Commits."""
+    count = purge_unverified(session, now, UNVERIFIED_GRACE)
+    session.commit()
+    return count

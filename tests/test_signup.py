@@ -217,6 +217,28 @@ def test_at_most_a_hundred_unconfirmed_password_accounts_exist_at_once(app, sess
     assert signup.MAX_UNVERIFIED == 2
 
 
+def test_at_the_cap_abandoned_unconfirmed_accounts_are_cleared_to_make_room(
+    app, session, monkeypatch
+):
+    """The cap must not be a way to lock everyone out: rows older than an hour are cleared."""
+    open_pilot(session, max_accounts=None)
+    monkeypatch.setattr(signup, "MAX_UNVERIFIED", 2)
+    old = [make_user(session, f"old{i}@example.test", email_verified_at=None) for i in range(2)]
+    for user in old:
+        user.created_at = datetime.now(UTC) - timedelta(hours=2)
+        accounts.add_user_defaults(session, user)
+    invited, _ = joined_unconfirmed(session, "invited@example.test")
+    invited.created_at = datetime.now(UTC) - timedelta(hours=2)
+    session.commit()
+    assert visitor(app, "198.51.100.1").post("/api/signup", form()).status_code == 202
+    assert user_of(session) is not None
+    assert (
+        user_of(session, "old0@example.test") is None
+        and user_of(session, "old1@example.test") is None
+    )
+    assert user_of(session, "invited@example.test") is not None  # its place was promised
+
+
 def test_the_unconfirmed_cap_does_not_stop_an_invited_sign_up(app, session, monkeypatch):
     open_pilot(session, max_accounts=5)
     monkeypatch.setattr(signup, "MAX_UNVERIFIED", 1)
@@ -712,14 +734,42 @@ def test_unverified_accounts_older_than_48_hours_are_deleted_and_free_their_slot
     assert user_of(session, "verified@example.test") and user_of(session, "admin@example.test")
 
 
-def test_the_sweep_counts_from_the_last_submission_not_from_creation(session):
+def production_without_mail(app):
+    from tests.test_web import make_settings
+
+    app.state.settings = make_settings(app_env="production")
+
+
+def test_without_a_mail_provider_password_sign_up_is_off_and_no_token_is_made(app, session):
+    open_pilot(session)
+    production_without_mail(app)
+    web = visitor(app, "198.51.100.1")
+    error_of(sign_up(web), 403, "password_signup_disabled")
+    assert user_of(session) is None
+    assert session.scalars(select(AuthToken)).all() == [] and queued(session) == []
+
+
+def test_without_a_mail_provider_forgot_and_resend_make_no_token_and_still_answer_202(
+    app, session, owner
+):
+    production_without_mail(app)
+    web = visitor(app, "198.51.100.1")
+    assert web.post("/api/password/forgot", {"email": OWNER_EMAIL}).status_code == 202
+    assert web.post("/api/signup/resend", {"email": OWNER_EMAIL}).status_code == 202
+    assert session.scalars(select(AuthToken)).all() == [] and queued(session) == []
+
+
+def test_the_sweep_counts_from_the_last_sign_up_submission_and_a_resend_does_not_extend_it(
+    session,
+):
     now = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
-    resubmitted, _ = joined_unconfirmed(session, "again@example.test", hours_old=1)
-    stale, _ = joined_unconfirmed(session, "stale@example.test", hours_old=49)
-    for user in (resubmitted, stale):
-        user.created_at = now - timedelta(hours=60)
+    resubmitted, _ = joined_unconfirmed(session, "again@example.test")
+    stale, _ = joined_unconfirmed(session, "stale@example.test")
+    resubmitted.created_at = stale.created_at = now - timedelta(hours=60)
+    resubmitted.terms_accepted_at = now - timedelta(hours=1)  # signed up again an hour ago
+    stale.terms_accepted_at = now - timedelta(hours=49)
     for row in session.scalars(select(AuthToken)).all():
-        row.created_at = now - timedelta(hours=1 if row.email == "again@example.test" else 49)
+        row.created_at = now - timedelta(minutes=5)  # both were just sent a resend
     session.commit()
     assert accounts.sweep_unverified(session, now) == 1
     assert user_of(session, "again@example.test") and user_of(session, "stale@example.test") is None
@@ -727,10 +777,8 @@ def test_the_sweep_counts_from_the_last_submission_not_from_creation(session):
 
 def test_sweeping_an_invited_account_returns_the_person_to_the_waitlist(session):
     now = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
-    user, _ = joined_unconfirmed(session, "invitee@example.test", hours_old=49)
-    user.created_at = now - timedelta(hours=60)
-    for row in session.scalars(select(AuthToken)).all():
-        row.created_at = now - timedelta(hours=49)
+    user, _ = joined_unconfirmed(session, "invitee@example.test")
+    user.created_at = user.terms_accepted_at = now - timedelta(hours=60)
     session.commit()
     accounts.sweep_unverified(session, now)
     session.expire_all()

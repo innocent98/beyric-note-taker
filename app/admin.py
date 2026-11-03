@@ -222,7 +222,7 @@ def invite(
     ).one()
     link = signup.link(settings, "/signup", raw, param="invite")
     entry.status, entry.invited_at, entry.invite_token_id = "invited", now, token.id
-    emailed = mail.build_mailer(settings) is not None
+    emailed = mail.is_configured(settings)
     if emailed:
         mail.enqueue(session, entry.email, "waitlist_invite", {"link": link, "name": entry.name})
     session.commit()

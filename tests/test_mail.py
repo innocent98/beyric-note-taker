@@ -201,9 +201,10 @@ def test_an_unexpected_error_is_recorded_by_type_only(session, caplog):
     assert "SECRETTOKEN" not in caplog.text and "ada@example.test" not in caplog.text
 
 
-def test_the_sweep_scrubs_old_unsent_mail_and_fails_it(session):
-    old = queue(session, created=NOW - timedelta(hours=25))
-    fresh = queue(session, created=NOW - timedelta(hours=1))
+def test_the_sweep_scrubs_unsent_mail_after_an_hour_and_fails_it(session):
+    """A raw token sits in the payload until the mail is sent; backups must not hold it longer."""
+    old = queue(session, created=NOW - timedelta(hours=1, minutes=1))
+    fresh = queue(session, created=NOW - timedelta(minutes=30))
     mail.sweep_outbox(session, NOW)
     session.refresh(old)
     session.refresh(fresh)
@@ -211,8 +212,8 @@ def test_the_sweep_scrubs_old_unsent_mail_and_fails_it(session):
     assert (fresh.status, fresh.payload["link"]) == ("pending", LINK)
 
 
-def test_the_sweep_scrubs_a_failed_row_after_24_hours_and_deletes_sent_after_30_days(session):
-    failed = queue(session, created=NOW - timedelta(hours=25))
+def test_the_sweep_scrubs_a_failed_row_after_an_hour_and_deletes_sent_after_30_days(session):
+    failed = queue(session, created=NOW - timedelta(hours=2))
     failed.status = "failed"
     sent = queue(session, created=NOW - timedelta(days=31))
     sent.status, sent.payload = "sent", {}
@@ -302,3 +303,21 @@ def test_a_name_that_is_not_just_a_name_is_dropped_from_the_greeting(name):
     )
     assert message.text.startswith("Hello,\n\n")
     assert "evil" not in message.text and "evil" not in message.html
+
+
+# ---- is mail configured? (no token is queued when nothing can send it) ----
+
+
+def test_mail_is_configured_with_a_key_in_the_console_outside_production_and_not_otherwise():
+    assert mail.is_configured(make_settings(app_env="production", resend_api_key="re_x"))
+    assert mail.is_configured(make_settings(app_env="development"))
+    assert mail.is_configured(make_settings(app_env="test"))
+    assert not mail.is_configured(make_settings(app_env="production"))
+
+
+def test_asking_whether_mail_is_configured_builds_no_client(monkeypatch):
+    def refuse(*args, **kwargs):
+        raise AssertionError("a mailer (and its HTTP client) was built just to ask")
+
+    monkeypatch.setattr(mail.ResendMailer, "__init__", refuse)
+    assert mail.is_configured(make_settings(app_env="production", resend_api_key="re_x"))

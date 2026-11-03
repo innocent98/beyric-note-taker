@@ -190,6 +190,24 @@ def test_a_refused_code_or_a_broken_reply_is_an_error_with_no_detail(caplog):
     assert "the-code" not in caplog.text and "s3cret" not in caplog.text
 
 
+def test_each_exchange_closes_its_http_client(monkeypatch):
+    """A client per request that is never closed leaks sockets; each call closes its own."""
+    made = []
+    real = httpx.Client
+
+    class Recording(real):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            made.append(self)
+
+    monkeypatch.setattr(google_oauth.httpx, "Client", Recording)
+    client = oauth(answer(id_token()))
+    exchange(client)
+    with pytest.raises(GoogleError):
+        exchange(oauth(lambda r: httpx.Response(400, json={})))
+    assert made and all(c.is_closed for c in made)
+
+
 # ---- the flow ----
 
 

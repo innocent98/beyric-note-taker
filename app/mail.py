@@ -4,11 +4,12 @@ An action that needs to send mail (sign-up, password reset, a waitlist invite) o
 `mail_outbox` row in its own transaction (`enqueue`): a mail provider that is down can never fail
 the action. The worker sends pending rows (`deliver_pending`) and tidies up (`sweep_outbox`).
 
-A row holds the link in its `payload` while the mail is pending, because the link carries a
-token. The payload is replaced by `{}` the moment the mail is sent or has failed for good, and
-any row that is still unsent 24 hours after it was queued is failed and scrubbed too: by then
-every token in it has expired (the longest lives 24 hours; an invite lives 7 days, but its link
-is shown to the admin as well and can be issued again).
+A row holds the link in its `payload` while the mail is pending, because the link carries the RAW
+token (`auth_tokens` keeps only its hash): that is the one place a usable token is stored. The
+payload is replaced by `{}` the moment the mail is sent or has failed for good (normally within
+seconds), and any row still unsent an hour after it was queued is failed and scrubbed too, so a
+backup taken in between can hold a live link for at most that hour. When no mail provider is
+configured (`is_configured`) callers do not make a token or a row at all.
 
 Errors are recorded by kind only (`HTTP 500`, an exception's class name): a provider's reply or
 an exception message can hold the address, the link or the API key.
@@ -37,7 +38,7 @@ SEND_TIMEOUT_SECONDS = 15.0
 # these ages. Counted from creation, so a worker that was down catches up with no extra state.
 RETRY_AGES = (timedelta(0), timedelta(minutes=1), timedelta(minutes=6), timedelta(minutes=36))
 MAX_ATTEMPTS = len(RETRY_AGES)
-SCRUB_AFTER = timedelta(hours=24)
+SCRUB_AFTER = timedelta(hours=1)
 KEEP_SENT_FOR = timedelta(days=30)
 BATCH = 25  # rows one pass sends, so a backlog cannot hold the worker for long
 
@@ -111,15 +112,28 @@ def check_settings(settings: Settings) -> None:
         raise RuntimeError("mail_provider resend needs RESEND_API_KEY")
 
 
-def build_mailer(settings: Settings) -> Mailer | None:
-    """The mailer for these settings, or None when production has no provider configured."""
+def _provider(settings: Settings) -> str | None:
+    """ "resend", "console", or None when production has no provider configured."""
     check_settings(settings)
     provider = settings.mail_provider or ("resend" if settings.resend_api_key else "")
     if provider == "resend":
-        return ResendMailer(settings)
+        return "resend"
     if provider == "console" or settings.app_env != "production":
-        return ConsoleMailer()
+        return "console"
     return None
+
+
+def is_configured(settings: Settings) -> bool:
+    """Whether mail can be sent at all. Asking builds nothing (no HTTP client)."""
+    return _provider(settings) is not None
+
+
+def build_mailer(settings: Settings) -> Mailer | None:
+    """The mailer for these settings, or None when production has no provider configured."""
+    provider = _provider(settings)
+    if provider == "resend":
+        return ResendMailer(settings)
+    return ConsoleMailer() if provider == "console" else None
 
 
 # ---- what each mail says ----
