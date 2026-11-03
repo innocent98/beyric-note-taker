@@ -13,7 +13,7 @@ export function TranscriptPanel({ text, incomplete }: { text: string; incomplete
     <div className="transcript-body">
       {incomplete ? <Alert kind="notice">Speaker names unavailable for part of this transcript.</Alert> : null}
       {lines.map((line, index) => (
-        <div className="transcript-line" key={index}>
+        <div className={line.speaker !== null ? "transcript-line" : "transcript-line transcript-line-plain"} key={index}>
           {line.speaker !== null ? (
             <>
               <div className={`avatar avatar-sm ${TONES[speakers.indexOf(line.speaker) % TONES.length]}`} aria-hidden="true">
@@ -25,10 +25,7 @@ export function TranscriptPanel({ text, incomplete }: { text: string; incomplete
               </div>
             </>
           ) : (
-            <>
-              <span />
-              <p className="transcript-text">{line.text}</p>
-            </>
+            <p className="transcript-text">{line.text}</p>
           )}
         </div>
       ))}

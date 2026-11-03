@@ -12,7 +12,7 @@ export default async function LoginPage() {
   return (
     <div className="auth">
       <div className="auth-head">
-        <Logo large href={null} />
+        <Logo large label={false} href={null} />
         <h1 className="auth-title">Sign in to Beyric</h1>
         <p className="auth-sub">Welcome back.</p>
       </div>

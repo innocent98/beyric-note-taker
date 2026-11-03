@@ -1,6 +1,6 @@
 -- Seeds one meeting in each state the owner screens draw, into a SCRATCH database (the compose
 -- stack of a review, never the pilot). The worker is not running there, so the rows stay as
--- inserted. Run:  docker compose exec -T db psql -U postgres -d notetaker < web/scripts/seed-owner-states.sql
+-- inserted. Run:  docker exec -i <project>-db-1 psql -U postgres -d notetaker < web/scripts/seed-owner-states.sql
 -- All names are placeholders. Template ids 1 to 4 are the four the first migration seeds.
 INSERT INTO app_state (id, session_epoch, worker_heartbeat_at) VALUES (1, 0, now())
   ON CONFLICT (id) DO UPDATE SET worker_heartbeat_at = now();
