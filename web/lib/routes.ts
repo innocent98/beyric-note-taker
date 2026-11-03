@@ -12,6 +12,7 @@ export const NEXT_PAGES = [
   "/reset-password",
   "/pilot-full",
   "/meetings/[id]",
+  "/share",
   "/templates",
   "/vocabulary",
   "/privacy",
@@ -21,7 +22,8 @@ export const NEXT_PAGES = [
 
 // Handlers Next owns that are not pages (no nonce CSP needed, no HTML). `/logout` takes a POST,
 // calls DELETE /api/session with the visitor's cookie and passes FastAPI's Set-Cookie on.
-export const NEXT_ROUTES = ["/logout"] as const;
+// `/share-target` takes the PWA share sheet's POST and redirects to /share (app/share-target/route.ts).
+export const NEXT_ROUTES = ["/logout", "/share-target"] as const;
 
 const PATTERNS = NEXT_PAGES.map(
   (page) => new RegExp(`^${page.replace(/\[[^\]]+\]/g, "[^/]+").replace(/\//g, "\\/")}$`),
@@ -42,6 +44,7 @@ export const APP_PATHS = [
   "/pilot-full",
   "/logout",
   "/meetings",
+  "/share",
   "/templates",
   "/vocabulary",
   "/styleguide",

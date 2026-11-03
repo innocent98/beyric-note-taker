@@ -263,6 +263,15 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] A2 to A7, only if A1 passes: signed-in host files, `auth_session_missing` handling and alert, provisioning runbook, keep-warm job, invite path (`bot_invited`, Upcoming row, Settings address), policy and terms rows
 - [ ] Clear "calendar disconnected" state (built in C13 and C14; the 7-day expiry path stays dormant while the Google app is verified)
 
+## PWA share target (Android share sheet; built 2026-11-03, branch `feature/pwa-share-target`; SOP `docs/sop/2026-11-03-pwa-share-target.md`)
+- [x] Link extraction from shared text (Meet, Zoom with passcode, bare Meet code, two links, hostile text), Vitest
+- [x] `share_target` in the manifest (POST to `/share-target`), route handler, `/share` page with the login round trip and every refusal, Vitest
+- [x] Service worker (network-only, caches nothing), checked against Chrome's documentation; manifest parses and no installability errors in headless Chrome on a Mac
+- [x] FE guide section 5.9 with captures, SOP
+- [ ] CI green on the PR; merge only on Adebayo's word
+- [ ] Phone test by Adebayo: install from Chrome's menu, share a Meet link from the Meet app, check a meeting appears (the real share sheet is not verified)
+- [ ] Decide whether a share may send without the tap (needs a way to tell a real share from a forged post)
+
 ## Backlog
 
 - [ ] Outlook calendar (after Google)
