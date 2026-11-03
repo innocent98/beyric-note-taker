@@ -1,0 +1,35 @@
+{
+  "note": "`ai_runs` after the worker ran `workspace.process_next` until nothing was due. One real call per meeting with a Please check item; a meeting with none makes no call.",
+  "content": [
+    {
+      "meeting_id": 1,
+      "kind": "extract",
+      "model": "gpt-6-luna",
+      "status": "ok",
+      "prompt_version": "extract-v1",
+      "input_tokens": 1088,
+      "output_tokens": 108,
+      "error": null
+    },
+    {
+      "meeting_id": 2,
+      "kind": "extract",
+      "model": "gpt-6-luna",
+      "status": "ok",
+      "prompt_version": "extract-v1",
+      "input_tokens": 1121,
+      "output_tokens": 127,
+      "error": null
+    },
+    {
+      "meeting_id": 4,
+      "kind": "extract",
+      "model": "gpt-6-luna",
+      "status": "ok",
+      "prompt_version": "extract-v1",
+      "input_tokens": 1088,
+      "output_tokens": 136,
+      "error": null
+    }
+  ]
+}

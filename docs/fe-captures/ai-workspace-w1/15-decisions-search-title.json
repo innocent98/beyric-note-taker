@@ -1,0 +1,43 @@
+{
+  "note": "A title (meeting code) match shows all of that meeting's decisions.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisions?q=81234567890",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "groups": [
+        {
+          "meeting": {
+            "id": 2,
+            "title": "Zoom 81234567890",
+            "platform": "zoom",
+            "created_at": "2026-11-01T17:55:12.501570Z"
+          },
+          "decisions": [
+            {
+              "id": 2,
+              "text": "Renew the vendor for one more year."
+            },
+            {
+              "id": 3,
+              "text": "Confirm the claimed discount in writing before relying on it."
+            }
+          ]
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

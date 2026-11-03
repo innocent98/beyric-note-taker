@@ -168,8 +168,8 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
         - [ ] Designed and not built (no backend): workspace setup, team invite acceptance, Microsoft sign-in, "Keep me signed in", the 6-digit email code (the API confirms with a link and the password)
         - [ ] Not checked: CI on the pushed head, a real mail, a real Google round trip, Safari and Firefox, the live site. Sign-up stays closed (`signups_open` is false)
   - [ ] D2, calendar and auto-join (needs Module 2 phase C): Meetings page calendar card and Upcoming list with per-meeting switches, "Not recorded" rows with Send now (designer gap), "Calendar disconnected" banner and Reconnect (designer gap), Settings, Calendar (rules, template), the instant-Meet switch (designer gap)
-  - [ ] D3, Decisions (needs W1): search, groups by meeting, Open notes, Remove from log (designer gap)
-  - [ ] D4, Review (needs W1): open and checked lists, Add to vocabulary, Open transcript, Mark as checked, Undo, sidebar badge, "Rewrite notes with the corrected spelling" offer
+  - [ ] D3, Decisions (API shipped in W1; see `docs/fe-integration-guide-ai-workspace.md`): search, groups by meeting, Open notes, Remove from log (designer gap)
+  - [ ] D4, Review (API shipped in W1; see `docs/fe-integration-guide-ai-workspace.md`): open and checked lists, Add to vocabulary, Open transcript, Mark as checked, Undo, sidebar badge, "Rewrite notes with the corrected spelling" offer
   - [ ] D5, Tasks (needs W2; owners need W3; projects need W4; sprints need W9): filter chips, project tabs, Board and Backlog, drag and drop, task drawer, "needs attention" banner, New task, sprint header and Close sprint, milestone card, meeting page Action items as tasks; states for extraction pending and failed (designer gap)
   - [ ] D6, Projects (needs W4): list, name, colour, recurring meetings, keywords, sprint length, milestone (proposal chip is a designer gap), delete
   - [ ] D7, Team (needs W3; W0.4 first): members, roles, aliases (editing is a designer gap), invite dialog (name field is a designer gap), Resend, remove, "Share with team" switch on the meeting page (designer gap)
@@ -262,6 +262,32 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] A1 measure the full Vexa stack with a bot built from PR #1873 on the Mac, and settle two questions (Zoom on an authenticated deployment, a signed-in bot on an invited event)
   - [ ] A2 to A7, only if A1 passes: signed-in host files, `auth_session_missing` handling and alert, provisioning runbook, keep-warm job, invite path (`bot_invited`, Upcoming row, Settings address), policy and terms rows
 - [ ] Clear "calendar disconnected" state (built in C13 and C14; the 7-day expiry path stays dormant while the Google app is verified)
+
+## AI workspace backend (spec `docs/superpowers/specs/2026-11-03-ai-workspace-design.md`, phases W0 to W10; approved 2026-11-03, D1 to D19 as recommended)
+
+Each phase ends with its policy rows, SOP, checklist and FE guide with live captures. Opus reviews the phases marked in spec section 15.
+
+- [ ] W0.1 Spikes
+  - [x] AI1 extraction eval: **go on `gpt-6-luna`** (2026-11-03: 7 synthetic cases, 30 bullets, 0 invented owners, 30/30 quotes, 17/17 dates; `docs/spike/ai-extraction-eval.md`). Five real transcripts reviewed by Adebayo are still owed before W2
+  - [ ] EX1 PDF memory and time (W5)
+  - [ ] ML1 Resend attachments and limits (W6)
+  - [ ] TR1 French and Spanish with names (W7)
+- [x] W0.2 AI ledger and settings: `ai_runs`, `EXTRACT_MODEL`, prompt versions (2026-11-03, SOP `2026-11-03-ai-workspace-w1-extraction.md`)
+- [ ] W0.3 Mail upgrade
+- [ ] W0.4 Team foundation (`visible_meetings()` replaces the owner filter in `app/workspace.py`)
+- [ ] W0.5 Meeting delete
+- [x] W1 Extraction, Decisions, Review (2026-11-03; migration `0011`; SOP `2026-11-03-ai-workspace-w1-extraction.md`; FE guide `docs/fe-integration-guide-ai-workspace.md`)
+  - [x] Worker job with states `pending`, `running`, `done`, `failed`, `skipped`, 3 attempts, crash recovery
+  - [x] Parsers for Decisions, Open questions, Please check; reconcile by fingerprint (hidden and checked survive a re-run that keeps the words)
+  - [x] `decisions`, `open_questions`, `review_items`, `ai_runs`; deleted with the meeting (ledger kept)
+  - [x] `GET /api/decisions`, `POST /api/decisions/{id}/hide`, `GET /api/review`, `check`, `uncheck`, `vocabulary`, `badges.review_open`, `extraction_status` on the meeting
+  - [x] Backfill `scripts/backfill_extraction.py` (decisions for all, the rest for 14 days). **Adebayo or the lead runs it once after deploy**
+  - [x] Privacy rows for W1 (Jinja and Next, `legal.test.tsx` green)
+  - [x] FE guide with live captures (`docs/fe-captures/ai-workspace-w1/`)
+  - [ ] Open questions endpoint (with the series screens, W8)
+  - [ ] Regenerate `web/lib/api/schema.d.ts` (`npm run gen:api`) with the first screen
+- [ ] W2 Tasks (needs W1; Opus)
+- [ ] W5 Export, W3 Team, W4 Projects, W6 Share, W7 Translate, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 
 ## Backlog
 

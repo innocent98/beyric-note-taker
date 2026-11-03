@@ -1,0 +1,37 @@
+{
+  "note": "After the 409 the item is still in the checked list.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/review?state=checked",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "items": [
+        {
+          "id": 1,
+          "text": "Dan said, “I have only heard it said out loud, so I am not sure about the spelling.”",
+          "heard_as": "Metrika",
+          "checked_at": "2026-11-03T17:55:24.846688Z",
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet nat-aaaa-bbb",
+            "platform": "google_meet",
+            "created_at": "2026-10-31T17:55:12.498416Z"
+          }
+        }
+      ],
+      "open_count": 2,
+      "truncated": false
+    }
+  }
+}

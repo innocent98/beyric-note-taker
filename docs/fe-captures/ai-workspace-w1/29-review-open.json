@@ -1,0 +1,61 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/review",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "items": [
+        {
+          "id": 3,
+          "text": "The claimed discount is unverified: Olu said, “the vendor said Daniel agreed a discount last year. I have no proof of it.”",
+          "heard_as": null,
+          "checked_at": null,
+          "meeting": {
+            "id": 2,
+            "title": "Zoom 81234567890",
+            "platform": "zoom",
+            "created_at": "2026-11-01T17:55:12.501570Z"
+          }
+        },
+        {
+          "id": 1,
+          "text": "Dan said, “I have only heard it said out loud, so I am not sure about the spelling.”",
+          "heard_as": "Metrika",
+          "checked_at": null,
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet nat-aaaa-bbb",
+            "platform": "google_meet",
+            "created_at": "2026-10-31T17:55:12.498416Z"
+          }
+        },
+        {
+          "id": 2,
+          "text": "Dan said the contract number was “something like four seven two or four seven three.”",
+          "heard_as": null,
+          "checked_at": null,
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet nat-aaaa-bbb",
+            "platform": "google_meet",
+            "created_at": "2026-10-31T17:55:12.498416Z"
+          }
+        }
+      ],
+      "open_count": 3,
+      "truncated": false
+    }
+  }
+}

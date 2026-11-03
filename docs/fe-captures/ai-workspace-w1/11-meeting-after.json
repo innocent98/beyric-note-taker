@@ -1,0 +1,49 @@
+{
+  "note": "Now `done`.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "title": "Google Meet nat-aaaa-bbb",
+      "platform": "google_meet",
+      "native_id": "nat-aaaa-bbb",
+      "status": "ready",
+      "step": "done",
+      "status_text": "Ready",
+      "status_tone": "success",
+      "template_id": 5,
+      "created_at": "2026-10-31T17:55:12.498416Z",
+      "failure_reason": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": false,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": true,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "extraction_status": "done",
+      "notes": "## Summary\nThe meeting covered the analytics rollout and Metrika dashboards. The group decided to proceed with the rollout in the next release. Tracking-plan, dashboard, vendor-spelling, and contract-number follow-ups were identified.\n\n## Key points\n- The analytics tracking plan needs to be set up.\n- Metrika dashboards are needed for the leadership review.\n- The vendor spelling of “Metrika” was uncertain.\n- The contract number was uncertain between “four seven two” and “four seven three.”\n\n## Decisions\n- Proceed with the Metrika rollout in the next release.\n\n## Action items\n- Chidi: Set up the tracking plan by Friday.\n- Amina: Share a draft of the dashboards on Wednesday of next week.\n- Amina: Check the vendor site for the spelling.\n- Chidi: Ask finance tomorrow to confirm the contract number.\n\n## Open questions\n- What is the correct spelling of the vendor name?\n- What is the correct contract number?\n\n## Please check\n- Dan said, “I have only heard it said out loud, so I am not sure about the spelling.”\n- Dan said the contract number was “something like four seven two or four seven three.”\n",
+      "notes_html": "<h2>Summary</h2>\n<p>The meeting covered the analytics rollout and Metrika dashboards. The group decided to proceed with the rollout in the next release. Tracking-plan, dashboard, vendor-spelling, and contract-number follow-ups were identified.</p>\n<h2>Key points</h2>\n<ul>\n<li>The analytics tracking plan needs to be set up.</li>\n<li>Metrika dashboards are needed for the leadership review.</li>\n<li>The vendor spelling of “Metrika” was uncertain.</li>\n<li>The contract number was uncertain between “four seven two” and “four seven three.”</li>\n</ul>\n<h2>Decisions</h2>\n<ul>\n<li>Proceed with the Metrika rollout in the next release.</li>\n</ul>\n<h2>Action items</h2>\n<ul>\n<li>Chidi: Set up the tracking plan by Friday.</li>\n<li>Amina: Share a draft of the dashboards on Wednesday of next week.</li>\n<li>Amina: Check the vendor site for the spelling.</li>\n<li>Chidi: Ask finance tomorrow to confirm the contract number.</li>\n</ul>\n<h2>Open questions</h2>\n<ul>\n<li>What is the correct spelling of the vendor name?</li>\n<li>What is the correct contract number?</li>\n</ul>\n<h2>Please check</h2>\n<ul>\n<li>Dan said, “I have only heard it said out loud, so I am not sure about the spelling.”</li>\n<li>Dan said the contract number was “something like four seven two or four seven three.”</li>\n</ul>\n",
+      "transcript": "[Dan]: Morning all. Agenda: the analytics rollout, and the Metrika dashboards.\n[Chidi]: For analytics I will set up the tracking plan by Friday.\n[Dan]: Great. We also need the Metrika dashboards for the leadership review. Amina, can you take those?\n[Amina]: Yes, I can do the dashboards. I'll share a draft on Wednesday of next week.\n[Chidi]: Is it Metrika with a k or a c? I thought the vendor spells it differently.\n[Dan]: I have only heard it said out loud, so I am not sure about the spelling. Can someone check?\n[Amina]: I'll look at the vendor site.\n[Dan]: Also the contract number was something like four seven two or four seven three. Somebody needs to confirm that with finance.\n[Chidi]: I will ask finance tomorrow.\n[Dan]: Good. Decision: we go ahead with the Metrika rollout in the next release.\n[Amina]: Agreed."
+    }
+  }
+}
