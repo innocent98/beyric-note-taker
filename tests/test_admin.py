@@ -792,6 +792,36 @@ def test_a_meeting_vexa_is_still_finishing_keeps_the_account_until_the_copy_can_
     assert session.scalar(select(func.count()).select_from(Meeting)) == 1
 
 
+def test_a_finished_meeting_with_no_recording_yet_waits_out_the_recording_grace(session, audio_dir):
+    """`completed` with no recording id is not proof that none will appear: the pipeline itself
+    waits RECORDING_GRACE after first seeing the meeting over. So does the purge."""
+    from app import pipeline
+
+    user, running = live_meeting_account(session, audio_dir)
+    vexa = FakeVexa(lookups={"77": VexaMeeting(status="completed")})
+    with pytest.raises(VexaError):  # never seen over: wait
+        deletion.purge_user(session, user, vexa)
+    running.terminal_seen_at = datetime.now(UTC) - pipeline.RECORDING_GRACE + timedelta(minutes=1)
+    session.commit()
+    with pytest.raises(VexaError):  # seen over, but not long enough ago
+        deletion.purge_user(session, user, vexa)
+    running.terminal_seen_at = datetime.now(UTC) - pipeline.RECORDING_GRACE - timedelta(minutes=1)
+    session.commit()
+    deletion.purge_user(session, user, vexa)  # the grace has passed with no recording
+    assert vexa.deleted == []
+    session.expire_all()
+    assert session.get(User, user.id) is None
+
+
+def test_a_recording_that_exists_but_has_no_id_yet_is_waited_for(session, audio_dir):
+    user, _ = live_meeting_account(session, audio_dir)
+    vexa = FakeVexa(lookups={"77": VexaMeeting(status="completed", recording_status="in_progress")})
+    with pytest.raises(VexaError):
+        deletion.purge_user(session, user, vexa)
+    session.expire_all()
+    assert session.get(User, user.id) is not None
+
+
 def test_a_bot_that_never_recorded_leaves_nothing_at_vexa_to_delete(session, audio_dir):
     user, _ = live_meeting_account(session, audio_dir)
     vexa = FakeVexa(lookups={"77": VexaMeeting(status="failed")})

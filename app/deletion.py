@@ -16,6 +16,7 @@ marked and the next pass tries again; nothing is half-removed except recordings 
 
 import logging
 import shutil
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
@@ -32,33 +33,39 @@ from app.models import (
     VocabularyTerm,
     WaitlistEntry,
 )
-from app.pipeline import audio_path
+from app.pipeline import RECORDING_GRACE, audio_path
 from app.vexa import VexaError
 
 logger = logging.getLogger(__name__)
 
 
-VEXA_FINISHED = ("completed", "failed")
-
-
-def _recording_to_delete(vexa, meeting: Meeting) -> int | None:
+def _recording_to_delete(vexa, meeting: Meeting, now: datetime) -> int | None:
     """The id of Vexa's copy of this meeting's recording, or None when there is none to delete.
 
     The pipeline learns the id only when it first polls a finished meeting, so a meeting deleted
-    while still running may not have it stored: ask Vexa by the meeting id it gave us. If Vexa has
-    not finished with the meeting yet (no recording id and not `completed` or `failed`), the copy
-    may appear after we delete the row, so raise `VexaError` and let the next pass try again."""
+    while still running may not have it stored: ask Vexa by the meeting id it gave us. A missing
+    id is "nothing to delete" only when Vexa is done and says so: the meeting `failed`, or it
+    `completed`, reports no recording and the pipeline's own grace for a recording to appear has
+    passed since we first saw the meeting over. In every other case (still running, a recording
+    that exists but has no id or is not final, the grace not over) raise `VexaError` so the next
+    pass tries again: the copy may appear after the row is gone."""
     if meeting.vexa_recording_id is not None:
         return meeting.vexa_recording_id
     if not meeting.vexa_meeting_id:
         return None
     info = vexa.get_meeting_by_id(meeting.vexa_meeting_id)
-    if info.recording_id is None and info.status not in VEXA_FINISHED:
-        raise VexaError("Vexa has not finished the meeting, so its recording is not known yet")
-    return info.recording_id
+    if info.recording_id is not None:
+        return info.recording_id
+    if info.status == "failed":
+        return None
+    if info.status == "completed" and info.recording_status is None:
+        seen = meeting.terminal_seen_at
+        if seen is not None and now - seen >= RECORDING_GRACE:
+            return None
+    raise VexaError("Vexa has not settled this meeting's recording yet")
 
 
-def purge_user(session: Session, user: User, vexa) -> None:
+def purge_user(session: Session, user: User, vexa, now: datetime | None = None) -> None:
     """Delete `user` and everything of theirs. Commits. Raises `VexaError` when a bot cannot be
     stopped or Vexa's copy of a recording cannot be found or deleted; nothing is deleted then."""
     meetings = list(session.scalars(select(Meeting).where(Meeting.owner_user_id == user.id)))
@@ -67,7 +74,7 @@ def purge_user(session: Session, user: User, vexa) -> None:
             vexa.stop_bot(meeting.platform, meeting.native_id)
     for meeting in meetings:
         if meeting.audio_deleted_at is None:
-            recording_id = _recording_to_delete(vexa, meeting)
+            recording_id = _recording_to_delete(vexa, meeting, now or datetime.now(UTC))
             if recording_id is not None:
                 vexa.delete_recording(recording_id)
     for meeting in meetings:
