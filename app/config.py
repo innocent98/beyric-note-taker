@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # until measured (spec section 9); raise it only after the load test. Phase C replaces this
     # with a per-host dispatcher.
     max_active_bots: int = 1
+    # Teams links are recognised on calendar events, but the bot joins them only once the Teams
+    # spike (P0.7) has passed and this is set: until then a Teams event reads "Can't join yet".
+    teams_join_enabled: bool = False
 
     openai_api_key: str = ""
     transcription_model: str = "gpt-transcribe"
@@ -54,6 +57,24 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     mail_from: str = "Beyric Note Taker <no-reply@beyrictech.com>"
+
+    # Hosts a pasted calendar link may point at, comma separated: an exact name, or `.suffix`
+    # (every subdomain of it). Only an admin edits this, through the environment, never a user.
+    # The defaults are the hosts Google Calendar and Outlook publish private links on, not yet
+    # confirmed against real feeds (spike C19).
+    ics_allowed_hosts: str = "calendar.google.com,outlook.office365.com,outlook.live.com"
+
+    # The key that encrypts stored secrets (calendar refresh tokens, a pasted calendar link): 32
+    # random bytes, base64 (`openssl rand -base64 32`). It lives only in the server .env, never in
+    # the database or a backup. Rotation: new key here, old key in `token_enc_key_previous`, raise
+    # `token_enc_key_version` by one, re-encrypt, then drop the previous key (app/vault.py).
+    token_enc_key: str = ""
+    token_enc_key_previous: str = ""
+    token_enc_key_version: int = 1
+    # Set true where the calendar features (Google connect, pasted calendar links) are switched
+    # on. In production the app then refuses to start without `token_enc_key`, as it already does
+    # once `google_client_id` is set.
+    calendar_enabled: bool = False
 
 
 @lru_cache

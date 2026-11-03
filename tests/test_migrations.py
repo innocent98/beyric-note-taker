@@ -365,3 +365,44 @@ def test_bot_state_seen_at_is_added_and_dropped(scratch_url):
     command.upgrade(cfg, "head")
     assert "bot_state_seen_at" in {c["name"] for c in inspect(engine).get_columns("meetings")}
     engine.dispose()
+
+
+# ---- 0010 calendar ----
+
+CALENDAR_TABLES = {"calendar_connections", "calendar_events", "scheduled_joins"}
+
+
+def test_calendar_migration_round_trip_with_seeded_owner_data(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0009")
+    engine = create_engine(scratch_url)
+    assert not CALENDAR_TABLES & set(inspect(engine).get_table_names())
+    with engine.begin() as conn:  # an admin (made by 0006) and two meetings, as on the live DB
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
+                "select u.id, 'https://meet.google.com/' || n, 'google_meet', n, t.id "
+                "from users u, templates t, (values ('abc-defg-hij'), ('klm-nopq-rst')) v(n) "
+                "where u.is_admin and t.name = 'General'"
+            )
+        )
+
+    command.upgrade(cfg, "head")
+    assert CALENDAR_TABLES <= set(inspect(engine).get_table_names())
+    assert _rows(engine, "select count(*) from meetings") == [(2,)]
+    index_names = {i["name"] for i in inspect(engine).get_indexes("scheduled_joins")}
+    assert {"ix_scheduled_joins_state_run_at", "uq_scheduled_joins_live_code"} <= index_names
+
+    command.downgrade(cfg, "-1")
+    assert not CALENDAR_TABLES & set(inspect(engine).get_table_names())
+    assert _rows(engine, "select count(*) from meetings") == [(2,)]
+    assert _rows(engine, "select count(*) from users where is_admin") == [(1,)]
+
+    command.upgrade(cfg, "head")  # and up again, with the data still there
+    assert CALENDAR_TABLES <= set(inspect(engine).get_table_names())
+    engine.dispose()
+
+
+def test_calendar_migration_is_the_revision_after_0009():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0010").down_revision == "0009"

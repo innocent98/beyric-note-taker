@@ -9,6 +9,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -28,6 +29,26 @@ SEVERITIES = ("info", "warning", "error")
 MAIL_STATUSES = ("pending", "sent", "failed")
 AUTO_JOIN_RULES = ("all", "organizer", "none")
 INSTANT_MEET_MODES = ("events", "poll", "off")
+CONNECTION_PROVIDERS = ("google", "ics")
+CONNECTION_STATUSES = ("connected", "degraded", "needs_reconnect", "disconnected")
+RECONNECT_REASONS = ("expired", "revoked", "error")
+MEET_SUBSCRIPTION_STATES = ("none", "active", "needs_reconnect", "error")
+EVENT_PLATFORMS = ("google_meet", "zoom", "teams")
+EVENT_STATUSES = ("confirmed", "tentative", "cancelled")
+EVENT_RESPONSES = ("accepted", "declined", "tentative", "needsAction")
+JOIN_SOURCES = ("calendar", "instant_meet")
+JOIN_STATES = (
+    "scheduled",
+    "dispatching",
+    "joined",
+    "completed",
+    "skipped",
+    "cancelled",
+    "no_capacity",
+    "failed",
+)
+# A join in one of these states holds its meeting code: only one bot per code at a time.
+LIVE_JOIN_STATES = ("dispatching", "no_capacity", "joined")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -208,6 +229,165 @@ class UserSettings(Base):
     )
     instant_meet_mode_override: Mapped[str | None] = mapped_column(String(16))
     notify_email: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+
+
+class CalendarConnection(Base):
+    """A user's connected calendar source: their Google connection (the calendar and Meet features
+    are each derived from `granted_scopes`, so Meet detection works without the Calendar scope) or,
+    from provider `ics`, a pasted calendar link. Access tokens are never stored; the refresh token
+    is AES-GCM ciphertext (`app/vault.py`). One row per user and provider."""
+
+    __tablename__ = "calendar_connections"
+    __table_args__ = (
+        CheckConstraint(
+            _in("provider", CONNECTION_PROVIDERS), name="ck_calendar_connections_provider"
+        ),
+        CheckConstraint(_in("status", CONNECTION_STATUSES), name="ck_calendar_connections_status"),
+        CheckConstraint(
+            "needs_reconnect_reason is null or " + _in("needs_reconnect_reason", RECONNECT_REASONS),
+            name="ck_calendar_connections_reason",
+        ),
+        CheckConstraint(
+            _in("meet_subscription_state", MEET_SUBSCRIPTION_STATES),
+            name="ck_calendar_connections_meet_state",
+        ),
+        UniqueConstraint("user_id", "provider", name="uq_calendar_connections_user_provider"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    provider: Mapped[str] = mapped_column(String(16), default="google", server_default="google")
+    google_account_email: Mapped[str | None] = mapped_column(String(254))
+    google_sub: Mapped[str | None] = mapped_column(String(64))
+    # The ID token's `hd` claim: present for Workspace accounts, absent for personal Gmail.
+    google_hosted_domain: Mapped[str | None] = mapped_column(String(253))
+    status: Mapped[str] = mapped_column(String(16), default="connected", server_default="connected")
+    needs_reconnect_reason: Mapped[str | None] = mapped_column(String(16))
+    granted_scopes: Mapped[str | None] = mapped_column(Text)
+    refresh_token_enc: Mapped[bytes | None] = mapped_column(LargeBinary)  # nonce || ciphertext
+    key_version: Mapped[int | None] = mapped_column(Integer)
+    connected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    # Null asks the sync loop for a first sync.
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sync_token: Mapped[str | None] = mapped_column(Text)
+    # connected_at + 7 days, set only while the OAuth app is in Testing.
+    expected_expiry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    meet_subscription_name: Mapped[str | None] = mapped_column(Text)
+    meet_subscription_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Apart from `status`: Meet detection can fail while the calendar is fine.
+    meet_subscription_state: Mapped[str] = mapped_column(
+        String(16), default="none", server_default="none"
+    )
+
+
+class CalendarEvent(Base):
+    """One calendar event as the sync last saw it. Holds the attendee count, never the addresses,
+    and no description or location. `meeting_url` can carry a Zoom passcode: never log it. Rows are
+    deleted two days after the event ends and on disconnect."""
+
+    __tablename__ = "calendar_events"
+    __table_args__ = (
+        CheckConstraint(
+            "platform is null or " + _in("platform", EVENT_PLATFORMS),
+            name="ck_calendar_events_platform",
+        ),
+        CheckConstraint(_in("status", EVENT_STATUSES), name="ck_calendar_events_status"),
+        CheckConstraint(
+            "self_response is null or " + _in("self_response", EVENT_RESPONSES),
+            name="ck_calendar_events_response",
+        ),
+        UniqueConstraint("connection_id", "source_event_id", name="uq_calendar_events_source"),
+        Index("ix_calendar_events_user_starts", "user_id", "starts_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    connection_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("calendar_connections.id", ondelete="CASCADE")
+    )
+    # The source's own id (Google's event id, an ICS UID plus RECURRENCE-ID).
+    source_event_id: Mapped[str] = mapped_column(String(1024))
+    recurring_event_id: Mapped[str | None] = mapped_column(String(1024))
+    title: Mapped[str] = mapped_column(Text, default="", server_default="")
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    platform: Mapped[str | None] = mapped_column(String(16))
+    meeting_url: Mapped[str | None] = mapped_column(Text)
+    native_id: Mapped[str | None] = mapped_column(String(200))
+    organizer_self: Mapped[bool | None] = mapped_column(Boolean)
+    # The organiser is in the user's own Workspace domain (the address itself is never kept).
+    organizer_same_org: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
+    attendee_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    self_response: Mapped[str | None] = mapped_column(String(16))
+    status: Mapped[str] = mapped_column(String(16), default="confirmed", server_default="confirmed")
+    # Kept so a rule change can re-run `will_join` from the stored row alone.
+    all_day: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    event_type: Mapped[str] = mapped_column(String(32), default="default", server_default="default")
+    # The user's switch for this meeting: null follows the rule, true joins, false does not.
+    override: Mapped[bool | None] = mapped_column(Boolean)
+    source_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ScheduledJoin(Base):
+    """A bot that will be, is being, or was sent to a meeting by the scheduler. One row per
+    calendar event per user, revived and reused rather than duplicated. A row exists only for
+    events that will be joined. `meeting_id` is the only link to the meeting; from `joined` on the
+    meeting is the truth."""
+
+    __tablename__ = "scheduled_joins"
+    __table_args__ = (
+        CheckConstraint(_in("source", JOIN_SOURCES), name="ck_scheduled_joins_source"),
+        CheckConstraint(_in("platform", EVENT_PLATFORMS), name="ck_scheduled_joins_platform"),
+        CheckConstraint(_in("state", JOIN_STATES), name="ck_scheduled_joins_state"),
+        UniqueConstraint("user_id", "calendar_event_id", name="uq_scheduled_joins_user_event"),
+        Index("ix_scheduled_joins_state_run_at", "state", "run_at"),
+        # One live join per user per meeting code. Per user on purpose: a global index would let one
+        # account block another's join by registering the same link first. Two users in one
+        # meeting each get a join until C12's dispatcher decides how sharing works.
+        Index(
+            "uq_scheduled_joins_live_code",
+            "user_id",
+            "platform",
+            "native_id",
+            unique=True,
+            postgresql_where=sa.text(_in("state", LIVE_JOIN_STATES)),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    source: Mapped[str] = mapped_column(String(16), default="calendar", server_default="calendar")
+    # Null for an instant-Meet join. The event row goes two days after the meeting; the join stays.
+    calendar_event_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("calendar_events.id", ondelete="SET NULL")
+    )
+    platform: Mapped[str] = mapped_column(String(16))
+    native_id: Mapped[str] = mapped_column(String(200))
+    meeting_url: Mapped[str] = mapped_column(Text)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    state: Mapped[str] = mapped_column(String(16), default="scheduled", server_default="scheduled")
+    # Why a join was skipped or cancelled; free text on purpose, the runner owns the vocabulary.
+    skip_reason: Mapped[str | None] = mapped_column(String(32))
+    template_id: Mapped[int | None] = mapped_column(ForeignKey("templates.id", ondelete="SET NULL"))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    deadline_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="SET NULL"))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    # When the single-event re-check ran, so it runs once per join.
+    rechecked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 class Meeting(Base):

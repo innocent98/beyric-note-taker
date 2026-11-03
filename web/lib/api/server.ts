@@ -2,7 +2,7 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { ApiError, createApi } from "./client";
-import type { SessionState } from "./types";
+import type { Pilot, SessionState } from "./types";
 
 // FastAPI's address inside the compose network (the same variable next.config.ts reads for the
 // fallback proxy, set at runtime in compose.yaml).
@@ -39,6 +39,17 @@ export async function serverApi(extra: { onResponse?: (response: Response) => vo
 export const getSession = cache(async (): Promise<SessionState | null> => {
   try {
     return await (await serverApi()).session();
+  } catch {
+    return null;
+  }
+});
+
+// The pilot's state for the sign-up and sign-in pages (public). The visitor's cookie is passed on,
+// because `prefill_email` rides in a cookie. null when FastAPI cannot be reached; the pages then
+// draw the plain form and let the API's own answer decide.
+export const getPilot = cache(async (): Promise<Pilot | null> => {
+  try {
+    return await (await serverApi()).pilot();
   } catch {
     return null;
   }

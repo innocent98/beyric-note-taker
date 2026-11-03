@@ -136,7 +136,7 @@ Reading: **the AI workspace adds under 2% to the per-hour cost**; accuracy and p
 
 ### 3.5 Conventions reused from the accounts spec
 
-REST under `/api`, session cookie, `X-CSRF-Token` on every non-GET, error shape `{"error": {"code", "message"}}`, ids `bigint`, a foreign id is **404, never 403**, `app/notifications.py` for the bell, `mail_outbox` with retries for every email (a failed mail never fails the action), `ConsoleMailer` refused in production, the route-enumeration test (`tests/test_api.py`) extended for every new route, one Alembic head and a round trip on a scratch DB. **Migrations:** this layer's revisions take the next free numbers *when they merge* (main is at `0009`; Phase C's calendar migration is in flight), merged one at a time, so the one-head test never trips.
+REST under `/api`, session cookie, `X-CSRF-Token` on every non-GET, error shape `{"error": {"code", "message"}}`, ids `bigint`, a foreign id is **404, never 403**, `app/notifications.py` for the bell, `mail_outbox` with retries for every email (a failed mail never fails the action), `ConsoleMailer` refused in production, the route-enumeration test (`tests/test_api.py`) extended for every new route, one Alembic head and a round trip on a scratch DB. **Migrations:** this layer's revisions take the next free numbers *when they merge* (main is at `0010_calendar`, merged with Phase C), merged one at a time, so the one-head test never trips.
 
 ---
 

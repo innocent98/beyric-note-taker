@@ -10,10 +10,11 @@ last section lists it. Emails, names and passwords in the captures are placehold
 Read this together with `docs/fe-integration-guide-owner-app.md` (session cookie, CSRF, error shape,
 meetings, templates, vocabulary): all of it still holds, plus the changes in section 11.
 
-Scope: the **API**. The screens (sign-up, forgot password, confirm email, pilot full, waitlist, the
-bell, the admin screens) are stream D of Module 2b and are not built yet; this guide is what they are
-built against. The pages that the emailed links open belong to the frontend and **must exist before
-sign-up opens** (section 3).
+Scope: the **API**. The screens are stream D of Module 2b: sign-up, confirm email, forgot and reset
+password, pilot full, the waiting list and the sign-in additions are built (branch
+`feature/stream-d-auth-pages`, SOP `docs/sop/2026-11-03-accounts-auth-pages.md`); the bell and the
+admin screens are not. The pages that the emailed links open belong to the frontend and **must exist
+before sign-up opens** (section 3).
 
 ## 0. How every call works (unchanged, restated for the new routes)
 

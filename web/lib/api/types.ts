@@ -20,3 +20,7 @@ export type StatusTone = Meeting["status_tone"];
 export type RetryBlock = NonNullable<Meeting["retry_block"]>;
 
 export type FieldError = Schemas["FieldError"];
+
+export type Pilot = Schemas["PilotOut"];
+export type PilotState = Pilot["state"];
+export type SignUpBody = Schemas["SignUp"];

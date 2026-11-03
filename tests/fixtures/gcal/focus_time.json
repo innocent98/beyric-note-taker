@@ -1,0 +1,10 @@
+{
+  "kind": "calendar#event",
+  "id": "synthfocus0001",
+  "status": "confirmed",
+  "summary": "Focus time",
+  "organizer": {"email": "me@example.test", "self": true},
+  "start": {"dateTime": "2026-11-04T13:00:00+01:00"},
+  "end": {"dateTime": "2026-11-04T15:00:00+01:00"},
+  "eventType": "focusTime"
+}

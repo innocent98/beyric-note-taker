@@ -1,0 +1,16 @@
+{
+  "kind": "calendar#event",
+  "id": "synthzoom0001",
+  "status": "confirmed",
+  "summary": "Client call",
+  "description": "Join Zoom Meeting\nhttps://us02web.zoom.us/j/81234567890?pwd=PLACEHOLDERPASSCODE\n\nMeeting ID: 812 3456 7890\nPasscode: 000000",
+  "location": "Zoom",
+  "organizer": {"email": "organizer@example.test", "self": true},
+  "start": {"dateTime": "2026-11-04T15:00:00Z"},
+  "end": {"dateTime": "2026-11-04T16:00:00Z"},
+  "attendees": [
+    {"email": "me@example.test", "self": true, "organizer": true, "responseStatus": "accepted"},
+    {"email": "client@example.test", "responseStatus": "needsAction"}
+  ],
+  "eventType": "default"
+}
