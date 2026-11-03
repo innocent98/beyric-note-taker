@@ -75,6 +75,8 @@ Earlier decisions stand (summarised in memory `beyric-note-taker-decisions`): mo
 5. **Stream D**: new designed screens in Next (accounts, calendar and auto-join settings, team, tasks, sprints, decisions log, agenda, sync, languages, share and download; the "needs backend" list in `docs/ui/parity-report.md` is the build order). Then retire the Jinja pages Next now owns and `app/static/tokens.css`, PWA basics, toast component.
 6. Later backlog (checklist): email notes and sharing, Outlook, languages and translation, Zoom RTMS, `gpt-4o-mini-transcribe` for live hints, upstream issue to Vexa about the `language` column, speaker name-order merge, CI for `deploy/nginx-limit-check.sh`.
 
+**Found live 2026-11-03 (meeting 8):** a bot that Google refuses to let ask to join (HTTP 403, `DisconnectedError`) sits in a dead lobby for about 8 minutes and the meeting stays `bot_sent`. Fail-fast follow-up with the evidence is in the checklist under "Found in live use" ("Fail fast when Google refuses the bot's join request"); do it before the calendar auto-join work depends on joins, since unattended joins need this failure to be visible quickly.
+
 ## 7. How we work here
 
 - Global rules in `~/.claude/CLAUDE.md`:
