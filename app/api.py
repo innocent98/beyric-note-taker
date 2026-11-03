@@ -9,6 +9,7 @@ Same session cookie, same login limit and same rules as the pages (the work is i
 """
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
@@ -17,8 +18,19 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import api_accounts, api_admin, auth, notifications, services, usage
+from app import (
+    api_accounts,
+    api_admin,
+    api_workspace,
+    auth,
+    export,
+    notifications,
+    services,
+    usage,
+    workspace,
+)
 from app.api_schemas import (
+    BadgesOut,
     ErrorResponse,
     Login,
     MeetingDetail,
@@ -38,6 +50,7 @@ from app.api_schemas import (
 )
 from app.db import get_session
 from app.models import Meeting, User
+from app.notes_document import build_notes_document, content_disposition, export_filename
 from app.pipeline import (
     MAX_JOIN_ATTEMPTS,
     REASON_UNEXPECTED,
@@ -139,6 +152,7 @@ def _session_state(request: Request, db: Session) -> SessionState:
             user=None,
             usage=None,
             unread_notifications=None,
+            badges=None,
         )
     settings = request.app.state.settings
     used = usage.hours_used(db, user, datetime.now(UTC), settings.max_poll_hours * 3600)
@@ -153,6 +167,7 @@ def _session_state(request: Request, db: Session) -> SessionState:
         ),
         usage=UsageOut(used_seconds=used, cap_seconds=usage.effective_cap(db, user)),
         unread_notifications=notifications.unread_count(db, user),
+        badges=BadgesOut(review_open=workspace.open_review_count(db, user)),
     )
 
 
@@ -199,8 +214,11 @@ def log_out(request: Request, session: Session = Depends(get_session)) -> Sessio
 # ---- meetings ----
 
 
-def _title(meeting: Meeting) -> str:
-    return f"{'Zoom' if meeting.platform == 'zoom' else 'Google Meet'} {meeting.native_id}"
+_title = services.meeting_title
+
+
+def _platform_label(meeting: Meeting) -> str:
+    return "Zoom" if meeting.platform == "zoom" else "Google Meet"
 
 
 def _summary(meeting: Meeting) -> MeetingSummary:
@@ -242,6 +260,7 @@ def _detail(meeting: Meeting, session: Session) -> MeetingDetail:
         ),
         worker_stale=active and services.worker_is_stale(session),
         join_retry_at=join_retry_at(meeting),
+        extraction_status=meeting.extraction_status if ready else None,
         notes=meeting.notes if ready else None,
         notes_html=str(services.render_markdown(meeting.notes)) if ready else None,
         transcript=meeting.speaker_transcript or meeting.transcript or None,
@@ -277,6 +296,84 @@ def get_meeting(
     user: User = Depends(auth.current_user),
 ) -> MeetingDetail:
     return _detail(services.meeting_or_404(session, user, meeting_id), session)
+
+
+EXPORT_RESPONSES = {
+    200: {
+        "description": "The file. Built for this request and not stored.",
+        "content": {
+            "application/pdf": {"schema": {"type": "string", "format": "binary"}},
+            export.FORMATS["docx"][0]: {"schema": {"type": "string", "format": "binary"}},
+        },
+    },
+    404: {"model": ErrorResponse, "description": "No such meeting (or not the caller's)"},
+    409: {"model": ErrorResponse, "description": "`not_ready`: the notes are not written yet"},
+    500: {"model": ErrorResponse, "description": "`export_failed`: the file could not be built"},
+    503: {"model": ErrorResponse, "description": "`export_busy`: another file is being built"},
+    504: {"model": ErrorResponse, "description": "`export_timeout`: it took too long"},
+}
+
+
+@router.get(
+    "/meetings/{meeting_id:id}/export",
+    tags=["meetings"],
+    response_class=Response,
+    responses=EXPORT_RESPONSES,
+)
+def export_meeting(
+    meeting_id: int,
+    format: Literal["pdf", "docx"] = Query("pdf"),
+    transcript: bool = Query(False),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> Response:
+    """The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.
+
+    Built when asked and never stored. One file is built at a time per server process: a second
+    request meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's
+    title, cleaned, in `Content-Disposition`.
+    """
+    meeting = services.meeting_or_404(session, user, meeting_id)
+    if meeting.status != "ready" or not meeting.notes:
+        raise Refused(409, "not_ready", "The notes are not ready yet.")
+    title = _title(meeting)
+    doc = build_notes_document(
+        title=title,
+        platform_label=_platform_label(meeting),
+        started_at=meeting.created_at,
+        recorded_seconds=meeting.recorded_seconds,
+        notes=meeting.notes,
+        transcript=(meeting.speaker_transcript or meeting.transcript) if transcript else None,
+        generated_at=datetime.now(UTC),
+    )
+    session.close()  # the build can take seconds: do not hold a database connection meanwhile
+    media_type, extension = export.FORMATS[format]
+    try:
+        content = export.build_file(doc, format)
+    except export.ExportBusy:
+        return error_response(
+            503,
+            "export_busy",
+            "Another file is being prepared. Try again in a few seconds.",
+            headers={"Retry-After": "5"},
+        )
+    except export.ExportFailed as failure:
+        if failure.timed_out:
+            return error_response(
+                504,
+                "export_timeout",
+                "Preparing the file took too long. Try again, or leave the transcript out.",
+            )
+        return error_response(500, "export_failed", "The file could not be prepared. Try again.")
+    return Response(
+        content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": content_disposition(export_filename(title, extension)),
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post(
@@ -469,3 +566,4 @@ def delete_term(
 
 router.include_router(api_accounts.router)
 router.include_router(api_admin.router)
+router.include_router(api_workspace.router)

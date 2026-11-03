@@ -143,6 +143,7 @@ Edit `.env`:
 | `BOT_LEFT_ALONE_SECONDS` | Optional, default `300`. How long the bot stays in a call after the last other person stops speaking before it leaves on its own (sent to Vexa as `automatic_leave.max_time_left_alone`, in milliseconds; Vexa's own default is 10 minutes, and `0` sends nothing so Vexa's default applies). **It is a silence rule, not a headcount**: a short window can cut a quiet meeting (a long screen-share with no talking, a reading break), and the notes then cover only what the bot heard. Change it by editing `.env` and recreating `web` and `worker` (`docker compose up -d --force-recreate web worker`, with no meeting `bot_sent` or `processing`): no image rebuild, no code deploy. It applies to bots sent after that; a bot already in a call keeps the window it was sent with |
 | `PUBLIC_BASE_URL`, `MAIL_PROVIDER`, `RESEND_API_KEY`, `MAIL_FROM` | Pilot accounts, section 10. `RESEND_API_KEY` from Resend (the sending domain verified there); leave `MAIL_PROVIDER` empty. Without a key the app runs, no mail goes out and password sign-up stays off |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional until Sign in with Google is wanted (both empty = the feature is off). The OAuth client's redirect address is `https://notes.beyrictech.com/api/auth/google/callback` |
+| `TOKEN_ENC_KEY` | **Required before the deploy once `GOOGLE_CLIENT_ID` is set** (or `CALENDAR_ENABLED=true`): the app refuses to start in production without it, so a server that has Google sign-in but no key crash-loops `web` (this took the site down for about 12 minutes on 2026-11-03). `openssl rand -base64 32`; it encrypts the calendar refresh tokens and pasted calendar links. Keep a copy somewhere safe (a password manager): it is not in the database or a backup, and **losing it means every user reconnects their calendar**. See "Before a deploy that needs a new setting" in section 8. `TOKEN_ENC_KEY_PREVIOUS`, `TOKEN_ENC_KEY_VERSION` (default `1`) are for rotation only |
 | `MAX_ACTIVE_BOTS` | Optional, default `1`. Bots on meetings at once across all users; a new meeting past it answers `409 bot_busy` |
 | `AUDIO_RETENTION_DAYS` | Optional, default `7`. The same value is shown on `/privacy` (compose passes it to `next`) |
 | `SCHEDULER_DISPATCH_SECONDS`, `SCHEDULER_SYNC_SECONDS` | Optional, defaults `10` and `60`: how often the `scheduler` service's two loops run (and how often a standby retries the leader lock). Leave them alone unless told to |
@@ -319,11 +320,38 @@ Next.js), starts, and waits up to two minutes until all three checks pass: `127.
 `127.0.0.1:8021/health` (FastAPI directly). If the new version never turns healthy it starts the
 previous commit again (with `--remove-orphans`, so a commit from before `next` existed does not
 leave the `next` container holding port 8020) and the workflow fails.
+A failing `docker compose up` (compose exits non-zero when a dependency is unhealthy, for example a
+crash-looping `web`) does not stop the script: the health check decides, and the rollback runs when
+the services do not come up. A build that fails restores the previous checkout and starts nothing.
+The rollback also starts any container compose left in the `Created` state (`next`, waiting on a
+dependency), since a stuck one would leave the site down. `tests/test_deploy_script.py` runs the
+script against stand-ins for `docker`, `git` and `curl` to prove each case.
 
 **The deploy that introduces `next`** moves port 8020 from `web` to `next`, so for a few seconds
 the site answers 502 while `web` is recreated on 8021 and `next` starts. Do it when no meeting is
 `bot_sent` or `processing` (the worker is not restarted, but the pilot should not be mid-call).
 Before it, check the server has about 1.5 GB of free memory for the Next.js build (`free -h`).
+
+### Before a deploy that needs a new setting
+
+The app refuses to start on a missing or unusable required setting (that is the safe behaviour), and
+`deploy/deploy.sh` then rolls back, so a forgotten setting costs a failed deploy rather than an
+outage, but it still blocks the release. A PR that adds a required environment variable lists it
+under **"Server steps before merge"** in its body; do those steps on the server first.
+
+The current one: with `GOOGLE_CLIENT_ID` set in `.env`, add `TOKEN_ENC_KEY` before the deploy that
+contains it. This appends a fresh key without printing it, then recreates the two services that
+read it:
+
+```bash
+cd <the project directory on the server>   # where compose.yaml and .env are
+grep -q '^TOKEN_ENC_KEY=.' .env || { [ -z "$(tail -c1 .env)" ] || echo >> .env; \
+  printf 'TOKEN_ENC_KEY=%s\n' "$(openssl rand -base64 32)" >> .env; }
+docker compose up -d --force-recreate web worker
+```
+
+Then copy the value from `.env` into your password manager (`grep '^TOKEN_ENC_KEY=' .env`, in a
+private terminal). Losing it means every user reconnects their calendar.
 
 ### Deploy key setup (once)
 

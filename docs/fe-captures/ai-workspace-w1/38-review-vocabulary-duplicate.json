@@ -1,0 +1,28 @@
+{
+  "note": "409 `duplicate_term`; the item stays checked.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/review/1/vocabulary",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "term": "Metrika"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "duplicate_term",
+        "message": "That term is already in your vocabulary."
+      }
+    }
+  }
+}

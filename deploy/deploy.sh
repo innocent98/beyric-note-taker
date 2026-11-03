@@ -6,7 +6,7 @@
 # Steps: check the SHA is on origin/main, back up the database, check out the SHA, build, start,
 # and wait until both services answer: FastAPI (`web`, 127.0.0.1:8021) and the Next.js front door
 # (`next`, 127.0.0.1:8020), including the path between them, and until the scheduler has written a
-# fresh heartbeat. If the new version never turns healthy, the previous commit is started again. A migration that already ran is NOT undone; see
+# fresh heartbeat. If the new version never turns healthy (or the build or `up` fails), the previous commit is started again. A migration that already ran is NOT undone; see
 # deploy/README.md "Updating and rolling back".
 #
 # Everything runs inside main(), which bash reads in full before running it, so checking out a
@@ -42,8 +42,20 @@ main() {
     fi
 
     git checkout --quiet --detach "$sha"
-    docker compose build --quiet
-    docker compose up -d --remove-orphans
+    if ! docker compose build --quiet; then
+        # Nothing was started yet, so the running version is untouched: just put the checkout back,
+        # or the next deploy would take the commit that failed to build for the live one.
+        echo "build failed for $sha; still running $previous" >&2
+        git checkout --quiet --detach "$previous"
+        return 1
+    fi
+    # `up` exits non-zero when a dependency is unhealthy (a crash-looping web, for instance). Under
+    # `set -e` that used to end the script right here, before the health check and the rollback
+    # below, leaving the broken version in place. So it never decides anything on its own: the
+    # health check does.
+    if ! docker compose up -d --remove-orphans; then
+        echo "docker compose up reported a failure; checking whether the services came up" >&2
+    fi
 
     # The rollback below waits for the web and next health only: it must work for a commit that
     # has no scheduler, and a scheduler problem is a reason to roll back, not to wait.
@@ -55,12 +67,24 @@ main() {
     echo "new version did not become healthy; starting $previous again" >&2
     docker compose logs --tail 50 next web worker migrate >&2 || true
     git checkout --quiet --detach "$previous"
-    docker compose build --quiet
+    docker compose build --quiet || echo "build of $previous failed; using the images already here" >&2
     # --remove-orphans: a previous commit without the `next` service must not leave that
     # container running, because it holds 127.0.0.1:8020, which the old `web` publishes itself.
-    docker compose up -d --remove-orphans
+    docker compose up -d --remove-orphans || echo "docker compose up failed for $previous" >&2
+    start_stuck_containers
     wait_healthy || echo "previous version is not healthy either; check the server" >&2
     return 1
+}
+
+# When compose gives up on a dependency it can leave the services that wait for it (`next`) in the
+# Created state, never started. A rollback that does not start them leaves the site down.
+start_stuck_containers() {
+    local stuck
+    stuck="$(docker compose ps -aq --status created 2>/dev/null || true)"
+    if [ -n "$stuck" ]; then
+        # shellcheck disable=SC2086  # one id per line, split on purpose
+        docker start $stuck >/dev/null || echo "could not start $stuck" >&2
+    fi
 }
 
 # A commit with a `scheduler` service must show a heartbeat newer than the moment `up` returned

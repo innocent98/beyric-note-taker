@@ -1,0 +1,26 @@
+{
+  "note": "No login: 401 JSON, as for every route under /api.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export?format=pdf",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "64",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

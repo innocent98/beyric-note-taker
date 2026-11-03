@@ -17,6 +17,7 @@ UtcDatetime = Annotated[datetime, AfterValidator(_utc)]
 
 Status = Literal["bot_sent", "processing", "ready", "failed"]
 Step = Literal["waiting", "audio", "transcribing", "speakers", "notes", "done"]
+ExtractionStatus = Literal["pending", "running", "done", "failed", "skipped"]
 Tone = Literal["success", "danger", "info", "warning", "neutral"]
 Platform = Literal["google_meet", "zoom"]
 RetryBlock = Literal["not_failed", "no_audio", "no_speech", "audio_deleted"]
@@ -63,14 +64,21 @@ class UsageOut(BaseModel):
     cap_seconds: int | None
 
 
+class BadgesOut(BaseModel):
+    # Review items the user has not checked yet: the number on the Review item in the sidebar.
+    review_open: int
+
+
 class SessionState(BaseModel):
     authenticated: bool
     csrf_token: str
-    # All three null while logged out.
+    # All four null while logged out.
     user: UserOut | None
     usage: UsageOut | None
     # Notifications the user has not read yet: the number on the bell.
     unread_notifications: int | None
+    # Counts for the sidebar.
+    badges: BadgesOut | None
 
 
 class Login(Body):
@@ -188,6 +196,12 @@ class MeetingDetail(MeetingSummary):
     # While Google has refused the first bot and the worker is pausing before it sends the second:
     # about when that happens (the status is still "bot_sent"). Null otherwise.
     join_retry_at: UtcDatetime | None
+    # Where reading the notes into decisions, open questions and review items stands; null unless
+    # the meeting is ready. `pending` and `running` are one state for the screen (a few seconds,
+    # or a few minutes if the worker is busy); `failed` means it gave up after three tries (the
+    # lists read from the notes are still there, only the "heard as" hints are missing, and
+    # rewriting the notes starts it again); `skipped` is an older meeting that only has decisions.
+    extraction_status: ExtractionStatus | None
     # Only when status is "ready", else null. `notes_html` is `notes` rendered by the server's
     # escaping markdown renderer: show it as HTML, and copy `notes`.
     notes: str | None
@@ -370,3 +384,59 @@ class AdminMailFailure(BaseModel):
 
 class AdminMailFailures(BaseModel):
     failures: list[AdminMailFailure]
+
+
+# ---- decisions and review ----
+
+
+class MeetingRef(BaseModel):
+    id: int
+    title: str
+    platform: Platform
+    created_at: UtcDatetime
+
+
+class DecisionOut(BaseModel):
+    id: int
+    text: str
+
+
+class DecisionGroup(BaseModel):
+    meeting: MeetingRef
+    decisions: list[DecisionOut]
+
+
+class DecisionList(BaseModel):
+    # One group per meeting, newest meeting first; decisions in the notes' order.
+    groups: list[DecisionGroup]
+    has_more: bool
+    # Pass as `before_id` for the next page of meetings.
+    next_before_id: int | None
+
+
+class ReviewItemOut(BaseModel):
+    id: int
+    # The "Please check" bullet, as the notes say it.
+    text: str
+    # Set only when the bullet is about a name or term the transcript has and that may have been
+    # misheard: the word as it was transcribed. Show the "Correct spelling" box only then.
+    heard_as: str | None
+    checked_at: UtcDatetime | None
+    meeting: MeetingRef
+
+
+class ReviewList(BaseModel):
+    items: list[ReviewItemOut]
+    # How many items are open in all (the sidebar badge), whatever `state` was asked for.
+    open_count: int
+    # True when more than 200 matched and only the newest 200 are listed.
+    truncated: bool
+
+
+class ReviewTermIn(Body):
+    term: str
+
+
+class ReviewTermOut(BaseModel):
+    item: ReviewItemOut
+    term: TermOut

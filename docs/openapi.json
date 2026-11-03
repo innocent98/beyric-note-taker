@@ -509,6 +509,90 @@
         "title": "AdminWaitlistEntry",
         "type": "object"
       },
+      "BadgesOut": {
+        "properties": {
+          "review_open": {
+            "title": "Review Open",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "review_open"
+        ],
+        "title": "BadgesOut",
+        "type": "object"
+      },
+      "DecisionGroup": {
+        "properties": {
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionOut"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "meeting": {
+            "$ref": "#/components/schemas/MeetingRef"
+          }
+        },
+        "required": [
+          "meeting",
+          "decisions"
+        ],
+        "title": "DecisionGroup",
+        "type": "object"
+      },
+      "DecisionList": {
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_before_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before Id"
+          }
+        },
+        "required": [
+          "groups",
+          "has_more",
+          "next_before_id"
+        ],
+        "title": "DecisionList",
+        "type": "object"
+      },
+      "DecisionOut": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text"
+        ],
+        "title": "DecisionOut",
+        "type": "object"
+      },
       "EmailIn": {
         "additionalProperties": false,
         "properties": {
@@ -631,6 +715,24 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "extraction_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "running",
+                  "done",
+                  "failed",
+                  "skipped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Status"
           },
           "failure_reason": {
             "anyOf": [
@@ -830,6 +932,7 @@
           "refresh_after_seconds",
           "worker_stale",
           "join_retry_at",
+          "extraction_status",
           "notes",
           "notes_html",
           "transcript"
@@ -885,6 +988,39 @@
           "refresh_after_seconds"
         ],
         "title": "MeetingList",
+        "type": "object"
+      },
+      "MeetingRef": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "platform": {
+            "enum": [
+              "google_meet",
+              "zoom"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "platform",
+          "created_at"
+        ],
+        "title": "MeetingRef",
         "type": "object"
       },
       "MeetingSummary": {
@@ -1190,11 +1326,124 @@
         "title": "ResetIn",
         "type": "object"
       },
+      "ReviewItemOut": {
+        "properties": {
+          "checked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checked At"
+          },
+          "heard_as": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heard As"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "meeting": {
+            "$ref": "#/components/schemas/MeetingRef"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "heard_as",
+          "checked_at",
+          "meeting"
+        ],
+        "title": "ReviewItemOut",
+        "type": "object"
+      },
+      "ReviewList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewItemOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "open_count": {
+            "title": "Open Count",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items",
+          "open_count",
+          "truncated"
+        ],
+        "title": "ReviewList",
+        "type": "object"
+      },
+      "ReviewTermIn": {
+        "additionalProperties": false,
+        "properties": {
+          "term": {
+            "title": "Term",
+            "type": "string"
+          }
+        },
+        "required": [
+          "term"
+        ],
+        "title": "ReviewTermIn",
+        "type": "object"
+      },
+      "ReviewTermOut": {
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ReviewItemOut"
+          },
+          "term": {
+            "$ref": "#/components/schemas/TermOut"
+          }
+        },
+        "required": [
+          "item",
+          "term"
+        ],
+        "title": "ReviewTermOut",
+        "type": "object"
+      },
       "SessionState": {
         "properties": {
           "authenticated": {
             "title": "Authenticated",
             "type": "boolean"
+          },
+          "badges": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BadgesOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "csrf_token": {
             "title": "Csrf Token",
@@ -1237,7 +1486,8 @@
           "csrf_token",
           "user",
           "usage",
-          "unread_notifications"
+          "unread_notifications",
+          "badges"
         ],
         "title": "SessionState",
         "type": "object"
@@ -2475,6 +2725,173 @@
         ]
       }
     },
+    "/api/decisions": {
+      "get": {
+        "description": "Everything the caller's meetings decided, newest meeting first, grouped by meeting. `q`\nmatches a decision's words or its meeting's title (a title match shows all of that meeting's\ndecisions). `limit` counts meetings, not decisions. For the next page pass `before_id` =\n`next_before_id`. A decision the caller hid is not listed.",
+        "operationId": "list_decisions",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Decisions",
+        "tags": [
+          "decisions"
+        ]
+      }
+    },
+    "/api/decisions/{decision_id}/hide": {
+      "post": {
+        "description": "Remove a decision from the log. It is hidden, never edited, and stays hidden when the\nmeeting's notes are rewritten. Hiding it again is 204 too.",
+        "operationId": "hide_decision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "decision_id",
+            "required": true,
+            "schema": {
+              "title": "Decision Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Hide Decision",
+        "tags": [
+          "decisions"
+        ]
+      }
+    },
     "/api/meetings": {
       "get": {
         "description": "The caller's meetings, newest first. For the next page pass `before_id` =\n`next_before_id`.",
@@ -2892,6 +3309,150 @@
           }
         },
         "summary": "End Meeting",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/export": {
+      "get": {
+        "description": "The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.\n\nBuilt when asked and never stored. One file is built at a time per server process: a second\nrequest meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's\ntitle, cleaned, in `Content-Disposition`.",
+        "operationId": "export_meeting",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "default": "pdf",
+              "enum": [
+                "pdf",
+                "docx"
+              ],
+              "title": "Format",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "transcript",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Transcript",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              },
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file. Built for this request and not stored."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such meeting (or not the caller's)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_ready`: the notes are not written yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`export_failed`: the file could not be built"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`export_busy`: another file is being built"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`export_timeout`: it took too long"
+          }
+        },
+        "summary": "Export Meeting",
         "tags": [
           "meetings"
         ]
@@ -3505,6 +4066,323 @@
         "summary": "Read Pilot",
         "tags": [
           "pilot"
+        ]
+      }
+    },
+    "/api/review": {
+      "get": {
+        "description": "The caller's \"Please check\" items from their meetings: `state=open` (default) or\n`checked`. Newest meeting first, in the order of the notes.",
+        "operationId": "list_review",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "enum": [
+                "open",
+                "checked"
+              ],
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Review",
+        "tags": [
+          "review"
+        ]
+      }
+    },
+    "/api/review/{item_id}/check": {
+      "post": {
+        "description": "Mark an item checked. Checking it again keeps the first time.",
+        "operationId": "check_review_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Check Review Item",
+        "tags": [
+          "review"
+        ]
+      }
+    },
+    "/api/review/{item_id}/uncheck": {
+      "post": {
+        "description": "Put a checked item back among the open ones.",
+        "operationId": "uncheck_review_item",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Uncheck Review Item",
+        "tags": [
+          "review"
+        ]
+      }
+    },
+    "/api/review/{item_id}/vocabulary": {
+      "post": {
+        "description": "Add the corrected spelling to the caller's vocabulary and mark the item checked. 400\n`invalid_term` (nothing changes). 409 `duplicate_term` when the term is already there; the\nitem is still marked checked. The notes of this meeting are not rewritten: offer \"rewrite\nthe notes\" (`POST /meetings/{id}/regenerate`) afterwards.",
+        "operationId": "add_review_term",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewTermIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewTermOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Add Review Term",
+        "tags": [
+          "review"
         ]
       }
     },

@@ -9,7 +9,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app import accounts, auth, passwords
-from app.models import Meeting, Notification, Template, UserSettings, VocabularyTerm
+from app.models import (
+    Decision,
+    Meeting,
+    Notification,
+    ReviewItem,
+    Template,
+    UserSettings,
+    VocabularyTerm,
+)
 from tests.test_api import Api, anon, api, error_of, ready  # noqa: F401  (fixtures used by name)
 from tests.test_web import (  # noqa: F401
     MEET,
@@ -556,13 +564,19 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     session.add(term)
     session.commit()
     note = Notification(user_id=owner.id, kind="k", title="t", dedupe_key="d")
-    session.add_all([term, note])
+    decision = Decision(meeting_id=mine.id, text="d", position=0, fingerprint="d")
+    review = ReviewItem(
+        meeting_id=mine.id, owner_user_id=owner.id, text="r", position=0, fingerprint="r"
+    )
+    session.add_all([term, note, decision, review])
     session.commit()
     ids = {
         "meeting_id": mine.id,
         "template_id": template.id,
         "term_id": term.id,
         "notification_id": note.id,
+        "decision_id": decision.id,
+        "item_id": review.id,
     }
     anon.log_in(email=OTHER_EMAIL)
     checked = 0
@@ -574,6 +588,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         url = re.sub(r"\{(\w+)\}", lambda m: str(ids[m[1]]), path)
         bodies = {  # a valid body for each route that takes one, so only the id can be wrong
             "/regenerate": {"template_id": strangers_data["template"].id},
+            "/vocabulary": {"term": "Metrika"},
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
         }
         body = next((b for key, b in bodies.items() if path.endswith(key)), None)

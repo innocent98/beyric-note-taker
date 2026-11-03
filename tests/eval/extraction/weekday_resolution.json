@@ -1,0 +1,15 @@
+{
+  "transcript": "weekday_resolution.txt",
+  "meeting_date": "2026-11-05",
+  "timezone": "Africa/Lagos",
+  "vocabulary": [],
+  "action_items": [
+    {"match": ["release notes"], "owner": "Bayo", "due_date": "2026-11-09"},
+    {"match": ["regression"], "owner": "Sade", "due_date": "2026-11-06"},
+    {"match": ["email"], "owner": "Sade", "due_date": "2026-11-06"},
+    {"match": ["review"], "owner": "Bayo", "due_date": "2026-11-11"},
+    {"match": ["retrospective"], "owner": "Funmi", "due_date": "2026-11-13"}
+  ],
+  "review": [],
+  "forbidden_owners": []
+}

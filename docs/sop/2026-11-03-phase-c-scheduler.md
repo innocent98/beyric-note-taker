@@ -37,7 +37,7 @@ Rejected: a lease row with an expiry (needs clock agreement and a renewal race t
 - Tests first (watched failing on the missing modules), then green: `tests/test_scheduler.py`, 16 tests on a real Postgres 17: second scheduler cannot lead; standby takes over after the leader closes and after the server kills its connection; restart has no duplicate leader and runs a missed job once; a whole simulated day on `FakeClock` (8,640 / 24 / 288 runs); a failing job does not stop others and its secret never reaches the log; a broken transaction does not poison the next job; sync loop on its own thread and session; a blocked sync job does not delay a dispatch tick or its heartbeat; heartbeat each tick; standby writes none; a closed leader connection really frees the lock.
 - Real processes, two copies of `python -m app.scheduler` against a migrated scratch database: the first led and beat (age under 10 s), the second stayed standby; `kill -9` on the leader and the standby led within one tick and kept beating; SIGTERM stopped the survivor in about 4 s and left no advisory lock.
 - `docker compose config` valid (with a throwaway `.env`).
-- `deploy.sh` extension: four stub tests (beat passes; no beat rolls back after exactly 15 tries; the rollback does not wait for a scheduler; a commit with no scheduler is never asked) passed on top of PR #47's script and test harness. They are added to `tests/test_deploy_script.py` once #47 is merged (the C10 PR carries the script change only).
+- `deploy.sh` extension: four stub tests in `tests/test_deploy_script.py` (beat passes; no beat rolls back after exactly 15 tries; the rollback does not wait for a scheduler; a commit with no scheduler is never asked), next to #47's eight; all twelve pass.
 - **Not verified:** a real `docker compose up` of the new service and the deploy on the haven-respite server (Docker's disk on the build machine is full); the 40 s stop grace against a real long sync job (there are none yet).
 
 ## Operate / roll back
@@ -48,6 +48,5 @@ Rejected: a lease row with an expiry (needs clock agreement and a renewal race t
 
 ## Follow-ups
 - C10b registers the sweeps and the mail tick; C8b, C12 register their jobs. Every job must be idempotent (a leader can lose its lock mid-job).
-- Add the four deploy tests to `tests/test_deploy_script.py` after #47 merges (copy in the shared notes folder).
 - The admin capacity screen alerts after 5 minutes without a heartbeat (spec 9.7): not built yet.
 - Opus lock review is part of the phase C pass (plan C10 Review).
