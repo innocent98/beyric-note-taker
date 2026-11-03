@@ -16,10 +16,14 @@ signing up again does not reset the 5 hours.
 produce a recording we would not delete:
 - Vexa does not know the meeting (404), or
 - the bot is gone (`completed` or `failed`) and either a recording with audio exists (it is deleted
-  first), or `failed`, or the recording itself `failed`, or no audio appeared within the pipeline's
-  own grace (`RECORDING_GRACE`) after we first saw the meeting over (else after it was created).
-Anything else (a bot still in a call, a recording still being written, the grace not over, Vexa not
-answering) raises `VexaError` before anything of the user is deleted, and the next pass tries again.
+  first), or the meeting `failed`, or the recording itself `failed`, or no audio appeared within
+  the pipeline's own grace (`RECORDING_GRACE`) counted from the moment THIS purge first saw Vexa
+  report the meeting over (stamped on the row, never taken from when it was created).
+Anything else (a bot still in a call, a recording still `in_progress` or in any other unsettled
+state, the grace not over, Vexa not answering) raises `VexaError` before anything of the user is
+deleted, and the next pass tries again; the bounded give-up below ends a wait that never settles.
+A 404 for the meeting is settled but logged at error level with the meeting id when no recording
+id is stored, so there is a trace of a copy that could not be looked for.
 A bot is stopped whatever our own status says: a meeting given up after six hours is `failed` here
 while its bot may still be in the call.
 
@@ -58,7 +62,9 @@ GIVE_UP_AFTER = timedelta(hours=24)
 VEXA_FINISHED = ("completed", "failed")
 
 
-def _recording_to_delete(vexa, meeting: Meeting, now: datetime, stopped: set[int]) -> int | None:
+def _recording_to_delete(
+    session: Session, vexa, meeting: Meeting, now: datetime, stopped: set[int]
+) -> int | None:
     """Settle one meeting's Vexa side (see the module docstring): the id of the recording to
     delete, or None when there is nothing to delete. Raises `VexaError` while it is not settled."""
     stored = meeting.vexa_recording_id
@@ -67,6 +73,12 @@ def _recording_to_delete(vexa, meeting: Meeting, now: datetime, stopped: set[int
     try:
         info = vexa.get_meeting_by_id(meeting.vexa_meeting_id)
     except VexaNotFound:
+        if stored is None:
+            logger.error(
+                "meeting %s: Vexa does not know it (404) and no recording id is stored; "
+                "treating it as settled",
+                meeting.id,
+            )
         return stored  # Vexa does not know the meeting: nothing there to wait for
     if info.status not in VEXA_FINISHED:
         if meeting.id not in stopped:  # whatever our status: the bot may still be in the call
@@ -79,8 +91,12 @@ def _recording_to_delete(vexa, meeting: Meeting, now: datetime, stopped: set[int
         return stored
     if info.status == "failed" or info.recording_status == "failed":
         return None
-    seen = meeting.terminal_seen_at or meeting.created_at
-    if seen is not None and now - seen >= RECORDING_GRACE:
+    if info.recording_status not in (None, "completed"):
+        raise VexaError("a recording of this meeting is still being written")
+    if meeting.terminal_seen_at is None:
+        meeting.terminal_seen_at = now  # the grace starts when the purge first sees it over
+        session.commit()  # kept although this pass raises: nothing else is pending yet
+    if now - meeting.terminal_seen_at >= RECORDING_GRACE:
         return None  # no audio appeared within the grace the pipeline itself allows
     raise VexaError("Vexa has not settled this meeting's recording yet")
 
@@ -101,7 +117,7 @@ def purge_user(
                 stopped.add(meeting.id)
         for meeting in meetings:
             if meeting.audio_deleted_at is None:
-                recording_id = _recording_to_delete(vexa, meeting, now, stopped)
+                recording_id = _recording_to_delete(session, vexa, meeting, now, stopped)
                 if recording_id is not None:
                     vexa.delete_recording(recording_id)
     for meeting in meetings:

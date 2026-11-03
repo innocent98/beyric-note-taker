@@ -794,13 +794,18 @@ def test_a_meeting_vexa_is_still_finishing_keeps_the_account_until_the_copy_can_
 
 def test_a_finished_meeting_with_no_recording_yet_waits_out_the_recording_grace(session, audio_dir):
     """`completed` with no recording id is not proof that none will appear: the pipeline itself
-    waits RECORDING_GRACE after first seeing the meeting over. So does the purge."""
+    waits RECORDING_GRACE after first seeing the meeting over. The purge measures it from the
+    moment IT first saw Vexa report the meeting over (stamped on the row), never from creation."""
     from app import pipeline
 
     user, running = live_meeting_account(session, audio_dir)
+    running.created_at = datetime.now(UTC) - timedelta(days=2)  # old, and it must not matter
+    session.commit()
     vexa = FakeVexa(lookups={"77": VexaMeeting(status="completed")})
-    with pytest.raises(VexaError):  # never seen over: wait
+    with pytest.raises(VexaError):  # first sight: stamp it and wait
         deletion.purge_user(session, user, vexa)
+    session.refresh(running)
+    assert running.terminal_seen_at is not None  # kept although the attempt raised
     running.terminal_seen_at = datetime.now(UTC) - pipeline.RECORDING_GRACE + timedelta(minutes=1)
     session.commit()
     with pytest.raises(VexaError):  # seen over, but not long enough ago
@@ -831,18 +836,31 @@ def test_a_recording_vexa_says_failed_is_nothing_to_delete_at_once(session, audi
     assert session.get(User, user.id) is None
 
 
-def test_a_recording_stuck_without_audio_is_nothing_to_delete_once_the_grace_has_passed(
+def test_a_recording_still_in_progress_keeps_the_purge_waiting_for_the_give_up(session, audio_dir):
+    """Audio may still be written: only the 24-hour give-up (with its admin alert) ends the wait."""
+    from app import pipeline
+
+    user, running = live_meeting_account(session, audio_dir)
+    running.terminal_seen_at = datetime.now(UTC) - pipeline.RECORDING_GRACE - timedelta(hours=1)
+    session.commit()
+    vexa = FakeVexa(lookups={"77": VexaMeeting(status="completed", recording_status="in_progress")})
+    with pytest.raises(VexaError):
+        deletion.purge_user(session, user, vexa)
+    session.expire_all()
+    assert session.get(User, user.id) is not None
+
+
+def test_a_completed_recording_without_audio_is_nothing_to_delete_after_the_grace(
     session, audio_dir
 ):
     from app import pipeline
 
     user, running = live_meeting_account(session, audio_dir)
-    vexa = FakeVexa(lookups={"77": VexaMeeting(status="completed", recording_status="in_progress")})
-    with pytest.raises(VexaError):
-        deletion.purge_user(session, user, vexa)  # a moment ago: audio may still appear
-    running.created_at = datetime.now(UTC) - pipeline.RECORDING_GRACE - timedelta(minutes=1)
+    running.terminal_seen_at = datetime.now(UTC) - pipeline.RECORDING_GRACE - timedelta(minutes=1)
     session.commit()
-    deletion.purge_user(session, user, vexa)  # no terminal time was ever seen: creation counts
+    vexa = FakeVexa(lookups={"77": VexaMeeting(status="completed", recording_status="completed")})
+    deletion.purge_user(session, user, vexa)  # a recording exists but holds no audio media
+    assert vexa.deleted == []
     session.expire_all()
     assert session.get(User, user.id) is None
 
@@ -860,6 +878,10 @@ def test_a_bot_is_stopped_whatever_our_own_status_says_and_the_purge_waits_for_i
         deletion.purge_user(session, user, vexa)
     assert vexa.stopped == [("google_meet", "liv-eliv-eli")]
     vexa.lookups["77"] = VexaMeeting(status="completed")  # the bot has left, nothing recorded
+    with pytest.raises(VexaError):  # the purge sees it over for the first time: the grace starts
+        deletion.purge_user(session, user, vexa)
+    running.terminal_seen_at = datetime.now(UTC) - timedelta(hours=1)
+    session.commit()
     deletion.purge_user(session, user, vexa)
     session.expire_all()
     assert session.get(User, user.id) is None
@@ -876,6 +898,21 @@ def test_a_meeting_vexa_does_not_know_is_settled(session, audio_dir):
     assert vexa.deleted == [31]  # a stored copy is still asked to be removed (Vexa 404 is fine)
     session.expire_all()
     assert session.get(User, user.id) is None
+
+
+def test_a_404_with_no_stored_recording_is_settled_but_logged_with_the_meeting_id(
+    session, audio_dir, caplog
+):
+    from app.vexa import VexaNotFound
+
+    user, running = live_meeting_account(session, audio_dir)
+    meeting_id = running.id
+    caplog.set_level("ERROR")
+    vexa = FakeVexa(lookups={"77": VexaNotFound("gone")})
+    deletion.purge_user(session, user, vexa)
+    errors = [r.getMessage() for r in caplog.records if r.levelname == "ERROR"]
+    assert any(f"meeting {meeting_id}" in e and "404" in e for e in errors)
+    assert "live@example.test" not in " ".join(errors)
 
 
 def test_deleting_an_account_stamps_when_and_the_purge_stamps_it_if_it_was_missing(
