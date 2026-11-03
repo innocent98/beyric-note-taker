@@ -1,0 +1,73 @@
+{
+  "case": "weekly_sync",
+  "extraction_failed": false,
+  "score": {
+    "case": "weekly_sync",
+    "bullets": 5,
+    "covered": 5,
+    "quotes_given": 5,
+    "quotes_verified": 5,
+    "invented_owners": 0,
+    "raw_invented_owners": 0,
+    "wrong_owners": 0,
+    "dates_stated": 2,
+    "dates_right": 2,
+    "dates_invented": 0,
+    "missing_from_notes": 0,
+    "review_expected": 0,
+    "review_found": 0,
+    "review_extra": 0,
+    "problems": []
+  },
+  "raw": {
+    "action_items": [
+      {
+        "index": 0,
+        "title": "Confirm with the app store by Wednesday.",
+        "spoken_owner": "Jonas Petrov",
+        "due_phrase": "by Wednesday",
+        "due_date": "2026-11-04",
+        "quote": "Jonas, you confirm with the app store by Wednesday.",
+        "confidence": "high"
+      },
+      {
+        "index": 1,
+        "title": "Send the revised pricing-page copy to the design team by Friday.",
+        "spoken_owner": "Lena Hoffmann",
+        "due_phrase": "by Friday",
+        "due_date": "2026-11-06",
+        "quote": "Lena, please send the revised pricing page copy to the design team by Friday.",
+        "confidence": "high"
+      },
+      {
+        "index": 2,
+        "title": "Check the survey for the team-plan price.",
+        "spoken_owner": null,
+        "due_phrase": null,
+        "due_date": null,
+        "quote": "The team plan, I think it was nineteen or twenty-nine, someone needs to check the survey.",
+        "confidence": "medium"
+      },
+      {
+        "index": 3,
+        "title": "Determine who has the onboarding-email templates and update the emails before launch.",
+        "spoken_owner": null,
+        "due_phrase": "before launch",
+        "due_date": null,
+        "quote": "Also somebody needs to update the onboarding emails before launch, but I am not sure who has the templates.",
+        "confidence": "medium"
+      },
+      {
+        "index": 4,
+        "title": "Look into the refund process.",
+        "spoken_owner": null,
+        "due_phrase": null,
+        "due_date": null,
+        "quote": "the customer in Lagos asked about a refund process, we should look into it.",
+        "confidence": "medium"
+      }
+    ],
+    "review": [],
+    "milestones": []
+  }
+}

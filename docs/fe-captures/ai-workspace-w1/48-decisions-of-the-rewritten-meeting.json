@@ -1,0 +1,16 @@
+{
+  "note": "Decision 1 (hidden before the rewrite) and the decisions of the same meeting after it. A row is matched by its words: the rewritten notes either still say it (the row is kept, still hidden) or word it differently (a new row, visible).",
+  "content": {
+    "hidden_before": {
+      "id": 1,
+      "text": "Proceed with the Metrika rollout in the next release."
+    },
+    "after": [
+      {
+        "id": 1,
+        "text": "Proceed with the Metrika rollout in the next release.",
+        "hidden": true
+      }
+    ]
+  }
+}

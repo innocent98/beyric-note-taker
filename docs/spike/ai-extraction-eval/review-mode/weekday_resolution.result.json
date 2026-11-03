@@ -1,0 +1,27 @@
+{
+  "case": "weekday_resolution",
+  "extraction_failed": false,
+  "score": {
+    "case": "weekday_resolution",
+    "bullets": 0,
+    "covered": 0,
+    "quotes_given": 0,
+    "quotes_verified": 0,
+    "invented_owners": 0,
+    "raw_invented_owners": 0,
+    "wrong_owners": 0,
+    "dates_stated": 0,
+    "dates_right": 0,
+    "dates_invented": 0,
+    "missing_from_notes": 0,
+    "review_expected": 0,
+    "review_found": 0,
+    "review_extra": 0,
+    "problems": []
+  },
+  "raw": {
+    "action_items": [],
+    "review": [],
+    "milestones": []
+  }
+}

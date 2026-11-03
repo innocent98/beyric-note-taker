@@ -1,0 +1,11 @@
+[Dan]: Morning all. Agenda: the analytics rollout, and the Metrika dashboards.
+[Chidi]: For analytics I will set up the tracking plan by Friday.
+[Dan]: Great. We also need the Metrika dashboards for the leadership review. Amina, can you take those?
+[Amina]: Yes, I can do the dashboards. I'll share a draft on Wednesday of next week.
+[Chidi]: Is it Metrika with a k or a c? I thought the vendor spells it differently.
+[Dan]: I have only heard it said out loud, so I am not sure about the spelling. Can someone check?
+[Amina]: I'll look at the vendor site.
+[Dan]: Also the contract number was something like four seven two or four seven three. Somebody needs to confirm that with finance.
+[Chidi]: I will ask finance tomorrow.
+[Dan]: Good. Decision: we go ahead with the Metrika rollout in the next release.
+[Amina]: Agreed.

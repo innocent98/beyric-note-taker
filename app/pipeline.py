@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app import audio, usage
+from app import audio, usage, workspace
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
@@ -577,6 +577,9 @@ def _step_notes(session: Session, meeting: Meeting, openai_client) -> bool:
         text, template, _terms(session, meeting.owner_user_id), client=openai_client
     )
     meeting.status, meeting.step, meeting.failure_reason = "ready", "done", None
+    # Queued in the same commit as the notes, and worked by its own job (app/workspace.py): it can
+    # fail and retry without touching the meeting, whose notes are the deliverable.
+    workspace.mark_pending(meeting)
     session.commit()
     return True
 
