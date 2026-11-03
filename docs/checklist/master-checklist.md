@@ -199,9 +199,34 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [ ] Run `deploy/nginx-limit-check.sh` (and, if cheap, `docs/spike/edge-secret/e2e.sh`) in CI
 - [ ] Alert the owner on an account lockout (today a log line only); per-account device cookie with the accounts work
 - [ ] Test paid Zoom accounts
-- [ ] Check Vexa licence exceptions before any commercial use
+- [x] Vexa licence for commercial use: Adebayo confirmed 2026-11-03 that Vexa allows it (his statement; the licence text itself was not re-read here)
 - [ ] Choose a recording notice for meetings
 - [x] Decide how long to keep audio: 7 days (`audio_retention_days`), stated in the privacy policy (2026-11-02)
 - [x] Create a private GitHub repo for this app (not a Vexa fork) so CI runs (2026-11-02: innocent98/beyric-note-taker, PR #1, CI green)
 - [ ] Vexa upgrade routine: read release notes, bump the pinned image tag, re-run one Meet and one Zoom call
 - [x] Raise the worker heartbeat warning from 5 to 20 minutes (2026-11-02)
+
+## Known gaps recorded 2026-11-03 (found while reconciling the handoff; none block the pilot work, each has an owner)
+
+Code and product
+- [ ] Live authenticated pass over the Next screens (meetings, meeting detail, templates, vocabulary): sessions must not enter the owner's production password, so Adebayo signs in once in the Browser pane and a session drives it read-only (stream C "not verified")
+- [ ] Real Vexa bot plus real OpenAI rewrite through the new screens; Safari and Firefox; long titles and many rows (stream C and P "not verified")
+- [ ] Speaker names appear under two name orders ("Godstime America" / "America Godstime"): merge variants in speaker labels
+- [ ] Measure real OpenAI spend per meeting hour (spike and Task 8 both open)
+- [ ] Stream D "needs backend, not built" list in `docs/ui/parity-report.md` (sign-up, forgot password, SSO, calendar card, team, tasks, share, download, translation, agenda, template delete, Emails) is the screen build order; also pending: toast component, PWA basics, retiring Jinja and `app/static/tokens.css`
+- [ ] Login lockout alert to the owner (log line only today); optionally log the resolved client address on failed logins
+- [ ] In-memory login counters reset on restart and are per process: move to the database or Redis with the accounts work
+
+Adebayo (server and accounts)
+- [x] `RESEND_API_KEY` added to the server `.env` (2026-11-03, reported by Adebayo)
+- [ ] Nightly backup cron (privacy policy promises 14-day deletion, so it must exist); Cloudflare proxy on or off
+- [ ] `docker stats --no-stream` and `free -h` during a live meeting, and during two overlapping ones (turns the capacity estimates into numbers; also the `next` container's memory)
+- [ ] Mark the 2 GitGuardian findings from #19 as false positives (test placeholders; nobody rewrites history)
+- [x] Google project is **In production** (Adebayo, 2026-11-03, so no 7-day token expiry) and the calendar scope is added to the consent screen, but only branding is verified and the sensitive-scope review has NOT been submitted (nothing to demo until the calendar flow exists)
+- [ ] Fix the final scope list (`calendar.events.readonly`; Meet only if the instant-Meet spike passes), then submit the sensitive-scope verification once the calendar flow works (Phase V); Search Console TXT for `beyrictech.com`
+
+Legal and business
+- [ ] Mailboxes `privacy@`, `legal@`, `security@beyrictech.com` confirmed; hosting country (France per IP lookup; check the Contabo panel); a DPO decision; a lawyer reads privacy and terms
+- [ ] Hour-long meeting rated against Fireflies; a French plus English call; rate the Zoom #3 notes; merge Novex-News#10
+- [ ] Launch capacity: bot-machine budget, or a per-hour vendor instead
+- [ ] Revisit the designer's landing and sign-in copy before the Google verification submission (decided 2026-11-03)
