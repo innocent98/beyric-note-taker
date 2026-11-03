@@ -33,6 +33,7 @@ export const config = {
     "/meetings/:id",
     "/decisions",
     "/review",
+    "/share",
     "/templates",
     "/vocabulary",
     "/privacy",

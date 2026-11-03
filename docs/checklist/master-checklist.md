@@ -253,11 +253,14 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] C3 connect flow with incremental consent (Opus review)
   - [ ] C4 disconnect flow
   - [ ] C5 calendar client and `CalendarSource` protocol; live check that `calendar.events.readonly` covers `events.list` and `events.get`
+    - [x] Protocol, `SyncBatch`, errors and `GoogleSource` / `AccessTokenCache` (2026-11-03, `feature/c5-calendar-source`; SOP `docs/sop/2026-11-03-phase-c-calendar-source.md`; 101 tests against synthetic Google bodies; open, not merged)
+    - [ ] **Live step, needs C3 and Adebayo:** one real `events.list` and one `events.get` with only `calendar.events.readonly`, redacted captures in `docs/spike/pilot-calendar-captures/`, fixtures and fake switched to them. If `events.get` refuses the scope, stop: the re-check would need `calendar.readonly`
   - [x] C6 event parsing (2026-11-03, same PR; synthetic fixtures until C5's live captures exist)
   - [x] C7 `will_join` rule function (2026-11-03, same PR; full rule x organiser x response x platform x override matrix; an unanswered invite from outside your organisation does not auto-join under `all`: **decision for Adebayo**, see the SOP)
   - [ ] C8 materialiser (events to rows); C8b sync job
   - [ ] C9 key re-encryption script
-  - [ ] C10 scheduler skeleton (leader lock, two loops, heartbeat, compose service); C10b periodic sweeps and mail tick
+  - [x] C10 scheduler skeleton (2026-11-03, `feature/c10-scheduler`; leader advisory lock on its own connection, dispatch and sync loops, injected clock, heartbeat, compose service, `deploy.sh` heartbeat wait; no migration, no required setting; SOP `docs/sop/2026-11-03-phase-c-scheduler.md`). Verified on a real Postgres and with two real processes (failover, clean stop). Not yet run on the server; four `deploy.sh` stub tests added to `tests/test_deploy_script.py`
+  - [ ] C10b periodic sweeps and mail tick
   - [ ] C11 `place_bot()` single host (Opus review); C11b alerts helper (admin email via Resend)
   - [ ] C12 join runner (dispatch at start minus `AUTOJOIN_LEAD_SECONDS`, no-capacity retry, catch-up)
   - [ ] C13 connection states and refresh failures; C14 disconnected notifications and email
@@ -282,6 +285,15 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] A1 measure the full Vexa stack with a bot built from PR #1873 on the Mac, and settle two questions (Zoom on an authenticated deployment, a signed-in bot on an invited event)
   - [ ] A2 to A7, only if A1 passes: signed-in host files, `auth_session_missing` handling and alert, provisioning runbook, keep-warm job, invite path (`bot_invited`, Upcoming row, Settings address), policy and terms rows
 - [ ] Clear "calendar disconnected" state (built in C13 and C14; the 7-day expiry path stays dormant while the Google app is verified)
+
+## PWA share target (Android share sheet; built 2026-11-03, branch `feature/pwa-share-target`; SOP `docs/sop/2026-11-03-pwa-share-target.md`)
+- [x] Link extraction from shared text (Meet, Zoom with passcode, bare Meet code, two links, hostile text), Vitest
+- [x] `share_target` in the manifest (POST to `/share-target`), route handler, `/share` page with the login round trip and every refusal, Vitest
+- [x] Service worker (network-only, caches nothing), checked against Chrome's documentation; manifest parses and no installability errors in headless Chrome on a Mac
+- [x] FE guide section 5.9 with captures, SOP
+- [ ] CI green on the PR; merge only on Adebayo's word
+- [ ] Phone test by Adebayo: install from Chrome's menu, share a Meet link from the Meet app, check a meeting appears (the real share sheet is not verified)
+- [ ] Decide whether a share may send without the tap (needs a way to tell a real share from a forged post)
 
 ## AI workspace backend (spec `docs/superpowers/specs/2026-11-03-ai-workspace-design.md`, phases W0 to W10; approved 2026-11-03, D1 to D19 as recommended)
 

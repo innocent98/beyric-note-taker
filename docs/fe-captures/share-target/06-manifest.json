@@ -1,0 +1,38 @@
+{
+    "name": "Beyric Note Taker",
+    "short_name": "Beyric Notes",
+    "description": "Beyric Note Taker joins your Google Meet and Zoom calls and writes clear notes: a summary, decisions and action items.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "background_color": "#F6F7F6",
+    "theme_color": "#0E6B5E",
+    "share_target": {
+        "action": "/share-target",
+        "method": "POST",
+        "enctype": "multipart/form-data",
+        "params": {
+            "title": "title",
+            "text": "text",
+            "url": "url"
+        }
+    },
+    "icons": [
+        {
+            "src": "/icons/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/icons/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "/icons/maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}

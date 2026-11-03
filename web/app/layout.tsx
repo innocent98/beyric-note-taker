@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
 import type { ReactNode } from "react";
 import { Behaviors } from "@/components/behaviors";
+import { PwaRegistration } from "@/components/pwa-registration";
 import { BRAND } from "@/lib/brand";
 import { OG_IMAGES, SITE_DESCRIPTION, SITE_NAME, SITE_URL } from "@/lib/site";
 import "../styles/tokens.css";
@@ -44,6 +45,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
       <body>
         {children}
         <Behaviors />
+        <PwaRegistration />
       </body>
     </html>
   );
