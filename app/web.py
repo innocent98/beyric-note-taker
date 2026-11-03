@@ -150,6 +150,7 @@ def _meeting_page(request, session: Session, meeting, status_code=200, **context
         meeting=meeting,
         templates=services.list_templates(session, request.state.user),
         worker_stale=meeting.status in services.ACTIVE and services.worker_is_stale(session),
+        can_end=services.can_end(meeting),
         retry_block=block,
         refused_wait=block is not None and is_join_failure(meeting),
         retry_block_message=services.retry_block_message(meeting, block),
@@ -197,6 +198,22 @@ def cancel(
     meeting = meeting_or_404(session, user, meeting_id)
     try:
         services.cancel_meeting(session, vexa, meeting)
+    except Refused as exc:
+        return _meeting_page(request, session, meeting, exc.status, error=exc.message)
+    return see_other(f"/meetings/{meeting.id}")
+
+
+@router.post("/meetings/{meeting_id:id}/end")
+def end(
+    meeting_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+    vexa=Depends(get_vexa),
+):
+    meeting = meeting_or_404(session, user, meeting_id)
+    try:
+        services.end_meeting(session, vexa, meeting)
     except Refused as exc:
         return _meeting_page(request, session, meeting, exc.status, error=exc.message)
     return see_other(f"/meetings/{meeting.id}")

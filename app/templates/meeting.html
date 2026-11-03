@@ -25,6 +25,14 @@
   {% call ui.alert("notice") %}{{ "Zoom" if meeting.platform == "zoom" else "Google" }} turned the bot away, so a new one was sent (attempt {{ meeting.join_attempts }}{% if meeting.platform == "zoom" %} of {{ max_join_attempts }}{% endif %}).{% endcall %}
   {% endif %}
 
+  {% if can_end %}
+  <form method="post" action="/meetings/{{ meeting.id }}/end" class="stack-sm" data-disable-on-submit>
+    {{ ui.csrf_field(csrf) }}
+    <p class="muted">The bot leaves the meeting now and the notes are written from what it heard so far.</p>
+    {{ ui.button("End now and write the notes") }}
+  </form>
+  {% endif %}
+
   {% if meeting.status == "bot_sent" %}
   <form method="post" action="/meetings/{{ meeting.id }}/cancel" data-disable-on-submit>
     {{ ui.csrf_field(csrf) }}

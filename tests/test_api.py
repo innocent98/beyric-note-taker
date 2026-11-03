@@ -831,7 +831,7 @@ def test_regenerate_failure_keeps_the_old_notes(api, template, session, fake_ope
     assert meeting.notes == NOTES
 
 
-@pytest.mark.parametrize("action", ["cancel", "retry", "regenerate"])
+@pytest.mark.parametrize("action", ["cancel", "end", "retry", "regenerate"])
 def test_meeting_actions_on_unknown_ids_are_404(api, action):
     body = {"template_id": 1} if action == "regenerate" else None
     error_of(api.post(f"/api/meetings/999/{action}", body), 404, "not_found")

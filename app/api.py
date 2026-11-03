@@ -223,6 +223,7 @@ def _detail(meeting: Meeting, session: Session) -> MeetingDetail:
         retry_block=block,
         retry_block_message=services.retry_block_message(meeting, block),
         can_cancel=meeting.status == "bot_sent",
+        can_end=services.can_end(meeting),
         can_retry=failed and block is None,
         can_regenerate=ready,
         join_attempts=meeting.join_attempts,
@@ -308,6 +309,25 @@ def cancel_meeting(
     """Take the bot out of a meeting that is still `bot_sent`."""
     meeting = services.meeting_or_404(session, user, meeting_id)
     return _detail(services.cancel_meeting(session, vexa, meeting), session)
+
+
+@router.post(
+    "/meetings/{meeting_id:id}/end",
+    tags=["meetings"],
+    responses={code: {"model": ErrorResponse} for code in (404, 409, 502)},
+)
+def end_meeting(
+    meeting_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+    vexa=Depends(get_vexa),
+) -> MeetingDetail:
+    """ "End now and write the notes": take the bot out of the call and write the notes from what
+    it recorded. Only when `can_end` is true (409 `not_endable` otherwise, 409 `already_ending`
+    when it was asked already). The meeting stays `bot_sent` while the bot leaves, then follows
+    the usual steps; it is not a cancel and nothing is discarded."""
+    meeting = services.meeting_or_404(session, user, meeting_id)
+    return _detail(services.end_meeting(session, vexa, meeting), session)
 
 
 @router.post(

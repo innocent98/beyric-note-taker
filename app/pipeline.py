@@ -41,7 +41,7 @@ REASON_UNEXPECTED = "Something went wrong while processing this meeting."
 REASON_DOWNLOAD = "The recording could not be downloaded from the meeting bot."
 REASON_CANCELLED = "You cancelled this meeting before it was recorded."
 REASON_ENDED_NOTHING_RECORDED = (
-    "You ended this meeting before the bot was in the call, so nothing was recorded."
+    "You ended this meeting before anything was recorded, so there are no notes to write."
 )
 REASON_NOT_LET_IN = (
     "The bot was not let into the meeting. The host may have declined it, or the waiting room "
@@ -108,6 +108,12 @@ BOT_LIVE_STATES = (
 # bot is leaving. Not a live state, so a poll never replaces it; Vexa's own completion reason
 # replaces it once the bot has gone.
 BOT_END_REQUESTED = "end_requested"
+# The states in which the owner may end the bot with "End now and write the notes": in the call,
+# or at the door (where it only means stop). A bot still joining, one asking for help, and one
+# already leaving are not offered it.
+BOT_ENDABLE_STATES = ("awaiting_admission", "active", BOT_RECORDING)
+# Vexa's completion reason for a bot the owner stopped (`DELETE /bots/...`).
+STOPPED_BY_USER = "stopped"
 # Consecutive failed lookups before the bot's state is given up on. One failed lookup is a blip.
 LOOKUP_MISSES_BEFORE_UNKNOWN = 2
 
@@ -233,8 +239,18 @@ def _zoom_blocked_reason(attempts: int, *, resend_failed: bool = False) -> str:
     return f"Zoom blocked the bot from joining: it refused the bot's browser {tries}.{tail}"
 
 
+def _nothing_recorded_reason(info: VexaMeeting) -> str:
+    """Why a finished meeting has no recording: the owner ended it first, or the bot was never
+    let in."""
+    if info.completion_reason == STOPPED_BY_USER:
+        return REASON_ENDED_NOTHING_RECORDED
+    return REASON_NOT_ADMITTED
+
+
 def bot_failure_reason(meeting: Meeting, info: VexaMeeting) -> str:
     """Plain words for a failed bot, from what Vexa reported."""
+    if info.completion_reason == STOPPED_BY_USER:
+        return REASON_ENDED_NOTHING_RECORDED  # the owner stopped a bot that had not joined yet
     if _zoom_blocked(info):
         return _zoom_blocked_reason(meeting.join_attempts)
     if info.completion_reason == "awaiting_admission_rejected":
@@ -454,7 +470,7 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
             count = _no_audio_polls.get(meeting.id, 0) + 1
             _no_audio_polls[meeting.id] = count
             if count >= NO_AUDIO_GRACE_POLLS:
-                _fail(session, meeting, REASON_NOT_ADMITTED)
+                _fail(session, meeting, _nothing_recorded_reason(info))
                 return False
         elif (
             info.recording_id is not None
@@ -484,7 +500,7 @@ def _step_audio(session: Session, meeting: Meeting, vexa) -> bool:
         info = _lookup(vexa, meeting)
         _remember(meeting, info)
         if info.recording_id is None or info.media_id is None:
-            _fail(session, meeting, REASON_NOT_ADMITTED)
+            _fail(session, meeting, _nothing_recorded_reason(info))
             return False
         path.parent.mkdir(parents=True, exist_ok=True)
         # Download beside the target and rename on success, so an interrupted download can never

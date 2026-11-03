@@ -27,6 +27,7 @@ from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
     BOT_END_REQUESTED,
+    BOT_ENDABLE_STATES,
     BOT_RECORDING,
     JOIN_FAILURE_MARKS,
     MEET_REFUSED,
@@ -501,6 +502,70 @@ def cancel_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meet
         ) from None
     locked.status, locked.failure_reason = "failed", REASON_CANCELLED
     session.commit()
+    return locked
+
+
+def can_end(meeting: Meeting) -> bool:
+    """Whether "End now and write the notes" is offered: the bot is in the call, or waiting to be
+    let in, as the worker last saw it. The state's age does not matter here: the owner who wants
+    the bot out should not lose the button because the worker is a little behind."""
+    return (
+        meeting.status == "bot_sent"
+        and meeting.step == "waiting"
+        and meeting.completion_reason in BOT_ENDABLE_STATES
+    )
+
+
+def _not_endable() -> Refused:
+    return Refused(
+        409,
+        "not_endable",
+        "The bot can only be ended while it is in the call or waiting to be let in.",
+    )
+
+
+def _check_endable(meeting: Meeting) -> None:
+    if meeting.completion_reason == BOT_END_REQUESTED and meeting.status == "bot_sent":
+        raise Refused(
+            409,
+            "already_ending",
+            "The bot has already been told to leave. The notes start once it has gone.",
+        )
+    if not can_end(meeting):
+        raise _not_endable()
+
+
+def end_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meeting:
+    """Take the bot out of the call and let the pipeline write the notes from what it recorded.
+
+    Unlike `cancel_meeting` nothing is discarded: the meeting stays `bot_sent`, marked
+    `end_requested`, and the worker carries on as for any call that ended (Vexa reports the bot
+    gone with the reason `stopped`, the recording is downloaded and the usual steps run). A bot
+    that recorded nothing ends as the same "nothing was recorded" failure as any empty meeting."""
+    _check_endable(meeting)  # without the lock: a meeting being processed must not make us wait
+    locked = session.scalars(  # re-read under a lock so the worker cannot move it meanwhile
+        select(Meeting)
+        .where(Meeting.id == meeting.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one()
+    try:
+        _check_endable(locked)
+    except Refused:
+        session.rollback()
+        raise
+    try:
+        vexa.stop_bot(locked.platform, locked.native_id)
+    except VexaError as exc:
+        session.rollback()
+        logger.warning("meeting %s: stop_bot failed (%s)", locked.id, type(exc).__name__)
+        raise Refused(
+            502, "bot_stop_failed", "The bot could not be stopped. Please try again in a moment."
+        ) from None
+    locked.completion_reason = BOT_END_REQUESTED
+    locked.bot_state_seen_at = datetime.now(UTC)
+    session.commit()
+    logger.info("meeting %s: the owner ended the bot", locked.id)
     return locked
 
 
