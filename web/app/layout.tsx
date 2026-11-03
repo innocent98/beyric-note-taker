@@ -21,7 +21,12 @@ export const metadata: Metadata = {
     images: OG_IMAGES,
   },
   twitter: { card: "summary_large_image", images: ["/og.png"] },
-  icons: { apple: "/icons/apple-touch-icon.png" },
+  // Setting `icons` here replaces the file-based `app/icon.svg` link, so the favicon is named too
+  // (the live page had no <link rel="icon"> after #26).
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
