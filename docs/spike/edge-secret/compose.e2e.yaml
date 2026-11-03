@@ -34,7 +34,7 @@ services:
       TRUSTED_PROXY_IPS: ${E2E_TRUSTED_PROXY_IPS-}
     networks:
       appdb: {}
-      front: {ipv4_address: 172.31.77.20}
+      front: {ipv4_address: 172.28.1.20}
     depends_on:
       migrate: {condition: service_completed_successfully}
   next:
@@ -44,7 +44,7 @@ services:
     environment:
       FASTAPI_INTERNAL_URL: "http://web:8000"
     networks:
-      front: {ipv4_address: 172.31.77.10}
+      front: {ipv4_address: 172.28.1.10}
   nginx:
     image: nginx:alpine
     volumes:
@@ -52,9 +52,9 @@ services:
       - ${E2E_WORK}/edge-secret.conf:/etc/nginx/snippets/beyric-edge-secret.conf:ro
     command: sh -c "rm -f /etc/nginx/conf.d/default.conf; nginx -g 'daemon off;'"
     networks:
-      front: {ipv4_address: 172.31.77.5}
+      front: {ipv4_address: 172.28.1.5}
 networks:
   appdb: {internal: true}
   front:
     ipam:
-      config: [{subnet: 172.31.77.0/24}]
+      config: [{subnet: 172.28.1.0/24}]

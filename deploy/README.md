@@ -200,34 +200,61 @@ sudo systemctl reload nginx`.
 nginx proves to the app that a request came through it by adding `X-Edge-Secret` to every
 request. The value is a random string kept in two places and in no git repository: the app's
 `.env` (`EDGE_SHARED_SECRET`) and a root-only nginx snippet that `deploy/nginx.conf` includes.
-Do it in this order, so nothing breaks half way (until step 4 the app trusts addresses the old
-way; nothing about login changes for the owner):
+**Never print it**: it must not reach the terminal, shell history, a chat or a log. The commands
+below keep it in a shell variable and write it straight to the two files. Run them in bash, as
+the deploy user, in this order, so nothing breaks half way (until step 4 the app trusts addresses
+the old way; nothing about login changes for the owner):
 
 ```bash
-# 1. Generate once, write the nginx snippet (root-only) and show the value for .env.
+# 1. Generate once; write the root-only nginx snippet and the .env line from the same variable.
 SECRET=$(openssl rand -hex 32)
 sudo mkdir -p /etc/nginx/snippets
 sudo install -m 600 -o root -g root /dev/null /etc/nginx/snippets/beyric-edge-secret.conf
-echo "proxy_set_header X-Edge-Secret \"$SECRET\";" | sudo tee /etc/nginx/snippets/beyric-edge-secret.conf >/dev/null
-echo "EDGE_SHARED_SECRET=$SECRET"        # copy this line into /opt/beyric-note-taker/.env, then clear the screen
+printf 'proxy_set_header X-Edge-Secret "%s";\n' "$SECRET" \
+  | sudo tee /etc/nginx/snippets/beyric-edge-secret.conf >/dev/null
+# The line is not in .env yet; if it is (an empty EDGE_SHARED_SECRET=), edit that line instead.
+[ -n "$(tail -c1 /opt/beyric-note-taker/.env)" ] && echo >> /opt/beyric-note-taker/.env  # last line needs its newline
+printf 'EDGE_SHARED_SECRET=%s\n' "$SECRET" >> /opt/beyric-note-taker/.env
+chmod 600 /opt/beyric-note-taker/.env
+unset SECRET
 
-# 2. Put the include line in the live site file (once), under the other proxy_set_header lines:
+# 2. Prove both files hold the same value, without showing it (prints "same"):
+diff <(sed -n 's/^EDGE_SHARED_SECRET=//p' /opt/beyric-note-taker/.env) \
+     <(sudo sed -n 's/.*X-Edge-Secret "\(.*\)";/\1/p' /etc/nginx/snippets/beyric-edge-secret.conf) \
+  && echo same
+
+# 3. Put the include line in the live site file (once), under the other proxy_set_header lines:
 #      include /etc/nginx/snippets/beyric-edge-secret.conf;
 #    (it is in deploy/nginx.conf; edit /etc/nginx/sites-available/beyric-notes by hand, see above)
 sudo nginx -t && sudo systemctl reload nginx
-
-# 3. Add EDGE_SHARED_SECRET=<the same value> to /opt/beyric-note-taker/.env.
 
 # 4. Deploy (or `docker compose up -d --force-recreate web`) once no meeting is bot_sent or
 #    processing. The app reads the secret at startup.
 ```
 
-Check it: `docker compose logs web | grep EDGE_SHARED_SECRET` shows **no** warning, and the spoof
-test in section 9 still ends in `429`. The app never refuses to start without the secret; it logs
-`EDGE_SHARED_SECRET is not set ...` at startup, and until the secret is set the address can still
-be forged by any container. Rotate by repeating steps 1 to 4 with a new value (a short window of
-shared login limits between steps 2 and 4 is harmless). `deploy/nginx-limit-check.sh` proves the
-nginx half (a client-sent `X-Edge-Secret` or `X-Forwarded-For` is replaced) without a server.
+`printf` is a shell builtin, so the value is not in any process's command line either. Do not
+`cat` or `echo` either file; to look at one, use `sudo grep -c X-Edge-Secret <file>` (a count).
+
+Check it after the deploy:
+
+```bash
+docker compose logs web | grep EDGE_SHARED_SECRET           # no output: the startup warning is gone
+curl -sI https://notes.beyrictech.com/health | grep -i x-edge-ok     # x-edge-ok: true
+```
+
+`X-Edge-Ok` says whether *that request* carried the right secret, so `true` through the public
+URL means nginx, Next and the app agree on it; it never contains the secret. (`deploy.sh` checks
+`/health` on `127.0.0.1:8020`, which skips nginx, so it reads `false` there: that is expected.)
+Afterwards the spoof test in section 9 still ends in `429`. If `docker compose logs web` later
+shows `arrived without a valid X-Edge-Secret header`, a request reached `next` without going
+through nginx, or nginx lost the include: look at the site file first.
+
+The app never refuses to start without the secret; it logs `EDGE_SHARED_SECRET is not set ...`
+at startup, and until the secret is set the address can still be forged by any container. Rotate
+by repeating steps 1 to 4 with a new value, replacing the old `.env` line and snippet (a short
+window of shared login limits between steps 3 and 4 is harmless). `deploy/nginx-limit-check.sh`
+proves the nginx half (a client-sent `X-Edge-Secret` or `X-Forwarded-For` is replaced) without a
+server.
 
 What the site does: proxies to `127.0.0.1:8020`, the Next.js front door (60 s, or 300 s for
 `/meetings/<id>/regenerate`); takes the visitor's address from `CF-Connecting-IP`, trusted only
@@ -354,10 +381,11 @@ curl -s -o /dev/null -w '%{http_code}\n' https://notes.beyrictech.com/health    
 
   ```bash
   HOST=https://notes.beyrictech.com; JAR=$(mktemp)
-  TOKEN=$(curl -s -c "$JAR" "$HOST/login" | sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p')
+  TOKEN=$(curl -s -c "$JAR" "$HOST/api/session" | sed -n 's/.*"csrf_token": *"\([^"]*\)".*/\1/p')
   for i in 1 2 3 4 5 6 7 8; do
-    curl -s -b "$JAR" -o /dev/null -w '%{http_code}\n' -X POST "$HOST/login" \
-      -d 'password=wrong' -d "csrf_token=$TOKEN" -H "X-Forwarded-For: 10.9.8.$i"
+    curl -s -b "$JAR" -o /dev/null -w '%{http_code}\n' -X POST "$HOST/api/session" \
+      -H 'Content-Type: application/json' -H "X-CSRF-Token: $TOKEN" \
+      -H "X-Forwarded-For: 10.9.8.$i" -d '{"password":"wrong"}'
   done; rm -f "$JAR"
   ```
 

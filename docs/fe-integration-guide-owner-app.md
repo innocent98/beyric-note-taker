@@ -193,6 +193,8 @@ content-type: application/json
 _While locked out even the right password gets 429._
 _Capture: `docs/fe-captures/owner-app/81-limit-right-password-while-locked.json`_
 
+**A second cookie, `device`.** A successful `POST /api/session` (and the page login) now also sets a long-lived `device` cookie, next to `session`. It marks this browser as one that has logged in before, and a browser that sends it is not blocked by the *account* limit (10 failures an hour from anyone), only by the per-address one. Nothing for the front end to do: the browser stores and returns it by itself, a failed login never sets it, and logout does not clear it. Do not read, write or clear it from code (it is `HttpOnly`); if a server action or route handler makes the login call, pass **both** `Set-Cookie` headers on to the browser. Captured live through nginx and Next (value hidden): `set-cookie: device=<signed-value>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax` (`docs/spike/edge-secret/e2e-output.txt`; `Secure` is added when the site is served with `COOKIE_SECURE=true`, as in production, which the local run was not). A browser without the cookie (a new device, cleared cookies, or after the owner password was changed) can still get a 429 for up to an hour after strangers' failed guesses.
+
 **The client address the limit uses behind Next** is the visitor's real address: nginx sets `X-Forwarded-For` and a secret header, Next passes both on, and FastAPI believes the address only when the secret is right (verified live end to end, `docs/spike/edge-secret/e2e-output.txt`). The browser sends nothing for this and must not try: a client-sent `X-Forwarded-For` or `X-Edge-Secret` is replaced by nginx, and one sent straight to Next is ignored by FastAPI. Two visitors have separate limits; the owner's *account* limit is shared by everyone.
 
 ### Who am I (after login)
@@ -1388,6 +1390,7 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | CSRF token changes at login and at logout | Verified live | `01`, `08`, `72` |
 | Login limit: 429 on the sixth attempt from one address, also for the right password | Verified live (2026-11-03, through nginx and Next) | `79`–`81` |
 | Account limit: 10 failures in an hour from any addresses lock the account, same 429 body | Verified live (`docs/spike/edge-secret/e2e-output.txt`) and test | `test_ten_failures_in_an_hour_lock_the_account_even_for_a_new_address` |
+| `device` cookie: set on a successful login only, bypasses the account limit but not the address limit; a forged cookie gets no bypass | Verified live (`docs/spike/edge-secret/e2e-output.txt`) and tests | `tests/test_edge.py` |
 | The limit counts the real visitor address behind nginx and Next; a forged `X-Forwarded-For` is ignored | Verified live (`docs/spike/edge-secret/e2e-output.txt`) | `tests/test_edge.py` |
 | Login limit is shared with `/login` | Test | `test_login_is_rate_limited_and_shares_the_pages_limit` |
 | Logged-out API call is 401 JSON, never a redirect | Verified live | `02` |

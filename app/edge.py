@@ -17,6 +17,8 @@ address itself before this code runs (compose.yaml and a test guard that).
 import hmac
 import ipaddress
 import logging
+import threading
+import time
 
 from fastapi import Request
 
@@ -38,12 +40,27 @@ def _peer(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-def _has_edge_secret(request: Request, settings: Settings) -> bool:
+def has_edge_secret(request: Request, settings: Settings) -> bool:
     if not settings.edge_shared_secret:
         return False
     given = request.headers.get(SECRET_HEADER, "")
     # Bytes, so a non-ASCII header is a mismatch rather than a TypeError.
     return hmac.compare_digest(given.encode(), settings.edge_shared_secret.encode())
+
+
+def limiter_key(address: str) -> str:
+    """What the limits count: an IPv4 address as is, an IPv6 address as its /64 (one customer
+    holds a whole /64, so per-address would let them rotate through 2^64 identities).
+    IPv4-mapped IPv6 addresses count as the IPv4 address. Anything else is kept as given."""
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return address
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped:
+            return str(ip.ipv4_mapped)
+        return str(ipaddress.ip_network(f"{ip}/64", strict=False))
+    return str(ip)
 
 
 def _forwarded_address(request: Request) -> str | None:
@@ -66,10 +83,38 @@ def client_address(request: Request, settings: Settings) -> str:
     """The address to rate-limit this request on."""
     peer = _peer(request)
     if settings.edge_shared_secret:
-        trusted = _has_edge_secret(request, settings)
+        trusted = has_edge_secret(request, settings)
     else:
         trusted = peer in _legacy_trusted_peers(settings)
-    return (_forwarded_address(request) if trusted else None) or peer
+    return limiter_key((_forwarded_address(request) if trusted else None) or peer)
+
+
+_MISSING_WARNING_EVERY = 60.0
+_missing_lock = threading.Lock()
+_missing_last = float("-inf")
+
+
+def note_missing_secret(request: Request, settings: Settings) -> None:
+    """With a secret configured, every genuine request reaches Next with it (nginx adds it). One
+    from Next's own address without it means nginx lost the include, or something on the server
+    is talking to Next directly. Warn, at most once a minute; the secret is never logged."""
+    global _missing_last
+    if not settings.edge_shared_secret or _peer(request) != NEXT_ADDRESS:
+        return
+    if has_edge_secret(request, settings):
+        return
+    now = time.monotonic()
+    with _missing_lock:
+        if now - _missing_last < _MISSING_WARNING_EVERY:
+            return
+        _missing_last = now
+    logger.warning(
+        "A request through the Next.js container arrived without a valid %s header "
+        "(path %s). Either nginx is not sending it (check the include in the site file) or "
+        "something on this server is calling next directly.",
+        SECRET_HEADER,
+        request.scope.get("path", "?"),
+    )
 
 
 def warn_if_unsafe(settings: Settings) -> None:

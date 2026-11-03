@@ -15,6 +15,17 @@ PASS  hostile container -> web directly (the rollback port's shape): 401,401,401
 PASS  visitors 1 and 2 are all 401; visitor 3 runs into the account limit: 401,401,401,401|401,401,401,401|401,401,429,429
 PASS  a fresh visitor with the RIGHT password is refused too: 429
 PASS  after a restart the owner can log in through nginx: 200
+-- known device: strangers' failures lock the account, the owner's browser still gets in
+PASS  a wrong password gets 401 and no device cookie: 401 
+set-cookie: device=<signed-value>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax
+PASS  owner logs in and gets a device cookie: 200
+PASS  strangers lock the account (10 failures): 401,401,401,401|401,401,401,401|401,401,429,429
+PASS  a stranger with the right password is refused: 429 
+PASS  a forged device cookie gets no bypass: 429
+PASS  the owner's browser with the device cookie is let in: 200
+PASS  X-Edge-Ok through nginx: true
+PASS  X-Edge-Ok straight at next (no secret): false
+PASS  next without the secret is noticed in the app log: 1
 -- live captures of the JSON login limit for the FE guide (docs/fe-captures/owner-app/)
 79-limit-wrong-password-5 401 {'error': {'code': 'invalid_password', 'message': 'That password is not right.'}}
 80-limit-sixth-attempt 429 {'error': {'code': 'too_many_attempts', 'message': 'Too many failed attempts. Try again later.'}}

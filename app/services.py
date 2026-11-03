@@ -81,7 +81,18 @@ def log_in(request: Request, session: Session, password: str, account: str = OWN
     settings = request.app.state.settings
     limiter: auth.LoginLimiter = request.app.state.limiter
     client = edge.client_address(request, settings)
-    if not limiter.try_acquire(client, account):  # counts this attempt; success gives it back
+    known_device = auth.device_is_known(
+        request.app.state.device_key, request.cookies.get(auth.DEVICE_COOKIE_NAME)
+    )
+    refused = limiter.check(client, account, known_device=known_device)  # counts this attempt
+    if refused:
+        if refused == "account":
+            logger.warning(
+                "login refused: account %r has had too many failed attempts in the last hour "
+                "(client %s)",
+                account.strip().lower()[:80],
+                client,
+            )
         raise Refused(429, "too_many_attempts", "Too many failed attempts. Try again later.")
     if not auth.password_matches(settings, password):
         raise Refused(401, "invalid_password", "That password is not right.")
@@ -89,6 +100,7 @@ def log_in(request: Request, session: Session, password: str, account: str = OWN
     # A fresh token, never a promoted old one, stamped with the current epoch.
     request.state.session = auth.new_session(auth=True, epoch=auth.current_epoch(session))
     request.state.session_changed = True
+    request.state.set_device_cookie = True  # only after the password was right
 
 
 def log_out(request: Request, session: Session) -> None:

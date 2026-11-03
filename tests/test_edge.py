@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 
-from app import edge
+from app import auth, edge
 from app.auth import LoginLimiter
 from app.main import create_app
 from tests.test_web import (  # noqa: F401  (fixtures used by name)
@@ -111,7 +111,7 @@ def test_the_nearest_hop_wins_and_ipv6_is_normalised():
         "10.0.0.5",
         **{"X-Forwarded-For": "2001:0DB8:0:0:0:0:0:1", edge.SECRET_HEADER: SECRET},
     )
-    assert edge.client_address(v6, settings) == "2001:db8::1"
+    assert edge.client_address(v6, settings) == "2001:db8::/64"
 
 
 def test_no_peer_at_all_is_one_shared_unknown_client():
@@ -175,10 +175,16 @@ def bad_login(client, forwarded=None, secret=None, password="nope", token=None):
 
 
 @pytest.fixture
-def edge_client(app, engine):  # noqa: F811
-    """The app with a secret configured, driven by a peer that looks like the Docker gateway."""
+def secured(app, engine):  # noqa: F811
+    """The app with a secret configured."""
     secured = create_app(make_settings(edge_shared_secret=SECRET, trusted_proxy_ips="172.28.0.1"))
     secured.dependency_overrides = app.dependency_overrides
+    return secured
+
+
+@pytest.fixture
+def edge_client(secured):
+    """Driven by a peer that looks like the Docker gateway."""
     with TestClient(secured, follow_redirects=False, client=("172.28.0.1", 50000)) as c:
         yield c
 
@@ -338,3 +344,325 @@ def test_nginx_sets_the_secret_from_a_file_outside_git():
     assert re.search(r"^\s*proxy_set_header\s+X-Forwarded-For\s+\$remote_addr;", nginx, re.M)
     # No directive carrying a secret value in the repository (the comment describing it is fine).
     assert "proxy_set_header X-Edge-Secret" not in nginx
+
+
+# ---- IPv6 addresses count as their /64 ----
+
+
+def test_ipv6_addresses_are_limited_per_slash_64():
+    settings = make_settings(edge_shared_secret=SECRET)
+
+    def key(address):
+        request = request_from(
+            "10.0.0.5", **{"X-Forwarded-For": address, edge.SECRET_HEADER: SECRET}
+        )
+        return edge.client_address(request, settings)
+
+    assert key("2001:db8:1:2:aaaa:bbbb:cccc:dddd") == key("2001:db8:1:2::1") == "2001:db8:1:2::/64"
+    assert key("2001:db8:1:3::1") != key("2001:db8:1:2::1")
+    assert key("::ffff:203.0.113.9") == "203.0.113.9"  # an IPv4 client seen through IPv6
+    assert edge.limiter_key("203.0.113.9") == "203.0.113.9"
+
+
+def test_an_ipv6_peer_is_keyed_on_its_slash_64_too():
+    request = request_from("2001:db8:9:9:1:2:3:4")
+    assert edge.client_address(request, make_settings(edge_shared_secret=SECRET)) == (
+        "2001:db8:9:9::/64"
+    )
+
+
+# ---- the limiter's memory is bounded ----
+
+
+def test_the_limiter_forgets_the_oldest_key_past_its_cap():
+    limiter = LoginLimiter(max_keys=3)
+    for i in range(10):
+        limiter.try_acquire(f"addr-{i}", f"acct-{i}", now=i)
+    assert len(limiter) <= 6  # three addresses and three accounts at most
+    assert limiter.try_acquire("addr-9", "acct-9", now=10)  # the newest keys are still there
+
+
+def test_a_flood_of_new_keys_never_refuses_a_stranger():
+    limiter = LoginLimiter(max_keys=3)
+    for i in range(50):
+        assert limiter.try_acquire(f"flood-{i}", f"flood-acct-{i}", now=i)
+    assert limiter.try_acquire("someone", "owner", now=60)
+
+
+# ---- the known-device cookie ----
+
+
+def device_settings(**overrides):
+    return make_settings(edge_shared_secret=SECRET, **overrides)
+
+
+def test_a_signed_device_cookie_is_known_until_it_expires():
+    key = auth.device_key(device_settings())
+    cookie = auth.sign_device(key, now=1_000)
+    assert auth.device_is_known(key, cookie, now=1_000)
+    assert auth.device_is_known(key, cookie, now=1_000 + auth.DEVICE_SECONDS)
+    assert not auth.device_is_known(key, cookie, now=1_000 + auth.DEVICE_SECONDS + 1)
+    assert not auth.device_is_known(key, cookie, now=999)  # from the future
+
+
+def test_forged_or_malformed_device_cookies_are_not_known():
+    key = auth.device_key(device_settings())
+    good = auth.sign_device(key)
+    body, signature = good.split(".")
+    other_key = auth.device_key(make_settings(session_secret="y" * 40))
+    for bad in (
+        None,
+        "",
+        "garbage",
+        "a.b.c",
+        good + "x",
+        f"{body}.{signature[::-1]}",
+        auth.sign_device(other_key),
+        f"{auth._b64(b'{}')}.{auth._signature(key, auth._b64(b'{}'))}",  # signed, wrong content
+    ):
+        assert not auth.device_is_known(key, bad), bad
+
+
+def test_a_session_cookie_is_not_a_device_cookie_and_the_reverse():
+    settings = device_settings()
+    session_cookie = auth.sign_session(auth.signing_key(settings), auth.new_session(auth=True))
+    assert not auth.device_is_known(auth.device_key(settings), session_cookie)
+    device_cookie = auth.sign_device(auth.device_key(settings))
+    assert auth.read_session(auth.signing_key(settings), device_cookie) is None
+
+
+def test_a_new_owner_password_retires_every_device_cookie():
+    old = auth.sign_device(auth.device_key(device_settings()))
+    changed = auth.device_key(device_settings(owner_password="a different password"))
+    assert not auth.device_is_known(changed, old)
+
+
+def test_known_device_skips_the_account_window_but_not_the_address_window():
+    limiter = LoginLimiter()
+    for i in range(10):  # an attacker spreads ten failures over addresses
+        assert limiter.try_acquire(f"attacker-{i}", "owner", now=i)
+    assert not limiter.try_acquire("owner-home", "owner", now=11)  # a stranger is locked out
+    assert limiter.try_acquire("owner-home", "owner", now=11, known_device=True)
+    # ...and a known device is counted by the address window like anyone else.
+    for t in range(12, 16):
+        assert limiter.try_acquire("owner-home", "owner", now=t, known_device=True)
+    assert not limiter.try_acquire("owner-home", "owner", now=16, known_device=True)
+
+
+def test_known_device_attempts_do_not_spend_the_accounts_budget():
+    limiter = LoginLimiter()
+    for i in range(30):
+        assert limiter.try_acquire(f"home-{i}", "owner", now=i, known_device=True)
+    assert limiter.try_acquire("stranger", "owner", now=40)  # the account window is still empty
+
+
+def test_check_says_which_limit_refused():
+    limiter = LoginLimiter(limit=1, window=100, account_limit=2, account_window=1000)
+    assert limiter.check("a", "x", now=0) is None
+    assert limiter.check("a", "x", now=1) == "address"
+    assert limiter.check("b", "x", now=2) is None
+    assert limiter.check("c", "x", now=3) == "account"
+
+
+def new_visitor(app_, address, cookies=None):
+    return TestClient(
+        app_, follow_redirects=False, client=("172.28.0.1", 50000), cookies=cookies or {}
+    )
+
+
+def lock_the_account(app_):
+    """Ten failures from ten visitor addresses, as an attacker would."""
+    for i in range(10):
+        with new_visitor(app_, i) as attacker:
+            assert bad_login(attacker, f"203.0.113.{i}", SECRET).status_code == 401
+
+
+def owner_logs_in(app_, address="198.51.100.20", cookies=None):
+    with new_visitor(app_, address, cookies) as owner:
+        response = bad_login(owner, address, SECRET, password=PASSWORD)
+        return response, owner.cookies
+
+
+def test_the_owner_gets_a_device_cookie_only_by_logging_in(secured):
+    with new_visitor(secured, 1) as anon:
+        failed = bad_login(anon, "198.51.100.20", SECRET)
+        assert failed.status_code == 401
+        assert auth.DEVICE_COOKIE_NAME not in failed.headers.get("set-cookie", "")
+        assert auth.DEVICE_COOKIE_NAME not in anon.cookies
+    ok, jar = owner_logs_in(secured)
+    assert ok.status_code == 303
+    cookie = next(
+        c for c in ok.headers.get_list("set-cookie") if c.startswith(f"{auth.DEVICE_COOKIE_NAME}=")
+    )
+    low = cookie.lower()
+    assert "httponly" in low and "samesite=lax" in low and "path=/" in low
+    assert f"max-age={auth.DEVICE_SECONDS}" in low
+    assert auth.device_is_known(secured.state.device_key, jar.get(auth.DEVICE_COOKIE_NAME))
+
+
+def test_the_device_cookie_is_secure_when_the_site_is_https_only(app, engine):  # noqa: F811
+    app_ = create_app(make_settings(edge_shared_secret=SECRET, cookie_secure=True))
+    app_.dependency_overrides = app.dependency_overrides
+    with TestClient(
+        app_, base_url="https://testserver", follow_redirects=False, client=("172.28.0.1", 1)
+    ) as c:
+        ok = bad_login(c, "198.51.100.20", SECRET, password=PASSWORD)
+    device = next(x for x in ok.headers.get_list("set-cookie") if x.startswith("device="))
+    assert "secure" in device.lower().replace("samesite", "")
+
+
+def test_an_attacker_cannot_lock_the_owner_out_of_a_new_login(secured):
+    _, jar = owner_logs_in(secured)
+    device = jar.get(auth.DEVICE_COOKIE_NAME)
+    lock_the_account(secured)
+    # A stranger, even with the right password, is refused ...
+    with new_visitor(secured, 2) as stranger:
+        locked = bad_login(stranger, "198.51.100.77", SECRET, password=PASSWORD)
+    assert locked.status_code == 429
+    # ... the owner's browser, carrying the device cookie, gets in.
+    response, _ = owner_logs_in(secured, "198.51.100.20", {auth.DEVICE_COOKIE_NAME: device})
+    assert response.status_code == 303
+
+
+def test_a_forged_or_expired_device_cookie_gets_no_bypass(secured):
+    lock_the_account(secured)
+    key = secured.state.device_key
+    other = auth.device_key(make_settings(session_secret="y" * 40))
+    expired = auth.sign_device(key, now=1)
+    for forged in ("garbage", auth.sign_device(other), expired, "x." + "y" * 43):
+        response, _ = owner_logs_in(secured, "198.51.100.77", {auth.DEVICE_COOKIE_NAME: forged})
+        assert response.status_code == 429, forged
+
+
+def test_the_device_cookie_does_not_bypass_the_address_limit(secured):
+    _, jar = owner_logs_in(secured)
+    cookies = {auth.DEVICE_COOKIE_NAME: jar.get(auth.DEVICE_COOKIE_NAME)}
+    with new_visitor(secured, 3, cookies) as c:
+        for _ in range(5):
+            assert bad_login(c, "203.0.113.50", SECRET).status_code == 401
+        assert bad_login(c, "203.0.113.50", SECRET).status_code == 429
+        # even with the right password, from the same locked address
+        assert bad_login(c, "203.0.113.50", SECRET, password=PASSWORD).status_code == 429
+
+
+def test_a_device_cookie_from_before_a_password_change_is_ignored(secured, app):  # noqa: F811
+    _, jar = owner_logs_in(secured)
+    device = jar.get(auth.DEVICE_COOKIE_NAME)
+    changed = create_app(
+        make_settings(
+            edge_shared_secret=SECRET, owner_password="a different password", app_env="test"
+        )
+    )
+    changed.dependency_overrides = app.dependency_overrides
+    lock_the_account(changed)
+    response, _ = owner_logs_in(changed, "198.51.100.20", {auth.DEVICE_COOKIE_NAME: device})
+    assert response.status_code == 429  # the old cookie no longer proves anything
+
+
+def test_logging_out_keeps_the_device_cookie(secured):
+    """Logout is routine and the cookie grants no access by itself; clearing it would put the
+    owner back in the lockout window exactly when they need to log in again."""
+    _, jar = owner_logs_in(secured)
+    with new_visitor(secured, 1, dict(jar)) as owner:
+        page = owner.get("/templates")
+        assert page.status_code == 200
+        token = token_from(page.text)
+        out = owner.post(
+            "/logout", data={"csrf_token": token}, headers={edge.SECRET_HEADER: SECRET}
+        )
+        assert out.status_code == 303
+        assert not any(
+            c.startswith(f"{auth.DEVICE_COOKIE_NAME}=") for c in out.headers.get_list("set-cookie")
+        )
+        assert owner.cookies.get(auth.DEVICE_COOKIE_NAME)
+
+
+def test_an_account_lockout_is_logged_without_password_material(secured, caplog):
+    with caplog.at_level(logging.WARNING, logger="app.services"):
+        lock_the_account(secured)
+        with new_visitor(secured, 4) as stranger:
+            bad_login(stranger, "198.51.100.77", SECRET, password="guess-that-must-not-leak")
+    lines = [r.getMessage() for r in caplog.records if r.name == "app.services"]
+    assert len(lines) == 1 and "account" in lines[0] and "198.51.100.77" in lines[0]
+    assert "guess-that-must-not-leak" not in " ".join(lines) and PASSWORD not in " ".join(lines)
+
+
+# ---- a request through next without the secret is noticed ----
+
+
+@pytest.fixture
+def next_peer(secured):
+    edge._missing_last = float("-inf")
+    with TestClient(secured, follow_redirects=False, client=(edge.NEXT_ADDRESS, 40000)) as c:
+        yield c
+
+
+def edge_warnings(caplog):
+    return [
+        r for r in caplog.records if r.name == "app.edge" and "arrived without" in r.getMessage()
+    ]
+
+
+def test_a_request_through_next_without_the_secret_warns_once_a_minute(next_peer, caplog):
+    with caplog.at_level(logging.WARNING, logger="app.edge"):
+        for _ in range(5):
+            next_peer.get("/login")
+        assert len(edge_warnings(caplog)) == 1
+        edge._missing_last -= 61  # a minute later
+        next_peer.get("/login")
+    assert len(edge_warnings(caplog)) == 2
+    assert SECRET not in caplog.text
+
+
+def test_no_warning_for_genuine_or_unrelated_requests(next_peer, secured, caplog):
+    with caplog.at_level(logging.WARNING, logger="app.edge"):
+        next_peer.get("/login", headers={edge.SECRET_HEADER: SECRET})
+        next_peer.get("/health")  # the deploy check goes through next without the secret
+        with new_visitor(secured, 1) as gateway:
+            gateway.get("/login")  # not next's address
+    assert not edge_warnings(caplog)
+
+
+def test_no_warning_while_no_secret_is_configured(app, caplog):  # noqa: F811
+    edge._missing_last = float("-inf")
+    with caplog.at_level(logging.WARNING, logger="app.edge"):
+        with TestClient(app, client=(edge.NEXT_ADDRESS, 1), follow_redirects=False) as c:
+            c.get("/login")
+    assert not edge_warnings(caplog)
+
+
+# ---- /health says whether the secret arrived ----
+
+
+def test_health_reports_edge_ok_and_never_the_secret(next_peer):
+    ok = next_peer.get("/health", headers={edge.SECRET_HEADER: SECRET})
+    assert (ok.status_code, ok.text, ok.headers["x-edge-ok"]) == (200, "ok", "true")
+    for headers in ({}, {edge.SECRET_HEADER: "wrong"}):
+        response = next_peer.get("/health", headers=headers)
+        assert (response.status_code, response.text) == (200, "ok")  # deploy.sh still sees 200
+        assert response.headers["x-edge-ok"] == "false"
+    assert SECRET not in str(ok.headers) + ok.text
+
+
+def test_health_says_false_when_no_secret_is_configured(anon_client):  # noqa: F811
+    assert anon_client.get("/health").headers["x-edge-ok"] == "false"
+
+
+# ---- nginx: a location block must not drop the inherited secret header ----
+
+
+def test_no_nginx_location_sets_proxy_headers_of_its_own():
+    """`proxy_set_header` in a location replaces every inherited proxy_set_header, silently
+    dropping X-Edge-Secret and X-Forwarded-For for that path."""
+    text = (ROOT / "deploy" / "nginx.conf").read_text()
+    text = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    blocks = 0
+    for match in re.finditer(r"\blocation\b[^{;]*\{", text):
+        depth, i = 1, match.end()
+        while depth:
+            depth += {"{": 1, "}": -1}.get(text[i], 0)
+            i += 1
+        body = text[match.end() : i - 1]
+        blocks += 1
+        assert "proxy_set_header" not in body, match.group(0)
+    assert blocks >= 3  # the parse found the login, regenerate and catch-all locations
