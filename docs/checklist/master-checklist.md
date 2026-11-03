@@ -163,7 +163,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 
 ## Deferred follow-ups
 
-- [ ] Remove the default trusted-proxy fallback (`172.28.0.1`, `trusted_proxy_ips`, hard-coded `next` trust) once `EDGE_SHARED_SECRET` is live on the server (Opus review finding 6; `docs/sop/2026-11-03-edge-secret-and-login-limits.md`)
+- [x] Remove the default trusted-proxy fallback (`172.28.0.1`, `trusted_proxy_ips`, hard-coded `next` trust) once `EDGE_SHARED_SECRET` is live on the server (done 2026-11-03, `chore/remove-trusted-proxy-fallback`; Opus review finding 6; `docs/sop/2026-11-03-edge-secret-and-login-limits.md`)
 - [ ] Run `deploy/nginx-limit-check.sh` (and, if cheap, `docs/spike/edge-secret/e2e.sh`) in CI
 - [ ] Alert the owner on an account lockout (today a log line only); per-account device cookie with the accounts work
 - [ ] Test paid Zoom accounts

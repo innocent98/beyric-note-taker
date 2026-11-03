@@ -16,6 +16,7 @@ from starlette.datastructures import Headers
 
 from app import auth, edge, services
 from app.auth import LoginLimiter
+from app.config import Settings
 from app.main import create_app
 from tests.test_web import (  # noqa: F401  (fixtures used by name)
     PASSWORD,
@@ -44,7 +45,7 @@ def request_from(peer, **headers):
 
 
 def test_without_the_secret_the_forwarded_address_is_ignored():
-    settings = make_settings(edge_shared_secret=SECRET, trusted_proxy_ips="")
+    settings = make_settings(edge_shared_secret=SECRET)
     request = request_from("10.0.0.5", **{"X-Forwarded-For": "203.0.113.9"})
     assert edge.client_address(request, settings) == "10.0.0.5"
 
@@ -82,7 +83,7 @@ def test_the_right_secret_makes_the_forwarded_address_count():
 def test_the_gateway_peer_is_not_trusted_once_a_secret_is_set():
     """The old rule: believe X-Forwarded-For from the Docker gateway. Docker masquerades every
     container and host-loopback connection as that address, so anyone could forge it."""
-    settings = make_settings(edge_shared_secret=SECRET, trusted_proxy_ips="172.28.0.1")
+    settings = make_settings(edge_shared_secret=SECRET)
     for peer in ("172.28.0.1", "172.28.1.10", "172.28.1.1"):
         request = request_from(peer, **{"X-Forwarded-For": "203.0.113.9"})
         assert edge.client_address(request, settings) == peer
@@ -118,22 +119,47 @@ def test_no_peer_at_all_is_one_shared_unknown_client():
     assert edge.client_address(request_from(None), make_settings()) == "unknown"
 
 
-# ---- before the secret is configured: as before, but loud ----
+# ---- no secret configured: the forwarded address is never believed, and the app says so ----
 
 
-def test_unset_secret_keeps_trusting_the_known_proxy_peers():
-    """Transitional: until the operator sets the secret, nothing changes for the owner."""
-    settings = make_settings(trusted_proxy_ips="172.28.0.1")
+def test_unset_secret_never_believes_the_forwarded_address():
+    """The proxy-by-address fallback is gone: with no secret every peer is just itself, including
+    the Docker gateway and the Next.js container, which the old rule trusted."""
+    settings = make_settings()
     forwarded = {"X-Forwarded-For": "203.0.113.9"}
-    assert edge.client_address(request_from("172.28.0.1", **forwarded), settings) == "203.0.113.9"
-    assert edge.client_address(request_from("172.28.1.10", **forwarded), settings) == "203.0.113.9"
-    assert edge.client_address(request_from("10.0.0.5", **forwarded), settings) == "10.0.0.5"
+    for peer in ("172.28.0.1", edge.NEXT_ADDRESS, "172.28.1.1", "10.0.0.5"):
+        assert edge.client_address(request_from(peer, **forwarded), settings) == peer
 
 
-def test_unset_secret_trusts_no_proxy_when_the_list_is_emptied():
-    settings = make_settings(trusted_proxy_ips="")
+def test_unset_secret_ignores_a_secret_header_too():
+    """Nothing to compare against, so no header can prove anything (and an empty one is not a
+    match for the empty setting)."""
+    settings = make_settings()
+    for given in ("", "anything", SECRET):
+        request = request_from(
+            "172.28.0.1", **{"X-Forwarded-For": "203.0.113.9", edge.SECRET_HEADER: given}
+        )
+        assert edge.client_address(request, settings) == "172.28.0.1", given
+
+
+def test_a_stale_trusted_proxy_ips_setting_is_ignored(monkeypatch, tmp_path):
+    """Older .env files and CI environments may still carry the removed variable: it must not
+    crash startup, and it must not make any address trusted."""
+    assert not hasattr(make_settings(), "trusted_proxy_ips")
     request = request_from("172.28.0.1", **{"X-Forwarded-For": "203.0.113.9"})
-    assert edge.client_address(request, settings) == "172.28.0.1"
+
+    monkeypatch.setenv("TRUSTED_PROXY_IPS", "172.28.0.1,10.0.0.5")
+    from_environment = Settings(_env_file=None, app_env="test")
+    assert edge.client_address(request, from_environment) == "172.28.0.1"
+
+    monkeypatch.delenv("TRUSTED_PROXY_IPS")
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("TRUSTED_PROXY_IPS=172.28.0.1\nAPP_ENV=test\n")
+    from_dotenv = Settings(_env_file=dotenv)
+    assert from_dotenv.app_env == "test"
+    assert edge.client_address(request, from_dotenv) == "172.28.0.1"
+
+    assert create_app(from_environment) is not None  # and the app still starts
 
 
 def test_the_app_warns_loudly_at_startup_when_the_secret_is_unset(caplog):
@@ -143,6 +169,20 @@ def test_the_app_warns_loudly_at_startup_when_the_secret_is_unset(caplog):
         r.levelno == logging.WARNING and "EDGE_SHARED_SECRET" in r.getMessage()
         for r in caplog.records
     )
+
+
+def test_the_startup_warning_says_every_client_shares_the_proxys_address(caplog):
+    with caplog.at_level(logging.WARNING, logger="app.edge"):
+        create_app(make_settings(app_env="production"))
+    [message] = [r.getMessage() for r in caplog.records if r.name == "app.edge"]
+    assert "every client is limited as the proxy's address" in message
+    assert "trusted" not in message.lower() and "TRUSTED_PROXY_IPS" not in message
+
+
+def test_no_startup_warning_outside_production(caplog):
+    with caplog.at_level(logging.WARNING, logger="app.edge"):
+        create_app(make_settings(app_env="test"))
+    assert not [r for r in caplog.records if r.name == "app.edge"]
 
 
 def test_a_good_secret_means_no_warning(caplog):
@@ -177,7 +217,7 @@ def bad_login(client, forwarded=None, secret=None, password="nope", token=None):
 @pytest.fixture
 def secured(app, engine):  # noqa: F811
     """The app with a secret configured."""
-    secured = create_app(make_settings(edge_shared_secret=SECRET, trusted_proxy_ips="172.28.0.1"))
+    secured = create_app(make_settings(edge_shared_secret=SECRET))
     secured.dependency_overrides = app.dependency_overrides
     return secured
 
@@ -187,6 +227,16 @@ def edge_client(secured):
     """Driven by a peer that looks like the Docker gateway."""
     with TestClient(secured, follow_redirects=False, client=("172.28.0.1", 50000)) as c:
         yield c
+
+
+def test_without_a_secret_forging_the_address_does_not_reset_the_limit(app, engine):  # noqa: F811
+    """Through the real route, from the gateway peer the old rule trusted: with no secret
+    configured every request is the same client, whatever X-Forwarded-For claims."""
+    with TestClient(app, follow_redirects=False, client=("172.28.0.1", 50000)) as c:
+        token = token_from(c.get("/login").text)
+        for i in range(5):
+            assert bad_login(c, f"203.0.113.{i}", token=token).status_code == 401
+        assert bad_login(c, "203.0.113.200", token=token).status_code == 429
 
 
 def test_forging_the_address_does_not_reset_the_limit(edge_client):
