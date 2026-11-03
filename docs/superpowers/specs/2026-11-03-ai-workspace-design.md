@@ -1,6 +1,6 @@
 # AI workspace: design (tasks, projects, decisions, review, team, series, share, export, translate, settings)
 
-**Status:** DRAFT for Adebayo, 2026-11-03. Design only: no application code. Open decisions are in section 14, each with a recommended default; "all recommended" makes this spec stand as written.
+**Status:** APPROVED by Adebayo, 2026-11-03: "all recommended" for D1 to D19, so section 14 holds the decided values. Design only: no application code.
 **Scope decision (Adebayo, 2026-11-03):** every screen and feature in `docs/ui/Beyric Note Taker redesign/` is **pilot** work, not future scope, because they are extensions of the AI notes. This spec therefore **supersedes section 1 non-goals of `2026-11-03-pilot-accounts-calendar-design.md`** ("teams and workspaces, invitations of teammates, tasks and sprints", "sharing a meeting between users, notes by email, translation"). Q9 of that spec (one bot per meeting) is unchanged.
 **Evidence base:** the prototype `Beyric Note Taker.dc.html` (JS state and sample data read, lines 1089 to 1871, not only the markup), `Emails.dc.html`, `docs/ui/parity-report.md`, the pilot accounts and calendar spec, `app/notes.py`, `app/pipeline.py`, `app/models.py`, `app/mail.py`, `app/notifications.py`, `app/services.py`, `docs/sop/2026-11-02-speakers-and-notes.md`, `2026-11-02-notes-model-gpt-6-luna.md`, `docs/spike/cost-and-capacity-2026-11-03.md`, and the checklist.
 
@@ -386,9 +386,9 @@ Decision of 2026-11-03: keep the designer's words; **revisit before the Google s
 
 ---
 
-## 14. Open decisions (answer in one word; "all recommended" is fine)
+## 14. Decisions (all answered 2026-11-03: "all recommended")
 
-| # | Question | Recommended | Why / effect on cost or timeline |
+| # | Question | Decided | Why / effect on cost or timeline |
 |---|---|---|---|
 | D1 | **Team shape:** shared team with accounts and optional shared meetings, or a roster of names only (no shared meetings, no teammate accounts)? | **shared** (built in two steps: team-of-one foundation first, invites later) | Roster-only removes W3 and the visibility rule (a large part of the work and most of the security risk) but cannot do "Member sees shared meetings" or per-person boards. Biggest timeline lever |
 | D2 | Do invited teammates count toward the 10 accounts? | **yes** | They are accounts that can record and spend. The pilot admin can raise `max_accounts` for a team |
