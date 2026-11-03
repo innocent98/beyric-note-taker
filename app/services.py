@@ -131,17 +131,23 @@ def log_in(request: Request, session: Session, email: str, password: str) -> Non
         )
     if user.status != "active":
         raise Refused(403, "account_suspended", "This account has been suspended.")
+    start_session(request, session, user)
+    # A device cookie for this account, only now that the password was right; a known device
+    # keeps its id so its failures stay on one counter.
+    request.state.device_cookie = (account, device)
+
+
+def start_session(request: Request, session: Session, user: User) -> None:
+    """Give the request a fresh logged-in session for `user` and stamp the login time. The one
+    place a session is issued (password login and Google sign-in both end here): a fresh token,
+    never a promoted old one, stamped with this user's and the global epoch."""
     user.last_login_at = datetime.now(UTC)
     session.commit()
-    # A fresh token, never a promoted old one, stamped with this user's and the global epoch.
     request.state.session = auth.new_session(
         uid=user.id, epoch=user.session_epoch, gepoch=auth.current_epoch(session)
     )
     request.state.session_changed = True
     request.state.user = user
-    # A device cookie for this account, only now that the password was right; a known device
-    # keeps its id so its failures stay on one counter.
-    request.state.device_cookie = (account, device)
 
 
 def log_out(request: Request, session: Session) -> None:

@@ -32,11 +32,26 @@ class Limit:
             self._window.add(key, now)
             return True
 
+    def full(self, key: str, now: float | None = None) -> bool:
+        """Whether `key` is over its limit, without counting anything."""
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            return self._window.full(key, now)
+
+    def add(self, key: str, now: float | None = None) -> None:
+        """Count one hit unconditionally (for events counted after the fact, like a wrong guess)."""
+        now = time.monotonic() if now is None else now
+        with self._lock:
+            self._window.add(key, now)
+
 
 class PublicLimits:
     def __init__(self) -> None:
         self.signup_address = Limit(5, HOUR)
         self.signup_email = Limit(1, 60.0)
+        # Wrong passwords per verification link: after 5 the link is dead, so its password
+        # cannot be guessed (the link itself is a 256-bit secret, so this is a second lock).
+        self.verify_wrong = Limit(5, HOUR)
         self.resend_email = Limit(1, 60.0)
         self.resend_address = Limit(5, HOUR)
         self.forgot_email = Limit(1, 60.0)

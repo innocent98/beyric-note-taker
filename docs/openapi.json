@@ -492,6 +492,10 @@
       },
       "PilotOut": {
         "properties": {
+          "google_signin": {
+            "title": "Google Signin",
+            "type": "boolean"
+          },
           "prefill_email": {
             "anyOf": [
               {
@@ -515,7 +519,8 @@
         },
         "required": [
           "state",
-          "prefill_email"
+          "prefill_email",
+          "google_signin"
         ],
         "title": "PilotOut",
         "type": "object"
@@ -835,6 +840,208 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/auth/google/callback": {
+      "get": {
+        "description": "Where Google sends the browser back. Public (checked by the single-use `state` and the\n`google_flow` cookie of the browser that started the flow). Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with a new session; a failure goes to\n`/login?error=<code>` with `google_denied`, `google_failed`, `terms_required`,\n`account_suspended`, `pilot_closed` or `email_unsupported`; a full pilot goes to\n`/pilot-full` and sets a 15-minute cookie that `GET /api/pilot` reads as `prefill_email`\n(the address is never put in a URL).",
+        "operationId": "google_callback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Redirect"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Google Callback",
+        "tags": [
+          "google"
+        ]
+      }
+    },
+    "/api/auth/google/start": {
+      "get": {
+        "description": "Send the browser to Google's consent screen (scopes `openid email profile` only). Public;\nnavigate to it, do not fetch it. `accept_terms=true` must be sent by the sign-up screen: it\nis what lets a NEW account be created (an existing one signs in without it). `return_to` is\na relative path to land on afterwards; anything else becomes `/`. 404\n`google_signin_unavailable` when the server has no Google client configured.",
+        "operationId": "google_start",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "accept_terms",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Accept Terms",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "return_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return To"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Redirect"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Google Start",
+        "tags": [
+          "google"
+        ]
+      }
+    },
     "/api/meetings": {
       "get": {
         "description": "The caller's meetings, newest first. For the next page pass `before_id` =\n`next_before_id`.",
@@ -1506,7 +1713,7 @@
     },
     "/api/pilot": {
       "get": {
-        "description": "Whether sign-up is `open`, `full` or `closed`. Public. No counts of other people.",
+        "description": "Whether sign-up is `open`, `full` or `closed`. Public. No counts of other people.\n\n`prefill_email` is the Google address of a visitor just turned away by `pilot_full` (a signed\n15-minute cookie), so the waitlist form can start filled in. `google_signin` says whether the\nGoogle button should be shown.",
         "operationId": "read_pilot",
         "responses": {
           "200": {
@@ -2098,7 +2305,7 @@
     },
     "/api/verify-email": {
       "post": {
-        "description": "Confirm an email with the token from the link and the password chosen at sign-up.\nPublic. The page the link opens must show a password field and a button that calls this\n(mail scanners open links, and a GET must not verify). Does not sign the user in.\n400 `token_invalid_or_expired`: wrong, used or older than 24 hours. 400 `password_mismatch`:\nnot the password submitted with this link's sign-up; the link stays usable.",
+        "description": "Confirm an email with the token from the link and the password chosen at sign-up.\nPublic. The page the link opens must show a password field and a button that calls this\n(mail scanners open links, and a GET must not verify). Does not sign the user in.\n400 `token_invalid_or_expired`: wrong, used or older than 24 hours. 400 `password_mismatch`:\nnot the password submitted with this link's sign-up; the link stays usable until 5 wrong\npasswords, after which it answers `token_invalid_or_expired`.",
         "operationId": "verify_email",
         "requestBody": {
           "content": {

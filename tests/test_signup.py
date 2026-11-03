@@ -83,9 +83,17 @@ def user_of(session, email=NEW_EMAIL) -> User | None:
 
 
 def test_the_pilot_is_closed_until_the_admin_opens_it(anon, session):
-    assert anon.get("/api/pilot").json() == {"state": "closed", "prefill_email": None}
+    assert anon.get("/api/pilot").json() == {
+        "state": "closed",
+        "prefill_email": None,
+        "google_signin": False,
+    }
     open_pilot(session)
-    assert anon.get("/api/pilot").json() == {"state": "open", "prefill_email": None}
+    assert anon.get("/api/pilot").json() == {
+        "state": "open",
+        "prefill_email": None,
+        "google_signin": False,
+    }
 
 
 def test_the_pilot_is_full_at_the_cap_and_the_admin_does_not_count(anon, session):
@@ -116,7 +124,7 @@ def test_no_cap_means_never_full(anon, session):
 def test_the_pilot_endpoint_is_public_and_reports_no_counts(anon, session):
     open_pilot(session)
     body = anon.get("/api/pilot").json()
-    assert set(body) == {"state", "prefill_email"}
+    assert set(body) == {"state", "prefill_email", "google_signin"}
 
 
 # ---- sign-up ----
@@ -281,6 +289,26 @@ def test_the_attackers_password_never_becomes_the_accounts_even_if_the_attacker_
     user = user_of(session)
     assert passwords.verify_password(user.password_hash, GOOD)
     assert not passwords.verify_password(user.password_hash, ATTACKER)
+
+
+def test_five_wrong_passwords_use_up_a_link_and_the_right_one_no_longer_works(anon, session):
+    """A link's password cannot be guessed by trying many: after 5 misses the link is dead."""
+    token = make_unverified(anon, session)
+    for _ in range(5):
+        error_of(verify(anon, token, ATTACKER), 400, "password_mismatch")
+    error_of(verify(anon, token, GOOD), 400, "token_invalid_or_expired")
+    assert user_of(session).email_verified_at is None
+
+
+def test_wrong_guesses_on_one_link_do_not_count_against_another(anon, session):
+    first = make_unverified(anon, session)
+    a_minute_later(anon)
+    sign_up(anon, password=ATTACKER)
+    second = token_of(queued(session, "verify_email")[1])
+    for _ in range(5):
+        verify(anon, first, "-".join(["not", "it", "at", "all"]))
+    error_of(verify(anon, first, GOOD), 400, "token_invalid_or_expired")
+    assert verify(anon, second, ATTACKER).status_code == 200
 
 
 def test_the_wrong_password_does_not_use_up_the_link(anon, session):

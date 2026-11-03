@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app import accounts, mail, passwords, tokens
 from app.config import Settings
+from app.limits import Limit
 from app.models import AppState, AuthToken, User, WaitlistEntry
 from app.services import Refused
 
@@ -256,18 +257,30 @@ def _sign_up_locked(
         )
 
 
-def verify_email(session: Session, raw_token: str, password: str, now: datetime) -> None:
+def verify_email(
+    session: Session,
+    raw_token: str,
+    password: str,
+    now: datetime,
+    wrong_guesses: Limit | None = None,
+) -> None:
     """Confirm the email the token was sent to, given the password chosen with that sign-up.
-    Commits. The token is used up only when the password is right, so a typo can be fixed."""
+    Commits. The token is used up only when the password is right, so a typo can be fixed, but
+    five wrong passwords (`wrong_guesses`, counted per token) kill it."""
     token = tokens.find_live(session, raw_token, "verify_email", now)
     user = session.get(User, token.user_id) if token else None
     if user is None or user.status == "deleted" or user.email != token.email:
+        raise _bad_token()
+    guess_key = tokens.digest(raw_token)
+    if wrong_guesses is not None and wrong_guesses.full(guess_key):
         raise _bad_token()
     try:
         right = passwords.verify_password(token.pending_password_hash, password)
     except passwords.HashBusy:
         raise Refused(429, "server_busy", "The server is busy. Try again in a moment.") from None
     if not right:
+        if wrong_guesses is not None:
+            wrong_guesses.add(guess_key)
         raise Refused(
             400,
             "password_mismatch",

@@ -101,3 +101,16 @@ def find_live(session: Session, raw: str, purpose: str, now: datetime) -> AuthTo
             AuthToken.expires_at > now,
         )
     ).first()
+
+
+def live_invite_for(session: Session, email: str, now: datetime) -> AuthToken | None:
+    """The live waitlist invitation issued to this address, if any (the sign-in with Google path
+    proves the address, so it needs no token in the URL)."""
+    return session.scalars(
+        select(AuthToken).where(
+            AuthToken.purpose == "waitlist_invite",
+            AuthToken.email == email,
+            AuthToken.used_at.is_(None),
+            AuthToken.expires_at > now,
+        )
+    ).first()

@@ -123,6 +123,8 @@ class PilotOut(BaseModel):
     # The Google email of a visitor who was turned away by `pilot_full` (a 15-minute cookie), so
     # the waitlist form can be pre-filled; otherwise null.
     prefill_email: str | None
+    # Whether "Continue with Google" exists on this server (the OAuth client is configured).
+    google_signin: bool
 
 
 class WaitlistIn(Body):
