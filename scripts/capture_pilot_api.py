@@ -372,7 +372,7 @@ def run(app, base, engine, settings) -> None:
         "POST",
         "/api/session",
         body={"email": ADA, "password": ADA_PASSWORD},
-        note="A correct password for an unverified account: 403, no session.",
+        note="A correct password for an unconfirmed account: the same 401 as a wrong password or an unknown email (it must not reveal the account), no session.",
     )
     visitor.call(
         "verify-wrong-password",
@@ -534,16 +534,57 @@ def run(app, base, engine, settings) -> None:
             "password": ADA_PASSWORD,
             "accept_terms": True,
         },
-        note="Ada, Ben and this one fill the 3 places.",
+        note="Unconfirmed accounts hold no place: the pilot (3 places) is still open.",
     )
-    visitor.call("pilot-full", "GET", "/api/pilot")
     visitor.call(
-        "signup-pilot-full",
+        "pilot-still-open-with-unconfirmed-accounts",
+        "GET",
+        "/api/pilot",
+        note="Ben, Third and Late are unconfirmed: none holds a place.",
+    )
+    visitor.call(
+        "signup-late",
         "POST",
         "/api/signup",
         body={
             "name": "Late Example",
             "email": "late@example.test",
+            "password": ADA_PASSWORD,
+            "accept_terms": True,
+        },
+    )
+    ben_link = token_of(outbox(engine, "verify_email", BEN))
+    third_link = token_of(outbox(engine, "verify_email", "third@example.test"))
+    late_link = token_of(outbox(engine, "verify_email", "late@example.test"))
+    ben.call(
+        "ben-verify",
+        "POST",
+        "/api/verify-email",
+        body={"token": ben_link, "password": BEN_PASSWORD},
+        note="Confirming takes a place: Ada and Ben.",
+    )
+    visitor.call(
+        "third-verify",
+        "POST",
+        "/api/verify-email",
+        body={"token": third_link, "password": ADA_PASSWORD},
+        note="The third place: the pilot is now full.",
+    )
+    visitor.call("pilot-full", "GET", "/api/pilot")
+    visitor.call(
+        "verify-pilot-filled-up",
+        "POST",
+        "/api/verify-email",
+        body={"token": late_link, "password": ADA_PASSWORD},
+        note="Late signed up while there was room but confirms after the pilot filled up: 409, and the link is not used up.",
+    )
+    visitor.call(
+        "signup-pilot-full",
+        "POST",
+        "/api/signup",
+        body={
+            "name": "Later Example",
+            "email": "later@example.test",
             "password": ADA_PASSWORD,
             "accept_terms": True,
         },

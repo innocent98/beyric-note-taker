@@ -1,0 +1,25 @@
+{
+  "note": "Mail is configured (the console mailer stands in for it), so the link is queued as a mail, not returned.",
+  "client": "admin",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/waitlist/1/invite",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "emailed": true,
+      "invite_url": null,
+      "expires_at": "2026-11-10T12:59:55.614989Z"
+    }
+  }
+}

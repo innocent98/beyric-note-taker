@@ -1,0 +1,29 @@
+{
+  "note": "Late signed up while there was room but confirms after the pilot filled up: 409, and the link is not used up.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/verify-email",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "token": "<token-5>",
+      "password": "<password>"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "pilot_full",
+        "message": "The pilot filled up before this account was confirmed. Join the waiting list and we will write when a place opens."
+      }
+    }
+  }
+}

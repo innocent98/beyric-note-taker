@@ -1,5 +1,5 @@
 {
-  "note": "Right password, but the email was never confirmed: no session.",
+  "note": "Right password, but the email was never confirmed: the same 401 as a wrong password (the answer must not reveal the account), no session.",
   "request": {
     "method": "POST",
     "path": "/api/session",
@@ -13,15 +13,15 @@
     }
   },
   "response": {
-    "status": 403,
+    "status": 401,
     "headers": {
       "content-type": "application/json",
       "cache-control": "no-store"
     },
     "body": {
       "error": {
-        "code": "email_not_verified",
-        "message": "Confirm your email first: open the link we sent you."
+        "code": "invalid_credentials",
+        "message": "That email or password is not right."
       }
     }
   }

@@ -1,0 +1,55 @@
+{
+  "note": "Ids 2 and 3 were inserted by SQL in the shape the app gives `usage.hours_low` (the app writes it at 80 % of the hours); id 1 is the real notice the admin's reset link made.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/notifications",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "notifications": [
+        {
+          "id": 3,
+          "kind": "usage.hours_low",
+          "severity": "info",
+          "title": "Example notice 2",
+          "body": "Most of your recorded hours are used.",
+          "meeting_id": null,
+          "created_at": "2026-11-03T12:59:57.667922Z",
+          "read_at": null
+        },
+        {
+          "id": 2,
+          "kind": "usage.hours_low",
+          "severity": "info",
+          "title": "Example notice 1",
+          "body": "Most of your recorded hours are used.",
+          "meeting_id": null,
+          "created_at": "2026-11-03T12:59:57.667922Z",
+          "read_at": null
+        },
+        {
+          "id": 1,
+          "kind": "account.reset_link_issued",
+          "severity": "warning",
+          "title": "A password reset link was made for your account",
+          "body": "An administrator made a one-time password reset link for your account. If you did not ask for this, tell us at once.",
+          "meeting_id": null,
+          "created_at": "2026-11-03T12:59:55.485967Z",
+          "read_at": null
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

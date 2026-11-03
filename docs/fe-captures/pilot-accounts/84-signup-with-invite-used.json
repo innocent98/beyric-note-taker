@@ -1,0 +1,32 @@
+{
+  "note": "",
+  "client": "someone-else",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-J>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Wendy Example",
+      "email": "wendy@example.test",
+      "password": "<password>",
+      "accept_terms": true,
+      "invite_token": "<token-7>"
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invite_invalid",
+        "message": "That invitation is not valid any more. Join the waiting list to get a new one."
+      }
+    }
+  }
+}

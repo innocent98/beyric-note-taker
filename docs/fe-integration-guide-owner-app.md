@@ -303,7 +303,7 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/83-login-missing-email.json`_
 
-**Right password, but the email was never confirmed: 403 `email_not_verified`, and no session.** (The confirm-your-email flow itself ships later; until then only the admin exists, so the FE can only meet this code once sign-up is on. Show a "Confirm your email" screen.) A wrong password on that account is a plain 401, so the code never confirms an account exists to someone who does not know the password.
+**Right password, but the email was never confirmed: the same 401 `invalid_credentials` as a wrong password, and no session.** There is deliberately no separate code: telling an unconfirmed account apart ("confirm your email") would reveal which addresses have a confirmed account (sign up with a chosen password, then sign in with it). Show the confirm-your-email screen after sign-up, not as a sign-in answer (`docs/fe-integration-guide-pilot-accounts.md`).
 
 ```http
 POST /api/session
@@ -315,13 +315,14 @@ Cookie: session=<cookie>
 ```
 
 ```http
-HTTP 403
+HTTP 401
 content-type: application/json
+cache-control: no-store
 ```
 ```json
-{"error": {"code": "email_not_verified", "message": "Confirm your email first: open the link we sent you."}}
+{"error": {"code": "invalid_credentials", "message": "That email or password is not right."}}
 ```
-_Right password, but the email was never confirmed: no session._
+_Right password, but the email was never confirmed: the same 401 as a wrong password (the answer must not reveal the account), no session._
 _Capture: `docs/fe-captures/owner-app/85-login-unverified.json`_
 
 **Right password, suspended account: 403 `account_suspended`, no session.**
@@ -525,7 +526,7 @@ One shape everywhere under `/api/`, including 404, 405 and 422:
 {"error": {"code": "not_found", "message": "No such meeting"}}
 ```
 
-Only validation errors add `fields` (see 5.6). **Switch on `code`, never on `message`.** The `message` of a 400, 409, 429 or 502, and of 401 `invalid_credentials`, 403 `email_not_verified`, `account_suspended` and `hours_cap_reached`, is written for the user and safe to show. The `message` of a 404, 405 or 422 is developer text (`"Field required"`, `"Not Found"`): show your own copy.
+Only validation errors add `fields` (see 5.6). **Switch on `code`, never on `message`.** The `message` of a 400, 409, 429 or 502, and of 401 `invalid_credentials`, `account_suspended` and `hours_cap_reached`, is written for the user and safe to show. The `message` of a 404, 405 or 422 is developer text (`"Field required"`, `"Not Found"`): show your own copy.
 
 Every error the captures produced (`status`, `code`, exact `message`, and the first capture that shows it):
 
@@ -544,7 +545,6 @@ Every error the captures produced (`status`, `code`, exact `message`, and the fi
 | 401 | `invalid_credentials` | That email or password is not right. | `05-login-wrong-password.json` |
 | 401 | `not_authenticated` | Log in first. | `02-meetings-not-logged-in.json` |
 | 403 | `account_suspended` | This account has been suspended. | `86-login-suspended.json` |
-| 403 | `email_not_verified` | Confirm your email first: open the link we sent you. | `85-login-unverified.json` |
 | 403 | `hours_cap_reached` | You have used your 5 recorded hours for the pilot, so the note taker will not join new meetings. Write to us at hello@beyrictech.com if you need more. | `97-meeting-create-hours-cap-reached.json` |
 | 403 | `csrf_rejected` | Missing or wrong X-CSRF-Token header. Read it from GET /api/session. | `03-login-without-csrf.json` |
 | 404 | `not_found` | No such meeting | `63-meeting-unknown.json` (and `91-meeting-of-another-user.json`: someone else's id) |
@@ -603,7 +603,7 @@ With meetings: page 1 of 3, then the next page using `next_before_id`. The respo
   "status_text": "Failed",
   "status_tone": "danger",
   "template_id": 1,
-  "created_at": "2026-11-02T21:16:52.726490Z"
+  "created_at": "2026-11-03T13:00:01.395027Z"
 }
 ```
 _First item of `54-meetings-list-page-1.json`_
@@ -731,7 +731,7 @@ content-type: application/json
   "status_text": "Ready",
   "status_tone": "success",
   "template_id": 1,
-  "created_at": "2026-11-02T21:16:52.726490Z",
+  "created_at": "2026-11-03T13:00:01.395027Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
@@ -813,7 +813,7 @@ location: /api/meetings/1
   "status_text": "Bot sent",
   "status_tone": "warning",
   "template_id": 1,
-  "created_at": "2026-11-02T21:16:52.638257Z",
+  "created_at": "2026-11-03T13:00:01.278483Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
@@ -1560,7 +1560,7 @@ _Capture: `docs/fe-captures/owner-app/69-unknown-api-path.json`_
 - **`transcript` is the speaker-labelled version when there is one**, otherwise the plain one. There is no way to ask for the other.
 - **`template_id` on a meeting is the template last used for its notes**; it changes after a successful regenerate.
 - **`title` is composed by the server** (`Google Meet abc-defg-hij`, `Zoom 12345678901`). The meeting link itself is never returned.
-- **`created_at` is ISO 8601 in UTC with a trailing `Z`** (`2026-11-02T21:15:52.633881Z`). Format it in the viewer's timezone yourself.
+- **`created_at` is ISO 8601 in UTC with a trailing `Z`** (`2026-11-03T13:00:01.278483Z`). Format it in the viewer's timezone yourself.
 - **`speakers_incomplete` and `bot_left_early` are independent notices**; see section 7.
 - **Ids are integers**, in JSON bodies and paths alike. `template_id` must be sent as a number.
 
@@ -1628,7 +1628,7 @@ Both the `bot_left_early` and `speakers_incomplete` flags are verified live (`48
 9. **A retry shows up as `processing` immediately** and resets the server's time limit; start polling again.
 11. **Recorded hours (`usage`).** Show a bar "2.4 of 5 h" from `used_seconds` and `cap_seconds`; hide it when `cap_seconds` is `null`. When `used_seconds >= cap_seconds` the next "send bot" will be a 403 `hours_cap_reached`: say so before the user pastes a link (disable the form with the message), and **show the 403 `message` as is** if it still happens. A running meeting is never cut off. Refresh the bar from `GET /api/session` after every send and when a meeting finishes.
 12. **A 401 right after the user did something can mean their account was suspended**, not that the cookie expired. The login screen will then show 403 `account_suspended` with its own message; show that message, not "your session expired".
-13. **Never word a login error as "no account with that email"** or "wrong password": the API deliberately answers both the same (401 `invalid_credentials`), and the form must not suggest otherwise. For 403 `email_not_verified` show the "Confirm your email" screen.
+13. **Never word a login error as "no account with that email"** or "wrong password": the API deliberately answers both the same (401 `invalid_credentials`), and the form must not suggest otherwise. An account whose email was never confirmed gets the same 401: put the "Confirm your email" screen after sign-up instead.
 14. **A foreign or missing id is the same 404.** Do not say "this belongs to someone else"; say the meeting, template or term "was not found".
 10. **Validation (422) should be rare**: validate the same limits in the form (template name 100, instructions 4000, term 100, no `<` `>` or line breaks in terms) so the owner never sees a developer message.
 
@@ -1653,7 +1653,7 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | Anonymous `GET /api/session` returns token and sets cookie; `user` and `usage` are `null` | Verified live | `01` |
 | Login (email and password): ok with `user` and `usage`, wrong password, missing fields, wrong type | Verified live | `05`–`08` |
 | Unknown email gives the same status, code and message as a wrong password | Verified live and test | `84`; `test_a_wrong_password_and_an_unknown_email_look_the_same` |
-| Unverified account with the right password: 403 `email_not_verified`, no session; wrong password stays 401 | Verified live (placeholder account inserted by SQL) and test | `85`; `test_an_unverified_account_gets_no_session_even_with_the_right_password` |
+| Unverified account with the right password: the same 401 `invalid_credentials` as a wrong password, no session | Verified live (placeholder account inserted by SQL) and test | `85`; `test_an_unverified_account_gets_no_session_even_with_the_right_password` |
 | Suspended account: 403 `account_suspended`; a session that is open when the account is suspended or removed turns into 401 | Login verified live; the open-session case is a test | `86`; `test_a_suspended_or_deleted_user_is_logged_out_at_once` |
 | Ordinary account: `usage` with a cap of `18000`, its own default templates | Verified live | `88`, `89` |
 | Another account's meeting, template or term by id is 404, as if missing; a foreign `template_id` in a body is 400 `template_required` | Verified live | `91`–`95`; every id route is a test: `test_every_api_route_with_an_id_returns_404_for_another_users_row` |

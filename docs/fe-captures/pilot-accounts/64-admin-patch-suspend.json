@@ -1,0 +1,37 @@
+{
+  "note": "",
+  "client": "admin",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/admin/users/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "suspended"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "email": "ben@example.test",
+      "name": "Ben Example",
+      "is_admin": false,
+      "status": "suspended",
+      "email_verified": true,
+      "has_password": true,
+      "has_google": false,
+      "created_at": "2026-11-03T12:59:53.802673Z",
+      "last_login_at": null,
+      "used_seconds": 0,
+      "cap_seconds": 18000,
+      "hours_cap_override": null
+    }
+  }
+}

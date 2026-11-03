@@ -72,3 +72,24 @@ def test_nothing_is_claimed_about_calendar_features_that_are_not_built(anon_clie
     """Accounts only: the calendar and Meet sentences stay as they were until those ship."""
     page = text(anon_client, PRIVACY)
     assert "Outlook" not in page and "Microsoft" not in page
+
+
+def test_resend_is_named_as_a_recipient_with_what_it_receives(anon_client):
+    page = text(anon_client, PRIVACY)
+    assert (
+        "Resend sends our service emails (account verification and password resets). It "
+        "receives your name and email address, and the content of those emails, which include "
+        "one-time links." in page
+    )
+    assert "and Resend the email addresses and names it sends mail to" in page
+
+
+def test_administrator_access_is_stated_plainly(anon_client):
+    page = text(anon_client, PRIVACY)
+    assert (
+        "Our administrator can see account details (name, email, status and hours used) and, if "
+        "you ask for help signing in, can create a one-time password reset link for your "
+        "account, which would give access to it. You are notified in the app when this happens, "
+        "and the action is logged. The administrator's account screens do not show your "
+        "meetings or notes." in page
+    )

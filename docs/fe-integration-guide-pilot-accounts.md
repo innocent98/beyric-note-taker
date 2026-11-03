@@ -44,18 +44,23 @@ Call it when the sign-up page loads and whenever you show the sign-up or Google 
 
 | Field | Meaning |
 |---|---|
-| `state` | `closed`: the admin has not opened sign-up (#4). `full`: the cap is reached (#53). `open` (#11) |
+| `state` | `closed`: the admin has not opened sign-up (#4). `full`: the cap is reached (#57). `open` (#11) |
 | `google_signin` | Show "Continue with Google" only when `true`. `false` when the server has no Google client configured (#2) |
-| `prefill_email` | The Google address of a visitor who was just turned away by `pilot_full` (a 15-minute cookie); pre-fill the waitlist form with it. `null` otherwise (#117) |
+| `prefill_email` | The Google address of a visitor who was just turned away by `pilot_full` (a 15-minute cookie); pre-fill the waitlist form with it. `null` otherwise (#122) |
 
 `closed` and `full` are different screens: *closed* says sign-up is not open yet, *full* says the
 pilot is full. Both offer the waitlist.
+
+**A place is taken when an account is confirmed, not when it signs up.** Accounts that have not
+confirmed their email hold no place, so `open` can still be `open` with several unconfirmed accounts
+(#53). Consequence for the frontend: someone can sign up while there is room and find the pilot full
+when they confirm (section 5, `pilot_full` on the verify call).
 
 ## 3. Pages the emailed links open (the frontend must build these)
 
 Links are built from the server's `PUBLIC_BASE_URL` (in the captures `https://notes.example.test`;
 in production `https://notes.beyrictech.com`). The worker would send these (the `mail_outbox` rows,
-#20, #32, #41, #74):
+#20, #32, #41, #79):
 
 | Mail | Link | The page must |
 |---|---|---|
@@ -98,15 +103,15 @@ Errors (all independent of whether the address exists):
 | Status | `code` | `message` (exact) | Show |
 |---|---|---|---|
 | 403 | `pilot_closed` | Sign-up is not open yet. Check back soon or join the waiting list. | the closed screen + waitlist (#5) |
-| 409 | `pilot_full` | The pilot is full. Leave your email and we will write when a place opens. | the pilot-full screen + waitlist (#54) |
-| 403 | `password_signup_disabled` | Creating an account with a password is not available yet. Use Google to sign up. | **not captured live** (the capture runs with password sign-up on); message from `app/signup.py`, tested. Hide the password form when you know it is off |
-| 400 | `invite_invalid` | That invitation is not valid any more. Join the waiting list to get a new one. | #77, #79 |
+| 409 | `pilot_full` | The pilot is full. Leave your email and we will write when a place opens. | the pilot-full screen + waitlist (#59) |
+| 403 | `password_signup_disabled` | Creating an account with a password is not available yet. Use Google to sign up. | **not captured live** (the capture runs with password sign-up on); message from `app/signup.py`, tested. Also the answer when **no mail provider is configured** (nothing could send the link). Hide the password form when you know it is off |
+| 400 | `invite_invalid` | That invitation is not valid any more. Join the waiting list to get a new one. | #82, #84 |
 | 422 | `password_too_weak` | That password is too common. Choose one that is harder to guess. | #12. Other messages of this code: `Use at least 8 characters.`, `Use at most 128 characters.` (the first two are **not captured live**, from `app/passwords.py`) |
 | 422 | `terms_required` | Accept the Terms and the Privacy Policy to create an account. | #13 |
 | 422 | `invalid_email` | Enter a valid email address. | #14. ASCII addresses only for now; an address with accented letters is refused |
 | 422 | `invalid_name` | Enter your name (up to 200 characters). | **not captured live**; tested |
 | 422 | `validation_error` | Some fields are missing or not valid. (+ `fields`) | #15, #16 |
-| 429 | `too_many_requests` | Too many attempts. Try again later. | #119: the 6th sign-up call in an hour from one address |
+| 429 | `too_many_requests` | Too many attempts. Try again later. | #124: the 6th sign-up call in an hour from one address. Also when 100 unconfirmed password accounts already exist and none is older than an hour (the same answer for every address) |
 | 429 | `server_busy` | The server is busy. Try again in a moment. | **not captured live**; tested |
 | 403 | `csrf_rejected` | Missing or wrong X-CSRF-Token header. Read it from GET /api/session. | #17 |
 
@@ -135,14 +140,20 @@ know and wait for it to be confirmed.
 |---|---|---|---|
 | 400 | `password_mismatch` | That is not the password you chose when you signed up. If you do not remember it, create the account again. | The link stays usable (#22). After **5** wrong passwords the link is dead (next row; not captured live, tested) |
 | 400 | `token_invalid_or_expired` | This link has expired or was already used. Ask for a new one. | Wrong, used (#25), expired (24 h; **not captured live**, tested) or dead after 5 wrong passwords. Offer "Send a new link" (section 6) |
+| 409 | `pilot_full` | The pilot filled up before this account was confirmed. Join the waiting list and we will write when a place opens. | #58: the link is **not** used up and works when a place opens (the pilot is `full` only because other people confirmed first). Show the pilot-full screen with the waitlist form. Accounts made from an invitation always confirm |
 | 422 | `validation_error` | … | missing `token` or `password` |
 
 If the person signed up twice (say a typo the first time) both links exist and each works only with
 its own password. Say "Use the password you chose when you signed up" on the page.
 
 **Signing in before confirming** (#21): a correct password for an unconfirmed account is
-`403 email_not_verified` — "Confirm your email first: open the link we sent you." — and **no session**.
-Show the "Confirm your email" screen with the Resend button when you get that code.
+`401 invalid_credentials` — "That email or password is not right." — **the same answer as a wrong
+password or an unknown email**, and no session. This is deliberate: a different answer ("confirm your
+email") would let anyone find out whether an address has a confirmed account (sign up with a chosen
+password, then sign in with it). **There is no `email_not_verified` code any more.** The "Confirm your
+email" screen (with the Resend button) is shown **after sign-up**, not as an answer to sign-in; on a
+sign-in error add a line such as "If you have just signed up, confirm your email first (check your
+inbox)".
 
 ## 6. Resend the verification mail: `POST /api/signup/resend` (public)
 
@@ -193,19 +204,19 @@ Show the button only when `GET /api/pilot` says `google_signin: true`.
    when the person ticked the terms checkbox next to the button; without it an **existing** account
    still signs in but a **new** one is refused (`terms_required`). `return_to` is a path on this site;
    anything else becomes `/`. The answer is a **302** to Google's consent screen, which asks for
-   `openid email profile` only (#103). It also sets a short `google_flow` cookie.
+   `openid email profile` only (#108). It also sets a short `google_flow` cookie.
 2. Google sends the browser to `/api/auth/google/callback`, which **always redirects**:
 
 | Where the browser lands | When | Capture |
 |---|---|---|
-| the stored `return_to` (default `/`), with a **new session cookie** | success: an existing account, a linked account, or a new account (created already confirmed, with no password) | #111, #112 |
-| `/login?error=google_failed` | anything wrong: unknown or reused state, expired flow, the flow finished in another browser, a bad token | #105, #109 |
-| `/login?error=google_denied` | the person pressed Cancel at Google | #110 |
-| `/login?error=terms_required` | a new account and `accept_terms` was not sent | #108 |
-| `/login?error=pilot_closed` | a new account while the pilot is closed | #106 |
+| the stored `return_to` (default `/`), with a **new session cookie** | success: an existing account, a linked account, or a new account (created already confirmed, with no password) | #116, #117 |
+| `/login?error=google_failed` | anything wrong: unknown or reused state, expired flow, the flow finished in another browser, a bad token | #110, #114 |
+| `/login?error=google_denied` | the person pressed Cancel at Google | #115 |
+| `/login?error=terms_required` | a new account and `accept_terms` was not sent | #113 |
+| `/login?error=pilot_closed` | a new account while the pilot is closed | #111 |
 | `/login?error=account_suspended` | the account is suspended | **not captured live**; tested |
 | `/login?error=email_unsupported` | Google's address has non-ASCII letters (not supported yet) | **not captured live**; tested |
-| `/pilot-full` | a new account and the pilot is full. **No address is in the URL.** A 15-minute cookie is set; `GET /api/pilot` then returns it as `prefill_email` (#116, #117) | #116 |
+| `/pilot-full` | a new account and the pilot is full. **No address is in the URL.** A 15-minute cookie is set; `GET /api/pilot` then returns it as `prefill_email` (#121, #122) | #121 |
 
 Matching, in short: an account already linked to that Google account signs in; otherwise an account
 with the same email gets the Google account linked (**an unconfirmed password account is confirmed and
@@ -216,7 +227,7 @@ When the Google client is not configured the routes answer 404 `google_signin_un
 with Google is not available." (#3).
 
 **Not exercised live:** Google itself. In the capture the consent screen and the code exchange are
-replaced by a stand-in that returns a chosen identity (`StandInGoogle`); the consent URL in #103 is the
+replaced by a stand-in that returns a chosen identity (`StandInGoogle`); the consent URL in #108 is the
 real one the app builds, and the redirects and cookies are the real ones. **The real round trip
 (consent screen, Google's token endpoint, the ID token) has not been run; do that once with a real
 Google test account before relying on it.**
@@ -225,7 +236,7 @@ Google test account before relying on it.**
 
 `GET /api/session` now carries `unread_notifications` (section 11).
 
-`GET /api/notifications?limit=50&before_id=` (#95, #96): newest first.
+`GET /api/notifications?limit=50&before_id=` (#100, #101): newest first.
 
 ```json
 {
@@ -233,21 +244,21 @@ Google test account before relying on it.**
     { "id": 1, "kind": "account.reset_link_issued", "severity": "warning",
       "title": "A password reset link was made for your account",
       "body": "An administrator made a one-time password reset link for your account. If you did not ask for this, tell us at once.",
-      "meeting_id": null, "created_at": "2026-11-03T12:04:03.778665Z", "read_at": null }
+      "meeting_id": null, "created_at": "2026-11-03T12:59:55.485967Z", "read_at": null }
   ],
   "has_more": false, "next_before_id": null
 }
 ```
 `severity` is `info`, `warning` or `error`. Page with `before_id = next_before_id`; `limit` 1 to 100
-(else 422 `validation_error`, #97).
+(else 422 `validation_error`, #102).
 
-- `POST /api/notifications/{id}/read` → the notification with `read_at` set (#98); repeating it keeps
-  the first time (#99). Someone else's id: **404** `not_found` — "No such notification" (#100).
-- `POST /api/notifications/read-all` → `{"unread_notifications": 0}` (#101).
+- `POST /api/notifications/{id}/read` → the notification with `read_at` set (#103); repeating it keeps
+  the first time (#104). Someone else's id: **404** `not_found` — "No such notification" (#105).
+- `POST /api/notifications/read-all` → `{"unread_notifications": 0}` (#106).
 
 Kinds that exist today: `usage.hours_low` (written by the app at 80 % of the hours) and
 `account.reset_link_issued` (the admin made a reset link for this user: show it prominently). In
-#95 ids 2 and 3 were **inserted by SQL** in the shape `usage.hours_low` takes; id 1 is the real notice.
+#100 ids 2 and 3 were **inserted by SQL** in the shape `usage.hours_low` takes; id 1 is the real notice.
 
 ## 11. Changes to routes you already use
 
@@ -263,46 +274,46 @@ Kinds that exist today: `usage.hours_low` (written by the app at 80 % of the hou
 next to `user` and `usage`, not inside either.
 
 **`POST /api/meetings`** has a new refusal: **409 `bot_busy`** — "The note taker is busy right now. Try
-again in a few minutes." (#93). It means the note taker is on someone else's meeting and says nothing
+again in a few minutes." (#98). It means the note taker is on someone else's meeting and says nothing
 about whose. **Trap:** `bot_already_active` — "A bot is already on a meeting. Wait for it to finish
-first." (#89) now means **the caller's own** meeting is running; it no longer fires because of anyone
+first." (#94) now means **the caller's own** meeting is running; it no longer fires because of anyone
 else. Show both messages as they come.
 
 ## 12. The admin API (`/api/admin/...`)
 
 Every route needs a signed-in **admin**: a visitor gets 401 `not_authenticated` — "Log in first."
-(#69), an ordinary user 403 `forbidden` — "This is for the administrator only." (#68). There is no
+(#74), an ordinary user 403 `forbidden` — "This is for the administrator only." (#73). There is no
 route to read another user's meetings, notes or calendar.
 
-**Users.** `GET /api/admin/users?limit=&before_id=` (#55, #56), newest first, deleted users not listed:
+**Users.** `GET /api/admin/users?limit=&before_id=` (#60, #61), newest first, deleted users not listed:
 
 ```json
-{ "users": [ { "id": 4, "email": "third@example.test", "name": "Third", "is_admin": false,
+{ "users": [ { "id": 5, "email": "late@example.test", "name": "Late Example", "is_admin": false,
     "status": "active", "email_verified": false, "has_password": true, "has_google": false,
-    "created_at": "2026-11-03T12:04:03.610810Z", "last_login_at": null, "used_seconds": 0,
+    "created_at": "2026-11-03T12:59:54.569972Z", "last_login_at": null, "used_seconds": 0,
     "cap_seconds": 18000, "hours_cap_override": null } ],
-  "has_more": true, "next_before_id": 4 }
+  "has_more": true, "next_before_id": 5 }
 ```
 `cap_seconds` is what the user may record (override, else default; `null` = no cap, an admin);
 `hours_cap_override` is the admin's per-user number alone. No hash or Google id is ever returned.
 
 `PATCH /api/admin/users/{id}` with `{"status": "suspended"|"active"}` and/or `{"hours_cap_seconds":
-n|null}` (#59 to #61, #67): returns the same user object. Only the fields sent change; `null` clears
-the override. An empty body is 422 `validation_error` — "Send `status` or `hours_cap_seconds`." (#62);
-`is_admin` or any other field is 422 (#63). Suspending signs the user out **for good** (reactivating
-does not revive old sessions). An unknown or deleted id is 404 `not_found` (#66).
+n|null}` (#64 to #66, #72): returns the same user object. Only the fields sent change; `null` clears
+the override. An empty body is 422 `validation_error` — "Send `status` or `hours_cap_seconds`." (#67);
+`is_admin` or any other field is 422 (#68). Suspending signs the user out **for good** (reactivating
+does not revive old sessions). An unknown or deleted id is 404 `not_found` (#71).
 
-`DELETE /api/admin/users/{id}` → `202 {"status": "deleting"}` (#85). The user is out and their place is
-free at once (#86, #87: a deleted account looks unknown); the **worker** removes their data afterwards
+`DELETE /api/admin/users/{id}` → `202 {"status": "deleting"}` (#90). The user is out and their place is
+free at once (#91, #92: a deleted account looks unknown); the **worker** removes their data afterwards
 (not run in the capture).
 
 **Last admin:** suspending or deleting the only active admin is 409 `last_admin` — "This is the only
-active admin account, so it cannot be suspended or deleted." (#64, #65).
+active admin account, so it cannot be suspended or deleted." (#69, #70).
 
-`POST /api/admin/users/{id}/reset-link` → `{"reset_url": "…/reset-password?token=<token-3>"}` (#70):
+`POST /api/admin/users/{id}/reset-link` → `{"reset_url": "…/reset-password?token=<token-3>"}` (#75):
 for when mail is not working. Shown once, never mailed, valid 30 minutes, replaces an earlier link,
 and the user gets a `warning` notification. Refused for an **admin** account — 409 `admin_account`,
-"A reset link cannot be made for an admin account." (#71) — and for an unconfirmed
+"A reset link cannot be made for an admin account." (#76) — and for an unconfirmed
 (`user_not_verified`) or suspended (`account_suspended`) one (**the last two not captured live**,
 tested).
 
@@ -313,36 +324,38 @@ tested).
   "password_signup_enabled": false, "slots_taken": 0, "state": "closed" }
 ```
 `PUT /api/admin/pilot` takes the four settings (**all required**; `max_accounts` and
-`default_hours_cap_seconds` may be `null` for no limit) and returns the same object (#10, #72). A bad
-number is 422 with `fields` (#9). `slots_taken` counts accounts that are not admins and not deleted
-(suspended and unconfirmed ones too) **plus live invitations** (#75). `password_signup_enabled` stays
+`default_hours_cap_seconds` may be `null` for no limit) and returns the same object (#10, #77). A bad
+number is 422 with `fields` (#9). `slots_taken` counts confirmed accounts that are not admins (suspended ones too), accounts made
+from an invitation that are not confirmed yet, **plus live invitations** (#80). A plain unconfirmed
+account holds no place. `password_signup_enabled` stays
 off until a real verification mail has been delivered once.
 
-**Waitlist.** `GET /api/admin/waitlist?limit=&before_id=` (#57): oldest first, without the removed;
+**Waitlist.** `GET /api/admin/waitlist?limit=&before_id=` (#62): oldest first, without the removed;
 `before_id` means "continue after this id" (`next_before_id`).
 
 `POST /api/admin/waitlist/{id}/invite` reserves a place for 7 days:
-- mail configured → `{"emailed": true, "invite_url": null, "expires_at": "2026-11-10T12:04:03.803403Z"}` (#73);
+- mail configured → `{"emailed": true, "invite_url": null, "expires_at": "2026-11-10T12:59:55.614989Z"}` (#78);
   the entry becomes `invited` and the person is mailed;
-- **no mail provider** → `{"emailed": false, "invite_url": "https://notes.example.test/signup?invite=<token-5>", "expires_at": "2026-11-10T12:04:03.994032Z"}`
-  (#82): the admin sends the link himself;
-- no free place → 409 `pilot_full` — "There is no free place to reserve. Raise the limit first." (#58);
+- **no mail provider** → `{"emailed": false, "invite_url": "https://notes.example.test/signup?invite=<token-8>", "expires_at": "2026-11-10T12:59:56.326566Z"}`
+  (#87): the admin sends the link himself;
+- no free place → 409 `pilot_full` — "There is no free place to reserve. Raise the limit first." (#63);
 - someone who already joined or was removed → 409 `waitlist_entry_closed` (**not captured live**, tested).
 
 Inviting again replaces the earlier link and holds one place. The invited address signs up with
-`invite_token` (#78) even while the pilot is `full` or `closed`; for any other address it is 400
-`invite_invalid` (#77) and it works once (#79); the entry then shows `joined` (#80).
-`DELETE /api/admin/waitlist/{id}` → 204: removes the person and frees any reserved place (#83).
+`invite_token` (#83) even while the pilot is `full` or `closed`; for any other address it is 400
+`invite_invalid` (#82) and it works once (#84); the entry then shows `joined` (#85).
+`DELETE /api/admin/waitlist/{id}` → 204: removes the person and frees any reserved place (#88).
 
-**Failed mail.** `GET /api/admin/mail-failures` → `{"failures": []}` (#84; empty here because the worker
+**Failed mail.** `GET /api/admin/mail-failures` → `{"failures": []}` (#89; empty here because the worker
 is not running in the capture). Each item is `{id, to_email, template, attempts, last_error,
 created_at}`, never a link. **Item shape not captured live** (tested).
 
 ## 13. State machines and polling
 
-- **Account:** `unverified` (created, cannot sign in: 403 `email_not_verified`) → `active` (verified)
-  ⇄ `suspended` (cannot sign in; signed out at once) → deleted (looks unknown). An unverified account
-  is **deleted automatically after 48 hours** (the worker; not run live), which frees its place.
+- **Account:** `unverified` (created, cannot sign in: it gets the ordinary 401) → `active` (verified;
+  a place is taken now) ⇄ `suspended` (cannot sign in; signed out at once) → deleted (looks unknown).
+  An unverified account is **deleted automatically 48 hours after its last sign-up submission** (a
+  resend does not extend it; the worker; not run live). It held no place, so nothing is freed.
 - **Waitlist entry:** `waiting` → `invited` (a place is held 7 days) → `joined`; or `removed`.
 - **Pilot:** `closed` ⇄ `open` ⇄ `full`, by the admin's settings and the number of places taken.
 - **Polling:** the bell: read `unread_notifications` from `GET /api/session` (call it on page load and
@@ -351,42 +364,40 @@ created_at}`, never a link. **Item shape not captured live** (tested).
 
 ## 14. UX consequences the frontend must surface
 
-1. **"Check your email" is the only answer to sign-up, resend and forgot-password.** Never say whether an
-   address exists. Never say "we sent you a mail" as a fact; say "if…".
-2. **The verify page asks for the password again.** Say why in one line ("the one you chose when you
-   signed up"). Five wrong tries kill the link: after `token_invalid_or_expired` offer a new link.
-3. **Verification and reset do not sign the person in.** Send them to the sign-in page afterwards.
-4. **A password reset signs the user out on every device.** Say so.
-5. **A mail can be dropped silently** (1 per minute per address). Do not show a "resend" button as
-   instantly usable; a 30 to 60 second wait is honest.
-6. **A suspended account is signed out on its next request** (401 `not_authenticated`): handle a sudden
-   401 with the sign-in screen, not an error.
-7. **`account.reset_link_issued` is a security notice**: show it in the bell with its `warning` severity.
-8. **Google sign-up needs the terms checkbox ticked first**, and the button must pass `accept_terms=true`.
-9. **Admin screens must treat `emailed: false` as "copy this link and send it yourself"** and show the
-   link once.
+1. **Signing in never says "confirm your email".** An unconfirmed account gets the ordinary "That email or password is not right." Put the "confirm your email" screen after sign-up.
+2. **"Check your email" is the only answer to sign-up, resend and forgot-password.** Never say whether an address exists. Never say "we sent you a mail" as a fact; say "if…".
+3. **The verify page asks for the password again.** Say why in one line ("the one you chose when you signed up"). Five wrong tries kill the link: after `token_invalid_or_expired` offer a new link.
+4. **A place is taken when the account is confirmed.** Someone can sign up while there is room and get `pilot_full` (409) when they confirm: show the pilot-full screen and the waitlist form, and keep the link (it works when a place opens).
+5. **Verification and reset do not sign the person in.** Send them to the sign-in page afterwards.
+6. **A password reset signs the user out on every device.** Say so.
+7. **A mail can be dropped silently** (1 per minute per address). Do not show a "resend" button as instantly usable; a 30 to 60 second wait is honest.
+8. **A suspended account is signed out on its next request** (401 `not_authenticated`): handle a sudden 401 with the sign-in screen, not an error. Suspending also ends old sessions for good.
+9. **`account.reset_link_issued` is a security notice**: show it in the bell with its `warning` severity. It means the administrator made a one-time reset link for this user at their request; whoever uses that link can sign in as them.
+10. **Google sign-up needs the terms checkbox ticked first**, and the button must pass `accept_terms=true`.
+11. **Admin screens must treat `emailed: false` as "copy this link and send it yourself"** and show the link once.
 
 ## 15. Verification table
 
 | Behaviour | Status |
 |---|---|
-| Pilot states, closed/open/full, `google_signin`, `prefill_email` | **verified live** (#2, #4, #11, #53, #117) |
+| Pilot states, closed/open/full, `google_signin`, `prefill_email` | **verified live** (#2, #4, #11, #57, #122) |
 | Sign-up 202 for new, existing and repeat address; mails queued (`verify_email`, `already_registered`) | **verified live** (#18 to #20, #31, #32; the mail rows are read from `mail_outbox`) |
-| Sign-up errors: closed, full, weak password, terms, bad email, missing/extra field, no CSRF, rate limit | **verified live** (#5, #12 to #17, #54, #119) |
-| Sign-up errors: `password_signup_disabled`, `invalid_name`, `server_busy`, password length messages | **not exercised live** (tested in `tests/test_signup.py`) |
-| Verify email: ok, wrong password, unknown, used; not signed in; login before verifying | **verified live** (#21 to #26) |
+| Sign-up errors: closed, full, weak password, terms, bad email, missing/extra field, no CSRF, rate limit | **verified live** (#5, #12 to #17, #59, #124) |
+| Sign-up errors: `password_signup_disabled` (also with no mail provider), `invalid_name`, `server_busy`, the cap of 100 unconfirmed accounts and its clearing of abandoned ones, password length messages | **not exercised live** (tested in `tests/test_signup.py`) |
+| Verify email: ok, wrong password, unknown, used; not signed in; login before verifying is the ordinary 401 | **verified live** (#21 to #26) |
+| A place is taken at confirmation: unconfirmed accounts leave the pilot `open` (#53); confirming after it filled up is 409 `pilot_full` and the link survives (#58) | **verified live** |
 | Verify email: 24-hour expiry, 5-wrong-passwords lock | **not exercised live** (tested with injected expiry and repeated calls) |
 | Resend and forgot: identical 202s; reset ok, weak, bad, used; sessions revoked | **verified live** (#35 to #48) |
 | Reset 30-minute expiry | **not exercised live** (tested) |
 | Waitlist join, repeat, bad email | **verified live** (#49 to #51) |
-| Admin users list, patch (suspend, hours, empty, `is_admin`, last admin, unknown), delete, 403 and 401 | **verified live** (#55 to #69, #85 to #87) |
-| Admin reset link (made, for an admin refused, notification) | **verified live** (#70, #71, #95); the `user_not_verified` and `account_suspended` refusals **not live** |
-| Admin pilot read, write, validation; slots with a reservation | **verified live** (#8 to #10, #72, #75) |
-| Admin invite (mailed, link returned without mail, full, signup with it, wrong address, used) | **verified live** (#58, #73, #77 to #82); `waitlist_entry_closed` **not live** |
-| Admin mail-failures | **empty list verified live** (#84); item shape not live |
-| `bot_busy` for someone else's meeting; `bot_already_active` for your own | **verified live** (#88, #89, #93) |
-| Notifications: list, page, bad limit, read, repeat, foreign 404, read-all, unread count | **verified live** (#94 to #101) |
-| Google routes: start redirect and cookie, callback success, denied, unknown state, no cookie, terms, closed, full, off | **verified live with Google's side stood in** (#3, #103 to #117) |
+| Admin users list, patch (suspend, hours, empty, `is_admin`, last admin, unknown), delete, 403 and 401 | **verified live** (#60 to #74, #90 to #92) |
+| Admin reset link (made, for an admin refused, notification) | **verified live** (#75, #76, #100); the `user_not_verified` and `account_suspended` refusals **not live** |
+| Admin pilot read, write, validation; slots with a reservation | **verified live** (#8 to #10, #77, #80) |
+| Admin invite (mailed, link returned without mail, full, signup with it, wrong address, used) | **verified live** (#63, #78, #82 to #87); `waitlist_entry_closed` **not live** |
+| Admin mail-failures | **empty list verified live** (#89); item shape not live |
+| `bot_busy` for someone else's meeting; `bot_already_active` for your own | **verified live** (#93, #94, #98) |
+| Notifications: list, page, bad limit, read, repeat, foreign 404, read-all, unread count | **verified live** (#99 to #106) |
+| Google routes: start redirect and cookie, callback success, denied, unknown state, no cookie, terms, closed, full, off | **verified live with Google's side stood in** (#3, #108 to #122) |
 | Google: the real consent screen, token exchange and ID token; `account_suspended`, `email_unsupported` redirects | **not exercised live** |
 | Mail delivery by Resend | **not exercised** (nothing is sent in the capture; the mail text is not captured, only the queued payload) |
 | The worker: sending mail, purging deleted accounts, the 48-hour sweep, hourly sweeps | **not exercised live** (tested in `tests/test_mail.py`, `test_admin.py`, `test_maintenance.py`) |

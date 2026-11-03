@@ -1,0 +1,11 @@
+{
+  "note": "7 days; reserves the place.",
+  "content": {
+    "to_email": "wendy@example.test",
+    "template": "waitlist_invite",
+    "payload": {
+      "link": "https://notes.example.test/signup?invite=<token-7>",
+      "name": "Wendy Example"
+    }
+  }
+}

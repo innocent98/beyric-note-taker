@@ -1,5 +1,5 @@
 {
-  "note": "A correct password for an unverified account: 403, no session.",
+  "note": "A correct password for an unconfirmed account: the same 401 as a wrong password or an unknown email (it must not reveal the account), no session.",
   "client": "visitor",
   "request": {
     "method": "POST",
@@ -14,15 +14,15 @@
     }
   },
   "response": {
-    "status": 403,
+    "status": 401,
     "headers": {
       "content-type": "application/json",
       "cache-control": "no-store"
     },
     "body": {
       "error": {
-        "code": "email_not_verified",
-        "message": "Confirm your email first: open the link we sent you."
+        "code": "invalid_credentials",
+        "message": "That email or password is not right."
       }
     }
   }
