@@ -124,7 +124,9 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] Adebayo: Google Cloud project, OAuth consent screen, verify beyrictech.com in Search Console, mailboxes privacy@/legal@/security@
   - [ ] Submit for verification (needs the working calendar flow and a demo video)
 - [x] Frontend approach decided: stay on Jinja, with parity and flexibility as conditions (`docs/superpowers/specs/2026-11-02-frontend-approach.md`, 2026-11-02)
-- [ ] Written design (`docs/superpowers/specs/`), builder check, Adebayo's approval
+- [ ] Written design (`docs/superpowers/specs/2026-11-03-pilot-accounts-calendar-design.md`): **draft written and builder-checked 2026-11-03, awaiting Adebayo's approval** (23 open questions with recommended answers at the top of the spec; personal-Gmail support for instant-Meet events is undocumented, spike P0.2 decides)
+  - [ ] Adebayo answers Q1 to Q23
+  - [ ] Phase 0 (parallel): Google Cloud project and billing; instant-Meet spike S1 to S7; Vexa chat and per-key limit check; mail provider and DNS; bots-per-machine measurement
 - [ ] Plan (superpowers:writing-plans)
 - [ ] Accounts: sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap
 - [ ] Calendar auto-join (Google): connect, upcoming list with per-meeting toggle, rules (all / only ones I organise / only when I turn it on), template for calendar meetings, scheduler in the worker
