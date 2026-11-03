@@ -114,6 +114,7 @@ def env(monkeypatch, tmp_path):
     pipeline._needs_help_since.clear()
     pipeline._stop_tries.clear()
     pipeline._gone_checks.clear()
+    pipeline._lookup_misses.clear()
 
     def fake_prepare(source, out_dir):
         return audio.Recording(_good_chunks(out_dir), RECORDED_SECONDS)

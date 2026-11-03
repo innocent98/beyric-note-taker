@@ -8,8 +8,9 @@ import type { MeetingList as MeetingListData, MeetingSummary, Template } from "@
 import { formatTime, plural } from "@/lib/format";
 
 // The list of meetings, newest first. The first page comes from the server render; older pages are
-// fetched on request with before_id (docs/fe-integration-guide-owner-app.md 5.1). The page also
-// refreshes when the tab comes back into view, as the guide suggests (the list does not poll).
+// fetched on request with before_id (docs/fe-integration-guide-owner-app.md 5.1). The page asks for a
+// fresh first page every `refresh_after_seconds` while a listed meeting is being worked on (the
+// status words change), and when the tab comes back into view.
 export function MeetingList({ initial, templates }: { initial: MeetingListData; templates: Template[] }) {
   const router = useRouter();
   const [older, setOlder] = useState<MeetingSummary[]>([]);
@@ -17,13 +18,20 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
+  // Refreshing re-renders the server component with a new `initial`, so the interval stops by
+  // itself once nothing listed is being worked on (it becomes null).
+  const interval = initial.refresh_after_seconds;
   useEffect(() => {
-    const onVisible = () => {
+    const refresh = () => {
       if (document.visibilityState === "visible") router.refresh();
     };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [router]);
+    const timer = interval === null ? undefined : setInterval(refresh, interval * 1000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      if (timer !== undefined) clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [router, interval]);
 
   const shown = new Set(initial.meetings.map((m) => m.id));
   const meetings = [...initial.meetings, ...older.filter((m) => !shown.has(m.id))];

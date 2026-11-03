@@ -218,17 +218,19 @@ def _summary(meeting: Meeting) -> MeetingSummary:
     )
 
 
-def _detail(meeting: Meeting) -> MeetingDetail:
+def _detail(meeting: Meeting, session: Session) -> MeetingDetail:
     """The meeting as its page shows it. The meeting link is never included: a Zoom link
     carries its meeting password."""
     failed, ready = meeting.status == "failed", meeting.status == "ready"
     block = services.retry_block(meeting) if failed else None
+    active = meeting.status in services.ACTIVE
     return MeetingDetail(
         **_summary(meeting).model_dump(),
         failure_reason=(meeting.failure_reason or REASON_UNEXPECTED) if failed else None,
         retry_block=block,
         retry_block_message=services.retry_block_message(meeting, block),
-        can_cancel=meeting.status == "bot_sent",
+        can_cancel=services.can_cancel(meeting),
+        can_end=services.can_end(meeting),
         can_retry=failed and block is None,
         can_regenerate=ready,
         join_attempts=meeting.join_attempts,
@@ -236,10 +238,9 @@ def _detail(meeting: Meeting) -> MeetingDetail:
         bot_left_early=ready and meeting.completion_reason in REMOVAL_REASONS,
         speakers_incomplete=meeting.speakers_incomplete,
         refresh_after_seconds=(
-            REFRESH_SECONDS
-            if meeting.status in services.ACTIVE or (block is not None and is_join_failure(meeting))
-            else None
+            REFRESH_SECONDS if active or (block is not None and is_join_failure(meeting)) else None
         ),
+        worker_stale=active and services.worker_is_stale(session),
         join_retry_at=join_retry_at(meeting),
         notes=meeting.notes if ready else None,
         notes_html=str(services.render_markdown(meeting.notes)) if ready else None,
@@ -263,6 +264,9 @@ def list_meetings(
         has_more=len(rows) > limit,
         next_before_id=page[-1].id if len(rows) > limit else None,
         worker_stale=services.worker_is_stale(session),
+        refresh_after_seconds=(
+            REFRESH_SECONDS if any(m.status in services.ACTIVE for m in page) else None
+        ),
     )
 
 
@@ -272,7 +276,7 @@ def get_meeting(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MeetingDetail:
-    return _detail(services.meeting_or_404(session, user, meeting_id))
+    return _detail(services.meeting_or_404(session, user, meeting_id), session)
 
 
 @router.post(
@@ -295,7 +299,7 @@ def create_meeting(
         session, vexa, user, body.url, body.template_id, request.app.state.settings
     )
     response.headers["Location"] = f"/api/meetings/{meeting.id}"
-    return _detail(meeting)
+    return _detail(meeting, session)
 
 
 @router.post(
@@ -309,9 +313,31 @@ def cancel_meeting(
     user: User = Depends(auth.current_user),
     vexa=Depends(get_vexa),
 ) -> MeetingDetail:
-    """Take the bot out of a meeting that is still `bot_sent`."""
+    """Take the bot out of a meeting that is still `bot_sent` and discard it. Only when `can_cancel`
+    is true: once the bot has been ended with `POST /end` (the notes are being written) it is 409
+    `already_ending`; 409 `meeting_busy` when the worker holds the meeting, try again."""
     meeting = services.meeting_or_404(session, user, meeting_id)
-    return _detail(services.cancel_meeting(session, vexa, meeting))
+    return _detail(services.cancel_meeting(session, vexa, meeting), session)
+
+
+@router.post(
+    "/meetings/{meeting_id:id}/end",
+    tags=["meetings"],
+    responses={code: {"model": ErrorResponse} for code in (404, 409, 502)},
+)
+def end_meeting(
+    meeting_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+    vexa=Depends(get_vexa),
+) -> MeetingDetail:
+    """ "End now and write the notes": take the bot out of the call and write the notes from what
+    it recorded. Only when `can_end` is true (409 `not_endable` otherwise, 409 `already_ending`
+    when it was asked already, 409 `meeting_busy` when the worker holds the meeting: try again).
+    The meeting stays `bot_sent` while the bot leaves, then follows the usual steps; it is not a
+    cancel and nothing is discarded."""
+    meeting = services.meeting_or_404(session, user, meeting_id)
+    return _detail(services.end_meeting(session, vexa, meeting), session)
 
 
 @router.post(
@@ -329,7 +355,7 @@ def retry_meeting(
     meeting whose join the worker ended (Google refused the bot, or it hung on a prompt) this
     sends a new bot instead, no sooner than 5 minutes after the failure."""
     meeting = services.meeting_or_404(session, user, meeting_id)
-    return _detail(services.retry_meeting(session, meeting, vexa))
+    return _detail(services.retry_meeting(session, meeting, vexa), session)
 
 
 @router.post(
@@ -346,7 +372,9 @@ def regenerate_notes(
 ) -> MeetingDetail:
     """Rewrite the notes of a `ready` meeting with a template. Runs in the request: allow 5 min."""
     meeting = services.meeting_or_404(session, user, meeting_id)
-    return _detail(services.regenerate_notes(session, meeting, body.template_id, openai_client))
+    return _detail(
+        services.regenerate_notes(session, meeting, body.template_id, openai_client), session
+    )
 
 
 # ---- templates ----

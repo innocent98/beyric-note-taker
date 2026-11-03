@@ -87,7 +87,47 @@ def test_send_bot_posts_full_url_and_returns_id(httpx_mock, client):
     assert client.send_bot(url) == 5
     req = httpx_mock.get_requests()[0]
     assert req.headers["X-API-Key"] == "test-key"
-    assert json.loads(req.content) == {"meeting_url": url, "bot_name": "Test Bot"}
+    assert json.loads(req.content) == {
+        "meeting_url": url,
+        "bot_name": "Test Bot",
+        "automatic_leave": {"max_time_left_alone": 300_000},
+    }
+
+
+def _sent_body(httpx_mock, client) -> dict:
+    httpx_mock.add_response(
+        method="POST", url="http://vexa.test/bots", status_code=201, json={"id": 1}
+    )
+    client.send_bot("https://meet.google.com/abc-defg-hij")
+    return json.loads(httpx_mock.get_requests()[0].content)
+
+
+def test_send_bot_asks_vexa_to_leave_after_the_configured_silence_in_milliseconds(
+    httpx_mock, monkeypatch
+):
+    monkeypatch.setenv("VEXA_BASE_URL", "http://vexa.test")
+    monkeypatch.setenv("VEXA_API_KEY", "test-key")
+    monkeypatch.setenv("BOT_LEFT_ALONE_SECONDS", "120")
+    get_settings.cache_clear()
+    try:
+        body = _sent_body(httpx_mock, VexaClient())
+    finally:
+        get_settings.cache_clear()
+    assert body["automatic_leave"] == {"max_time_left_alone": 120_000}
+
+
+@pytest.mark.parametrize("value", ["0", "-5"])
+def test_a_window_of_zero_or_less_leaves_vexas_own_default_in_place(httpx_mock, monkeypatch, value):
+    # Vexa answers 422 to a window that is not a positive integer, which would stop every send.
+    monkeypatch.setenv("VEXA_BASE_URL", "http://vexa.test")
+    monkeypatch.setenv("VEXA_API_KEY", "test-key")
+    monkeypatch.setenv("BOT_LEFT_ALONE_SECONDS", value)
+    get_settings.cache_clear()
+    try:
+        body = _sent_body(httpx_mock, VexaClient())
+    finally:
+        get_settings.cache_clear()
+    assert "automatic_leave" not in body
 
 
 @pytest.mark.parametrize(

@@ -40,6 +40,9 @@ REASON_NOTES = "The notes could not be written. The transcript was saved."
 REASON_UNEXPECTED = "Something went wrong while processing this meeting."
 REASON_DOWNLOAD = "The recording could not be downloaded from the meeting bot."
 REASON_CANCELLED = "You cancelled this meeting before it was recorded."
+REASON_ENDED_NOTHING_RECORDED = (
+    "You ended this meeting before anything was recorded, so there are no notes to write."
+)
 REASON_NOT_LET_IN = (
     "The bot was not let into the meeting. The host may have declined it, or the waiting room "
     "timed out."
@@ -87,11 +90,31 @@ JOIN_BUTTON_ERROR = "could not locate join button"
 MEET_MARKETING_URL = "workspace.google.com/products/meet"
 
 # What the bot is doing while the call runs, as Vexa reports it (`status` in the lifecycle schema).
-# The worker keeps it in `Meeting.completion_reason` while the meeting is `bot_sent`, so the owner's
-# page can say it (`services.status_text`); no column of its own. `BOT_RECORDING` is not a Vexa
+# The worker keeps it in `Meeting.completion_reason` while the meeting is `bot_sent`, with the time
+# of the poll that saw it in `bot_state_seen_at`, so the owner's page can say it
+# (`services.status_text`); no column of its own for the state. `BOT_RECORDING` is not a Vexa
 # status: it is `active` once segments or a recording id prove something is being captured.
 BOT_RECORDING = "recording"
-BOT_LIVE_STATES = ("joining", "awaiting_admission", "active", "needs_help", BOT_RECORDING)
+BOT_LIVE_STATES = (
+    "requested",
+    "joining",
+    "awaiting_admission",
+    "active",
+    "needs_help",
+    "stopping",
+    BOT_RECORDING,
+)
+# Stored in `completion_reason` by "End now and write the notes" (`services.end_meeting`) while the
+# bot is leaving. Not a live state, so a poll never replaces it; Vexa's own completion reason
+# replaces it once the bot has gone.
+BOT_END_REQUESTED = "end_requested"
+# The states in which the owner may end the bot with "End now and write the notes": in the call.
+# At the door Vexa tears the bot down and ends it `failed`, so there would be nothing to write
+# notes from (Cancel says that better); a bot still joining, one asking for help, and one already
+# leaving are not offered it either.
+BOT_ENDABLE_STATES = ("active", BOT_RECORDING)
+# Consecutive failed lookups before the bot's state is given up on. One failed lookup is a blip.
+LOOKUP_MISSES_BEFORE_UNKNOWN = 2
 
 # Zoom sometimes refuses the bot's browser and lets the next one in (2 of 3 joins were refused
 # on 2026-11-02, the third got in), so a refusal is retried up to this many bots in total.
@@ -116,6 +139,8 @@ _needs_help_since: dict[int, datetime] = {}
 # send. Lost on a restart, which only gives them a fresh count.
 _stop_tries: dict[int, int] = {}
 _gone_checks: dict[int, int] = {}
+# Consecutive failed Vexa lookups per meeting. Lost on a restart, which only forgets a miss.
+_lookup_misses: dict[int, int] = {}
 
 
 def audio_path(meeting_id: int) -> Path:
@@ -144,6 +169,7 @@ def _fail(session: Session, meeting: Meeting, reason: str) -> None:
     meeting.status = "failed"
     meeting.failure_reason = reason
     _no_audio_polls.pop(meeting.id, None)
+    _lookup_misses.pop(meeting.id, None)
     session.commit()
 
 
@@ -161,25 +187,43 @@ def _remember(meeting: Meeting, info: VexaMeeting) -> None:
     """Keep what Vexa told us that is needed later: its recording id and why the bot left."""
     if info.recording_id is not None:
         meeting.vexa_recording_id = info.recording_id
-    if info.completion_reason is not None:
+    # The owner's End press stays on the row until the meeting is done: it is what tells "you
+    # ended this" from a stop Vexa reports for any other reason, in every poll that follows.
+    if info.completion_reason is not None and meeting.completion_reason != BOT_END_REQUESTED:
         meeting.completion_reason = info.completion_reason
 
 
 def _live_state(info: VexaMeeting) -> str | None:
     """The bot's state for the owner while the call runs, or None when Vexa says something else
-    (not reported yet, over, failed)."""
-    if info.status == "active" and (info.segments or info.recording_id is not None):
+    (over, failed)."""
+    captured = bool(info.segments) or info.recording_id is not None
+    if info.status == "active" and captured:
         return BOT_RECORDING
+    if info.status == "needs_help" and captured:
+        # Help is asked for, but the bot has already heard the call, so it was in: do not tell
+        # the owner it is waiting on a prompt (`_join_problem` leaves such a bot be, too).
+        return "active"
     return info.status if info.status in BOT_LIVE_STATES else None
 
 
-def _record_live_state(meeting: Meeting, state: str | None) -> None:
-    """Keep the bot's state in `completion_reason`, never over a marker the worker stored itself
-    (the refusal marker) or over a reason Vexa gave for the bot leaving."""
+def _record_live_state(meeting: Meeting, state: str | None, now: datetime) -> None:
+    """Keep the bot's state in `completion_reason` and when it was seen in `bot_state_seen_at`,
+    never over a marker the worker stored itself (the refusal marker, the end request) or over a
+    reason Vexa gave for the bot leaving."""
     held = meeting.completion_reason
     if held is not None and held not in BOT_LIVE_STATES:
         return
     meeting.completion_reason = state
+    meeting.bot_state_seen_at = now if state is not None else None
+
+
+def _lookup_missed(meeting: Meeting, now: datetime) -> None:
+    """A lookup failed: forget the bot's state only after `LOOKUP_MISSES_BEFORE_UNKNOWN` in a row.
+    The state's time is not renewed meanwhile, so the page stops trusting it on its own."""
+    misses = _lookup_misses.get(meeting.id, 0) + 1
+    _lookup_misses[meeting.id] = misses
+    if misses >= LOOKUP_MISSES_BEFORE_UNKNOWN:
+        _record_live_state(meeting, None, now)
 
 
 def _zoom_blocked(info: VexaMeeting) -> bool:
@@ -196,8 +240,18 @@ def _zoom_blocked_reason(attempts: int, *, resend_failed: bool = False) -> str:
     return f"Zoom blocked the bot from joining: it refused the bot's browser {tries}.{tail}"
 
 
+def _nothing_recorded_reason(meeting: Meeting) -> str:
+    """Why a finished meeting has no recording: the owner ended it first, or the bot was never
+    let in."""
+    if meeting.completion_reason == BOT_END_REQUESTED:
+        return REASON_ENDED_NOTHING_RECORDED
+    return REASON_NOT_ADMITTED
+
+
 def bot_failure_reason(meeting: Meeting, info: VexaMeeting) -> str:
     """Plain words for a failed bot, from what Vexa reported."""
+    if meeting.completion_reason == BOT_END_REQUESTED:
+        return REASON_ENDED_NOTHING_RECORDED  # the owner stopped the bot before it recorded
     if _zoom_blocked(info):
         return _zoom_blocked_reason(meeting.join_attempts)
     if info.completion_reason == "awaiting_admission_rejected":
@@ -222,10 +276,12 @@ def send_again(meeting: Meeting, vexa) -> bool:
     meeting.vexa_recording_id = None
     meeting.completion_reason = None
     meeting.terminal_seen_at = None
+    meeting.bot_state_seen_at = None
     _no_audio_polls.pop(meeting.id, None)
     _needs_help_since.pop(meeting.id, None)
     _stop_tries.pop(meeting.id, None)
     _gone_checks.pop(meeting.id, None)
+    _lookup_misses.pop(meeting.id, None)
     logger.info("meeting %s: sent a new bot (attempt %s)", meeting.id, meeting.join_attempts)
     return True
 
@@ -377,13 +433,12 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
             info = _lookup(vexa, meeting)
         except VexaError as exc:
             logger.warning("meeting %s: Vexa unreachable (%s)", meeting.id, type(exc).__name__)
-            _record_live_state(
-                meeting, None
-            )  # not known now, so the page says no more than "Bot sent"
+            _lookup_missed(meeting, now)
 
     if info is not None:
+        _lookup_misses.pop(meeting.id, None)
         _remember(meeting, info)
-        _record_live_state(meeting, _live_state(info))
+        _record_live_state(meeting, _live_state(info), now)
         if info.status == "completed" and meeting.terminal_seen_at is None:
             meeting.terminal_seen_at = now
 
@@ -416,7 +471,7 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
             count = _no_audio_polls.get(meeting.id, 0) + 1
             _no_audio_polls[meeting.id] = count
             if count >= NO_AUDIO_GRACE_POLLS:
-                _fail(session, meeting, REASON_NOT_ADMITTED)
+                _fail(session, meeting, _nothing_recorded_reason(meeting))
                 return False
         elif (
             info.recording_id is not None
@@ -446,7 +501,7 @@ def _step_audio(session: Session, meeting: Meeting, vexa) -> bool:
         info = _lookup(vexa, meeting)
         _remember(meeting, info)
         if info.recording_id is None or info.media_id is None:
-            _fail(session, meeting, REASON_NOT_ADMITTED)
+            _fail(session, meeting, _nothing_recorded_reason(meeting))
             return False
         path.parent.mkdir(parents=True, exist_ok=True)
         # Download beside the target and rename on success, so an interrupted download can never

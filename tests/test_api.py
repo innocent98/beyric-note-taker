@@ -396,7 +396,13 @@ def test_a_login_through_the_page_works_for_the_api(client):
 
 def test_the_list_is_empty_and_flags_a_silent_worker(api):
     body = api.get("/api/meetings").json()
-    assert body == {"meetings": [], "has_more": False, "next_before_id": None, "worker_stale": True}
+    assert body == {
+        "meetings": [],
+        "has_more": False,
+        "next_before_id": None,
+        "worker_stale": True,
+        "refresh_after_seconds": None,
+    }
 
 
 def test_worker_stale_follows_the_heartbeat(api, session):
@@ -863,7 +869,7 @@ def test_regenerate_failure_keeps_the_old_notes(api, template, session, fake_ope
     assert meeting.notes == NOTES
 
 
-@pytest.mark.parametrize("action", ["cancel", "retry", "regenerate"])
+@pytest.mark.parametrize("action", ["cancel", "end", "retry", "regenerate"])
 def test_meeting_actions_on_unknown_ids_are_404(api, action):
     body = {"template_id": 1} if action == "regenerate" else None
     error_of(api.post(f"/api/meetings/999/{action}", body), 404, "not_found")
@@ -1005,7 +1011,9 @@ LIVE_STATES = [
 def test_detail_and_list_carry_the_bots_live_state_in_status_text(
     api, session, template, state, words
 ):
-    meeting = add_meeting(session, template, completion_reason=state)
+    meeting = add_meeting(
+        session, template, completion_reason=state, bot_state_seen_at=datetime.now(UTC)
+    )
     body = api.get(f"/api/meetings/{meeting.id}").json()
     assert body["status"] == "bot_sent" and body["step"] == "waiting"
     assert body["status_text"] == words
@@ -1022,3 +1030,40 @@ def test_the_live_state_does_not_leak_into_other_statuses(api, session, template
     body = api.get(f"/api/meetings/{meeting.id}").json()
     assert body["status_text"] == "Writing the notes"
     assert "completion_reason" not in body and "bot_state" not in body
+
+
+def test_the_list_says_when_to_ask_again_only_while_a_meeting_is_being_worked_on(
+    api, session, template
+):
+    ready(session, template)
+    assert api.get("/api/meetings").json()["refresh_after_seconds"] is None
+    waiting = add_meeting(session, template)
+    assert api.get("/api/meetings").json()["refresh_after_seconds"] == 30
+    waiting.status, waiting.step = "failed", "waiting"
+    session.commit()
+    assert api.get("/api/meetings").json()["refresh_after_seconds"] is None
+    add_meeting(session, template, status="processing", step="audio")
+    assert api.get("/api/meetings").json()["refresh_after_seconds"] == 30
+
+
+def test_the_detail_says_when_the_worker_looks_stale_for_a_meeting_it_should_be_moving(
+    api, session, template
+):
+    waiting = add_meeting(session, template)
+    done = ready(session, template)
+    session.add(AppState(id=1, worker_heartbeat_at=datetime.now(UTC) - timedelta(minutes=21)))
+    session.commit()
+    assert api.get(f"/api/meetings/{waiting.id}").json()["worker_stale"] is True
+    assert api.get(f"/api/meetings/{done.id}").json()["worker_stale"] is False  # nothing to move
+    session.get(AppState, 1).worker_heartbeat_at = datetime.now(UTC) - timedelta(minutes=19)
+    session.commit()
+    assert api.get(f"/api/meetings/{waiting.id}").json()["worker_stale"] is False
+
+
+def test_a_live_state_the_worker_has_not_renewed_reads_checking_on_the_bot(api, session, template):
+    old = datetime.now(UTC) - timedelta(minutes=5)
+    meeting = add_meeting(session, template, completion_reason="active", bot_state_seen_at=old)
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["status_text"] == "Checking on the bot..."
+    listed = api.get("/api/meetings").json()["meetings"]
+    assert [m["status_text"] for m in listed] == ["Checking on the bot..."]

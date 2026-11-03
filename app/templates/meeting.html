@@ -11,6 +11,10 @@
     {% call ui.page_head("Zoom " ~ meeting.native_id if meeting.platform == "zoom" else "Google Meet " ~ meeting.native_id, meeting.created_at|local_time) %}{{ head_end }}{% endcall %}
   </div>
 
+  {% if worker_stale %}
+  {% call ui.alert("notice", role="alert") %}The background worker has not checked in for over 20 minutes. This meeting will not move forward until it is running again.{% endcall %}
+  {% endif %}
+
   {% if meeting.status in ("bot_sent", "processing") or refused_wait %}
   <p class="muted">This page updates every 30 seconds.</p>
   {% endif %}
@@ -21,7 +25,21 @@
   {% call ui.alert("notice") %}{{ "Zoom" if meeting.platform == "zoom" else "Google" }} turned the bot away, so a new one was sent (attempt {{ meeting.join_attempts }}{% if meeting.platform == "zoom" %} of {{ max_join_attempts }}{% endif %}).{% endcall %}
   {% endif %}
 
-  {% if meeting.status == "bot_sent" %}
+  {% if can_end %}
+  <div class="stack-sm">
+    <p class="muted">The bot leaves the meeting now and the notes are written from what it heard so far.</p>
+    {{ ui.button("End now and write the notes", type="button", attrs='data-dialog-open="end-dialog"') }}
+  </div>
+  {% call ui.dialog("end-dialog", "End the meeting and write the notes?") %}
+  <form method="post" action="/meetings/{{ meeting.id }}/end" class="stack-sm" data-disable-on-submit>
+    {{ ui.csrf_field(csrf) }}
+    <p>The bot will leave the meeting now and the notes will be written from what it heard so far. Anything said after it leaves is not in the notes. To throw the recording away instead, cancel the meeting.</p>
+    <div class="dialog-actions">{{ ui.button("Keep recording", kind="secondary", type="button", attrs="data-dialog-close") }}{{ ui.button("End now and write the notes") }}</div>
+  </form>
+  {% endcall %}
+  {% endif %}
+
+  {% if can_cancel %}
   <form method="post" action="/meetings/{{ meeting.id }}/cancel" data-disable-on-submit>
     {{ ui.csrf_field(csrf) }}
     {{ ui.button("Cancel and remove the bot", kind="secondary") }}

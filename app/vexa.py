@@ -118,6 +118,7 @@ class VexaClient:
         self._base_url = settings.vexa_base_url.rstrip("/")
         self._headers = {"X-API-Key": settings.vexa_api_key}
         self._bot_name = settings.bot_name
+        self._left_alone_seconds = settings.bot_left_alone_seconds
         self._timeout = timeout
 
     def _client(self) -> httpx.Client:
@@ -130,7 +131,10 @@ class VexaClient:
 
     def send_bot(self, meeting_url: str) -> int:
         _, _, canonical = _parse(meeting_url)  # rebuilt from parsed parts; keeps Zoom pwd
-        payload = {"meeting_url": canonical, "bot_name": self._bot_name}
+        payload: dict[str, Any] = {"meeting_url": canonical, "bot_name": self._bot_name}
+        if self._left_alone_seconds > 0:
+            # Milliseconds, a positive integer: Vexa answers 422 to anything else.
+            payload["automatic_leave"] = {"max_time_left_alone": self._left_alone_seconds * 1000}
         try:
             with self._client() as client:
                 response = client.post("/bots", json=payload)

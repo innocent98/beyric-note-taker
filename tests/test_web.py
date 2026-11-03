@@ -1093,7 +1093,9 @@ LIVE_WORDS = [
 def test_page_and_list_say_what_the_bot_is_doing_and_keep_refreshing(
     client, template, session, state, words
 ):
-    meeting = add_meeting(session, template, completion_reason=state)
+    meeting = add_meeting(
+        session, template, completion_reason=state, bot_state_seen_at=datetime.now(UTC)
+    )
     page = client.get(f"/meetings/{meeting.id}").text
     assert words in page
     assert "Bot sent" not in page
@@ -1108,8 +1110,39 @@ def test_a_bot_with_no_known_state_still_reads_bot_sent_on_page_and_list(client,
 
 
 def test_a_long_bot_state_badge_may_wrap_and_a_short_one_may_not(client, template, session):
-    long_one = add_meeting(session, template, completion_reason="awaiting_admission")
+    long_one = add_meeting(
+        session,
+        template,
+        completion_reason="awaiting_admission",
+        bot_state_seen_at=datetime.now(UTC),
+    )
     page = client.get(f"/meetings/{long_one.id}").text
     assert 'class="badge badge-warning badge-wrap"' in page
-    short = add_meeting(session, template, completion_reason="recording")
+    short = add_meeting(
+        session, template, completion_reason="recording", bot_state_seen_at=datetime.now(UTC)
+    )
     assert 'class="badge badge-warning"' in client.get(f"/meetings/{short.id}").text
+
+
+def test_the_home_page_holds_a_form_so_it_never_reloads_itself(client, template, session):
+    """A meta refresh would wipe a link being typed or pasted and reset focus every 30 s. The
+    Next list polls with `router.refresh()`, which keeps what is typed; this page does not poll."""
+    add_meeting(session, template)  # a bot is live
+    page = client.get("/").text
+    assert 'name="url"' in page  # the form is there
+    assert "http-equiv" not in page and "refresh" not in page
+    add_meeting(session, template, status="processing", step="notes")
+    assert "http-equiv" not in client.get("/").text
+
+
+def test_the_meeting_page_warns_when_the_worker_has_gone_quiet(client, template, session):
+    waiting = add_meeting(session, template)
+    done = ready_meeting(session, template)
+    quiet = "The background worker has not checked in for over 20 minutes"
+    session.add(AppState(id=1, worker_heartbeat_at=datetime.now(UTC) - timedelta(minutes=30)))
+    session.commit()
+    assert quiet in client.get(f"/meetings/{waiting.id}").text
+    assert quiet not in client.get(f"/meetings/{done.id}").text
+    session.get(AppState, 1).worker_heartbeat_at = datetime.now(UTC)
+    session.commit()
+    assert quiet not in client.get(f"/meetings/{waiting.id}").text

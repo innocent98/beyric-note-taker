@@ -29,7 +29,10 @@ const RETRY_BLOCKED: Record<RetryBlock, string> = {
   not_failed: "This meeting can't be retried.",
 };
 
-type Busy = "cancel" | "retry" | "rewrite" | null;
+type Busy = "cancel" | "end" | "retry" | "rewrite" | null;
+
+// A state sentence longer than this (the lobby and prompt texts) is a paragraph, not a heading.
+const LONG_STATE_TEXT = 60;
 
 // The meeting page. `initial` is the server render; from then on the state here is the truth: every
 // action's response is the full meeting (no refetch needed), and while `refresh_after_seconds` is set
@@ -106,7 +109,7 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
       <div className="detail-head">
         <div className="detail-title">
           <h1>{m.title}</h1>
-          <Badge tone={m.status_tone} dot>
+          <Badge tone={m.status_tone} dot live>
             {m.status_text}
           </Badge>
         </div>
@@ -116,6 +119,12 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
         </p>
       </div>
 
+      {m.worker_stale ? (
+        <Alert kind="notice" role="alert">
+          The background worker has not checked in for over 20 minutes. This meeting will not move forward until it is
+          running again.
+        </Alert>
+      ) : null}
       {error ? <Alert kind="error">{error}</Alert> : null}
       {notice ? <Alert kind="info">{notice}</Alert> : null}
 
@@ -231,13 +240,22 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
             </>
           ) : (
             <>
-              <h2 className="state-title">{m.status_text}</h2>
+              {m.status_text.length > LONG_STATE_TEXT ? (
+                <p className="state-title">{m.status_text}</p>
+              ) : (
+                <h2 className="state-title">{m.status_text}</h2>
+              )}
               <p>
                 {m.status === "bot_sent"
                   ? "Notes and a full transcript will appear here when the meeting ends."
                   : "Notes and a full transcript will appear here when this finishes."}
               </p>
               {working ? <p className="muted">This page updates every 30 seconds.</p> : null}
+              {m.can_end ? (
+                <Button type="button" disabled={busy !== null} data-dialog-open="end-dialog">
+                  {busy === "end" ? "Ending..." : "End now and write the notes"}
+                </Button>
+              ) : null}
               {m.can_cancel ? (
                 <Button kind="secondary" type="button" disabled={busy !== null} data-dialog-open="cancel-dialog">
                   Cancel and remove the bot
@@ -257,6 +275,21 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
           <TranscriptPanel text={m.transcript} incomplete={m.speakers_incomplete} />
         </section>
       ) : null}
+
+      <Dialog id="end-dialog" title="End the meeting and write the notes?">
+        <p>
+          The bot will leave the meeting now and the notes will be written from what it heard so far. Anything said
+          after it leaves is not in the notes. To throw the recording away instead, cancel the meeting.
+        </p>
+        <div className="dialog-actions">
+          <Button kind="secondary" type="button" data-dialog-close>
+            Keep recording
+          </Button>
+          <Button type="button" data-dialog-close onClick={() => void act("end", () => api.meetings.end(m.id))}>
+            End now and write the notes
+          </Button>
+        </div>
+      </Dialog>
 
       <Dialog id="cancel-dialog" title="Cancel this meeting?">
         <p>

@@ -17,7 +17,7 @@ from fastapi import HTTPException, Request
 from markdown_it import MarkdownIt
 from markupsafe import Markup
 from sqlalchemy import func, select, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
@@ -26,7 +26,10 @@ from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
+    BOT_END_REQUESTED,
+    BOT_ENDABLE_STATES,
     BOT_RECORDING,
+    JOIN_FAILURE_MARKS,
     MEET_REFUSED,
     REASON_CANCELLED,
     REASON_NO_SPEECH,
@@ -48,6 +51,10 @@ ACTIVE = ("bot_sent", "processing")
 # One worker pass runs a whole recording through transcription and notes, and the heartbeat is
 # only stamped between passes, so an hour-long meeting can keep it quiet for several minutes.
 WORKER_STALE_AFTER = timedelta(minutes=20)
+# How long Cancel and End wait for a meeting row the worker holds (a poll takes seconds; a pass
+# that has gone on to transcribe holds it for minutes) before answering 409 instead of hanging.
+LOCK_WAIT = "10s"
+LOCK_NOT_AVAILABLE = "55P03"
 NEW_MEETING_LOCK = 6001  # serialises "is a bot active?" + "send a bot" across requests
 
 STEP_TEXT = {
@@ -61,6 +68,7 @@ STEP_TEXT = {
 # `{bot}` is the name the bot shows in the meeting. "Recording" is only said when something is
 # being captured (`BOT_RECORDING`); `active` alone only means the bot is in.
 BOT_STATE_TEXT = {
+    "requested": "Starting the bot",
     "joining": "Bot is joining the meeting",
     "awaiting_admission": "Waiting to be let in. Admit '{bot}' in the meeting",
     "active": "Bot is in the meeting",
@@ -69,7 +77,18 @@ BOT_STATE_TEXT = {
         "The bot is waiting on a prompt in the meeting, such as a consent or verification "
         "screen. Check the meeting for a prompt."
     ),
+    "stopping": "The bot is leaving the meeting",
 }
+# After "End now and write the notes": the bot has been told to leave and has not been seen gone.
+BOT_ENDING_TEXT = "The bot is leaving the meeting. The notes start once it has gone"
+# Vexa reported the call over but the recording is not ready to download yet.
+CALL_ENDED_TEXT = "The call ended; finishing the recording"
+# A live state older than this many poll intervals is not shown as current: the worker is behind,
+# or Vexa has not answered for a while. The worker handles meetings one at a time, so a pass on
+# another meeting (minutes of transcription) leaves this one unseen for that long: the window only
+# covers a slow Vexa and a short pass, not a long one.
+BOT_STATE_STALE_POLLS = 4
+BOT_STATE_UNSURE_TEXT = "Checking on the bot..."
 STATUS_TONES = {
     "ready": "success",
     "failed": "danger",
@@ -213,12 +232,32 @@ def _in_range(pk: int | None) -> bool:
 # ---- how a meeting reads ----
 
 
-def status_text(meeting: Meeting) -> str:
-    """Plain words for the owner. "Recording" is said only once something is being captured; a
-    bot whose state is not known (an older meeting, Vexa not reachable) reads "Bot sent"."""
+def bot_state_is_stale(meeting: Meeting, now: datetime | None = None) -> bool:
+    """True when the bot's live state was last seen too long ago to say what the bot is doing now
+    (or when no time was kept for it)."""
+    seen = meeting.bot_state_seen_at
+    if seen is None:
+        return True
+    window = timedelta(seconds=BOT_STATE_STALE_POLLS * get_settings().poll_interval_seconds)
+    return (now or datetime.now(UTC)) - seen > window
+
+
+def status_text(meeting: Meeting, now: datetime | None = None) -> str:
+    """Plain words for the owner. "Recording" is said only once something is being captured, and a
+    live state is said only while a recent poll has seen it; a bot whose state is not known (an
+    older meeting, Vexa not reachable) reads "Bot sent"."""
     if meeting.status == "bot_sent":
-        text = BOT_STATE_TEXT.get(meeting.completion_reason or "")
-        return text.format(bot=get_settings().bot_name) if text else "Bot sent"
+        reason = meeting.completion_reason or ""
+        if reason == BOT_END_REQUESTED and meeting.terminal_seen_at is None:
+            return BOT_ENDING_TEXT
+        text = BOT_STATE_TEXT.get(reason)
+        if text:
+            if bot_state_is_stale(meeting, now):
+                return BOT_STATE_UNSURE_TEXT
+            return text.format(bot=get_settings().bot_name)
+        if meeting.terminal_seen_at is not None and reason not in JOIN_FAILURE_MARKS:
+            return CALL_ENDED_TEXT  # Vexa said the call is over and the recording is being made
+        return "Bot sent"
     if meeting.status == "processing":
         return STEP_TEXT.get(meeting.step, "Working on it")
     if meeting.status == "ready":
@@ -462,14 +501,45 @@ def regenerate_notes(
     return meeting
 
 
+def _lock_meeting(session: Session, meeting: Meeting) -> Meeting:
+    """Re-read the meeting under a row lock so the worker cannot move it meanwhile. A row the
+    worker is holding is waited for at most `LOCK_WAIT`; then it is a plain 409 and the owner may
+    press again (`SET LOCAL` ends with the transaction, so it never leaks to later statements)."""
+    try:
+        session.execute(text(f"set local lock_timeout = '{LOCK_WAIT}'"))
+        return session.scalars(
+            select(Meeting)
+            .where(Meeting.id == meeting.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).one()
+    except OperationalError as exc:
+        session.rollback()
+        if getattr(exc.orig, "sqlstate", None) != LOCK_NOT_AVAILABLE:
+            raise
+        raise Refused(
+            409,
+            "meeting_busy",
+            "The meeting is being worked on right now. Try again in a moment.",
+        ) from None
+
+
+def _stop_bot_or_refuse(session: Session, vexa, meeting: Meeting) -> None:
+    """Ask Vexa to take the bot out, or roll back and refuse with a plain 502 (the message never
+    carries Vexa's own text; a meeting code the client will not send is the same failure)."""
+    try:
+        vexa.stop_bot(meeting.platform, meeting.native_id)
+    except (VexaError, ValueError) as exc:
+        session.rollback()
+        logger.warning("meeting %s: stop_bot failed (%s)", meeting.id, type(exc).__name__)
+        raise Refused(
+            502, "bot_stop_failed", "The bot could not be stopped. Please try again in a moment."
+        ) from None
+
+
 def cancel_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meeting:
     """Take the bot out of a meeting it has not finished recording. No OpenAI call is made."""
-    locked = session.scalars(  # re-read under a lock so the worker cannot move it meanwhile
-        select(Meeting)
-        .where(Meeting.id == meeting.id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    ).one()
+    locked = _lock_meeting(session, meeting)
     if locked.status != "bot_sent":
         session.rollback()
         raise Refused(
@@ -477,16 +547,76 @@ def cancel_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meet
             "not_waiting_for_bot",
             "Only a meeting that is still waiting for its bot can be cancelled.",
         )
-    try:
-        vexa.stop_bot(locked.platform, locked.native_id)
-    except VexaError as exc:
+    if locked.completion_reason == BOT_END_REQUESTED:
         session.rollback()
-        logger.warning("meeting %s: stop_bot failed (%s)", locked.id, type(exc).__name__)
         raise Refused(
-            502, "bot_stop_failed", "The bot could not be stopped. Please try again in a moment."
-        ) from None
+            409,
+            "already_ending",
+            "The bot is already leaving and the notes will be written from what it recorded, "
+            "so this meeting can't be cancelled now.",
+        )
+    _stop_bot_or_refuse(session, vexa, locked)
     locked.status, locked.failure_reason = "failed", REASON_CANCELLED
     session.commit()
+    return locked
+
+
+def can_end(meeting: Meeting) -> bool:
+    """Whether "End now and write the notes" is offered: the bot is in the call, as the worker last
+    saw it. The state's age does not matter here: the owner who wants the bot out should not lose
+    the button because the worker is a little behind."""
+    return (
+        meeting.status == "bot_sent"
+        and meeting.step == "waiting"
+        and meeting.completion_reason in BOT_ENDABLE_STATES
+    )
+
+
+def can_cancel(meeting: Meeting) -> bool:
+    """Cancel discards the meeting, so it is not offered once the owner has asked the bot to leave
+    to have the notes written (Vexa answers a second stop with 404, which would pass for success
+    and quietly throw the recording away)."""
+    return meeting.status == "bot_sent" and meeting.completion_reason != BOT_END_REQUESTED
+
+
+def _not_endable() -> Refused:
+    return Refused(
+        409,
+        "not_endable",
+        "The bot can only be ended while it is in the call. Cancel it instead if it is not in yet.",
+    )
+
+
+def _check_endable(meeting: Meeting) -> None:
+    if meeting.completion_reason == BOT_END_REQUESTED and meeting.status == "bot_sent":
+        raise Refused(
+            409,
+            "already_ending",
+            "The bot has already been told to leave. The notes start once it has gone.",
+        )
+    if not can_end(meeting):
+        raise _not_endable()
+
+
+def end_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meeting:
+    """Take the bot out of the call and let the pipeline write the notes from what it recorded.
+
+    Unlike `cancel_meeting` nothing is discarded: the meeting stays `bot_sent`, marked
+    `end_requested`, and the worker carries on as for any call that ended (Vexa reports the bot
+    gone with the reason `stopped`, the recording is downloaded and the usual steps run). A bot
+    that recorded nothing ends as the same "nothing was recorded" failure as any empty meeting."""
+    _check_endable(meeting)  # without the lock: a meeting being processed must not make us wait
+    locked = _lock_meeting(session, meeting)
+    try:
+        _check_endable(locked)
+    except Refused:
+        session.rollback()
+        raise
+    _stop_bot_or_refuse(session, vexa, locked)
+    locked.completion_reason = BOT_END_REQUESTED
+    locked.bot_state_seen_at = datetime.now(UTC)
+    session.commit()
+    logger.info("meeting %s: the owner ended the bot", locked.id)
     return locked
 
 

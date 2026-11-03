@@ -245,6 +245,9 @@ class Meeting(Base):
     join_attempts: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     # When a poll first saw Vexa report the meeting as over.
     terminal_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When a poll last saw the bot in the live state kept in `completion_reason`; null when there
+    # is none. A state older than a couple of poll intervals is not shown as current.
+    bot_state_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source: Mapped[str] = mapped_column(String(16), default="manual", server_default="manual")
     # The calendar event's title; null for a pasted link.
     title: Mapped[str | None] = mapped_column(Text)

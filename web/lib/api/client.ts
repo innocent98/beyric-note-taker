@@ -149,6 +149,7 @@ export function createApi(options: ApiOptions = {}) {
       get: (id: number) => request<Meeting>("GET", `/api/meetings/${id}`),
       create: (body: NewMeeting) => request<Meeting>("POST", "/api/meetings", { body, write: true }),
       cancel: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/cancel`, { write: true }),
+      end: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/end`, { write: true }),
       retry: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/retry`, { write: true }),
       regenerate: (id: number, template_id: number) =>
         request<Meeting>("POST", `/api/meetings/${id}/regenerate`, { body: { template_id }, write: true }),

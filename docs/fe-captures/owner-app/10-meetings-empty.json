@@ -18,7 +18,8 @@
       "meetings": [],
       "has_more": false,
       "next_before_id": null,
-      "worker_stale": true
+      "worker_stale": true,
+      "refresh_after_seconds": null
     }
   }
 }
