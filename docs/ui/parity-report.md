@@ -80,7 +80,7 @@ The API's `POST /api/session` takes one password. So the form has no **Work emai
 
 ## Copy that runs ahead of the product
 
-The landing page and the sign-in panel use the designer's words, and some describe things the app cannot do yet. **Adebayo should decide before the page is indexed or submitted for Google verification** (the page is public and Google reads it):
+The landing page and the sign-in panel use the designer's words, and some describe things the app cannot do yet. **Decision (Adebayo, 2026-11-03): keep as designed.** Revisit before the page is submitted for Google verification, because Google reads the page and compares it with the app:
 
 | Where | Designer's words | What is true today |
 |---|---|---|

@@ -123,7 +123,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Sign-in screen (form plus teal panel), landing page, privacy and terms frames with "On this page", 404 and error pages
   - [x] Guard tests kept; new tests for notes sections, legal contents list, logo, landing links, Show / Hide
   - [ ] CI green on the PR (runs on GitHub)
-  - [ ] **Adebayo decides:** the landing page and sign-in panel use the designer's words, some of which run ahead of the product (Teams, tasks, integrations, sharing)
+  - [x] Decided 2026-11-03 (Adebayo): keep the designer's landing and sign-in words even though some run ahead of the product (Teams, tasks, integrations, sharing); revisit before the Google verification submission
   - [ ] Run `owner-e2e.mjs` and `owner-browser-check.mjs` on the compose stack before the deploy
   - [ ] Needs backend, not built (listed in the report): sign-up, forgot password, SSO, accounts and sidebar identity, calendar and auto-join card, series, tasks, projects, decisions, review, team, settings, download, share, translation, agenda, template delete, Emails
 - [ ] Stream D, new designed screens: accounts and pilot, calendar and auto-join, team, tasks, sprints, share and download, translation
