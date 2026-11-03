@@ -5,6 +5,9 @@ import { Icon, type IconName } from "./icon";
 // purpose the surrounding text already shows, as in the designer's compact forms).
 type Shared = { id: string; label: string; hint?: string; error?: string; hideLabel?: boolean };
 
+// `large` is the sign-in size (44px, 15px text); `end` is a control drawn inside the right edge (the
+// Show / Hide button on a password).
+
 function Wrap({ id, label, hint, error, hideLabel, children }: Shared & { children: ReactNode }) {
   const note = error ?? hint;
   return (
@@ -27,17 +30,20 @@ export function Field({
   error,
   hideLabel,
   icon,
+  large = false,
+  end,
   name,
   type = "text",
   ...rest
-}: Shared & { icon?: IconName } & Omit<InputHTMLAttributes<HTMLInputElement>, "id" | "className">) {
-  const input = <input className="input" id={id} name={name ?? id} type={type} {...rest} />;
+}: Shared & { icon?: IconName; large?: boolean; end?: ReactNode } & Omit<InputHTMLAttributes<HTMLInputElement>, "id" | "className">) {
+  const input = <input className={large ? "input input-lg" : "input"} id={id} name={name ?? id} type={type} {...rest} />;
   return (
     <Wrap id={id} label={label} hint={hint} error={error} hideLabel={hideLabel}>
-      {icon ? (
-        <div className="input-wrap">
-          <Icon name={icon} />
+      {icon || end ? (
+        <div className={`input-wrap${end ? " input-wrap-end" : ""}`}>
+          {icon ? <Icon name={icon} /> : null}
           {input}
+          {end}
         </div>
       ) : (
         input
@@ -51,15 +57,17 @@ export function SelectField({
   label,
   hint,
   hideLabel,
+  compact = false,
   options,
   name,
   ...rest
 }: Omit<Shared, "error"> & {
+  compact?: boolean;
   options: ReadonlyArray<readonly [string | number, string]>;
 } & Omit<SelectHTMLAttributes<HTMLSelectElement>, "id" | "className" | "children">) {
   return (
     <Wrap id={id} label={label} hint={hint} hideLabel={hideLabel}>
-      <select className="select" id={id} name={name ?? id} {...rest}>
+      <select className={compact ? "select select-sm" : "select"} id={id} name={name ?? id} {...rest}>
         {options.map(([value, text]) => (
           <option key={value} value={value}>
             {text}

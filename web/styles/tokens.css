@@ -1,5 +1,7 @@
 /* Design tokens: the one place colours, type, spacing and radii are defined.
-   Values come from the designer's prototypes in docs/ui (Brand.dc.html and the app screens).
+   Values come from the designer's prototypes in docs/ui (Brand.dc.html and the app screens). The
+   designs are light only (no dark theme is drawn), so there are no dark overrides here: the pages
+   render light whatever the device prefers.
    Nothing else in web/ (and nothing in app/static or app/templates) may contain a colour literal;
    web/tests/guards.test.ts and tests/test_ui_guards.py enforce that. Add a token here, then use
    var(--name). Ported from app/static/tokens.css with the same values: keep the two in step until
@@ -31,43 +33,84 @@
 }
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   /* Brand palette (Brand.dc.html) */
   --teal: #0E6B5E;
   --teal-deep: #0A5248;
   --teal-light: #1A9483;
   --teal-tint: #E6F1EE;
+  --teal-mint: #5FD3BF;       /* eyebrow text on the dark landing section */
+  --teal-wash: #F3F9F7;       /* landing pill background */
+  --teal-wash-2: #EEF5F3;     /* translated-notes bar */
+  --teal-line: #DCEAE6;       /* borders on teal washes */
+  --teal-ring: #E0EFEB;       /* focus ring around inputs */
+  --teal-on-panel: #CFE5E0;   /* body text on solid teal */
+  --teal-on-panel-line: #4E9A8F;
 
-  /* Semantic colours, light */
+  /* Semantic colours */
   --bg: #F6F7F6;            /* app background ("Paper") */
   --surface: #FFFFFF;       /* cards, sidebar, inputs */
-  --surface-hover: #F0F2F1;
+  --surface-hover: #F0F2F1; /* chips, hover on nav and icon buttons */
+  --surface-soft: #FAFBFA;  /* bars inside cards, count lines */
+  --surface-row: #F8FAF9;   /* list row hover */
+  --surface-menu: #F3F5F4;  /* menu and template hover */
+  --surface-active: #EEF1F0;/* current nav item */
   --text: #141917;          /* headings, body ("Ink") */
+  --ink-2: #2E3532;         /* field labels, body copy inside notes */
+  --ink-3: #4A524E;         /* nav links, secondary copy */
   --text-2: #5B6460;        /* secondary text ("Slate") */
   --text-3: #6E7772;        /* small meta text */
-  --text-faint: #8A928E;    /* icons, placeholders, section labels */
+  --text-faint: #8A928E;    /* icons, section labels */
+  --placeholder: #9AA19D;
+  --dot-amber: #C98A1B;     /* the in-progress dot on the landing board */
+  --chevron: #A8AFAB;       /* row chevrons, quiet bullets */
+  --separator: #C3C9C6;     /* the dot between meta items */
   --border: #E3E7E5;        /* borders, dividers ("Line") */
+  --border-soft: #EDF0EE;   /* dividers inside cards */
+  --border-softer: #F0F2F1;
   --border-strong: #D5DBD8; /* input borders */
+  --border-hover: #B9C2BE;  /* hovered card border */
   --primary: var(--teal);
   --primary-hover: var(--teal-deep);
   --primary-tint: var(--teal-tint);
   --on-primary: #FFFFFF;
   --link: var(--teal);
   --logo-tile: var(--teal);
-  --logo-bubble: #FFFFFF;
-  --focus: var(--teal-light);
+  --logo-glyph: #FFFFFF;
+  --focus: var(--teal);
 
   --danger: #B42318;
-  --danger-tint: #FEF3F2;
-  --danger-text: #7A271A;
-  --warning: #B54708;
-  --warning-tint: #FFFAEB;
-  --warning-text: #7A2E0E;
-  --success: #1A7F37;
+  --danger-tint: #FDECEA;
+  --danger-line: #F5C2BD;
+  --danger-text: #8C1D13;
+  --danger-dot: #D92D20;
+  --warning: #9A5B00;
+  --warning-tint: #FFF4E0;
+  --warning-wash: #FFF8EB;
+  --warning-line: #F3DDB0;
+  --warning-text: #7A4A00;
+  --warning-icon: #B26B00;
+  --success: #166534;
   --success-tint: #E8F5EC;
   --info: #3C4A7A;
   --info-tint: #EEF0F7;
+
+  /* Avatar pairs (background, text) in the order the prototype hands them out */
+  --avatar-1-bg: #E6F1EE; --avatar-1-fg: #0E6B5E;
+  --avatar-2-bg: #EEF0F7; --avatar-2-fg: #3C4A7A;
+  --avatar-3-bg: #FFF1E0; --avatar-3-fg: #8A4B00;
+  --avatar-4-bg: #F7ECF2; --avatar-4-fg: #8A2E5C;
+  --avatar-5-bg: #EEF1F0; --avatar-5-fg: #4A524E;
+
+  /* The dark section of the landing page and the logo on dark */
+  --night: #121715;
+  --night-card: #1B2220;
+  --night-line: #2A3330;
+  --night-line-hover: #3B4743;
+  --on-night: #FFFFFF;
+  --on-night-2: #A9B3AF;
+  --on-teal: #FFFFFF;
 
   /* Type */
   --font-sans: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -78,7 +121,6 @@
   --text-md: 0.9375rem; /* 15px */
   --text-lg: 1.125rem;
   --text-xl: 1.5rem;    /* 24px: page titles */
-  --text-hero: clamp(2rem, 5vw, 3rem);
   --leading: 1.5;
 
   /* Space, radius, elevation */
@@ -90,45 +132,21 @@
   --space-6: 24px;
   --space-8: 32px;
   --space-12: 48px;
+  --radius-xs: 5px;
   --radius-sm: 7px;
   --radius: 8px;
+  --radius-md: 10px;
   --radius-lg: 12px;
+  --radius-xl: 16px;
   --radius-pill: 999px;
   --shadow-pop: 0 12px 32px rgba(20, 25, 23, 0.14);
+  --shadow-hero: 0 30px 60px rgba(20, 25, 23, 0.1), 0 2px 6px rgba(20, 25, 23, 0.04);
+  --shadow-toast: 0 16px 32px rgba(20, 25, 23, 0.22);
+  --shadow-chip: 0 10px 24px rgba(20, 25, 23, 0.1);
+  --shadow-panel: 0 24px 48px rgba(6, 40, 35, 0.35);
+  --shadow-knob: 0 1px 2px rgba(20, 25, 23, 0.25);
+  --header-blur: rgba(255, 255, 255, 0.92);
   --control-height: 40px;
   --sidebar-width: 232px;
   --page-width: 1160px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #111513;
-    --surface: #1A1F1D;
-    --surface-hover: #232A27;
-    --text: #ECEFED;
-    --text-2: #A9B3AF;
-    --text-3: #A3ABA7;
-    --text-faint: #7C8682;
-    --border: #2E3532;
-    --border-strong: #3B4440;
-    --primary: #4FB8A6;
-    --primary-hover: #7FD0C2;
-    --primary-tint: #16302B;
-    --on-primary: #0B1412;
-    --link: #7FD0C2;
-    --logo-tile: var(--teal-light);
-    --focus: #7FD0C2;
-
-    --danger: #F97066;
-    --danger-tint: #3A1B18;
-    --danger-text: #FDA29B;
-    --warning: #FDB022;
-    --warning-tint: #3A2A0E;
-    --warning-text: #FEC84B;
-    --success: #47CD89;
-    --success-tint: #12301F;
-    --info: #A4B1E6;
-    --info-tint: #1E2438;
-    --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.5);
-  }
 }

@@ -13,11 +13,13 @@ const PATHS = {
   video: ["M5 6h9a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z", "m16 10.5 5-3v9l-5-3"],
   info: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M12 8v5M12 16h.01"],
   warning: ["M12 3 2 20h20L12 3z", "M12 10v4M12 17h.01"],
+  arrow: ["M5 12h14M13 6l6 6-6 6"],
+  plus2: ["M12 5v14M5 12h14"],
 } as const;
 
 export type IconName = keyof typeof PATHS;
 
-export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
+export function Icon({ name, size = 16, stroke = 2 }: { name: IconName; size?: number; stroke?: number }) {
   return (
     <svg
       className="icon"
@@ -26,7 +28,7 @@ export function Icon({ name, size = 16 }: { name: IconName; size?: number }) {
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="2"
+      strokeWidth={stroke}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"

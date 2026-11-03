@@ -3,6 +3,32 @@
 // rel="noopener noreferrer nofollow", images turned into links (docs/fe-integration-guide-owner-app.md
 // section 5.2, checked by tests/test_api.py on the server). Do not render `notes` with another
 // markdown library, and do not use dangerouslySetInnerHTML for anything else (tests/guards.test.ts).
+
+// The designer draws each part of the notes its own way: check marks for decisions, quiet dots for
+// open questions, a grey box for "Please check". The API sends one flat HTML string, so each part
+// that starts with an <h2> is wrapped in a <section> whose class comes from a fixed list; nothing
+// from the notes ends up in an attribute.
+const SECTION_CLASS: Record<string, string> = {
+  summary: "notes-sec-summary",
+  "key points": "notes-sec-key",
+  decisions: "notes-sec-decisions",
+  "action items": "notes-sec-actions",
+  "open questions": "notes-sec-questions",
+  "please check": "notes-sec-check",
+};
+
+export function wrapSections(html: string): string {
+  return html
+    .split(/(?=<h2[ >])/)
+    .map((part) => {
+      const heading = /^<h2[^>]*>([\s\S]*?)<\/h2>/.exec(part)?.[1];
+      if (heading === undefined) return part;
+      const name = heading.replace(/<[^>]*>/g, "").trim().toLowerCase();
+      return `<section class="notes-sec ${SECTION_CLASS[name] ?? ""}">${part}</section>`;
+    })
+    .join("");
+}
+
 export function NotesHtml({ html }: { html: string }) {
-  return <div className="notes-body notes" dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div className="notes-body notes" dangerouslySetInnerHTML={{ __html: wrapSections(html) }} />;
 }

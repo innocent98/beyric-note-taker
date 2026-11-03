@@ -151,10 +151,10 @@ for (const scheme of ["light", "dark"]) {
 
     if (values["send-check"] && name === "light-1280") {
       await page.goto(`${BASE}/`);
-      await page.getByLabel("Meeting link (Google Meet or Zoom)").fill("https://example.com/not-a-meeting");
+      await page.getByLabel("Meeting link").fill("https://example.com/not-a-meeting");
       await page.getByRole("button", { name: "Send note taker" }).click();
       await page.getByRole("alert").filter({ hasText: "That is not a Google Meet or Zoom link" }).waitFor();
-      check(`${name} new meeting: a bad link shows the API's message and keeps the input`, (await page.getByLabel("Meeting link (Google Meet or Zoom)").inputValue()) === "https://example.com/not-a-meeting");
+      check(`${name} new meeting: a bad link shows the API's message and keeps the input`, (await page.getByLabel("Meeting link").inputValue()) === "https://example.com/not-a-meeting");
       await shot("meetings-error");
     }
 

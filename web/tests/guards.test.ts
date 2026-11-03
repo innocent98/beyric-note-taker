@@ -36,12 +36,9 @@ describe("design guards", () => {
 
   it("keeps lib/brand.ts equal to tokens.css", () => {
     const tokens = read(join(WEB, "styles/tokens.css"));
-    const value = (name: string, from = 0) =>
-      new RegExp(`--${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(tokens.slice(from))?.[1]?.toUpperCase();
-    const darkStart = tokens.indexOf("prefers-color-scheme: dark");
+    const value = (name: string) => new RegExp(`--${name}:\\s*(#[0-9A-Fa-f]{6})`).exec(tokens)?.[1]?.toUpperCase();
     expect(BRAND.teal.toUpperCase()).toBe(value("teal"));
     expect(BRAND.bgLight.toUpperCase()).toBe(value("bg"));
-    expect(BRAND.bgDark.toUpperCase()).toBe(value("bg", darkStart));
   });
 
   it("uses no inline style prop or attribute, and no inline HTML event handler attributes", () => {
