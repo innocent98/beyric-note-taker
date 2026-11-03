@@ -38,16 +38,38 @@ from app.vexa import VexaError
 logger = logging.getLogger(__name__)
 
 
+VEXA_FINISHED = ("completed", "failed")
+
+
+def _recording_to_delete(vexa, meeting: Meeting) -> int | None:
+    """The id of Vexa's copy of this meeting's recording, or None when there is none to delete.
+
+    The pipeline learns the id only when it first polls a finished meeting, so a meeting deleted
+    while still running may not have it stored: ask Vexa by the meeting id it gave us. If Vexa has
+    not finished with the meeting yet (no recording id and not `completed` or `failed`), the copy
+    may appear after we delete the row, so raise `VexaError` and let the next pass try again."""
+    if meeting.vexa_recording_id is not None:
+        return meeting.vexa_recording_id
+    if not meeting.vexa_meeting_id:
+        return None
+    info = vexa.get_meeting_by_id(meeting.vexa_meeting_id)
+    if info.recording_id is None and info.status not in VEXA_FINISHED:
+        raise VexaError("Vexa has not finished the meeting, so its recording is not known yet")
+    return info.recording_id
+
+
 def purge_user(session: Session, user: User, vexa) -> None:
     """Delete `user` and everything of theirs. Commits. Raises `VexaError` when a bot cannot be
-    stopped or Vexa's copy of a recording cannot be deleted; nothing is deleted then."""
+    stopped or Vexa's copy of a recording cannot be found or deleted; nothing is deleted then."""
     meetings = list(session.scalars(select(Meeting).where(Meeting.owner_user_id == user.id)))
     for meeting in meetings:
         if meeting.status == "bot_sent":
             vexa.stop_bot(meeting.platform, meeting.native_id)
     for meeting in meetings:
-        if meeting.vexa_recording_id is not None and meeting.audio_deleted_at is None:
-            vexa.delete_recording(meeting.vexa_recording_id)
+        if meeting.audio_deleted_at is None:
+            recording_id = _recording_to_delete(vexa, meeting)
+            if recording_id is not None:
+                vexa.delete_recording(recording_id)
     for meeting in meetings:
         shutil.rmtree(audio_path(meeting.id).parent, ignore_errors=True)
     email, user_id = user.email, user.id
@@ -65,19 +87,20 @@ def purge_user(session: Session, user: User, vexa) -> None:
 
 
 def purge_deleted(session: Session, vexa) -> int:
-    """Purge every user marked `deleted`; returns how many went. One user's trouble (Vexa down)
-    is logged and leaves that user marked for the next pass; it never stops the others."""
+    """Purge every user marked `deleted`; returns how many went. Any trouble with one user (Vexa
+    down, a bad value, a database error) is logged by type only and leaves that user marked for
+    the next pass; it never stops the others and never reaches the worker's loop."""
     ids = list(session.scalars(select(User.id).where(User.status == "deleted").order_by(User.id)))
     purged = 0
     for user_id in ids:
-        user = session.get(User, user_id)
-        if user is None:
-            continue
         try:
+            user = session.get(User, user_id)
+            if user is None:
+                continue
             purge_user(session, user, vexa)
-        except VexaError as exc:
+        except Exception as exc:  # one user must not stall the rest
             session.rollback()
-            logger.warning("user %s: purge waits, Vexa said %s", user_id, type(exc).__name__)
+            logger.warning("user %s: purge waits (%s)", user_id, type(exc).__name__)
             continue
         purged += 1
     return purged

@@ -80,6 +80,21 @@ def purge_deleted(session: Session, vexa=None) -> int:
     return deletion.purge_deleted(session, vexa or VexaClient())
 
 
+def background_jobs(session: Session, mailer: mail.Mailer | None, now: datetime) -> None:
+    """The jobs that run before each meeting pass: send due mail, purge deleted accounts. Each is
+    on its own, and whatever one throws is logged by type only (an exception can hold an address
+    or a link) and never reaches the loop, so a mail or purge problem cannot stall meetings."""
+    for name, job in (
+        ("mail", lambda: send_mail(session, mailer, now)),
+        ("purge", lambda: purge_deleted(session)),
+    ):
+        try:
+            job()
+        except Exception as exc:
+            session.rollback()
+            logger.warning("%s job failed (%s)", name, type(exc).__name__)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     mailer = mail.build_mailer(get_settings())
@@ -96,8 +111,7 @@ def main() -> None:
         try:
             with SessionLocal() as session:
                 record_heartbeat(session, datetime.now(UTC))
-                send_mail(session, mailer, datetime.now(UTC))
-                purge_deleted(session)
+                background_jobs(session, mailer, datetime.now(UTC))
                 found = run_pass(session, cursor)
                 if time.monotonic() - last_cleanup >= CLEANUP_EVERY_SECONDS:
                     removed = delete_expired_audio(session, datetime.now(UTC), vexa=VexaClient())

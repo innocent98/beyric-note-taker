@@ -20,7 +20,7 @@ from app.models import (
     VocabularyTerm,
     WaitlistEntry,
 )
-from app.vexa import VexaError
+from app.vexa import VexaError, VexaMeeting
 from tests.test_accounts import visitor
 from tests.test_api import anon, api, error_of  # noqa: F401  (fixtures used by name)
 from tests.test_signup import GOOD, open_pilot, queued
@@ -632,14 +632,23 @@ def test_the_admin_sees_failed_mail_without_links(boss, session):
 
 
 class FakeVexa:
-    def __init__(self, fail_stop=False, fail_delete=False):
+    def __init__(self, fail_stop=False, fail_delete=False, lookups=None):
         self.stopped, self.deleted = [], []
         self.fail_stop, self.fail_delete = fail_stop, fail_delete
+        self.lookups = lookups or {}  # Vexa meeting id -> VexaMeeting (or an exception)
+        self.looked_up = []
 
     def stop_bot(self, platform, native_id):
         if self.fail_stop:
             raise VexaError("down")
         self.stopped.append((platform, native_id))
+
+    def get_meeting_by_id(self, vexa_meeting_id):
+        self.looked_up.append(str(vexa_meeting_id))
+        found = self.lookups[str(vexa_meeting_id)]
+        if isinstance(found, Exception):
+            raise found
+        return found
 
     def delete_recording(self, recording_id):
         if self.fail_delete:
@@ -744,6 +753,102 @@ def test_purging_leaves_other_users_data_alone(session, audio_dir):
         == 2
     )
     assert (audio_dir / str(other_running.id)).exists()
+
+
+def live_meeting_account(session, audio_dir, vexa_id="77"):
+    user = make_user(session, "live@example.test")
+    tpl = Template(owner_user_id=user.id, name="General", instructions="x")
+    session.add(tpl)
+    session.flush()
+    running = add_meeting(
+        session, tpl, status="bot_sent", native_id="liv-eliv-eli", vexa_meeting_id=vexa_id
+    )
+    (audio_dir / str(running.id)).mkdir()
+    return user, running
+
+
+def test_a_recording_vexa_has_not_told_us_about_yet_is_found_and_deleted(session, audio_dir):
+    """The pipeline learns the recording id later, so a live meeting may not have it stored."""
+    user, running = live_meeting_account(session, audio_dir)
+    assert running.vexa_recording_id is None
+    done = VexaMeeting(status="completed", recording_id=55, recording_status="completed")
+    vexa = FakeVexa(lookups={"77": done})
+    deletion.purge_user(session, user, vexa)
+    assert vexa.stopped == [("google_meet", "liv-eliv-eli")]
+    assert vexa.looked_up == ["77"] and vexa.deleted == [55]
+    session.expire_all()
+    assert session.get(User, user.id) is None
+
+
+def test_a_meeting_vexa_is_still_finishing_keeps_the_account_until_the_copy_can_be_deleted(
+    session, audio_dir
+):
+    user, _ = live_meeting_account(session, audio_dir)
+    vexa = FakeVexa(lookups={"77": VexaMeeting(status="active")})
+    with pytest.raises(VexaError):
+        deletion.purge_user(session, user, vexa)
+    session.expire_all()
+    assert session.get(User, user.id) is not None
+    assert session.scalar(select(func.count()).select_from(Meeting)) == 1
+
+
+def test_a_bot_that_never_recorded_leaves_nothing_at_vexa_to_delete(session, audio_dir):
+    user, _ = live_meeting_account(session, audio_dir)
+    vexa = FakeVexa(lookups={"77": VexaMeeting(status="failed")})
+    deletion.purge_user(session, user, vexa)
+    assert vexa.deleted == []
+    session.expire_all()
+    assert session.get(User, user.id) is None
+
+
+def test_a_vexa_lookup_that_fails_keeps_the_account(session, audio_dir):
+    user, _ = live_meeting_account(session, audio_dir)
+    vexa = FakeVexa(lookups={"77": VexaError("down")})
+    with pytest.raises(VexaError):
+        deletion.purge_user(session, user, vexa)
+    session.expire_all()
+    assert session.get(User, user.id) is not None
+
+
+def test_one_users_unexpected_error_does_not_stop_the_others(session, audio_dir):
+    first, *_ = full_account(session, audio_dir, "first@example.test")
+    second, *_ = full_account(session, audio_dir, "second@example.test")
+    first.status = second.status = "deleted"
+    session.commit()
+
+    class Explodes(FakeVexa):
+        def stop_bot(self, platform, native_id):
+            if not hasattr(self, "tripped"):
+                self.tripped = True
+                raise ValueError("unsupported platform or meeting code")  # not a VexaError
+            super().stop_bot(platform, native_id)
+
+    assert deletion.purge_deleted(session, Explodes()) == 1
+    session.expire_all()
+    assert session.scalar(select(func.count()).select_from(User)) == 1
+
+
+def test_background_jobs_survive_a_failing_job_and_a_failing_purge(session, monkeypatch, caplog):
+    from app import worker
+
+    calls = []
+
+    def boom_mail(*args, **kwargs):
+        calls.append("mail")
+        raise RuntimeError("secret detail ada@example.test")
+
+    def boom_purge(*args, **kwargs):
+        calls.append("purge")
+        raise ValueError("secret detail")
+
+    monkeypatch.setattr(worker, "send_mail", boom_mail)
+    monkeypatch.setattr(worker, "purge_deleted", boom_purge)
+    caplog.set_level("WARNING")
+    worker.background_jobs(session, None, datetime.now(UTC))  # must not raise
+    assert calls == ["mail", "purge"]
+    ours = " ".join(r.getMessage() for r in caplog.records)
+    assert "RuntimeError" in ours and "ValueError" in ours
+    assert "secret detail" not in ours and "ada@example.test" not in ours
 
 
 def test_a_bot_that_cannot_be_stopped_keeps_the_account_to_try_again(session, audio_dir):
