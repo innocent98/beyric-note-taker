@@ -86,6 +86,13 @@ STOP_TRIES = 3
 JOIN_BUTTON_ERROR = "could not locate join button"
 MEET_MARKETING_URL = "workspace.google.com/products/meet"
 
+# What the bot is doing while the call runs, as Vexa reports it (`status` in the lifecycle schema).
+# The worker keeps it in `Meeting.completion_reason` while the meeting is `bot_sent`, so the owner's
+# page can say it (`services.status_text`); no column of its own. `BOT_RECORDING` is not a Vexa
+# status: it is `active` once segments or a recording id prove something is being captured.
+BOT_RECORDING = "recording"
+BOT_LIVE_STATES = ("joining", "awaiting_admission", "active", "needs_help", BOT_RECORDING)
+
 # Zoom sometimes refuses the bot's browser and lets the next one in (2 of 3 joins were refused
 # on 2026-11-02, the third got in), so a refusal is retried up to this many bots in total.
 MAX_JOIN_ATTEMPTS = 3
@@ -156,6 +163,23 @@ def _remember(meeting: Meeting, info: VexaMeeting) -> None:
         meeting.vexa_recording_id = info.recording_id
     if info.completion_reason is not None:
         meeting.completion_reason = info.completion_reason
+
+
+def _live_state(info: VexaMeeting) -> str | None:
+    """The bot's state for the owner while the call runs, or None when Vexa says something else
+    (not reported yet, over, failed)."""
+    if info.status == "active" and (info.segments or info.recording_id is not None):
+        return BOT_RECORDING
+    return info.status if info.status in BOT_LIVE_STATES else None
+
+
+def _record_live_state(meeting: Meeting, state: str | None) -> None:
+    """Keep the bot's state in `completion_reason`, never over a marker the worker stored itself
+    (the refusal marker) or over a reason Vexa gave for the bot leaving."""
+    held = meeting.completion_reason
+    if held is not None and held not in BOT_LIVE_STATES:
+        return
+    meeting.completion_reason = state
 
 
 def _zoom_blocked(info: VexaMeeting) -> bool:
@@ -353,9 +377,13 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
             info = _lookup(vexa, meeting)
         except VexaError as exc:
             logger.warning("meeting %s: Vexa unreachable (%s)", meeting.id, type(exc).__name__)
+            _record_live_state(
+                meeting, None
+            )  # not known now, so the page says no more than "Bot sent"
 
     if info is not None:
         _remember(meeting, info)
+        _record_live_state(meeting, _live_state(info))
         if info.status == "completed" and meeting.terminal_seen_at is None:
             meeting.terminal_seen_at = now
 

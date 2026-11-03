@@ -988,3 +988,37 @@ def test_deleting_an_unknown_term_is_404(api):
 def test_term_body_is_validated(api):
     error_of(api.post("/api/vocabulary", {}), 422, "validation_error")
     error_of(api.post("/api/vocabulary", {"term": ["a"]}), 422, "validation_error")
+
+
+LIVE_STATES = [
+    ("joining", "Bot is joining the meeting"),
+    (
+        "awaiting_admission",
+        "Waiting to be let in. Admit 'Beyric Note Taker (recording)' in the meeting",
+    ),
+    ("active", "Bot is in the meeting"),
+    ("recording", "Recording"),
+]
+
+
+@pytest.mark.parametrize(("state", "words"), LIVE_STATES)
+def test_detail_and_list_carry_the_bots_live_state_in_status_text(
+    api, session, template, state, words
+):
+    meeting = add_meeting(session, template, completion_reason=state)
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["status"] == "bot_sent" and body["step"] == "waiting"
+    assert body["status_text"] == words
+    assert body["refresh_after_seconds"] == 30  # the page keeps asking while the call runs
+    assert set(body) == set(api.get(f"/api/meetings/{add_meeting(session, template).id}").json())
+    listed = api.get("/api/meetings").json()["meetings"]
+    assert [m["status_text"] for m in listed if m["id"] == meeting.id] == [words]
+
+
+def test_the_live_state_does_not_leak_into_other_statuses(api, session, template):
+    meeting = add_meeting(
+        session, template, status="processing", step="notes", completion_reason="active"
+    )
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["status_text"] == "Writing the notes"
+    assert "completion_reason" not in body and "bot_state" not in body

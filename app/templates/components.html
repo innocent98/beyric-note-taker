@@ -22,7 +22,7 @@
 
 {#- tone: neutral | success | danger | warning | info | brand -#}
 {% macro badge(text, tone="neutral") -%}
-<span class="badge{{ '' if tone == 'neutral' else ' badge-' ~ tone }}">{{ text }}</span>
+<span class="badge{{ '' if tone == 'neutral' else ' badge-' ~ tone }}{{ ' badge-wrap' if text|length > 28 else '' }}">{{ text }}</span>
 {%- endmacro %}
 
 {#- kind: error | notice | info. Use with {% call ui.alert("notice") %}text{% endcall %} -#}

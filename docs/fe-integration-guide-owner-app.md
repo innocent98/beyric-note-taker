@@ -1647,7 +1647,12 @@ What each state looks like through the API (values from the captures; `can_*` an
 
 | `status` / `step` | `status_text` | `status_tone` | `can_cancel` | `can_retry` | `can_regenerate` | `retry_block` | `refresh_after_seconds` | Capture |
 |---|---|---|---|---|---|---|---|---|
-| `bot_sent` / `waiting` | Bot sent | `warning` | `true` | `false` | `false` | `null` | `30` | `33-meeting-create.json` |
+| `bot_sent` / `waiting` | Bot sent (the bot's state is not known) | `warning` | `true` | `false` | `false` | `null` | `30` | `33-meeting-create.json, 104-meeting-detail-bot-state-unknown.json` |
+| `bot_sent` / `waiting` | Bot is joining the meeting | `warning` | `true` | `false` | `false` | `null` | `30` | `105-meeting-detail-bot-joining.json` |
+| `bot_sent` / `waiting` | Waiting to be let in. Admit 'Beyric Note Taker (recording)' in the meeting | `warning` | `true` | `false` | `false` | `null` | `30` | `106-meeting-detail-bot-awaiting-admission.json` |
+| `bot_sent` / `waiting` | Bot is in the meeting | `warning` | `true` | `false` | `false` | `null` | `30` | `107-meeting-detail-bot-in-meeting.json` |
+| `bot_sent` / `waiting` | Recording | `warning` | `true` | `false` | `false` | `null` | `30` | `108-meeting-detail-bot-recording.json` |
+| `bot_sent` / `waiting` | The bot is waiting on a prompt in the meeting, such as a consent or verification screen. Check the meeting for a prompt. | `warning` | `true` | `false` | `false` | `null` | `30` | `109-meeting-detail-bot-needs-help.json` |
 | `processing` / `audio` | Downloading the audio | `info` | `false` | `false` | `false` | `null` | `30` | `43-meeting-detail-processing.json` |
 | `processing` / `transcribing` | Writing the transcript | `info` | `false` | `false` | `false` | `null` | `30` | `44-meeting-detail-processing-transcribing.json` |
 | `processing` / `speakers` | Working out who said what | `info` | `false` | `false` | `false` | `null` | `30` | `45-meeting-detail-processing-speakers.json` |
@@ -1664,10 +1669,68 @@ What each state looks like through the API (values from the captures; `can_*` an
 
 | `status` | Show | Actions |
 |---|---|---|
-| `bot_sent` | badge `status_text`, "This page updates every 30 seconds." | Cancel (`can_cancel`); if `join_attempts` is above 1 also the Zoom notice below |
+| `bot_sent` | badge `status_text` and the same `status_text` as the card heading (it says what the bot is doing, see below), "This page updates every 30 seconds." | Cancel (`can_cancel`); if `join_attempts` is above 1 also the Zoom notice below |
 | `processing` | badge with the step in plain words, the same "updates" line | none |
 | `ready` | notes, transcript, the template picker | Rewrite notes (`can_regenerate`), copy buttons |
 | `failed` | a card "What went wrong" with `failure_reason` | Try again if `can_retry`, otherwise `retry_block_message` |
+
+**What the bot is doing while the call runs (added 2026-11-03, `feature/bot-live-state`).** While a meeting is `bot_sent`, `status_text` says what the bot is doing, from the state the worker last saw Vexa report (the worker looks every 30 seconds). **No field was added and no other field changed**: `status`, `step`, `status_tone` (still `warning`, also for "Recording"), `can_cancel` and `refresh_after_seconds` (30) are the same as before; only the words in `status_text` differ, on `GET /api/meetings/{id}` and in every row of `GET /api/meetings`. The six values are in the table above. Rules:
+
+1. **Show `status_text` as it is; do not branch on its words.** There is no `bot_state` field, so the words are the only signal. The text for an unknown state is still exactly `Bot sent`.
+2. **Never write "recording" yourself.** The API says `Recording` only when Vexa reported transcript segments or a recording id; `Bot is in the meeting` means the bot is in and nothing is proven to be captured.
+3. **The text can go back to `Bot sent`** (Vexa could not be reached for one look) and can **change under the owner's eyes**: keep polling while `refresh_after_seconds` is set, and let the heading follow it.
+4. The awaiting text carries an instruction ("Admit ... in the meeting"). Do not hide it behind a tooltip, and do not add your own "admit the bot" paragraph beside it.
+5. `needs_help` is still `bot_sent`, not failed: the bot may continue once the owner answers the prompt. After 2 minutes of it with nothing recorded the worker fails the join (`failed`, step `waiting`; see the retry section above).
+6. The texts are long. A badge that carries one must be allowed to wrap (the Jinja and Next badges do this for text over 28 characters).
+
+Captured from the running app, with the real worker (`pipeline.advance_meeting`) fed one fake Vexa answer per capture (`scripts/capture_owner_api.py`, `run_live_state`), body of `GET /api/meetings/15` after Vexa reported `awaiting_admission` (`106-meeting-detail-bot-awaiting-admission.json`):
+
+```json
+{
+  "id": 15,
+  "title": "Google Meet abc-defg-hij",
+  "platform": "google_meet",
+  "native_id": "abc-defg-hij",
+  "status": "bot_sent",
+  "step": "waiting",
+  "status_text": "Waiting to be let in. Admit 'Beyric Note Taker (recording)' in the meeting",
+  "status_tone": "warning",
+  "template_id": 1,
+  "created_at": "2026-11-03T13:27:01.512210Z",
+  "failure_reason": null,
+  "retry_block": null,
+  "retry_block_message": null,
+  "can_cancel": true,
+  "can_retry": false,
+  "can_regenerate": false,
+  "join_attempts": 1,
+  "max_join_attempts": 3,
+  "bot_left_early": false,
+  "speakers_incomplete": false,
+  "refresh_after_seconds": 30,
+  "join_retry_at": null,
+  "notes": null,
+  "notes_html": null,
+  "transcript": null
+}
+```
+
+The list row for the `needs_help` state (`110-meetings-list-bot-needs-help.json`) carries the same words in its `status_text`; its `meetings[0]`:
+
+```json
+{
+  "id": 15,
+  "title": "Google Meet abc-defg-hij",
+  "platform": "google_meet",
+  "native_id": "abc-defg-hij",
+  "status": "bot_sent",
+  "step": "waiting",
+  "status_text": "The bot is waiting on a prompt in the meeting, such as a consent or verification screen. Check the meeting for a prompt.",
+  "status_tone": "warning",
+  "template_id": 1,
+  "created_at": "2026-11-03T13:27:01.512210Z"
+}
+```
 
 **Polling.** `refresh_after_seconds` is `30` while the meeting is `bot_sent` or `processing` (and while a failed join counts down its retry wait) and `null` once it is `ready` or `failed` otherwise. Refetch `GET /api/meetings/{id}` every `refresh_after_seconds` seconds while it is non-null and stop when it is `null`. This is what the Jinja page does (a 30-second refresh). The worker itself polls every 30 seconds (`poll_interval_seconds` in `app/config.py`, from the code, not measured), so a faster poll adds load and no fresher data. Suggested: pause polling while the tab is hidden and refetch when it becomes visible. The list page does not poll in Jinja; refetch it after a write and when the tab regains focus.
 
@@ -1755,6 +1818,8 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | A real Google refusal, the real worker stopping the bot and pausing for the auto retry | **NOT EXERCISED** (fake Vexa; no real refusal was provoked) | `tests/test_join_refusal.py` |
 | The pause before the automatic second bot (`join_retry_at`) | Verified live (the paused row is inserted by SQL; the worker was not run) | `103` |
 | `refresh_after_seconds` is 30 while a failed join's wait counts down | Verified live | `99` |
+| `status_text` for the unknown, joining, awaiting admission, in-the-meeting, recording and needs-help states, same shape and fields as before | Verified live (the real worker with a fake Vexa answer per state, read over HTTP) | `104`–`110` |
+| Vexa really reporting those states during a call | **NOT EXERCISED** in this change: the names come from Vexa's lifecycle schema at `31122f9`, and from the lead's note that meeting 12 on 2026-11-03 went `joining`, `awaiting_admission`, `active`, done; the fakes follow that order | `tests/test_bot_live_state.py` |
 | Regenerate: ok, not ready, no template, OpenAI failure | Verified live **with a fake OpenAI** | `59`–`62` |
 | Real OpenAI regenerate, its duration, edge timeouts | **NOT EXERCISED** | `deploy/nginx.conf` |
 | Template create, update, duplicate, empty, too long, unknown | Verified live | `22`–`28` |

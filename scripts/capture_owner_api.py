@@ -72,7 +72,7 @@ from app.pipeline import (  # noqa: E402
     REASON_NOT_ADMITTED,
 )
 from app.services import get_openai_client, get_vexa  # noqa: E402
-from app.vexa import VexaError  # noqa: E402
+from app.vexa import VexaError, VexaMeeting  # noqa: E402
 
 NOTES = "\n\n".join(
     [
@@ -600,6 +600,7 @@ def run(app, base, engine, vexa, openai_client) -> None:
     )
     run_accounts(app, base, engine, ids, general["id"])
     run_refusal(owner, engine, general["id"])
+    run_live_state(owner, engine, general["id"])
 
 
 def run_accounts(app, base, engine, ids, admin_general_id) -> None:
@@ -817,6 +818,88 @@ def run_refusal(owner, engine, general_id) -> None:
         f"/api/meetings/{paused_id}",
         note="Google refused the first bot a minute ago; the worker has stopped it and will send "
         "the second at `join_retry_at` (4 to 5 minutes after the refusal). Still `bot_sent`.",
+    )
+
+
+class BotAs:
+    """A Vexa that answers every lookup with one state (or fails), for the real worker below."""
+
+    def __init__(self, answer) -> None:
+        self.answer = answer
+
+    def get_meeting_by_id(self, vexa_meeting_id):
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+
+def run_live_state(owner, engine, general_id) -> None:
+    """What the owner sees while the call runs. The worker is not running in this script, so each
+    state is the real `pipeline.advance_meeting` fed one Vexa answer, then read over HTTP."""
+    from app import pipeline
+
+    with Session(engine) as session:
+        session.execute(
+            text(
+                "update meetings set status = 'ready', step = 'done' where status in "
+                "('bot_sent', 'processing')"
+            )
+        )
+        meeting = Meeting(
+            owner_user_id=owner_id_of(engine),
+            url=MEET,
+            platform="google_meet",
+            native_id="abc-defg-hij",
+            template_id=general_id,
+            vexa_meeting_id="4250",
+        )
+        session.add(meeting)
+        session.commit()
+        meeting_id = meeting.id
+    segment = {"speaker": "Ada Example", "text": "Hello everyone, thanks for joining."}
+    steps = [
+        (
+            "bot-state-unknown",
+            VexaError("down"),
+            'Vexa could not be reached, so nothing is known: `status_text` is the old "Bot sent".',
+        ),
+        (
+            "bot-joining",
+            VexaMeeting(status="joining"),
+            "Vexa reports `joining`. Same fields as before: only `status_text` changed.",
+        ),
+        (
+            "bot-awaiting-admission",
+            VexaMeeting(status="awaiting_admission"),
+            "Vexa reports `awaiting_admission`: the bot is in the waiting room.",
+        ),
+        (
+            "bot-in-meeting",
+            VexaMeeting(status="active"),
+            "Vexa reports `active` with no segments and no recording yet: the bot is in, and the "
+            "text does not say it is recording.",
+        ),
+        (
+            "bot-recording",
+            VexaMeeting(status="active", segments=[segment]),
+            "`active` with transcript segments: now it says `Recording`.",
+        ),
+        (
+            "bot-needs-help",
+            VexaMeeting(status="needs_help"),
+            "Vexa reports `needs_help` (a consent or verification prompt). Still `bot_sent`: the "
+            "worker only fails the join after 2 minutes of it.",
+        ),
+    ]
+    for name, answer, note in steps:
+        with Session(engine) as session:
+            pipeline.advance_meeting(session, meeting_id, vexa=BotAs(answer), now=datetime.now(UTC))
+        owner.call(f"meeting-detail-{name}", "GET", f"/api/meetings/{meeting_id}", note=note)
+    owner.call(
+        "meetings-list-bot-needs-help",
+        "GET",
+        "/api/meetings?limit=2",
+        note="The list rows carry the same `status_text`.",
     )
 
 

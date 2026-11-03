@@ -333,7 +333,10 @@ def settle_time(session, meeting, events, *, until=timedelta(minutes=10)):
             [seen for start, seen in sorted(events.items()) if start <= at.total_seconds()][-1]
         ]
         run(session, meeting, vexa, now=NOW + at)
-        if meeting.status == "failed" or meeting.completion_reason in (REFUSED, HELP):
+        # A marker counts only with its time: while the bot waits on a prompt the same word is
+        # the live state (`terminal_seen_at` is set only when the worker ends the join).
+        marked = meeting.completion_reason in (REFUSED, HELP) and meeting.terminal_seen_at
+        if meeting.status == "failed" or marked:
             return at, vexa
     return None, vexa
 
