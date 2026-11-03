@@ -288,7 +288,9 @@ def test_every_write_needs_the_csrf_header(api, app, template):
 def test_reads_work_without_the_header_and_no_route_is_cross_wired(api, app, template):
     for method, path in api_routes(app):
         if method == "GET":
-            assert api.get(concrete(path)).status_code in (200, 404)
+            # an ordinary user is refused the admin routes (tests/test_admin.py covers each)
+            allowed = (403,) if path.startswith("/api/admin/") else (200, 404)
+            assert api.get(concrete(path)).status_code in allowed
 
 
 def test_malformed_json_is_422_before_the_login_check_and_leaks_nothing(anon):

@@ -111,9 +111,10 @@ def _refuse_by_state(state: str) -> None:
 # ---- sign-up ----
 
 
-def _link(settings: Settings, path: str, token: str | None = None) -> str:
+def link(settings: Settings, path: str, token: str | None = None, param: str = "token") -> str:
+    """An absolute link on the public site, with a token in the query when there is one."""
     base = settings.public_base_url.rstrip("/")
-    return f"{base}{path}" + (f"?token={token}" if token else "")
+    return f"{base}{path}" + (f"?{param}={token}" if token else "")
 
 
 def _send_verification(
@@ -133,7 +134,7 @@ def _send_verification(
         session,
         user.email,
         "verify_email",
-        {"link": _link(settings, "/verify-email", raw), "name": user.name},
+        {"link": link(settings, "/verify-email", raw), "name": user.name},
     )
 
 
@@ -253,7 +254,7 @@ def _sign_up_locked(
             session,
             address,
             "already_registered",
-            {"link": _link(settings, "/login"), "name": existing.name},
+            {"link": link(settings, "/login"), "name": existing.name},
         )
 
 
@@ -334,7 +335,7 @@ def issue_reset(session: Session, settings: Settings, user: User, now: datetime)
     raw = tokens.issue(
         session, purpose="reset_password", email=user.email, user_id=user.id, now=now
     )
-    return _link(settings, "/reset-password", raw)
+    return link(settings, "/reset-password", raw)
 
 
 def request_reset(session: Session, settings: Settings, email: str, now: datetime) -> None:
@@ -363,3 +364,19 @@ def reset_password(session: Session, raw_token: str, password: str, now: datetim
     user.session_epoch = User.session_epoch + 1
     tokens.revoke(session, "reset_password", user.id, now)
     session.commit()
+
+
+# ---- the waitlist ----
+
+
+def join_waitlist(session: Session, address: str, name: str | None) -> None:
+    """Add an address to the waiting list; nothing changes for one that is already there (or was
+    removed by the admin). Commits."""
+    name = name.strip()[:MAX_NAME_CHARS] if name and name.strip() else None
+    exists = session.scalars(select(WaitlistEntry.id).where(WaitlistEntry.email == address)).first()
+    if exists is None:
+        try:
+            session.add(WaitlistEntry(email=address, name=name))
+            session.commit()
+        except IntegrityError:  # two requests at once: the other one won
+            session.rollback()

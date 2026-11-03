@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app import accounts, auth, passwords
-from app.models import Meeting, Template, UserSettings, VocabularyTerm
+from app.models import Meeting, Notification, Template, UserSettings, VocabularyTerm
 from tests.test_api import Api, anon, api, error_of, ready  # noqa: F401  (fixtures used by name)
 from tests.test_web import (  # noqa: F401
     MEET,
@@ -479,13 +479,21 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     term = VocabularyTerm(owner_user_id=owner.id, term="MyTerm")
     session.add(term)
     session.commit()
-    ids = {"meeting_id": mine.id, "template_id": template.id, "term_id": term.id}
+    note = Notification(user_id=owner.id, kind="k", title="t", dedupe_key="d")
+    session.add_all([term, note])
+    session.commit()
+    ids = {
+        "meeting_id": mine.id,
+        "template_id": template.id,
+        "term_id": term.id,
+        "notification_id": note.id,
+    }
     anon.log_in(email=OTHER_EMAIL)
     checked = 0
     for method, path in api_routes(app):
         names = re.findall(r"\{(\w+)\}", path)
-        if not names:
-            continue
+        if not names or path.startswith("/api/admin/"):
+            continue  # admin routes answer 403 to any non-admin: tests/test_admin.py
         assert set(names) <= set(ids), f"classify the id in {method} {path} and scope it"
         url = re.sub(r"\{(\w+)\}", lambda m: str(ids[m[1]]), path)
         bodies = {  # a valid body for each route that takes one, so only the id can be wrong

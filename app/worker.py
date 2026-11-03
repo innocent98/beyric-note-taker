@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import mail
+from app import deletion, mail, maintenance
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import AppState, Meeting
@@ -75,6 +75,11 @@ def send_mail(session: Session, mailer: mail.Mailer | None, now: datetime) -> in
     return mail.deliver_pending(session, mailer, get_settings(), now)
 
 
+def purge_deleted(session: Session, vexa=None) -> int:
+    """Remove the data of accounts the admin deleted (`app/deletion.py`)."""
+    return deletion.purge_deleted(session, vexa or VexaClient())
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     mailer = mail.build_mailer(get_settings())
@@ -92,10 +97,11 @@ def main() -> None:
             with SessionLocal() as session:
                 record_heartbeat(session, datetime.now(UTC))
                 send_mail(session, mailer, datetime.now(UTC))
+                purge_deleted(session)
                 found = run_pass(session, cursor)
                 if time.monotonic() - last_cleanup >= CLEANUP_EVERY_SECONDS:
                     removed = delete_expired_audio(session, datetime.now(UTC), vexa=VexaClient())
-                    mail.sweep_outbox(session, datetime.now(UTC))
+                    maintenance.run_hourly(session, datetime.now(UTC))
                     last_cleanup = time.monotonic()
                     if removed:
                         logger.info("deleted audio for %s meetings", removed)

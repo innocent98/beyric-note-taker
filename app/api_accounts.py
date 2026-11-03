@@ -14,19 +14,25 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app import edge, google_oauth, google_signin, limits, services, signup
+from app import auth, edge, google_oauth, google_signin, limits, notifications, services, signup
 from app.api_schemas import (
     Accepted,
     EmailIn,
     ErrorResponse,
+    NotificationList,
+    NotificationOut,
     PasswordChanged,
     PilotOut,
     ResetIn,
     SignUp,
+    UnreadCount,
     Verified,
     VerifyIn,
+    WaitlistAccepted,
+    WaitlistIn,
 )
 from app.db import get_session
+from app.models import User
 
 router = APIRouter()
 
@@ -263,3 +269,82 @@ def _finish_google(request, session, google, flow, code, error, cookie, now) -> 
         )
         return response
     return _login_error(outcome.error)
+
+
+# ---- waitlist ----
+
+
+@router.post(
+    "/waitlist",
+    status_code=202,
+    tags=["waitlist"],
+    responses={code: {"model": ErrorResponse} for code in (422,)},
+)
+def join_waitlist(
+    body: WaitlistIn, request: Request, session: Session = Depends(get_session)
+) -> WaitlistAccepted:
+    """Leave an email (and optionally a name) for when a place opens. Public. Always 202
+    `on_the_list`, whether or not the address is already listed or has an account; a repeat
+    changes nothing, and 5 per hour per address and 1 per minute per email are dropped silently.
+    422 `invalid_email` for a malformed address."""
+    address = signup.normalise_email(body.email)
+    if address is None:
+        raise signup.Refused(422, "invalid_email", "Enter a valid email address.")
+    allowed = _limits(request).waitlist_address.hit(_address(request)) and (
+        _limits(request).waitlist_email.hit(limits.email_key(address))
+    )
+    if allowed:
+        signup.join_waitlist(session, address, body.name)
+    return WaitlistAccepted(status="on_the_list")
+
+
+# ---- notifications ----
+
+LIST_DEFAULT, LIST_MAX = 50, 100
+
+
+@router.get("/notifications", tags=["notifications"])
+def list_notifications(
+    limit: int = Query(LIST_DEFAULT, ge=1, le=LIST_MAX),
+    before_id: int | None = Query(None, ge=1, le=services.MAX_ID),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> NotificationList:
+    """The caller's notifications, newest first. For the next page pass `before_id` =
+    `next_before_id`."""
+    rows = notifications.list_notifications(session, user, limit + 1, before_id)
+    page = rows[:limit]
+    return NotificationList(
+        notifications=[NotificationOut.model_validate(row) for row in page],
+        has_more=len(rows) > limit,
+        next_before_id=page[-1].id if len(rows) > limit else None,
+    )
+
+
+@router.post(
+    "/notifications/read-all",
+    tags=["notifications"],
+)
+def read_all_notifications(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> UnreadCount:
+    """Mark all of the caller's notifications read."""
+    notifications.mark_all_read(session, user, _now())
+    return UnreadCount(unread_notifications=notifications.unread_count(session, user))
+
+
+@router.post(
+    "/notifications/{notification_id:id}/read",
+    tags=["notifications"],
+    responses={404: {"model": ErrorResponse}},
+)
+def read_notification(
+    notification_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> NotificationOut:
+    """Mark one notification read (repeating it keeps the first read time). 404 for someone
+    else's."""
+    return NotificationOut.model_validate(
+        notifications.mark_read(session, user, notification_id, _now())
+    )
