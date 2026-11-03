@@ -3472,7 +3472,7 @@
         ]
       },
       "post": {
-        "description": "Log in with email and password. Public, but needs the X-CSRF-Token from `GET /session`.\n\n401 `invalid_credentials` for a wrong password or an unknown email (the same answer for\nboth). 403 `email_not_verified` or `account_suspended` when the password was right but the\naccount may not sign in. The login limits are the page's: 5 failed attempts per client\naddress in 5 minutes and 10 per email in an hour, then 429. The response carries the new\nsession's CSRF token: it replaces the one from before login.",
+        "description": "Log in with email and password. Public, but needs the X-CSRF-Token from `GET /session`.\n\n401 `invalid_credentials` for a wrong password or an unknown email (the same answer for\nboth, and for an account whose email was never confirmed). 403 `account_suspended` when the\npassword was right but the account is suspended. The login limits are the page's: 5 failed\nattempts per client address in 5 minutes and 10 per email in an hour, then 429. The response\ncarries the new session's CSRF token: it replaces the one from before login.",
         "operationId": "log_in",
         "requestBody": {
           "content": {
