@@ -35,7 +35,7 @@ Vexa then polls that URL (hosted: every 60 s; self-hosted: every 5 min, `CALENDA
 
 Not recommended, even though self-hosted Vexa exposes it. Our product owns things Vexa's sync does not know about: the per-account **hours cap checked before every dispatch**, per-user ownership of the resulting meeting, the **capacity registry** (a queue is not acceptable), the 2-minute lead time and 15-minute late window we chose, the rules "all / only ones I organise / only when I turn it on", and the "Can't join" reasons on the Upcoming list. If Vexa joined on its own we would learn about the meeting afterwards, could not gate on hours or capacity, and would depend on Vexa's per-user model *(how Vexa users map to our accounts is unchecked)*. Keep the scheduler ours and treat Vexa as the bot layer only.
 
-## Recommendation (for Adebayo to confirm)
+## Recommendation (Adebayo confirmed 2026-11-03: "Yes, add ICS"; Google OAuth primary plus the ICS source)
 
 1. **Google OAuth stays the main path.** For ordinary users it is a two-click flow against a six-step paste, it is fresher, it handles recurring series and later instant-Meet, and the verification cost is already paid.
 2. **Add the secret-ICS link as a second, optional source**, behind one calendar-source interface, for **Outlook and Microsoft 365 users and anyone who will not grant Google access**. That brings Outlook into the pilot at a fraction of the Microsoft app-registration cost (the pilot answer was "Outlook later"; this changes that to "Outlook through a pasted link, slower"). Label it honestly in the UI: "Updates can take a while; meetings made just before they start may be missed."
