@@ -14,7 +14,7 @@
     "headers": {
       "cache-control": "no-store",
       "location": "/login?error=terms_required",
-      "set-cookie": "google_flow=<cookie>; expires=Tue, 03 Nov 2026 13:54:22 GMT; Max-Age=0; Path=/api/auth/google; SameSite=lax"
+      "set-cookie": "google_flow=<cookie>; expires=Tue, 03 Nov 2026 14:02:59 GMT; Max-Age=0; Path=/api/auth/google; SameSite=lax"
     },
     "body": ""
   }

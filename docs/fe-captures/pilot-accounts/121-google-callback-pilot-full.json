@@ -16,7 +16,7 @@
       "location": "/pilot-full",
       "set-cookie": [
         "pilot_email=<cookie>; HttpOnly; Max-Age=900; Path=/api/pilot; SameSite=lax",
-        "google_flow=<cookie>; expires=Tue, 03 Nov 2026 13:54:23 GMT; Max-Age=0; Path=/api/auth/google; SameSite=lax"
+        "google_flow=<cookie>; expires=Tue, 03 Nov 2026 14:02:59 GMT; Max-Age=0; Path=/api/auth/google; SameSite=lax"
       ]
     },
     "body": ""
