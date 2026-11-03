@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     vexa_api_key: str = ""
     bot_name: str = "Beyric Note Taker (recording)"
     poll_interval_seconds: int = 30
+    # How long the bot may sit in a call with no one else speaking before it leaves on its own
+    # (Vexa `automatic_leave.max_time_left_alone`). It is a silence rule, not a headcount, so a
+    # short window can cut a quiet meeting short. Vexa's own default is 10 minutes. 0 = send
+    # nothing and keep Vexa's default.
+    bot_left_alone_seconds: int = 300
     max_poll_hours: int = 6
 
     openai_api_key: str = ""
