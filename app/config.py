@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     mail_from: str = "Beyric Note Taker <no-reply@beyrictech.com>"
 
+    # Hosts a pasted calendar link may point at, comma separated: an exact name, or `.suffix`
+    # (every subdomain of it). Only an admin edits this, through the environment, never a user.
+    # The defaults are the hosts Google Calendar and Outlook publish private links on, not yet
+    # confirmed against real feeds (spike C19).
+    ics_allowed_hosts: str = "calendar.google.com,outlook.office365.com,outlook.live.com"
+
     # The key that encrypts stored secrets (calendar refresh tokens, a pasted calendar link): 32
     # random bytes, base64 (`openssl rand -base64 32`). It lives only in the server .env, never in
     # the database or a backup. Rotation: new key here, old key in `token_enc_key_previous`, raise
