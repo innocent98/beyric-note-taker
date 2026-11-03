@@ -1,0 +1,8 @@
+# 03-post-no-link
+# curl -X POST -F text=Lunch at noon? https://example.com/menu localhost:3055/share-target  (against the production build of web/ on localhost:3055; text and link are placeholders)
+
+HTTP/1.1 303 See Other
+cache-control: no-store
+location: /share#none
+Transfer-Encoding: chunked
+

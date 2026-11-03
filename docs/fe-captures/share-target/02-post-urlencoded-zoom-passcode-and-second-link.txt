@@ -1,0 +1,8 @@
+# 02-post-urlencoded-zoom-passcode-and-second-link
+# curl -X POST --data-urlencode text=Join Zoom: https://us02web.zoom.us/j/81234567890?pwd=PLACEHOLDERpass&utm=x or Meet https://meet.google.com/abc-defg-hij localhost:3055/share-target  (against the production build of web/ on localhost:3055; text and link are placeholders)
+
+HTTP/1.1 303 See Other
+cache-control: no-store
+location: /share#link=https%3A%2F%2Fus02web.zoom.us%2Fj%2F81234567890%3Fpwd%3DPLACEHOLDERpass&others=1
+Transfer-Encoding: chunked
+

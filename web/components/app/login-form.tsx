@@ -6,6 +6,7 @@ import { GoogleButton } from "@/components/auth/google-button";
 import { Alert, AppLink, Button, Field } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
+import { hasPendingShare } from "@/lib/share-pending";
 
 // POST /api/session from the browser, so the session cookie FastAPI sets lands in the browser by
 // itself. The button stays locked after a 429: the lockout lasts 5 minutes to an hour with no
@@ -50,7 +51,8 @@ export function LoginForm({
     setWrongCredentials(false);
     try {
       await api.login(email.trim(), password);
-      router.replace("/");
+      // A meeting link shared from another app (the PWA share target) is waiting in this tab: back to it.
+      router.replace(hasPendingShare() ? "/share" : "/");
       router.refresh();
     } catch (caught) {
       setError(errorMessage(caught));
