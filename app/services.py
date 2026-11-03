@@ -26,6 +26,7 @@ from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
+    BOT_RECORDING,
     MEET_REFUSED,
     REASON_CANCELLED,
     REASON_NO_SPEECH,
@@ -55,6 +56,19 @@ STEP_TEXT = {
     "transcribing": "Writing the transcript",
     "speakers": "Working out who said what",
     "notes": "Writing the notes",
+}
+# What the owner reads while the bot is in a call, by the state the worker last saw Vexa report.
+# `{bot}` is the name the bot shows in the meeting. "Recording" is only said when something is
+# being captured (`BOT_RECORDING`); `active` alone only means the bot is in.
+BOT_STATE_TEXT = {
+    "joining": "Bot is joining the meeting",
+    "awaiting_admission": "Waiting to be let in. Admit '{bot}' in the meeting",
+    "active": "Bot is in the meeting",
+    BOT_RECORDING: "Recording",
+    "needs_help": (
+        "The bot is waiting on a prompt in the meeting, such as a consent or verification "
+        "screen. Check the meeting for a prompt."
+    ),
 }
 STATUS_TONES = {
     "ready": "success",
@@ -197,9 +211,11 @@ def _in_range(pk: int | None) -> bool:
 
 
 def status_text(meeting: Meeting) -> str:
-    """Plain words for the owner. Nothing here claims the meeting is being recorded."""
+    """Plain words for the owner. "Recording" is said only once something is being captured; a
+    bot whose state is not known (an older meeting, Vexa not reachable) reads "Bot sent"."""
     if meeting.status == "bot_sent":
-        return "Bot sent"
+        text = BOT_STATE_TEXT.get(meeting.completion_reason or "")
+        return text.format(bot=get_settings().bot_name) if text else "Bot sent"
     if meeting.status == "processing":
         return STEP_TEXT.get(meeting.step, "Working on it")
     if meeting.status == "ready":

@@ -1075,3 +1075,41 @@ def test_the_app_shell_marks_the_current_page(client):
     html = client.get("/templates").text
     assert re.search(r'<a class="nav-link" href="/templates" aria-current="page">', html)
     assert not re.search(r'href="/" aria-current="page"', html)
+
+
+LIVE_WORDS = [
+    ("joining", "Bot is joining the meeting"),
+    (
+        "awaiting_admission",
+        "Waiting to be let in. Admit &#39;Beyric Note Taker (recording)&#39; in",
+    ),
+    ("active", "Bot is in the meeting"),
+    ("recording", "Recording"),
+    ("needs_help", "waiting on a prompt in the meeting"),
+]
+
+
+@pytest.mark.parametrize(("state", "words"), LIVE_WORDS)
+def test_page_and_list_say_what_the_bot_is_doing_and_keep_refreshing(
+    client, template, session, state, words
+):
+    meeting = add_meeting(session, template, completion_reason=state)
+    page = client.get(f"/meetings/{meeting.id}").text
+    assert words in page
+    assert "Bot sent" not in page
+    assert 'http-equiv="refresh" content="30"' in page
+    assert words in client.get("/").text
+
+
+def test_a_bot_with_no_known_state_still_reads_bot_sent_on_page_and_list(client, template, session):
+    meeting = add_meeting(session, template)
+    assert "Bot sent" in client.get(f"/meetings/{meeting.id}").text
+    assert "Bot sent" in client.get("/").text
+
+
+def test_a_long_bot_state_badge_may_wrap_and_a_short_one_may_not(client, template, session):
+    long_one = add_meeting(session, template, completion_reason="awaiting_admission")
+    page = client.get(f"/meetings/{long_one.id}").text
+    assert 'class="badge badge-warning badge-wrap"' in page
+    short = add_meeting(session, template, completion_reason="recording")
+    assert 'class="badge badge-warning"' in client.get(f"/meetings/{short.id}").text

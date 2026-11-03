@@ -130,6 +130,7 @@ form.inline { display: inline; }
 .badge-warning { background: var(--warning-tint); color: var(--warning); }
 .badge-info { background: var(--info-tint); color: var(--info); }
 .badge-brand { background: var(--primary-tint); color: var(--link); }
+.badge-wrap { white-space: normal; text-align: left; max-width: min(100%, 16rem); border-radius: 14px; }
 .alert { padding: 10px var(--space-3); border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); }
 .alert-error { border-color: var(--danger); background: var(--danger-tint); color: var(--danger-text); }
 .alert-notice { border-color: var(--warning); background: var(--warning-tint); color: var(--warning-text); }

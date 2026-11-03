@@ -156,6 +156,7 @@ form.inline { display: inline; }
 .badge-info { background: var(--info-tint); color: var(--info); }
 .badge-brand { background: var(--primary-tint); color: var(--link); }
 .badge-dot { gap: 6px; padding: 3px 10px 3px 8px; font-weight: 550; }
+.badge-wrap { white-space: normal; text-align: left; max-width: min(100%, 16rem); border-radius: 14px; }
 .badge-sm { padding: 2px 9px 2px 7px; font-size: 11px; font-weight: 600; }
 .badge-dot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .alert { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface); font-size: var(--text-sm); }
