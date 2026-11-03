@@ -212,16 +212,18 @@ sudo mkdir -p /etc/nginx/snippets
 sudo install -m 600 -o root -g root /dev/null /etc/nginx/snippets/beyric-edge-secret.conf
 printf 'proxy_set_header X-Edge-Secret "%s";\n' "$SECRET" \
   | sudo tee /etc/nginx/snippets/beyric-edge-secret.conf >/dev/null
-# The line is not in .env yet; if it is (an empty EDGE_SHARED_SECRET=), edit that line instead.
+# Replace any existing EDGE_SHARED_SECRET line (an empty one from .env.example, or an old value
+# when rotating) with a fresh one; neither command prints a value.
+sed -i '/^EDGE_SHARED_SECRET=/d' /opt/beyric-note-taker/.env
 [ -n "$(tail -c1 /opt/beyric-note-taker/.env)" ] && echo >> /opt/beyric-note-taker/.env  # last line needs its newline
 printf 'EDGE_SHARED_SECRET=%s\n' "$SECRET" >> /opt/beyric-note-taker/.env
 chmod 600 /opt/beyric-note-taker/.env
 unset SECRET
 
-# 2. Prove both files hold the same value, without showing it (prints "same"):
-diff <(sed -n 's/^EDGE_SHARED_SECRET=//p' /opt/beyric-note-taker/.env) \
-     <(sudo sed -n 's/.*X-Edge-Secret "\(.*\)";/\1/p' /etc/nginx/snippets/beyric-edge-secret.conf) \
-  && echo same
+# 2. Prove both files hold the same value, without showing either (prints "same"):
+cmp -s <(sed -n 's/^EDGE_SHARED_SECRET=//p' /opt/beyric-note-taker/.env) \
+       <(sudo sed -n 's/.*X-Edge-Secret "\(.*\)";/\1/p' /etc/nginx/snippets/beyric-edge-secret.conf) \
+  && echo same || echo DIFFERENT
 
 # 3. Put the include line in the live site file (once), under the other proxy_set_header lines:
 #      include /etc/nginx/snippets/beyric-edge-secret.conf;
@@ -233,7 +235,7 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 `printf` is a shell builtin, so the value is not in any process's command line either. Do not
-`cat` or `echo` either file; to look at one, use `sudo grep -c X-Edge-Secret <file>` (a count).
+`cat`, `echo` or `diff` either file; to look at one, use `sudo grep -c X-Edge-Secret <file>` (a count).
 
 Check it after the deploy:
 

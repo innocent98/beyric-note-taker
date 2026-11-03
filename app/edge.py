@@ -89,28 +89,44 @@ def client_address(request: Request, settings: Settings) -> str:
     return limiter_key((_forwarded_address(request) if trusted else None) or peer)
 
 
-_MISSING_WARNING_EVERY = 60.0
-_missing_lock = threading.Lock()
-_missing_last = float("-inf")
+class Throttle:
+    """Lets something through at most once every `every` seconds (for log lines an attacker could
+    otherwise trigger at will)."""
+
+    def __init__(self, every: float = 60.0) -> None:
+        self.every = every
+        self._lock = threading.Lock()
+        self._last = float("-inf")
+
+    def ready(self) -> bool:
+        now = time.monotonic()
+        with self._lock:
+            if now - self._last < self.every:
+                return False
+            self._last = now
+            return True
+
+    def reset(self) -> None:
+        with self._lock:
+            self._last = float("-inf")
+
+
+missing_secret_throttle = Throttle()
 
 
 def note_missing_secret(request: Request, settings: Settings) -> None:
     """With a secret configured, every genuine request reaches Next with it (nginx adds it). One
     from Next's own address without it means nginx lost the include, or something on the server
     is talking to Next directly. Warn, at most once a minute; the secret is never logged."""
-    global _missing_last
     if not settings.edge_shared_secret or _peer(request) != NEXT_ADDRESS:
         return
     if has_edge_secret(request, settings):
         return
-    now = time.monotonic()
-    with _missing_lock:
-        if now - _missing_last < _MISSING_WARNING_EVERY:
-            return
-        _missing_last = now
+    if not missing_secret_throttle.ready():
+        return
     logger.warning(
         "A request through the Next.js container arrived without a valid %s header "
-        "(path %s). Either nginx is not sending it (check the include in the site file) or "
+        "(path %r). Either nginx is not sending it (check the include in the site file) or "
         "something on this server is calling next directly.",
         SECRET_HEADER,
         request.scope.get("path", "?"),

@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.datastructures import Headers
 
-from app import auth, edge
+from app import auth, edge, services
 from app.auth import LoginLimiter
 from app.main import create_app
 from tests.test_web import (  # noqa: F401  (fixtures used by name)
@@ -396,13 +396,23 @@ def device_settings(**overrides):
     return make_settings(edge_shared_secret=SECRET, **overrides)
 
 
+def known(key, cookie, account, now=None):
+    return auth.device_id(key, cookie, account, now) is not None
+
+
+@pytest.fixture(autouse=True)
+def fresh_throttles():
+    edge.missing_secret_throttle.reset()
+    services.lockout_log_throttle.reset()
+
+
 def test_a_signed_device_cookie_is_known_until_it_expires():
     key = auth.device_key(device_settings())
     cookie = auth.sign_device(key, "owner", now=1_000)
-    assert auth.device_is_known(key, cookie, "owner", now=1_000)
-    assert auth.device_is_known(key, cookie, "owner", now=1_000 + auth.DEVICE_SECONDS)
-    assert not auth.device_is_known(key, cookie, "owner", now=1_000 + auth.DEVICE_SECONDS + 1)
-    assert not auth.device_is_known(key, cookie, "owner", now=999)  # from the future
+    assert known(key, cookie, "owner", now=1_000)
+    assert known(key, cookie, "owner", now=1_000 + auth.DEVICE_SECONDS)
+    assert not known(key, cookie, "owner", now=1_000 + auth.DEVICE_SECONDS + 1)
+    assert not known(key, cookie, "owner", now=999)  # from the future
 
 
 def test_forged_or_malformed_device_cookies_are_not_known():
@@ -420,22 +430,22 @@ def test_forged_or_malformed_device_cookies_are_not_known():
         auth.sign_device(other_key, "owner"),
         f"{auth._b64(b'{}')}.{auth._signature(key, auth._b64(b'{}'))}",  # signed, wrong content
     ):
-        assert not auth.device_is_known(key, bad, "owner"), bad
+        assert not known(key, bad, "owner"), bad
 
 
 def test_a_device_cookie_only_counts_for_its_own_account():
     """With accounts, one user's cookie must not skip the account window of another's."""
     key = auth.device_key(device_settings())
     cookie = auth.sign_device(key, "Ada@Example.com")
-    assert auth.device_is_known(key, cookie, " ada@example.com ")  # same account, normalised
-    assert not auth.device_is_known(key, cookie, "ben@example.com")
-    assert not auth.device_is_known(key, cookie, "owner")
+    assert known(key, cookie, " ada@example.com ")  # same account, normalised
+    assert not known(key, cookie, "ben@example.com")
+    assert not known(key, cookie, "owner")
 
 
 def test_a_session_cookie_is_not_a_device_cookie_and_the_reverse():
     settings = device_settings()
     session_cookie = auth.sign_session(auth.signing_key(settings), auth.new_session(auth=True))
-    assert not auth.device_is_known(auth.device_key(settings), session_cookie, "owner")
+    assert not known(auth.device_key(settings), session_cookie, "owner")
     device_cookie = auth.sign_device(auth.device_key(settings), "owner")
     assert auth.read_session(auth.signing_key(settings), device_cookie) is None
 
@@ -443,7 +453,7 @@ def test_a_session_cookie_is_not_a_device_cookie_and_the_reverse():
 def test_a_new_owner_password_retires_every_device_cookie():
     old = auth.sign_device(auth.device_key(device_settings()), "owner")
     changed = auth.device_key(device_settings(owner_password="a different password"))
-    assert not auth.device_is_known(changed, old, "owner")
+    assert not known(changed, old, "owner")
 
 
 def test_known_device_skips_the_account_window_but_not_the_address_window():
@@ -451,18 +461,44 @@ def test_known_device_skips_the_account_window_but_not_the_address_window():
     for i in range(10):  # an attacker spreads ten failures over addresses
         assert limiter.try_acquire(f"attacker-{i}", "owner", now=i)
     assert not limiter.try_acquire("owner-home", "owner", now=11)  # a stranger is locked out
-    assert limiter.try_acquire("owner-home", "owner", now=11, known_device=True)
+    assert limiter.try_acquire("owner-home", "owner", now=11, device="dev-1")
     # ...and a known device is counted by the address window like anyone else.
     for t in range(12, 16):
-        assert limiter.try_acquire("owner-home", "owner", now=t, known_device=True)
-    assert not limiter.try_acquire("owner-home", "owner", now=16, known_device=True)
+        assert limiter.try_acquire("owner-home", "owner", now=t, device="dev-1")
+    assert not limiter.try_acquire("owner-home", "owner", now=16, device="dev-1")
 
 
 def test_known_device_attempts_do_not_spend_the_accounts_budget():
     limiter = LoginLimiter()
     for i in range(30):
-        assert limiter.try_acquire(f"home-{i}", "owner", now=i, known_device=True)
+        assert limiter.try_acquire(f"home-{i}", "owner", now=i, device=f"dev-{i}")
     assert limiter.try_acquire("stranger", "owner", now=40)  # the account window is still empty
+
+
+def test_a_stolen_device_cookie_keeps_a_cap_of_its_own():
+    limiter = LoginLimiter()
+    for i in range(10):
+        assert limiter.try_acquire(f"thief-{i}", "owner", now=i, device="stolen")
+    assert limiter.check("thief-new", "owner", now=11, device="stolen") == "device"
+    assert limiter.try_acquire("owner-home", "owner", now=11, device="owners-own")  # not shared
+    assert limiter.try_acquire("stranger", "owner", now=11)  # the account window is untouched
+
+
+def test_a_known_device_success_does_not_clear_the_account_window():
+    limiter = LoginLimiter()
+    for i in range(10):
+        limiter.try_acquire(f"attacker-{i}", "owner", now=i)
+    assert limiter.try_acquire("owner-home", "owner", now=11, device="dev-1")
+    limiter.succeeded("owner-home", "owner", device="dev-1")
+    assert limiter.check("stranger", "owner", now=12) == "account"  # still locked for strangers
+    # ...whereas a success without a known device (the password was proven) clears it.
+    assert limiter.try_acquire("new-browser", "owner", now=13) is False
+    limiter2 = LoginLimiter()
+    for i in range(9):
+        limiter2.try_acquire(f"a-{i}", "owner", now=i)
+    limiter2.try_acquire("somewhere", "owner", now=10)
+    limiter2.succeeded("somewhere", "owner")
+    assert limiter2.try_acquire("stranger", "owner", now=11)
 
 
 def test_check_says_which_limit_refused():
@@ -506,7 +542,7 @@ def test_the_owner_gets_a_device_cookie_only_by_logging_in(secured):
     low = cookie.lower()
     assert "httponly" in low and "samesite=lax" in low and "path=/" in low
     assert f"max-age={auth.DEVICE_SECONDS}" in low
-    assert auth.device_is_known(secured.state.device_key, jar.get(auth.DEVICE_COOKIE_NAME), "owner")
+    assert known(secured.state.device_key, jar.get(auth.DEVICE_COOKIE_NAME), "owner")
 
 
 def test_the_device_cookie_is_secure_when_the_site_is_https_only(app, engine):  # noqa: F811
@@ -516,8 +552,11 @@ def test_the_device_cookie_is_secure_when_the_site_is_https_only(app, engine):  
         app_, base_url="https://testserver", follow_redirects=False, client=("172.28.0.1", 1)
     ) as c:
         ok = bad_login(c, "198.51.100.20", SECRET, password=PASSWORD)
-    device = next(x for x in ok.headers.get_list("set-cookie") if x.startswith("device="))
-    assert "secure" in device.lower().replace("samesite", "")
+    device = next(x for x in ok.headers.get_list("set-cookie") if "device=" in x)
+    assert device.startswith("__Host-device=")  # the browser then insists on Secure, Path=/
+    low = device.lower()
+    assert "secure" in low.replace("samesite", "") and "path=/" in low and "domain" not in low
+    assert not any(x.startswith("device=") for x in ok.headers.get_list("set-cookie"))
 
 
 def test_an_attacker_cannot_lock_the_owner_out_of_a_new_login(secured):
@@ -601,7 +640,7 @@ def test_an_account_lockout_is_logged_without_password_material(secured, caplog)
 
 @pytest.fixture
 def next_peer(secured):
-    edge._missing_last = float("-inf")
+    edge.missing_secret_throttle.reset()
     with TestClient(secured, follow_redirects=False, client=(edge.NEXT_ADDRESS, 40000)) as c:
         yield c
 
@@ -617,7 +656,7 @@ def test_a_request_through_next_without_the_secret_warns_once_a_minute(next_peer
         for _ in range(5):
             next_peer.get("/login")
         assert len(edge_warnings(caplog)) == 1
-        edge._missing_last -= 61  # a minute later
+        edge.missing_secret_throttle._last -= 61  # a minute later
         next_peer.get("/login")
     assert len(edge_warnings(caplog)) == 2
     assert SECRET not in caplog.text
@@ -633,7 +672,7 @@ def test_no_warning_for_genuine_or_unrelated_requests(next_peer, secured, caplog
 
 
 def test_no_warning_while_no_secret_is_configured(app, caplog):  # noqa: F811
-    edge._missing_last = float("-inf")
+    edge.missing_secret_throttle.reset()
     with caplog.at_level(logging.WARNING, logger="app.edge"):
         with TestClient(app, client=(edge.NEXT_ADDRESS, 1), follow_redirects=False) as c:
             c.get("/login")
@@ -675,3 +714,75 @@ def test_no_nginx_location_sets_proxy_headers_of_its_own():
         blocks += 1
         assert "proxy_set_header" not in body, match.group(0)
     assert blocks >= 3  # the parse found the login, regenerate and catch-all locations
+
+
+# ---- the second review's fixes ----
+
+
+def test_a_stolen_device_cookie_is_capped_through_the_real_login(secured):
+    _, jar = owner_logs_in(secured)
+    cookies = {auth.DEVICE_COOKIE_NAME: jar.get(auth.DEVICE_COOKIE_NAME)}
+    for i in range(10):  # a thief guesses from ten addresses with the stolen cookie
+        with new_visitor(secured, i, cookies) as thief:
+            assert bad_login(thief, f"203.0.113.{i}", SECRET).status_code == 401
+    with new_visitor(secured, 99, cookies) as thief:
+        assert bad_login(thief, "203.0.113.200", SECRET, password=PASSWORD).status_code == 429
+    # the account window was never touched, so a stranger is not locked out by the thief
+    with new_visitor(secured, 98) as stranger:
+        assert bad_login(stranger, "198.51.100.77", SECRET, password=PASSWORD).status_code == 303
+
+
+def test_a_known_device_login_during_a_lockout_leaves_the_lockout_in_place(secured):
+    _, jar = owner_logs_in(secured)
+    device = jar.get(auth.DEVICE_COOKIE_NAME)
+    lock_the_account(secured)
+    response, _ = owner_logs_in(secured, "198.51.100.20", {auth.DEVICE_COOKIE_NAME: device})
+    assert response.status_code == 303
+    with new_visitor(secured, 2) as stranger:  # the failures are still on the account
+        assert bad_login(stranger, "198.51.100.77", SECRET, password=PASSWORD).status_code == 429
+
+
+def issued_device_cookie(response):
+    line = next(
+        c for c in response.headers.get_list("set-cookie") if c.startswith(auth.DEVICE_COOKIE_NAME)
+    )
+    return line.split(";")[0].split("=", 1)[1]
+
+
+def test_a_device_keeps_its_id_when_it_logs_in_again_and_new_browsers_get_new_ones(secured):
+    key = secured.state.device_key
+    first, _ = owner_logs_in(secured, "198.51.100.20")
+    other, _ = owner_logs_in(secured, "198.51.100.21")
+    cookie = issued_device_cookie(first)
+    id_first = auth.device_id(key, cookie, "owner")
+    assert id_first and id_first != auth.device_id(key, issued_device_cookie(other), "owner")
+    again, _ = owner_logs_in(secured, "198.51.100.20", {auth.DEVICE_COOKIE_NAME: cookie})
+    assert auth.device_id(key, issued_device_cookie(again), "owner") == id_first
+
+
+def test_lockout_warnings_are_rate_limited(secured, caplog):
+    with caplog.at_level(logging.WARNING, logger="app.services"):
+        lock_the_account(secured)
+        for i in range(5):
+            with new_visitor(secured, i) as stranger:
+                bad_login(stranger, f"198.51.100.{100 + i}", SECRET)
+        assert len([r for r in caplog.records if r.name == "app.services"]) == 1
+        services.lockout_log_throttle._last -= 61
+        with new_visitor(secured, 9) as stranger:
+            bad_login(stranger, "198.51.100.199", SECRET)
+    assert len([r for r in caplog.records if r.name == "app.services"]) == 2
+
+
+def test_the_missing_secret_warning_logs_the_path_escaped(next_peer, caplog):
+    with caplog.at_level(logging.WARNING, logger="app.edge"):
+        next_peer.get("/api/x%0AFORGED%20LOG%20LINE")
+    [record] = edge_warnings(caplog)
+    assert "\n" not in record.getMessage() and "\\n" in record.getMessage()
+
+
+def test_the_limiter_comment_matches_what_it_evicts():
+    limiter = LoginLimiter(max_keys=2)
+    limiter.try_acquire("a", "x1", now=0)
+    limiter.try_acquire("b", "x2", now=1)
+    limiter.try_acquire("c", "x3", now=2)  # "a" and "x1" were created first
+    assert limiter._clients.attempts.keys() == {"b", "c"}

@@ -74,6 +74,7 @@ def get_openai_client():
 
 
 OWNER_ACCOUNT = "owner"  # the login form has no username yet; accounts will pass the email
+lockout_log_throttle = edge.Throttle()
 
 
 def log_in(request: Request, session: Session, password: str, account: str = OWNER_ACCOUNT) -> None:
@@ -81,26 +82,31 @@ def log_in(request: Request, session: Session, password: str, account: str = OWN
     settings = request.app.state.settings
     limiter: auth.LoginLimiter = request.app.state.limiter
     client = edge.client_address(request, settings)
-    known_device = auth.device_is_known(
-        request.app.state.device_key, request.cookies.get(auth.DEVICE_COOKIE_NAME), account
+    device = auth.device_id(
+        request.app.state.device_key,
+        request.cookies.get(auth.device_cookie_name(settings)),
+        account,
     )
-    refused = limiter.check(client, account, known_device=known_device)  # counts this attempt
+    refused = limiter.check(client, account, device=device)  # counts this attempt
     if refused:
-        if refused == "account":
+        if refused != "address" and lockout_log_throttle.ready():
             logger.warning(
-                "login refused: account %r has had too many failed attempts in the last hour "
-                "(client %s)",
-                account.strip().lower()[:80],
+                "login refused: too many failed attempts in the last hour on the %s limit "
+                "(account %r, client %s); further refusals are not logged for a minute",
+                refused,
+                auth.account_key(account)[:80],
                 client,
             )
         raise Refused(429, "too_many_attempts", "Too many failed attempts. Try again later.")
     if not auth.password_matches(settings, password):
         raise Refused(401, "invalid_password", "That password is not right.")
-    limiter.succeeded(client, account)
+    limiter.succeeded(client, account, device)
     # A fresh token, never a promoted old one, stamped with the current epoch.
     request.state.session = auth.new_session(auth=True, epoch=auth.current_epoch(session))
     request.state.session_changed = True
-    request.state.device_account = account  # a device cookie for this account, only now
+    # A device cookie for this account, only now that the password was right; a known device
+    # keeps its id so its failures stay on one counter.
+    request.state.device_cookie = (account, device)
 
 
 def log_out(request: Request, session: Session) -> None:
