@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # until measured (spec section 9); raise it only after the load test. Phase C replaces this
     # with a per-host dispatcher.
     max_active_bots: int = 1
+    # Teams links are recognised on calendar events, but the bot joins them only once the Teams
+    # spike (P0.7) has passed and this is set: until then a Teams event reads "Can't join yet".
+    teams_join_enabled: bool = False
 
     openai_api_key: str = ""
     transcription_model: str = "gpt-transcribe"
