@@ -655,6 +655,30 @@ def test_create_refuses_while_a_bot_is_active(api, template, session, fake_vexa)
     assert fake_vexa.sent == []
 
 
+def test_a_bot_busy_with_someone_elses_meeting_is_a_neutral_busy(
+    api, template, session, fake_vexa, stranger
+):
+    """A capacity refusal must not say whose meeting holds the bot (or that anyone is recording)."""
+    theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
+    session.add(theirs)
+    session.commit()
+    add_meeting(session, theirs, status="bot_sent")
+    error = error_of(create(api, template), 409, "bot_busy")
+    assert error["message"] == "The note taker is busy right now. Try again in a few minutes."
+    assert fake_vexa.sent == []
+
+
+def test_someone_elses_meeting_does_not_block_when_there_is_room(
+    api, app, template, session, fake_vexa, stranger
+):
+    app.state.settings.max_active_bots = 2
+    theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
+    session.add(theirs)
+    session.commit()
+    add_meeting(session, theirs, status="bot_sent")
+    assert create(api, template).status_code == 201
+
+
 def test_create_reports_a_vexa_failure_without_its_detail(api, template, fake_vexa, session):
     fake_vexa.fail = True
     response = create(api, template, url=ZOOM)

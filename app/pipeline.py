@@ -257,6 +257,12 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
         # Counted now, in the same commit as whatever this step ends with: a recording that turns
         # out to hold no speech was still transcribed, and a retry counts it only once.
         usage.record_usage(session, meeting, recording.seconds)
+        # Committed before the OpenAI call: if it fails, the failure path rolls the session back,
+        # and the cost already spent would otherwise leave the ledger. Retaking the row lock
+        # keeps another worker off the meeting.
+        session.commit()
+        if _lock(session, meeting.id) is None:
+            return False
         text = transcribe_chunks(
             recording.chunks, _terms(session, meeting.owner_user_id), client=openai_client
         )

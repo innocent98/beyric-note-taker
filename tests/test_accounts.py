@@ -346,6 +346,78 @@ def test_the_pages_hide_foreign_meetings_and_templates_too(client, template, str
     assert edit.status_code == 404
 
 
+def test_the_pages_refuse_regenerate_cancel_and_term_delete_on_foreign_rows(
+    client, session, template, strangers_data, fake_vexa, fake_openai
+):
+    """The Jinja routes are scoped by the same service calls as the API; this proves it for the
+    three that act on a row (retry and template edit are above)."""
+    token = token_from(client.get("/").text)
+    meeting = strangers_data["meeting"]
+    notes_before = meeting.notes
+    regenerate = client.post(
+        f"/meetings/{meeting.id}/regenerate",
+        data={"template_id": str(template.id), "csrf_token": token},
+    )
+    assert regenerate.status_code == 404
+    waiting = add_meeting(
+        session,
+        strangers_data["template"],
+        status="bot_sent",
+        native_id="zzz-zzzz-zzz",
+    )
+    cancel = client.post(f"/meetings/{waiting.id}/cancel", data={"csrf_token": token})
+    assert cancel.status_code == 404
+    delete = client.post(
+        f"/vocabulary/{strangers_data['term'].id}/delete", data={"csrf_token": token}
+    )
+    assert delete.status_code == 303  # the page never says whether the row exists
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).notes == notes_before
+    assert session.get(Meeting, waiting.id).status == "bot_sent"
+    assert session.get(VocabularyTerm, strangers_data["term"].id) is not None
+    assert getattr(fake_vexa, "stopped", []) == [] and fake_openai.chat_calls == []
+
+
+def test_every_page_route_with_an_id_returns_404_for_another_users_row(
+    anon_client, app, session, owner, template, stranger, strangers_data
+):
+    """Page routes that act on an id: the stranger calls each with the owner's row. A new one
+    that is not classified here fails, so nobody adds one unscoped."""
+    from fastapi.routing import APIRoute
+
+    from app import web
+
+    mine = add_meeting(session, template)
+    term = VocabularyTerm(owner_user_id=owner.id, term="MyTerm")
+    session.add(term)
+    session.commit()
+    ids = {"meeting_id": mine.id, "template_id": template.id, "term_id": term.id}
+    token = token_from(anon_client.get("/login").text)
+    login = anon_client.post("/login", data=login_data(token, email=OTHER_EMAIL))
+    assert login.status_code == 303
+    token = token_from(anon_client.get("/").text)
+    checked = 0
+    for route in web.router.routes:
+        assert isinstance(route, APIRoute)
+        names = re.findall(r"\{(\w+)(?::\w+)?\}", route.path)
+        if not names:
+            continue
+        assert set(names) <= set(ids), f"classify the id in {route.path} and scope it"
+        url = re.sub(r"\{(\w+)(?::\w+)?\}", lambda m: str(ids[m[1]]), route.path)
+        for method in route.methods:
+            data = {"template_id": str(strangers_data["template"].id), "csrf_token": token}
+            data |= {"name": "x", "instructions": "y"}
+            response = anon_client.request(method, url, data=data if method == "POST" else None)
+            if route.path.endswith("/delete"):
+                assert response.status_code == 303  # a term delete never says "no such term"
+            else:
+                assert response.status_code == 404, f"{method} {route.path}"
+            checked += 1
+    assert checked >= 6
+    session.expire_all()
+    assert session.get(VocabularyTerm, term.id) is not None
+
+
 def test_a_meeting_cannot_be_started_with_someone_elses_template(
     api, fake_vexa, session, strangers_data
 ):

@@ -15,7 +15,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import HTTPException, Request
 from markdown_it import MarkdownIt
 from markupsafe import Markup
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
@@ -343,10 +343,20 @@ def _create_meeting(
         >= cap
     ):
         raise Refused(403, "hours_cap_reached", hours_cap_message(cap))
-    active = session.scalars(select(Meeting.id).where(Meeting.status.in_(ACTIVE)).limit(1)).first()
-    if active is not None:
+    # Two different refusals, so one user's activity is never visible to another: your own
+    # running meeting is named as yours; a full note taker is only "busy" and says nothing about
+    # whose meeting holds it.
+    own = session.scalars(
+        select(Meeting.id).where(Meeting.owner_user_id == user.id, Meeting.status.in_(ACTIVE))
+    ).first()
+    if own is not None:
         raise Refused(
             409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."
+        )
+    busy = session.scalar(select(func.count()).where(Meeting.status.in_(ACTIVE)))
+    if busy >= settings.max_active_bots:
+        raise Refused(
+            409, "bot_busy", "The note taker is busy right now. Try again in a few minutes."
         )
     try:
         vexa_id = vexa.send_bot(url)

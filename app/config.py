@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     bot_name: str = "Beyric Note Taker (recording)"
     poll_interval_seconds: int = 30
     max_poll_hours: int = 6
+    # How many bots may be on meetings at once, across all users. The Vexa box fits about one
+    # until measured (spec section 9); raise it only after the load test. Phase C replaces this
+    # with a per-host dispatcher.
+    max_active_bots: int = 1
 
     openai_api_key: str = ""
     transcription_model: str = "gpt-transcribe"
