@@ -37,8 +37,13 @@ The designer's prototype has a Download menu that the app lacked, and the AI wor
 ## Operate / roll back
 - Deploy: the image rebuild installs the two new Python packages; no environment variable, no migration. Check after deploy: open a ready meeting, Download, PDF with the transcript ticked; the `web` log gets one line `export: pdf built in ... renderer peak ... MiB`.
 - If exports fail after a deploy, `export_failed` is logged as `the pdf render exited with status N` with no content; run `docker compose exec web python -c "import weasyprint"`: an `OSError` naming a library means Pango is missing from the image.
-- **`compose.yaml` gives `web` no `mem_limit`** (only `next` and `vexa` have one). The export adds its own guard (child limit), but the container itself is uncapped; consider `mem_limit: 512m` for `web` (measured worst case with an export running about 210 MiB).
+- **`web` now has `mem_limit: 768m`** in `compose.yaml` (it had none; `next` has 512m, `vexa` 3g). Measured: the app is about 90 MiB idle and one export adds about 100 to 120 MiB (child process), so about 210 MiB at worst; 768m leaves room for the rest of the app. The export also has its own child limit (2 GiB address space).
 - Roll back by reverting the PR: no data was written, so nothing is left behind. Users lose the Download button and nothing else.
+
+## Server steps before merge
+- **Free disk first** (`df -h`, `docker system df`): the first deploy rebuilds the `web`, `worker` and `migrate` image (they share one build) with the two Pango packages named in the Dockerfile and one pip layer of about 103 MB (WeasyPrint, python-docx and dependencies); the finished image was 264 MB in total on arm64. On the shared server, prune old images if free space is tight.
+- No new environment variable, no migration, no nginx change. `compose.yaml` changes: `mem_limit: 768m` on `web` (the container is recreated on deploy).
+- After deploy: open a ready meeting, Download, PDF with the transcript ticked; the `web` log gets `export: pdf built in ... renderer peak ... MiB`.
 
 ## Follow-ups
 - The prototype's language note and translated downloads wait for W7 (`NotesDocument` already takes the text it renders; the translated sections come from the same parser). Share (W6) reuses the same document and the PDF and Word renderers for its attachments.

@@ -191,7 +191,8 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Download menu in the Next meeting page (parity with the prototype) and its states; privacy row "files you export are built when you ask and are not stored" in the Jinja templates and the Next copies
   - [x] SOP, FE guide with live captures, `scripts/capture_export_api.py`
   - [ ] Not verified: a file opened in Microsoft Word, Google Docs or Pages; the browser writing the file to disk; Safari and Firefox; the production CSP and the live site; timings on the real server
-  - [ ] Suggested, not done: `mem_limit: 512m` on the `web` service (it has none today); a per-account export limit
+  - [x] `mem_limit: 768m` on the `web` service (it had none)
+  - [ ] Suggested, not done: a per-account export limit
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated
 - [ ] Measure Next.js memory on the server (Adebayo runs the SSH steps)
 

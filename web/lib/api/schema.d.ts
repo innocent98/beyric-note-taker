@@ -232,6 +232,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Decisions
+         * @description Everything the caller's meetings decided, newest meeting first, grouped by meeting. `q`
+         *     matches a decision's words or its meeting's title (a title match shows all of that meeting's
+         *     decisions). `limit` counts meetings, not decisions. For the next page pass `before_id` =
+         *     `next_before_id`. A decision the caller hid is not listed.
+         */
+        get: operations["list_decisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/decisions/{decision_id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hide Decision
+         * @description Remove a decision from the log. It is hidden, never edited, and stays hidden when the
+         *     meeting's notes are rewritten. Hiding it again is 204 too.
+         */
+        post: operations["hide_decision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings": {
         parameters: {
             query?: never;
@@ -510,6 +554,90 @@ export interface paths {
         get: operations["read_pilot"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Review
+         * @description The caller's "Please check" items from their meetings: `state=open` (default) or
+         *     `checked`. Newest meeting first, in the order of the notes.
+         */
+        get: operations["list_review"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/review/{item_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check Review Item
+         * @description Mark an item checked. Checking it again keeps the first time.
+         */
+        post: operations["check_review_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/review/{item_id}/uncheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Uncheck Review Item
+         * @description Put a checked item back among the open ones.
+         */
+        post: operations["uncheck_review_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/review/{item_id}/vocabulary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Review Term
+         * @description Add the corrected spelling to the caller's vocabulary and mark the item checked. 400
+         *     `invalid_term` (nothing changes). 409 `duplicate_term` when the term is already there; the
+         *     item is still marked checked. The notes of this meeting are not rewritten: offer "rewrite
+         *     the notes" (`POST /meetings/{id}/regenerate`) afterwards.
+         */
+        post: operations["add_review_term"];
         delete?: never;
         options?: never;
         head?: never;
@@ -908,6 +1036,33 @@ export interface components {
              */
             status: "waiting" | "invited" | "joined" | "removed";
         };
+        /** BadgesOut */
+        BadgesOut: {
+            /** Review Open */
+            review_open: number;
+        };
+        /** DecisionGroup */
+        DecisionGroup: {
+            /** Decisions */
+            decisions: components["schemas"]["DecisionOut"][];
+            meeting: components["schemas"]["MeetingRef"];
+        };
+        /** DecisionList */
+        DecisionList: {
+            /** Groups */
+            groups: components["schemas"]["DecisionGroup"][];
+            /** Has More */
+            has_more: boolean;
+            /** Next Before Id */
+            next_before_id: number | null;
+        };
+        /** DecisionOut */
+        DecisionOut: {
+            /** Id */
+            id: number;
+            /** Text */
+            text: string;
+        };
         /** EmailIn */
         EmailIn: {
             /** Email */
@@ -957,6 +1112,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Extraction Status */
+            extraction_status: ("pending" | "running" | "done" | "failed" | "skipped") | null;
             /** Failure Reason */
             failure_reason: string | null;
             /** Id */
@@ -1024,6 +1181,23 @@ export interface components {
             refresh_after_seconds: number | null;
             /** Worker Stale */
             worker_stale: boolean;
+        };
+        /** MeetingRef */
+        MeetingRef: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: number;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "google_meet" | "zoom";
+            /** Title */
+            title: string;
         };
         /** MeetingSummary */
         MeetingSummary: {
@@ -1141,10 +1315,42 @@ export interface components {
             /** Token */
             token: string;
         };
+        /** ReviewItemOut */
+        ReviewItemOut: {
+            /** Checked At */
+            checked_at: string | null;
+            /** Heard As */
+            heard_as: string | null;
+            /** Id */
+            id: number;
+            meeting: components["schemas"]["MeetingRef"];
+            /** Text */
+            text: string;
+        };
+        /** ReviewList */
+        ReviewList: {
+            /** Items */
+            items: components["schemas"]["ReviewItemOut"][];
+            /** Open Count */
+            open_count: number;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** ReviewTermIn */
+        ReviewTermIn: {
+            /** Term */
+            term: string;
+        };
+        /** ReviewTermOut */
+        ReviewTermOut: {
+            item: components["schemas"]["ReviewItemOut"];
+            term: components["schemas"]["TermOut"];
+        };
         /** SessionState */
         SessionState: {
             /** Authenticated */
             authenticated: boolean;
+            badges: components["schemas"]["BadgesOut"] | null;
             /** Csrf Token */
             csrf_token: string;
             /** Unread Notifications */
@@ -1913,6 +2119,113 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_decisions: {
+        parameters: {
+            query?: {
+                q?: string | null;
+                limit?: number;
+                before_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    hide_decision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                decision_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Not logged in */
             401: {
@@ -2848,6 +3161,251 @@ export interface operations {
             };
             /** @description Missing or wrong X-CSRF-Token */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_review: {
+        parameters: {
+            query?: {
+                state?: "open" | "checked";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    check_review_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewItemOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    uncheck_review_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewItemOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    add_review_term: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewTermIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewTermOut"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -31,7 +31,7 @@ Earlier runs of the bare spike script in the same kind of container gave the sam
 
 Reading:
 - The PDF renderer holds **about 90 MiB before any transcript and grows about 1 MiB per 1,000 to 1,800 words**; 40,000 words peaks at 120 MiB. The web process itself is about 86 MiB idle *(read, `docs/spike/nextjs-scaffold/memory-and-deploy.txt`)*, so the worst case is about 210 MiB for the container while one export runs. The whole run (app, client, renderer) stayed inside a 512 MiB cap with room.
-- **`compose.yaml` gives the `web` service no `mem_limit`** (only `next` has 512m and `vexa` 3g). The brief for this task said it had one. So there is nothing to fit under, and nothing stops a runaway; the export adds its own guard (below). Recommendation, not done here (deployment config is the lead's call): `mem_limit: 512m` on `web`.
+- **`compose.yaml` gave the `web` service no `mem_limit`** when this was measured (only `next` has 512m and `vexa` 3g; the brief for this task said it had one). The lead asked for `mem_limit: 768m` on `web`, added in the same PR: about 210 MiB worst case with an export running leaves ample room.
 - Time is dominated by layout and grows with pages (about 1 s a hour of speech, when the machine is quiet). The longest measured, 9 s on a loaded machine, is well under the 45 s limit below. A first export after a restart is a few seconds slower (fontconfig and page cache warm up).
 
 ### 3. What the build does about it
