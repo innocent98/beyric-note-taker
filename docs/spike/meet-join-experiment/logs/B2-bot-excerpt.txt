@@ -1,0 +1,19 @@
+# excerpt of the bot's own log (workload mtg-43-c32e6659); full log not committed
+8:{"ts":"2026-11-03T12:19:01.387Z","level":"info","msg":"Lobby locale (#856): url=https://meet.google.com/meet/tip-mhbx-fcp?hl=en html.lang=en navigator.language=en-US"}
+16:{"ts":"2026-11-03T12:19:06.037Z","level":"info","msg":"Name input field found."}
+24:{"ts":"2026-11-03T12:19:15.701Z","level":"info","msg":"Located join button via selector: //button[.//span[text()=\"Ask to join\"]]"}
+28:{"ts":"2026-11-03T12:19:16.697Z","level":"info","msg":"Beyric Note Taker (recording) joined the Google Meet Meeting."}
+33:{"ts":"2026-11-03T12:19:16.934Z","level":"info","msg":"Bot not yet admitted - checking for Google Meet waiting room indicators..."}
+34:{"ts":"2026-11-03T12:19:16.947Z","level":"info","msg":"No waiting room detected. Polling for admission for up to 900000ms..."}
+36:{"ts":"2026-11-03T12:19:19.163Z","level":"info","msg":"🚫 Google Meet refused the join: CreateMeetingDevice answered HTTP 403"}
+159:{"ts":"2026-11-03T12:19:21.226Z","level":"info","msg":"🚫 Google Meet refused the join (CreateMeetingDevice answered HTTP 403; Meet showed \"You can't join this video call\", polling mode)"}
+160:{"ts":"2026-11-03T12:19:21.226Z","level":"info","msg":"🔁 Google Meet refused knock 1 of 3 (CreateMeetingDevice answered HTTP 403; Meet showed \"You can't join this video call\"); knocking again"}
+164:{"ts":"2026-11-03T12:19:23.679Z","level":"info","msg":"Lobby locale (#856): url=https://meet.google.com/meet/tip-mhbx-fcp?hl=en html.lang=en navigator.language=en-US"}
+171:{"ts":"2026-11-03T12:19:28.116Z","level":"info","msg":"Name input field found."}
+182:{"ts":"2026-11-03T12:19:31.994Z","level":"info","msg":"Located join button via selector: //button[.//span[text()=\"Ask to join\"]]"}
+185:{"ts":"2026-11-03T12:19:32.974Z","level":"info","msg":"Beyric Note Taker (recording) joined the Google Meet Meeting."}
+190:{"ts":"2026-11-03T12:19:33.193Z","level":"info","msg":"Bot not yet admitted - checking for Google Meet waiting room indicators..."}
+191:{"ts":"2026-11-03T12:19:33.232Z","level":"info","msg":"No waiting room detected. Polling for admission for up to 876500ms..."}
+195:{"ts":"2026-11-03T12:19:39.946Z","level":"info","msg":"⚠️ Waiting room indicator visible — suppressing admission (lobby buttons are false positives)"}
+196:{"ts":"2026-11-03T12:19:39.957Z","level":"info","msg":"ℹ️ Waiting room appeared during polling. Switching to waiting-room monitoring..."}
+# lines containing 'statusCode = 403': 0
