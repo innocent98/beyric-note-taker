@@ -141,7 +141,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] App shell (sidebar, phone top bar), Meetings (new meeting, list, paging, stale-worker alert, empty state), meeting page (notes, transcript, copy, rewrite, cancel with confirm, retry, notices, 30 s polling), Templates, Vocabulary, login; light and dark
   - [x] 89 vitest tests, 41-check end-to-end through Next on a compose stack, real-browser pass at 375 and 1280 px in both themes
   - [x] CI green (PR merged and deployed 2026-11-03)
-  - [ ] Not built, waiting on the API (stream D): Download menu, Share dialog, translation, template delete, participants and duration
+  - [ ] Not built, waiting on the API (stream D): Download menu (shipped with W5, 2026-11-03), Share dialog, translation, template delete, participants and duration
   - [ ] Not verified: real Vexa bot and real OpenAI rewrite through the screens, Safari and Firefox, the live server
 - [ ] Stream P, UI parity with the designer's files (`feature/nextjs-ui-parity`, PR #26, merged and deployed 2026-11-03; SOP `docs/sop/2026-11-03-ui-parity.md`; report `docs/ui/parity-report.md`)
   - [x] Gap check of every designer file against the Next pages at 1440, 768 and 390 px; report with before and after screenshots
@@ -174,7 +174,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] D6, Projects (needs W4): list, name, colour, recurring meetings, keywords, sprint length, milestone (proposal chip is a designer gap), delete
   - [ ] D7, Team (needs W3; W0.4 first): members, roles, aliases (editing is a designer gap), invite dialog (name field is a designer gap), Resend, remove, "Share with team" switch on the meeting page (designer gap)
   - [ ] D8, Series (needs W8, and Module 2 phase C for recurring ids): cards on Meetings, series page (unfinished, finished since, carried questions, agenda, past meetings, attendees), "On next agenda" toggles, Send agenda, Details row on the meeting page, "Add to recurring meeting" and "Possibly resolved" chips (designer gaps)
-  - [ ] D9, Download (needs W5): menu with PDF and Word, transcript tick, language note
+  - [x] D9, Download (W5, 2026-11-03): menu with PDF and Word, transcript tick, the states for preparing, done, failed and not ready; **the language note waits for W7** (translated downloads)
   - [ ] D10, Share (needs W6, and W3 for participants): dialog, recipients, language, attachment, transcript, message, "Shared with ..." note, "Add email" on a participant (designer gap), share-limit message (designer gap)
   - [ ] D11, Translate (needs W7): language select, "Translating ..." and "Translated from ..." banners, Show original, default language in Settings, failed state (designer gap)
   - [ ] D12, Settings (needs W2, W7, W8, W9, W10): Tasks card, default language, sprints and reminders card, Slack and tracker cards
@@ -182,6 +182,17 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] D14, Emails in the designer's layout (needs W0.3): replace the plain mails (`Emails.dc.html` applies to all eight)
   - [ ] D15, template delete (needs `DELETE /api/templates/{id}`, not yet built, and a `template_in_use` refusal for a template still used by a meeting or the calendar setting; both are planned in the accounts spec, neither exists in code yet)
   - [ ] D16, shell leftovers: toast component, PWA basics
+- [x] W5, Download and export (AI workspace spec section 9; branch `feature/notes-export-w5`, 2026-11-03; SOP `docs/sop/2026-11-03-notes-export-w5.md`; FE guide `docs/fe-integration-guide-export.md` with 18 live captures; PR #48 open, not merged)
+  - [x] Spike EX1: WeasyPrint fits the image (Pango already comes with ffmpeg; one 103 MB pip layer) and the memory (renderer peak 91 MiB for a 1-hour transcript, 120 MiB for 40,000 words; 1.9 s and 9.0 s on a loaded arm64 VM): `docs/spike/export-pdf-memory.md`
+  - [x] `NotesDocument` render model from the stored notes and, when asked, the transcript (`app/notes_document.py`)
+  - [x] PDF (WeasyPrint, Geist, A4, footer, page numbers) and Word (python-docx: headings, nested bullets, transcript after a page break)
+  - [x] `GET /api/meetings/{id}/export?format=pdf|docx&transcript=true|false`: owner-scoped (404 for another account's meeting), 409 `not_ready`, never stores the file, child process per export, one at a time (503 `export_busy`), 45 s limit (504 `export_timeout`), cleaned file name from the title with RFC 5987 `Content-Disposition`
+  - [x] Route named in the route-enumeration test; `docs/openapi.json` and `web/lib/api/schema.d.ts` regenerated
+  - [x] Download menu in the Next meeting page (parity with the prototype) and its states; privacy row "files you export are built when you ask and are not stored" in the Jinja templates and the Next copies
+  - [x] SOP, FE guide with live captures, `scripts/capture_export_api.py`
+  - [ ] Not verified: a file opened in Microsoft Word, Google Docs or Pages; the browser writing the file to disk; Safari and Firefox; the production CSP and the live site; timings on the real server
+  - [x] `mem_limit: 768m` on the `web` service (it had none)
+  - [ ] Suggested, not done: a per-account export limit
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated
 - [ ] Measure Next.js memory on the server (Adebayo runs the SSH steps)
 

@@ -1,0 +1,26 @@
+{
+  "note": "Someone else's meeting is a 404, never a 403.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/5/export?format=pdf",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "58",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

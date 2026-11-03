@@ -1,0 +1,26 @@
+{
+  "note": "A failed meeting has no notes either: the same 409.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/4/export?format=pdf",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "71",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "body": {
+      "error": {
+        "code": "not_ready",
+        "message": "The notes are not ready yet."
+      }
+    }
+  }
+}

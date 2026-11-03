@@ -1,0 +1,26 @@
+{
+  "note": "PROVOKED IN-PROCESS: the time limit was set to 0.2 s for this one call (it is 45 s in the app), so the real child process was really killed. The answer is the real one.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/8/export?format=pdf&transcript=true",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 504,
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "121",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "body": {
+      "error": {
+        "code": "export_timeout",
+        "message": "Preparing the file took too long. Try again, or leave the transcript out."
+      }
+    }
+  }
+}
