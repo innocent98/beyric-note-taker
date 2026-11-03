@@ -76,11 +76,11 @@ describe("login", () => {
   });
 
   it("locks the form after the 15-minute lockout", async () => {
-    mocks.login.mockRejectedValue(new ApiError(429, "too_many_attempts", "Too many failed attempts. Try again in 15 minutes."));
+    mocks.login.mockRejectedValue(new ApiError(429, "too_many_attempts", "Too many failed attempts. Try again later."));
     render(<LoginForm />);
     await userEvent.type(screen.getByLabelText("Password"), "nope");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    expect((await screen.findByRole("alert")).textContent).toMatch(/15 minutes/);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/try again later/i);
     expect((screen.getByRole("button", { name: "Sign in" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

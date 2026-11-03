@@ -10,7 +10,12 @@ import type { Meeting } from "@/lib/api/types";
 
 const hdrs = vi.hoisted(() => ({ cookie: "session=old" }));
 vi.mock("next/headers", () => ({
-  headers: async () => new Headers({ cookie: hdrs.cookie, "x-forwarded-for": "203.0.113.9" }),
+  headers: async () =>
+    new Headers({
+      cookie: hdrs.cookie,
+      "x-forwarded-for": "203.0.113.9",
+      "x-edge-secret": "edge-secret-placeholder",
+    }),
 }));
 
 describe("transcript", () => {
@@ -108,6 +113,7 @@ describe("POST /logout", () => {
     expect(sent["X-CSRF-Token"]).toBe("tok");
     expect(sent.cookie).toBe("session=old");
     expect(sent["x-forwarded-for"]).toBe("203.0.113.9");
+    expect(sent["x-edge-secret"]).toBe("edge-secret-placeholder"); // FastAPI needs it to believe the address
   });
 
   it("still sends the visitor to /login when the session was already gone", async () => {

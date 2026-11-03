@@ -1,21 +1,16 @@
 # Deployment model: nginx runs on the HOST (see deploy/README.md) and proxies to
 # 127.0.0.1:8020, which is the Next.js front door (`next`). Next renders the pages it owns and
 # proxies every other path to FastAPI (`web`, internal port 8000; also on 127.0.0.1:8021 for the
-# operator and for rollback). The project networks are pinned so the addresses FastAPI's trusted
-# proxies arrive from are known: the bridge gateway 172.28.0.1 (nginx, through Docker, on the 8021
-# rollback path) and `next`, pinned to 172.28.1.10 on its own network `front`. `next` passes
-# X-Forwarded-For through unchanged and FastAPI believes it from those two addresses, so this is
-# a known gap, not a protection: anything that can reach `next` by IP (Docker allows that across
-# networks for a published port) or reach 127.0.0.1:8021 arrives as a trusted address and can pick
-# the address the login limit counts. `front` only stops Vexa resolving the name `next`; it is NOT
-# a security boundary. See docs/spike/nextjs-scaffold/forwarded-for-trust.md; the real fix is
-# required before open sign-up.
+# operator and for rollback).
+# The visitor's address: nginx sets X-Forwarded-For and a secret header (X-Edge-Secret) on every
+# request, `next` passes both on unchanged, and FastAPI believes the forwarded address only on a
+# request that carries the secret (EDGE_SHARED_SECRET in .env, app/edge.py). It is NOT decided by
+# the peer address: Docker rewrites any container's (and the host loopback's) connection to the
+# bridge gateway, so the peer cannot tell nginx from a hostile container. uvicorn therefore runs
+# with --no-proxy-headers and never rewrites the peer itself. `front` only stops Vexa resolving the
+# name `next`; it is not a security boundary. See docs/sop/2026-11-03-edge-secret-and-login-limits.md.
 # The server is shared with other apps, so nothing here is published on a public interface: `next`,
 # `web` and Vexa's API are bound to 127.0.0.1, and Vexa's terminal and agent ports are not published.
-# TRUSTED_PROXY_IPS: unset means the bridge gateway above; set but EMPTY means trust no proxy
-# beyond `next` (`-` interpolation, not `:-`, so an empty value is kept rather than replaced by the
-# default). `next` is always trusted: it is the one hop every request now passes through, so
-# without it the login limit would see every visitor as the same address.
 services:
   db:
     image: postgres:17
@@ -69,8 +64,7 @@ services:
       - --factory
       - --host=0.0.0.0
       - --port=8000
-      - --proxy-headers
-      - --forwarded-allow-ips=${TRUSTED_PROXY_IPS-172.28.0.1},172.28.1.10
+      - --no-proxy-headers  # the app decides which X-Forwarded-For to believe (app/edge.py)
     user: app
     networks: [default, appdb, front]
     env_file: .env

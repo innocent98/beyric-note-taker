@@ -124,8 +124,9 @@ export interface paths {
          * Log In
          * @description Log in with the owner password. Public, but needs the X-CSRF-Token from `GET /session`.
          *
-         *     The login limit is the page's: 5 attempts per client in 15 minutes, then 429. The response
-         *     carries the new session's CSRF token: it replaces the one from before login.
+         *     The login limits are the page's: 5 failed attempts per client address in 5 minutes and 10 per
+         *     account in an hour, then 429. The response carries the new session's CSRF token: it replaces
+         *     the one from before login.
          */
         post: operations["log_in"];
         /**

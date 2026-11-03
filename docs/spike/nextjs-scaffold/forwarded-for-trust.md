@@ -1,5 +1,12 @@
 # X-Forwarded-For trust through Next (finding, 2026-11-02)
 
+> **RESOLVED 2026-11-03 by an edge secret (option 2 below), on branch `fix/login-limits-and-edge-secret`.**
+> nginx adds `X-Edge-Secret`, Next passes it on, and FastAPI believes `X-Forwarded-For` only on a
+> request that carries the right secret; trusting a proxy by IP address is gone (a transitional
+> fallback applies only while the secret is unset). Record, proof and operator steps:
+> `docs/sop/2026-11-03-edge-secret-and-login-limits.md`, `docs/spike/edge-secret/e2e-output.txt`.
+> The text below is the finding as it stood when it was written, kept for the reasoning.
+
 FastAPI keys the login limit on `request.client.host`. With Next in front, FastAPI must trust Next
 as a proxy (`--forwarded-allow-ips` includes `next`), and Next passes `X-Forwarded-For` through
 unchanged (captured: `proxy-passthrough-stub.txt`; Next neither appends to it nor validates it).
@@ -45,3 +52,5 @@ that nginx sets, Next forwards and FastAPI checks before it believes `X-Forwarde
 paths; option 1 only closes the `next` path.
 
 **Decision (lead, 2026-11-02):** option 3 for the single-owner pilot. Blocker before open sign-up: option 1 or 2, Adebayo to choose.
+
+**Decision (Adebayo, 2026-11-03):** option 2, the edge secret ("do what's right from the start"). Built as described above, with nginx (not Next) as the party that adds the secret, so Next holds no secret at all. Resolved: see the note at the top.

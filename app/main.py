@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import api, auth, web
+from app import api, auth, edge, web
 from app.config import Settings, get_settings
 from app.db import get_session
 
@@ -23,6 +23,7 @@ CSP = (
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     auth.check_start(settings)
+    edge.warn_if_unsafe(settings)
     app = FastAPI(
         title="Beyric Note Taker",
         dependencies=[Depends(auth.guard)],
@@ -33,18 +34,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.limiter = auth.LoginLimiter()
     key = app.state.session_key = auth.signing_key(settings)
+    app.state.device_key = auth.device_key(settings)
 
     @app.middleware("http")
     async def session_and_headers(request: Request, call_next):
         loaded = auth.read_session(key, request.cookies.get(auth.COOKIE_NAME))
         request.state.session = loaded or auth.new_session()
         request.state.session_changed = loaded is None
+        if auth.request_path(request) != "/health":
+            edge.note_missing_secret(request, settings)
         response = await call_next(request)
         if auth.request_path(request) != "/health" and request.state.session_changed:
             response.set_cookie(
                 auth.COOKIE_NAME,
                 auth.sign_session(key, request.state.session),
                 max_age=auth.SESSION_SECONDS,
+                httponly=True,
+                samesite="lax",
+                secure=settings.cookie_secure,
+                path="/",
+            )
+        device_cookie = getattr(request.state, "device_cookie", None)
+        if device_cookie is not None:
+            # Marks this browser as the owner's, so a lockout caused by someone else's failed
+            # guesses cannot keep it out. It grants no access by itself: the password is still
+            # checked, and the address limit still applies.
+            account, known_id = device_cookie
+            response.set_cookie(
+                auth.device_cookie_name(settings),
+                auth.sign_device(app.state.device_key, account, device_id=known_id),
+                max_age=auth.DEVICE_SECONDS,
                 httponly=True,
                 samesite="lax",
                 secure=settings.cookie_secure,
@@ -72,13 +91,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return HTMLResponse(page, status_code=403)
 
     @app.get("/health", include_in_schema=False)
-    def health(db: Session = Depends(get_session)) -> Response:
-        """Unauthenticated liveness check that also needs the database. No detail in the body."""
+    def health(request: Request, db: Session = Depends(get_session)) -> Response:
+        """Unauthenticated liveness check that also needs the database. No detail in the body.
+
+        `X-Edge-Ok` says whether THIS request carried the right edge secret, so
+        `curl -sI https://<site>/health` shows that nginx, Next and the app agree on it. It
+        never holds the secret, and is false whenever no secret is configured."""
+        edge_ok = "true" if edge.has_edge_secret(request, settings) else "false"
         try:
             db.execute(text("select 1"))
         except SQLAlchemyError:
-            return PlainTextResponse("unavailable", status_code=503)
-        return PlainTextResponse("ok")
+            return PlainTextResponse("unavailable", status_code=503, headers={"X-Edge-Ok": edge_ok})
+        return PlainTextResponse("ok", headers={"X-Edge-Ok": edge_ok})
 
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     api.install_errors(app)

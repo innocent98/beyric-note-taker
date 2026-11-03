@@ -25,10 +25,14 @@ class Settings(BaseSettings):
     owner_password: str = ""
     session_secret: str = ""
     cookie_secure: bool = True
-    # Comma-separated proxy addresses whose X-Forwarded-For header is trusted ("" = none).
-    # Read by compose.yaml for uvicorn's --forwarded-allow-ips (unset = 172.28.0.1, set but empty
-    # = none); not used by the app code.
-    trusted_proxy_ips: str = ""
+    # The secret nginx sends in X-Edge-Secret. The app believes X-Forwarded-For only on a request
+    # that carries it (app/edge.py). Empty = not configured yet: the app warns at startup and
+    # falls back to `trusted_proxy_ips` below.
+    edge_shared_secret: str = ""
+    # TRANSITIONAL, used only while `edge_shared_secret` is empty: peer addresses whose
+    # X-Forwarded-For is believed ("" = none; the Next.js container is always on top of this).
+    # Forgeable through Docker's NAT, so it is ignored once the secret is set.
+    trusted_proxy_ips: str = "172.28.0.1"
 
 
 @lru_cache

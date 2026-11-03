@@ -10,6 +10,12 @@ export function fastapiUrl(): string {
   return (process.env.FASTAPI_INTERNAL_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 }
 
+// Headers a server-side call passes on to FastAPI. `x-forwarded-for` is the visitor's address (the
+// login limits key on it) and `x-edge-secret` is nginx's proof that the address is genuine:
+// FastAPI believes the address only when the secret is right. Next never reads the secret and
+// never invents one, so a request that did not come through nginx has nothing to forward.
+const FORWARDED = ["cookie", "x-forwarded-for", "x-forwarded-proto", "x-edge-secret"];
+
 // The API as a server component or route handler calls it: the visitor's Cookie (and address, for
 // FastAPI's own limits and logs) are passed on. A 401 leaves the page for /login.
 export async function serverApi(extra: { onResponse?: (response: Response) => void } = {}) {
@@ -19,7 +25,7 @@ export async function serverApi(extra: { onResponse?: (response: Response) => vo
     baseUrl: fastapiUrl(),
     headers: () => {
       const out: Record<string, string> = {};
-      for (const name of ["cookie", "x-forwarded-for", "x-forwarded-proto"]) {
+      for (const name of FORWARDED) {
         const value = incoming.get(name);
         if (value) out[name] = value;
       }

@@ -142,8 +142,9 @@ def read_session(request: Request) -> SessionState:
 def log_in(body: Login, request: Request, session: Session = Depends(get_session)) -> SessionState:
     """Log in with the owner password. Public, but needs the X-CSRF-Token from `GET /session`.
 
-    The login limit is the page's: 5 attempts per client in 15 minutes, then 429. The response
-    carries the new session's CSRF token: it replaces the one from before login.
+    The login limits are the page's: 5 failed attempts per client address in 5 minutes and 10 per
+    account in an hour, then 429. The response carries the new session's CSRF token: it replaces
+    the one from before login.
     """
     services.log_in(request, session, body.password)
     return _session_state(request)
