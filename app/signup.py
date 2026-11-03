@@ -225,7 +225,12 @@ def _sign_up_locked(
         )
     if not mail_allowed(address):
         return
-    existing = session.scalars(select(User).where(User.email == address)).first()
+    # The row is locked from here to the commit: `verify_email` takes the same lock before it
+    # writes, so a confirmation and a re-submission for one address cannot interleave (an
+    # attacker's write must never land on an account confirmed a moment before).
+    existing = session.scalars(
+        select(User).where(User.email == address).with_for_update(of=User)
+    ).first()
     if existing is None:
         user = User(
             email=address,
@@ -289,6 +294,11 @@ def verify_email(
             "If you do not remember it, create the account again.",
         )
     if tokens.consume(session, raw_token, "verify_email", now) is None:  # used a moment ago
+        session.rollback()
+        raise _bad_token()
+    # Lock the account before writing and look again: a sign-up for this address may have held it.
+    user = session.get(User, user.id, with_for_update=True, populate_existing=True)
+    if user is None or user.status == "deleted":
         session.rollback()
         raise _bad_token()
     user.email_verified_at = user.email_verified_at or now

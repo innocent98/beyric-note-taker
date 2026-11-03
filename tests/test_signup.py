@@ -311,6 +311,51 @@ def test_wrong_guesses_on_one_link_do_not_count_against_another(anon, session):
     assert verify(anon, second, ATTACKER).status_code == 200
 
 
+def test_a_sign_up_cannot_overwrite_the_password_of_an_account_confirmed_a_moment_ago(
+    app, session, monkeypatch
+):
+    """The sign-up reads an unverified account, and while it works the real owner confirms it. The
+    row lock makes the confirmation wait, so the confirmed password is the owner's, not the
+    attacker's. Without the lock the attacker's write lands after the confirmation."""
+    import threading
+
+    open_pilot(session)
+    victim = visitor(app, "198.51.100.1")
+    assert sign_up(victim).status_code == 202
+    link = token_of(queued(session)[0])
+    attacker = visitor(app, "198.51.100.2")
+    a_minute_later(attacker)
+    real = signup._send_verification
+
+    def slow(*args, **kwargs):  # the gap between reading the account and writing to it
+        time.sleep(0.6)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(signup, "_send_verification", slow)
+    results = {}
+    thread = threading.Thread(
+        target=lambda: results.update(attacker=sign_up(attacker, password=ATTACKER).status_code)
+    )
+    thread.start()
+    time.sleep(0.2)  # the attacker's request now holds the account
+    results["verify"] = verify(victim, link, GOOD).status_code
+    thread.join()
+    assert results == {"attacker": 202, "verify": 200}
+    user = user_of(session)
+    assert user.email_verified_at is not None
+    assert passwords.verify_password(user.password_hash, GOOD)
+    assert not passwords.verify_password(user.password_hash, ATTACKER)
+
+
+def test_a_sign_up_that_finds_the_account_confirmed_by_then_only_mails_the_owner(app, session):
+    open_pilot(session)
+    make_user(session, NEW_EMAIL)  # confirmed already
+    before = user_of(session).password_hash
+    assert sign_up(visitor(app, "198.51.100.3"), password=ATTACKER).status_code == 202
+    assert user_of(session).password_hash == before
+    assert [r.template for r in queued(session)] == ["already_registered"]
+
+
 def test_the_wrong_password_does_not_use_up_the_link(anon, session):
     token = make_unverified(anon, session)
     error_of(verify(anon, token, "-".join(["not", "it", "at", "all"])), 400, "password_mismatch")

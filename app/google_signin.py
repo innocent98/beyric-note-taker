@@ -147,7 +147,9 @@ def _match(
     user = session.scalars(select(User).where(User.google_sub == identity.sub)).first()
     if user is not None:
         return _sign_in_by_sub(session, user, address)
-    user = session.scalars(select(User).where(User.email == address)).first()
+    user = session.scalars(
+        select(User).where(User.email == address).with_for_update(of=User)
+    ).first()
     if user is not None:
         return _link_by_email(session, user, identity, now)
     return _create(session, identity, address, accepted_terms, now)
