@@ -207,11 +207,64 @@ def test_an_account_without_a_password_cannot_log_in_that_way(anon, session):
 
 def test_an_unverified_account_gets_no_session_even_with_the_right_password(anon, session):
     make_user(session, "new@example.test", email_verified_at=None)
-    error = error_of(anon.log_in(email="new@example.test"), 403, "email_not_verified")
-    assert error["message"]
+    error_of(anon.log_in(email="new@example.test"), 401, "invalid_credentials")
     assert anon.get("/api/session").json()["authenticated"] is False
-    # a wrong password does not reveal that the account is unverified
-    error_of(anon.log_in("wrong", email="new@example.test"), 401, "invalid_credentials")
+
+
+def test_login_answers_alike_for_no_account_an_unverified_one_and_a_wrong_password(
+    app, session, owner
+):
+    """Otherwise sign-up plus login would tell whether an address has a confirmed account: sign
+    up with a password, then log in with it. The answer must not depend on which case it is."""
+    make_user(session, "new@example.test", email_verified_at=None)
+    answers = []
+    for i, (email, password) in enumerate(
+        [
+            ("nobody@example.test", PASSWORD),  # no account
+            ("new@example.test", PASSWORD),  # unverified, right password
+            (OWNER_EMAIL, "-".join(["a", "wrong", "one", "7"])),  # verified, wrong password
+        ]
+    ):
+        response = visitor(app, f"198.51.100.{i + 1}").log_in(password, email=email)
+        answers.append((response.status_code, response.json()))
+    assert answers[0] == answers[1] == answers[2]
+    assert answers[0][1]["error"]["code"] == "invalid_credentials"
+
+
+def test_an_unverified_login_costs_one_hash_check_like_every_other_case(anon, session, monkeypatch):
+    make_user(session, "new@example.test", email_verified_at=None)
+    calls = []
+    real = passwords.verify_password
+
+    def counting(stored, password):
+        calls.append(stored is not None)
+        return real(stored, password)
+
+    monkeypatch.setattr(passwords, "verify_password", counting)
+    anon.log_in(email="new@example.test")
+    anon.log_in(email="nobody@example.test")
+    assert calls == [True, False]  # one check each: against its hash, against the dummy
+
+
+def test_sign_up_then_login_gives_the_same_answer_for_a_new_and_an_existing_address(
+    app, session, owner
+):
+    from tests.test_signup import open_pilot, sign_up
+
+    open_pilot(session)
+    new = visitor(app, "198.51.100.10")
+    sign_up(new, email="fresh@example.test", password=PASSWORD)
+    existing = visitor(app, "198.51.100.11")
+    sign_up(existing, email=OWNER_EMAIL, password=PASSWORD)  # the owner's address, a known password
+    seen = []
+    for web, email in ((new, "fresh@example.test"), (existing, OWNER_EMAIL)):
+        response = web.log_in(
+            PASSWORD + "x", email=email
+        )  # the password they just submitted, wrong
+        seen.append((response.status_code, response.json()))
+    right_new = new.log_in(PASSWORD, email="fresh@example.test")
+    assert right_new.status_code == 401  # an unconfirmed account does not sign in
+    assert seen[0] == seen[1]
 
 
 def test_a_suspended_account_cannot_log_in(anon, session):
@@ -234,10 +287,10 @@ def test_a_login_stamps_the_time_and_issues_a_fresh_cookie(anon, session, owner)
     assert anon.csrf != before
 
 
-def test_the_right_password_of_a_proven_account_is_not_held_against_the_limit(anon, session):
+def test_an_unverified_login_counts_against_the_limit_like_any_failure(anon, session):
     make_user(session, "new@example.test", email_verified_at=None)
-    for _ in range(8):  # more than the 5 an address may fail
-        error_of(anon.log_in(email="new@example.test"), 403, "email_not_verified")
+    codes = [anon.log_in(email="new@example.test").status_code for _ in range(6)]
+    assert codes == [401] * 5 + [429]
 
 
 def test_failures_on_one_email_from_many_addresses_lock_that_email(app, owner):

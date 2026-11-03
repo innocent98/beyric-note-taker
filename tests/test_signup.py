@@ -164,7 +164,7 @@ def test_a_new_account_gets_no_session(anon, session):
     open_pilot(session)
     sign_up(anon)
     assert anon.get("/api/session").json()["authenticated"] is False
-    error_of(anon.log_in(GOOD, NEW_EMAIL), 403, "email_not_verified")
+    error_of(anon.log_in(GOOD, NEW_EMAIL), 401, "invalid_credentials")
 
 
 def test_sign_up_is_refused_while_the_pilot_is_closed(anon, session):

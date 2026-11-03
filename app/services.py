@@ -85,9 +85,9 @@ def log_in(request: Request, session: Session, email: str, password: str) -> Non
     """Check the email and password and give the request a fresh logged-in session.
 
     The attempt is counted against the client address and the email (`auth.LoginLimiter`) before
-    the password is looked at. An unknown email, an account with no password and a wrong password
-    are the same answer, and each costs one hash check, so neither the reply nor its timing says
-    whether an account exists.
+    the password is looked at. An unknown email, an account with no password, an account whose email
+    was never confirmed and a wrong password are the same answer, and each costs one hash check, so
+    neither the reply nor its timing says whether an account exists.
     """
     settings = request.app.state.settings
     limiter: auth.LoginLimiter = request.app.state.limiter
@@ -120,15 +120,12 @@ def log_in(request: Request, session: Session, email: str, password: str) -> Non
     except passwords.HashBusy:
         limiter.refund(client, account, device)  # the password was never checked: not a failure
         raise Refused(429, "server_busy", "The server is busy. Try again in a moment.") from None
-    if user is None or not right:
+    # An account that never confirmed its email fails exactly like a wrong password, after the
+    # same one hash check. Telling it apart ("confirm your email") would let anyone find out
+    # whether an address has a confirmed account: sign up with a password, then log in with it.
+    if user is None or user.email_verified_at is None or not right:
         raise Refused(401, "invalid_credentials", "That email or password is not right.")
     limiter.succeeded(client, account, device)  # the password was right, whatever happens next
-    if user.email_verified_at is None:
-        raise Refused(
-            403,
-            "email_not_verified",
-            "Confirm your email first: open the link we sent you.",
-        )
     if user.status != "active":
         raise Refused(403, "account_suspended", "This account has been suspended.")
     start_session(request, session, user)
