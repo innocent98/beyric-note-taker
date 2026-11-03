@@ -1,0 +1,66 @@
+# SOP: Google Calendar connect flow (Phase C, task C3)
+
+## What shipped
+The connect flow for a user's Google Calendar: **incremental consent** (ask for one feature's permission at the moment its switch is turned on), PKCE, a single-use state bound to the user and the browser, and the refresh token stored only through the AES-GCM vault. Two routes (`POST /api/calendar/google/connect`, `GET /api/calendar/google/callback`), the module `app/calendar_connect.py`, the Security row of the privacy policy, tests with a fake Google, and a front-end guide from captured responses. Branch `feature/c3-google-connect`, one PR (number in the PR list). **Security-critical (OAuth tokens): wants the Opus review before merge.** Not deployed, and **the feature stays dark** until the server sets `CALENDAR_ENABLED=true`. **The live step (a real Google consent with Adebayo's Gmail test account) is NOT verified.** Disconnect is C4, not here.
+
+## Why
+Phase C needs the user's calendar. The spec (7.2, 12.1) requires that sign-in never touches the calendar, that the user can untick permissions on Google's screen without us pretending otherwise, and that a stolen database holds no usable token.
+
+## How
+| Piece | Decision |
+|---|---|
+| Consent URL (`GoogleOAuth.connect_url`, `app/google_oauth.py`) | `access_type=offline`, `prompt=consent` (a refresh token every time), `include_granted_scopes=true` (earlier permissions come back), `login_hint` = the user's email, PKCE S256, scope `openid email` plus the feature scopes. `openid email` is always asked so the connected Google account (it can differ from the sign-in address) and its Workspace domain (`hd`) can be recorded even for a user who never signed in with Google. `profile` is not asked |
+| Redirect URIs | `redirect_uri(settings, path)` accepts only the two allow-listed callback paths (`/api/auth/google/callback`, `/api/calendar/google/callback`) and raises `ValueError` for anything else; both are built from `PUBLIC_BASE_URL` |
+| Features and scopes | `calendar` is `calendar.events.readonly`, `meet` is `meetings.space.readonly`. A flow's `purpose` (`calendar` or `meet_scope`, both already allowed by migration 0006) names the feature it was started for, and only **that** feature's scope is required at the callback. Asking for both is purpose `calendar`; Meet then counts only if Google granted it. No migration |
+| State | `oauth_flows` row: only the SHA-256 of the state; the PKCE verifier and nonce; `user_id`; the stored `return_to`; 10 minutes. **Single use:** the row is deleted in one `DELETE ... RETURNING` whatever the outcome. A sign-in flow's state is never accepted here (the purpose filter) and vice versa |
+| Binding | Two bindings. (1) **The user:** `flow.user_id` must equal the signed-in user (`wrong_account` otherwise): this is what stops a victim being lured into finishing an attacker's flow. (2) **The browser:** a `calendar_flow` cookie (`HttpOnly`, `SameSite=lax`, `Path=/api/calendar/google`, 10 minutes) holding the state, set by the connect response and checked at the callback, like the sign-in flow's `google_flow` |
+| Callback in the guard | Listed in `auth.PUBLIC_API` (it must answer a signed-out visitor with a redirect, not a JSON 401) and then does its own checks: state, signed-in user, cookie. Not in an nginx zone (like the sign-in callback: it needs a single-use state, a flood is only cheap failures) |
+| Granted scopes | `granted_scopes` is Google's `scope` field of the token answer (a space-separated list), never the list we asked for. If the required scope is missing the connect is refused with `scope_missing` and **nothing is stored**; an existing connection is untouched. `granted_features(conn)` reads the exact scope strings, so a broader or look-alike scope never switches a feature on |
+| Refresh token | Only through `vault.encrypt(..., purpose="refresh_token", owner=user.id)`; a `Secret` object carries it from the token answer to the vault so no repr or log line can hold it; the access token is dropped in `exchange_connect` and never stored. A vault failure refuses the connect (`google_failed`). `ConnectUnavailable` (no usable key) is checked **before** Google is involved (503 `calendar_unavailable`), so nobody consents to something we could not keep |
+| No refresh token in the answer | Google omits it when it thinks one was issued. The old token stands in **only** if the connection is alive (not `needs_reconnect`), is for the same Google account, and already covers the scope this connect required; otherwise `no_refresh_token` and nothing changes. Rejected: keeping the old token and overwriting the scopes (the token would not cover them) |
+| Reconnect | One row per user and provider (`uq_calendar_connections_user_provider`): the connect updates it in place (status `connected`, reason and last error cleared, `sync_token` and `last_sync_at` null so the sync loop does a full first sync, `connected_at` now). A **different Google account** than before also deletes the old account's `calendar_events` and the user's `scheduled_joins` that are not live (`dispatching`, `no_capacity`, `joined` survive), because they belong to a calendar that is no longer connected. A concurrent double connect that hits the unique constraint answers `google_failed` |
+| `expected_expiry_at` | `connected_at + 7 days` only while `GOOGLE_OAUTH_TESTING=true`; null otherwise, and a reconnect clears an old value |
+| Unverified-app notice | The connect response carries `show_unverified_notice = not GOOGLE_APP_VERIFIED`, so the front end explains "Google hasn't verified this app" before sending testers to Google |
+| `return_to` | Must match the sign-in pattern (one leading slash, no scheme, no backslash); anything else becomes `/settings/calendar`. It is stored server-side in `oauth_flows` and never taken from the callback URL. The result is added to it as `?calendar=connected` or `?calendar_error=<code>` (codes only) |
+| Feature flag | Both routes answer 404 `calendar_unavailable` unless `CALENDAR_ENABLED=true` **and** a Google client is configured. The plan did not say this; it follows the flag's stated purpose ("set true where the calendar features are switched on") and keeps the routes dark in today's deploy. Flip it only with `TOKEN_ENC_KEY` set |
+| Where the router is included | In `app/api.py` next to the accounts router (the plan said `app/main.py`), so the routes share the `/api` prefix and appear in `docs/openapi.json`, which only walks `api.router` |
+
+Deviations from the plan's signatures (needed to make the functions work): `start_connect(session, user, features, return_to, *, google, now)` returns `(url, state)` (the route needs the state for the cookie); `finish_connect(session, user, *, state, code, google, settings, now, flow_cookie, error)`, with `user` possibly `None` (nobody signed in) and `error` Google's own `error` parameter, so the single-use consumption and every check live in one function.
+
+## What's involved
+| Path | Change |
+|---|---|
+| `app/calendar_connect.py` (new) | `start_connect`, `finish_connect`, `granted_features`, `ConnectResult`, `ConnectUnavailable`, the reconnect upsert |
+| `app/calendar_api.py` (new) | the two routes and their bodies; C15a adds the rest of the calendar API here |
+| `app/google_oauth.py` | `connect_url`, `exchange_connect`, `Grant`, `Identity.hosted_domain`, scope constants, callback allow-list; `exchange` now shares `_token_request` |
+| `app/auth.py`, `app/api.py` | the callback in `PUBLIC_API`; the router included |
+| `app/config.py`, `.env.example`, `deploy/README.md` | `GOOGLE_OAUTH_TESTING`, `GOOGLE_APP_VERIFIED` (both default false) |
+| `app/templates/privacy.html`, `web/components/legal/privacy-content.tsx` | the Security row (see below) |
+| `docs/openapi.json`, `web/lib/api/schema.d.ts` | regenerated (additions only) |
+| `tests/test_calendar_connect.py`, `tests/fakes/google.py` | 59 tests; the fake is the REAL `GoogleOAuth` over an `httpx.MockTransport` that checks PKCE, redirect URI and single use like Google |
+| `tests/test_api.py`, `tests/test_edge.py` | the callback added to the two lists of public routes |
+| `scripts/capture_calendar_connect.py`, `docs/fe-captures/calendar-connect/`, `docs/fe-integration-guide-calendar-connect.md` | live captures and the guide |
+
+Privacy policy: the Security paragraph gains "Google access credentials are encrypted before they are stored, and the encryption key is kept apart from the database and its backups." (spec 12.3, true now). The "Last updated" date and `TERMS_VERSION` are unchanged: the sentence describes a safeguard, not a new use of data or a new right, so it does not need a re-acceptance.
+
+## Verification
+| Claim | How | Result |
+|---|---|---|
+| The flow, every refusal, the token at rest, logs | `tests/test_calendar_connect.py` (59): connect URL, flow row, cookie, features and scopes, `return_to`, flag and key gating, redirect-URI allow-list, notice flag, good callback, token encrypted and decryptable only with the user id (wrong owner and wrong purpose fail), unticked box, Meet upgrade, unknown/expired/reused/garbage state, sign-in state refused, different user, missing cookie, signed out, cancel, token endpoint failure, wrong nonce, wrong code, wrong PKCE verifier, no refresh token cases, reconnect replaces, account switch, two users, expected expiry, query merging, **no code, token, state, verifier or client secret in the captured logs** | pass |
+| The tests really guard | Mutation checks: removing the user check, the cookie check, the purpose filter, the scope check, the expiry check, or using a different vault owner each fails a named test | done |
+| Whole suite, ruff, OpenAPI | `pytest`, `ruff check .`, `ruff format --check .`, `scripts/export_openapi.py --check` (touches `auth.py`) | see the PR |
+| Real HTTP, real database and migrations | `scripts/capture_calendar_connect.py` (32 captures) | recorded; guide written from them |
+| **Not verified** | **A real Google consent** (Adebayo's Gmail test account: connect through the real screen, see the row with the token as bytes, and that real scope names and `hd` parse), Google's real "unverified app" page, a real Google omitting the refresh token, the 503 path against a server without a key (tested, not captured), the nginx and uvicorn access logs (below) | live step before relying on it |
+
+## Operate / roll back
+- **Server steps before merge: none required.** To switch the feature on later: `CALENDAR_ENABLED=true`, `TOKEN_ENC_KEY` set (production refuses to start otherwise), and `https://notes.beyrictech.com/api/calendar/google/callback` added as an authorised redirect URI on the Google OAuth client (without it Google shows `redirect_uri_mismatch`). Optional: `GOOGLE_OAUTH_TESTING` (true while the Google project is in Testing), `GOOGLE_APP_VERIFIED`.
+- Roll back: the routes are additive and dark; set `CALENDAR_ENABLED=false` to turn them off at once. No migration. Connections already stored stay (disconnect is C4).
+- Logs: the app logs only that a connect happened (user id) and that an exchange failed (error type). **The callback URL itself carries `code` and `state` in its query string by OAuth's design, so nginx's access log and uvicorn's access log record them** (the sign-in callback does the same). Both are single use and the code needs the PKCE verifier that lives only in our database, so a leaked log line cannot be redeemed after the flow; keep the access logs private regardless.
+
+## Follow-ups
+- **Live check** with Adebayo's Gmail (C3's "Done" line): real consent, the row, real scope names, `hd`, and what Google does with an unticked box; then C4 disconnect.
+- **C4 must add `GoogleOAuth.revoke`.** `FakeGoogle` already models the revoke endpoint. Also: when a connect is refused for a missing scope, Google still holds a (identity-only) grant for our app; C4's revoke or a later revoke-on-refuse could tidy it.
+- The `calendar_flow` cookie and `return_to` default (`/settings/calendar`) assume the front end builds that page; stream D should confirm the path.
+- C5/C13 decide what `needs_reconnect` shows; this flow clears it on a successful connect.
+- Two Beyric users connecting the **same** Google account is allowed (the unique key is per user); C12's dispatcher decides how one meeting with two connected users is shared (already a C12 item).
+- Nothing yet reads `granted_features`; C8b (sync) must skip a connection whose features lack `calendar`.

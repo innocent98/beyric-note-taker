@@ -4,6 +4,10 @@ profile` only (non-sensitive: Google shows no "unverified app" warning for them)
 `GoogleOAuth` builds the consent URL and exchanges the returned code for the person's identity.
 The flow's state, PKCE verifier and nonce live in `oauth_flows` (`app/google_signin.py`).
 
+The calendar connect flow (`app/calendar_connect.py`) shares this client: `connect_url` asks for
+offline access to the calendar (or Meet) scope, and `exchange_connect` returns the refresh token
+and the scopes Google says were granted, with the same ID-token checks.
+
 ID-token checks. The token is received straight from Google's token endpoint over TLS, in answer
 to a request that carried our client secret and PKCE verifier. OpenID Connect Core 3.1.3.7 lets a
 client rely on that TLS channel instead of verifying the token's signature, and Google's own
@@ -26,6 +30,7 @@ import httpx
 from fastapi import Request
 
 from app.config import Settings
+from app.vault import Secret
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +39,12 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 ISSUERS = ("https://accounts.google.com", "accounts.google.com")
 SCOPES = "openid email profile"
 CALLBACK_PATH = "/api/auth/google/callback"
+CALENDAR_CALLBACK_PATH = "/api/calendar/google/callback"
+# The only paths ever sent to Google as a redirect URI; both are registered in the Google console.
+ALLOWED_CALLBACK_PATHS = (CALLBACK_PATH, CALENDAR_CALLBACK_PATH)
+CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events.readonly"
+MEET_SCOPE = "https://www.googleapis.com/auth/meetings.space.readonly"
+MAX_REFRESH_TOKEN_CHARS = 4096
 TIMEOUT_SECONDS = 15.0
 CLOCK_SKEW_SECONDS = 60
 MAX_SUB_CHARS = 64  # the `users.google_sub` column; Google's real ones are about 21 digits
@@ -49,6 +60,19 @@ class Identity:
     sub: str
     email: str
     name: str | None
+    # The ID token's `hd` claim: set for a Workspace account, absent for a personal Gmail one.
+    hosted_domain: str | None = None
+
+
+@dataclass(frozen=True)
+class Grant:
+    """What the token endpoint gave for a calendar connect. `scopes` is what Google SAYS was
+    granted (the person may have unticked boxes), never what was asked. `refresh_token` is None
+    when Google did not issue one. `Secret` keeps it out of any repr or log line."""
+
+    identity: Identity
+    scopes: frozenset[str]
+    refresh_token: Secret | None
 
 
 def enabled(settings: Settings) -> bool:
@@ -56,8 +80,11 @@ def enabled(settings: Settings) -> bool:
     return bool(settings.google_client_id and settings.google_client_secret)
 
 
-def redirect_uri(settings: Settings) -> str:
-    return settings.public_base_url.rstrip("/") + CALLBACK_PATH
+def redirect_uri(settings: Settings, path: str = CALLBACK_PATH) -> str:
+    """The redirect URI for one of the allow-listed callback paths (nothing else is accepted)."""
+    if path not in ALLOWED_CALLBACK_PATHS:
+        raise ValueError("not an allow-listed callback path")
+    return settings.public_base_url.rstrip("/") + path
 
 
 def new_pkce() -> tuple[str, str]:
@@ -102,8 +129,39 @@ class GoogleOAuth:
         )
         return f"{AUTH_URL}?{query}"
 
-    def exchange(self, *, code: str, code_verifier: str, nonce: str, now: datetime) -> Identity:
-        """Trade the authorization code for the person's identity, or raise `GoogleError`."""
+    def connect_url(
+        self,
+        *,
+        state: str,
+        nonce: str,
+        code_challenge: str,
+        scopes: list[str],
+        login_hint: str,
+    ) -> str:
+        """The consent URL for connecting a calendar: offline access, a consent screen every time
+        (so a refresh token is always issued), the scopes already granted carried along, the
+        person's own address as the hint, and the identity scopes needed to record which Google
+        account was connected."""
+        query = urlencode(
+            {
+                "client_id": self._settings.google_client_id,
+                "redirect_uri": redirect_uri(self._settings, CALENDAR_CALLBACK_PATH),
+                "response_type": "code",
+                "scope": " ".join(["openid", "email", *scopes]),
+                "state": state,
+                "nonce": nonce,
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256",
+                "access_type": "offline",
+                "prompt": "consent",
+                "include_granted_scopes": "true",
+                "login_hint": login_hint,
+            }
+        )
+        return f"{AUTH_URL}?{query}"
+
+    def _token_request(self, *, code: str, code_verifier: str, callback_path: str) -> dict:
+        """Post the authorization code to the token endpoint; the JSON answer or `GoogleError`."""
         try:
             with httpx.Client(timeout=TIMEOUT_SECONDS, transport=self._transport) as client:
                 response = client.post(
@@ -112,7 +170,7 @@ class GoogleOAuth:
                         "code": code,
                         "client_id": self._settings.google_client_id,
                         "client_secret": self._settings.google_client_secret,
-                        "redirect_uri": redirect_uri(self._settings),
+                        "redirect_uri": redirect_uri(self._settings, callback_path),
                         "grant_type": "authorization_code",
                         "code_verifier": code_verifier,
                     },
@@ -124,7 +182,39 @@ class GoogleOAuth:
         if not isinstance(body, dict) or not isinstance(body.get("id_token"), str):
             logger.warning("google token exchange refused (HTTP %s)", response.status_code)
             raise GoogleError
+        return body
+
+    def exchange(self, *, code: str, code_verifier: str, nonce: str, now: datetime) -> Identity:
+        """Trade the authorization code for the person's identity, or raise `GoogleError`."""
+        body = self._token_request(
+            code=code, code_verifier=code_verifier, callback_path=CALLBACK_PATH
+        )
         return self.check_id_token(body["id_token"], nonce=nonce, now=now)
+
+    def exchange_connect(
+        self, *, code: str, code_verifier: str, nonce: str, now: datetime
+    ) -> Grant:
+        """Trade the code of a calendar connect for the account's identity, the scopes Google
+        granted and the refresh token (if one was issued), or raise `GoogleError`. The access
+        token in the answer is dropped here: it is never stored."""
+        body = self._token_request(
+            code=code, code_verifier=code_verifier, callback_path=CALENDAR_CALLBACK_PATH
+        )
+        identity = self.check_id_token(body["id_token"], nonce=nonce, now=now)
+        scope, refresh = body.get("scope"), body.get("refresh_token")
+        if not isinstance(scope, str):
+            logger.warning("google token answer had no scope list")
+            raise GoogleError
+        if refresh is not None and not (
+            isinstance(refresh, str) and 0 < len(refresh) <= MAX_REFRESH_TOKEN_CHARS
+        ):
+            logger.warning("google token answer had a malformed refresh token")
+            raise GoogleError
+        return Grant(
+            identity=identity,
+            scopes=frozenset(scope.split()),
+            refresh_token=Secret(refresh) if refresh else None,
+        )
 
     def check_id_token(self, id_token: str, *, nonce: str, now: datetime) -> Identity:
         claims = _claims(id_token)
@@ -146,7 +236,13 @@ class GoogleOAuth:
         if not all(checks):
             logger.warning("google id token refused (check %s failed)", checks.index(False) + 1)
             raise GoogleError
-        return Identity(sub=sub, email=email, name=name if isinstance(name, str) else None)
+        hosted = claims.get("hd")
+        return Identity(
+            sub=sub,
+            email=email,
+            name=name if isinstance(name, str) else None,
+            hosted_domain=hosted if isinstance(hosted, str) and hosted else None,
+        )
 
 
 def get_google(request: Request) -> GoogleOAuth | None:

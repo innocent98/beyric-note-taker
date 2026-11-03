@@ -55,8 +55,10 @@ select = ["E", "F", "I", "UP", "B"]
 "tests/test_join_refusal.py" = ["F811"]
 "tests/test_bot_live_state.py" = ["F811"]
 "tests/test_end_meeting.py" = ["F811"]
+"tests/test_calendar_connect.py" = ["F811"]
 # The capture script's notes are long sentences, one per saved exchange.
 "scripts/capture_pilot_api.py" = ["E501"]
+"scripts/capture_calendar_connect.py" = ["E501"]
 
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["fastapi.Depends", "fastapi.Form"]

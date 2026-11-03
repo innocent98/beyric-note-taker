@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import api_accounts, api_admin, auth, notifications, services, usage
+from app import api_accounts, api_admin, auth, calendar_api, notifications, services, usage
 from app.api_schemas import (
     ErrorResponse,
     Login,
@@ -469,3 +469,4 @@ def delete_term(
 
 router.include_router(api_accounts.router)
 router.include_router(api_admin.router)
+router.include_router(calendar_api.router)

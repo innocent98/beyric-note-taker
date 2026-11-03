@@ -1,0 +1,42 @@
+{
+  "note": "Log in.",
+  "client": "a different user",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-E>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "ben@example.test",
+      "password": "ben-chosen-password-2"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": [
+        "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax",
+        "device=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax"
+      ]
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-F>",
+      "user": {
+        "email": "ben@example.test",
+        "name": null,
+        "is_admin": false,
+        "email_verified": true
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 18000
+      },
+      "unread_notifications": 0
+    }
+  }
+}

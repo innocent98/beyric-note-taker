@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     # the routes answer 404 and `GET /api/pilot` says `google_signin: false`.
     google_client_id: str = ""
     google_client_secret: str = ""
+    # True while the Google Cloud project is in Testing: a refresh token then lapses after 7 days,
+    # and a connection records when (`expected_expiry_at`). Off once the project is in production.
+    google_oauth_testing: bool = False
+    # True once Google has verified the app for its sensitive scopes. Until then a tester sees
+    # "Google hasn't verified this app" on the calendar consent screen, so the connect call tells
+    # the frontend to explain it first.
+    google_app_verified: bool = False
     mail_from: str = "Beyric Note Taker <no-reply@beyrictech.com>"
 
     # Hosts a pasted calendar link may point at, comma separated: an exact name, or `.suffix`
