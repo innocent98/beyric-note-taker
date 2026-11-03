@@ -172,7 +172,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [x] Implementation plan: `docs/superpowers/plans/2026-11-03-pilot-accounts-calendar.md` (2026-11-03; open as `docs/pilot-plan`). Per-task files, tests, reviewer, dependencies and the single "Needs Adebayo" table are there; the lists below mirror its task IDs
 - [ ] Phase 0, prerequisites and spikes (parallel, no app code)
   - [ ] P0.1 Google console state: **branding verified only; the sensitive scopes are NOT verified** (Adebayo's correction of spec 0a Q7). Record Audience, Data Access and Verification Center; declare the scopes (`docs/spike/pilot-google-console.md`)
-  - [ ] P0.2 Instant-Meet spike S1 to S7 and S9 on a personal Gmail first (gate outcome G1 to G4 decides Phase I)
+  - [ ] P0.2 Instant-Meet spike S1 to S7 and S9 on a personal Gmail first (gate outcome G1 to G4 decides Phase I). Part 1 done 2026-11-03: scripts and runbook in `docs/spike/pilot-instant-meet.md`; waiting on Adebayo (consent click, host the calls)
   - [ ] P0.3 Vexa checks: chat posting, per-key limit, bot listing, health endpoint
   - [ ] P0.4 Resend state: domain, SPF/DKIM/DMARC, a delivered test mail, `ADMIN_ALERT_EMAIL`
   - [ ] P0.5 Bots per machine (M1): `docker stats` during live meetings (Adebayo)
