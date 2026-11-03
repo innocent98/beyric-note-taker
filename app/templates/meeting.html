@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "components.html" as ui %}
 {% block title %}Meeting {{ meeting.native_id }} - Beyric Notes{% endblock %}
-{% block head %}{% if meeting.status in ("bot_sent", "processing") %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
+{% block head %}{% if meeting.status in ("bot_sent", "processing") or refused_wait %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
 {% block content %}
 {% set template_options = [] %}{% for t in templates %}{% set _ = template_options.append((t.id, t.name)) %}{% endfor %}
 <div class="stack">
@@ -11,12 +11,14 @@
     {% call ui.page_head("Zoom " ~ meeting.native_id if meeting.platform == "zoom" else "Google Meet " ~ meeting.native_id, meeting.created_at|local_time) %}{{ head_end }}{% endcall %}
   </div>
 
-  {% if meeting.status in ("bot_sent", "processing") %}
+  {% if meeting.status in ("bot_sent", "processing") or refused_wait %}
   <p class="muted">This page updates every 30 seconds.</p>
   {% endif %}
 
-  {% if meeting.status == "bot_sent" and meeting.join_attempts > 1 %}
-  {% call ui.alert("notice") %}Zoom turned the bot away, so a new one was sent (attempt {{ meeting.join_attempts }} of {{ max_join_attempts }}).{% endcall %}
+  {% if meeting.status == "bot_sent" and meeting.completion_reason == "google_meet_join_refused" %}
+  {% call ui.alert("notice") %}Google would not let the bot ask to join, so it was taken out. A new bot will be sent in a few minutes (attempt 2 of 2).{% endcall %}
+  {% elif meeting.status == "bot_sent" and meeting.join_attempts > 1 %}
+  {% call ui.alert("notice") %}{{ "Zoom" if meeting.platform == "zoom" else "Google" }} turned the bot away, so a new one was sent (attempt {{ meeting.join_attempts }}{% if meeting.platform == "zoom" %} of {{ max_join_attempts }}{% endif %}).{% endcall %}
   {% endif %}
 
   {% if meeting.status == "bot_sent" %}
@@ -42,6 +44,8 @@
     <p class="muted">This meeting can't be retried: the audio has been deleted and no transcript was saved.</p>
     {% elif retry_block == "no_speech" %}
     <p class="muted">This meeting can't be retried: no speech was found, so trying again would give the same result.</p>
+    {% elif refused_wait %}
+    <p class="muted">{{ retry_block_message }}</p>
     {% else %}
     <p class="muted">This meeting can't be retried: nothing was captured. Send the bot again with a new link.</p>
     {% endif %}
