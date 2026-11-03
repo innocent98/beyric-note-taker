@@ -217,6 +217,7 @@ export default async function StyleGuidePage() {
             <nav className="nav measure" aria-label="Sidebar example">
               <NavLink href="#" label="Current page" current />
               <NavLink href="#" label="Another page" />
+              <NavLink href="#" label="With a count" badge={3} />
             </nav>
           </div>
         </section>
@@ -225,7 +226,7 @@ export default async function StyleGuidePage() {
           <h2>Icons</h2>
           <div className="card sg-demo">
             <Icon name="link" /><Icon name="video" /><Icon name="copy" /><Icon name="check" /><Icon name="plus" />
-            <Icon name="chevron" /><Icon name="back" /><Icon name="info" /><Icon name="warning" />
+            <Icon name="chevron" /><Icon name="down" /><Icon name="download" /><Icon name="back" /><Icon name="info" /><Icon name="warning" />
             <Icon name="trash" /><Icon name="logout" /><Icon name="arrow" />
             <IconButton icon="copy" label="Copy" />
             <IconButton icon="trash" label="Delete" tone="danger" />

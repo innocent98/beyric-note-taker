@@ -16,7 +16,10 @@ const PATHS = {
   mail: ["M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z", "m3 7 9 6 9-6"],
   lock: ["M7 11h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2z", "M8 11V8a4 4 0 0 1 8 0v3"],
   arrow: ["M5 12h14M13 6l6 6-6 6"],
+  download: ["M12 3v12M7 10l5 5 5-5M5 21h14"],
+  down: ["m6 9 6 6 6-6"],
   plus2: ["M12 5v14M5 12h14"],
+  search: ["M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", "m20 20-3.5-3.5"],
 } as const;
 
 export type IconName = keyof typeof PATHS;

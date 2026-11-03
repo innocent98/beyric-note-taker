@@ -1,9 +1,29 @@
 import { AppLink } from "./link";
 
-export function NavLink({ href, label, current = false }: { href: string; label: string; current?: boolean }) {
+// `badge` is a count drawn at the right (the Review link's open items); nothing is drawn for 0.
+// A screen reader hears "Review, 3 open", not a bare number.
+export function NavLink({
+  href,
+  label,
+  current = false,
+  badge = 0,
+}: {
+  href: string;
+  label: string;
+  current?: boolean;
+  badge?: number;
+}) {
   return (
     <AppLink className="nav-link" href={href} aria-current={current ? "page" : undefined}>
-      {label}
+      <span>{label}</span>
+      {badge > 0 ? (
+        <>
+          <span className="nav-badge" aria-hidden="true">
+            {badge > 99 ? "99+" : badge}
+          </span>
+          <span className="visually-hidden">, {badge} open</span>
+        </>
+      ) : null}
     </AppLink>
   );
 }

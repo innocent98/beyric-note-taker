@@ -1,0 +1,26 @@
+{
+  "note": "PROVOKED IN-PROCESS: the renderer's PDF library was made unloadable (as a missing Pango would), so the real child process really exited with an error. The answer is the real one; the message says nothing of the cause.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export?format=pdf",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "content-type": "application/json",
+      "content-length": "89",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "body": {
+      "error": {
+        "code": "export_failed",
+        "message": "The file could not be prepared. Try again."
+      }
+    }
+  }
+}

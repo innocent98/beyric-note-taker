@@ -141,7 +141,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] App shell (sidebar, phone top bar), Meetings (new meeting, list, paging, stale-worker alert, empty state), meeting page (notes, transcript, copy, rewrite, cancel with confirm, retry, notices, 30 s polling), Templates, Vocabulary, login; light and dark
   - [x] 89 vitest tests, 41-check end-to-end through Next on a compose stack, real-browser pass at 375 and 1280 px in both themes
   - [x] CI green (PR merged and deployed 2026-11-03)
-  - [ ] Not built, waiting on the API (stream D): Download menu, Share dialog, translation, template delete, participants and duration
+  - [ ] Not built, waiting on the API (stream D): Download menu (shipped with W5, 2026-11-03), Share dialog, translation, template delete, participants and duration
   - [ ] Not verified: real Vexa bot and real OpenAI rewrite through the screens, Safari and Firefox, the live server
 - [ ] Stream P, UI parity with the designer's files (`feature/nextjs-ui-parity`, PR #26, merged and deployed 2026-11-03; SOP `docs/sop/2026-11-03-ui-parity.md`; report `docs/ui/parity-report.md`)
   - [x] Gap check of every designer file against the Next pages at 1440, 768 and 390 px; report with before and after screenshots
@@ -152,7 +152,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] CI green (PR merged and deployed 2026-11-03)
   - [x] Decided 2026-11-03 (Adebayo): keep the designer's landing and sign-in words even though some run ahead of the product (Teams, tasks, integrations, sharing); revisit before the Google verification submission
   - [x] Run `owner-e2e.mjs` and `owner-browser-check.mjs` on the compose stack (2026-11-03: 41/41 and all pass, also with `--poll-check` and `--send-check`; SOP `2026-11-03-ui-parity.md`, "Live check"). Live public pages read in a browser; favicon link fixed. Still open: a live authenticated pass by Adebayo, and the designed 404 for unknown URLs (FastAPI JSON shows)
-  - [ ] Needs backend, not built (listed in the report): sign-up, forgot password, SSO, accounts and sidebar identity, calendar and auto-join card, series, tasks, projects, decisions, review, team, settings, download, share, translation, agenda, template delete, Emails
+  - [ ] Needs backend, not built (listed in the report): sign-up, forgot password, SSO, accounts and sidebar identity, calendar and auto-join card, series, tasks, projects, team, settings, download, share, translation, agenda, template delete, Emails
 - [ ] Stream D, new designed screens, one line per screen. **Decided 2026-11-03 (Adebayo): every designed screen is pilot work, and the AI workspace spec is approved ("all recommended" for D1 to D19).** The AI workspace screens follow `docs/superpowers/specs/2026-11-03-ai-workspace-design.md` (phases W0 to W10; "Needs" names the backend phase that must merge first; "Designer gap" is a control the prototype does not draw). Each screen is built after its API merges, against live captures in the FE guide, and ticked only when verified in a real browser.
   - [ ] D1, accounts and pilot (needs Module 2 phase A, shipped on the backend): sign up, confirm your email (`/verify-email`), forgot password, check your email, new password (`/reset-password`), waitlist form and "pilot full" (`/pilot-full`, designer gap), accept invite (`/signup?invite=`), Google sign-in buttons and the `/login?error=` messages, sidebar identity (name and email from `GET /api/session`), usage bar and "hours used up" (designer gap), notification bell (designer gap), admin screens: users, waitlist, pilot settings (designer gap)
     - Shipped on the frontend so far (from main, PR #44); the rest of D1 is still open:
@@ -168,13 +168,21 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
         - [ ] Designed and not built (no backend): workspace setup, team invite acceptance, Microsoft sign-in, "Keep me signed in", the 6-digit email code (the API confirms with a link and the password)
         - [ ] Not checked: CI on the pushed head, a real mail, a real Google round trip, Safari and Firefox, the live site. Sign-up stays closed (`signups_open` is false)
   - [ ] D2, calendar and auto-join (needs Module 2 phase C): Meetings page calendar card and Upcoming list with per-meeting switches, "Not recorded" rows with Send now (designer gap), "Calendar disconnected" banner and Reconnect (designer gap), Settings, Calendar (rules, template), the instant-Meet switch (designer gap)
-  - [ ] D3, Decisions (needs W1): search, groups by meeting, Open notes, Remove from log (designer gap)
-  - [ ] D4, Review (needs W1): open and checked lists, Add to vocabulary, Open transcript, Mark as checked, Undo, sidebar badge, "Rewrite notes with the corrected spelling" offer
+  - [x] D3, Decisions (API shipped in W1; see `docs/fe-integration-guide-ai-workspace.md`): search, groups by meeting, Open notes, Remove from log (designer gap). Built 2026-11-03 on branch `feature/stream-d-decisions-review`, SOP `2026-11-03-stream-d-decisions-review.md`; verified in a real browser against a real local FastAPI and Postgres (search by code and by words, empty search, Remove from log with its ask, phone width), not against the live site
+    - [x] `/decisions`: groups by meeting with the day, title and Open notes; search through the API (300 ms pause, stale answers dropped); "Show older meetings"; "No decisions yet."; "No decisions match your search."; Searching..., search failed with Try again; Remove from log asks first and treats a 404 as removed
+    - [x] Tests: `decisions-view.test.tsx` (15, against the captures)
+  - [x] D4, Review (API shipped in W1; see `docs/fe-integration-guide-ai-workspace.md`): open and checked lists, Add to vocabulary, Open transcript, Mark as checked, Undo, sidebar badge, "Rewrite notes with the corrected spelling" offer. Built 2026-11-03 (same branch and SOP); verified in a real browser against a real local FastAPI and Postgres, **except** a successful rewrite (needs OpenAI) and luna's own `heard_as` (a stand-in reply was used)
+    - [x] `/review`: open items with meeting and day, the spelling box only when `heard_as` is set, Add to vocabulary (201, 400 and 409 handled), Open transcript (`/meetings/<id>?tab=transcript`), Mark as checked, collapsed Checked list with Undo, "All caught up" and "Nothing to review yet.", 200-item notice, item gone (404) notice
+    - [x] Sidebar: Decisions and Review links, the Review count from `badges.review_open`, refreshed after every change
+    - [x] Rewrite offer after an add or a duplicate: reads the meeting's template, calls `regenerate`, warns that removed and checked items may come back
+    - [x] Meeting page: "Decisions and review" card from `extraction_status` (pending and running with 5 s polling for 2 minutes, stalled, done, failed, skipped), the line near Rewrite notes
+    - [x] Tests: `review-view.test.tsx` (20), `meeting-extraction.test.tsx` (11), `decisions-review-shell.test.tsx` (7); `npm run gen:api` gave no difference
+    - [ ] Not verified: a successful rewrite from the offer, the real worker filling the lists, Safari and Firefox, the live site, 200 items
   - [ ] D5, Tasks (needs W2; owners need W3; projects need W4; sprints need W9): filter chips, project tabs, Board and Backlog, drag and drop, task drawer, "needs attention" banner, New task, sprint header and Close sprint, milestone card, meeting page Action items as tasks; states for extraction pending and failed (designer gap)
   - [ ] D6, Projects (needs W4): list, name, colour, recurring meetings, keywords, sprint length, milestone (proposal chip is a designer gap), delete
   - [ ] D7, Team (needs W3; W0.4 first): members, roles, aliases (editing is a designer gap), invite dialog (name field is a designer gap), Resend, remove, "Share with team" switch on the meeting page (designer gap)
   - [ ] D8, Series (needs W8, and Module 2 phase C for recurring ids): cards on Meetings, series page (unfinished, finished since, carried questions, agenda, past meetings, attendees), "On next agenda" toggles, Send agenda, Details row on the meeting page, "Add to recurring meeting" and "Possibly resolved" chips (designer gaps)
-  - [ ] D9, Download (needs W5): menu with PDF and Word, transcript tick, language note
+  - [x] D9, Download (W5, 2026-11-03): menu with PDF and Word, transcript tick, the states for preparing, done, failed and not ready; **the language note waits for W7** (translated downloads)
   - [ ] D10, Share (needs W6, and W3 for participants): dialog, recipients, language, attachment, transcript, message, "Shared with ..." note, "Add email" on a participant (designer gap), share-limit message (designer gap)
   - [ ] D11, Translate (needs W7): language select, "Translating ..." and "Translated from ..." banners, Show original, default language in Settings, failed state (designer gap)
   - [ ] D12, Settings (needs W2, W7, W8, W9, W10): Tasks card, default language, sprints and reminders card, Slack and tracker cards
@@ -182,6 +190,17 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] D14, Emails in the designer's layout (needs W0.3): replace the plain mails (`Emails.dc.html` applies to all eight)
   - [ ] D15, template delete (needs `DELETE /api/templates/{id}`, not yet built, and a `template_in_use` refusal for a template still used by a meeting or the calendar setting; both are planned in the accounts spec, neither exists in code yet)
   - [ ] D16, shell leftovers: toast component, PWA basics
+- [x] W5, Download and export (AI workspace spec section 9; branch `feature/notes-export-w5`, 2026-11-03; SOP `docs/sop/2026-11-03-notes-export-w5.md`; FE guide `docs/fe-integration-guide-export.md` with 18 live captures; PR #48 open, not merged)
+  - [x] Spike EX1: WeasyPrint fits the image (Pango already comes with ffmpeg; one 103 MB pip layer) and the memory (renderer peak 91 MiB for a 1-hour transcript, 120 MiB for 40,000 words; 1.9 s and 9.0 s on a loaded arm64 VM): `docs/spike/export-pdf-memory.md`
+  - [x] `NotesDocument` render model from the stored notes and, when asked, the transcript (`app/notes_document.py`)
+  - [x] PDF (WeasyPrint, Geist, A4, footer, page numbers) and Word (python-docx: headings, nested bullets, transcript after a page break)
+  - [x] `GET /api/meetings/{id}/export?format=pdf|docx&transcript=true|false`: owner-scoped (404 for another account's meeting), 409 `not_ready`, never stores the file, child process per export, one at a time (503 `export_busy`), 45 s limit (504 `export_timeout`), cleaned file name from the title with RFC 5987 `Content-Disposition`
+  - [x] Route named in the route-enumeration test; `docs/openapi.json` and `web/lib/api/schema.d.ts` regenerated
+  - [x] Download menu in the Next meeting page (parity with the prototype) and its states; privacy row "files you export are built when you ask and are not stored" in the Jinja templates and the Next copies
+  - [x] SOP, FE guide with live captures, `scripts/capture_export_api.py`
+  - [ ] Not verified: a file opened in Microsoft Word, Google Docs or Pages; the browser writing the file to disk; Safari and Firefox; the production CSP and the live site; timings on the real server
+  - [x] `mem_limit: 768m` on the `web` service (it had none)
+  - [ ] Suggested, not done: a per-account export limit
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated
 - [ ] Measure Next.js memory on the server (Adebayo runs the SSH steps)
 
@@ -198,6 +217,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [x] Frontend approach decided: stay on Jinja, with parity and flexibility as conditions (`docs/superpowers/specs/2026-11-02-frontend-approach.md`, 2026-11-02)
 - [x] Written design (`docs/superpowers/specs/2026-11-03-pilot-accounts-calendar-design.md`): drafted, builder-checked and **answered by Adebayo 2026-11-03** (section 0a overrides the older question table)
 - [x] Implementation plan: `docs/superpowers/plans/2026-11-03-pilot-accounts-calendar.md` (2026-11-03; open as `docs/pilot-plan`). Per-task files, tests, reviewer, dependencies and the single "Needs Adebayo" table are there; the lists below mirror its task IDs
+- [x] **Deploy gate (2026-11-03, after the #45 outage; `fix/deploy-rollback-and-token-key`):** every PR that adds a required environment variable lists it under "Server steps before merge" in its body and the step is done on the server before merging (the app refuses to start without it, by design); `deploy/deploy.sh` now rolls back when `docker compose up` itself fails, restores the checkout on a failed build and starts containers stuck in `Created` (`tests/test_deploy_script.py`); `TOKEN_ENC_KEY` is documented in `deploy/README.md`, `.env.example` and the Phase C foundations SOP. Not yet exercised on the real server
 - [ ] Phase 0, prerequisites and spikes (parallel, no app code)
   - [ ] P0.1 Google console state: **branding verified only; the sensitive scopes are NOT verified** (Adebayo's correction of spec 0a Q7). Record Audience, Data Access and Verification Center; declare the scopes (`docs/spike/pilot-google-console.md`)
   - [ ] P0.2 Instant-Meet spike S1 to S7 and S9 on a personal Gmail first (gate outcome G1 to G4 decides Phase I)
@@ -230,14 +250,20 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [ ] Phase C, Google Calendar auto-join plus the ICS source (needs A6, A9, A13, A18 for most tasks)
   - [x] C1 migration for connections, events, scheduled joins (2026-11-03, `feature/phase-c-foundations`; migration `0010`, SOP `docs/sop/2026-11-03-phase-c-foundations.md`; open, not merged)
   - [x] C2 token vault (AES-GCM, Opus review) (2026-11-03, same PR #45; Opus reviewed, no Critical or High, its fixes applied; the privacy "Security" row waits for C3)
-  - [ ] C3 connect flow with incremental consent (Opus review)
+  - [ ] C3 connect flow with incremental consent (Opus review) (2026-11-03, PR `feature/c3-google-connect`, open, not merged; SOP `docs/sop/2026-11-03-phase-c-google-connect.md`, FE guide `docs/fe-integration-guide-calendar-connect.md`). Built and tested, routes dark until `CALENDAR_ENABLED=true`: not ticked until the **live step** (a real Google consent with Adebayo's Gmail test account) is done
+    - [x] connect URL (offline, consent prompt, PKCE S256, login hint, granted scopes carried), single-use state bound to user and browser, callback classified public-but-state-checked, granted scopes from Google, refresh token only through the vault with the user id as owner, reconnect replaces, `return_to` allow-list, redirect-URI allow-list, no secrets in logs (71 tests, mutation-checked; a different Google account is refused while a connection works; captured against the running app with Google faked)
+    - [x] privacy "Security" row (Jinja and Next copies)
+    - [ ] live check with a real Google account: consent screen, stored row (token is bytes), real scope names and `hd`, unticked box
   - [ ] C4 disconnect flow
   - [ ] C5 calendar client and `CalendarSource` protocol; live check that `calendar.events.readonly` covers `events.list` and `events.get`
+    - [x] Protocol, `SyncBatch`, errors and `GoogleSource` / `AccessTokenCache` (2026-11-03, `feature/c5-calendar-source`; SOP `docs/sop/2026-11-03-phase-c-calendar-source.md`; 101 tests against synthetic Google bodies; open, not merged)
+    - [ ] **Live step, needs C3 and Adebayo:** one real `events.list` and one `events.get` with only `calendar.events.readonly`, redacted captures in `docs/spike/pilot-calendar-captures/`, fixtures and fake switched to them. If `events.get` refuses the scope, stop: the re-check would need `calendar.readonly`
   - [x] C6 event parsing (2026-11-03, same PR; synthetic fixtures until C5's live captures exist)
   - [x] C7 `will_join` rule function (2026-11-03, same PR; full rule x organiser x response x platform x override matrix; an unanswered invite from outside your organisation does not auto-join under `all`: **decision for Adebayo**, see the SOP)
   - [ ] C8 materialiser (events to rows); C8b sync job
   - [ ] C9 key re-encryption script
-  - [ ] C10 scheduler skeleton (leader lock, two loops, heartbeat, compose service); C10b periodic sweeps and mail tick
+  - [x] C10 scheduler skeleton (2026-11-03, `feature/c10-scheduler`; leader advisory lock on its own connection, dispatch and sync loops, injected clock, heartbeat, compose service, `deploy.sh` heartbeat wait; no migration, no required setting; SOP `docs/sop/2026-11-03-phase-c-scheduler.md`). Verified on a real Postgres and with two real processes (failover, clean stop). Not yet run on the server; four `deploy.sh` stub tests added to `tests/test_deploy_script.py`
+  - [ ] C10b periodic sweeps and mail tick
   - [ ] C11 `place_bot()` single host (Opus review); C11b alerts helper (admin email via Resend)
   - [ ] C12 join runner (dispatch at start minus `AUTOJOIN_LEAD_SECONDS`, no-capacity retry, catch-up)
   - [ ] C13 connection states and refresh failures; C14 disconnected notifications and email
@@ -262,6 +288,41 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] A1 measure the full Vexa stack with a bot built from PR #1873 on the Mac, and settle two questions (Zoom on an authenticated deployment, a signed-in bot on an invited event)
   - [ ] A2 to A7, only if A1 passes: signed-in host files, `auth_session_missing` handling and alert, provisioning runbook, keep-warm job, invite path (`bot_invited`, Upcoming row, Settings address), policy and terms rows
 - [ ] Clear "calendar disconnected" state (built in C13 and C14; the 7-day expiry path stays dormant while the Google app is verified)
+
+## PWA share target (Android share sheet; built 2026-11-03, branch `feature/pwa-share-target`; SOP `docs/sop/2026-11-03-pwa-share-target.md`)
+- [x] Link extraction from shared text (Meet, Zoom with passcode, bare Meet code, two links, hostile text), Vitest
+- [x] `share_target` in the manifest (POST to `/share-target`), route handler, `/share` page with the login round trip and every refusal, Vitest
+- [x] Service worker (network-only, caches nothing), checked against Chrome's documentation; manifest parses and no installability errors in headless Chrome on a Mac
+- [x] FE guide section 5.9 with captures, SOP
+- [ ] CI green on the PR; merge only on Adebayo's word
+- [ ] Phone test by Adebayo: install from Chrome's menu, share a Meet link from the Meet app, check a meeting appears (the real share sheet is not verified)
+- [ ] Decide whether a share may send without the tap (needs a way to tell a real share from a forged post)
+
+## AI workspace backend (spec `docs/superpowers/specs/2026-11-03-ai-workspace-design.md`, phases W0 to W10; approved 2026-11-03, D1 to D19 as recommended)
+
+Each phase ends with its policy rows, SOP, checklist and FE guide with live captures. Opus reviews the phases marked in spec section 15.
+
+- [ ] W0.1 Spikes
+  - [x] AI1 extraction eval: **go on `gpt-6-luna`** (2026-11-03: 7 synthetic cases, 30 bullets, 0 invented owners, 30/30 quotes, 17/17 dates; `docs/spike/ai-extraction-eval.md`). Five real transcripts reviewed by Adebayo are still owed before W2
+  - [ ] EX1 PDF memory and time (W5)
+  - [ ] ML1 Resend attachments and limits (W6)
+  - [ ] TR1 French and Spanish with names (W7)
+- [x] W0.2 AI ledger and settings: `ai_runs`, `EXTRACT_MODEL`, prompt versions (2026-11-03, SOP `2026-11-03-ai-workspace-w1-extraction.md`)
+- [ ] W0.3 Mail upgrade
+- [ ] W0.4 Team foundation (`visible_meetings()` replaces the owner filter in `app/workspace.py`)
+- [ ] W0.5 Meeting delete
+- [x] W1 Extraction, Decisions, Review (2026-11-03; migration `0011`; SOP `2026-11-03-ai-workspace-w1-extraction.md`; FE guide `docs/fe-integration-guide-ai-workspace.md`)
+  - [x] Worker job with states `pending`, `running`, `done`, `failed`, `skipped`, 3 attempts, crash recovery
+  - [x] Parsers for Decisions, Open questions, Please check; reconcile by fingerprint (hidden and checked survive a re-run that keeps the words)
+  - [x] `decisions`, `open_questions`, `review_items`, `ai_runs`; deleted with the meeting (ledger kept)
+  - [x] `GET /api/decisions`, `POST /api/decisions/{id}/hide`, `GET /api/review`, `check`, `uncheck`, `vocabulary`, `badges.review_open`, `extraction_status` on the meeting
+  - [x] Backfill `scripts/backfill_extraction.py` (decisions for all, the rest for 14 days). **Adebayo or the lead runs it once after deploy**
+  - [x] Privacy rows for W1 (Jinja and Next, `legal.test.tsx` green)
+  - [x] FE guide with live captures (`docs/fe-captures/ai-workspace-w1/`)
+  - [ ] Open questions endpoint (with the series screens, W8)
+  - [ ] Regenerate `web/lib/api/schema.d.ts` (`npm run gen:api`) with the first screen
+- [ ] W2 Tasks (needs W1; Opus)
+- [ ] W5 Export, W3 Team, W4 Projects, W6 Share, W7 Translate, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 
 ## Backlog
 

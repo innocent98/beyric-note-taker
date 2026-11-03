@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     transcription_model: str = "gpt-transcribe"
     notes_model: str = "gpt-6-luna"
+    # The one call that reads the notes and transcript into decisions, open questions and review
+    # items (app/extraction.py). Kept apart from `notes_model` so a stronger model can take over
+    # this call alone if the eval gate (docs/spike/ai-extraction-eval.md) says luna is not enough.
+    extract_model: str = "gpt-6-luna"
 
     audio_retention_days: int = 7
     audio_dir: str = "data/audio"
@@ -56,6 +60,13 @@ class Settings(BaseSettings):
     # the routes answer 404 and `GET /api/pilot` says `google_signin: false`.
     google_client_id: str = ""
     google_client_secret: str = ""
+    # True while the Google Cloud project is in Testing: a refresh token then lapses after 7 days,
+    # and a connection records when (`expected_expiry_at`). Off once the project is in production.
+    google_oauth_testing: bool = False
+    # True once Google has verified the app for its sensitive scopes. Until then a tester sees
+    # "Google hasn't verified this app" on the calendar consent screen, so the connect call tells
+    # the frontend to explain it first.
+    google_app_verified: bool = False
     mail_from: str = "Beyric Note Taker <no-reply@beyrictech.com>"
 
     # Hosts a pasted calendar link may point at, comma separated: an exact name, or `.suffix`
@@ -75,6 +86,11 @@ class Settings(BaseSettings):
     # on. In production the app then refuses to start without `token_enc_key`, as it already does
     # once `google_client_id` is set.
     calendar_enabled: bool = False
+
+    # The scheduler's two loops (spec section 9.7): dispatch every 10 s (which is also how often
+    # a standby retries the leader lock), the sync loop wakes every 60 s. Not required.
+    scheduler_dispatch_seconds: int = 10
+    scheduler_sync_seconds: int = 60
 
 
 @lru_cache

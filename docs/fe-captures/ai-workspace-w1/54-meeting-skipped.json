@@ -1,0 +1,49 @@
+{
+  "note": "An old meeting got its decisions only: `skipped`.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/6",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 6,
+      "title": "Zoom 99999999999",
+      "platform": "zoom",
+      "native_id": "99999999999",
+      "status": "ready",
+      "step": "done",
+      "status_text": "Ready",
+      "status_tone": "success",
+      "template_id": 5,
+      "created_at": "2026-09-04T20:31:34.488282Z",
+      "failure_reason": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": false,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": true,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "extraction_status": "skipped",
+      "notes": "## Summary\nThe meeting covered the Beyric client portal launch, email notifications, budget, contract, launch-event venue, welcome-pack stock, VAT, contractor resourcing, and a login-page typo. The launch was moved to 14 March, and the remaining phase budget was capped at £4,000. The email provider and contractor decision remain open.\n\n## Key points\n- The payment integration slipped by about two weeks after the provider changed its sandbox.\n- Amaka compared Postmark and Resend. Postmark had better deliverability figures in the reports she read; Resend was cheaper and had a cleaner API, according to Tunde.\n- Grace prefers the venue near Liverpool Street but said either of the two options would be acceptable.\n- The welcome-pack requirement was clarified as 1,500 packs, or 30 boxes.\n- The login page has a product-name typo that should read Beyric.\n- Grace will be travelling next week and asked for urgent items to be sent before Thursday.\n\n## Decisions\n- Move the launch to 14 March.\n- Cap the remaining budget for this phase at £4,000; anything that would exceed the cap requires Grace’s sign-off.\n- Defer the email-provider decision until the test results are reviewed next week.\n- Defer the extra mobile-app contractor decision until the integration progress is clearer.\n\n## Action items\n- Adebayo: Update the plan with the new launch date.\n- Amaka: Send a test batch through Postmark and Resend using the team’s domain by Wednesday.\n- Tunde: Send Grace the revised contract with the new dates by Friday.\n- Amaka: Review the two venue options Grace mentioned and handle the booking.\n- Unassigned: Check whether VAT applies to international customers and identify an owner for the check.\n- Amaka: Fix the login-page product-name typo today.\n\n## Open questions\n- Which email provider will be selected after the tests?\n- Does VAT apply to international customers, and who will own checking this?\n- Will the team hire an extra contractor for the mobile app or do the work in-house?\n- Which venue option will be selected?\n\n## Please check\nNone noted\n",
+      "notes_html": "<h2>Summary</h2>\n<p>The meeting covered the Beyric client portal launch, email notifications, budget, contract, launch-event venue, welcome-pack stock, VAT, contractor resourcing, and a login-page typo. The launch was moved to 14 March, and the remaining phase budget was capped at £4,000. The email provider and contractor decision remain open.</p>\n<h2>Key points</h2>\n<ul>\n<li>The payment integration slipped by about two weeks after the provider changed its sandbox.</li>\n<li>Amaka compared Postmark and Resend. Postmark had better deliverability figures in the reports she read; Resend was cheaper and had a cleaner API, according to Tunde.</li>\n<li>Grace prefers the venue near Liverpool Street but said either of the two options would be acceptable.</li>\n<li>The welcome-pack requirement was clarified as 1,500 packs, or 30 boxes.</li>\n<li>The login page has a product-name typo that should read Beyric.</li>\n<li>Grace will be travelling next week and asked for urgent items to be sent before Thursday.</li>\n</ul>\n<h2>Decisions</h2>\n<ul>\n<li>Move the launch to 14 March.</li>\n<li>Cap the remaining budget for this phase at £4,000; anything that would exceed the cap requires Grace’s sign-off.</li>\n<li>Defer the email-provider decision until the test results are reviewed next week.</li>\n<li>Defer the extra mobile-app contractor decision until the integration progress is clearer.</li>\n</ul>\n<h2>Action items</h2>\n<ul>\n<li>Adebayo: Update the plan with the new launch date.</li>\n<li>Amaka: Send a test batch through Postmark and Resend using the team’s domain by Wednesday.</li>\n<li>Tunde: Send Grace the revised contract with the new dates by Friday.</li>\n<li>Amaka: Review the two venue options Grace mentioned and handle the booking.</li>\n<li>Unassigned: Check whether VAT applies to international customers and identify an owner for the check.</li>\n<li>Amaka: Fix the login-page product-name typo today.</li>\n</ul>\n<h2>Open questions</h2>\n<ul>\n<li>Which email provider will be selected after the tests?</li>\n<li>Does VAT apply to international customers, and who will own checking this?</li>\n<li>Will the team hire an extra contractor for the mobile app or do the work in-house?</li>\n<li>Which venue option will be selected?</li>\n</ul>\n<h2>Please check</h2>\n<p>None noted</p>\n",
+      "transcript": "[Priya]: Let's get going. Three things: the partner portal, the data export, and the new hire.\n[Segun]: Portal first. Design is done. I will build the login screens tomorrow and have the dashboard in the coming weeks.\n[Priya]: Fine. The dashboard has no firm date, so let's say in the coming weeks.\n[Ebuka]: For the data export, I will write the spec by next Monday. After that someone has to estimate the work, but we do not know who has capacity.\n[Priya]: Agreed, leave the estimate unassigned for now.\n[Segun]: The auditors asked for the export format soon. Whoever picks it up should reply to them.\n[Priya]: Nobody volunteers, so it stays open.\n[Ebuka]: New hire. HR wants the job description signed off sometime next quarter, no rush.\n[Priya]: I'll review the job description at some point, but I will not commit to a date.\n[Segun]: Also I will update the staging server tonight.\n[Priya]: Good. We decided to keep the export in CSV for version one.\n[Ebuka]: Agreed. Excel can wait.\n[Priya]: Thanks all."
+    }
+  }
+}

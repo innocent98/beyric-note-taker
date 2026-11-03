@@ -1,0 +1,23 @@
+{
+  "note": "The failed calls in `ai_runs`: the class name, no text.",
+  "content": [
+    {
+      "meeting_id": 5,
+      "status": "failed",
+      "error": "NotFoundError",
+      "model": "no-such-model-w1"
+    },
+    {
+      "meeting_id": 5,
+      "status": "failed",
+      "error": "NotFoundError",
+      "model": "no-such-model-w1"
+    },
+    {
+      "meeting_id": 5,
+      "status": "failed",
+      "error": "NotFoundError",
+      "model": "no-such-model-w1"
+    }
+  ]
+}

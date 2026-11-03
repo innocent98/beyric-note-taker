@@ -1,9 +1,15 @@
 import type {
+  DecisionList,
+  ExportFormat,
   FieldError,
   Meeting,
   MeetingList,
   NewMeeting,
   Pilot,
+  ReviewItem,
+  ReviewList,
+  ReviewState,
+  ReviewTermResult,
   SessionState,
   SignUpBody,
   Template,
@@ -56,9 +62,27 @@ export type ApiOptions = {
 };
 
 type Query = Record<string, string | number | undefined>;
-type Call = { body?: unknown; query?: Query; write?: boolean };
+type Call = { body?: unknown; query?: Query; write?: boolean; accept?: string };
 
 export type Api = ReturnType<typeof createApi>;
+
+export type DownloadedFile = { blob: Blob; filename: string | null };
+
+// The file name in a Content-Disposition header: the UTF-8 `filename*` (RFC 5987) when there is
+// one, else the plain `filename`. null when there is neither; the caller then names the file.
+export function filenameFrom(header: string | null): string | null {
+  if (!header) return null;
+  const extended = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+  if (extended) {
+    try {
+      return decodeURIComponent(extended[1].trim());
+    } catch {
+      // fall through to the plain name
+    }
+  }
+  const plain = /filename\s*=\s*"([^"]*)"/i.exec(header) ?? /filename\s*=\s*([^;]+)/i.exec(header);
+  return plain ? plain[1].trim() : null;
+}
 
 export function createApi(options: ApiOptions = {}) {
   const base = (options.baseUrl ?? "").replace(/\/$/, "");
@@ -67,7 +91,7 @@ export function createApi(options: ApiOptions = {}) {
   // The token the last write went out with, to tell a stale one from a session that never changed.
   let sentCsrf: string | null = null;
 
-  async function send(method: string, path: string, { body, query, write }: Call): Promise<Response> {
+  async function send(method: string, path: string, { body, query, write, accept }: Call): Promise<Response> {
     const search = query
       ? Object.entries(query)
           .filter(([, v]) => v !== undefined)
@@ -75,7 +99,7 @@ export function createApi(options: ApiOptions = {}) {
           .join("&")
       : "";
     const headers: Record<string, string> = {
-      Accept: "application/json",
+      Accept: accept ?? "application/json",
       ...((await options.headers?.()) as Record<string, string> | undefined),
     };
     if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -135,6 +159,19 @@ export function createApi(options: ApiOptions = {}) {
     return (await res.json()) as T;
   }
 
+  // A file the API builds for this request (the notes as PDF or Word): the bytes and the name the
+  // server gave it. Failures are the usual JSON errors, so they throw the same `ApiError`.
+  async function download(path: string, query: Query): Promise<DownloadedFile> {
+    const res = await send("GET", path, { query, accept: "*/*" });
+    if (!res.ok) return fail(res);
+    const type = res.headers.get("content-type") ?? "";
+    // A 200 that is not a file (a proxy's page) is a failure, not something to save.
+    if (type.includes("text/html") || type.includes("application/json")) {
+      throw new ApiError(res.status, "gateway_error", GATEWAY_MESSAGE);
+    }
+    return { blob: await res.blob(), filename: filenameFrom(res.headers.get("content-disposition")) };
+  }
+
   // GET /api/session: whether the visitor is signed in (and as whom), and the token that goes with the cookie.
   async function readSession(): Promise<SessionState> {
     const state = await request<SessionState>("GET", "/api/session");
@@ -185,12 +222,29 @@ export function createApi(options: ApiOptions = {}) {
       retry: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/retry`, { write: true }),
       regenerate: (id: number, template_id: number) =>
         request<Meeting>("POST", `/api/meetings/${id}/regenerate`, { body: { template_id }, write: true }),
+      // The notes as a PDF or Word file, built when asked and not stored (GET .../export).
+      export: (id: number, format: ExportFormat, transcript: boolean) =>
+        download(`/api/meetings/${id}/export`, { format, transcript: String(transcript) }),
     },
     templates: {
       list: async () => (await request<{ templates: Template[] }>("GET", "/api/templates")).templates,
       create: (body: TemplateInput) => request<Template>("POST", "/api/templates", { body, write: true }),
       update: (id: number, body: TemplateInput) =>
         request<Template>("PUT", `/api/templates/${id}`, { body, write: true }),
+    },
+    // GET /api/decisions groups by meeting; `limit` counts meetings. Hiding never edits the notes.
+    decisions: {
+      list: (query: { q?: string; limit?: number; before_id?: number } = {}) =>
+        request<DecisionList>("GET", "/api/decisions", { query }),
+      hide: (id: number) => request<void>("POST", `/api/decisions/${id}/hide`, { write: true }),
+    },
+    // Items to check against the transcript. Adding a term also marks the item checked.
+    review: {
+      list: (state: ReviewState = "open") => request<ReviewList>("GET", "/api/review", { query: { state } }),
+      check: (id: number) => request<ReviewItem>("POST", `/api/review/${id}/check`, { write: true }),
+      uncheck: (id: number) => request<ReviewItem>("POST", `/api/review/${id}/uncheck`, { write: true }),
+      addToVocabulary: (id: number, term: string) =>
+        request<ReviewTermResult>("POST", `/api/review/${id}/vocabulary`, { body: { term }, write: true }),
     },
     vocabulary: {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,

@@ -1,0 +1,25 @@
+{
+  "note": "Once `GOOGLE_APP_VERIFIED` is true the unverified-app notice is not needed.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/google/connect",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": "calendar_flow=<cookie>; HttpOnly; Max-Age=600; Path=/api/calendar/google; SameSite=lax"
+    },
+    "body": {
+      "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth?client_id=capture-client-id.apps.example.test&redirect_uri=https%3A%2F%2Fnotes.example.test%2Fapi%2Fcalendar%2Fgoogle%2Fcallback&response_type=code&scope=openid+email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.events.readonly&state=<state>&nonce=<nonce>&code_challenge=<code_challenge>&code_challenge_method=S256&access_type=offline&prompt=consent&include_granted_scopes=true&login_hint=admin%40example.test",
+      "show_unverified_notice": false
+    }
+  }
+}

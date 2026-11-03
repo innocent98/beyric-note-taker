@@ -1,0 +1,10 @@
+[Funmi]: It is Thursday, so let's keep this short. Release planning.
+[Bayo]: I will finish the release notes by Monday.
+[Funmi]: Good. Sade, the QA run?
+[Sade]: I'll complete the regression run this week.
+[Funmi]: And the customer email about downtime?
+[Sade]: I will draft it by tomorrow morning and send it to Bayo for review.
+[Bayo]: I will review it next Wednesday, I am out until then.
+[Funmi]: Fine. I will book the retrospective for end of next week, let's say Friday of next week.
+[Sade]: Decision: we ship on the Tuesday after next.
+[Funmi]: Yes, agreed, we ship on the Tuesday after next.

@@ -1,0 +1,37 @@
+{
+  "note": "`badges.review_open` counts open items.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-C>",
+      "user": {
+        "email": "ada@example.test",
+        "name": "Ada Example",
+        "is_admin": false,
+        "email_verified": true
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 18000
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 3
+      }
+    }
+  }
+}

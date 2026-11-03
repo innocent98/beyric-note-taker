@@ -1,0 +1,88 @@
+{
+  "case": "planted",
+  "extraction_failed": false,
+  "score": {
+    "case": "planted",
+    "bullets": 6,
+    "covered": 6,
+    "quotes_given": 6,
+    "quotes_verified": 5,
+    "invented_owners": 0,
+    "raw_invented_owners": 0,
+    "wrong_owners": 0,
+    "dates_stated": 3,
+    "dates_right": 3,
+    "dates_invented": 0,
+    "missing_from_notes": 0,
+    "review_expected": 0,
+    "review_found": 0,
+    "review_extra": 0,
+    "problems": []
+  },
+  "raw": {
+    "action_items": [
+      {
+        "index": 0,
+        "title": "Update the plan with the new launch date.",
+        "spoken_owner": "Adebayo",
+        "due_phrase": null,
+        "due_date": null,
+        "quote": "I'll update the plan.",
+        "confidence": "high"
+      },
+      {
+        "index": 1,
+        "title": "Send a test batch through Postmark and Resend using the team\u2019s domain.",
+        "spoken_owner": "Amaka",
+        "due_phrase": "by Wednesday",
+        "due_date": "2027-02-03",
+        "quote": "Amaka, can you send a test batch through both with our domain and we'll look at the results next week? Sure, I can do that by Wednesday.",
+        "confidence": "high"
+      },
+      {
+        "index": 2,
+        "title": "Send Grace the revised contract with the new dates.",
+        "spoken_owner": "Tunde",
+        "due_phrase": "by Friday",
+        "due_date": "2027-02-05",
+        "quote": "I'll send the revised contract by Friday.",
+        "confidence": "high"
+      },
+      {
+        "index": 3,
+        "title": "Review the two venue options Grace mentioned and handle the booking.",
+        "spoken_owner": "Amaka",
+        "due_phrase": null,
+        "due_date": null,
+        "quote": "I can book it, yes. I'll look at the two options Grace mentioned.",
+        "confidence": "high"
+      },
+      {
+        "index": 4,
+        "title": "Check whether VAT applies to international customers and identify an owner for the check.",
+        "spoken_owner": null,
+        "due_phrase": null,
+        "due_date": null,
+        "quote": "Somebody needs to check whether VAT applies to the international customers. I don't know who owns that. Okay, let's leave it for now, but it needs an owner.",
+        "confidence": "medium"
+      },
+      {
+        "index": 5,
+        "title": "Fix the login-page product-name typo today.",
+        "spoken_owner": "Amaka",
+        "due_phrase": "today",
+        "due_date": "2027-02-01",
+        "quote": "I'll fix that today, it's a one-line change.",
+        "confidence": "high"
+      }
+    ],
+    "review": [],
+    "milestones": [
+      {
+        "name": "Launch",
+        "date": "2027-03-14",
+        "quote": "Okay, so we're agreed, launch moves to the fourteenth of March."
+      }
+    ]
+  }
+}

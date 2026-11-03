@@ -1,0 +1,98 @@
+[
+  {
+    "transcript_words": 9000,
+    "format": "pdf",
+    "with_transcript": false,
+    "seconds": 1.5,
+    "bytes": 14933,
+    "renderer_peak_mib": 86
+  },
+  {
+    "transcript_words": 9000,
+    "format": "pdf",
+    "with_transcript": true,
+    "seconds": 1.9,
+    "bytes": 65932,
+    "renderer_peak_mib": 91
+  },
+  {
+    "transcript_words": 9000,
+    "format": "docx",
+    "with_transcript": false,
+    "seconds": 0.6,
+    "bytes": 37766,
+    "renderer_peak_mib": 45
+  },
+  {
+    "transcript_words": 9000,
+    "format": "docx",
+    "with_transcript": true,
+    "seconds": 0.5,
+    "bytes": 50635,
+    "renderer_peak_mib": 45
+  },
+  {
+    "transcript_words": 27000,
+    "format": "pdf",
+    "with_transcript": false,
+    "seconds": 1.5,
+    "bytes": 14933,
+    "renderer_peak_mib": 86
+  },
+  {
+    "transcript_words": 27000,
+    "format": "pdf",
+    "with_transcript": true,
+    "seconds": 5.0,
+    "bytes": 162985,
+    "renderer_peak_mib": 103
+  },
+  {
+    "transcript_words": 27000,
+    "format": "docx",
+    "with_transcript": false,
+    "seconds": 0.6,
+    "bytes": 37766,
+    "renderer_peak_mib": 45
+  },
+  {
+    "transcript_words": 27000,
+    "format": "docx",
+    "with_transcript": true,
+    "seconds": 1.1,
+    "bytes": 74013,
+    "renderer_peak_mib": 46
+  },
+  {
+    "transcript_words": 40000,
+    "format": "pdf",
+    "with_transcript": false,
+    "seconds": 2.2,
+    "bytes": 15040,
+    "renderer_peak_mib": 86
+  },
+  {
+    "transcript_words": 40000,
+    "format": "pdf",
+    "with_transcript": true,
+    "seconds": 9.0,
+    "bytes": 232258,
+    "renderer_peak_mib": 120
+  },
+  {
+    "transcript_words": 40000,
+    "format": "docx",
+    "with_transcript": false,
+    "seconds": 1.6,
+    "bytes": 37771,
+    "renderer_peak_mib": 45
+  },
+  {
+    "transcript_words": 40000,
+    "format": "docx",
+    "with_transcript": true,
+    "seconds": 1.5,
+    "bytes": 90826,
+    "renderer_peak_mib": 47
+  }
+]

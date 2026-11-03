@@ -1,0 +1,14 @@
+{
+  "transcript": "../sample_transcript.txt",
+  "meeting_date": "2026-11-03",
+  "timezone": "America/New_York",
+  "vocabulary": [],
+  "action_items": [
+    {"match": ["app store"], "owner": "Jonas", "due_date": "2026-11-04"},
+    {"match": ["pricing", "design"], "owner": "Lena", "due_date": "2026-11-06"},
+    {"match": ["onboarding"], "owner": null, "due_date": null},
+    {"match": ["refund"], "owner": null, "due_date": null}
+  ],
+  "review": [],
+  "forbidden_owners": []
+}

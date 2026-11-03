@@ -1,0 +1,24 @@
+{
+  "note": "No session cookie and no CSRF header.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/google/connect",
+    "headers": {},
+    "body": {}
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

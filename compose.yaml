@@ -56,6 +56,28 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Everything time-critical (spec section 9.7), in its own process so a long transcription in
+  # `worker` can never delay it. One replica leads through a Postgres advisory lock; nothing
+  # depends on this service, so one that cannot start never takes `web` or `next` down. It
+  # needs no setting of its own (DATABASE_URL and .env as `worker`).
+  scheduler:
+    build: .
+    command: ["python", "-m", "app.scheduler"]
+    user: app
+    networks: [default, appdb]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:${POSTGRES_PASSWORD}@db:5432/notetaker
+      VEXA_BASE_URL: http://vexa:8056
+    mem_limit: 256m
+    restart: unless-stopped
+    stop_grace_period: 40s  # lets a tick in progress finish before the lock is given up
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
   web:
     build: .
     command:
@@ -73,6 +95,10 @@ services:
       VEXA_BASE_URL: http://vexa:8056
     ports:
       - "127.0.0.1:8021:8000"  # operator and rollback access; visitors reach FastAPI through `next`
+    # The notes export (WeasyPrint, in a child process) adds about 100 MiB while it runs on top of
+    # the app's own ~90 MiB (docs/spike/export-pdf-memory.md); this keeps a runaway from taking the
+    # shared server's memory. `next` has 512m and `vexa` 3g.
+    mem_limit: 768m
     healthcheck:
       test:
         - CMD

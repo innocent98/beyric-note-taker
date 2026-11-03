@@ -1809,6 +1809,49 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/69-unknown-api-path.json`_
 
+### 5.9 Sharing a link from Android (PWA share target)
+
+An installed copy of the app can receive a Google Meet or Zoom link from Android's share sheet. This is a **Next route and page, not part of the JSON API**: nothing here is in `docs/openapi.json`. Captured from the running route (production build of `web/`, placeholder text and links); files in `docs/fe-captures/share-target/`.
+
+The manifest (`GET /manifest.webmanifest`, capture `06-manifest.json`) holds:
+
+```json
+"share_target": {"action": "/share-target", "method": "POST", "enctype": "multipart/form-data", "params": {"title": "title", "text": "text", "url": "url"}}
+```
+
+`POST /share-target` takes the form fields `title`, `text` and `url` (multipart or urlencoded), finds the first Meet or Zoom link in `url`, `text` and `title` (in that order), and always answers **303 with an empty body**. The shared text is not kept or logged, and only the link goes into the redirect, after a `#` (a fragment never reaches a server):
+
+```http
+POST /share-target   (multipart: title="Weekly sync", text="Hi all, join our sync on Google Meet today: https://meet.google.com/abc-defg-hij (the host will let you in). Thanks!")
+HTTP/1.1 303 See Other
+cache-control: no-store
+location: /share#link=https%3A%2F%2Fmeet.google.com%2Fabc-defg-hij&others=0
+```
+_Capture: `docs/fe-captures/share-target/01-post-multipart-link-in-sentence.txt`_
+
+A Zoom passcode is kept, every other query parameter is dropped, and `others` counts other, different meeting links in what was shared (the first is used):
+
+```http
+HTTP/1.1 303 See Other
+location: /share#link=https%3A%2F%2Fus02web.zoom.us%2Fj%2F81234567890%3Fpwd%3DPLACEHOLDERpass&others=1
+```
+_Capture: `02-post-urlencoded-zoom-passcode-and-second-link.txt`_
+
+With no meeting link (or a look-alike such as `https://meet.google.com@evil.example/...`), and for a GET to the same path:
+
+```http
+HTTP/1.1 303 See Other
+location: /share#none
+```
+_Captures: `03-post-no-link.txt`, `04-post-look-alike-host.txt`, `05-get.txt`_
+
+What `/share` does with it (verified in headless Chrome against a stand-in for the API; see the table):
+1. It moves the link from the `#` into this tab's `sessionStorage` (`beyric.pending-share`, 15 minutes) and clears the address bar.
+2. **Signed out:** goes to `/login`. After a password sign-in the login form goes to `/share` instead of `/` while a link is waiting. Google sign-in does not return to it.
+3. **Signed in:** shows the meeting name (`Google Meet abc-defg-hij`, `Zoom meeting 81234567890 (with passcode)`, never the passcode), a notes template select, and **Send note taker**. Nothing is sent until the tap. The tap is `POST /api/meetings` exactly as section 5.3, and every refusal is shown with the server's own `message`: `invalid_meeting_url`, `bot_already_active`, `bot_busy`, `hours_cap_reached` (the button then stays off), `bot_send_failed`. `bot_already_active` and `hours_cap_reached` are also checked from `GET /api/meetings` and `GET /api/session` (`usage`) before the tap and lock the button with the same sentences.
+
+**UX consequences to keep:** the page must not send on load (a forged form post to `/share-target` could otherwise start a recording bot for a signed-in owner); the "Tell participants that this meeting will be recorded." line stays next to the button; a shared link is never put in a URL the server sees or in a log. There is no server-side "duplicate link" refusal: sending the same meeting again while a bot is active is `bot_already_active`.
+
 ## 6. Field-nesting and shape traps
 
 - **Lists are wrapped objects**, never bare arrays: `{"meetings": […]}`, `{"templates": […]}`, `{"terms": […]}`.
@@ -2054,3 +2097,7 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | The meeting link and Zoom password never appear in responses | Verified live for Zoom; also a test | `40`, `test_the_meeting_link_is_never_returned` |
 | `/openapi.json` and `/docs` stay off in the app | Test | `test_openapi_and_docs_stay_off_in_the_app` |
 | Generating TypeScript types from `docs/openapi.json` | **NOT EXERCISED** | |
+| `POST /share-target`: link in a sentence, Zoom passcode and second link, no link, look-alike host, GET | Verified live (the production Next build; the route calls no API) | `docs/fe-captures/share-target/01`–`05` |
+| Manifest `share_target` parsed by Chrome, no manifest errors, no installability errors, service worker registers under the CSP | Verified in headless Chrome on a Mac (Chrome DevTools protocol), not on Android | `06-manifest.json` |
+| `/share`: link kept through `/login` and back, one-tap send, each refusal shown | Verified in headless Chrome against a stand-in that replays the captures in `docs/fe-captures/owner-app/` (`09`, `10`, `11`, `30`, `33`, `34`, `97`), not the real API; also covered by `web/tests/share-page.test.tsx` | |
+| The real Android share sheet, what `Sec-Fetch-Site` / `Origin` an Android share POST carries, Google sign-in returning to `/share` | **NOT EXERCISED** (needs the phone, and Google sign-in is off in production) | |

@@ -15,7 +15,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h3>Information you give us</h3>
       <ul>
         <li>Account details: your name and email address, and a password (stored only in hashed form) or, if you sign in with Google, your Google account identifier. We also keep a count of the hours of meetings recorded for your account, and, if you join the waiting list, your email address.</li>
-        <li>Settings and content you create: notes templates and vocabulary terms.</li>
+        <li>Settings and content you create: notes templates and vocabulary terms. From each set of notes we also keep the lists of decisions, open questions and Please check items it contains, so you can search and tick them off, and, for a Please check item about a name or term that may have been misheard, the word as it was transcribed.</li>
         <li>Messages you send us, such as support requests.</li>
       </ul>
       <h3>Meeting content</h3>
@@ -25,6 +25,7 @@ export function PrivacyContent({ days }: { days: number }) {
         <li>The transcript produced from that audio.</li>
         <li>Notes, summaries, decisions and action items produced from the transcript.</li>
         <li>Meeting details such as the platform, meeting link or ID, date, time and duration.</li>
+        <li>Files you export (a PDF or Word file of your notes, and of the transcript if you choose it) are built when you ask and are not stored.</li>
       </ul>
       <p>We do not record video or screen sharing.</p>
       <h3>Information collected automatically</h3>
@@ -48,7 +49,7 @@ export function PrivacyContent({ days }: { days: number }) {
         <li>We do not use Google user data to develop, improve or train generalised artificial intelligence or machine learning models.</li>
         <li>People at Beyric do not read Google user data unless you ask us to for support, it is needed for security or to investigate abuse, or the law requires it.</li>
       </ul>
-      <p>You can disconnect your Google account at any time in the app or at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. When you disconnect, we stop reading your calendar and delete the calendar data we hold.</p>
+      <p>You can disconnect at any time by revoking access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> or by asking us to remove it. When you disconnect, we stop reading your calendar and delete the calendar data we hold.</p>
 
       <h2 id="use">How we use your information</h2>
       <ul>
@@ -62,7 +63,7 @@ export function PrivacyContent({ days }: { days: number }) {
 
       <h2 id="share">Who we share information with</h2>
       <ul>
-        <li><strong>OpenAI</strong> turns meeting audio into a transcript and writes notes from it. Under OpenAI's API terms, data sent through its API is not used to train its models.</li>
+        <li><strong>OpenAI</strong> turns meeting audio into a transcript, writes notes from it, and checks the notes against the transcript to find names and terms that may have been misheard. Under OpenAI's API terms, data sent through its API is not used to train its models.</li>
         <li><strong>Resend</strong> sends our service emails (account verification, password resets, waiting-list invitations and notices that an address already has an account). It receives the email address and, if given, the name on each of those emails, and their content, which includes one-time links.</li>
         <li><strong>Contabo</strong> hosts our server, in France.</li>
         <li><strong>Cloudflare</strong> provides our domain's DNS and may carry traffic to the site.</li>
@@ -80,7 +81,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h2 id="retention">How long we keep information</h2>
       <ul>
         <li>Meeting audio: deleted automatically {days} days after the meeting.</li>
-        <li>Transcripts and notes: kept until you ask us to delete them or close your account.</li>
+        <li>Transcripts and notes, and the lists of decisions, open questions and Please check items taken from them: kept until you ask us to delete them or close your account.</li>
         <li>Calendar data: we keep only what is needed for upcoming meetings, and delete it when you disconnect your calendar.</li>
         <li>Account information: kept while your account is active and deleted within 30 days of closing it, except where the law requires us to keep records.</li>
         <li>An account whose email address is not confirmed within 48 hours is deleted.</li>
@@ -90,7 +91,7 @@ export function PrivacyContent({ days }: { days: number }) {
       </ul>
 
       <h2 id="security">Security</h2>
-      <p>Traffic to the site is encrypted with TLS. Access to the server is limited to the people who run it, the software that joins meetings runs on a separate network from our database, and secrets are kept out of our code. Our administrator can see account details (name, email, status and hours used) and, if you ask for help signing in, can create a one-time password reset link for your account, which would give access to it. You are notified in the app when this happens, and the action is logged. The administrator's account screens do not show your meetings or notes. No system is completely secure. If a personal data breach affects you, we will tell you and the relevant authorities as the law requires.</p>
+      <p>Traffic to the site is encrypted with TLS. Access to the server is limited to the people who run it, the software that joins meetings runs on a separate network from our database, and secrets are kept out of our code. Google access credentials are encrypted before they are stored, and the encryption key is kept apart from the database and its backups. Our administrator can see account details (name, email, status and hours used) and, if you ask for help signing in, can create a one-time password reset link for your account, which would give access to it. You are notified in the app when this happens, and the action is logged. The administrator's account screens do not show your meetings or notes. No system is completely secure. If a personal data breach affects you, we will tell you and the relevant authorities as the law requires.</p>
 
       <h2 id="transfers">International transfers</h2>
       <p>Our server is in France. OpenAI may process meeting audio and transcripts, and Resend the email addresses and names it sends mail to, in the United States. When personal data leaves Nigeria, the UK or the European Economic Area, we rely on the safeguards those laws allow, such as standard contractual clauses in our providers' terms.</p>

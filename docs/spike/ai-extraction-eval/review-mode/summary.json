@@ -1,0 +1,197 @@
+{
+  "mode": "review",
+  "notes_model": "gpt-6-luna",
+  "extract_model": "gpt-6-luna",
+  "gate": {
+    "passed": true,
+    "checks": {
+      "every_expected_term_found": true,
+      "no_term_where_the_key_has_none": true
+    },
+    "totals": {
+      "review_expected": 1,
+      "review_found": 1,
+      "review_extra": 0
+    }
+  },
+  "cases": [
+    {
+      "case": "mention_is_not_owner",
+      "extraction_failed": true,
+      "error": "ExtractionFailed"
+    },
+    {
+      "case": "names_and_terms",
+      "extraction_failed": false,
+      "score": {
+        "case": "names_and_terms",
+        "bullets": 0,
+        "covered": 0,
+        "quotes_given": 0,
+        "quotes_verified": 0,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 0,
+        "dates_right": 0,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 1,
+        "review_found": 1,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [],
+        "review": [
+          {
+            "index": 0,
+            "heard_as": "Metrika"
+          }
+        ],
+        "milestones": []
+      }
+    },
+    {
+      "case": "nothing_to_do",
+      "extraction_failed": false,
+      "score": {
+        "case": "nothing_to_do",
+        "bullets": 0,
+        "covered": 0,
+        "quotes_given": 0,
+        "quotes_verified": 0,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 0,
+        "dates_right": 0,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [],
+        "review": [],
+        "milestones": []
+      }
+    },
+    {
+      "case": "planted",
+      "extraction_failed": false,
+      "score": {
+        "case": "planted",
+        "bullets": 0,
+        "covered": 0,
+        "quotes_given": 0,
+        "quotes_verified": 0,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 0,
+        "dates_right": 0,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [],
+        "review": [],
+        "milestones": []
+      }
+    },
+    {
+      "case": "vague_timing",
+      "extraction_failed": false,
+      "score": {
+        "case": "vague_timing",
+        "bullets": 0,
+        "covered": 0,
+        "quotes_given": 0,
+        "quotes_verified": 0,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 0,
+        "dates_right": 0,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [],
+        "review": [],
+        "milestones": []
+      }
+    },
+    {
+      "case": "weekday_resolution",
+      "extraction_failed": false,
+      "score": {
+        "case": "weekday_resolution",
+        "bullets": 0,
+        "covered": 0,
+        "quotes_given": 0,
+        "quotes_verified": 0,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 0,
+        "dates_right": 0,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [],
+        "review": [],
+        "milestones": []
+      }
+    },
+    {
+      "case": "weekly_sync",
+      "extraction_failed": false,
+      "score": {
+        "case": "weekly_sync",
+        "bullets": 0,
+        "covered": 0,
+        "quotes_given": 0,
+        "quotes_verified": 0,
+        "invented_owners": 0,
+        "raw_invented_owners": 0,
+        "wrong_owners": 0,
+        "dates_stated": 0,
+        "dates_right": 0,
+        "dates_invented": 0,
+        "missing_from_notes": 0,
+        "review_expected": 0,
+        "review_found": 0,
+        "review_extra": 0,
+        "problems": []
+      },
+      "raw": {
+        "action_items": [],
+        "review": [],
+        "milestones": []
+      }
+    }
+  ],
+  "tokens": {
+    "notes_input": 0,
+    "notes_output": 0,
+    "extract_input": 4216,
+    "extract_output": 248
+  }
+}
