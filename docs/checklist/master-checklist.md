@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status (2026-11-02, night):** MVP live at notes.beyrictech.com (PRs #1–#17 merged and deployed). The UI foundation (Module 2a) and the JSON API are shipped; the frontend is moving to Next.js (Module 2b, stream A in progress). The Pilot module (accounts plus calendar auto-join) has a design draft in progress. Next steps and Adebayo's queued items are in `docs/HANDOFF-master.md`.
+**Status (2026-11-03):** MVP live at notes.beyrictech.com (PRs #1–#21 merged; #19 and #21 deployed 2026-11-03). The UI foundation (Module 2a) and the JSON API are shipped; the frontend is moving to Next.js (Module 2b: the front door and the owner screens are merged and live; the UI parity pass, stream P, is in a PR). The Pilot module (accounts plus calendar auto-join) has a design draft in progress. Next steps and Adebayo's queued items are in `docs/HANDOFF-master.md`.
 
 Legend: `[x]` done and verified, `[ ]` not done.
 
@@ -98,7 +98,9 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Container memory measured on a Mac: 37 MiB idle, 65 MiB peak after 240 requests (not yet on the server); `mem_limit` stays 512m as a ceiling
   - [ ] CI: `web` job with path filters (docs-only skips both, Python-only skips Node, web-only skips Python), always-reporting `ci` job
   - [ ] Adebayo's server steps (SOP "Operate"): subnet and memory check, deploy outside meetings, post-deploy checks, send back `docker stats` for `next`
-  - [ ] **BLOCKER before open sign-up:** real fix for the forwarded-for trust gap (option 1: `next` bound to host loopback with FastAPI reached on `127.0.0.1:8021`, tested on Linux; or option 2: an edge secret that nginx sets and Next checks). Accepted for the single-owner pilot (2026-11-02); Adebayo to choose 1 or 2. Write-up: `docs/spike/nextjs-scaffold/forwarded-for-trust.md`
+  - [x] Forwarded-for trust gap closed in code (2026-11-03, PR open, not merged or deployed): edge secret (`X-Edge-Secret` set by nginx, passed by Next, checked by FastAPI in `app/edge.py`); login limits are now 5 failures per 5 min per address plus 10 per hour per account. SOP `docs/sop/2026-11-03-edge-secret-and-login-limits.md`
+  - [x] Opus review fixes on the same PR (2026-11-03): known-device cookie so strangers cannot lock the owner out, lockout log, missing-secret warning and `X-Edge-Ok` on `/health`, IPv6 `/64` keys, bounded limiter, nginx location guard test, README never prints the secret
+  - [ ] **BLOCKER before open sign-up, Adebayo's server steps:** generate the secret, nginx snippet and include line, `.env`, redeploy (`deploy/README.md`, "Edge secret"); 
 - [x] Stream B, JSON API (`feature/json-api`, 2026-11-02, PR open, not merged): `/api/` for session, meetings, templates, vocabulary with a CSRF header; tests; captured responses; `docs/fe-integration-guide-*.md`
   - [x] Shared rules extracted to `app/services.py`; Jinja routes and all 338 earlier tests unchanged
   - [x] `/api/session` (get, login, logout), meetings (list, detail, create, cancel, retry, regenerate), templates (list, create, update), vocabulary (list, create, delete)
@@ -108,7 +110,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Live captures (`scripts/capture_owner_api.py`, 81 files) and `docs/fe-integration-guide-owner-app.md`; SOP `docs/sop/2026-11-02-json-api.md`
   - [ ] Opus review of the auth path before merge (lead)
   - [ ] Follow-ups for stream A and the lead: nginx `/api/` locations (regenerate 300 s timeout, login limit zone), real visitor address through the Next proxy, TypeScript type generation
-- [ ] Stream C, owner app screens to designer parity (`feature/nextjs-app-screens`, 2026-11-03, PR open against `feature/nextjs-scaffold`, not merged; SOP `docs/sop/2026-11-03-nextjs-owner-screens.md`)
+- [x] Stream C, owner app screens (`feature/nextjs-app-screens`, PR #21, merged 2026-11-03; parity pass in stream P below; SOP `docs/sop/2026-11-03-nextjs-owner-screens.md`)
   - [x] Typed API client generated from `docs/openapi.json`; one error shape, CSRF on every write, 401 to `/login`; tested against the captured responses
   - [x] Next owns `/`, `/login`, `/logout`, `/meetings/[id]`, `/templates`, `/vocabulary`; `/styleguide` owner-only; `/welcome` redirects to `/`; the rest still falls through to FastAPI (rollback: SOP "Operate")
   - [x] App shell (sidebar, phone top bar), Meetings (new meeting, list, paging, stale-worker alert, empty state), meeting page (notes, transcript, copy, rewrite, cancel with confirm, retry, notices, 30 s polling), Templates, Vocabulary, login; light and dark
@@ -116,6 +118,16 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] CI green on the PR (runs on GitHub)
   - [ ] Not built, waiting on the API (stream D): Download menu, Share dialog, translation, template delete, participants and duration
   - [ ] Not verified: real Vexa bot and real OpenAI rewrite through the screens, Safari and Firefox, the live server
+- [ ] Stream P, UI parity with the designer's files (`feature/nextjs-ui-parity`, 2026-11-03, PR open against `main`, not merged; SOP `docs/sop/2026-11-03-ui-parity.md`; report `docs/ui/parity-report.md`)
+  - [x] Gap check of every designer file against the Next pages at 1440, 768 and 390 px; report with before and after screenshots
+  - [x] Brand tokens from `Brand.dc.html` (light only: the dark overrides are gone), new "b" logo, favicon, PWA and Apple icons, share image
+  - [x] App shell, Meetings, meeting page (notes split into decisions, questions, "Please check"), Templates, Vocabulary at parity
+  - [x] Sign-in screen (form plus teal panel), landing page, privacy and terms frames with "On this page", 404 and error pages
+  - [x] Guard tests kept; new tests for notes sections, legal contents list, logo, landing links, Show / Hide
+  - [ ] CI green on the PR (runs on GitHub)
+  - [x] Decided 2026-11-03 (Adebayo): keep the designer's landing and sign-in words even though some run ahead of the product (Teams, tasks, integrations, sharing); revisit before the Google verification submission
+  - [ ] Run `owner-e2e.mjs` and `owner-browser-check.mjs` on the compose stack before the deploy
+  - [ ] Needs backend, not built (listed in the report): sign-up, forgot password, SSO, accounts and sidebar identity, calendar and auto-join card, series, tasks, projects, decisions, review, team, settings, download, share, translation, agenda, template delete, Emails
 - [ ] Stream D, new designed screens: accounts and pilot, calendar and auto-join, team, tasks, sprints, share and download, translation
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated
 - [ ] Measure Next.js memory on the server (Adebayo runs the SSH steps)
@@ -151,6 +163,9 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 
 ## Deferred follow-ups
 
+- [ ] Remove the default trusted-proxy fallback (`172.28.0.1`, `trusted_proxy_ips`, hard-coded `next` trust) once `EDGE_SHARED_SECRET` is live on the server (Opus review finding 6; `docs/sop/2026-11-03-edge-secret-and-login-limits.md`)
+- [ ] Run `deploy/nginx-limit-check.sh` (and, if cheap, `docs/spike/edge-secret/e2e.sh`) in CI
+- [ ] Alert the owner on an account lockout (today a log line only); per-account device cookie with the accounts work
 - [ ] Test paid Zoom accounts
 - [ ] Check Vexa licence exceptions before any commercial use
 - [ ] Choose a recording notice for meetings

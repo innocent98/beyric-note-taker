@@ -27,8 +27,27 @@ from app.models import AppState
 
 COOKIE_NAME = "session"
 SESSION_SECONDS = 30 * 24 * 3600
+# Failed logins: per client address, and per account so that guessing spread over many addresses
+# is capped too. Both are in-memory sliding windows.
 MAX_FAILURES = 5
-FAILURE_WINDOW_SECONDS = 15 * 60
+FAILURE_WINDOW_SECONDS = 5 * 60
+ACCOUNT_MAX_FAILURES = 10
+ACCOUNT_FAILURE_WINDOW_SECONDS = 60 * 60
+MAX_ACCOUNT_KEY = 254
+MAX_LIMITER_KEYS = 50_000  # per window; see _Window
+DEVICE_COOKIE_NAME = "device"
+HOST_DEVICE_COOKIE_NAME = "__Host-device"
+DEVICE_SECONDS = 90 * 24 * 3600
+DEVICE_MAX_FAILURES = 10  # per device cookie, so a stolen one still has a cap
+DEVICE_FAILURE_WINDOW_SECONDS = 60 * 60
+MAX_DEVICE_ID = 64
+
+
+def device_cookie_name(settings: Settings) -> str:
+    """`__Host-device` when cookies are Secure (the browser then also insists on Path=/ and no
+    Domain, so no sibling subdomain can plant one); the plain name over http, so local tests and
+    a dev server still work."""
+    return HOST_DEVICE_COOKIE_NAME if settings.cookie_secure else DEVICE_COOKIE_NAME
 
 
 class NotLoggedIn(Exception):
@@ -116,45 +135,200 @@ def password_matches(settings: Settings, given: str) -> bool:
     return bool(expected) and hmac.compare_digest(given.encode(), expected)
 
 
-class LoginLimiter:
-    """Login attempts per client in a sliding window. In memory: a restart resets it.
+def account_key(account: str) -> str:
+    """How an account name is compared: trimmed, lower-cased, capped."""
+    return account.strip().lower()[:MAX_ACCOUNT_KEY]
 
-    An attempt is counted *before* the password is checked (under a lock, so parallel requests
-    cannot all slip through) and cleared again on success. After `limit` attempts without a
-    success the client gets 429 until the oldest one leaves the window.
-    """
 
-    def __init__(self, limit: int = MAX_FAILURES, window: float = FAILURE_WINDOW_SECONDS) -> None:
+class _Window:
+    """Timestamps of recent attempts per key; entries older than `window` seconds expire.
+
+    Memory is bounded: expired keys are dropped as they are touched and by a sweep every
+    `SWEEP_SECONDS`, and past `max_keys` the key created longest ago is forgotten (a flood of
+    distinct keys can then weaken the limit for the forgotten ones, but cannot grow memory or
+    lock anyone out)."""
+
+    SWEEP_SECONDS = 30.0
+
+    def __init__(self, limit: int, window: float, max_keys: int = MAX_LIMITER_KEYS) -> None:
         self.limit = limit
         self.window = window
-        self._attempts: dict[str, deque[float]] = {}
+        self.max_keys = max_keys
+        self.attempts: dict[str, deque[float]] = {}
+        self._swept = float("-inf")
+
+    def _trim(self, key: str, now: float) -> deque[float] | None:
+        attempts = self.attempts.get(key)
+        if attempts is None:
+            return None
+        while attempts and now - attempts[0] > self.window:
+            attempts.popleft()
+        if not attempts:
+            del self.attempts[key]
+            return None
+        return attempts
+
+    def sweep(self, now: float) -> None:
+        if now - self._swept < self.SWEEP_SECONDS:
+            return
+        self._swept = now
+        for key in list(self.attempts):
+            self._trim(key, now)
+
+    def full(self, key: str, now: float) -> bool:
+        attempts = self._trim(key, now)
+        return attempts is not None and len(attempts) >= self.limit
+
+    def add(self, key: str, now: float) -> None:
+        if key not in self.attempts and len(self.attempts) >= self.max_keys:
+            del self.attempts[next(iter(self.attempts))]  # insertion order: the oldest key
+        self.attempts.setdefault(key, deque()).append(now)
+
+    def refund(self, key: str) -> None:
+        attempts = self.attempts.get(key)
+        if attempts:
+            attempts.pop()
+            if not attempts:
+                del self.attempts[key]
+
+
+class LoginLimiter:
+    """Login attempts in sliding windows: `limit` per client address in `window` seconds, and
+    `account_limit` per account in `account_window` seconds. In memory: a restart resets it.
+
+    An attempt is counted *before* the password is checked (under a lock, so parallel requests
+    cannot all slip through) and is only counted when no limit is already full: a locked client
+    that keeps hammering does not extend its wait, and an address over its limit does not spend
+    the account's budget. On success `succeeded` gives this client's attempt back; it must not
+    clear the client's other failures (a visitor with an account of their own could otherwise log
+    in to it between guesses at someone else's).
+
+    A request from a *known device* (it carries a valid device cookie, see `sign_device`; the
+    caller passes the cookie's random `device` id) skips the account window: it is neither
+    refused by it nor counted in it. Without that, anyone who can reach the login could keep the
+    owner out of new logins with a few requests an hour. It is still held to the address window,
+    and to a window of its own per device id, so a stolen cookie keeps a cap. A known-device
+    success gives back its own attempts and does NOT clear the account's failures: those belong
+    to whoever was guessing.
+
+    Unknown accounts are limited exactly like known ones: the key is only the name given.
+    """
+
+    def __init__(
+        self,
+        limit: int = MAX_FAILURES,
+        window: float = FAILURE_WINDOW_SECONDS,
+        account_limit: int = ACCOUNT_MAX_FAILURES,
+        account_window: float = ACCOUNT_FAILURE_WINDOW_SECONDS,
+        max_keys: int = MAX_LIMITER_KEYS,
+        device_limit: int = DEVICE_MAX_FAILURES,
+        device_window: float = DEVICE_FAILURE_WINDOW_SECONDS,
+    ) -> None:
+        self._clients = _Window(limit, window, max_keys)
+        self._accounts = _Window(account_limit, account_window, max_keys)
+        self._devices = _Window(device_limit, device_window, max_keys)
         self._lock = threading.Lock()
 
-    def _prune(self, now: float) -> None:
-        for client in list(self._attempts):
-            attempts = self._attempts[client]
-            while attempts and now - attempts[0] > self.window:
-                attempts.popleft()
-            if not attempts:
-                del self._attempts[client]
+    @staticmethod
+    def _account_key(account: str) -> str:
+        return account_key(account)
 
-    def try_acquire(self, client: str, now: float | None = None) -> bool:
-        """Count an attempt. False means the client is over the limit and must wait."""
+    def check(
+        self, client: str, account: str, now: float | None = None, device: str | None = None
+    ) -> str | None:
+        """Count an attempt. None means go ahead; otherwise "address", "device" or "account":
+        the limit that refused it (nothing is counted then)."""
         now = time.monotonic() if now is None else now
+        account = self._account_key(account)
         with self._lock:
-            self._prune(now)
-            attempts = self._attempts.setdefault(client, deque())
-            if len(attempts) >= self.limit:
-                return False
-            attempts.append(now)
-            return True
+            for window in (self._clients, self._accounts, self._devices):
+                window.sweep(now)
+            if self._clients.full(client, now):
+                return "address"
+            if device is not None:
+                if self._devices.full(device, now):
+                    return "device"
+            elif self._accounts.full(account, now):
+                return "account"
+            self._clients.add(client, now)
+            if device is not None:
+                self._devices.add(device, now)
+            else:
+                self._accounts.add(account, now)
+            return None
 
-    def reset(self, client: str) -> None:
+    def try_acquire(
+        self, client: str, account: str, now: float | None = None, device: str | None = None
+    ) -> bool:
+        return self.check(client, account, now, device) is None
+
+    def succeeded(self, client: str, account: str, device: str | None = None) -> None:
         with self._lock:
-            self._attempts.pop(client, None)
+            self._clients.refund(client)
+            if device is not None:
+                self._devices.refund(device)
+            else:
+                self._accounts.attempts.pop(self._account_key(account), None)
 
     def __len__(self) -> int:
-        return len(self._attempts)
+        return (
+            len(self._clients.attempts) + len(self._accounts.attempts) + len(self._devices.attempts)
+        )
+
+
+# ---- known-device cookie ----
+
+
+def device_key(settings: Settings) -> bytes:
+    """Key for device cookies. Derived like the session key but with its own label, so a device
+    cookie is never a valid session cookie. A new owner password or session secret changes it,
+    which retires every device cookie."""
+    return hmac.new(
+        settings.session_secret.encode(), b"device|" + settings.owner_password.encode(), "sha256"
+    ).digest()
+
+
+def sign_device(
+    key: bytes, account: str, now: float | None = None, device_id: str | None = None
+) -> str:
+    """A device cookie for one account: it only helps when logging in to that account, so one
+    user's cookie cannot be used to skip the account window of another user's. It carries a
+    random device id (kept when a known device logs in again) that the limiter counts failures
+    on, so a stolen cookie is capped too."""
+    payload = {
+        "dev": 1,
+        "acct": account_key(account),
+        "did": device_id or secrets.token_urlsafe(16),
+        "iat": int(now or time.time()),
+    }
+    body = _b64(json.dumps(payload).encode())
+    return f"{body}.{_signature(key, body)}"
+
+
+def device_id(key: bytes, cookie: str | None, account: str, now: float | None = None) -> str | None:
+    """The device id in a device cookie this app signed for this account, less than
+    DEVICE_SECONDS old; None for anything else."""
+    if not cookie or cookie.count(".") != 1:
+        return None
+    body, signature = cookie.split(".")
+    if not hmac.compare_digest(signature.encode(), _signature(key, body).encode()):
+        return None
+    try:
+        data = json.loads(_unb64(body))
+        issued, known, bound_to, did = data["iat"], data["dev"] == 1, data["acct"], data["did"]
+    except (ValueError, KeyError, TypeError):
+        return None
+    if not (known and isinstance(issued, int) and not isinstance(issued, bool)):
+        return None
+    if not (isinstance(did, str) and 0 < len(did) <= MAX_DEVICE_ID):
+        return None
+    if not (
+        isinstance(bound_to, str)
+        and hmac.compare_digest(bound_to.encode(), account_key(account).encode())
+    ):
+        return None
+    age = (now or time.time()) - issued
+    return did if 0 <= age <= DEVICE_SECONDS else None
 
 
 DEV_ENVS = ("development", "test")

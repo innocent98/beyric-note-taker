@@ -154,7 +154,7 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/03-login-without-csrf.json`_
 
-**Login limit.** 5 password attempts per client in 15 minutes; the sixth gets 429, and while locked even the right password gets 429. There is no `Retry-After` header and no countdown, so show the message as is. The counter is in the server's memory (a restart clears it) and is shared with the old `/login` page. The captures below are attempts 6 and 7 from one client (`79-limit-wrong-password-5.json` is the fifth, a plain 401):
+**Login limit.** Two counters, both of failed attempts, both in the server's memory (a restart clears them), both shared with the old `/login` page: **5 per client address in 5 minutes**, and **10 per account in an hour** (the account is the owner for now; a wrong password counts against it from any address). The sixth attempt from one address gets 429; so does any attempt once the account has had 10 failures in the hour, and while locked even the right password gets 429. **Both limits return the same 429 body**, so the client cannot tell which one it hit (and need not): a lockout from the address clears in 5 minutes, one from the account in up to an hour. A successful login gives back its own attempt but not the earlier failures. There is no `Retry-After` header and no countdown, so show the message as is. The captures below are attempts 6 and 7 from one client (`79-limit-wrong-password-5.json` is the fifth, a plain 401; captured live through nginx, Next and FastAPI on 2026-11-03):
 
 ```http
 POST /api/session
@@ -170,7 +170,7 @@ HTTP 429
 content-type: application/json
 ```
 ```json
-{"error": {"code": "too_many_attempts", "message": "Too many failed attempts. Try again in 15 minutes."}}
+{"error": {"code": "too_many_attempts", "message": "Too many failed attempts. Try again later."}}
 ```
 _Capture: `docs/fe-captures/owner-app/80-limit-sixth-attempt.json`_
 
@@ -188,12 +188,14 @@ HTTP 429
 content-type: application/json
 ```
 ```json
-{"error": {"code": "too_many_attempts", "message": "Too many failed attempts. Try again in 15 minutes."}}
+{"error": {"code": "too_many_attempts", "message": "Too many failed attempts. Try again later."}}
 ```
 _While locked out even the right password gets 429._
 _Capture: `docs/fe-captures/owner-app/81-limit-right-password-while-locked.json`_
 
-**The client address the limit uses behind Next is NOT EXERCISED.** The app keys the limit on the peer address (or on `X-Forwarded-For` when the proxy is trusted by uvicorn's `--forwarded-allow-ips`). If Next's proxy does not forward the real visitor address and the app does not trust it, every visitor shares one bucket. Stream A must check this.
+**A second cookie, `device` (named `__Host-device` in production, where cookies are `Secure`).** A successful `POST /api/session` (and the page login) now also sets a long-lived device cookie, next to `session`. It marks this browser as one that has logged in before, and a browser that sends it is not blocked by the *account* limit (10 failures an hour from anyone), only by the per-address one and a limit of 10 failures an hour on that cookie itself. Nothing for the front end to do: the browser stores and returns it by itself, a failed login never sets it, and logout does not clear it. Do not read, write or clear it from code (it is `HttpOnly`); if a server action or route handler makes the login call, pass **both** `Set-Cookie` headers on to the browser. Captured live through nginx and Next (value hidden): `set-cookie: device=<signed-value>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax` (`docs/spike/edge-secret/e2e-output.txt`; `Secure` is added when the site is served with `COOKIE_SECURE=true`, as in production, which the local run was not). A browser without the cookie (a new device, cleared cookies, or after the owner password was changed) can still get a 429 for up to an hour after strangers' failed guesses.
+
+**The client address the limit uses behind Next** is the visitor's real address: nginx sets `X-Forwarded-For` and a secret header, Next passes both on, and FastAPI believes the address only when the secret is right (verified live end to end, `docs/spike/edge-secret/e2e-output.txt`). The browser sends nothing for this and must not try: a client-sent `X-Forwarded-For` or `X-Edge-Secret` is replaced by nginx, and one sent straight to Next is ignored by FastAPI. Two visitors have separate limits; the owner's *account* limit is shared by everyone.
 
 ### Who am I (after login)
 
@@ -294,7 +296,7 @@ Every error the captures produced (`status`, `code`, exact `message`, and the fi
 | 409 | `not_retryable` | This meeting cannot be retried. | `38-meeting-retry-cancelled.json` |
 | 409 | `not_waiting_for_bot` | Only a meeting that is still waiting for its bot can be cancelled. | `37-meeting-cancel-again.json` |
 | 422 | `validation_error` | Some fields are missing or not valid. | `06-login-missing-password.json` |
-| 429 | `too_many_attempts` | Too many failed attempts. Try again in 15 minutes. | `80-limit-sixth-attempt.json` |
+| 429 | `too_many_attempts` | Too many failed attempts. Try again later. | `80-limit-sixth-attempt.json` |
 | 502 | `bot_send_failed` | The bot could not be sent. Please try again in a moment. | `39-meeting-create-vexa-down.json` |
 | 502 | `bot_stop_failed` | The bot could not be stopped. Please try again in a moment. | `42-meeting-cancel-vexa-down.json` |
 | 502 | `notes_failed` | The notes could not be written. The old notes were kept. | `62-meeting-regenerate-openai-down.json` |
@@ -1357,7 +1359,7 @@ Both the `bot_left_early` and `speakers_incomplete` flags are verified live (`48
 2. **The edge may cut a slow rewrite short, and then the response is not JSON.** `deploy/nginx.conf` gives `/meetings/<id>/regenerate` 300 seconds, but its pattern does not match `/api/meetings/<id>/regenerate`, which therefore gets the 60-second default; Cloudflare gives up at 100 seconds with its own 524 page; Next's proxy has its own timeout. **NOT EXERCISED** (read from the config, not run). If a rewrite call fails at the gateway, say "this is taking longer than expected" and refetch the meeting after a minute: the rewrite probably finished. Decision for the lead and stream A (nginx and the Next proxy), not for this API.
 3. **Cancel is final.** The bot is removed and the meeting becomes failed and cannot be retried. Confirm first.
 4. **Logout signs out every device**, not just this one. Say so on the logout control if that is not what the user expects.
-5. **Login lockout is 15 minutes with no countdown.** Show the 429 message and disable the form; do not let the user keep hammering it.
+5. **Login lockout is 5 minutes to an hour with no countdown.** Show the 429 message and disable the form; do not let the user keep hammering it. The account limit is shared by everyone, so a 429 can be unrelated to this visitor's own attempts (someone else failing, or a bot): say "try again later", never "you entered the wrong password too many times".
 6. **Never put a meeting link in a URL, log line or analytics event.** Zoom links contain a password. On any error, keep what the user typed in client state: the server never echoes the link back.
 7. **Disable the "Send bot" button on submit.** A double click is safe (the server serialises it and the second request gets `bot_already_active`), but showing that as a failure is wrong. Also disable the form while any meeting in the list is `bot_sent` or `processing`: the server will refuse it with 409 anyway, and the 409 `message` is fine to show.
 8. **Any call can return 401 at any time** (30-day cookie, logout elsewhere, a password change). Handle it once, globally, not per screen.
@@ -1386,7 +1388,10 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | Login: ok, wrong password, missing field, wrong type | Verified live | `05`–`08` |
 | Login without or with wrong CSRF token is 403 | Verified live | `03`, `04` |
 | CSRF token changes at login and at logout | Verified live | `01`, `08`, `72` |
-| Login limit: 429 on the sixth attempt, also for the right password | Verified live | `79`–`81` |
+| Login limit: 429 on the sixth attempt from one address, also for the right password | Verified live (2026-11-03, through nginx and Next) | `79`–`81` |
+| Account limit: 10 failures in an hour from any addresses lock the account, same 429 body | Verified live (`docs/spike/edge-secret/e2e-output.txt`) and test | `test_ten_failures_in_an_hour_lock_the_account_even_for_a_new_address` |
+| `device` cookie: set on a successful login only, bypasses the account limit but not the address limit; a forged cookie gets no bypass | Verified live (`docs/spike/edge-secret/e2e-output.txt`) and tests | `tests/test_edge.py` |
+| The limit counts the real visitor address behind nginx and Next; a forged `X-Forwarded-For` is ignored | Verified live (`docs/spike/edge-secret/e2e-output.txt`) | `tests/test_edge.py` |
 | Login limit is shared with `/login` | Test | `test_login_is_rate_limited_and_shares_the_pages_limit` |
 | Logged-out API call is 401 JSON, never a redirect | Verified live | `02` |
 | Every `/api` route needs login except `GET`/`POST /api/session` | Test (enumerates the app's own routes) | `test_every_api_route_needs_login_except_the_two_session_starters` |

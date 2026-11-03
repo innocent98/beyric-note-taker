@@ -50,7 +50,7 @@ export function VocabularyManager({ initial }: { initial: Term[] }) {
   }
 
   return (
-    <div className="stack">
+    <div className="stack-md measure">
       <PageHead title="Vocabulary" subtitle="Names and terms to spell correctly in transcripts and notes." />
       {error ? <Alert kind="error">{error}</Alert> : null}
       <Card flush>

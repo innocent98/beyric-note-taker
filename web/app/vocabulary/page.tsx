@@ -9,7 +9,7 @@ export default async function VocabularyPage() {
   const api = await requireOwner();
   const terms = await load(api.vocabulary.list());
   return (
-    <AppShell current="vocabulary" narrow>
+    <AppShell current="vocabulary">
       <VocabularyManager initial={terms} />
     </AppShell>
   );

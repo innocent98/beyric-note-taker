@@ -99,11 +99,11 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
 
   return (
     <div className="stack-lg">
+      <AppLink className="crumb" href="/">
+        <Icon name="back" size={14} />
+        All meetings
+      </AppLink>
       <div className="detail-head">
-        <AppLink className="crumb" href="/">
-          <Icon name="back" size={14} />
-          All meetings
-        </AppLink>
         <div className="detail-title">
           <h1>{m.title}</h1>
           <Badge tone={m.status_tone} dot>
@@ -154,7 +154,7 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
             )}
           </section>
           <aside className="detail-side">
-            <Card>
+            <Card compact>
               <h2 className="side-title">Details</h2>
               <dl className="details">
                 <dt>Date</dt>
@@ -170,9 +170,9 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
               </dl>
             </Card>
             {m.can_regenerate ? (
-              <Card>
+              <Card compact>
                 <form
-                  className="stack-sm"
+                  className="stack-xs"
                   aria-busy={busy === "rewrite"}
                   onSubmit={(event) => {
                     event.preventDefault();
@@ -187,12 +187,13 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
                     id="template_id"
                     label="Rewrite the notes with a template"
                     hideLabel
+                    compact
                     options={templates.map((t) => [t.id, t.name] as const)}
                     value={rewriteId}
                     disabled={busy !== null}
                     onChange={(event) => setRewriteId(event.target.value)}
                   />
-                  <Button kind="secondary" disabled={busy !== null}>
+                  <Button kind="secondary" size="md" disabled={busy !== null}>
                     {busy === "rewrite" ? "Rewriting..." : "Rewrite notes"}
                   </Button>
                   {busy === "rewrite" ? (

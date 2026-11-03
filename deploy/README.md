@@ -23,13 +23,15 @@ so nothing here takes a public port except through nginx.
 - nginx connects to `127.0.0.1:8020`, which is `next`, and `next` connects to FastAPI as
   `http://web:8000`. `next` renders the few pages it owns (`/privacy`, `/terms` and some review
   pages) and proxies every other path to FastAPI unchanged, so the Jinja pages, `/health` and the
-  login keep working as before. `compose.yaml` pins the network: FastAPI sees nginx as the Docker
-  bridge gateway `172.28.0.1` (on the `8021` rollback path) and `next` as `172.28.1.10`, and trusts
-  both as proxies (`next` passes the visitor's address on in `X-Forwarded-For`; without trusting it
-  the login limit would see every visitor as one address). `next` sits on its own network `front`
-  with `web` only, so Vexa, which shares `default` with `web`, cannot reach `next` and forge that
-  header. Only processes on the server can reach ports 8020 and 8021,
-  so nobody outside can pose as a proxy.
+  login keep working as before. The visitor's address reaches FastAPI like this: nginx sets
+  `X-Forwarded-For` (the address Cloudflare reports) and a secret header `X-Edge-Secret` on every
+  request, `next` passes both on unchanged, and FastAPI believes the forwarded address **only on a
+  request that carries the right secret** (`EDGE_SHARED_SECRET`, below). It never trusts a proxy
+  by its IP address: Docker rewrites every container's and the host loopback's connection to the
+  bridge gateway, so any container on the server could pose as nginx. Without the secret a request
+  is identified by its socket peer, so a container that forges `X-Forwarded-For` cannot choose the
+  address the login limit counts (`uvicorn` runs with `--no-proxy-headers` for this reason). Only
+  processes on the server can reach ports 8020 and 8021; none of them can read the secret.
 - `next` is capped at 512 MB of memory (`mem_limit`) and holds no secrets. Measured on a Mac it
   used 37 MB idle and 65 MB at peak under 240 requests, so the cap is a ceiling, not a need.
   Building its image (`next build`) peaked at about 0.8 GB for its largest process, once per
@@ -137,7 +139,8 @@ Edit `.env`:
 | `OWNER_PASSWORD` | a long password |
 | `SESSION_SECRET` | `openssl rand -hex 48` |
 | `APP_ENV`, `COOKIE_SECURE` | `production`, `true` |
-| `TRUSTED_PROXY_IPS` | `172.28.0.1`. `next` (`172.28.1.10`) is always trusted on top of this, because every request passes through it; set it **empty** and nginx is not trusted, which makes every visitor look like the same address |
+| `EDGE_SHARED_SECRET` | `openssl rand -hex 32`, the **same value** nginx sends as `X-Edge-Secret` (section 6, "Edge secret"). Empty = not configured: the app starts, logs a warning, and falls back to `TRUSTED_PROXY_IPS`, which a container on the server can forge |
+| `TRUSTED_PROXY_IPS` | Transitional. Read only while `EDGE_SHARED_SECRET` is empty: peers whose `X-Forwarded-For` is believed (default `172.28.0.1`; `next`, `172.28.1.10`, is always on top). Delete it from `.env` once the secret is live; it does nothing then |
 | `AUDIO_RETENTION_DAYS` | Optional, default `7`. The same value is shown on `/privacy` (compose passes it to `next`) |
 
 ## 4. Start Vexa and create the app's key
@@ -192,9 +195,72 @@ After a later change to `deploy/nginx.conf`, do not copy it over the live file (
 certbot's lines): edit `/etc/nginx/sites-available/beyric-notes` by hand, then `sudo nginx -t &&
 sudo systemctl reload nginx`.
 
+### Edge secret (one-time, and the order matters)
+
+nginx proves to the app that a request came through it by adding `X-Edge-Secret` to every
+request. The value is a random string kept in two places and in no git repository: the app's
+`.env` (`EDGE_SHARED_SECRET`) and a root-only nginx snippet that `deploy/nginx.conf` includes.
+**Never print it**: it must not reach the terminal, shell history, a chat or a log. The commands
+below keep it in a shell variable and write it straight to the two files. Run them in bash, as
+the deploy user, in this order, so nothing breaks half way (until step 4 the app trusts addresses
+the old way; nothing about login changes for the owner):
+
+```bash
+# 1. Generate once; write the root-only nginx snippet and the .env line from the same variable.
+SECRET=$(openssl rand -hex 32)
+sudo mkdir -p /etc/nginx/snippets
+sudo install -m 600 -o root -g root /dev/null /etc/nginx/snippets/beyric-edge-secret.conf
+printf 'proxy_set_header X-Edge-Secret "%s";\n' "$SECRET" \
+  | sudo tee /etc/nginx/snippets/beyric-edge-secret.conf >/dev/null
+# Replace any existing EDGE_SHARED_SECRET line (an empty one from .env.example, or an old value
+# when rotating) with a fresh one; neither command prints a value.
+sed -i '/^EDGE_SHARED_SECRET=/d' /opt/beyric-note-taker/.env
+[ -n "$(tail -c1 /opt/beyric-note-taker/.env)" ] && echo >> /opt/beyric-note-taker/.env  # last line needs its newline
+printf 'EDGE_SHARED_SECRET=%s\n' "$SECRET" >> /opt/beyric-note-taker/.env
+chmod 600 /opt/beyric-note-taker/.env
+unset SECRET
+
+# 2. Prove both files hold the same value, without showing either (prints "same"):
+cmp -s <(sed -n 's/^EDGE_SHARED_SECRET=//p' /opt/beyric-note-taker/.env) \
+       <(sudo sed -n 's/.*X-Edge-Secret "\(.*\)";/\1/p' /etc/nginx/snippets/beyric-edge-secret.conf) \
+  && echo same || echo DIFFERENT
+
+# 3. Put the include line in the live site file (once), under the other proxy_set_header lines:
+#      include /etc/nginx/snippets/beyric-edge-secret.conf;
+#    (it is in deploy/nginx.conf; edit /etc/nginx/sites-available/beyric-notes by hand, see above)
+sudo nginx -t && sudo systemctl reload nginx
+
+# 4. Deploy (or `docker compose up -d --force-recreate web`) once no meeting is bot_sent or
+#    processing. The app reads the secret at startup.
+```
+
+`printf` is a shell builtin, so the value is not in any process's command line either. Do not
+`cat`, `echo` or `diff` either file; to look at one, use `sudo grep -c X-Edge-Secret <file>` (a count).
+
+Check it after the deploy:
+
+```bash
+docker compose logs web | grep EDGE_SHARED_SECRET           # no output: the startup warning is gone
+curl -sI https://notes.beyrictech.com/health | grep -i x-edge-ok     # x-edge-ok: true
+```
+
+`X-Edge-Ok` says whether *that request* carried the right secret, so `true` through the public
+URL means nginx, Next and the app agree on it; it never contains the secret. (`deploy.sh` checks
+`/health` on `127.0.0.1:8020`, which skips nginx, so it reads `false` there: that is expected.)
+Afterwards the spoof test in section 9 still ends in `429`. If `docker compose logs web` later
+shows `arrived without a valid X-Edge-Secret header`, a request reached `next` without going
+through nginx, or nginx lost the include: look at the site file first.
+
+The app never refuses to start without the secret; it logs `EDGE_SHARED_SECRET is not set ...`
+at startup, and until the secret is set the address can still be forged by any container. Rotate
+by repeating steps 1 to 4 with a new value, replacing the old `.env` line and snippet (a short
+window of shared login limits between steps 3 and 4 is harmless). `deploy/nginx-limit-check.sh`
+proves the nginx half (a client-sent `X-Edge-Secret` or `X-Forwarded-For` is replaced) without a
+server.
+
 What the site does: proxies to `127.0.0.1:8020`, the Next.js front door (60 s, or 300 s for
 `/meetings/<id>/regenerate`); takes the visitor's address from `CF-Connecting-IP`, trusted only
-from Cloudflare's published ranges; **overwrites** `X-Forwarded-For` with that address, so a client
+from Cloudflare's published ranges; **overwrites** `X-Forwarded-For` with that address and adds the `X-Edge-Secret` header, so a client
 cannot dodge the login limit; limits POST `/login` to 6 a minute per address (burst 3, then 429)
 and all traffic to 20 requests a second; adds HSTS (1 year), `X-Frame-Options: DENY` and a
 `Permissions-Policy`. The app sets its own CSP, `nosniff`, `Referrer-Policy` and `Cache-Control`.
@@ -317,17 +383,19 @@ curl -s -o /dev/null -w '%{http_code}\n' https://notes.beyrictech.com/health    
 
   ```bash
   HOST=https://notes.beyrictech.com; JAR=$(mktemp)
-  TOKEN=$(curl -s -c "$JAR" "$HOST/login" | sed -n 's/.*name="csrf_token" value="\([^"]*\)".*/\1/p')
+  TOKEN=$(curl -s -c "$JAR" "$HOST/api/session" | sed -n 's/.*"csrf_token": *"\([^"]*\)".*/\1/p')
   for i in 1 2 3 4 5 6 7 8; do
-    curl -s -b "$JAR" -o /dev/null -w '%{http_code}\n' -X POST "$HOST/login" \
-      -d 'password=wrong' -d "csrf_token=$TOKEN" -H "X-Forwarded-For: 10.9.8.$i"
+    curl -s -b "$JAR" -o /dev/null -w '%{http_code}\n' -X POST "$HOST/api/session" \
+      -H 'Content-Type: application/json' -H "X-CSRF-Token: $TOKEN" \
+      -H "X-Forwarded-For: 10.9.8.$i" -d '{"password":"wrong"}'
   done; rm -f "$JAR"
   ```
 
   Run it in bash. To test the Cloudflare header, send `-H "CF-Connecting-IP: 10.7.7.$i"` straight
   to the server (`--resolve notes.beyrictech.com:443:SERVER_IP`); through Cloudflare that header
   gets a 403 from Cloudflare itself. Expect your own address in `docker compose logs web`. The test
-  locks your own address out of login for 15 minutes (the app's limit).
+  locks your own address out of login for 5 minutes (the app's per-address limit), and each failed
+  attempt also counts against the account's 10 an hour, so do not repeat it within the hour.
 - [ ] `docker compose ps`: `db`, `web`, `vexa` healthy; `worker` up; no Vexa errors in
       `docker compose logs worker`.
 - [ ] Other apps on the server still answer after the install.

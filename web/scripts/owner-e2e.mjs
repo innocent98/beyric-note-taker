@@ -70,7 +70,7 @@ const loc = (r) => r.headers.get("location") ?? "";
 
 // 1. Logged out
 let r = await send("GET", "/");
-check("GET / logged out: the landing page", r.status === 200 && r.text.includes("Clear notes from every meeting"), `status ${r.status}`);
+check("GET / logged out: the landing page", r.status === 200 && r.text.includes("Your meetings, turned into finished work."), `status ${r.status}`);
 const csp = r.headers.get("content-security-policy") ?? "";
 check("GET / has a nonce CSP without unsafe-inline", /nonce-/.test(csp) && !/unsafe-inline|unsafe-eval/.test(csp), csp);
 check("GET / offers Sign in, not Open the app", r.text.includes("Sign in") && !r.text.includes("Open the app"));
@@ -83,7 +83,7 @@ for (const path of ["/templates", "/vocabulary", "/meetings/1"]) {
 r = await send("GET", "/styleguide");
 check("GET /styleguide logged out is a 404 (owner only)", r.status === 404, `status ${r.status}`);
 r = await send("GET", "/login");
-check("GET /login: the sign-in page", r.status === 200 && r.text.includes("Sign in to Beyric"), `status ${r.status}`);
+check("GET /login: the sign-in page", r.status === 200 && r.text.includes("Welcome back"), `status ${r.status}`);
 
 // 2. Login through the API, through Next
 r = await send("GET", "/api/session");
@@ -105,7 +105,7 @@ check("GET /login logged in goes to /", [307, 308, 303].includes(r.status) && (l
 r = await send("GET", "/styleguide");
 check("GET /styleguide logged in: the style guide", r.status === 200 && r.text.includes("Style guide"), `status ${r.status}`);
 r = await send("GET", "/privacy");
-check("GET /privacy logged in offers Open the app", r.status === 200 && r.text.includes("Open the app"), `status ${r.status}`);
+check("GET /privacy logged in: the policy with its table of contents", r.status === 200 && r.text.includes("ON THIS PAGE"), `status ${r.status}`);
 
 // 4. Template
 r = await write("POST", "/api/templates", { name: TEMPLATE, instructions: "One line per person." });

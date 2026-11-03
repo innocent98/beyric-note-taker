@@ -59,9 +59,9 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
   }
 
   return (
-    <div className="stack">
+    <div className="stack-md">
       <PageHead title="Templates" subtitle="Instructions tell the notes writer what to focus on.">
-        <Button type="button" onClick={() => choose("new")}>
+        <Button size="md" type="button" onClick={() => choose("new")}>
           <Icon name="plus" size={14} />
           Add template
         </Button>
@@ -114,7 +114,7 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
               <span className="saved" role="status">
                 {saved ? "Saved" : ""}
               </span>
-              <Button disabled={pending}>
+              <Button size="md" wide disabled={pending}>
                 {pending ? "Saving..." : selected === "new" ? "Add template" : "Save"}
               </Button>
             </div>

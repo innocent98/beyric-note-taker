@@ -44,7 +44,7 @@ export function NewMeetingForm({ templates, busy }: { templates: Template[]; bus
           <div className="field-grow">
             <Field
               id="url"
-              label="Meeting link (Google Meet or Zoom)"
+              label="Meeting link"
               icon="link"
               type="url"
               required

@@ -16,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
-from app import auth
+from app import auth, edge
 from app.models import AppState, Meeting, Template, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import REASON_CANCELLED, REASON_NO_SPEECH
@@ -73,20 +73,40 @@ def get_openai_client():
 # ---- login ----
 
 
-def log_in(request: Request, session: Session, password: str) -> None:
-    """Check the owner password and give the request a fresh logged-in session."""
+OWNER_ACCOUNT = "owner"  # the login form has no username yet; accounts will pass the email
+lockout_log_throttle = edge.Throttle()
+
+
+def log_in(request: Request, session: Session, password: str, account: str = OWNER_ACCOUNT) -> None:
+    """Check the password and give the request a fresh logged-in session."""
+    settings = request.app.state.settings
     limiter: auth.LoginLimiter = request.app.state.limiter
-    client = request.client.host if request.client else "unknown"
-    if not limiter.try_acquire(client):  # counts this attempt; success clears it below
-        raise Refused(
-            429, "too_many_attempts", "Too many failed attempts. Try again in 15 minutes."
-        )
-    if not auth.password_matches(request.app.state.settings, password):
+    client = edge.client_address(request, settings)
+    device = auth.device_id(
+        request.app.state.device_key,
+        request.cookies.get(auth.device_cookie_name(settings)),
+        account,
+    )
+    refused = limiter.check(client, account, device=device)  # counts this attempt
+    if refused:
+        if refused != "address" and lockout_log_throttle.ready():
+            logger.warning(
+                "login refused: too many failed attempts in the last hour on the %s limit "
+                "(account %r, client %s); further refusals are not logged for a minute",
+                refused,
+                auth.account_key(account)[:80],
+                client,
+            )
+        raise Refused(429, "too_many_attempts", "Too many failed attempts. Try again later.")
+    if not auth.password_matches(settings, password):
         raise Refused(401, "invalid_password", "That password is not right.")
-    limiter.reset(client)
+    limiter.succeeded(client, account, device)
     # A fresh token, never a promoted old one, stamped with the current epoch.
     request.state.session = auth.new_session(auth=True, epoch=auth.current_epoch(session))
     request.state.session_changed = True
+    # A device cookie for this account, only now that the password was right; a known device
+    # keeps its id so its failures stay on one counter.
+    request.state.device_cookie = (account, device)
 
 
 def log_out(request: Request, session: Session) -> None:

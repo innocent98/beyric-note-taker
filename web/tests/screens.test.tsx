@@ -43,6 +43,19 @@ beforeEach(() => {
 });
 
 describe("login", () => {
+  it("shows and hides the password, and asks for one before calling the API", async () => {
+    render(<LoginForm />);
+    const field = screen.getByLabelText("Password");
+    expect(field).toHaveProperty("type", "password");
+    await userEvent.click(screen.getByRole("button", { name: "Show" }));
+    expect(field).toHaveProperty("type", "text");
+    await userEvent.click(screen.getByRole("button", { name: "Hide" }));
+    expect(field).toHaveProperty("type", "password");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(screen.getByRole("alert").textContent).toContain("Enter your password.");
+    expect(mocks.login).not.toHaveBeenCalled();
+  });
+
   it("signs in and goes to the app", async () => {
     mocks.login.mockResolvedValue({ authenticated: true, csrf_token: "x" });
     render(<LoginForm />);
@@ -63,11 +76,11 @@ describe("login", () => {
   });
 
   it("locks the form after the 15-minute lockout", async () => {
-    mocks.login.mockRejectedValue(new ApiError(429, "too_many_attempts", "Too many failed attempts. Try again in 15 minutes."));
+    mocks.login.mockRejectedValue(new ApiError(429, "too_many_attempts", "Too many failed attempts. Try again later."));
     render(<LoginForm />);
     await userEvent.type(screen.getByLabelText("Password"), "nope");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    expect((await screen.findByRole("alert")).textContent).toMatch(/15 minutes/);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/try again later/i);
     expect((screen.getByRole("button", { name: "Sign in" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
@@ -76,7 +89,7 @@ describe("new meeting form", () => {
   it("sends the link and the chosen template, then opens the meeting", async () => {
     mocks.create.mockResolvedValue(captured<Meeting>("33-meeting-create.json"));
     render(<NewMeetingForm templates={templates} busy={false} />);
-    await userEvent.type(screen.getByLabelText("Meeting link (Google Meet or Zoom)"), " https://meet.google.com/abc-defg-hij ");
+    await userEvent.type(screen.getByLabelText("Meeting link"), " https://meet.google.com/abc-defg-hij ");
     await userEvent.selectOptions(screen.getByLabelText("Notes template"), "2");
     await userEvent.click(screen.getByRole("button", { name: "Send note taker" }));
     expect(mocks.create).toHaveBeenCalledWith({ url: "https://meet.google.com/abc-defg-hij", template_id: 2 });
@@ -89,7 +102,7 @@ describe("new meeting form", () => {
       new ApiError(400, "invalid_meeting_url", "That is not a Google Meet or Zoom link. Paste the full meeting link."),
     );
     render(<NewMeetingForm templates={templates} busy={false} />);
-    const input = screen.getByLabelText("Meeting link (Google Meet or Zoom)") as HTMLInputElement;
+    const input = screen.getByLabelText("Meeting link") as HTMLInputElement;
     await userEvent.type(input, "https://example.com/x");
     await userEvent.click(screen.getByRole("button", { name: "Send note taker" }));
     expect(await screen.findByText(/That is not a Google Meet or Zoom link/)).toBeTruthy();
@@ -106,7 +119,7 @@ describe("new meeting form", () => {
   it("locks the button while the request runs", async () => {
     mocks.create.mockReturnValue(new Promise(() => undefined));
     render(<NewMeetingForm templates={templates} busy={false} />);
-    await userEvent.type(screen.getByLabelText("Meeting link (Google Meet or Zoom)"), "https://meet.google.com/abc-defg-hij");
+    await userEvent.type(screen.getByLabelText("Meeting link"), "https://meet.google.com/abc-defg-hij");
     await userEvent.click(screen.getByRole("button", { name: "Send note taker" }));
     expect((screen.getByRole("button", { name: "Sending..." }) as HTMLButtonElement).disabled).toBe(true);
   });
