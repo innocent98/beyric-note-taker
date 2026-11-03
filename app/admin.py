@@ -6,7 +6,7 @@ calendar: there is no function in this module that reads them.
 """
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import func, select, text
@@ -95,7 +95,7 @@ def schedule_deletion(session: Session, user: User) -> None:
     if _is_last_admin(session, user):
         session.rollback()
         raise _refuse_last_admin()
-    user.status = "deleted"
+    user.status, user.deleted_at = "deleted", datetime.now(UTC)
     session.commit()
 
 

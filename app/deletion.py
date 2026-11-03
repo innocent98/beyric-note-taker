@@ -2,21 +2,37 @@
 admin API.
 
 The admin's `DELETE /api/admin/users/{id}` only marks the user `deleted` (they cannot sign in and
-the slot is free at once, since `deleted` rows are treated as absent everywhere); the worker then
-calls `purge_deleted`, which runs `purge_user` for each. `purge_user` stops the user's running
-bots, deletes every recording (here and Vexa's copy), then deletes their meetings, templates,
-vocabulary, settings, notifications, tokens, queued mail and waitlist row, and finally the user.
+the slot is free at once, since `deleted` rows are treated as absent everywhere) and stamps
+`deleted_at`; the worker then calls `purge_deleted`, which runs `purge_user` for each. The pipeline
+leaves a deleted user's meetings alone (`pipeline._owner_deleted`), so nothing more is downloaded,
+sent to OpenAI or counted for them. `purge_user` stops any bot that is still in a call, deletes
+every recording at Vexa and here, then deletes their meetings, templates, vocabulary, settings,
+notifications, queued mail, tokens and waitlist row, and finally the user.
 
 What stays: `usage_entries` rows, with only the seconds and `email_hash` (no personal data), so
-signing up again with the same address does not reset the 5 hours.
+signing up again does not reset the 5 hours.
 
-Vexa trouble raises `VexaError` *before* anything of the user is deleted, so the account stays
-marked and the next pass tries again; nothing is half-removed except recordings already gone.
+**Settled.** A meeting's Vexa side is settled, and the rows may go, only when Vexa can no longer
+produce a recording we would not delete:
+- Vexa does not know the meeting (404), or
+- the bot is gone (`completed` or `failed`) and either a recording with audio exists (it is deleted
+  first), or `failed`, or the recording itself `failed`, or no audio appeared within the pipeline's
+  own grace (`RECORDING_GRACE`) after we first saw the meeting over (else after it was created).
+Anything else (a bot still in a call, a recording still being written, the grace not over, Vexa not
+answering) raises `VexaError` before anything of the user is deleted, and the next pass tries again.
+A bot is stopped whatever our own status says: a meeting given up after six hours is `failed` here
+while its bot may still be in the call.
+
+**Bounded.** If a purge keeps waiting for a day (`GIVE_UP_AFTER` since `deleted_at`, which the
+first failed pass stamps if the admin API did not), it stops waiting: it logs an error naming the
+meetings, tells every admin in the app (`admin.purge_forced`), and deletes our rows anyway without
+calling Vexa again. The data then outlives the promise only at Vexa, and the admin knows which
+meetings to look at. The alert and the log carry ids, never the person's address.
 """
 
 import logging
 import shutil
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
@@ -34,49 +50,60 @@ from app.models import (
     WaitlistEntry,
 )
 from app.pipeline import RECORDING_GRACE, audio_path
-from app.vexa import VexaError
+from app.vexa import VexaError, VexaNotFound
 
 logger = logging.getLogger(__name__)
 
+GIVE_UP_AFTER = timedelta(hours=24)
+VEXA_FINISHED = ("completed", "failed")
 
-def _recording_to_delete(vexa, meeting: Meeting, now: datetime) -> int | None:
-    """The id of Vexa's copy of this meeting's recording, or None when there is none to delete.
 
-    The pipeline learns the id only when it first polls a finished meeting, so a meeting deleted
-    while still running may not have it stored: ask Vexa by the meeting id it gave us. A missing
-    id is "nothing to delete" only when Vexa is done and says so: the meeting `failed`, or it
-    `completed`, reports no recording and the pipeline's own grace for a recording to appear has
-    passed since we first saw the meeting over. In every other case (still running, a recording
-    that exists but has no id or is not final, the grace not over) raise `VexaError` so the next
-    pass tries again: the copy may appear after the row is gone."""
-    if meeting.vexa_recording_id is not None:
-        return meeting.vexa_recording_id
+def _recording_to_delete(vexa, meeting: Meeting, now: datetime, stopped: set[int]) -> int | None:
+    """Settle one meeting's Vexa side (see the module docstring): the id of the recording to
+    delete, or None when there is nothing to delete. Raises `VexaError` while it is not settled."""
+    stored = meeting.vexa_recording_id
     if not meeting.vexa_meeting_id:
-        return None
-    info = vexa.get_meeting_by_id(meeting.vexa_meeting_id)
+        return stored
+    try:
+        info = vexa.get_meeting_by_id(meeting.vexa_meeting_id)
+    except VexaNotFound:
+        return stored  # Vexa does not know the meeting: nothing there to wait for
+    if info.status not in VEXA_FINISHED:
+        if meeting.id not in stopped:  # whatever our status: the bot may still be in the call
+            vexa.stop_bot(meeting.platform, meeting.native_id)
+            stopped.add(meeting.id)
+        raise VexaError("the bot is still in the meeting")
     if info.recording_id is not None:
         return info.recording_id
-    if info.status == "failed":
+    if stored is not None:
+        return stored
+    if info.status == "failed" or info.recording_status == "failed":
         return None
-    if info.status == "completed" and info.recording_status is None:
-        seen = meeting.terminal_seen_at
-        if seen is not None and now - seen >= RECORDING_GRACE:
-            return None
+    seen = meeting.terminal_seen_at or meeting.created_at
+    if seen is not None and now - seen >= RECORDING_GRACE:
+        return None  # no audio appeared within the grace the pipeline itself allows
     raise VexaError("Vexa has not settled this meeting's recording yet")
 
 
-def purge_user(session: Session, user: User, vexa, now: datetime | None = None) -> None:
-    """Delete `user` and everything of theirs. Commits. Raises `VexaError` when a bot cannot be
-    stopped or Vexa's copy of a recording cannot be found or deleted; nothing is deleted then."""
+def purge_user(
+    session: Session, user: User, vexa, now: datetime | None = None, *, force: bool = False
+) -> None:
+    """Delete `user` and everything of theirs. Commits. Raises `VexaError` while Vexa has not
+    settled (nothing is deleted then). With `force`, Vexa is not called at all: the caller has
+    given up waiting and recorded that."""
+    now = now or datetime.now(UTC)
     meetings = list(session.scalars(select(Meeting).where(Meeting.owner_user_id == user.id)))
-    for meeting in meetings:
-        if meeting.status == "bot_sent":
-            vexa.stop_bot(meeting.platform, meeting.native_id)
-    for meeting in meetings:
-        if meeting.audio_deleted_at is None:
-            recording_id = _recording_to_delete(vexa, meeting, now or datetime.now(UTC))
-            if recording_id is not None:
-                vexa.delete_recording(recording_id)
+    if not force:
+        stopped: set[int] = set()
+        for meeting in meetings:
+            if meeting.status == "bot_sent":
+                vexa.stop_bot(meeting.platform, meeting.native_id)
+                stopped.add(meeting.id)
+        for meeting in meetings:
+            if meeting.audio_deleted_at is None:
+                recording_id = _recording_to_delete(vexa, meeting, now, stopped)
+                if recording_id is not None:
+                    vexa.delete_recording(recording_id)
     for meeting in meetings:
         shutil.rmtree(audio_path(meeting.id).parent, ignore_errors=True)
     email, user_id = user.email, user.id
@@ -93,21 +120,74 @@ def purge_user(session: Session, user: User, vexa, now: datetime | None = None) 
     session.commit()
 
 
+def _give_up(session: Session, user: User, now: datetime) -> None:
+    """Stop waiting for Vexa: log, tell every admin in the app, delete our rows anyway."""
+    meeting_ids = list(
+        session.scalars(
+            select(Meeting.id).where(Meeting.owner_user_id == user.id).order_by(Meeting.id)
+        )
+    )
+    logger.error(
+        "user %s: gave up waiting for Vexa after %s; deleting our rows, the Vexa copy of meetings "
+        "%s could not be confirmed deleted",
+        user.id,
+        GIVE_UP_AFTER,
+        meeting_ids,
+    )
+    body = (
+        f"The deletion of user {user.id} waited a day for Vexa and then deleted our records "
+        f"anyway. Check Vexa for the recordings of meeting ids {meeting_ids}: they could not be "
+        "confirmed deleted."
+    )
+    for admin_id in session.scalars(
+        select(User.id).where(User.is_admin.is_(True), User.status == "active")
+    ):
+        session.add(
+            Notification(
+                user_id=admin_id,
+                kind="admin.purge_forced",
+                severity="error",
+                title="A deleted account's recordings could not be confirmed gone at Vexa",
+                body=body,
+                dedupe_key=f"purge_forced:{user.id}",
+                created_at=now,
+            )
+        )
+    session.commit()
+    purge_user(session, user, None, now, force=True)
+
+
 def purge_deleted(session: Session, vexa) -> int:
     """Purge every user marked `deleted`; returns how many went. Any trouble with one user (Vexa
-    down, a bad value, a database error) is logged by type only and leaves that user marked for
-    the next pass; it never stops the others and never reaches the worker's loop."""
+    down or not settled, a bad value, a database error) is logged by type only and leaves that
+    user marked for the next pass, until a day has passed (see the module docstring); it never
+    stops the others and never reaches the worker's loop."""
     ids = list(session.scalars(select(User.id).where(User.status == "deleted").order_by(User.id)))
     purged = 0
     for user_id in ids:
+        now = datetime.now(UTC)
         try:
             user = session.get(User, user_id)
             if user is None:
                 continue
-            purge_user(session, user, vexa)
-        except Exception as exc:  # one user must not stall the rest
+            try:
+                purge_user(session, user, vexa, now)
+            except Exception as exc:
+                session.rollback()
+                logger.warning("user %s: purge waits (%s)", user_id, type(exc).__name__)
+                user = session.get(User, user_id)
+                if user is None:
+                    continue
+                if user.deleted_at is None:  # marked by hand: the clock starts now
+                    user.deleted_at = now
+                    session.commit()
+                elif now - user.deleted_at >= GIVE_UP_AFTER:
+                    _give_up(session, user, now)
+                    purged += 1
+                continue
+        except Exception as exc:  # the bookkeeping itself failed: still only this user
             session.rollback()
-            logger.warning("user %s: purge waits (%s)", user_id, type(exc).__name__)
+            logger.warning("user %s: purge bookkeeping failed (%s)", user_id, type(exc).__name__)
             continue
         purged += 1
     return purged
