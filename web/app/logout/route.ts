@@ -5,7 +5,14 @@ import { serverApi } from "@/lib/api/server";
 // the sidebar works without JavaScript. It asks FastAPI to end the session (DELETE /api/session,
 // which signs out every device), passes FastAPI's new anonymous cookie on to the browser and sends
 // the visitor to the login page. The Location is relative so it needs no knowledge of the public host.
-export async function POST() {
+export async function POST(request: Request) {
+  // This handler reads the CSRF token for the caller (a plain form has none to send), so FastAPI's
+  // own check cannot stop a forged logout; this does. A browser always says where a POST came from
+  // (Sec-Fetch-Site, or Origin on older ones), and only our own pages are accepted. A request with
+  // neither header is not a browser acting for a web page, and the cookie is SameSite=Lax anyway.
+  if (!isOwnOrigin(request)) {
+    return new Response("Not allowed.", { status: 403, headers: { "Cache-Control": "no-store" } });
+  }
   const setCookie: string[] = [];
   const api = await serverApi({
     onResponse: (response) => {
@@ -28,6 +35,19 @@ export async function POST() {
   const headers = new Headers({ Location: "/login", "Cache-Control": "no-store" });
   for (const cookie of setCookie) headers.append("Set-Cookie", cookie);
   return new Response(null, { status: 303, headers });
+}
+
+export function isOwnOrigin(request: Request): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  if (site) return site === "same-origin";
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
 }
 
 // A link or a prefetch must never log anyone out.

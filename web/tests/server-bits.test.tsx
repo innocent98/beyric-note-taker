@@ -78,6 +78,9 @@ describe("POST /logout", () => {
     vi.resetModules();
   });
 
+  const post = (headers: Record<string, string> = {}) =>
+    new Request("http://next:3000/logout", { method: "POST", headers });
+
   function stubFetch(handler: (url: string, init: RequestInit) => Response) {
     const calls: { url: string; init: RequestInit }[] = [];
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
@@ -96,7 +99,7 @@ describe("POST /logout", () => {
         : json({ authenticated: false, csrf_token: "new" }, { headers: { "set-cookie": "session=fresh; HttpOnly; Path=/" } }),
     );
     const { POST } = await import("@/app/logout/route");
-    const res = await POST();
+    const res = await POST(post());
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/login");
     expect(res.headers.get("set-cookie")).toBe("session=fresh; HttpOnly; Path=/");
@@ -114,7 +117,7 @@ describe("POST /logout", () => {
         : json({ error: { code: "not_authenticated", message: "Log in first." } }, { status: 401 }),
     );
     const { POST } = await import("@/app/logout/route");
-    const res = await POST();
+    const res = await POST(post());
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("/login");
   });
@@ -122,7 +125,28 @@ describe("POST /logout", () => {
   it("does not claim a logout that did not happen", async () => {
     stubFetch(() => new Response("bad gateway", { status: 502, headers: { "content-type": "text/html" } }));
     const { POST } = await import("@/app/logout/route");
-    expect((await POST()).status).toBe(502);
+    expect((await POST(post())).status).toBe(502);
+  });
+
+  it("refuses a POST that came from another site, without calling FastAPI", async () => {
+    const calls = stubFetch(() => json({ authenticated: false, csrf_token: "x" }));
+    const { POST } = await import("@/app/logout/route");
+    const forged: Record<string, string>[] = [
+      { "sec-fetch-site": "cross-site" },
+      { "sec-fetch-site": "same-site" },
+      { origin: "https://evil.example", host: "notes.example" },
+    ];
+    for (const headers of forged) {
+      expect((await POST(post(headers))).status).toBe(403);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("accepts the sidebar form's own-origin POST", async () => {
+    stubFetch((url, init) => (init.method === "GET" ? json({ authenticated: true, csrf_token: "t" }) : json({ authenticated: false, csrf_token: "n" })));
+    const { POST } = await import("@/app/logout/route");
+    expect((await POST(post({ "sec-fetch-site": "same-origin" }))).status).toBe(303);
+    expect((await POST(post({ origin: "https://notes.example", "x-forwarded-host": "notes.example", host: "web:3000" }))).status).toBe(303);
   });
 
   it("never logs out on a GET", async () => {
