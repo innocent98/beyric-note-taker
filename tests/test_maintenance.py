@@ -84,3 +84,36 @@ def test_unverified_accounts_and_the_outbox_are_swept_too(session):
     session.expire_all()
     assert session.scalars(select(User).where(User.email == "old@example.test")).first() is None
     assert session.scalars(select(MailOutbox)).one().status == "failed"
+
+
+def test_one_failing_hourly_part_does_not_stop_the_others(session, monkeypatch, caplog):
+    from app import accounts
+
+    row = mail.enqueue(session, "x@example.test", "verify_email", {"link": "https://x/?token=T"})
+    row.created_at = NOW - timedelta(hours=3)
+    session.commit()
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("secret detail ada@example.test")
+
+    monkeypatch.setattr(accounts, "sweep_unverified", boom)
+    caplog.set_level("WARNING")
+    maintenance.run_hourly(session, NOW)  # must not raise
+    session.expire_all()
+    assert session.scalars(select(MailOutbox)).one().status == "failed"  # the outbox sweep ran
+    ours = " ".join(r.getMessage() for r in caplog.records)
+    assert "RuntimeError" in ours and "secret detail" not in ours and "ada@example.test" not in ours
+
+
+def test_the_worker_runs_the_maintenance_even_when_the_audio_cleanup_always_fails(
+    session, monkeypatch, caplog
+):
+    from app import worker
+
+    ran = []
+    monkeypatch.setattr(worker, "delete_expired_audio", lambda *a, **k: 1 / 0)
+    monkeypatch.setattr(maintenance, "run_hourly", lambda s, now: ran.append(now))
+    caplog.set_level("WARNING")
+    worker.hourly_jobs(session, NOW, vexa=object())  # must not raise
+    assert ran == [NOW]
+    assert "ZeroDivisionError" in " ".join(r.getMessage() for r in caplog.records)

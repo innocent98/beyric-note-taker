@@ -1197,3 +1197,38 @@ def test_read_all_marks_only_mine(api, session, owner, stranger):
     assert body == {"unread_notifications": 0}
     session.refresh(theirs)
     assert theirs.read_at is None
+
+
+def test_the_script_checks_for_the_last_admin_under_the_admin_lock_after_confirming(
+    session, audio_dir, monkeypatch
+):
+    from app import admin as admin_module
+    from scripts import delete_user
+
+    keeper = make_user(session, ADMIN, admin=True)
+    second = make_user(session, "second@example.test", admin=True)
+    seen = []
+    real_execute = session.execute
+
+    def spy(statement, *args, **kwargs):
+        text_ = str(statement)
+        if "pg_advisory_xact_lock" in text_:
+            seen.append(("lock", args[0]["key"] if args else None))
+        return real_execute(statement, *args, **kwargs)
+
+    monkeypatch.setattr(session, "execute", spy)
+    real_check = admin_module._is_last_admin
+    monkeypatch.setattr(
+        admin_module,
+        "_is_last_admin",
+        lambda db, user: seen.append(("check", user.id)) or real_check(db, user),
+    )
+    monkeypatch.setattr(delete_user, "SessionLocal", lambda: _Same(session))
+    monkeypatch.setattr(delete_user, "VexaClient", lambda: FakeVexa())
+    assert delete_user.run([second.email, "--yes"]) == 0
+    assert ("lock", admin_module.ADMIN_LOCK) in seen
+    assert seen.index(("lock", admin_module.ADMIN_LOCK)) < max(
+        i for i, item in enumerate(seen) if item[0] == "check"
+    )  # the decisive check comes after the lock
+    session.expire_all()
+    assert session.get(User, keeper.id) is not None

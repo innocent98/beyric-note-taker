@@ -100,6 +100,28 @@ def background_jobs(session: Session, mailer: mail.Mailer | None, now: datetime)
             logger.warning("%s job failed (%s)", name, type(exc).__name__)
 
 
+def hourly_jobs(session: Session, now: datetime, vexa=None) -> None:
+    """The hourly jobs, each on its own: deleting expired audio, and the housekeeping of
+    `app/maintenance.py` (the unverified-account sweep, the mail outbox scrub and the rest). One
+    that fails every time (Vexa down for the audio cleanup, say) must not stop the other, so each
+    is caught and logged by type only."""
+
+    def audio() -> None:
+        removed = delete_expired_audio(session, now, vexa=vexa or VexaClient())
+        if removed:
+            logger.info("deleted audio for %s meetings", removed)
+
+    for name, job in (
+        ("audio cleanup", audio),
+        ("maintenance", lambda: maintenance.run_hourly(session, now)),
+    ):
+        try:
+            job()
+        except Exception as exc:
+            session.rollback()
+            logger.warning("hourly %s failed (%s)", name, type(exc).__name__)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     mailer = mail.build_mailer(get_settings())
@@ -119,11 +141,8 @@ def main() -> None:
                 background_jobs(session, mailer, datetime.now(UTC))
                 found = run_pass(session, cursor)
                 if time.monotonic() - last_cleanup >= CLEANUP_EVERY_SECONDS:
-                    removed = delete_expired_audio(session, datetime.now(UTC), vexa=VexaClient())
-                    maintenance.run_hourly(session, datetime.now(UTC))
+                    hourly_jobs(session, datetime.now(UTC))
                     last_cleanup = time.monotonic()
-                    if removed:
-                        logger.info("deleted audio for %s meetings", removed)
         except Exception as exc:  # e.g. database briefly down
             logger.error("pass failed: %s", type(exc).__name__)
             found = None

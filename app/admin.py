@@ -68,6 +68,13 @@ def _lock_admins(session: Session, user: User) -> None:
     session.refresh(user)
 
 
+def last_admin_locked(session: Session, user: User) -> bool:
+    """Take the admin lock, re-read `user`, and say whether they are the only active admin. The
+    answer stays true until the caller commits, so the change that depends on it can follow."""
+    _lock_admins(session, user)
+    return _is_last_admin(session, user)
+
+
 def update_user(session: Session, user: User, changes: dict) -> User:
     """Apply `changes` (only `status`, between active and suspended, and `hours_cap_seconds`).
     Commits. The last active admin cannot be suspended. Suspending also signs the user out for

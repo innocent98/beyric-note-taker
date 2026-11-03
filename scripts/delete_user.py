@@ -19,7 +19,7 @@ from sqlalchemy import func, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import deletion, signup  # noqa: E402
+from app import admin, deletion, signup  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.models import Meeting, User  # noqa: E402
 from app.vexa import VexaClient, VexaError  # noqa: E402
@@ -56,6 +56,12 @@ def run(argv: list[str]) -> int:
             and input(f"Type the address ({user.email}) to confirm: ").strip() != user.email
         ):
             print("Not confirmed; nothing was deleted.", file=sys.stderr)
+            return 1
+        # The decisive last-admin check, under the admin lock and after the question (the lock is
+        # held until the purge commits, so it is never held while waiting for a person to type).
+        if admin.last_admin_locked(session, user):
+            session.rollback()
+            print("Refusing: this is the last admin account.", file=sys.stderr)
             return 1
         try:
             deletion.purge_user(session, user, VexaClient())
