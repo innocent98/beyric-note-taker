@@ -59,6 +59,7 @@ FLOW_COOKIE_PATH = "/api/calendar/google"
 DEFAULT_RETURN_TO = "/settings/calendar"
 LOGIN_ERROR = "/login?error=google_failed"
 TESTING_EXPIRY = timedelta(days=7)
+LIVE_STATUSES = ("connected", "degraded")  # a connection that still works
 MAX_EMAIL_CHARS = 254  # the `google_account_email` column
 MAX_DOMAIN_CHARS = 253
 
@@ -241,6 +242,13 @@ def _store(
         .with_for_update()
     ).first()
     same_account = conn is not None and conn.google_sub == identity.sub
+    live = conn is not None and conn.status in LIVE_STATUSES
+    if live and not same_account and conn.google_sub is not None:
+        # The chooser lets the person pick any Google account whatever the login hint says. A
+        # working connection is never replaced by another account's: that would delete the first
+        # account's events and joins and could drop its permissions. A switch needs the old
+        # connection gone first (disconnect, C4) or dead (`needs_reconnect`).
+        return "different_account"
     if grant.refresh_token is None:
         # Google omits it when it believes one was already issued. The old token is only a
         # stand-in when it is alive, belongs to this same Google account and already covers
@@ -252,7 +260,21 @@ def _store(
             and same_account
             and REQUIRED_SCOPE[purpose] in (conn.granted_scopes or "").split()
         )
-        return None if covered else "no_refresh_token"
+        if not covered:
+            return "no_refresh_token"
+        # Same token, same account: record what Google granted now (the old scopes stay, the
+        # new ones are added), clear the trouble flags, and release the row lock.
+        conn.granted_scopes = " ".join(sorted(set(conn.granted_scopes.split()) | grant.scopes))
+        conn.status = "connected"
+        conn.needs_reconnect_reason = None
+        conn.last_error = None
+        conn.last_error_at = None
+        # The token is the old one, so its age (and any 7-day expiry already noted) is unchanged.
+        if not settings.google_oauth_testing:
+            conn.expected_expiry_at = None
+        elif conn.expected_expiry_at is None:
+            conn.expected_expiry_at = (conn.connected_at or now) + TESTING_EXPIRY
+        return _commit(session)
     try:
         blob, key_version = vault.encrypt(
             grant.refresh_token.reveal(), purpose="refresh_token", owner=user.id
@@ -278,6 +300,10 @@ def _store(
     conn.last_error = None
     conn.last_error_at = None
     conn.expected_expiry_at = now + TESTING_EXPIRY if settings.google_oauth_testing else None
+    return _commit(session)
+
+
+def _commit(session: Session) -> str | None:
     try:
         session.commit()
     except IntegrityError:  # two connects for one user finishing at the same moment
@@ -286,8 +312,13 @@ def _store(
 
 
 def _drop_old_account(session: Session, conn: CalendarConnection) -> None:
-    """The user connected a different Google account: the old account's events go, and so do the
-    joins that had not started (a join already live keeps going)."""
+    """A dead connection is being replaced by a different Google account: the old account's
+    events go, and so do the joins that had not started (a join already live keeps going), and
+    the Meet subscription of the old account is forgotten. The old refresh token is overwritten
+    unrevoked: it belonged to a connection that was already dead (revoking waits for C4)."""
+    conn.meet_subscription_name = None
+    conn.meet_subscription_expires_at = None
+    conn.meet_subscription_state = "none"
     session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
     session.execute(
         delete(ScheduledJoin).where(

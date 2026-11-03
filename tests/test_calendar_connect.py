@@ -12,7 +12,7 @@ from urllib.parse import parse_qs, quote, urlparse
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app import auth, calendar_connect, google_oauth, tokens, vault
@@ -237,6 +237,16 @@ def test_return_to_must_start_with_single_slash(web, session, target):
     connect(web, return_to=target)
     [flow] = flows(session)
     assert flow.return_to == DEFAULT_LANDING  # never stored, so never redirected to
+
+
+def test_a_trailing_newline_does_not_pass_the_return_to_check(web, session):
+    from app import google_signin
+
+    connect(web, return_to="/settings\n")
+    assert flows(session)[0].return_to == DEFAULT_LANDING
+    for pattern_user in (google_signin.safe_return_to, calendar_connect._safe_return_to):
+        assert pattern_user("/settings\n") != "/settings\n"
+        assert pattern_user("/settings") == "/settings"
 
 
 def test_a_missing_return_to_lands_on_the_calendar_settings(web, session):
@@ -603,6 +613,24 @@ def test_another_google_account_without_a_refresh_token_is_refused(web, session,
     connect_google(web, google)
     google.issue_refresh_token = False
     response, _, _ = connect_google(web, google, email="someone.else@example.test", sub="g-x")
+    assert landing(response)[1] == {"calendar_error": "different_account"}
+    assert connection_of(session, owner).google_sub == "g-grace-1"
+
+
+def kill(session, owner, reason="revoked"):
+    conn = connection_of(session, owner)
+    conn.status, conn.needs_reconnect_reason = "needs_reconnect", reason
+    session.commit()
+    return conn
+
+
+def test_another_account_without_a_refresh_token_on_a_dead_connection_needs_one(
+    web, session, owner, google
+):
+    connect_google(web, google)
+    kill(session, owner)
+    google.issue_refresh_token = False
+    response, _, _ = connect_google(web, google, email="someone.else@example.test", sub="g-x")
     assert landing(response)[1] == {"calendar_error": "no_refresh_token"}
     assert connection_of(session, owner).google_sub == "g-grace-1"
 
@@ -615,6 +643,68 @@ def test_a_new_scope_without_a_new_refresh_token_is_refused_not_faked(web, sessi
     )
     assert landing(response)[1] == {"calendar_error": "no_refresh_token"}
     assert calendar_connect.granted_features(connection_of(session, owner)) == {"calendar"}
+
+
+def test_a_reply_without_a_token_records_the_new_scopes_and_heals_a_degraded_connection(
+    web, session, owner, google
+):
+    connect_google(web, google)  # calendar
+    conn = connection_of(session, owner)
+    conn.status, conn.last_error, conn.last_error_at = "degraded", "boom", NOW
+    session.commit()
+    blob = conn.refresh_token_enc
+    google.issue_refresh_token = False
+    # A calendar reconnect with Meet riding along; the person ticked Meet this time.
+    response, _, _ = connect_google(web, google, features=["calendar", "meet"])
+    assert landing(response)[1] == {"calendar": "connected"}
+    after = connection_of(session, owner)
+    assert after.refresh_token_enc == blob  # the old token stands in
+    assert calendar_connect.granted_features(after) == {"calendar", "meet"}
+    assert after.status == "connected" and after.last_error is None and after.last_error_at is None
+
+
+def test_a_reply_without_a_token_keeps_old_scopes_google_did_not_repeat(
+    web, session, owner, google
+):
+    connect_google(web, google)
+    google.issue_refresh_token = False
+    connect_google(web, google, grant={CALENDAR_SCOPE})  # Google answers with a shorter list
+    assert CALENDAR_SCOPE in connection_of(session, owner).granted_scopes.split()
+
+
+def test_a_reply_without_a_token_follows_the_testing_flag_for_the_expiry_hint(
+    engine, settings, google, fake_vexa, fake_openai, session, owner
+):
+    connect_google(browser(build_app(engine, settings, google, fake_vexa, fake_openai)), google)
+    google.issue_refresh_token = False
+
+    def again(testing: bool):
+        app = build_app(
+            engine,
+            settings.model_copy(update={"google_oauth_testing": testing}),
+            google,
+            fake_vexa,
+            fake_openai,
+        )
+        connect_google(browser(app), google)
+        return connection_of(session, owner)
+
+    on = again(True)
+    assert on.expected_expiry_at == on.connected_at + timedelta(days=7)  # the old token's age
+    assert again(False).expected_expiry_at is None
+
+
+def test_the_row_lock_is_released_after_a_reply_without_a_token(
+    web, session, owner, google, engine
+):
+    connect_google(web, google)
+    google.issue_refresh_token = False
+    connect_google(web, google)
+    with Session(engine) as other:  # would block (and time out) if the first session kept its lock
+        other.execute(text("set lock_timeout = '2s'"))
+        conn = other.scalars(select(CalendarConnection).with_for_update()).one()
+        conn.last_error = "x"
+        other.commit()
 
 
 def test_a_dead_connection_is_not_kept_alive_by_a_reply_without_a_token(
@@ -689,17 +779,54 @@ def add_event_and_join(session, conn, user, *, state="scheduled"):
     return event, join
 
 
-def test_reconnecting_a_different_google_account_drops_the_old_accounts_events(
+@pytest.mark.parametrize("features", [["calendar"], ["meet"], ["calendar", "meet"]])
+@pytest.mark.parametrize("status", ["connected", "degraded"])
+def test_a_different_google_account_never_replaces_a_working_connection(
+    web, session, owner, google, features, status
+):
+    connect_google(web, google)
+    conn = connection_of(session, owner)
+    event, join = add_event_and_join(session, conn, owner)
+    conn.status = status
+    conn.meet_subscription_name, conn.meet_subscription_state = "subscriptions/s1", "active"
+    session.commit()
+    blob, scopes = conn.refresh_token_enc, conn.granted_scopes
+    response, _, _ = connect_google(
+        web, google, features=features, email="other@example.test", sub="g-other-2"
+    )
+    assert landing(response)[1] == {"calendar_error": "different_account"}
+    session.expire_all()
+    after = connection_of(session, owner)
+    assert after.google_sub == "g-grace-1" and after.status == status
+    assert after.refresh_token_enc == blob and after.granted_scopes == scopes
+    assert after.meet_subscription_state == "active"
+    assert len(session.scalars(select(CalendarEvent)).all()) == 1  # the events survive
+    assert len(session.scalars(select(ScheduledJoin)).all()) == 1
+    assert flows(session) == []
+
+
+def test_replacing_a_dead_connection_with_another_account_drops_the_old_accounts_events(
     web, session, owner, google
 ):
     connect_google(web, google)
     conn = connection_of(session, owner)
     add_event_and_join(session, conn, owner)
-    connect_google(web, google, email="other@example.test", sub="g-other-2")
+    conn.meet_subscription_name = "subscriptions/s1"
+    conn.meet_subscription_expires_at = NOW
+    conn.meet_subscription_state = "active"
+    session.commit()
+    kill(session, owner)
+    response, _, _ = connect_google(web, google, email="other@example.test", sub="g-other-2")
+    assert landing(response)[1] == {"calendar": "connected"}
     session.expire_all()
     assert session.scalars(select(CalendarEvent)).all() == []
     assert session.scalars(select(ScheduledJoin)).all() == []
-    assert connection_of(session, owner).google_sub == "g-other-2"
+    after = connection_of(session, owner)
+    assert after.google_sub == "g-other-2" and after.status == "connected"
+    # The old account's Meet subscription is forgotten, not carried over.
+    assert after.meet_subscription_name is None
+    assert after.meet_subscription_expires_at is None
+    assert after.meet_subscription_state == "none"
 
 
 def test_reconnecting_the_same_google_account_keeps_events_and_joins(web, session, owner, google):
@@ -711,9 +838,10 @@ def test_reconnecting_the_same_google_account_keeps_events_and_joins(web, sessio
     assert len(session.scalars(select(ScheduledJoin)).all()) == 1
 
 
-def test_a_join_already_running_survives_an_account_change(web, session, owner, google):
+def test_a_join_already_running_survives_replacing_a_dead_connection(web, session, owner, google):
     connect_google(web, google)
     add_event_and_join(session, connection_of(session, owner), owner, state="joined")
+    kill(session, owner)
     connect_google(web, google, email="other@example.test", sub="g-other-2")
     session.expire_all()
     assert [j.state for j in session.scalars(select(ScheduledJoin)).all()] == ["joined"]

@@ -48,7 +48,7 @@ export function PrivacyContent({ days }: { days: number }) {
         <li>We do not use Google user data to develop, improve or train generalised artificial intelligence or machine learning models.</li>
         <li>People at Beyric do not read Google user data unless you ask us to for support, it is needed for security or to investigate abuse, or the law requires it.</li>
       </ul>
-      <p>You can disconnect your Google account at any time in the app or at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. When you disconnect, we stop reading your calendar and delete the calendar data we hold.</p>
+      <p>You can disconnect at any time by revoking access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> or by asking us to remove it. When you disconnect, we stop reading your calendar and delete the calendar data we hold.</p>
 
       <h2 id="use">How we use your information</h2>
       <ul>

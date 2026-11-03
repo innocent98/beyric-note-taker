@@ -402,6 +402,22 @@ def run(app, base, engine, settings, google) -> None:
         note="Once `GOOGLE_APP_VERIFIED` is true the unverified-app notice is not needed.",
     )
     app.state.settings = live
+    # Last, so the numbers above stay put: another Google account while one is connected.
+    consent_and_callback(
+        user,
+        google,
+        "different-account",
+        return_to="/settings/calendar",
+        email="other.person@example.test",
+        sub="g-other-2",
+        note="The person picked another Google account in Google's chooser: refused, the first "
+        "connection is untouched.",
+    )
+    note_file(
+        "stored-row-after-different-account",
+        "Unchanged: still the first account.",
+        {"rows": row_summary(engine)},
+    )
 
 
 def main() -> None:

@@ -94,6 +94,7 @@ cookie. The `Location` values below are exact (#09, #12, #14, #15, #19, #23, #25
 | `...?calendar_error=scope_missing` | The user **unticked the calendar box** on Google's screen. Nothing was stored | "To join your meetings automatically we need permission to read your calendar events. Try again and leave the calendar box ticked." (The old connection, if there was one, is untouched) |
 | `...?calendar_error=no_refresh_token` | Google gave no long-lived key (it sometimes does not), and the old one cannot stand in (first connect, a different Google account, a dead connection, or a new permission). Nothing stored | "Google didn't finish connecting. Remove Beyric at myaccount.google.com/permissions and try again." **Not reproduced live** (the fake can omit the key; a real Google that omits it was not seen) |
 | `...?calendar_error=google_failed` | Anything else: an unknown, used or expired state; a different browser; Google or the exchange failed | "Something went wrong connecting Google. Try again." |
+| `...?calendar_error=different_account` | A Google account is **already connected and working**, and the person picked a **different** Google account in Google's chooser (#34). Nothing was changed: the first connection, its events and its permissions stay as they were (#35) | "A different Google account is already connected ({email}). To use another one, disconnect first." Needs the connected email from `GET /api/calendar` (C15a); the disconnect button arrives with C4 |
 | `...?calendar_error=wrong_account` | The signed-in user is not the one who started the connect (a link forwarded or planted) | "This connection was started from a different account. Sign in with the right account and start again." |
 | `/login?error=google_failed` | Nobody was signed in when Google came back (#25) | The login page already handles `google_failed` |
 
@@ -143,9 +144,15 @@ unticked box can never switch a feature on.
 - The connected Google account **can differ from the sign-in email** (`google_account_email`). The
   Settings screen must show which Google account is connected, not assume the login address.
 - `refresh_token_enc` is bytes, never text, and no API ever returns it.
-- A **reconnect replaces** the row (#26–#28): still one connection per user. Connecting a different
-  Google account than before also removes the old account's upcoming events and the joins that had not
-  started (a join already running keeps going).
+- A **reconnect with the same Google account replaces** the row (#26–#28): still one connection per
+  user. A **different** Google account is refused (`different_account`, #34) while the connection
+  works (`status` `connected` or `degraded`), so an accidental pick in Google's chooser can never
+  swap or wipe the calendar. A switch needs the old connection removed first (disconnect, C4) or dead
+  (`needs_reconnect`); only then is the different account accepted, and the old account's events,
+  the joins that had not started and its Meet subscription are dropped (a join already running keeps
+  going).
+- When Google issues no new long-lived key but the same account is already connected with a working
+  key, the connect still succeeds and the newly granted permissions are merged into the stored list.
 - `expected_expiry_at` is set to seven days after connecting **only** while the server flag
   `GOOGLE_OAUTH_TESTING` is on (the Google project is in Testing and tokens lapse). Null otherwise.
 - These fields reach the frontend through `GET /api/calendar` (task C15a), not yet built.
@@ -174,4 +181,6 @@ unticked box can never switch a feature on.
 | 503 `calendar_unavailable` (no encryption key) | tested only (`tests/test_calendar_connect.py`), not captured |
 | `no_refresh_token` from a real Google | not seen; the fake can omit the token |
 | Google's real consent screen, real scope names (Google may return `https://www.googleapis.com/auth/userinfo.email` where the fake returns `email`), the "unverified app" page, `hd` for a Workspace account | **not verified**: needs Adebayo's Gmail test account |
+| `different_account` while a working connection exists | **live** against the running app, Google faked (#33–#35) |
+| Replacing a dead connection with another account (events dropped), merge of scopes without a new key | tested only (`tests/test_calendar_connect.py`), not captured |
 | `show_unverified_notice` after Google verifies the app | the flag flips in #32; Google's side not seen |
