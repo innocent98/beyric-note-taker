@@ -1,0 +1,34 @@
+{
+  "kind": "calendar#event",
+  "etag": "\"3400000000000000\"",
+  "id": "synthmeet0001",
+  "status": "confirmed",
+  "htmlLink": "https://www.google.com/calendar/event?eid=synthmeet0001",
+  "created": "2026-10-28T09:00:00.000Z",
+  "updated": "2026-10-30T14:12:00.000Z",
+  "summary": "Weekly planning",
+  "description": "Agenda in the shared doc.",
+  "creator": {"email": "organizer@example.test"},
+  "organizer": {"email": "organizer@example.test"},
+  "start": {"dateTime": "2026-11-04T10:00:00+01:00", "timeZone": "Europe/Lagos"},
+  "end": {"dateTime": "2026-11-04T10:30:00+01:00", "timeZone": "Europe/Lagos"},
+  "recurringEventId": "synthmeet0001_series",
+  "iCalUID": "synthmeet0001@google.com",
+  "attendees": [
+    {"email": "organizer@example.test", "organizer": true, "responseStatus": "accepted"},
+    {"email": "me@example.test", "self": true, "responseStatus": "needsAction"},
+    {"email": "colleague@example.test", "responseStatus": "accepted"}
+  ],
+  "hangoutLink": "https://meet.google.com/abc-defg-hij",
+  "conferenceData": {
+    "entryPoints": [
+      {"entryPointType": "video", "uri": "https://meet.google.com/abc-defg-hij", "label": "meet.google.com/abc-defg-hij"},
+      {"entryPointType": "more", "uri": "https://tel.meet/abc-defg-hij?pin=0000000000000"},
+      {"regionCode": "US", "entryPointType": "phone", "uri": "tel:+1-555-0100", "label": "+1 555-0100", "pin": "0000000"}
+    ],
+    "conferenceSolution": {"key": {"type": "hangoutsMeet"}, "name": "Google Meet"},
+    "conferenceId": "abc-defg-hij"
+  },
+  "reminders": {"useDefault": true},
+  "eventType": "default"
+}

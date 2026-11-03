@@ -1,0 +1,10 @@
+{
+  "kind": "calendar#event",
+  "id": "synthallday0001",
+  "status": "confirmed",
+  "summary": "Team offsite",
+  "organizer": {"email": "organizer@example.test"},
+  "start": {"date": "2026-11-06"},
+  "end": {"date": "2026-11-07"},
+  "eventType": "default"
+}
