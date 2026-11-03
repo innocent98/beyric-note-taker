@@ -15,7 +15,9 @@ export function Badge({
   small?: boolean;
   children: ReactNode;
 }) {
-  const className = ["badge", tone === "neutral" ? "" : `badge-${tone}`, dot ? "badge-dot" : "", small ? "badge-sm" : ""]
+  // A sentence (the bot's state can be one) may wrap; a short word stays on one line.
+  const wraps = typeof children === "string" && children.length > 28;
+  const className = ["badge", tone === "neutral" ? "" : `badge-${tone}`, dot ? "badge-dot" : "", small ? "badge-sm" : "", wraps ? "badge-wrap" : ""]
     .filter(Boolean)
     .join(" ");
   return <span className={className}>{children}</span>;

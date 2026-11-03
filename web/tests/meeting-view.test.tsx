@@ -104,9 +104,49 @@ describe("ready meeting", () => {
 describe("waiting and working", () => {
   it("shows the waiting state with a cancel button and the 30-second line", () => {
     show(meeting("35-meeting-detail-bot-sent.json"));
-    expect(screen.getByText("Waiting for the note taker to join")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Bot sent" })).toBeTruthy();
     expect(screen.getByText("This page updates every 30 seconds.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Cancel and remove the bot" })).toBeTruthy();
+  });
+
+  it.each([
+    ["105-meeting-detail-bot-joining.json", "Bot is joining the meeting"],
+    ["106-meeting-detail-bot-awaiting-admission.json", "Waiting to be let in. Admit 'Beyric Note Taker (recording)' in the meeting"],
+    ["107-meeting-detail-bot-in-meeting.json", "Bot is in the meeting"],
+    ["108-meeting-detail-bot-recording.json", "Recording"],
+    ["109-meeting-detail-bot-needs-help.json", /waiting on a prompt in the meeting.*Check the meeting for a prompt\./],
+    ["104-meeting-detail-bot-state-unknown.json", "Bot sent"],
+  ])("says what the bot is doing (%s), in the badge and in the wait card", (file, words) => {
+    show(meeting(file));
+    expect(screen.getAllByText(words)).toHaveLength(2); // the badge and the card heading
+    expect(screen.getByRole("heading", { level: 2, name: words })).toBeTruthy();
+    expect(screen.queryByText("Waiting for the note taker to join")).toBeNull();
+    expect(screen.getByText("This page updates every 30 seconds.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel and remove the bot" })).toBeTruthy();
+  });
+
+  it("does not claim a recording before one exists", () => {
+    show(meeting("107-meeting-detail-bot-in-meeting.json"));
+    expect(document.querySelector(".detail-title")?.textContent).not.toMatch(/record/i); // the badge
+    expect(screen.getByRole("heading", { level: 2 }).textContent).not.toMatch(/record/i);
+    expect(document.querySelector(".state-title + p")?.textContent).not.toMatch(/record/i);
+  });
+
+  it("follows the bot from joining to recording without a reload", async () => {
+    vi.useFakeTimers();
+    mocks.get
+      .mockResolvedValueOnce(meeting("106-meeting-detail-bot-awaiting-admission.json"))
+      .mockResolvedValueOnce(meeting("107-meeting-detail-bot-in-meeting.json"))
+      .mockResolvedValue(meeting("108-meeting-detail-bot-recording.json"));
+    show(meeting("105-meeting-detail-bot-joining.json"));
+    expect(screen.getAllByText("Bot is joining the meeting").length).toBeGreaterThan(0);
+    await act(async () => vi.advanceTimersByTime(30_500));
+    expect(screen.getAllByText(/Waiting to be let in\. Admit/).length).toBeGreaterThan(0);
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(screen.getAllByText("Bot is in the meeting").length).toBeGreaterThan(0);
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(screen.getAllByText("Recording").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Bot is in the meeting")).toBeNull();
   });
 
   it("shows the attempt notice on a second Zoom attempt", () => {

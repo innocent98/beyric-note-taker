@@ -231,12 +231,10 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
             </>
           ) : (
             <>
-              <h2 className="state-title">
-                {m.status === "bot_sent" ? "Waiting for the note taker to join" : m.status_text}
-              </h2>
+              <h2 className="state-title">{m.status_text}</h2>
               <p>
                 {m.status === "bot_sent"
-                  ? "Admit the note taker from the waiting room if your meeting requires it."
+                  ? "Notes and a full transcript will appear here when the meeting ends."
                   : "Notes and a full transcript will appear here when this finishes."}
               </p>
               {working ? <p className="muted">This page updates every 30 seconds.</p> : null}

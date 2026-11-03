@@ -148,6 +148,13 @@ describe("meeting list", () => {
     expect(screen.getByText(/^\d+ meetings?$/)).toBeTruthy();
   });
 
+  it("shows what the bot is doing on a meeting still in its call", () => {
+    render(<MeetingList initial={captured<MeetingListData>("110-meetings-list-bot-needs-help.json")} templates={templates} />);
+    const first = screen.getAllByRole("listitem")[0];
+    expect(within(first).getByText(/waiting on a prompt in the meeting.*Check the meeting for a prompt\./)).toBeTruthy();
+    expect(within(first).queryByText("Bot sent")).toBeNull();
+  });
+
   it("shows the empty state", () => {
     render(<MeetingList initial={captured<MeetingListData>("10-meetings-empty.json")} templates={templates} />);
     expect(screen.getByText("No meetings yet.")).toBeTruthy();
