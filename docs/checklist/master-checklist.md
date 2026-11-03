@@ -67,6 +67,13 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [x] Make the Vexa column fix permanent: one-shot `vexa-schema-fix` compose service, runs on every deploy (branch `fix/vexa-language-column`, 2026-11-02)
 - [ ] Report the narrow `language` column upstream to Vexa
 
+- [ ] **Fail fast when Google refuses the bot's join request** (found live 2026-11-03, meeting 8, an admin of another organisation hosting). The bot clicked "Ask to join" at 10:07:29 UTC and Meet's page immediately faulted (HTTP 403, `DisconnectedError`, `EndCause = 72, StartupCode = 200`); the host never saw a request, the bot polled a dead lobby for about 8 minutes (left 10:15:21) and our meeting stayed `bot_sent` the whole time. Vexa moved to `needs_help` at 10:09:25 (about 2 minutes in), which our worker ignores. Meetings 4 and 5 (hosted from Adebayo's own account) joined with none of these errors; the logs for the cancelled meetings 6 and 7 were not saved, so whether they hit the same fault is unknown. Cause not proven: most likely the host organisation's Meet guest settings, possibly Google refusing this meeting for another reason.
+  - [ ] Worker: treat Vexa `needs_help` (and a bot log with `DisconnectedError` right after "Ask to join", if Vexa exposes it) as a failed join after a short grace, with a plain reason on the meeting page, e.g. "Google would not let the bot ask to join. The host's Meet settings may block guests who are not signed in or are outside their organisation." The bot must be stopped so it does not hold a slot for 8 minutes
+  - [ ] Show the same reason on the Upcoming and "Not recorded" lists once auto-join exists, with a retry
+  - [ ] Help text for hosts in other organisations (what to allow in Meet guest access); check Vexa for a bot that joins signed in to a Google account, which would avoid guest rules (investigate, do not promise it)
+  - [ ] Keep Vexa's `botlog.txt` and signal tape for failed joins (they were only kept for meetings that ran to the end) so the cause can be read after a cancel
+  - [ ] Control test: host a meeting from Adebayo's own Google account and confirm the bot joins and is admitted (proves the fault is on the other host's side)
+
 ## Module 2a: UI foundation (before accounts; decided 2026-11-02)
 
 Goal: one look everywhere (the logged-in app is still blue and system-ui while the public pages are teal), and parts every later screen reuses. Plan in the frontend-approach spec.
