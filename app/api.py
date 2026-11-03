@@ -38,7 +38,13 @@ from app.api_schemas import (
 )
 from app.db import get_session
 from app.models import Meeting, User
-from app.pipeline import MAX_JOIN_ATTEMPTS, REASON_UNEXPECTED, REMOVAL_REASONS
+from app.pipeline import (
+    MAX_JOIN_ATTEMPTS,
+    REASON_UNEXPECTED,
+    REMOVAL_REASONS,
+    is_join_failure,
+    join_retry_at,
+)
 from app.services import Refused, get_openai_client, get_vexa
 
 REFRESH_SECONDS = 30  # how often the Jinja page refreshes while a meeting is active
@@ -221,7 +227,7 @@ def _detail(meeting: Meeting) -> MeetingDetail:
         **_summary(meeting).model_dump(),
         failure_reason=(meeting.failure_reason or REASON_UNEXPECTED) if failed else None,
         retry_block=block,
-        retry_block_message=services.RETRY_BLOCK_TEXT.get(block),
+        retry_block_message=services.retry_block_message(meeting, block),
         can_cancel=meeting.status == "bot_sent",
         can_retry=failed and block is None,
         can_regenerate=ready,
@@ -229,7 +235,12 @@ def _detail(meeting: Meeting) -> MeetingDetail:
         max_join_attempts=MAX_JOIN_ATTEMPTS,
         bot_left_early=ready and meeting.completion_reason in REMOVAL_REASONS,
         speakers_incomplete=meeting.speakers_incomplete,
-        refresh_after_seconds=REFRESH_SECONDS if meeting.status in services.ACTIVE else None,
+        refresh_after_seconds=(
+            REFRESH_SECONDS
+            if meeting.status in services.ACTIVE or (block is not None and is_join_failure(meeting))
+            else None
+        ),
+        join_retry_at=join_retry_at(meeting),
         notes=meeting.notes if ready else None,
         notes_html=str(services.render_markdown(meeting.notes)) if ready else None,
         transcript=meeting.speaker_transcript or meeting.transcript or None,
@@ -306,16 +317,19 @@ def cancel_meeting(
 @router.post(
     "/meetings/{meeting_id:id}/retry",
     tags=["meetings"],
-    responses={code: {"model": ErrorResponse} for code in (404, 409)},
+    responses={code: {"model": ErrorResponse} for code in (403, 404, 409, 502)},
 )
 def retry_meeting(
     meeting_id: int,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    vexa=Depends(get_vexa),
 ) -> MeetingDetail:
-    """Resume a failed meeting at the step that failed. Only when `can_retry` is true."""
+    """Resume a failed meeting at the step that failed. Only when `can_retry` is true. For a
+    meeting whose join the worker ended (Google refused the bot, or it hung on a prompt) this
+    sends a new bot instead, no sooner than 5 minutes after the failure."""
     meeting = services.meeting_or_404(session, user, meeting_id)
-    return _detail(services.retry_meeting(session, meeting))
+    return _detail(services.retry_meeting(session, meeting, vexa))
 
 
 @router.post(

@@ -10,6 +10,7 @@ sequential, so a 403 would confirm that the row exists).
 """
 
 import logging
+import math
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, Request
@@ -21,10 +22,17 @@ from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
 from app import auth, edge, passwords, usage
-from app.config import Settings
+from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
-from app.pipeline import REASON_CANCELLED, REASON_NO_SPEECH
+from app.pipeline import (
+    MEET_REFUSED,
+    REASON_CANCELLED,
+    REASON_NO_SPEECH,
+    is_join_failure,
+    manual_retry_wait,
+    send_again,
+)
 from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError, parse_meeting_url
 
 logger = logging.getLogger(__name__)
@@ -206,21 +214,45 @@ def status_tone(meeting: Meeting) -> str:
     return STATUS_TONES.get(meeting.status, "neutral")
 
 
-def retry_block(meeting: Meeting) -> str | None:
+def retry_block(meeting: Meeting, now: datetime | None = None) -> str | None:
     """Why a failed meeting cannot be retried, or None when it can.
 
     Retrying resumes at the step that failed, so it needs either the saved transcript or the
-    downloaded audio. A bot that never recorded anything (step `waiting`) has neither.
+    downloaded audio. A bot that never recorded anything (step `waiting`) has neither, except one
+    whose join the worker ended (Google refused it, or it hung on a prompt): that retry sends a
+    new bot, and is held back for a few minutes.
     """
     if meeting.status != "failed":
         return "not_failed"
     if meeting.step == "waiting":
+        if is_join_failure(meeting) and not manual_retry_wait(meeting, now or datetime.now(UTC)):
+            return None
         return "no_audio"
     if meeting.failure_reason == REASON_NO_SPEECH:
         return "no_speech"  # the same audio would give the same result
     if meeting.transcript is None and meeting.audio_deleted_at is not None:
         return "audio_deleted"
     return None
+
+
+def retry_block_message(
+    meeting: Meeting, block: str | None, now: datetime | None = None
+) -> str | None:
+    """The words for a retry block. The wait after a failed join says how long is left."""
+    if block == "no_audio" and is_join_failure(meeting):
+        wait = manual_retry_wait(meeting, now or datetime.now(UTC))
+        minutes = max(1, math.ceil(wait.total_seconds() / 60))
+        unit = "minute" if minutes == 1 else "minutes"
+        if meeting.completion_reason == MEET_REFUSED:
+            return (
+                f"Google refused the bot a moment ago. To be polite to Google, you can send it "
+                f"again in {minutes} {unit}."
+            )
+        return (
+            "The bot was just taken out of this meeting. "
+            f"You can send it again in {minutes} {unit}."
+        )
+    return RETRY_BLOCK_TEXT.get(block)
 
 
 RETRY_BLOCK_TEXT = {
@@ -437,12 +469,54 @@ def cancel_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meet
     return locked
 
 
-def retry_meeting(session: Session, meeting: Meeting) -> Meeting:
-    if retry_block(meeting) is not None:
-        raise Refused(409, "not_retryable", "This meeting cannot be retried.")
+def retry_meeting(session: Session, meeting: Meeting, vexa: VexaClient | None = None) -> Meeting:
+    now = datetime.now(UTC)
+    refused = is_join_failure(meeting)
+    if retry_block(meeting, now) is not None:
+        raise Refused(
+            409,
+            "not_retryable",
+            retry_block_message(meeting, "no_audio", now)
+            if refused
+            else "This meeting cannot be retried.",
+        )
+    if refused:
+        return _send_refused_meeting_again(session, vexa or get_vexa(), meeting)
     # The step is kept. A fresh polling start keeps the time limit from failing it at once.
     meeting.status, meeting.failure_reason = "processing", None
-    meeting.started_polling_at = datetime.now(UTC)
+    meeting.started_polling_at = now
+    session.commit()
+    return meeting
+
+
+def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Meeting) -> Meeting:
+    """Send a new bot to a meeting Google refused: one bot at a time, like a new meeting."""
+    session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": NEW_MEETING_LOCK})
+    session.refresh(meeting, with_for_update=True)  # a double click must not send two bots
+    now = datetime.now(UTC)
+    if retry_block(meeting, now) is not None:
+        session.rollback()
+        raise Refused(409, "not_retryable", "This meeting cannot be retried.")
+    owner = session.get(User, meeting.owner_user_id)
+    cap = usage.effective_cap(session, owner)
+    if (
+        cap is not None
+        and usage.hours_used(session, owner, now, get_settings().max_poll_hours * 3600) >= cap
+    ):
+        session.rollback()
+        raise Refused(403, "hours_cap_reached", hours_cap_message(cap))
+    active = session.scalars(select(Meeting.id).where(Meeting.status.in_(ACTIVE)).limit(1)).first()
+    if active is not None:
+        session.rollback()
+        raise Refused(
+            409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."
+        )
+    if not send_again(meeting, vexa):
+        session.rollback()
+        raise Refused(
+            502, "bot_send_failed", "The bot could not be sent. Please try again in a moment."
+        )
+    meeting.started_polling_at = now
     session.commit()
     return meeting
 

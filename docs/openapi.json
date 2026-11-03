@@ -647,6 +647,18 @@
             "title": "Join Attempts",
             "type": "integer"
           },
+          "join_retry_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Join Retry At"
+          },
           "max_join_attempts": {
             "title": "Max Join Attempts",
             "type": "integer"
@@ -807,6 +819,7 @@
           "bot_left_early",
           "speakers_incomplete",
           "refresh_after_seconds",
+          "join_retry_at",
           "notes",
           "notes_html",
           "transcript"
@@ -2884,7 +2897,7 @@
     },
     "/api/meetings/{meeting_id}/retry": {
       "post": {
-        "description": "Resume a failed meeting at the step that failed. Only when `can_retry` is true.",
+        "description": "Resume a failed meeting at the step that failed. Only when `can_retry` is true. For a\nmeeting whose join the worker ended (Google refused the bot, or it hung on a prompt) this\nsends a new bot instead, no sooner than 5 minutes after the failure.",
         "operationId": "retry_meeting",
         "parameters": [
           {
@@ -2926,7 +2939,7 @@
                 }
               }
             },
-            "description": "Missing or wrong X-CSRF-Token"
+            "description": "Forbidden"
           },
           "404": {
             "content": {
@@ -2957,6 +2970,16 @@
               }
             },
             "description": "Malformed request"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Gateway"
           }
         },
         "summary": "Retry Meeting",

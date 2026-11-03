@@ -1,0 +1,11 @@
+12:07:47 attempt 1 POST /bots
+12:07:47 POST status 201 body {...}
+12:07:48 t+  0.5s status=requested reason=None stage=None
+12:07:54 t+  7.0s status=joining reason=None stage=None
+12:08:28 t+ 40.7s status=awaiting_admission reason=None stage=None
+12:08:34 t+ 46.8s status=active reason=None stage=None
+12:08:34 first-seen offsets {"requested": 0.5, "joining": 7.0, "awaiting_admission": 40.7, "active": 46.8}
+12:08:36 screens before stop: 5
+12:08:36 DELETE status 200 body {"status": "stopping", "meeting_id": 42, "native_meeting_id": "tip-mhbx-fcp", "also_stopped": [], "cancelled": []}
+12:08:45 bot gone: True
+12:08:49 screens after stop: 5

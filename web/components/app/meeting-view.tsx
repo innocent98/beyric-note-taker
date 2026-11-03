@@ -119,9 +119,16 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
       {error ? <Alert kind="error">{error}</Alert> : null}
       {notice ? <Alert kind="info">{notice}</Alert> : null}
 
-      {m.status === "bot_sent" && m.join_attempts > 1 ? (
+      {m.status === "bot_sent" && m.join_retry_at !== null ? (
         <Alert kind="notice">
-          Zoom turned the bot away, so a new one was sent (attempt {m.join_attempts} of {m.max_join_attempts}).
+          Google would not let the bot ask to join, so it was taken out. A new bot will be sent at about{" "}
+          {formatTime(m.join_retry_at)} (attempt 2 of 2).
+        </Alert>
+      ) : m.status === "bot_sent" && m.join_attempts > 1 ? (
+        <Alert kind="notice">
+          {m.platform === "zoom"
+            ? `Zoom turned the bot away, so a new one was sent (attempt ${m.join_attempts} of ${m.max_join_attempts}).`
+            : `Google turned the bot away, so a new one was sent (attempt ${m.join_attempts}).`}
         </Alert>
       ) : null}
       {m.status === "ready" && m.bot_left_early ? (

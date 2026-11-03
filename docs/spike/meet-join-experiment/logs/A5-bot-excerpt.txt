@@ -1,0 +1,10 @@
+# excerpt of the bot's own log (workload mtg-41-ef0b2a72); full log not committed
+8:{"ts":"2026-11-03T12:03:15.259Z","level":"info","msg":"Lobby locale (#856): url=https://meet.google.com/meet/tip-mhbx-fcp?hl=en html.lang=en navigator.language=en-US"}
+16:{"ts":"2026-11-03T12:04:09.451Z","level":"info","msg":"Name input field found."}
+26:{"ts":"2026-11-03T12:04:17.715Z","level":"info","msg":"Located join button via selector: //button[.//span[text()=\"Ask to join\"]]"}
+30:{"ts":"2026-11-03T12:04:18.526Z","level":"info","msg":"Beyric Note Taker (recording) joined the Google Meet Meeting."}
+35:{"ts":"2026-11-03T12:04:18.905Z","level":"info","msg":"Bot not yet admitted - checking for Google Meet waiting room indicators..."}
+36:{"ts":"2026-11-03T12:04:18.919Z","level":"info","msg":"No waiting room detected. Polling for admission for up to 900000ms..."}
+163:{"ts":"2026-11-03T12:04:29.599Z","level":"info","msg":"⚠️ Waiting room indicator visible — suppressing admission (lobby buttons are false positives)"}
+164:{"ts":"2026-11-03T12:04:29.617Z","level":"info","msg":"ℹ️ Waiting room appeared during polling. Switching to waiting-room monitoring..."}
+# lines containing 'statusCode = 403': 0

@@ -326,7 +326,9 @@ export interface paths {
         put?: never;
         /**
          * Retry Meeting
-         * @description Resume a failed meeting at the step that failed. Only when `can_retry` is true.
+         * @description Resume a failed meeting at the step that failed. Only when `can_retry` is true. For a
+         *     meeting whose join the worker ended (Google refused the bot, or it hung on a prompt) this
+         *     sends a new bot instead, no sooner than 5 minutes after the failure.
          */
         post: operations["retry_meeting"];
         delete?: never;
@@ -909,6 +911,8 @@ export interface components {
             id: number;
             /** Join Attempts */
             join_attempts: number;
+            /** Join Retry At */
+            join_retry_at: string | null;
             /** Max Join Attempts */
             max_join_attempts: number;
             /** Native Id */
@@ -2263,7 +2267,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Missing or wrong X-CSRF-Token */
+            /** @description Forbidden */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2292,6 +2296,15 @@ export interface operations {
             };
             /** @description Malformed request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

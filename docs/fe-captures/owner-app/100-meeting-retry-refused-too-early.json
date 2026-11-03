@@ -1,0 +1,25 @@
+{
+  "note": "A send-again inside the 5 minutes is the ordinary 409 `not_retryable`, with the wait in the message.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/13/retry",
+    "headers": {
+      "X-CSRF-Token": "<csrf-I>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_retryable",
+        "message": "Google refused the bot a moment ago. To be polite to Google, you can send it again in 4 minutes."
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+# excerpt of the bot's own log (workload mtg-38-abfca076); full log not committed
+8:{"ts":"2026-11-03T11:31:20.738Z","level":"info","msg":"Lobby locale (#856): url=https://meet.google.com/meet/tip-mhbx-fcp?hl=en html.lang=en navigator.language=en-US"}
+532:{"ts":"2026-11-03T11:32:42.802Z","level":"info","msg":"Name input field found."}
+# lines containing 'statusCode = 403': 12
+19:      1 = "The caller does not have permission"

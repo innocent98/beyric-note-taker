@@ -1073,6 +1073,72 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/57-meeting-retry-blocked-no-speech.json`_
 
+**Retry of a meeting whose join the worker ended (added 2026-11-03, `fix/join-refusal-handling`).** The worker ends a Google Meet join in two cases: Google refused the bot (`failure_reason` "Google would not let the bot ask to join this meeting. ..."), or the bot sat on a prompt in the meeting (a consent or verification screen) for 2 minutes (`failure_reason` "The bot is waiting on a prompt in the meeting, ..."). The meeting is `failed`, step `waiting`. Until 5 minutes after that it is blocked with the **existing** `retry_block: "no_audio"` but a different `retry_block_message` that says how long is left (use the message; do not fall back to your own `no_audio` text), and `refresh_after_seconds` is `30` so you keep asking while the wait counts down. After the wait `retry_block` is `null`, `can_retry` is `true`, and `refresh_after_seconds` is `null` again; `POST .../retry` then **sends a new bot** (it does not resume a step) and returns the meeting as `bot_sent` with `join_attempts` raised by one. `max_join_attempts` stays 3 (the Zoom cap). A Google refusal is retried automatically only once (2 bots); a prompt is not retried automatically; manual sends are not capped.
+
+```json
+{
+  "id": 13,
+  "status": "failed",
+  "step": "waiting",
+  "failure_reason": "Google would not let the bot ask to join this meeting. This sometimes happens; try sending the bot again in a few minutes. If it keeps happening, the host's Meet settings may be blocking guests.",
+  "retry_block": "no_audio",
+  "retry_block_message": "Google refused the bot a moment ago. To be polite to Google, you can send it again in 4 minutes.",
+  "can_retry": false,
+  "refresh_after_seconds": 30,
+  "join_retry_at": null,
+  "join_attempts": 2,
+  "max_join_attempts": 3
+}
+```
+_Response trimmed to the fields that matter here; the capture file has all of them._
+_Capture: `docs/fe-captures/owner-app/99-meeting-detail-refused-waiting.json`_
+
+For a bot that sat on a prompt, only the message differs ("The bot was just taken out of this meeting. You can send it again in N minutes."): **not captured** (the same code path with another marker; covered by `test_the_wait_after_a_prompt_does_not_blame_google`).
+
+Sending again too early is the ordinary 409, with the wait in the message:
+
+```json
+{"error": {"code": "not_retryable", "message": "Google refused the bot a moment ago. To be polite to Google, you can send it again in 4 minutes."}}
+```
+_Capture: `docs/fe-captures/owner-app/100-meeting-retry-refused-too-early.json`_
+
+After the wait (`101-meeting-detail-refused-can-send-again.json`: `retry_block` and `retry_block_message` are `null`, `can_retry` is `true`), the send succeeds (`102-meeting-retry-refused-sends-a-new-bot.json`):
+
+```json
+{
+  "id": 13,
+  "status": "bot_sent",
+  "step": "waiting",
+  "failure_reason": null,
+  "retry_block": null,
+  "can_cancel": true,
+  "can_retry": false,
+  "join_attempts": 3,
+  "refresh_after_seconds": 30
+}
+```
+
+Other errors of this retry (now declared in the OpenAPI file): `403 hours_cap_reached` when the owner's hours are used up, `409 bot_already_active` ("A bot is already on a meeting. Wait for it to finish first.") when another meeting has a bot, and `502 bot_send_failed` ("The bot could not be sent. Please try again in a moment.") when Vexa cannot take it; both from the same code as creating a meeting (**not captured for this route; the strings come from `POST /api/meetings`, capture `31` and `39`, and the route is covered by `tests/test_join_refusal.py`**).
+
+**The pause before the automatic second bot** (new field `join_retry_at`, an ISO time or `null`). After the **first** refusal the worker stops the bot and waits 4 to 5 minutes before it sends one more by itself. During that pause the meeting is still `bot_sent`, `join_attempts` is 1, and `join_retry_at` is about when the second bot goes; it is `null` at every other time. It is a new field on every meeting detail (`null` unless paused), so a client built before it simply never sees it.
+
+```json
+{
+  "id": 14,
+  "status": "bot_sent",
+  "step": "waiting",
+  "can_cancel": true,
+  "can_retry": false,
+  "join_attempts": 1,
+  "refresh_after_seconds": 30,
+  "join_retry_at": "2026-11-03T12:44:57.879429Z"
+}
+```
+_Response trimmed to the fields that matter here; the capture file has all of them (the time is when it was captured)._
+_Capture: `docs/fe-captures/owner-app/103-meeting-detail-refused-paused-before-retry.json`_
+
+**UX the frontend must surface.** (1) The wait is real: show `retry_block_message` as it is and keep refreshing while `refresh_after_seconds` is set (the minutes in it are computed at read time). (2) A refused bot is stopped at once, so a refusal reads as failed within about 3 minutes of the knock on Vexa v0.12.29 (not verified live), not 10. (3) While `join_retry_at` is set, say that Google refused the first bot and when the second goes; do not show a plain "waiting for the bot". (4) For a Google meeting with `join_attempts` above 1, the text "turned the bot away" must say Google, not Zoom.
+
 **Regenerate** rewrites the notes of a `ready` meeting with a template, from the saved transcript. No audio is processed. Body: `{"template_id": number}`.
 
 ```http
@@ -1603,7 +1669,7 @@ What each state looks like through the API (values from the captures; `can_*` an
 | `ready` | notes, transcript, the template picker | Rewrite notes (`can_regenerate`), copy buttons |
 | `failed` | a card "What went wrong" with `failure_reason` | Try again if `can_retry`, otherwise `retry_block_message` |
 
-**Polling.** `refresh_after_seconds` is `30` while the meeting is `bot_sent` or `processing` and `null` once it is `ready` or `failed`. Refetch `GET /api/meetings/{id}` every `refresh_after_seconds` seconds while it is non-null and stop when it is `null`. This is what the Jinja page does (a 30-second refresh). The worker itself polls every 30 seconds (`poll_interval_seconds` in `app/config.py`, from the code, not measured), so a faster poll adds load and no fresher data. Suggested: pause polling while the tab is hidden and refetch when it becomes visible. The list page does not poll in Jinja; refetch it after a write and when the tab regains focus.
+**Polling.** `refresh_after_seconds` is `30` while the meeting is `bot_sent` or `processing` (and while a failed join counts down its retry wait) and `null` once it is `ready` or `failed` otherwise. Refetch `GET /api/meetings/{id}` every `refresh_after_seconds` seconds while it is non-null and stop when it is `null`. This is what the Jinja page does (a 30-second refresh). The worker itself polls every 30 seconds (`poll_interval_seconds` in `app/config.py`, from the code, not measured), so a faster poll adds load and no fresher data. Suggested: pause polling while the tab is hidden and refetch when it becomes visible. The list page does not poll in Jinja; refetch it after a write and when the tab regains focus.
 
 **Copy the Jinja pages show** (taken from `app/templates/`, not from API payloads, so check them if the templates change):
 
@@ -1685,6 +1751,10 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | Real Vexa sending a bot, stopping a bot | **NOT EXERCISED** | shapes come from `app/vexa.py` and its tests |
 | Cancel: ok, wrong state, Vexa failure | Verified live (fake Vexa) | `36`, `37`, `42` |
 | Retry: ok and the blocked case | Verified live | `38`, `57`, `58` |
+| Retry of a meeting whose join the worker ended: the wait message, the 409, the unblocked state, the new bot | Verified live (fake Vexa; the failed row is inserted by SQL) | `99`–`102` |
+| A real Google refusal, the real worker stopping the bot and pausing for the auto retry | **NOT EXERCISED** (fake Vexa; no real refusal was provoked) | `tests/test_join_refusal.py` |
+| The pause before the automatic second bot (`join_retry_at`) | Verified live (the paused row is inserted by SQL; the worker was not run) | `103` |
+| `refresh_after_seconds` is 30 while a failed join's wait counts down | Verified live | `99` |
 | Regenerate: ok, not ready, no template, OpenAI failure | Verified live **with a fake OpenAI** | `59`–`62` |
 | Real OpenAI regenerate, its duration, edge timeouts | **NOT EXERCISED** | `deploy/nginx.conf` |
 | Template create, update, duplicate, empty, too long, unknown | Verified live | `22`–`28` |

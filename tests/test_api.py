@@ -15,7 +15,7 @@ from sqlalchemy import select
 from app import auth
 from app.db import get_session
 from app.models import AppState, Meeting, Template, VocabularyTerm
-from app.pipeline import REASON_CANCELLED, REASON_NO_SPEECH
+from app.pipeline import REASON_CANCELLED, REASON_JOIN_REFUSED, REASON_NO_SPEECH
 from app.services import RETRY_BLOCK_TEXT
 from app.vexa import VexaError
 from tests.test_web import (  # noqa: F401  (fixtures used by name)
@@ -590,6 +590,51 @@ def test_retry_block_messages_are_the_ones_the_page_shows(client, session, templ
     ):
         meeting = add_meeting(session, template, status="failed", **fields)
         assert RETRY_BLOCK_TEXT[block] in client.get(f"/meetings/{meeting.id}").text
+
+
+def test_refused_meeting_detail_shows_the_wait_in_the_existing_fields(api, session, template):
+    refused = add_meeting(
+        session,
+        template,
+        status="failed",
+        failure_reason=REASON_JOIN_REFUSED,
+        completion_reason="google_meet_join_refused",
+        terminal_seen_at=datetime.now(UTC) - timedelta(minutes=1),
+        join_attempts=2,
+    )
+    body = api.get(f"/api/meetings/{refused.id}").json()
+    assert body["failure_reason"] == REASON_JOIN_REFUSED
+    assert (body["retry_block"], body["can_retry"]) == ("no_audio", False)
+    assert "in 4 minutes" in body["retry_block_message"]
+    refused.terminal_seen_at = datetime.now(UTC) - timedelta(minutes=6)
+    session.commit()
+    body = api.get(f"/api/meetings/{refused.id}").json()
+    assert (body["retry_block"], body["retry_block_message"], body["can_retry"]) == (
+        None,
+        None,
+        True,
+    )
+
+
+def test_retry_of_a_refused_meeting_sends_a_new_bot(api, session, template, fake_vexa):
+    refused = add_meeting(
+        session,
+        template,
+        status="failed",
+        failure_reason=REASON_JOIN_REFUSED,
+        completion_reason="google_meet_join_refused",
+        terminal_seen_at=datetime.now(UTC) - timedelta(minutes=2),
+        join_attempts=2,
+    )
+    early = api.post(f"/api/meetings/{refused.id}/retry")
+    assert early.status_code == 409
+    assert early.json()["error"]["code"] == "not_retryable"
+    assert "in 3 minutes" in early.json()["error"]["message"]
+    refused.terminal_seen_at = datetime.now(UTC) - timedelta(minutes=6)
+    session.commit()
+    body = api.post(f"/api/meetings/{refused.id}/retry").json()
+    assert body["status"] == "bot_sent" and body["failure_reason"] is None
+    assert fake_vexa.sent == [MEET] and body["join_attempts"] == 3
 
 
 @pytest.mark.parametrize(

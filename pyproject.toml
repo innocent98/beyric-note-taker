@@ -50,7 +50,7 @@ select = ["E", "F", "I", "UP", "B"]
 "tests/test_admin.py" = ["F811"]
 "tests/test_maintenance.py" = ["F811"]
 "tests/test_legal.py" = ["F811"]
-
+"tests/test_join_refusal.py" = ["F811"]
 # The capture script's notes are long sentences, one per saved exchange.
 "scripts/capture_pilot_api.py" = ["E501"]
 
