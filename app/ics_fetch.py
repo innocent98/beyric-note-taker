@@ -22,6 +22,7 @@ thing ever logged is the reason and the host.
 
 import ipaddress
 import logging
+import re
 import socket
 import threading
 import time
@@ -57,6 +58,10 @@ TOTAL_TIMEOUT = 10.0
 READ_TIMEOUT = 5.0
 MAX_ADDRESSES_TRIED = 2
 HTTPS_PORT = 443
+# A plain DNS name: letters, digits and hyphens in dot-separated labels. Anything else (a
+# backslash, an underscore, brackets, a trailing garbage label) is refused before the allowlist
+# is consulted, so no odd spelling can pass a suffix entry.
+HOST_NAME = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$")
 USER_AGENT = "BeyricNoteTaker/1 (calendar sync)"
 
 REASONS = (
@@ -168,8 +173,8 @@ def _check_url(url: str) -> tuple[str, str]:
         raise _reject("scheme", "unknown") from None
     if parts.scheme != "https" or not host:
         raise _reject("scheme", host or "unknown")
-    if not host.isascii() or "@" in parts.netloc or port not in (None, HTTPS_PORT):
-        raise _reject("host_not_allowed", host if host.isascii() else "unknown")
+    if not HOST_NAME.match(host) or "@" in parts.netloc or port not in (None, HTTPS_PORT):
+        raise _reject("host_not_allowed", host if HOST_NAME.match(host) else "unknown")
     if not _allowed(host):
         raise _reject("host_not_allowed", host)
     target = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
@@ -276,10 +281,11 @@ def _fetch(url: str, resolver, transport) -> bytes:
             )
             try:
                 response = client.send(request, stream=True)
-            except httpx.ConnectError:
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
                 if index + 1 < len(addresses):
                     continue  # another address from the SAME validated answer, never a new lookup
-                raise _reject("unreachable", host) from None
+                reason = "timeout" if isinstance(exc, httpx.ConnectTimeout) else "unreachable"
+                raise _reject(reason, host) from None
             except httpx.TimeoutException:
                 raise _reject("timeout", host) from None
             except (httpx.HTTPError, httpx.InvalidURL, OSError):

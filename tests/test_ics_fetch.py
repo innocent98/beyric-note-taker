@@ -179,6 +179,11 @@ def test_http_scheme_rejected(url):
         "https://org/feed.ics",  # a bare suffix entry's own name is not a subdomain of it
         "https://calendar.google.com。evil.test/feed.ics",  # a unicode dot
         "https://caléndar.google.com/feed.ics",
+        "https://evil.test\\.example.org/feed.ics",  # a backslash must not slip past a suffix entry
+        "https://ev_il.example.org/feed.ics",
+        "https://-evil.example.org/feed.ics",
+        "https://.example.org/feed.ics",
+        "https://a..example.org/feed.ics",
     ],
 )
 def test_host_outside_allowlist_rejected(url):
@@ -391,6 +396,14 @@ def test_a_transport_timeout_is_a_timeout_and_the_limits_are_the_documented_ones
     assert rejected(respond=respond)[0].reason == "timeout"
     assert (ics_fetch.CONNECT_TIMEOUT, ics_fetch.TOTAL_TIMEOUT) == (3.0, 10.0)
     assert ics_fetch.MAX_BYTES == 2 * 1024 * 1024
+
+
+def test_a_connect_timeout_on_every_address_is_a_timeout():
+    def respond(request):
+        raise httpx.ConnectTimeout("no answer")
+
+    error, recorder = rejected(ips=(PUBLIC_IP, OTHER_PUBLIC_IP), respond=respond)
+    assert error.reason == "timeout" and len(recorder.requests) == 2
 
 
 def test_a_connection_error_is_unreachable():
