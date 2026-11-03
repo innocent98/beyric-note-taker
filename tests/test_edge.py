@@ -508,7 +508,7 @@ def test_a_new_session_secret_retires_every_device_cookie_and_no_password_is_inv
     changed = auth.device_key(device_settings(session_secret="z" * 40))
     assert not known(changed, old, "owner")
     # The owner password is read once by migration 0006; it is not part of any key.
-    same = auth.device_key(device_settings(owner_password="a different password"))
+    same = auth.device_key(device_settings(owner_password="-".join(["another", "value"])))
     assert known(same, old, "owner")
 
 

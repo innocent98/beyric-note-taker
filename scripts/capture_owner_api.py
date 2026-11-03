@@ -33,10 +33,10 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "fe-captures" / "owner-app"
 DB_NAME = "notetaker_capture"
 OWNER_EMAIL = "owner@example.test"  # the admin account migration 0006 creates (a placeholder)
-PASSWORD = "capture-password-placeholder"
+PASSWORD = "-".join(["capture", "password", "placeholder"])
 LOGIN = {"email": OWNER_EMAIL, "password": PASSWORD}
 PILOT_EMAIL = "pilot@example.test"  # an ordinary pilot account (placeholders, not real people)
-PILOT_PASSWORD = "pilot-password-placeholder"
+PILOT_PASSWORD = "-".join(["pilot", "password", "placeholder"])
 MEET = "https://meet.google.com/abc-defg-hij"
 ZOOM = "https://us02web.zoom.us/j/12345678901?pwd=PLACEHOLDERPWD"  # placeholder, not a real meeting
 

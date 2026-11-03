@@ -277,6 +277,16 @@ class LoginLimiter:
             else:
                 self._accounts.attempts.pop(self._account_key(account), None)
 
+    def refund(self, client: str, account: str, device: str | None = None) -> None:
+        """Give back only this attempt (a login that never got to check the password, because
+        the server was busy). Unlike `succeeded` it leaves the account's other failures alone."""
+        with self._lock:
+            self._clients.refund(client)
+            if device is not None:
+                self._devices.refund(device)
+            else:
+                self._accounts.refund(self._account_key(account))
+
     def __len__(self) -> int:
         return (
             len(self._clients.attempts) + len(self._accounts.attempts) + len(self._devices.attempts)
@@ -336,22 +346,24 @@ def device_id(key: bytes, cookie: str | None, account: str, now: float | None = 
     return did if 0 <= age <= DEVICE_SECONDS else None
 
 
-DEV_ENVS = ("development", "test")
+KNOWN_ENVS = ("development", "test", "production")
+MIN_SESSION_SECRET = 32
 
 
 def check_start(settings: Settings) -> None:
-    """Fail closed: only a named dev environment may run without a session secret.
-
-    Any other `app_env` value (including a typo such as "prod") must have it set.
-    """
-    if settings.app_env in DEV_ENVS:
-        return
-    if settings.app_env != "production":
+    """Fail closed. `app_env` must be production, development or test (a typo such as "prod"
+    does not start). Outside `test`, `session_secret` must be at least MIN_SESSION_SECRET
+    characters: it is the only key behind every session cookie, so an empty or short one lets
+    anyone forge an admin session, in development as much as in production."""
+    if settings.app_env not in KNOWN_ENVS:
         raise RuntimeError(
             f"app_env must be production, development or test (got {settings.app_env!r})"
         )
-    if not settings.session_secret:
-        raise RuntimeError("session_secret must be set before the app can start in production")
+    if settings.app_env != "test" and len(settings.session_secret) < MIN_SESSION_SECRET:
+        raise RuntimeError(
+            f"session_secret must be at least {MIN_SESSION_SECRET} characters "
+            f"(generate one with: openssl rand -hex 48); it signs every session cookie"
+        )
 
 
 PUBLIC_PATHS = frozenset({"/login", "/privacy", "/terms"})

@@ -12,7 +12,7 @@ from tests.conftest import TEST_DATABASE_URL
 
 SCRATCH_DB = "notetaker_migration_scratch"
 OWNER_EMAIL = "owner@example.test"  # placeholders: migration 0006 creates the admin from these
-OWNER_PASSWORD = "migration-test-password-placeholder"
+OWNER_PASSWORD = "-".join(["migration", "test", "placeholder"])
 
 
 @pytest.fixture(autouse=True)

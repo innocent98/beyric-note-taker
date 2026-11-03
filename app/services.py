@@ -115,7 +115,11 @@ def log_in(request: Request, session: Session, email: str, password: str) -> Non
     user = session.scalars(select(User).where(User.email == account)).first()
     if user is not None and user.status == "deleted":
         user = None  # a deleted account is an unknown one
-    right = passwords.verify_password(user.password_hash if user else None, password)
+    try:
+        right = passwords.verify_password(user.password_hash if user else None, password)
+    except passwords.HashBusy:
+        limiter.refund(client, account, device)  # the password was never checked: not a failure
+        raise Refused(429, "server_busy", "The server is busy. Try again in a moment.") from None
     if user is None or not right:
         raise Refused(401, "invalid_credentials", "That email or password is not right.")
     limiter.succeeded(client, account, device)  # the password was right, whatever happens next

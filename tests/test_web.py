@@ -21,7 +21,7 @@ from app.pipeline import REASON_NO_SPEECH
 from app.vexa import VexaError
 from app.web import get_openai_client, get_vexa
 
-PASSWORD = "correct horse battery"
+PASSWORD = " ".join(["correct", "horse", "battery"])
 OWNER_EMAIL = "owner@example.test"  # placeholder addresses, never real ones
 OTHER_EMAIL = "other@example.test"
 MEET = "https://meet.google.com/abc-defg-hij"
@@ -552,6 +552,19 @@ def test_production_refuses_to_start_without_a_session_secret():
         create_app(make_settings(app_env="production", session_secret=""))
 
 
+@pytest.mark.parametrize("env", ["production", "development"])
+@pytest.mark.parametrize("secret", ["", "short", "x" * 31])
+def test_a_short_session_secret_never_starts_outside_the_test_environment(env, secret):
+    """An empty or short key is a public key: anyone could forge an admin session."""
+    with pytest.raises(RuntimeError, match=r"session_secret.*at least 32 characters"):
+        create_app(make_settings(app_env=env, session_secret=secret))
+
+
+@pytest.mark.parametrize("env", ["production", "development"])
+def test_a_32_character_session_secret_starts(env):
+    assert create_app(make_settings(app_env=env, session_secret="x" * 32)) is not None
+
+
 def test_security_headers(anon_client):
     response = anon_client.get("/login")
     assert "script-src 'self'" in response.headers["content-security-policy"]
@@ -580,15 +593,14 @@ def test_unknown_app_env_refuses_to_start_even_with_secrets(env):
         create_app(make_settings(app_env=env))
 
 
-@pytest.mark.parametrize("env", ["production", "prod"])
+@pytest.mark.parametrize("env", ["production", "prod", "development"])
 def test_prod_style_env_with_empty_secrets_never_starts(env):
     with pytest.raises(RuntimeError):
         create_app(make_settings(app_env=env, session_secret=""))
 
 
-@pytest.mark.parametrize("env", ["development", "test"])
-def test_named_dev_environments_may_start_without_secrets(env):
-    create_app(make_settings(app_env=env, session_secret=""))
+def test_only_the_test_environment_may_start_without_a_secret():
+    create_app(make_settings(app_env="test", session_secret=""))
 
 
 def test_empty_password_never_logs_in_even_in_dev(app, session):

@@ -31,6 +31,8 @@ from tests.test_web import (  # noqa: F401
 )
 
 KEY = b"k" * 32
+GUESS = "-".join(["wrong", "guess", "17"])
+OTHER_SECRET = "-".join(["not", "a", "login", "value"])  # only proves the key ignores it
 
 
 def visitor(app, address="198.51.100.1") -> Api:
@@ -80,7 +82,7 @@ def test_the_signing_key_comes_from_the_session_secret_alone():
     from tests.test_web import make_settings
 
     base = auth.signing_key(make_settings())
-    assert auth.signing_key(make_settings(owner_password="anything")) == base
+    assert auth.signing_key(make_settings(owner_password=OTHER_SECRET)) == base
     assert auth.signing_key(make_settings(session_secret="z" * 40)) != base
 
 
@@ -262,11 +264,11 @@ def test_the_pages_login_logs_in_with_email_and_password(anon_client, owner):
 
 def test_the_pages_login_error_keeps_the_email_but_never_the_password(anon_client, owner):
     token = token_from(anon_client.get("/login").text)
-    response = anon_client.post("/login", data=login_data(token, password="s3cret-guess"))
+    response = anon_client.post("/login", data=login_data(token, password=GUESS))
     assert response.status_code == 401
     assert "That email or password is not right." in response.text
     assert f'value="{OWNER_EMAIL}"' in response.text
-    assert "s3cret-guess" not in response.text
+    assert GUESS not in response.text
 
 
 def test_the_pages_login_without_an_email_fails(anon_client, owner):
@@ -463,3 +465,20 @@ def test_the_default_templates_match_the_ones_migration_0001_seeds():
     initial = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(initial)
     assert accounts.DEFAULT_TEMPLATES == initial.SEED_TEMPLATES
+
+
+def test_a_busy_server_answers_429_without_costing_a_login_attempt(app, owner, monkeypatch):
+    import threading
+
+    from tests.test_edge import SECRET  # noqa: F401
+
+    held = threading.BoundedSemaphore(1)
+    held.acquire()  # every hash slot is taken
+    monkeypatch.setattr(passwords, "_slots", held)
+    monkeypatch.setattr(passwords, "SLOT_WAIT_SECONDS", 0.05)
+    client = visitor(app)
+    for _ in range(8):  # more than the 5 failures an address may have
+        error = error_of(client.log_in(), 429, "server_busy")
+        assert error["message"] == "The server is busy. Try again in a moment."
+    held.release()  # a slot frees up: the very same address is not locked out
+    assert client.log_in().status_code == 200

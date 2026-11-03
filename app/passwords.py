@@ -9,8 +9,17 @@ hashes the owner password with the same defaults.
 `verify_password` always costs one hash check, also when there is no account or no password to
 compare with (it checks against a dummy hash), so the time a login takes does not reveal which
 emails have accounts.
+
+Cost bound. One argon2id check with the default parameters (t=3, m=64 MiB, p=4) is the RFC 9106
+"low memory" profile and is kept as it is: OWASP's minimum is far lower, and weakening the hash
+protects nothing here. What needs a bound is how many run at once, because the login route is
+public and the server is shared and memory-capped: 40 parallel requests would hold about 2.5 GB.
+Every hash or check therefore takes one of `MAX_CONCURRENT` slots (about 64 MiB each); a request
+that cannot get one within `SLOT_WAIT_SECONDS` raises `HashBusy` and the caller answers 429.
 """
 
+import secrets
+import threading
 from functools import lru_cache
 from pathlib import Path
 
@@ -20,11 +29,29 @@ from argon2.exceptions import InvalidHashError, VerificationError
 MIN_LENGTH = 8
 MAX_LENGTH = 128
 MAX_LOGIN_LENGTH = 1024  # a login attempt longer than this cannot match; do not hash it
+MAX_CONCURRENT = 3  # hash computations at once: 3 x 64 MiB at the default parameters
+SLOT_WAIT_SECONDS = 5.0  # how long a request may wait for a slot before it is told to retry
 COMMON_PASSWORDS = Path(__file__).parent / "data" / "common-passwords.txt"
 
 _hasher = PasswordHasher()
-# Hash of a random password nobody knows; only ever compared against.
-DUMMY_HASH = _hasher.hash("dummy-password-for-unknown-accounts-3f9a1c")
+_slots = threading.BoundedSemaphore(MAX_CONCURRENT)
+# Hash of a random password nobody knows (new at every start); only ever compared against.
+DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(24))
+
+
+class HashBusy(Exception):
+    """Every hash slot stayed taken for `SLOT_WAIT_SECONDS`: the server is busy, try again."""
+
+
+class _Slot:
+    """`with _Slot():` runs the body holding one hash slot, or raises `HashBusy`."""
+
+    def __enter__(self) -> None:
+        if not _slots.acquire(timeout=SLOT_WAIT_SECONDS):
+            raise HashBusy
+
+    def __exit__(self, *exc: object) -> None:
+        _slots.release()
 
 
 class PasswordRejected(ValueError):
@@ -55,15 +82,18 @@ def check_new_password(password: str) -> None:
 
 
 def hash_password(password: str) -> str:
-    return _hasher.hash(password)
+    with _Slot():
+        return _hasher.hash(password)
 
 
 def verify_password(stored_hash: str | None, password: str) -> bool:
     """Whether `password` matches `stored_hash`. With no hash (an unknown account, or a Google-only
-    one) the password is checked against a dummy and the answer is False."""
+    one) the password is checked against a dummy and the answer is False. Raises `HashBusy` when
+    no hash slot frees up in time."""
     if len(password) > MAX_LOGIN_LENGTH:
         return False
     try:
-        return _hasher.verify(stored_hash or DUMMY_HASH, password) and bool(stored_hash)
+        with _Slot():
+            return _hasher.verify(stored_hash or DUMMY_HASH, password) and bool(stored_hash)
     except (VerificationError, InvalidHashError):
         return False
