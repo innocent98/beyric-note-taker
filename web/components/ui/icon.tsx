@@ -14,6 +14,8 @@ const PATHS = {
   info: ["M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z", "M12 8v5M12 16h.01"],
   warning: ["M12 3 2 20h20L12 3z", "M12 10v4M12 17h.01"],
   arrow: ["M5 12h14M13 6l6 6-6 6"],
+  download: ["M12 3v12M7 10l5 5 5-5M5 21h14"],
+  down: ["m6 9 6 6 6-6"],
   plus2: ["M12 5v14M5 12h14"],
 } as const;
 

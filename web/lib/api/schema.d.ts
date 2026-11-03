@@ -321,6 +321,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{meeting_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Meeting
+         * @description The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.
+         *
+         *     Built when asked and never stored. One file is built at a time per server process: a second
+         *     request meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's
+         *     title, cleaned, in `Content-Disposition`.
+         */
+        get: operations["export_meeting"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{meeting_id}/regenerate": {
         parameters: {
             query?: never;
@@ -2248,6 +2272,104 @@ export interface operations {
             };
             /** @description Bad Gateway */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    export_meeting: {
+        parameters: {
+            query?: {
+                format?: "pdf" | "docx";
+                transcript?: boolean;
+            };
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file. Built for this request and not stored. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": string;
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such meeting (or not the caller's) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_ready`: the notes are not written yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `export_failed`: the file could not be built */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `export_busy`: another file is being built */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `export_timeout`: it took too long */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

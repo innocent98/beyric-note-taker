@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CopyButton } from "@/components/app/copy-button";
+import { DownloadMenu } from "@/components/app/download-menu";
 import { NotesHtml } from "@/components/app/notes-html";
 import { TranscriptPanel } from "@/components/app/transcript-panel";
 import {
@@ -106,17 +107,28 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
         <Icon name="back" size={14} />
         All meetings
       </AppLink>
-      <div className="detail-head">
-        <div className="detail-title">
-          <h1>{m.title}</h1>
-          <Badge tone={m.status_tone} dot live>
-            {m.status_text}
-          </Badge>
+      <div className="detail-bar">
+        <div className="detail-head">
+          <div className="detail-title">
+            <h1>{m.title}</h1>
+            <Badge tone={m.status_tone} dot live>
+              {m.status_text}
+            </Badge>
+          </div>
+          <p className="meta-line">
+            <span>{formatTime(m.created_at)}</span>
+            <span>{platformLabel(m.platform)}</span>
+          </p>
         </div>
-        <p className="meta-line">
-          <span>{formatTime(m.created_at)}</span>
-          <span>{platformLabel(m.platform)}</span>
-        </p>
+        {m.status !== "failed" ? (
+          <DownloadMenu
+            meetingId={m.id}
+            title={m.title}
+            ready={m.status === "ready" && Boolean(m.notes)}
+            hasTranscript={Boolean(m.transcript)}
+            onNotReady={() => void refetch()}
+          />
+        ) : null}
       </div>
 
       {m.worker_stale ? (

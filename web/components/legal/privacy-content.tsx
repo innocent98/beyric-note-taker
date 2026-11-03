@@ -25,6 +25,7 @@ export function PrivacyContent({ days }: { days: number }) {
         <li>The transcript produced from that audio.</li>
         <li>Notes, summaries, decisions and action items produced from the transcript.</li>
         <li>Meeting details such as the platform, meeting link or ID, date, time and duration.</li>
+        <li>Files you export (a PDF or Word file of your notes, and of the transcript if you choose it) are built when you ask and are not stored.</li>
       </ul>
       <p>We do not record video or screen sharing.</p>
       <h3>Information collected automatically</h3>
