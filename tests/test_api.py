@@ -849,6 +849,27 @@ def test_regenerate_rewrites_the_notes_without_transcribing(api, template, sessi
     assert meeting.template_id == other.id and "Rewritten" in meeting.notes
 
 
+def test_regenerate_queues_the_new_notes_for_extraction(api, template, session, fake_openai):
+    meeting = ready(session, template)
+    meeting.extraction_status, meeting.extraction_attempts = "done", 1
+    session.commit()
+    fake_openai.notes = "\n\n".join(
+        f"## {h}\nNone noted"
+        for h in (
+            "Summary",
+            "Key points",
+            "Decisions",
+            "Action items",
+            "Open questions",
+            "Please check",
+        )
+    )
+    response = api.post(f"/api/meetings/{meeting.id}/regenerate", {"template_id": template.id})
+    assert response.status_code == 200
+    session.refresh(meeting)
+    assert (meeting.extraction_status, meeting.extraction_attempts) == ("pending", 0)
+
+
 def test_regenerate_errors(api, template, session, fake_openai):
     waiting = add_meeting(session, template)
     error = error_of(

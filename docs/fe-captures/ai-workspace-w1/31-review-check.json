@@ -1,0 +1,32 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/review/1/check",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "text": "Dan said, “I have only heard it said out loud, so I am not sure about the spelling.”",
+      "heard_as": "Metrika",
+      "checked_at": "2026-11-03T20:31:04.573551Z",
+      "meeting": {
+        "id": 1,
+        "title": "Google Meet nat-aaaa-bbb",
+        "platform": "google_meet",
+        "created_at": "2026-10-31T20:30:51.722621Z"
+      }
+    }
+  }
+}

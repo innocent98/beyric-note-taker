@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import deletion, mail, maintenance
+from app import deletion, mail, maintenance, workspace
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import AppState, Meeting, User
@@ -85,13 +85,21 @@ def purge_deleted(session: Session, vexa=None) -> int:
     return deletion.purge_deleted(session, vexa or VexaClient())
 
 
+def extract_pending(session: Session, now: datetime) -> int | None:
+    """Read the notes of one meeting into decisions, open questions and review items
+    (`app/workspace.py`)."""
+    return workspace.process_next(session, now)
+
+
 def background_jobs(session: Session, mailer: mail.Mailer | None, now: datetime) -> None:
-    """The jobs that run before each meeting pass: send due mail, purge deleted accounts. Each is
-    on its own, and whatever one throws is logged by type only (an exception can hold an address
-    or a link) and never reaches the loop, so a mail or purge problem cannot stall meetings."""
+    """The jobs that run before each meeting pass: send due mail, purge deleted accounts, read a
+    finished meeting's notes into lists. Each is on its own, and whatever one throws is logged by
+    type only (an exception can hold an address or a link) and never reaches the loop, so a mail,
+    purge or extraction problem cannot stall meetings."""
     for name, job in (
         ("mail", lambda: send_mail(session, mailer, now)),
         ("purge", lambda: purge_deleted(session)),
+        ("extraction", lambda: extract_pending(session, now)),
     ):
         try:
             job()

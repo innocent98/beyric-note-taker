@@ -1,0 +1,28 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/review/4/vocabulary",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "term": "x"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such review item"
+      }
+    }
+  }
+}

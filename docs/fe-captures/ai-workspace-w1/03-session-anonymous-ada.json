@@ -1,0 +1,25 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": false,
+      "csrf_token": "<csrf-B>",
+      "user": null,
+      "usage": null,
+      "unread_notifications": null,
+      "badges": null
+    }
+  }
+}

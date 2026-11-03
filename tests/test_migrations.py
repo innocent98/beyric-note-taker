@@ -393,7 +393,7 @@ def test_calendar_migration_round_trip_with_seeded_owner_data(scratch_url):
     index_names = {i["name"] for i in inspect(engine).get_indexes("scheduled_joins")}
     assert {"ix_scheduled_joins_state_run_at", "uq_scheduled_joins_live_code"} <= index_names
 
-    command.downgrade(cfg, "-1")
+    command.downgrade(cfg, "0009")
     assert not CALENDAR_TABLES & set(inspect(engine).get_table_names())
     assert _rows(engine, "select count(*) from meetings") == [(2,)]
     assert _rows(engine, "select count(*) from users where is_admin") == [(1,)]
@@ -406,3 +406,66 @@ def test_calendar_migration_round_trip_with_seeded_owner_data(scratch_url):
 def test_calendar_migration_is_the_revision_after_0009():
     script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
     assert script.get_revision("0010").down_revision == "0009"
+
+
+# ---- 0011 AI workspace W1 ----
+
+
+def test_ai_workspace_migration_round_trip(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0010")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (id, email) values (7, 'w@example.test')"))
+        conn.execute(
+            text(
+                "insert into meetings (id, owner_user_id, url, platform, native_id, template_id,"
+                " status) values (5, 7, 'u', 'zoom', '1', 1, 'ready')"
+            )
+        )
+    command.upgrade(cfg, "head")
+    tables = set(inspect(engine).get_table_names())
+    assert {"ai_runs", "decisions", "open_questions", "review_items"} <= tables
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("select extraction_status, extraction_attempts from meetings where id = 5")
+        ).one()
+    assert tuple(row) == (None, 0)  # nothing is backfilled by the migration
+
+    with engine.begin() as conn:  # the checks and the cascade are the database's
+        conn.execute(
+            text(
+                "insert into decisions (meeting_id, text, position, fingerprint)"
+                " values (5, 'x', 0, 'f')"
+            )
+        )
+        conn.execute(
+            text("insert into ai_runs (meeting_id, kind, model) values (5, 'extract', 'm')")
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("update meetings set extraction_status = 'bogus' where id = 5"))
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into decisions (meeting_id, text, position, fingerprint)"
+                " values (5, 'again', 1, 'f')"
+            )
+        )
+    with engine.begin() as conn:
+        conn.execute(text("delete from meetings where id = 5"))
+    with engine.connect() as conn:
+        assert conn.execute(text("select count(*) from decisions")).scalar() == 0
+        assert conn.execute(text("select meeting_id from ai_runs")).scalar() is None
+
+    command.downgrade(cfg, "0010")
+    after = set(inspect(engine).get_table_names())
+    assert not {"ai_runs", "decisions", "open_questions", "review_items"} & after
+    assert "extraction_status" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    command.upgrade(cfg, "head")  # and up again
+    assert "review_items" in inspect(engine).get_table_names()
+    engine.dispose()
+
+
+def test_ai_workspace_migration_follows_0010():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0011").down_revision == "0010"

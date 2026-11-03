@@ -1,0 +1,15 @@
+{
+  "transcript": "names_and_terms.txt",
+  "meeting_date": "2026-11-03",
+  "timezone": "Europe/London",
+  "vocabulary": [],
+  "action_items": [
+    {"match": ["tracking"], "owner": "Chidi", "due_date": "2026-11-06"},
+    {"match": ["dashboard"], "owner": "Amina", "due_date": "2026-11-11"},
+    {"match": ["contract number"], "owner": "Chidi", "due_date": "2026-11-04"}
+  ],
+  "review": [
+    {"match": ["spelling"], "heard_as": "Metrika"}
+  ],
+  "forbidden_owners": []
+}
