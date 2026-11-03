@@ -13,6 +13,9 @@ COPY pyproject.toml ./
 COPY app ./app
 COPY alembic.ini ./
 COPY alembic ./alembic
+# Operator scripts run with `docker compose exec web python scripts/<name>.py` (delete_user,
+# backfill_extraction, and the Phase C key re-encryption later).
+COPY scripts ./scripts
 RUN pip install --no-cache-dir . \
     && useradd --system --no-create-home --shell /usr/sbin/nologin app \
     && mkdir -p /srv/data/audio \
