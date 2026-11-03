@@ -276,6 +276,17 @@ def test_every_api_route_needs_login_except_the_listed_public_ones(anon, app):
             error_of(response, 401, "not_authenticated")
 
 
+# Routes that answer with a file, not JSON. The enumeration above reaches them too (a missing
+# meeting is a 404, an anonymous caller a 401); this names them so one cannot be left out of it.
+FILE_ROUTES = {("GET", "/api/meetings/{meeting_id}/export")}
+
+
+def test_the_routes_that_return_files_are_listed_and_not_public(app):
+    routes = set(api_routes(app))
+    assert FILE_ROUTES <= routes
+    assert not FILE_ROUTES & PUBLIC
+
+
 def test_every_write_needs_the_csrf_header(api, app, template):
     for method, path in api_routes(app):
         if method == "GET":

@@ -19,6 +19,10 @@ dependencies = [
     "openai>=2.50",
     "markdown-it-py>=3.0",
     "argon2-cffi>=23.1",
+    # PDF export. Needs the Pango libraries (apt: libpango-1.0-0, libpangoft2-1.0-0); the app's
+    # image already has them through ffmpeg, and the Dockerfile names them anyway.
+    "weasyprint>=70",
+    "python-docx>=1.1",
 ]
 
 [project.optional-dependencies]
@@ -53,6 +57,7 @@ select = ["E", "F", "I", "UP", "B"]
 "tests/test_join_refusal.py" = ["F811"]
 "tests/test_bot_live_state.py" = ["F811"]
 "tests/test_end_meeting.py" = ["F811"]
+"tests/test_export.py" = ["F811"]
 # The capture script's notes are long sentences, one per saved exchange.
 "scripts/capture_pilot_api.py" = ["E501"]
 

@@ -1,0 +1,27 @@
+{
+  "note": "No query at all: a PDF of the notes, no transcript.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/pdf",
+      "content-disposition": "attachment; filename=\"Google Meet abc-defg-hij.pdf\"; filename*=UTF-8''Google%20Meet%20abc-defg-hij.pdf",
+      "content-length": "14942",
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    },
+    "file": {
+      "saved_as": "files/05-export-pdf-default.pdf",
+      "bytes": 14942,
+      "first_bytes": "%PDF-1.7",
+      "sha256": "9fb136b2b10ab846e468098adadf41fd8d14c778355e9078e6609dff1daafdec"
+    }
+  }
+}

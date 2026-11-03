@@ -1,0 +1,429 @@
+"""Download and export: the `NotesDocument`, the PDF and Word renderers, and the endpoint.
+
+The PDF tests need the Pango libraries WeasyPrint draws with. CI installs them; on a machine
+without them those tests skip, unless `CI` is set, where a missing library must fail the build.
+"""
+
+import io
+import os
+import subprocess
+from datetime import UTC, datetime
+
+import pytest
+from docx import Document
+
+from app import export
+from app.export_render import render_docx, render_html, render_pdf
+from app.notes_document import (
+    ListBlock,
+    Paragraph,
+    build_notes_document,
+    content_disposition,
+    export_filename,
+    parse_sections,
+    parse_transcript,
+)
+from tests.test_api import (  # noqa: F401  (fixtures used by name)
+    Api,
+    anon,
+    api,
+    error_of,
+    ready,
+)
+from tests.test_web import (  # noqa: F401
+    NOTES,
+    OTHER_EMAIL,
+    PASSWORD,
+    add_meeting,
+    anon_client,
+    app,
+    fake_openai,
+    fake_vexa,
+    make_user,
+    owner,
+    stranger,
+    template,
+)
+
+try:
+    import weasyprint  # noqa: F401
+
+    HAVE_PANGO = True
+except OSError:
+    HAVE_PANGO = False
+
+needs_pango = pytest.mark.skipif(
+    not HAVE_PANGO and not os.environ.get("CI"), reason="the Pango libraries are not installed"
+)
+
+PDF_TYPE = "application/pdf"
+DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+RICH_NOTES = """## Summary
+The team met on **Monday** and agreed on *8 December*. See [the plan](https://example.com/plan).
+
+## Key points
+- Checkout is the blocker
+  - a nested point with `code`
+- Marketing needs copy by Friday
+1. first
+2. second
+
+## Decisions
+- Ship on 8 December
+
+## Action items
+- Tosin: finish checkout (before Friday)
+
+## Open questions
+None noted
+
+## Please check
+- Heard "Metrika"; may be Metrica
+"""
+
+TRANSCRIPT = "[Ada]: Hello everyone.\n[Ben Müller]: Hi there.\na second line\n[Ada]: Bye."
+WHEN = datetime(2026, 11, 3, 14, 0, tzinfo=UTC)
+
+
+def make_doc(notes=RICH_NOTES, transcript=None, title="Google Meet abc-defg-hij"):
+    return build_notes_document(
+        title=title,
+        platform_label="Google Meet",
+        started_at=WHEN,
+        recorded_seconds=4350,
+        notes=notes,
+        transcript=transcript,
+        generated_at=WHEN,
+    )
+
+
+# ---- NotesDocument ----
+
+
+def test_the_notes_are_split_at_each_heading_in_order():
+    sections = parse_sections(RICH_NOTES)
+    assert [s.heading for s in sections] == [
+        "Summary",
+        "Key points",
+        "Decisions",
+        "Action items",
+        "Open questions",
+        "Please check",
+    ]
+
+
+def test_inline_formatting_and_links_become_runs():
+    summary = parse_sections(RICH_NOTES)[0].blocks[0]
+    assert isinstance(summary, Paragraph)
+    bold = [r.text for r in summary.runs if r.bold]
+    italic = [r.text for r in summary.runs if r.italic]
+    text = "".join(r.text for r in summary.runs)
+    assert bold == ["Monday"] and italic == ["8 December"]
+    # a link keeps its text and shows a web address the text does not already show
+    assert "the plan (https://example.com/plan)" in text
+
+
+def test_lists_keep_their_nesting_and_kind():
+    blocks = parse_sections(RICH_NOTES)[1].blocks
+    bullets, numbered = blocks
+    assert isinstance(bullets, ListBlock) and not bullets.ordered
+    assert len(bullets.items) == 2
+    nested = bullets.items[0][1]
+    assert isinstance(nested, ListBlock) and nested.items[0][0].runs[1].code is True
+    assert numbered.ordered and len(numbered.items) == 2
+
+
+def test_raw_html_in_notes_stays_text_and_a_javascript_link_is_not_a_link():
+    notes = "## Summary\n<script>alert(1)</script> and [x](javascript:alert(1))\n"
+    runs = parse_sections(notes)[0].blocks[0].runs
+    text = "".join(r.text for r in runs)
+    # the parser refuses the link, so it is plain text, and the html is text, not markup
+    assert "<script>alert(1)</script> and [x](javascript:alert(1))" in text
+    assert "href" not in render_html(make_doc(notes))
+    assert "<script>" not in render_html(make_doc(notes))
+
+
+def test_text_before_the_first_heading_is_kept_without_a_heading():
+    sections = parse_sections("Intro line\n\n## Summary\nBody\n")
+    assert [s.heading for s in sections] == [None, "Summary"]
+
+
+def test_a_labelled_transcript_becomes_turns_and_unlabelled_lines_continue_the_turn():
+    turns = parse_transcript(TRANSCRIPT)
+    assert [(t.speaker, t.text) for t in turns] == [
+        ("Ada", "Hello everyone."),
+        ("Ben Müller", "Hi there.\na second line"),
+        ("Ada", "Bye."),
+    ]
+
+
+def test_an_unlabelled_transcript_is_paragraphs_without_speakers():
+    turns = parse_transcript("First part.\nStill first.\n\nSecond part.")
+    assert [t.speaker for t in turns] == [None, None]
+    assert turns[0].text == "First part.\nStill first."
+
+
+def test_the_meta_line_and_footer():
+    doc = make_doc()
+    assert doc.meta == "3 Nov 2026 · Google Meet · 1 h 12 min"
+    assert doc.footer == "Generated by Beyric Note Taker, 3 Nov 2026"
+    short = build_notes_document(
+        title="t",
+        platform_label="Zoom",
+        started_at=WHEN,
+        recorded_seconds=None,
+        notes=RICH_NOTES,
+        transcript=None,
+        generated_at=WHEN,
+    )
+    assert short.meta == "3 Nov 2026 · Zoom"
+    assert short.transcript is None
+
+
+def test_the_transcript_is_only_in_the_document_when_given():
+    assert make_doc().transcript is None
+    assert len(make_doc(transcript=TRANSCRIPT).transcript) == 3
+
+
+# ---- file names ----
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("Weekly sync", "Weekly sync.pdf"),
+        ('a/b\\c:d*e?f"g<h>i|j', "abcdefghij.pdf"),
+        ("line\nbreak\r\nhere", "line break here.pdf"),
+        ("  .. dots ..  ", "dots.pdf"),
+        ("../../etc/passwd", "etcpasswd.pdf"),
+        ("", "meeting-notes.pdf"),
+        ("///", "meeting-notes.pdf"),
+        ("x" * 300, "x" * 100 + ".pdf"),
+        ("Réunion équipe ☕", "Réunion équipe ☕.pdf"),
+        ("zero​width‮flip", "zerowidthflip.pdf"),
+    ],
+)
+def test_filenames_are_the_title_made_safe(title, expected):
+    assert export_filename(title, "pdf") == expected
+
+
+def test_content_disposition_has_an_ascii_fallback_and_the_real_name():
+    header = content_disposition("Réunion équipe.pdf")
+    assert header.startswith('attachment; filename="Reunion equipe.pdf"')
+    assert "filename*=UTF-8''R%C3%A9union%20%C3%A9quipe.pdf" in header
+    assert "\n" not in header and "\r" not in header
+    # a name with nothing ASCII still gets a usable fallback with the right extension
+    assert content_disposition("日本語.docx").startswith('attachment; filename="download.docx"')
+
+
+# ---- renderers ----
+
+
+def test_the_html_escapes_everything_it_prints():
+    doc = make_doc(
+        notes='## Summary\n**<b>bold</b>** & "quotes"\n',
+        transcript="[<i>Eve</i>]: <img src=x onerror=1>",
+        title="<script>t</script>",
+    )
+    html = render_html(doc)
+    for raw in ("<script>t", "<b>bold", "<i>Eve", "<img src=x"):
+        assert raw not in html
+    assert "&lt;script&gt;t&lt;/script&gt;" in html and "&amp;" in html
+
+
+def test_the_word_file_has_real_headings_bullets_and_the_transcript():
+    data = render_docx(make_doc(transcript=TRANSCRIPT))
+    assert data[:2] == b"PK"
+    word = Document(io.BytesIO(data))
+    styles = [(p.style.name, p.text) for p in word.paragraphs]
+    assert ("Title", "Google Meet abc-defg-hij") in styles
+    assert ("Heading 1", "Key points") in styles
+    assert ("List Bullet", "Checkout is the blocker") in styles
+    assert ("List Bullet 2", "a nested point with code") in styles
+    assert ("List Number", "first") in styles
+    assert ("Heading 1", "Transcript") in styles
+    assert word.paragraphs[-1].text == "Ada: Bye."
+    assert (
+        "Generated by Beyric Note Taker, 3 Nov 2026" in word.sections[0].footer.paragraphs[0].text
+    )
+
+
+def test_the_word_file_has_no_transcript_unless_asked():
+    word = Document(io.BytesIO(render_docx(make_doc())))
+    assert "Transcript" not in [p.text for p in word.paragraphs]
+
+
+@needs_pango
+def test_the_pdf_is_a_pdf():
+    data = render_pdf(make_doc(transcript=TRANSCRIPT))
+    assert data.startswith(b"%PDF-") and len(data) > 5000
+
+
+# ---- the endpoint ----
+
+
+def get(api, meeting_id, **query):
+    suffix = "&".join(f"{k}={v}" for k, v in query.items())
+    return api.get(f"/api/meetings/{meeting_id}/export" + (f"?{suffix}" if suffix else ""))
+
+
+def test_a_word_file_downloads_with_a_clean_name(api, session, template):
+    meeting = ready(session, template, notes=RICH_NOTES)
+    response = get(api, meeting.id, format="docx")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == DOCX_TYPE
+    assert response.headers["content-disposition"].startswith(
+        'attachment; filename="Google Meet abc-defg-hij.docx"'
+    )
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    word = Document(io.BytesIO(response.content))
+    assert "Key points" in [p.text for p in word.paragraphs]
+
+
+def test_the_transcript_is_included_only_when_asked(api, session, template):
+    meeting = ready(
+        session, template, notes=RICH_NOTES, speaker_transcript="[Ada]: Hello there everyone."
+    )
+
+    def paragraphs(**query):
+        return [
+            p.text for p in Document(io.BytesIO(get(api, meeting.id, **query).content)).paragraphs
+        ]
+
+    assert "Ada: Hello there everyone." not in paragraphs(format="docx")
+    assert "Ada: Hello there everyone." not in paragraphs(format="docx", transcript="false")
+    assert "Ada: Hello there everyone." in paragraphs(format="docx", transcript="true")
+
+
+def test_an_unlabelled_transcript_is_used_when_there_is_no_speaker_version(api, session, template):
+    meeting = ready(
+        session, template, notes=RICH_NOTES, speaker_transcript=None, transcript="Plain."
+    )
+    texts = [
+        p.text
+        for p in Document(
+            io.BytesIO(get(api, meeting.id, format="docx", transcript="true").content)
+        ).paragraphs
+    ]
+    assert "Plain." in texts
+
+
+@needs_pango
+def test_a_pdf_downloads_by_default(api, session, template):
+    meeting = ready(session, template, notes=RICH_NOTES)
+    response = get(api, meeting.id)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == PDF_TYPE
+    assert response.headers["content-disposition"].startswith(
+        'attachment; filename="Google Meet abc-defg-hij.pdf"'
+    )
+    assert response.content.startswith(b"%PDF-")
+
+
+def test_another_users_meeting_is_a_404_and_so_is_a_missing_one(api, session, template, stranger):
+    theirs = Template_for(session, stranger)
+    meeting = ready(session, theirs, notes=RICH_NOTES)
+    error_of(get(api, meeting.id, format="docx"), 404, "not_found")
+    error_of(get(api, 424242, format="docx"), 404, "not_found")
+
+
+def Template_for(session, user):
+    from app.models import Template
+
+    template = Template(owner_user_id=user.id, name="General", instructions="x")
+    session.add(template)
+    session.commit()
+    return template
+
+
+@pytest.mark.parametrize("status", ["bot_sent", "processing", "failed"])
+def test_a_meeting_that_is_not_ready_is_a_409(api, session, template, status):
+    meeting = add_meeting(session, template, status=status, notes=None)
+    error = error_of(get(api, meeting.id, format="docx"), 409, "not_ready")
+    assert error["message"] == "The notes are not ready yet."
+
+
+def test_a_ready_meeting_with_no_notes_is_a_409(api, session, template):
+    meeting = ready(session, template, notes=None)
+    error_of(get(api, meeting.id, format="docx"), 409, "not_ready")
+
+
+def test_an_unknown_format_or_flag_is_a_validation_error(api, session, template):
+    meeting = ready(session, template, notes=RICH_NOTES)
+    error_of(get(api, meeting.id, format="odt"), 422, "validation_error")
+    error_of(get(api, meeting.id, format="docx", transcript="maybe"), 422, "validation_error")
+
+
+def test_a_second_export_while_one_runs_is_a_503_with_retry_after(api, session, template):
+    meeting = ready(session, template, notes=RICH_NOTES)
+    assert export._one_at_a_time.acquire(blocking=False)
+    try:
+        response = get(api, meeting.id, format="docx")
+    finally:
+        export._one_at_a_time.release()
+    error_of(response, 503, "export_busy")
+    assert response.headers["retry-after"] == "5"
+    assert get(api, meeting.id, format="docx").status_code == 200  # free again
+
+
+def test_a_render_past_the_time_limit_is_a_504_and_frees_the_slot(
+    api, session, template, monkeypatch
+):
+    meeting = ready(session, template, notes=RICH_NOTES)
+
+    def too_slow(*args, **kwargs):
+        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+
+    monkeypatch.setattr(export.subprocess, "run", too_slow)
+    error_of(get(api, meeting.id, format="docx"), 504, "export_timeout")
+    monkeypatch.undo()
+    assert get(api, meeting.id, format="docx").status_code == 200
+
+
+def test_a_render_that_crashes_is_a_500_that_shows_nothing_of_the_notes(
+    api, session, template, monkeypatch
+):
+    meeting = ready(session, template, notes=RICH_NOTES)
+
+    def crashed(*args, **kwargs):
+        return subprocess.CompletedProcess(args[0], 1, b"", b"Traceback ... Metrika")
+
+    monkeypatch.setattr(export.subprocess, "run", crashed)
+    response = get(api, meeting.id, format="docx")
+    error_of(response, 500, "export_failed")
+    assert "Metrika" not in response.text and "Traceback" not in response.text
+
+
+def test_the_render_is_killed_at_the_time_limit(monkeypatch):
+    """A real child that never finishes: the limit stops it and the slot is released."""
+    monkeypatch.setattr(export, "TIME_LIMIT_SECONDS", 1)
+    monkeypatch.setattr(export, "APP_ROOT", export.APP_ROOT)  # unchanged: the real package
+    real_run = subprocess.run
+
+    def hang(cmd, **kwargs):
+        return real_run(["sleep", "30"], **{**kwargs, "input": None})
+
+    monkeypatch.setattr(export.subprocess, "run", hang)
+    with pytest.raises(export.ExportFailed) as caught:
+        export.build_file(make_doc(), "docx")
+    assert caught.value.timed_out
+    assert export._one_at_a_time.acquire(blocking=False)
+    export._one_at_a_time.release()
+
+
+def test_the_renderer_does_not_inherit_the_apps_secrets(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://user:pw@db/x")
+    monkeypatch.setenv("SESSION_SECRET", "s" * 40)
+    env = export._child_env()
+    assert "sk-secret" not in env.values() and "DATABASE_URL" not in env
+    assert "SESSION_SECRET" not in env
+
+
+def test_an_anonymous_visitor_is_refused(anon, session, template):
+    meeting = ready(session, template, notes=RICH_NOTES)
+    error_of(
+        anon.call("GET", f"/api/meetings/{meeting.id}/export", csrf=False), 401, "not_authenticated"
+    )
