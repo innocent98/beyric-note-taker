@@ -26,7 +26,9 @@ from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
+    BOT_END_REQUESTED,
     BOT_RECORDING,
+    JOIN_FAILURE_MARKS,
     MEET_REFUSED,
     REASON_CANCELLED,
     REASON_NO_SPEECH,
@@ -61,6 +63,7 @@ STEP_TEXT = {
 # `{bot}` is the name the bot shows in the meeting. "Recording" is only said when something is
 # being captured (`BOT_RECORDING`); `active` alone only means the bot is in.
 BOT_STATE_TEXT = {
+    "requested": "Starting the bot",
     "joining": "Bot is joining the meeting",
     "awaiting_admission": "Waiting to be let in. Admit '{bot}' in the meeting",
     "active": "Bot is in the meeting",
@@ -69,7 +72,16 @@ BOT_STATE_TEXT = {
         "The bot is waiting on a prompt in the meeting, such as a consent or verification "
         "screen. Check the meeting for a prompt."
     ),
+    "stopping": "The bot is leaving the meeting",
 }
+# After "End now and write the notes": the bot has been told to leave and has not been seen gone.
+BOT_ENDING_TEXT = "The bot is leaving the meeting. The notes start once it has gone"
+# Vexa reported the call over but the recording is not ready to download yet.
+CALL_ENDED_TEXT = "The call ended; finishing the recording"
+# A live state older than this many poll intervals is not shown as current: the worker is behind,
+# or Vexa has not answered for a while.
+BOT_STATE_STALE_POLLS = 2
+BOT_STATE_UNSURE_TEXT = "Checking on the bot..."
 STATUS_TONES = {
     "ready": "success",
     "failed": "danger",
@@ -210,12 +222,32 @@ def _in_range(pk: int | None) -> bool:
 # ---- how a meeting reads ----
 
 
-def status_text(meeting: Meeting) -> str:
-    """Plain words for the owner. "Recording" is said only once something is being captured; a
-    bot whose state is not known (an older meeting, Vexa not reachable) reads "Bot sent"."""
+def bot_state_is_stale(meeting: Meeting, now: datetime | None = None) -> bool:
+    """True when the bot's live state was last seen too long ago to say what the bot is doing now
+    (or when no time was kept for it)."""
+    seen = meeting.bot_state_seen_at
+    if seen is None:
+        return True
+    window = timedelta(seconds=BOT_STATE_STALE_POLLS * get_settings().poll_interval_seconds)
+    return (now or datetime.now(UTC)) - seen > window
+
+
+def status_text(meeting: Meeting, now: datetime | None = None) -> str:
+    """Plain words for the owner. "Recording" is said only once something is being captured, and a
+    live state is said only while a recent poll has seen it; a bot whose state is not known (an
+    older meeting, Vexa not reachable) reads "Bot sent"."""
     if meeting.status == "bot_sent":
-        text = BOT_STATE_TEXT.get(meeting.completion_reason or "")
-        return text.format(bot=get_settings().bot_name) if text else "Bot sent"
+        reason = meeting.completion_reason or ""
+        if reason == BOT_END_REQUESTED:
+            return BOT_ENDING_TEXT
+        text = BOT_STATE_TEXT.get(reason)
+        if text:
+            if bot_state_is_stale(meeting, now):
+                return BOT_STATE_UNSURE_TEXT
+            return text.format(bot=get_settings().bot_name)
+        if meeting.terminal_seen_at is not None and reason not in JOIN_FAILURE_MARKS:
+            return CALL_ENDED_TEXT  # Vexa said the call is over and the recording is being made
+        return "Bot sent"
     if meeting.status == "processing":
         return STEP_TEXT.get(meeting.step, "Working on it")
     if meeting.status == "ready":
