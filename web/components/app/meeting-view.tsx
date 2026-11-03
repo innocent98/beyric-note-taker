@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { CopyButton } from "@/components/app/copy-button";
 import { DownloadMenu } from "@/components/app/download-menu";
 import { NotesHtml } from "@/components/app/notes-html";
@@ -32,15 +32,30 @@ const RETRY_BLOCKED: Record<RetryBlock, string> = {
 
 type Busy = "cancel" | "end" | "retry" | "rewrite" | null;
 
+// While the notes are being read for decisions and review items, ask again every 5 seconds for up to
+// 2 minutes, then stop and say so (docs/fe-integration-guide-ai-workspace.md section 2).
+const EXTRACTION_POLL_MS = 5_000;
+const EXTRACTION_POLLS = 24;
+
 // A state sentence longer than this (the lobby and prompt texts) is a paragraph, not a heading.
 const LONG_STATE_TEXT = 60;
 
 // The meeting page. `initial` is the server render; from then on the state here is the truth: every
 // action's response is the full meeting (no refetch needed), and while `refresh_after_seconds` is set
 // (bot_sent, processing) the page asks for it again, as the Jinja page's 30-second refresh did.
-export function MeetingView({ initial, templates }: { initial: Meeting; templates: Template[] }) {
+export function MeetingView({
+  initial,
+  templates,
+  initialTab = "notes",
+}: {
+  initial: Meeting;
+  templates: Template[];
+  initialTab?: "notes" | "transcript";
+}) {
   const [meeting, setMeeting] = useState(initial);
-  const [tab, setTab] = useState("notes");
+  const [tab, setTab] = useState<string>(initialTab);
+  const [extractionStalled, setExtractionStalled] = useState(false);
+  const extractionPolls = useRef(0);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -71,8 +86,29 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
     };
   }, [interval, refetch]);
 
+  // The decisions and review items are read from the notes after they are written (and again after a
+  // rewrite): `pending` and `running` both mean "not yet".
+  const extracting =
+    meeting.status === "ready" && (meeting.extraction_status === "pending" || meeting.extraction_status === "running");
+  useEffect(() => {
+    if (!extracting) return;
+    const tick = () => {
+      if (document.visibilityState !== "visible" || busyRef.current !== null) return;
+      extractionPolls.current += 1;
+      if (extractionPolls.current >= EXTRACTION_POLLS) {
+        clearInterval(timer);
+        setExtractionStalled(true);
+      }
+      void refetch();
+    };
+    const timer = setInterval(tick, EXTRACTION_POLL_MS);
+    return () => clearInterval(timer);
+  }, [extracting, refetch]);
+
   async function act(kind: Exclude<Busy, null>, call: () => Promise<Meeting>) {
     if (busyRef.current !== null) return;
+    extractionPolls.current = 0;
+    setExtractionStalled(false);
     busyRef.current = kind;
     setBusy(kind);
     setError(null);
@@ -161,7 +197,7 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
           <section className="card card-flush detail-main">
             <div className="panel-bar">
               {tabs.length > 1 ? (
-                <TabButtons items={tabs} defaultId="notes" onChange={setTab} label="Meeting content" />
+                <TabButtons items={tabs} defaultId={initialTab} onChange={setTab} label="Meeting content" />
               ) : (
                 <h2 className="panel-title">Notes</h2>
               )}
@@ -197,6 +233,7 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
                 ) : null}
               </dl>
             </Card>
+            <ExtractionCard status={m.extraction_status ?? null} stalled={extractionStalled} />
             {m.can_regenerate ? (
               <Card compact>
                 <form
@@ -210,6 +247,7 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
                   <div>
                     <h2 className="side-title">Rewrite notes</h2>
                     <p className="side-sub">Regenerate these notes with a different template.</p>
+                    <p className="side-sub">Decisions you removed and items you checked may come back if the wording changes.</p>
                   </div>
                   <SelectField
                     id="template_id"
@@ -318,5 +356,37 @@ export function MeetingView({ initial, templates }: { initial: Meeting; template
         </div>
       </Dialog>
     </div>
+  );
+}
+
+// What the Decisions and Review screens know about this meeting, from `extraction_status`.
+// null (not written yet, or a meeting the backfill has not reached) says nothing.
+function ExtractionCard({ status, stalled }: { status: Meeting["extraction_status"] | null; stalled: boolean }) {
+  if (status === null) return null;
+  let text: ReactNode;
+  if (status === "pending" || status === "running") {
+    text = stalled
+      ? "Reading the notes is taking longer than usual. Decisions and Review will have this meeting when it finishes; this page has stopped checking, so reload it to look again."
+      : "Reading the notes for decisions and items to check. They appear on the Decisions and Review screens in a moment.";
+  } else if (status === "failed") {
+    text =
+      "The decisions are on the Decisions screen. The hints about names that may be misspelled could not be added. Rewrite the notes to try again.";
+  } else if (status === "skipped") {
+    text = "An older meeting: its decisions are on the Decisions screen. It has no Review items.";
+  } else {
+    text = (
+      <>
+        Decisions and items to check from these notes are on the <AppLink href="/decisions">Decisions</AppLink> and{" "}
+        <AppLink href="/review">Review</AppLink> screens.
+      </>
+    );
+  }
+  return (
+    <Card compact>
+      <h2 className="side-title">Decisions and review</h2>
+      <p className="side-sub" role={status === "pending" || status === "running" ? "status" : undefined}>
+        {text}
+      </p>
+    </Card>
   );
 }

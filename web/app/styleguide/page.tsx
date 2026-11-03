@@ -217,6 +217,7 @@ export default async function StyleGuidePage() {
             <nav className="nav measure" aria-label="Sidebar example">
               <NavLink href="#" label="Current page" current />
               <NavLink href="#" label="Another page" />
+              <NavLink href="#" label="With a count" badge={3} />
             </nav>
           </div>
         </section>

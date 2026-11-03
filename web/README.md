@@ -21,7 +21,7 @@ FASTAPI_INTERNAL_URL=http://127.0.0.1:8000 npm run dev      # http://localhost:3
 
 | Where | What |
 |---|---|
-| `app/` | Pages Next owns (`/`, `/login`, `/meetings/[id]`, `/templates`, `/vocabulary`, `/privacy`, `/terms`, `/styleguide`), the `/logout` handler, `sitemap.ts`, `robots.ts`, `manifest.ts`, `llms.txt`, `healthz` |
+| `app/` | Pages Next owns (`/`, `/login`, `/meetings/[id]`, `/decisions`, `/review`, `/templates`, `/vocabulary`, `/privacy`, `/terms`, `/styleguide`), the `/logout` handler, `sitemap.ts`, `robots.ts`, `manifest.ts`, `llms.txt`, `healthz` |
 | `lib/api/` | Typed client for the JSON API: `schema.d.ts` is generated (`npm run gen:api`), `client.ts` is the one fetch wrapper, `server.ts` and `browser.ts` are the two ways to call it |
 | `components/app/` | The owner app screens and their forms |
 | `proxy.ts` | Nonce Content-Security-Policy, only for the pages Next owns (its matcher) |

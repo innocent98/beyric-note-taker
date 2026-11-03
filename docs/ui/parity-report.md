@@ -119,7 +119,7 @@ The words are in one file (`web/components/landing/content.ts`) plus the two pre
 | Microsoft sign-in button (Google is built) | `Auth.dc.html` | Microsoft OAuth |
 | "Keep me signed in" on sign-in (the email field is built) | `Auth.dc.html` | A session lifetime option |
 | Sidebar name and email ("Adebayo Tosin") | App shell | Identity on `GET /api/session` (the sidebar says "Owner") |
-| Sidebar: Tasks (with count), Projects, Decisions, Review (with count), Team, Settings | App shell | Tasks, projects, decision log, review queue, team and settings APIs |
+| Sidebar: Tasks (with count), Projects, Team, Settings (**Decisions and Review, with the Review count, are built**: `docs/sop/2026-11-03-stream-d-decisions-review.md`) | App shell | Tasks, projects, team and settings APIs |
 | "Join meetings automatically" card, Connect calendar, Upcoming list and toggles | Meetings | Calendar connection and auto-join (pilot design, PR #20) |
 | Recurring (series) cards, the Series screen | Meetings, meeting page | Series model and API |
 | "N tasks" link on a list row | Meetings | Tasks |
@@ -130,7 +130,7 @@ The words are in one file (`web/components/landing/content.ts`) plus the two pre
 | Action items as tasks with owner, due date, "Needs owner", "View board" | Meeting page | Structured notes and tasks |
 | "On next agenda" chips, Mark resolved, agenda items, Send agenda | Meeting page, series | Agenda and carry-over model |
 | Delete template | Templates | `DELETE /api/templates/<id>` |
-| Projects, Tasks board, Decisions, Review, Team (invite), Settings screens | Main app prototype | Everything above |
+| Projects, Tasks board, Team (invite), Settings screens (**Decisions and Review are built**) | Main app prototype | Everything above |
 | Emails: reminders, notes shared, invitations, verification | `Emails.dc.html` | Mail provider (pilot design Q6), HTML templates, scheduling |
 | Sign-up buttons and "See the app" on the landing page | `Landing.dc.html` | Not part of stream D's account screens; left as it was (the sign-up pages exist, but sign-up is closed) |
 

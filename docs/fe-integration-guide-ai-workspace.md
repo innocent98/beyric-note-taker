@@ -11,8 +11,10 @@ lists it.
 
 Read this with `docs/fe-integration-guide-owner-app.md` (session cookie, CSRF, error shape,
 meetings, vocabulary): all of it still holds. Scope: the **API** of the Decisions and Review screens
-and the extraction state on the meeting page. No screen is built yet. Types: `docs/openapi.json` is
-updated; run `npm run gen:api` in `web/` to refresh `lib/api/schema.d.ts` (not done in this change).
+and the extraction state on the meeting page. The screens are built since (`/decisions`, `/review`:
+`docs/sop/2026-11-03-stream-d-decisions-review.md`; no shape in this guide changed). Types:
+`web/lib/api/schema.d.ts` is generated from `docs/openapi.json` and was checked with `npm run gen:api`
+on 2026-11-03: no difference.
 
 ## 0. How every call works (unchanged)
 

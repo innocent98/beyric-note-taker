@@ -1,10 +1,15 @@
 import type {
+  DecisionList,
   ExportFormat,
   FieldError,
   Meeting,
   MeetingList,
   NewMeeting,
   Pilot,
+  ReviewItem,
+  ReviewList,
+  ReviewState,
+  ReviewTermResult,
   SessionState,
   SignUpBody,
   Template,
@@ -226,6 +231,20 @@ export function createApi(options: ApiOptions = {}) {
       create: (body: TemplateInput) => request<Template>("POST", "/api/templates", { body, write: true }),
       update: (id: number, body: TemplateInput) =>
         request<Template>("PUT", `/api/templates/${id}`, { body, write: true }),
+    },
+    // GET /api/decisions groups by meeting; `limit` counts meetings. Hiding never edits the notes.
+    decisions: {
+      list: (query: { q?: string; limit?: number; before_id?: number } = {}) =>
+        request<DecisionList>("GET", "/api/decisions", { query }),
+      hide: (id: number) => request<void>("POST", `/api/decisions/${id}/hide`, { write: true }),
+    },
+    // Items to check against the transcript. Adding a term also marks the item checked.
+    review: {
+      list: (state: ReviewState = "open") => request<ReviewList>("GET", "/api/review", { query: { state } }),
+      check: (id: number) => request<ReviewItem>("POST", `/api/review/${id}/check`, { write: true }),
+      uncheck: (id: number) => request<ReviewItem>("POST", `/api/review/${id}/uncheck`, { write: true }),
+      addToVocabulary: (id: number, term: string) =>
+        request<ReviewTermResult>("POST", `/api/review/${id}/vocabulary`, { body: { term }, write: true }),
     },
     vocabulary: {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,

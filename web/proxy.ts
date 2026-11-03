@@ -31,6 +31,8 @@ export const config = {
     "/reset-password",
     "/pilot-full",
     "/meetings/:id",
+    "/decisions",
+    "/review",
     "/templates",
     "/vocabulary",
     "/privacy",

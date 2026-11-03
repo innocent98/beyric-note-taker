@@ -14,6 +14,15 @@ export type NewMeeting = Schemas["NewMeeting"];
 export type Template = Schemas["TemplateOut"];
 export type TemplateInput = Schemas["TemplateIn"];
 export type Term = Schemas["TermOut"];
+export type MeetingRef = Schemas["MeetingRef"];
+export type Decision = Schemas["DecisionOut"];
+export type DecisionGroup = Schemas["DecisionGroup"];
+export type DecisionList = Schemas["DecisionList"];
+export type ReviewItem = Schemas["ReviewItemOut"];
+export type ReviewList = Schemas["ReviewList"];
+export type ReviewTermResult = Schemas["ReviewTermOut"];
+export type ReviewState = "open" | "checked";
+export type ExtractionStatus = NonNullable<Meeting["extraction_status"]>;
 
 export type MeetingStatus = Meeting["status"];
 export type StatusTone = Meeting["status_tone"];
