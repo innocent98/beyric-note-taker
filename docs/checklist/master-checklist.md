@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status (2026-11-03, updated for the sign-up PR):** MVP live at notes.beyrictech.com (PRs #1–#23, #25 and #26 merged and deployed 2026-11-03; #24 docs open). The UI foundation (Module 2a) and the JSON API are shipped; the frontend is moving to Next.js (Module 2b: the front door, the owner screens and the UI parity pass are merged and live). The Pilot module (accounts plus calendar auto-join) has an approved design (Adebayo answered the questions 2026-11-03); the plan and the Phase 0 spikes are next. Next steps and Adebayo's queued items are in `docs/HANDOFF-master.md`.
+**Status (2026-11-03, updated for the sign-up PR):** MVP live at notes.beyrictech.com (PRs #1–#23, #25 and #26 merged and deployed 2026-11-03; #24 docs open). The UI foundation (Module 2a) and the JSON API are shipped; the frontend is moving to Next.js (Module 2b: the front door, the owner screens and the UI parity pass are merged and live). The Pilot module (accounts plus calendar auto-join) has an approved design (Adebayo answered the questions 2026-11-03); the plan and the Phase 0 spikes are next. Next steps and Adebayo's queued items are in `docs/HANDOFF-master.md`. **2026-11-03: Adebayo decided every designed screen (tasks, projects, decisions, review, team, series, download, share, translate, settings) is pilot work; the design is `docs/superpowers/specs/2026-11-03-ai-workspace-design.md` and the per-screen list is under Module 2b, Stream D.**
 
 Legend: `[x]` done and verified, `[ ]` not done.
 
@@ -153,18 +153,35 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Decided 2026-11-03 (Adebayo): keep the designer's landing and sign-in words even though some run ahead of the product (Teams, tasks, integrations, sharing); revisit before the Google verification submission
   - [x] Run `owner-e2e.mjs` and `owner-browser-check.mjs` on the compose stack (2026-11-03: 41/41 and all pass, also with `--poll-check` and `--send-check`; SOP `2026-11-03-ui-parity.md`, "Live check"). Live public pages read in a browser; favicon link fixed. Still open: a live authenticated pass by Adebayo, and the designed 404 for unknown URLs (FastAPI JSON shows)
   - [ ] Needs backend, not built (listed in the report): sign-up, forgot password, SSO, accounts and sidebar identity, calendar and auto-join card, series, tasks, projects, decisions, review, team, settings, download, share, translation, agenda, template delete, Emails
-- [ ] Stream D, new designed screens: accounts and pilot, calendar and auto-join, team, tasks, sprints, share and download, translation
-  - [ ] Accounts and pilot screens (branch `feature/stream-d-auth-pages`, 2026-11-03; SOP `2026-11-03-accounts-auth-pages.md`; against `web/scripts/mock-api.mjs` replaying the captures, not against real FastAPI or a real mail)
-    - [x] `/signup`: the form (invitation token read in the browser and removed from the address, name, email, password with Show / Hide, Terms checkbox, Google when `google_signin`), the "check your email" screen with a 60 s resend, the `closed` and `full` screens with the waiting list, `?invite=` (form even while closed or full), API refusals switch the screen
-    - [x] `/verify-email?token=`: password form (a GET never confirms), "Email confirmed", dead-link screen with "Send a new link", `pilot_full` screen that keeps the link
-    - [x] `/forgot-password` and its "check your email" state (60 s resend)
-    - [x] `/reset-password?token=`: new password and confirm, "Password updated", dead-link screen
-    - [x] `/pilot-full`: waiting list form pre-filled from `prefill_email`
-    - [x] `/login`: "Forgot password?", Google button only when `GET /api/pilot` says `google_signin`, "Create account" in the header, `?error=<code>` messages, the "confirm your email" line under a wrong-password answer
-    - [x] Client: `pilot`, `signup`, `resendVerification`, `verifyEmail`, `forgotPassword`, `resetPassword`, `joinWaitlist`; nginx's non-JSON 429 becomes `too_many_requests`
-    - [x] Tests: 85 new (`accounts-api`, `accounts-pages`, `accounts-server`, `accounts-guards`); mock API extended from the captures
-    - [ ] Designed and not built (no backend): workspace setup, team invite acceptance, Microsoft sign-in, "Keep me signed in", the 6-digit email code (the API confirms with a link and the password)
-    - [ ] Not checked: CI on the pushed head, a real mail, a real Google round trip, Safari and Firefox, the live site. Sign-up stays closed (`signups_open` is false)
+- [ ] Stream D, new designed screens, one line per screen. **Decided 2026-11-03 (Adebayo): every designed screen is pilot work, and the AI workspace spec is approved ("all recommended" for D1 to D19).** The AI workspace screens follow `docs/superpowers/specs/2026-11-03-ai-workspace-design.md` (phases W0 to W10; "Needs" names the backend phase that must merge first; "Designer gap" is a control the prototype does not draw). Each screen is built after its API merges, against live captures in the FE guide, and ticked only when verified in a real browser.
+  - [ ] D1, accounts and pilot (needs Module 2 phase A, shipped on the backend): sign up, confirm your email (`/verify-email`), forgot password, check your email, new password (`/reset-password`), waitlist form and "pilot full" (`/pilot-full`, designer gap), accept invite (`/signup?invite=`), Google sign-in buttons and the `/login?error=` messages, sidebar identity (name and email from `GET /api/session`), usage bar and "hours used up" (designer gap), notification bell (designer gap), admin screens: users, waitlist, pilot settings (designer gap)
+    - Shipped on the frontend so far (from main, PR #44); the rest of D1 is still open:
+      - [ ] Accounts and pilot screens (branch `feature/stream-d-auth-pages`, 2026-11-03; SOP `2026-11-03-accounts-auth-pages.md`; against `web/scripts/mock-api.mjs` replaying the captures, not against real FastAPI or a real mail)
+        - [x] `/signup`: the form (invitation token read in the browser and removed from the address, name, email, password with Show / Hide, Terms checkbox, Google when `google_signin`), the "check your email" screen with a 60 s resend, the `closed` and `full` screens with the waiting list, `?invite=` (form even while closed or full), API refusals switch the screen
+        - [x] `/verify-email?token=`: password form (a GET never confirms), "Email confirmed", dead-link screen with "Send a new link", `pilot_full` screen that keeps the link
+        - [x] `/forgot-password` and its "check your email" state (60 s resend)
+        - [x] `/reset-password?token=`: new password and confirm, "Password updated", dead-link screen
+        - [x] `/pilot-full`: waiting list form pre-filled from `prefill_email`
+        - [x] `/login`: "Forgot password?", Google button only when `GET /api/pilot` says `google_signin`, "Create account" in the header, `?error=<code>` messages, the "confirm your email" line under a wrong-password answer
+        - [x] Client: `pilot`, `signup`, `resendVerification`, `verifyEmail`, `forgotPassword`, `resetPassword`, `joinWaitlist`; nginx's non-JSON 429 becomes `too_many_requests`
+        - [x] Tests: 85 new (`accounts-api`, `accounts-pages`, `accounts-server`, `accounts-guards`); mock API extended from the captures
+        - [ ] Designed and not built (no backend): workspace setup, team invite acceptance, Microsoft sign-in, "Keep me signed in", the 6-digit email code (the API confirms with a link and the password)
+        - [ ] Not checked: CI on the pushed head, a real mail, a real Google round trip, Safari and Firefox, the live site. Sign-up stays closed (`signups_open` is false)
+  - [ ] D2, calendar and auto-join (needs Module 2 phase C): Meetings page calendar card and Upcoming list with per-meeting switches, "Not recorded" rows with Send now (designer gap), "Calendar disconnected" banner and Reconnect (designer gap), Settings, Calendar (rules, template), the instant-Meet switch (designer gap)
+  - [ ] D3, Decisions (needs W1): search, groups by meeting, Open notes, Remove from log (designer gap)
+  - [ ] D4, Review (needs W1): open and checked lists, Add to vocabulary, Open transcript, Mark as checked, Undo, sidebar badge, "Rewrite notes with the corrected spelling" offer
+  - [ ] D5, Tasks (needs W2; owners need W3; projects need W4; sprints need W9): filter chips, project tabs, Board and Backlog, drag and drop, task drawer, "needs attention" banner, New task, sprint header and Close sprint, milestone card, meeting page Action items as tasks; states for extraction pending and failed (designer gap)
+  - [ ] D6, Projects (needs W4): list, name, colour, recurring meetings, keywords, sprint length, milestone (proposal chip is a designer gap), delete
+  - [ ] D7, Team (needs W3; W0.4 first): members, roles, aliases (editing is a designer gap), invite dialog (name field is a designer gap), Resend, remove, "Share with team" switch on the meeting page (designer gap)
+  - [ ] D8, Series (needs W8, and Module 2 phase C for recurring ids): cards on Meetings, series page (unfinished, finished since, carried questions, agenda, past meetings, attendees), "On next agenda" toggles, Send agenda, Details row on the meeting page, "Add to recurring meeting" and "Possibly resolved" chips (designer gaps)
+  - [ ] D9, Download (needs W5): menu with PDF and Word, transcript tick, language note
+  - [ ] D10, Share (needs W6, and W3 for participants): dialog, recipients, language, attachment, transcript, message, "Shared with ..." note, "Add email" on a participant (designer gap), share-limit message (designer gap)
+  - [ ] D11, Translate (needs W7): language select, "Translating ..." and "Translated from ..." banners, Show original, default language in Settings, failed state (designer gap)
+  - [ ] D12, Settings (needs W2, W7, W8, W9, W10): Tasks card, default language, sprints and reminders card, Slack and tracker cards
+  - [ ] D13, meeting page details (needs W0.4 and W8): duration (`recorded_seconds`), participants (names from speaker labels), series, milestone
+  - [ ] D14, Emails in the designer's layout (needs W0.3): replace the plain mails (`Emails.dc.html` applies to all eight)
+  - [ ] D15, template delete (needs `DELETE /api/templates/{id}`, not yet built, and a `template_in_use` refusal for a template still used by a meeting or the calendar setting; both are planned in the accounts spec, neither exists in code yet)
+  - [ ] D16, shell leftovers: toast component, PWA basics
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated
 - [ ] Measure Next.js memory on the server (Adebayo runs the SSH steps)
 
@@ -250,9 +267,9 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 
 - [ ] Outlook calendar (after Google)
 - [ ] Microsoft Teams links (Vexa supports them; about a day plus a test call)
-- [ ] Languages: a default notes language, translation as a separate view (original stays the main version), a language for each share, names and vocabulary kept unchanged (designed in docs/ui). First test a French and English call
+- [ ] (Now W7 of the AI workspace spec) Languages: a default notes language, translation as a separate view (original stays the main version), a language for each share, names and vocabulary kept unchanged (designed in docs/ui). First test a French and English call
 - [ ] Mac app for capture without a bot
-- [ ] Sharing notes by email (designed in docs/ui)
+- [ ] (Now W6 of the AI workspace spec) Sharing notes by email (designed in docs/ui)
 
 ## Deferred follow-ups
 
