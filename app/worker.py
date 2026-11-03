@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import mail
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import AppState, Meeting
@@ -66,8 +67,19 @@ def run_pass(session: Session, after_id: int) -> int | None:
     return meeting_id
 
 
+def send_mail(session: Session, mailer: mail.Mailer | None, now: datetime) -> int:
+    """Send the mail that is due. With no mailer (production without a provider) mail waits in
+    the outbox until the next sweep fails it."""
+    if mailer is None:
+        return 0
+    return mail.deliver_pending(session, mailer, get_settings(), now)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    mailer = mail.build_mailer(get_settings())
+    if mailer is None:
+        logger.warning("no mail provider is configured: mail stays in the outbox")
     stop = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
@@ -79,9 +91,11 @@ def main() -> None:
         try:
             with SessionLocal() as session:
                 record_heartbeat(session, datetime.now(UTC))
+                send_mail(session, mailer, datetime.now(UTC))
                 found = run_pass(session, cursor)
                 if time.monotonic() - last_cleanup >= CLEANUP_EVERY_SECONDS:
                     removed = delete_expired_audio(session, datetime.now(UTC), vexa=VexaClient())
+                    mail.sweep_outbox(session, datetime.now(UTC))
                     last_cleanup = time.monotonic()
                     if removed:
                         logger.info("deleted audio for %s meetings", removed)
