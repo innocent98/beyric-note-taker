@@ -7,8 +7,9 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from app import services
+from app import auth, services
 from app.db import get_session
+from app.models import User
 from app.pipeline import MAX_JOIN_ATTEMPTS, REMOVAL_REASONS
 from app.services import (
     Refused,
@@ -36,7 +37,7 @@ templates.env.globals["status_tone"] = status_tone
 
 def render(request: Request, name: str, status_code: int = 200, **context):
     context["csrf"] = request.state.session["csrf"]
-    context["logged_in"] = request.state.session["auth"]
+    context["logged_in"] = request.state.user is not None
     return templates.TemplateResponse(request, name, context, status_code=status_code)
 
 
@@ -49,17 +50,23 @@ def see_other(url: str) -> RedirectResponse:
 
 @router.get("/login")
 def login_page(request: Request):
-    if request.state.session["auth"]:
+    if request.state.user is not None:
         return see_other("/")
     return render(request, "login.html")
 
 
 @router.post("/login")
-def login(request: Request, password: str = Form(""), session: Session = Depends(get_session)):
+def login(
+    request: Request,
+    email: str = Form(""),
+    password: str = Form(""),
+    session: Session = Depends(get_session),
+):
     try:
-        services.log_in(request, session, password)
+        services.log_in(request, session, email, password)
     except Refused as exc:
-        return render(request, "login.html", exc.status, error=exc.message)
+        # The email is shown again so a typo is easy to fix; the password never is.
+        return render(request, "login.html", exc.status, error=exc.message, email=email.strip())
     return see_other("/")
 
 
@@ -72,13 +79,13 @@ def logout(request: Request, session: Session = Depends(get_session)):
 # ---- meetings ----
 
 
-def _index(request, session: Session, status_code=200, **context):
+def _index(request, session: Session, user: User, status_code=200, **context):
     return render(
         request,
         "index.html",
         status_code,
-        meetings=services.list_meetings(session),
-        templates=services.list_templates(session),
+        meetings=services.list_meetings(session, user),
+        templates=services.list_templates(session, user),
         worker_stale=services.worker_is_stale(session),
         **context,
     )
@@ -86,9 +93,9 @@ def _index(request, session: Session, status_code=200, **context):
 
 @router.get("/")
 def index(request: Request, session: Session = Depends(get_session)):
-    if not request.state.session["auth"]:
+    if request.state.user is None:
         return render(request, "landing.html")
-    return _index(request, session)
+    return _index(request, session, request.state.user)
 
 
 # ---- public pages ----
@@ -119,13 +126,16 @@ def create_meeting(
     url: str = Form(""),
     template_id: str = Form(""),
     session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
     vexa=Depends(get_vexa),
 ):
     try:
-        meeting = services.create_meeting(session, vexa, url, parse_id(template_id))
+        meeting = services.create_meeting(
+            session, vexa, user, url, parse_id(template_id), request.app.state.settings
+        )
     except Refused as exc:
         # The submitted link is not echoed back: a Zoom link carries its meeting password.
-        return _index(request, session, exc.status, error=exc.message, chosen=template_id)
+        return _index(request, session, user, exc.status, error=exc.message, chosen=template_id)
     return see_other(f"/meetings/{meeting.id}")
 
 
@@ -135,7 +145,7 @@ def _meeting_page(request, session: Session, meeting, status_code=200, **context
         "meeting.html",
         status_code,
         meeting=meeting,
-        templates=services.list_templates(session),
+        templates=services.list_templates(session, request.state.user),
         retry_block=retry_block(meeting) if meeting.status == "failed" else None,
         bot_left_early=meeting.completion_reason in REMOVAL_REASONS,
         max_join_attempts=MAX_JOIN_ATTEMPTS,
@@ -144,8 +154,13 @@ def _meeting_page(request, session: Session, meeting, status_code=200, **context
 
 
 @router.get("/meetings/{meeting_id:id}")
-def meeting_page(meeting_id: int, request: Request, session: Session = Depends(get_session)):
-    return _meeting_page(request, session, meeting_or_404(session, meeting_id))
+def meeting_page(
+    meeting_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+):
+    return _meeting_page(request, session, meeting_or_404(session, user, meeting_id))
 
 
 @router.post("/meetings/{meeting_id:id}/regenerate")
@@ -154,9 +169,10 @@ def regenerate(
     request: Request,
     template_id: str = Form(""),
     session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
     openai_client=Depends(get_openai_client),
 ):
-    meeting = meeting_or_404(session, meeting_id)
+    meeting = meeting_or_404(session, user, meeting_id)
     try:
         services.regenerate_notes(session, meeting, parse_id(template_id), openai_client)
     except Refused as exc:
@@ -169,9 +185,10 @@ def cancel(
     meeting_id: int,
     request: Request,
     session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
     vexa=Depends(get_vexa),
 ):
-    meeting = meeting_or_404(session, meeting_id)
+    meeting = meeting_or_404(session, user, meeting_id)
     try:
         services.cancel_meeting(session, vexa, meeting)
     except Refused as exc:
@@ -180,8 +197,13 @@ def cancel(
 
 
 @router.post("/meetings/{meeting_id:id}/retry")
-def retry(meeting_id: int, request: Request, session: Session = Depends(get_session)):
-    meeting = meeting_or_404(session, meeting_id)
+def retry(
+    meeting_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+):
+    meeting = meeting_or_404(session, user, meeting_id)
     try:
         services.retry_meeting(session, meeting)
     except Refused as exc:
@@ -192,23 +214,31 @@ def retry(meeting_id: int, request: Request, session: Session = Depends(get_sess
 # ---- templates ----
 
 
-def _templates_page(request, session: Session, status_code=200, **context):
+def _templates_page(request, session: Session, user: User, status_code=200, **context):
     return render(
-        request, "templates.html", status_code, rows=services.list_templates(session), **context
+        request,
+        "templates.html",
+        status_code,
+        rows=services.list_templates(session, user),
+        **context,
     )
 
 
-def _save_template(request, session: Session, template, name, instructions):
+def _save_template(request, session: Session, user: User, template, name, instructions):
     try:
-        services.save_template(session, template, name, instructions)
+        services.save_template(session, user, template, name, instructions)
     except Refused as exc:
-        return _templates_page(request, session, exc.status, error=exc.message)
+        return _templates_page(request, session, user, exc.status, error=exc.message)
     return see_other("/templates")
 
 
 @router.get("/templates")
-def templates_page(request: Request, session: Session = Depends(get_session)):
-    return _templates_page(request, session)
+def templates_page(
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+):
+    return _templates_page(request, session, user)
 
 
 @router.post("/templates")
@@ -217,8 +247,9 @@ def add_template(
     name: str = Form(""),
     instructions: str = Form(""),
     session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ):
-    return _save_template(request, session, None, name, instructions)
+    return _save_template(request, session, user, None, name, instructions)
 
 
 @router.post("/templates/{template_id:id}")
@@ -228,35 +259,55 @@ def edit_template(
     name: str = Form(""),
     instructions: str = Form(""),
     session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ):
-    template = template_or_404(session, template_id)
-    return _save_template(request, session, template, name, instructions)
+    template = template_or_404(session, user, template_id)
+    return _save_template(request, session, user, template, name, instructions)
 
 
 # ---- vocabulary ----
 
 
-def _vocabulary_page(request, session: Session, status_code=200, **context):
+def _vocabulary_page(request, session: Session, user: User, status_code=200, **context):
     return render(
-        request, "vocabulary.html", status_code, rows=services.list_terms(session), **context
+        request,
+        "vocabulary.html",
+        status_code,
+        rows=services.list_terms(session, user),
+        **context,
     )
 
 
 @router.get("/vocabulary")
-def vocabulary_page(request: Request, session: Session = Depends(get_session)):
-    return _vocabulary_page(request, session)
+def vocabulary_page(
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+):
+    return _vocabulary_page(request, session, user)
 
 
 @router.post("/vocabulary")
-def add_term(request: Request, term: str = Form(""), session: Session = Depends(get_session)):
+def add_term(
+    request: Request,
+    term: str = Form(""),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+):
     try:
-        services.add_term(session, term)
+        services.add_term(session, user, term)
     except Refused as exc:
-        return _vocabulary_page(request, session, exc.status, error=exc.message, term=term.strip())
+        return _vocabulary_page(
+            request, session, user, exc.status, error=exc.message, term=term.strip()
+        )
     return see_other("/vocabulary")
 
 
 @router.post("/vocabulary/{term_id:id}/delete")
-def delete_term(term_id: int, session: Session = Depends(get_session)):
-    services.delete_term(session, term_id)
+def delete_term(
+    term_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+):
+    services.delete_term(session, user, term_id)
     return see_other("/vocabulary")

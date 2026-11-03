@@ -279,13 +279,12 @@ class AppState(Base):
     session_epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # Set by the worker on every pass; the home page warns when it goes stale.
     worker_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Pilot settings. Nobody can sign up until the admin opens the pilot.
+    # Pilot settings. Nobody can sign up until the admin opens the pilot. The two nullable ints
+    # have a server default only, so an explicit None means "no limit".
     signups_open: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
-    max_accounts: Mapped[int | None] = mapped_column(Integer, default=10, server_default="10")
+    max_accounts: Mapped[int | None] = mapped_column(Integer, server_default="10")
     # Seconds of recorded audio per account for the whole pilot; null = no cap.
-    default_hours_cap_seconds: Mapped[int | None] = mapped_column(
-        Integer, default=18000, server_default="18000"
-    )
+    default_hours_cap_seconds: Mapped[int | None] = mapped_column(Integer, server_default="18000")
     password_signup_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=sa.false()
     )

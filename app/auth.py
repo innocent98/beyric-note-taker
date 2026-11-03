@@ -1,11 +1,12 @@
-"""Owner login: a signed session cookie, a CSRF token for every POST, and a failed-login limit.
+"""Accounts: a signed session cookie, a CSRF token for every POST, and failed-login limits.
 
-The session cookie holds `{"auth": bool, "csrf": token, "iat": seconds, "epoch": n}` signed with
-HMAC-SHA256. The signing key is derived from `session_secret` and `owner_password` together, so
-changing either signs everyone out. `epoch` is checked against `app_state.session_epoch` on every
-logged-in request, and logout bumps it, so a copied cookie stops working once the owner logs
-out. Anonymous visitors get a session too (so the login form has a CSRF token); logging in
-issues a fresh one, so a cookie from before login is never promoted.
+The session cookie holds `{"uid": int | None, "csrf": token, "iat": seconds, "epoch": n,
+"gepoch": n}` signed with HMAC-SHA256. The signing key is derived from `session_secret` alone, so
+changing it signs everyone out. `guard` loads the user (`uid`) on every request and drops the
+session unless the user is active, `epoch` equals `users.session_epoch` (logout and a password
+change bump it: that user only) and `gepoch` equals `app_state.session_epoch` (bumped to sign
+everyone out). Anonymous visitors get a session too (so the login form has a CSRF token), with
+`uid` null; logging in issues a fresh one, so a cookie from before login is never promoted.
 """
 
 import base64
@@ -23,7 +24,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.db import get_session
-from app.models import AppState
+from app.models import AppState, User
 
 COOKIE_NAME = "session"
 SESSION_SECONDS = 30 * 24 * 3600
@@ -67,22 +68,24 @@ def _unb64(text: str) -> bytes:
 
 
 def signing_key(settings: Settings) -> bytes:
-    """Key for session cookies: depends on both secrets, so a password change revokes sessions."""
-    return hmac.new(
-        settings.session_secret.encode(), b"session|" + settings.owner_password.encode(), "sha256"
-    ).digest()
+    """Key for session cookies: from `session_secret` only. No password is part of it (passwords
+    are per user now; a password change bumps that user's `session_epoch` instead)."""
+    return hmac.new(settings.session_secret.encode(), b"session", "sha256").digest()
 
 
 def _signature(key: bytes, body: str) -> str:
     return _b64(hmac.new(key, body.encode(), hashlib.sha256).digest())
 
 
-def new_session(*, auth: bool = False, epoch: int = 0, now: float | None = None) -> dict:
+def new_session(
+    *, uid: int | None = None, epoch: int = 0, gepoch: int = 0, now: float | None = None
+) -> dict:
     return {
-        "auth": auth,
+        "uid": uid,
         "csrf": secrets.token_urlsafe(32),
         "iat": int(now or time.time()),
         "epoch": epoch,
+        "gepoch": gepoch,
     }
 
 
@@ -101,23 +104,32 @@ def read_session(key: bytes, cookie: str | None, now: float | None = None) -> di
         return None
     try:
         data = json.loads(_unb64(body))
-        csrf, iat, auth, epoch = data["csrf"], data["iat"], data["auth"], data["epoch"]
+        uid, csrf, iat = data["uid"], data["csrf"], data["iat"]
+        epoch, gepoch = data["epoch"], data["gepoch"]
     except (ValueError, KeyError, TypeError):
         return None
-    if not (
-        isinstance(csrf, str)
-        and isinstance(iat, int)
-        and isinstance(auth, bool)
-        and isinstance(epoch, int)
-    ):
+    # bool is an int in Python; a cookie holding true where a number belongs is not ours.
+    if not (isinstance(csrf, str) and all(_is_int(n) for n in (iat, epoch, gepoch))):
+        return None
+    if not (uid is None or (_is_int(uid) and uid > 0)):
         return None
     if (now or time.time()) - iat > SESSION_SECONDS:
         return None
-    return {"auth": auth, "csrf": csrf, "iat": iat, "epoch": epoch}
+    return {"uid": uid, "csrf": csrf, "iat": iat, "epoch": epoch, "gepoch": gepoch}
+
+
+def _is_int(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def current_epoch(db: Session) -> int:
     return db.scalars(select(AppState.session_epoch).where(AppState.id == 1)).first() or 0
+
+
+def bump_user_epoch(db: Session, user_id: int) -> None:
+    """Sign one user out everywhere: logout, and a password change."""
+    db.execute(update(User).where(User.id == user_id).values(session_epoch=User.session_epoch + 1))
+    db.commit()
 
 
 def bump_epoch(db: Session) -> None:
@@ -128,11 +140,6 @@ def bump_epoch(db: Session) -> None:
     if updated.rowcount == 0:
         db.add(AppState(id=1, session_epoch=1))
     db.commit()
-
-
-def password_matches(settings: Settings, given: str) -> bool:
-    expected = settings.owner_password.encode()
-    return bool(expected) and hmac.compare_digest(given.encode(), expected)
 
 
 def account_key(account: str) -> str:
@@ -281,11 +288,9 @@ class LoginLimiter:
 
 def device_key(settings: Settings) -> bytes:
     """Key for device cookies. Derived like the session key but with its own label, so a device
-    cookie is never a valid session cookie. A new owner password or session secret changes it,
-    which retires every device cookie."""
-    return hmac.new(
-        settings.session_secret.encode(), b"device|" + settings.owner_password.encode(), "sha256"
-    ).digest()
+    cookie is never a valid session cookie. A new session secret changes it, which retires every
+    device cookie."""
+    return hmac.new(settings.session_secret.encode(), b"device", "sha256").digest()
 
 
 def sign_device(
@@ -335,9 +340,9 @@ DEV_ENVS = ("development", "test")
 
 
 def check_start(settings: Settings) -> None:
-    """Fail closed: only a named dev environment may run without a password and secret.
+    """Fail closed: only a named dev environment may run without a session secret.
 
-    Any other `app_env` value (including a typo such as "prod") must have both set.
+    Any other `app_env` value (including a typo such as "prod") must have it set.
     """
     if settings.app_env in DEV_ENVS:
         return
@@ -345,13 +350,12 @@ def check_start(settings: Settings) -> None:
         raise RuntimeError(
             f"app_env must be production, development or test (got {settings.app_env!r})"
         )
-    for name in ("owner_password", "session_secret"):
-        if not getattr(settings, name):
-            raise RuntimeError(f"{name} must be set before the app can start in production")
+    if not settings.session_secret:
+        raise RuntimeError("session_secret must be set before the app can start in production")
 
 
 PUBLIC_PATHS = frozenset({"/login", "/privacy", "/terms"})
-# The JSON API is owner-only except the two calls that start a session. Everything else under
+# The JSON API needs a login except the two calls that start a session. Everything else under
 # `/api/` needs a login, and every call that is not a read needs the CSRF header.
 API_PREFIX = "/api/"
 PUBLIC_API = frozenset({("GET", "/api/session"), ("POST", "/api/session")})
@@ -369,18 +373,43 @@ def _csrf_matches(given: object, session: dict) -> bool:
     return isinstance(given, str) and hmac.compare_digest(given.encode(), session["csrf"].encode())
 
 
+def load_user(db: Session, session: dict) -> User | None:
+    """The active user a session cookie belongs to, or None when it is anonymous or revoked:
+    no such user, not active (suspended or deleted), signed out since (`epoch`), or everyone was
+    signed out since (`gepoch`)."""
+    uid = session["uid"]
+    if uid is None:
+        return None
+    user = db.get(User, uid)
+    if user is None or user.status != "active" or session["epoch"] != user.session_epoch:
+        return None
+    return user if session["gepoch"] == current_epoch(db) else None
+
+
+def current_user(request: Request) -> User:
+    """The signed-in user of this request. Every route that is not public takes this, so it is
+    the only way any service learns who is calling."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise NotLoggedIn
+    return user
+
+
 async def guard(request: Request, db: Session = Depends(get_session)) -> None:
-    """App-wide check: owner pages need a login, and every POST needs a valid CSRF token.
+    """App-wide check: pages need a login, and every POST needs a valid CSRF token.
 
     Pages send the token as the `csrf_token` form field. `/api/` calls send it in the
     `X-CSRF-Token` header (no body is read here) on every method except GET, HEAD and OPTIONS.
+    Sets `request.state.user` (None for a visitor).
     """
     path = request_path(request)
+    request.state.user = None
     if path == "/health":
         return
     session = request.state.session
-    if session["auth"] and session["epoch"] != current_epoch(db):
-        session = request.state.session = new_session()  # revoked by a logout
+    request.state.user = load_user(db, session)
+    if session["uid"] is not None and request.state.user is None:
+        session = request.state.session = new_session()  # revoked, suspended, or signed out
         request.state.session_changed = True
     api = path.startswith(API_PREFIX)
     if api:
@@ -389,7 +418,7 @@ async def guard(request: Request, db: Session = Depends(get_session)) -> None:
         # The landing page (logged-out "/") and the legal pages must be readable without a login:
         # Google's app review checks them. POSTs to them still need the CSRF token below.
         public = path in PUBLIC_PATHS or (path == "/" and request.method in ("GET", "HEAD"))
-    if not public and not session["auth"]:
+    if not public and request.state.user is None:
         raise NotLoggedIn
     if api:
         if request.method not in SAFE_METHODS:

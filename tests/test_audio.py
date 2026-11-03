@@ -133,3 +133,16 @@ def test_timeout_raises_audio_error(monkeypatch, silent_audio, tmp_path):
     monkeypatch.setattr(audio.subprocess, "run", fake_run)
     with pytest.raises(AudioError, match="timed out"):
         prepare_chunks(silent_audio, tmp_path)
+
+
+def test_prepare_recording_measures_the_recording_it_chunks(tmp_path, monkeypatch):
+    chunk = tmp_path / "chunk_000.webm"
+    monkeypatch.setattr(audio, "_ffmpeg", lambda *a: None)
+    monkeypatch.setattr(audio, "_analyse", lambda path: (-20.0, []))
+    monkeypatch.setattr(audio, "_duration", lambda path: 61.2)
+    source = tmp_path / "source.webm"
+    source.write_bytes(b"x")
+    recording = audio.prepare_recording(source, tmp_path / "out")
+    assert recording.seconds == 62  # rounded up: a started second is a second
+    assert [c.name for c in recording.chunks] == [chunk.name]
+    assert audio.prepare_chunks(source, tmp_path / "out2") == [tmp_path / "out2" / chunk.name]

@@ -3,9 +3,11 @@
     python scripts/capture_owner_api.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres
 
 The argument is any Postgres server the script may create a scratch database on. It runs the
-real migrations there, starts the real app under uvicorn on a free local port with only Vexa and
-OpenAI replaced by fakes, and walks the owner journey with httpx. Each exchange is written to
-`docs/fe-captures/owner-app/NN-name.json`, so every claim in the frontend guide
+real migrations there (migration 0006 creates the admin account from OWNER_EMAIL and
+OWNER_PASSWORD, set below to placeholders), starts the real app under uvicorn on a free local
+port with only Vexa and OpenAI replaced by fakes, and walks the owner journey with httpx. Each
+exchange is written to `docs/fe-captures/owner-app/NN-name.json`, so every claim in the frontend
+guide
 (`docs/fe-integration-guide-owner-app.md`) can be re-derived by running this again.
 
 What is real: the app, auth, CSRF, validation, database, migrations, serialisation and every
@@ -30,7 +32,11 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "fe-captures" / "owner-app"
 DB_NAME = "notetaker_capture"
+OWNER_EMAIL = "owner@example.test"  # the admin account migration 0006 creates (a placeholder)
 PASSWORD = "capture-password-placeholder"
+LOGIN = {"email": OWNER_EMAIL, "password": PASSWORD}
+PILOT_EMAIL = "pilot@example.test"  # an ordinary pilot account (placeholders, not real people)
+PILOT_PASSWORD = "pilot-password-placeholder"
 MEET = "https://meet.google.com/abc-defg-hij"
 ZOOM = "https://us02web.zoom.us/j/12345678901?pwd=PLACEHOLDERPWD"  # placeholder, not a real meeting
 
@@ -42,17 +48,23 @@ def database_urls(admin_url: str) -> tuple[str, str]:
 
 admin_url, scratch_url = database_urls(sys.argv[1] if len(sys.argv) > 1 else "")
 os.environ["DATABASE_URL"] = scratch_url  # read by app.db when it is imported below
+os.environ["OWNER_EMAIL"] = OWNER_EMAIL  # read by migration 0006
+os.environ["OWNER_PASSWORD"] = PASSWORD
 
 import httpx  # noqa: E402
 import uvicorn  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
-from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy import create_engine, select, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
+from app import usage  # noqa: E402
+from app.accounts import create_user_defaults  # noqa: E402
+from app.auth import LoginLimiter  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import AppState, Meeting  # noqa: E402
+from app.models import AppState, Meeting, UsageEntry, User  # noqa: E402
+from app.passwords import hash_password  # noqa: E402
 from app.pipeline import REASON_DOWNLOAD, REASON_NO_SPEECH, REASON_NOT_ADMITTED  # noqa: E402
 from app.services import get_openai_client, get_vexa  # noqa: E402
 from app.vexa import VexaError  # noqa: E402
@@ -195,9 +207,10 @@ def prepare_database() -> None:
     command.upgrade(Config(str(ROOT / "alembic.ini")), "head")  # the real migrations and seeds
 
 
-def seed(engine, general: int) -> dict[str, int]:
+def seed(engine, general: int, owner_id: int) -> dict[str, int]:
     """Meetings in the states the worker would leave them in (it is not running here)."""
     base = {
+        "owner_user_id": owner_id,
         "url": MEET,
         "platform": "google_meet",
         "native_id": "abc-defg-hij",
@@ -265,7 +278,6 @@ def main() -> None:
     settings = Settings(
         _env_file=None,
         app_env="test",  # lets cookies work over plain http; production adds the Secure flag
-        owner_password=PASSWORD,
         session_secret="capture-secret-" + "x" * 30,
         cookie_secure=False,
         database_url=scratch_url,
@@ -277,13 +289,13 @@ def main() -> None:
     server, base = start_server(app)
     engine = create_engine(scratch_url)
     try:
-        run(base, engine, vexa, openai_client)
+        run(app, base, engine, vexa, openai_client)
     finally:
         server.should_exit = True
         engine.dispose()
 
 
-def run(base, engine, vexa, openai_client) -> None:
+def run(app, base, engine, vexa, openai_client) -> None:
     owner = Recorder(base)
 
     # --- session ---
@@ -299,22 +311,32 @@ def run(base, engine, vexa, openai_client) -> None:
         "/api/meetings",
         note="Not logged in: 401 JSON, not a redirect.",
     )
-    owner.call("login-without-csrf", "POST", "/api/session", body={"password": PASSWORD}, csrf=None)
+    owner.call("login-without-csrf", "POST", "/api/session", body=LOGIN, csrf=None)
     owner.call(
         "login-wrong-csrf",
         "POST",
         "/api/session",
-        body={"password": PASSWORD},
+        body=LOGIN,
         csrf="not-the-token",
     )
-    owner.call("login-wrong-password", "POST", "/api/session", body={"password": "nope"})
+    owner.call(
+        "login-wrong-password",
+        "POST",
+        "/api/session",
+        body={"email": OWNER_EMAIL, "password": "nope"},
+    )
     owner.call("login-missing-password", "POST", "/api/session", body={})
-    owner.call("login-password-wrong-type", "POST", "/api/session", body={"password": 123456})
+    owner.call(
+        "login-password-wrong-type",
+        "POST",
+        "/api/session",
+        body={"email": OWNER_EMAIL, "password": 123456},
+    )
     owner.call(
         "login-ok",
         "POST",
         "/api/session",
-        body={"password": PASSWORD},
+        body=LOGIN,
         note="The csrf_token here replaces the one from before login.",
     )
     owner.call("session-logged-in", "GET", "/api/session")
@@ -455,7 +477,9 @@ def run(base, engine, vexa, openai_client) -> None:
     with Session(engine) as session:
         session.get(AppState, 1).worker_heartbeat_at = datetime.now(UTC) - timedelta(minutes=2)
         session.commit()
-    ids = seed(engine, general["id"])
+    with Session(engine) as session:
+        admin_id = session.scalars(select(User.id).where(User.email == OWNER_EMAIL)).one()
+    ids = seed(engine, general["id"], admin_id)
     for key in (
         "processing",
         "processing_transcribing",
@@ -545,15 +569,148 @@ def run(base, engine, vexa, openai_client) -> None:
     guest.call("limit-session", "GET", "/api/session")
     for attempt in range(1, 6):
         guest.call(
-            f"limit-wrong-password-{attempt}", "POST", "/api/session", body={"password": "nope"}
+            f"limit-wrong-password-{attempt}",
+            "POST",
+            "/api/session",
+            body={"email": OWNER_EMAIL, "password": "nope"},
         )
-    guest.call("limit-sixth-attempt", "POST", "/api/session", body={"password": "nope"})
+    guest.call(
+        "limit-sixth-attempt",
+        "POST",
+        "/api/session",
+        body={"email": OWNER_EMAIL, "password": "nope"},
+    )
     guest.call(
         "limit-right-password-while-locked",
         "POST",
         "/api/session",
-        body={"password": PASSWORD},
+        body=LOGIN,
         note="While locked out even the right password gets 429.",
+    )
+    run_accounts(app, base, engine, ids, general["id"])
+
+
+def run_accounts(app, base, engine, ids, admin_general_id) -> None:
+    """A second, ordinary account: what login can end in, the hours cap, and that one user's ids
+    mean nothing to another. Numbered after everything above so the earlier files keep their
+    numbers."""
+    app.state.limiter = LoginLimiter()  # the limit captures above used up this address
+    now = datetime.now(UTC)
+    with Session(engine) as session:
+        pilot = User(
+            email=PILOT_EMAIL,
+            name="Pilot Example",
+            password_hash=hash_password(PILOT_PASSWORD),
+            email_verified_at=now,
+        )
+        session.add_all(
+            [
+                pilot,
+                User(
+                    email="unverified@example.test",
+                    password_hash=hash_password(PILOT_PASSWORD),
+                ),
+                User(
+                    email="suspended@example.test",
+                    password_hash=hash_password(PILOT_PASSWORD),
+                    email_verified_at=now,
+                    status="suspended",
+                ),
+            ]
+        )
+        session.commit()
+        create_user_defaults(session, pilot)
+        pilot_id = pilot.id
+
+    def body(email, password=PILOT_PASSWORD):
+        return {"email": email, "password": password}
+
+    guest = Recorder(base)
+    guest.call("accounts-session-anonymous", "GET", "/api/session")
+    guest.call("login-missing-email", "POST", "/api/session", body={"password": "x"})
+    guest.call(
+        "login-unknown-email",
+        "POST",
+        "/api/session",
+        body=body("nobody@example.test"),
+        note="Same status, code and message as a wrong password: no account is revealed.",
+    )
+    guest.call(
+        "login-unverified",
+        "POST",
+        "/api/session",
+        body=body("unverified@example.test"),
+        note="Right password, but the email was never confirmed: no session.",
+    )
+    guest.call(
+        "login-suspended",
+        "POST",
+        "/api/session",
+        body=body("suspended@example.test"),
+        note="Right password, suspended account: no session.",
+    )
+
+    pilot_client = Recorder(base)
+    pilot_client.call("accounts-session-anonymous-2", "GET", "/api/session")
+    pilot_client.call(
+        "login-ok-pilot-user",
+        "POST",
+        "/api/session",
+        body=body(PILOT_EMAIL),
+        note="An ordinary account: a capped `usage`, not an admin.",
+    )
+    pilot_templates = pilot_client.call(
+        "templates-pilot-user",
+        "GET",
+        "/api/templates",
+        note="Their own four default templates, not the admin's.",
+    ).json()["templates"]
+    pilot_general = next(t for t in pilot_templates if t["name"] == "General")
+    pilot_client.call("meetings-pilot-user-empty", "GET", "/api/meetings")
+    other = ids["ready"]
+    pilot_client.call(
+        "meeting-of-another-user",
+        "GET",
+        f"/api/meetings/{other}",
+        note="A meeting that exists but is someone else's: 404, as if it did not exist.",
+    )
+    pilot_client.call("meeting-cancel-of-another-user", "POST", f"/api/meetings/{other}/cancel")
+    pilot_client.call(
+        "template-of-another-user",
+        "PUT",
+        f"/api/templates/{admin_general_id}",
+        body={"name": "Mine now", "instructions": "x"},
+    )
+    pilot_client.call("vocabulary-of-another-user", "DELETE", "/api/vocabulary/2")
+    pilot_client.call(
+        "meeting-create-with-another-users-template",
+        "POST",
+        "/api/meetings",
+        body={"url": MEET, "template_id": admin_general_id},
+        note="A template id that is someone else's looks like a missing template.",
+    )
+    with Session(engine) as session:
+        session.add(
+            UsageEntry(
+                user_id=pilot_id,
+                email_hash=usage.email_hash(PILOT_EMAIL),
+                seconds=5 * 3600,
+                counted_at=now,
+            )
+        )
+        session.commit()
+    pilot_client.call(
+        "session-pilot-user-hours-used",
+        "GET",
+        "/api/session",
+        note="Five recorded hours are in the ledger (inserted by SQL: the worker is not running).",
+    )
+    pilot_client.call(
+        "meeting-create-hours-cap-reached",
+        "POST",
+        "/api/meetings",
+        body={"url": MEET, "template_id": pilot_general["id"]},
+        note="Checked before the bot is sent. The hours in the text follow the user's own cap.",
     )
 
 

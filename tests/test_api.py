@@ -21,6 +21,8 @@ from app.vexa import VexaError
 from tests.test_web import (  # noqa: F401  (fixtures used by name)
     MEET,
     NOTES,
+    OTHER_EMAIL,
+    OWNER_EMAIL,
     PASSWORD,
     TRANSCRIPT,
     ZOOM,
@@ -31,6 +33,10 @@ from tests.test_web import (  # noqa: F401  (fixtures used by name)
     client,
     fake_openai,
     fake_vexa,
+    login_data,
+    make_user,
+    owner,
+    stranger,
     template,
 )
 
@@ -64,8 +70,8 @@ class Api:
     def delete(self, url, **kw):
         return self.call("DELETE", url, **kw)
 
-    def log_in(self, password=PASSWORD):
-        return self.post("/api/session", {"password": password})
+    def log_in(self, password=PASSWORD, email=OWNER_EMAIL):
+        return self.post("/api/session", {"email": email, "password": password})
 
 
 def ready(session, template, **fields) -> Meeting:
@@ -79,7 +85,7 @@ def anon(anon_client):
 
 
 @pytest.fixture
-def api(anon):
+def api(anon, owner):
     assert anon.log_in().status_code == 200
     return anon
 
@@ -109,7 +115,7 @@ def test_a_visitor_gets_a_session_and_a_csrf_token(anon_client):
     assert anon_client.get("/api/session").json() == body
 
 
-def test_login_returns_a_fresh_csrf_token(anon):
+def test_login_returns_a_fresh_csrf_token(anon, owner):
     before = anon.csrf
     response = anon.log_in()
     assert response.status_code == 200
@@ -128,54 +134,67 @@ def test_login_with_the_old_token_after_login_is_refused(api):
     )
 
 
-def test_wrong_password_is_401_and_does_not_log_in(anon):
-    error = error_of(anon.log_in("nope"), 401, "invalid_password")
-    assert error["message"] == "That password is not right."
+def test_wrong_password_is_401_and_does_not_log_in(anon, owner):
+    error = error_of(anon.log_in("nope"), 401, "invalid_credentials")
+    assert error["message"] == "That email or password is not right."
     assert anon.client.get("/api/session").json()["authenticated"] is False
 
 
 @pytest.mark.parametrize("password", ["", "pässwörd ✓", "x" * 10_000])
-def test_odd_passwords_are_ordinary_failures(anon, password):
-    error_of(anon.log_in(password), 401, "invalid_password")
+def test_odd_passwords_are_ordinary_failures(anon, owner, password):
+    error_of(anon.log_in(password), 401, "invalid_credentials")
 
 
-def test_login_needs_the_csrf_header(anon):
-    error_of(anon.post("/api/session", {"password": PASSWORD}, csrf=False), 403, "csrf_rejected")
-    error_of(anon.post("/api/session", {"password": PASSWORD}, csrf="wrong"), 403, "csrf_rejected")
+def test_login_needs_the_csrf_header(anon, owner):
+    body = {"email": OWNER_EMAIL, "password": PASSWORD}
+    error_of(anon.post("/api/session", body, csrf=False), 403, "csrf_rejected")
+    error_of(anon.post("/api/session", body, csrf="wrong"), 403, "csrf_rejected")
     assert anon.client.get("/api/session").json()["authenticated"] is False
 
 
-def test_login_is_rate_limited_and_shares_the_pages_limit(anon):
+def test_login_is_rate_limited_and_shares_the_pages_limit(anon, owner):
     for _ in range(5):
-        error_of(anon.log_in("nope"), 401, "invalid_password")
+        error_of(anon.log_in("nope"), 401, "invalid_credentials")
     error = error_of(anon.log_in("nope"), 429, "too_many_attempts")
     assert error["message"] == "Too many failed attempts. Try again later."
     error_of(anon.log_in(), 429, "too_many_attempts")  # even the right password waits
     # The login page counts the same client.
     token = re.search(r'name="csrf_token" value="([^"]+)"', anon.client.get("/login").text)[1]
-    page = anon.client.post("/login", data={"password": PASSWORD, "csrf_token": token})
+    page = anon.client.post("/login", data=login_data(token))
     assert page.status_code == 429
 
 
-def test_a_good_login_gives_back_its_own_attempt_not_the_earlier_failures(anon):
+def test_a_good_login_gives_back_its_own_attempt_not_the_earlier_failures(anon, owner):
     for _ in range(4):
         anon.log_in("nope")
     assert anon.log_in().status_code == 200  # counted, then given back: four failures remain
     anon.delete("/api/session")
-    error_of(anon.log_in("nope"), 401, "invalid_password")  # the fifth failure is still allowed
+    error_of(anon.log_in("nope"), 401, "invalid_credentials")  # the fifth failure is still allowed
     error_of(anon.log_in("nope"), 429, "too_many_attempts")
 
 
 def test_login_body_must_be_valid(anon):
     error = error_of(anon.post("/api/session", {}), 422, "validation_error")
-    assert error["fields"] == [{"field": "password", "message": "Field required"}]
-    error = error_of(anon.post("/api/session", {"password": 123456}), 422, "validation_error")
+    assert error["fields"] == [
+        {"field": "email", "message": "Field required"},
+        {"field": "password", "message": "Field required"},
+    ]
+    error = error_of(
+        anon.post("/api/session", {"email": "a@b.test", "password": 123456}),
+        422,
+        "validation_error",
+    )
     assert error["fields"][0]["field"] == "password"
     assert "123456" not in json.dumps(error)  # submitted values are never echoed
-    error_of(anon.post("/api/session", {"password": "x", "extra": 1}), 422, "validation_error")
+    error_of(
+        anon.post("/api/session", {"email": "a@b.test", "password": "x", "extra": 1}),
+        422,
+        "validation_error",
+    )
+    error_of(anon.post("/api/session", {"password": "x"}), 422, "validation_error")  # no email
 
 
-def test_logout_revokes_every_copy_of_the_cookie(anon, app):
+def test_logout_revokes_every_copy_of_the_cookie(anon, app, owner):
     anon.log_in()
     cookie, before = anon.client.cookies.get("session"), anon.csrf
     response = anon.delete("/api/session")
@@ -186,14 +205,14 @@ def test_logout_revokes_every_copy_of_the_cookie(anon, app):
         error_of(replay.get("/api/templates"), 401, "not_authenticated")
 
 
-def test_logout_needs_login_and_the_header(anon):
+def test_logout_needs_login_and_the_header(anon, owner):
     error_of(anon.delete("/api/session"), 401, "not_authenticated")
     anon.log_in()
     error_of(anon.delete("/api/session", csrf=False), 403, "csrf_rejected")
     assert anon.client.get("/api/session").json()["authenticated"] is True
 
 
-def test_one_cookie_serves_the_pages_and_the_api(anon):
+def test_one_cookie_serves_the_pages_and_the_api(anon, owner):
     anon.log_in()
     assert anon.client.get("/templates").status_code == 200
     token = re.search(r'name="csrf_token" value="([^"]+)"', anon.client.get("/templates").text)[1]
@@ -204,7 +223,7 @@ def test_one_cookie_serves_the_pages_and_the_api(anon):
 
 def test_an_expired_session_is_401_json_never_a_redirect(anon, app):
     key = app.state.session_key
-    old = auth.new_session(auth=True, epoch=0, now=1_000_000)
+    old = auth.new_session(uid=1, now=1_000_000)
     with TestClient(app, follow_redirects=False) as client:
         client.cookies.set("session", auth.sign_session(key, old))
         error_of(client.get("/api/meetings"), 401, "not_authenticated")
@@ -429,7 +448,13 @@ def test_list_query_is_validated(api, query):
 def test_the_list_holds_at_most_the_default_page_when_there_are_many(api, session, template):
     for _ in range(52):
         session.add(
-            Meeting(url=MEET, platform="google_meet", native_id="x", template_id=template.id)
+            Meeting(
+                owner_user_id=template.owner_user_id,
+                url=MEET,
+                platform="google_meet",
+                native_id="x",
+                template_id=template.id,
+            )
         )
     session.commit()
     body = api.get("/api/meetings").json()
@@ -699,7 +724,7 @@ def test_retry_is_refused_when_it_cannot_help(api, template, session, fields):
 
 
 def test_regenerate_rewrites_the_notes_without_transcribing(api, template, session, fake_openai):
-    other = Template(name="Short", instructions="Be brief.")
+    other = Template(owner_user_id=template.owner_user_id, name="Short", instructions="Be brief.")
     session.add(other)
     session.commit()
     meeting = ready(session, template)
@@ -765,7 +790,7 @@ def test_meeting_actions_on_unknown_ids_are_404(api, action):
 
 
 def test_templates_list_is_sorted_and_has_instructions(api, template, session):
-    session.add(Template(name="Alpha", instructions="First."))
+    session.add(Template(owner_user_id=template.owner_user_id, name="Alpha", instructions="First."))
     session.commit()
     body = api.get("/api/templates").json()
     assert [t["name"] for t in body["templates"]] == ["Alpha", "General"]
@@ -811,7 +836,7 @@ def test_template_names_are_unique(api, template):
 
 
 def test_update_template(api, template, session):
-    other = Template(name="Other", instructions="o")
+    other = Template(owner_user_id=template.owner_user_id, name="Other", instructions="o")
     session.add(other)
     session.commit()
     response = api.put(

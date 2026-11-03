@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app import audio
+from app import audio, usage
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
 from app.models import Meeting, Template, VocabularyTerm
@@ -237,15 +237,29 @@ def _step_audio(session: Session, meeting: Meeting, vexa) -> bool:
     return True
 
 
-def _terms(session: Session) -> list[str]:
-    return list(session.scalars(select(VocabularyTerm.term).order_by(VocabularyTerm.id)))
+def _terms(session: Session, owner_user_id: int) -> list[str]:
+    """The meeting owner's vocabulary, never anyone else's."""
+    return list(
+        session.scalars(
+            select(VocabularyTerm.term)
+            .where(VocabularyTerm.owner_user_id == owner_user_id)
+            .order_by(VocabularyTerm.id)
+        )
+    )
 
 
 def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> bool:
     if meeting.transcript is None:
         folder = audio_path(meeting.id).parent
-        chunks = audio.prepare_chunks(audio_path(meeting.id), folder / "chunks")  # rebuilt freely
-        text = transcribe_chunks(chunks, _terms(session), client=openai_client)
+        recording = audio.prepare_recording(
+            audio_path(meeting.id), folder / "chunks"
+        )  # rebuilt freely
+        # Counted now, in the same commit as whatever this step ends with: a recording that turns
+        # out to hold no speech was still transcribed, and a retry counts it only once.
+        usage.record_usage(session, meeting, recording.seconds)
+        text = transcribe_chunks(
+            recording.chunks, _terms(session, meeting.owner_user_id), client=openai_client
+        )
         if len(text.split()) < MIN_WORDS:
             # The audio check only looks at peak volume, so noise can slip through.
             _fail(session, meeting, REASON_NO_SPEECH)
@@ -272,7 +286,9 @@ def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> b
 def _step_notes(session: Session, meeting: Meeting, openai_client) -> bool:
     template = session.get(Template, meeting.template_id)
     text = meeting.speaker_transcript or meeting.transcript or ""
-    meeting.notes = generate_notes(text, template, _terms(session), client=openai_client)
+    meeting.notes = generate_notes(
+        text, template, _terms(session, meeting.owner_user_id), client=openai_client
+    )
     meeting.status, meeting.step, meeting.failure_reason = "ready", "done", None
     session.commit()
     return True

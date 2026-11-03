@@ -5,9 +5,11 @@ recording is compressed to mono 32 kbps Opus and split into chunks of at most 15
 Each cut goes in a silence near the end of its window so words are not sliced in half.
 """
 
+import math
 import re
 import subprocess
 from pathlib import Path
+from typing import NamedTuple
 
 MAX_CHUNK_SECONDS = 15 * 60
 # Container rounding can add a few ms to a chunk, so aim just under the hard limit.
@@ -92,8 +94,17 @@ def _cut_points(total: float, silences: list[tuple[float, float]]) -> list[float
     return cuts
 
 
+class Recording(NamedTuple):
+    chunks: list[Path]
+    seconds: int  # length of the whole recording, rounded up: a started second is a second
+
+
 def prepare_chunks(source: Path, out_dir: Path) -> list[Path]:
-    """Compress `source` and split it into Opus WebM chunks in `out_dir`.
+    return prepare_recording(source, out_dir).chunks
+
+
+def prepare_recording(source: Path, out_dir: Path) -> Recording:
+    """Compress `source` and split it into Opus WebM chunks in `out_dir`; also measures it.
 
     Raises NoSpeechError for silent audio and AudioError when ffmpeg fails.
     """
@@ -128,4 +139,4 @@ def prepare_chunks(source: Path, out_dir: Path) -> list[Path]:
         raise
     finally:
         full.unlink(missing_ok=True)
-    return chunks
+    return Recording(chunks, math.ceil(total))

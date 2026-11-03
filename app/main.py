@@ -41,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         loaded = auth.read_session(key, request.cookies.get(auth.COOKIE_NAME))
         request.state.session = loaded or auth.new_session()
         request.state.session_changed = loaded is None
+        request.state.user = None  # `auth.guard` sets the real one
         if auth.request_path(request) != "/health":
             edge.note_missing_secret(request, settings)
         response = await call_next(request)
