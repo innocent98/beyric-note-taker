@@ -1,14 +1,33 @@
-// Pages Next renders itself. Every other path is proxied to FastAPI (next.config.ts).
+// Pages Next renders itself. Every other path is proxied to FastAPI (next.config.ts), so removing
+// a path from this list, from proxy.ts's matcher and from app/ hands it back to the Jinja page.
 // proxy.ts must list the same HTML paths in its matcher (a literal there, so tests/routes.test.ts
-// compares); the sitemap and robots rules also read from here.
-export const NEXT_PAGES = ["/privacy", "/terms", "/welcome", "/styleguide"] as const;
+// compares); the sitemap and robots rules also read from here. `[id]` is one path segment (the
+// matcher spells it `:id`).
+export const NEXT_PAGES = [
+  "/",
+  "/login",
+  "/meetings/[id]",
+  "/templates",
+  "/vocabulary",
+  "/privacy",
+  "/terms",
+  "/styleguide",
+] as const;
+
+// Handlers Next owns that are not pages (no nonce CSP needed, no HTML). `/logout` takes a POST,
+// calls DELETE /api/session with the visitor's cookie and passes FastAPI's Set-Cookie on.
+export const NEXT_ROUTES = ["/logout"] as const;
+
+const PATTERNS = NEXT_PAGES.map(
+  (page) => new RegExp(`^${page.replace(/\[[^\]]+\]/g, "[^/]+").replace(/\//g, "\\/")}$`),
+);
 
 export function isNextPage(href: string): boolean {
   const path = href.split(/[?#]/, 1)[0];
-  return (NEXT_PAGES as readonly string[]).includes(path);
+  return PATTERNS.some((pattern) => pattern.test(path));
 }
 
-// Paths of the owner app that crawlers must not visit (FastAPI-served for now).
+// Paths of the owner app that crawlers must not visit.
 export const APP_PATHS = [
   "/login",
   "/logout",

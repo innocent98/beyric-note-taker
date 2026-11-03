@@ -12,9 +12,10 @@ export function fastapiUrl(): string {
 
 // The API as a server component or route handler calls it: the visitor's Cookie (and address, for
 // FastAPI's own limits and logs) are passed on. A 401 leaves the page for /login.
-export async function serverApi() {
+export async function serverApi(extra: { onResponse?: (response: Response) => void } = {}) {
   const incoming = await headers();
   return createApi({
+    ...extra,
     baseUrl: fastapiUrl(),
     headers: () => {
       const out: Record<string, string> = {};

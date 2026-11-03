@@ -1,0 +1,62 @@
+import type { Metadata } from "next";
+import { AppShell } from "@/components/app/shell";
+import { MeetingList } from "@/components/app/meeting-list";
+import { NewMeetingForm } from "@/components/app/new-meeting-form";
+import { Landing, LandingBand, LandingClose } from "@/components/landing/landing";
+import { JsonLd, organizationJsonLd, softwareJsonLd } from "@/components/site/json-ld";
+import { PublicShell } from "@/components/site/public-shell";
+import { Alert, PageHead } from "@/components/ui";
+import { getSession, load, serverApi } from "@/lib/api/server";
+
+// `/` is two pages: the landing page for a visitor who is not logged in (indexed, in the sitemap),
+// and the owner's Meetings page for the owner (never indexed). GET /api/session says which.
+export async function generateMetadata(): Promise<Metadata> {
+  if ((await getSession())?.authenticated) return { title: "Meetings", robots: { index: false, follow: false } };
+  return {
+    title: { absolute: "Beyric Note Taker - clear notes from every meeting" },
+    alternates: { canonical: "/" },
+  };
+}
+
+export default async function HomePage() {
+  if (!(await getSession())?.authenticated) return <LandingPage />;
+  return <MeetingsPage />;
+}
+
+function LandingPage() {
+  return (
+    <>
+      <JsonLd data={[organizationJsonLd(), softwareJsonLd()]} />
+      <PublicShell mainClass="">
+        <div className="pub-main">
+          <Landing />
+        </div>
+        <LandingBand />
+        <div className="pub-main">
+          <LandingClose />
+        </div>
+      </PublicShell>
+    </>
+  );
+}
+
+async function MeetingsPage() {
+  const api = await serverApi();
+  const [list, templates] = await load(Promise.all([api.meetings.list(), api.templates.list()]));
+  const busy = list.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
+  return (
+    <AppShell current="meetings">
+      {list.worker_stale ? (
+        <Alert kind="notice" role="alert">
+          The background worker has not checked in for over 20 minutes. New meetings will not be processed until it
+          is running again.
+        </Alert>
+      ) : null}
+      <div className="stack">
+        <PageHead title="Meetings" subtitle="Send the note taker to a call and find your notes here afterwards." />
+        <NewMeetingForm templates={templates} busy={busy} />
+        <MeetingList initial={list} templates={templates} />
+      </div>
+    </AppShell>
+  );
+}

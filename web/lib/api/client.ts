@@ -45,6 +45,9 @@ export type ApiOptions = {
   // Called once for any 401 `not_authenticated`, before the error is thrown. The browser sends
   // the visitor to /login here; the server redirects in lib/api/server.ts instead.
   onUnauthorized?: () => void;
+  // Sees every response before it is read; the logout route handler uses it to pass FastAPI's
+  // Set-Cookie on to the browser.
+  onResponse?: (response: Response) => void;
 };
 
 type Query = Record<string, string | number | undefined>;
@@ -70,8 +73,9 @@ export function createApi(options: ApiOptions = {}) {
     };
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (write) headers["X-CSRF-Token"] = csrf ?? (await readSession()).csrf_token;
+    let res: Response;
     try {
-      return await doFetch(`${base}${path}${search ? `?${search}` : ""}`, {
+      res = await doFetch(`${base}${path}${search ? `?${search}` : ""}`, {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -81,6 +85,8 @@ export function createApi(options: ApiOptions = {}) {
     } catch {
       throw new ApiError(0, "network_error", NETWORK_MESSAGE);
     }
+    options.onResponse?.(res);
+    return res;
   }
 
   async function fail(res: Response): Promise<never> {

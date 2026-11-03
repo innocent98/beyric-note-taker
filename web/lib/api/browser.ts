@@ -8,6 +8,7 @@ export const api = createApi({
   onUnauthorized: () => {
     if (typeof window !== "undefined" && window.location.pathname !== "/login") {
       // A full load, so the server renders the login page fresh.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
       window.location.href = "/login";
     }
   },
