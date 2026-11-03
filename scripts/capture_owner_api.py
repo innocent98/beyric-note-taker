@@ -1036,6 +1036,17 @@ def run_end_controls(owner, engine, general_id, vexa) -> None:
         "`no_audio`, nothing to retry), with its own reason.",
     )
 
+    kept = new_meeting("4264")
+    poll(kept, VexaMeeting(status="active", segments=[segment]))
+    owner.call("meeting-end-then-cancel-setup", "POST", f"/api/meetings/{kept}/end")
+    owner.call(
+        "meeting-cancel-after-end",
+        "POST",
+        f"/api/meetings/{kept}/cancel",
+        note="Cancel after End is refused (409): it would throw away the recording the owner asked "
+        "to keep. `can_cancel` is already false on the meeting returned by End.",
+    )
+
     stale = new_meeting("4263")
     poll(stale, VexaMeeting(status="active"), when=datetime.now(UTC) - timedelta(minutes=5))
     owner.call(

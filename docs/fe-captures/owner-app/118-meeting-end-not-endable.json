@@ -18,7 +18,7 @@
     "body": {
       "error": {
         "code": "not_endable",
-        "message": "The bot can only be ended while it is in the call or waiting to be let in."
+        "message": "The bot can only be ended while it is in the call. Cancel it instead if it is not in yet."
       }
     }
   }

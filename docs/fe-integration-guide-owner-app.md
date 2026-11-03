@@ -733,7 +733,7 @@ content-type: application/json
   "status_text": "Ready",
   "status_tone": "success",
   "template_id": 1,
-  "created_at": "2026-11-03T14:26:33.354813Z",
+  "created_at": "2026-11-03T14:46:03.224672Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
@@ -818,7 +818,7 @@ location: /api/meetings/1
   "status_text": "Bot sent",
   "status_tone": "warning",
   "template_id": 1,
-  "created_at": "2026-11-03T14:26:33.245644Z",
+  "created_at": "2026-11-03T14:46:03.120765Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
@@ -1040,7 +1040,7 @@ _Capture: `docs/fe-captures/owner-app/38-meeting-retry-cancelled.json`_
 
 ### 5.4a `POST /api/meetings/{id}/end` (write): "End now and write the notes"
 
-Added 2026-11-03 (`feature/bot-end-controls`). The owner stops the bot while it is in the call (or waiting to be let in) and the notes are written from what the bot recorded so far, as for any meeting. It is **not** Cancel: Cancel discards and makes no OpenAI call; this keeps the recording and runs the usual transcript, speaker and notes steps. No request body. Offer it only while `can_end` is `true` on the meeting (the field is on every detail response; it is `true` exactly when the bot is waiting to be let in, in the meeting, or recording).
+Added 2026-11-03 (`feature/bot-end-controls`). The owner stops the bot while it is in the call and the notes are written from what the bot recorded so far, as for any meeting. It is **not** Cancel: Cancel discards and makes no OpenAI call; this keeps the recording and runs the usual transcript, speaker and notes steps. No request body. Offer it only while `can_end` is `true` on the meeting (the field is on every detail response; it is `true` exactly when the bot is in the meeting or recording: **not** while it is joining or waiting to be let in, because at the door Vexa ends the bot as failed with nothing recorded, so Cancel is the right control there).
 
 The call is the same shape as Cancel: the response is the full meeting, `status` is **still `bot_sent`** while the bot leaves, `can_end` is `false`, and `status_text` says the bot is leaving. After that the worker takes over (see "What happens after End" below).
 
@@ -1084,11 +1084,11 @@ content-type: application/json
   "status_text": "The bot is leaving the meeting. The notes start once it has gone",
   "status_tone": "warning",
   "template_id": 1,
-  "created_at": "2026-11-03T14:26:34.491894Z",
+  "created_at": "2026-11-03T14:46:04.399726Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
-  "can_cancel": true,
+  "can_cancel": false,
   "can_end": false,
   "can_retry": false,
   "can_regenerate": false,
@@ -1128,7 +1128,7 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/115-meeting-end-again.json`_
 
-When the bot is not in a state it can be ended from (still joining, asking for help, already gone, or the meeting is processing, ready or failed) the answer is 409 `not_endable`. Here the bot was still joining:
+When the bot is not in a state it can be ended from (joining, waiting to be let in, asking for help, already gone, or the meeting is processing, ready or failed) the answer is 409 `not_endable`. Here the bot was still joining:
 
 ```http
 POST /api/meetings/17/end
@@ -1144,7 +1144,7 @@ content-type: application/json
 {
   "error": {
     "code": "not_endable",
-    "message": "The bot can only be ended while it is in the call or waiting to be let in."
+    "message": "The bot can only be ended while it is in the call. Cancel it instead if it is not in yet."
   }
 }
 ```
@@ -1197,7 +1197,30 @@ An unknown or foreign id is 404 `not_found`, like every id route (a test: `test_
 _Trimmed to the fields that matter here; the capture file has all of them._
 _Capture: `docs/fe-captures/owner-app/120-meeting-detail-ended-nothing-recorded.json`_
 
-`can_cancel` stays `true` while the bot is leaving: Cancel after End is allowed and discards the meeting.
+`can_cancel` is **`false` from the press on** (and until the meeting is processing): hide Cancel, because Cancel after End would throw away the recording the owner asked to keep. The API refuses it too, with a plain 409 (and `meeting_busy`, below):
+
+```http
+POST /api/meetings/19/cancel
+X-CSRF-Token: <csrf-I>
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 409
+content-type: application/json
+```
+```json
+{
+  "error": {
+    "code": "already_ending",
+    "message": "The bot is already leaving and the notes will be written from what it recorded, so this meeting can't be cancelled now."
+  }
+}
+```
+_Cancel after End is refused (409): it would throw away the recording the owner asked to keep. `can_cancel` is already false on the meeting returned by End._
+_Capture: `docs/fe-captures/owner-app/122-meeting-cancel-after-end.json`_
+
+**409 `meeting_busy`** ("The meeting is being worked on right now. Try again in a moment.") is possible on **both End and Cancel**: the worker holds the meeting row while it polls Vexa, and these calls wait for it for up to 10 seconds before answering instead of hanging. Show the message; pressing again is safe. Covered by `tests/test_end_meeting.py` (a held row, a short wait); **not captured**, the capture script has no worker holding a row.
 
 **What Vexa does with it, and what is not verified.** From Vexa's source (v0.12.29, `31122f9`): `DELETE /bots/{platform}/{id}` marks the meeting stop-requested, answers 200 `{"status": "stopping"}` at once and publishes a `leave` command; an `active` bot leaves, finishes its recording upload and ends as `completed` with reason `stopped`. A bot that had not joined yet ends as `failed` with the same reason and recorded nothing. **No real call was made for this change**: the time between the press and the bot being gone, and whether the recording is downloadable at that moment, are unmeasured. The worker already waits up to 10 minutes for a recording that Vexa still reports as in progress after the call, which is what covers it.
 
@@ -1825,9 +1848,9 @@ What each state looks like through the API (values from the captures; `can_*` an
 | `bot_sent` / `waiting` | Recording | `warning` | `true` | `false` | `false` | `null` | `30` | `108-meeting-detail-bot-recording.json` |
 | `bot_sent` / `waiting` | The bot is waiting on a prompt in the meeting, such as a consent or verification screen. Check the meeting for a prompt. | `warning` | `true` | `false` | `false` | `null` | `30` | `109-meeting-detail-bot-needs-help.json` |
 | `bot_sent` / `waiting` | Starting the bot | `warning` | `true` | `false` | `false` | `null` | `30` | `111-meeting-detail-bot-requested.json` |
-| `bot_sent` / `waiting` | The bot is leaving the meeting. The notes start once it has gone (after "End now") | `warning` | `true` | `false` | `false` | `null` | `30` | `114-meeting-end.json`, `116-meeting-detail-bot-leaving.json` |
+| `bot_sent` / `waiting` | The bot is leaving the meeting. The notes start once it has gone (after "End now") | `warning` | `false` | `false` | `false` | `null` | `30` | `114-meeting-end.json`, `116-meeting-detail-bot-leaving.json` |
 | `bot_sent` / `waiting` | The call ended; finishing the recording | `warning` | `true` | `false` | `false` | `null` | `30` | `117-meeting-detail-call-ended-finishing-recording.json` |
-| `bot_sent` / `waiting` | Checking on the bot... (the worker has not seen the bot for over 2 poll intervals) | `warning` | `true` | `false` | `false` | `null` | `30` | `121-meeting-detail-bot-state-stale.json` |
+| `bot_sent` / `waiting` | Checking on the bot... (the worker has not seen the bot for over 4 poll intervals, 120 s with the default) | `warning` | `true` | `false` | `false` | `null` | `30` | `123-meeting-detail-bot-state-stale.json` |
 | `failed` / `waiting` | Failed (ended before anything was recorded) | `danger` | `false` | `false` | `false` | `"no_audio"` | `null` | `120-meeting-detail-ended-nothing-recorded.json` |
 | `processing` / `audio` | Downloading the audio | `info` | `false` | `false` | `false` | `null` | `30` | `43-meeting-detail-processing.json` |
 | `processing` / `transcribing` | Writing the transcript | `info` | `false` | `false` | `false` | `null` | `30` | `44-meeting-detail-processing-transcribing.json` |
@@ -1850,13 +1873,13 @@ What each state looks like through the API (values from the captures; `can_*` an
 | `ready` | notes, transcript, the template picker | Rewrite notes (`can_regenerate`), copy buttons |
 | `failed` | a card "What went wrong" with `failure_reason` | Try again if `can_retry`, otherwise `retry_block_message` |
 
-**`can_end` and `worker_stale` per state (added 2026-11-03, `feature/bot-end-controls`).** `can_end` (see 5.4a) is `true` for the awaiting-admission (`106`), in-the-meeting (`107`), recording (`108`, `112`) and `Checking on the bot...` (`121`, `122`) rows; `false` for unknown (`104`), joining (`105`), needs-help (`109`), starting (`111`), leaving (`114`, `116`), call-ended (`117`) and the failed row (`120`). `worker_stale` is `false` in all of them except `122`, where the heartbeat is 30 minutes old (`true`). The captures before `111` were taken with no worker heartbeat, so their `worker_stale` is `true` (e.g. `35`).
+**`can_end` and `worker_stale` per state (added 2026-11-03, `feature/bot-end-controls`).** `can_end` (see 5.4a) is `true` for the in-the-meeting (`107`), recording (`108`, `112`) and `Checking on the bot...` (`123`, `124`) rows; `false` for unknown (`104`), joining (`105`), awaiting-admission (`106`), needs-help (`109`), starting (`111`), leaving (`114`, `116`), call-ended (`117`) and the failed row (`120`). `can_cancel` is `false` once End was pressed (`114`, `116`, `117`), `true` in every other `bot_sent` row. `worker_stale` is `false` in all of them except `124`, where the heartbeat is 30 minutes old (`true`). The captures before `111` were taken with no worker heartbeat, so their `worker_stale` is `true` (e.g. `35`).
 
 **What the bot is doing while the call runs (added 2026-11-03, `feature/bot-live-state`; extended the same day by `feature/bot-end-controls`).** While a meeting is `bot_sent`, `status_text` says what the bot is doing, from the state the worker last saw Vexa report. The worker looks at each active meeting once per sweep and rests `poll_interval_seconds` (30) after a sweep, so a meeting is looked at about every 30 seconds **when the sweep is quick**; it is not a promise: the worker handles meetings one after another and a meeting being transcribed holds it for as long as that takes (minutes for a long recording), during which no other meeting is looked at. That is why the state carries a time (below). `status`, `step`, `status_tone` (still `warning`, also for "Recording"), `can_cancel` and `refresh_after_seconds` (30) behave as before; the words in `status_text` differ, on `GET /api/meetings/{id}` and in every row of `GET /api/meetings`; the table above lists them. Rules:
 
 1. **Show `status_text` as it is; do not branch on its words.** There is no `bot_state` field, so the words are the only signal. The text for an unknown state is still exactly `Bot sent`.
 2. **Never write "recording" yourself.** The API says `Recording` only when Vexa reported transcript segments or a recording id; `Bot is in the meeting` means the bot is in and nothing is proven to be captured.
-3. **The text can change under the owner's eyes**: keep polling while `refresh_after_seconds` is set, and let the heading follow it. It goes back to `Bot sent` only after **two failed Vexa lookups in a row** (one failed lookup keeps the last state). A state the worker has not renewed for over 2 poll intervals (60 s with the default) reads **`Checking on the bot...`** instead of a claim that may be out of date (`121`); it changes back by itself on the next successful look. Never word it as an error.
+3. **The text can change under the owner's eyes**: keep polling while `refresh_after_seconds` is set, and let the heading follow it. It goes back to `Bot sent` only after **two failed Vexa lookups in a row** (one failed lookup keeps the last state). A state the worker has not renewed for over 4 poll intervals (120 s with the default) reads **`Checking on the bot...`** instead of a claim that may be out of date (`123`); it changes back by itself on the next successful look. Never word it as an error.
 4. The awaiting text carries an instruction ("Admit ... in the meeting"). Do not hide it behind a tooltip, and do not add your own "admit the bot" paragraph beside it.
 5. `needs_help` is still `bot_sent`, not failed: the bot may continue once the owner answers the prompt. After 2 minutes of it with nothing recorded the worker fails the join (`failed`, step `waiting`; see the retry section above).
 6. The texts are long. A badge that carries one must be allowed to wrap (the Jinja and Next badges do this for text over 28 characters). A sentence over about 60 characters (the lobby and prompt texts, the leaving text) is a paragraph in the wait card, not an `<h2>`.
@@ -1877,12 +1900,12 @@ Captured from the running app, with the real worker (`pipeline.advance_meeting`)
   "status_text": "Waiting to be let in. Admit 'Beyric Note Taker (recording)' in the meeting",
   "status_tone": "warning",
   "template_id": 1,
-  "created_at": "2026-11-03T14:26:34.413065Z",
+  "created_at": "2026-11-03T14:46:04.338552Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
   "can_cancel": true,
-  "can_end": true,
+  "can_end": false,
   "can_retry": false,
   "can_regenerate": false,
   "join_attempts": 1,
@@ -1911,11 +1934,11 @@ The list row for the `needs_help` state (`110-meetings-list-bot-needs-help.json`
   "status_text": "The bot is waiting on a prompt in the meeting, such as a consent or verification screen. Check the meeting for a prompt.",
   "status_tone": "warning",
   "template_id": 1,
-  "created_at": "2026-11-03T14:26:34.413065Z"
+  "created_at": "2026-11-03T14:46:04.338552Z"
 }
 ```
 
-**Polling.** `refresh_after_seconds` is `30` while the meeting is `bot_sent` or `processing` (and while a failed join counts down its retry wait) and `null` once it is `ready` or `failed` otherwise. Refetch `GET /api/meetings/{id}` every `refresh_after_seconds` seconds while it is non-null and stop when it is `null`. This is what the Jinja page does (a 30-second refresh). The worker sweeps the active meetings one after another and rests `poll_interval_seconds` (30, `app/config.py`; from the code, not measured) after each sweep, so a faster poll adds load and no fresher data, and a sweep can take much longer than 30 seconds while another meeting is being processed. Suggested: pause polling while the tab is hidden and refetch when it becomes visible. **The list polls too** (new): `GET /api/meetings` has `refresh_after_seconds`, `30` while any listed meeting is `bot_sent` or `processing` and `null` otherwise (`53`, `110` have 30; `54`, `10` have `null`); refetch the list at that interval while it is set, since the status words in its rows change. The Jinja list page refreshes itself every 30 seconds under the same condition. Also refetch it after a write and when the tab regains focus.
+**Polling.** `refresh_after_seconds` is `30` while the meeting is `bot_sent` or `processing` (and while a failed join counts down its retry wait) and `null` once it is `ready` or `failed` otherwise. Refetch `GET /api/meetings/{id}` every `refresh_after_seconds` seconds while it is non-null and stop when it is `null`. This is what the Jinja page does (a 30-second refresh). The worker sweeps the active meetings one after another and rests `poll_interval_seconds` (30, `app/config.py`; from the code, not measured) after each sweep, so a faster poll adds load and no fresher data, and a sweep can take much longer than 30 seconds while another meeting is being processed. Suggested: pause polling while the tab is hidden and refetch when it becomes visible. **The list polls too** (new): `GET /api/meetings` has `refresh_after_seconds`, `30` while any listed meeting is `bot_sent` or `processing` and `null` otherwise (`53`, `110` have 30; `54`, `10` have `null`); refetch the list at that interval while it is set, since the status words in its rows change. The Jinja home page does **not** refresh itself (it holds the new-meeting form, and a page reload would wipe a link being pasted); the Jinja meeting page still does. Also refetch the list after a write and when the tab regains focus. Use `router.refresh()`-style updates that keep what the user typed in the form.
 
 **Copy the Jinja pages show** (taken from `app/templates/`, not from API payloads, so check them if the templates change):
 
@@ -1945,11 +1968,11 @@ Both the `bot_left_early` and `speakers_incomplete` flags are verified live (`48
 13. **Never word a login error as "no account with that email"** or "wrong password": the API deliberately answers both the same (401 `invalid_credentials`), and the form must not suggest otherwise. An account whose email was never confirmed gets the same 401: put the "Confirm your email" screen after sign-up instead.
 14. **A foreign or missing id is the same 404.** Do not say "this belongs to someone else"; say the meeting, template or term "was not found".
 10. **Validation (422) should be rare**: validate the same limits in the form (template name 100, instructions 4000, term 100, no `<` `>` or line breaks in terms) so the owner never sees a developer message.
-15. **"End now and write the notes" is a one-way press, and it is not Cancel.** Confirm first, and say what happens: the bot leaves now, the notes are written from what it heard so far, and anything said after it leaves is not in them. It discards nothing. To throw the recording away the owner uses Cancel (which stays available while the bot leaves). After the press the meeting stays `bot_sent` for a while (the bot leaving, then the recording being finished) before `processing` starts: show `status_text`, keep polling, and do not read "leaving" as a failure. The notes arrive minutes later, as for any meeting.
+15. **"End now and write the notes" is a one-way press, and it is not Cancel.** Confirm first, and say what happens: the bot leaves now, the notes are written from what it heard so far, and anything said after it leaves is not in them. It discards nothing. To throw the recording away the owner uses Cancel, which is not offered once End was pressed (`can_cancel` is `false`). After the press the meeting stays `bot_sent` for a while (the bot leaving, then the recording being finished) before `processing` starts: show `status_text`, keep polling, and do not read "leaving" as a failure. The notes arrive minutes later, as for any meeting.
 16. **Ending before anything was recorded ends in a failed meeting**, with `retry_block` `no_audio` and the reason `You ended this meeting before anything was recorded, so there are no notes to write.` Show it as the usual "What went wrong" card; there is nothing to retry (send the bot again with a new link).
-17. **A 409 on End means the state moved** (the bot left on its own, the worker moved the meeting, or it was ended already): show the message and refetch, as for Cancel.
+17. **A 409 on End means the state moved** (the bot left on its own, the worker moved the meeting, or it was ended already): show the message and refetch, as for Cancel. `meeting_busy` is the exception: nothing moved, the worker was busy with the row; show the message and let the owner press again.
 18. **`Checking on the bot...` is not an error.** It means the worker has not looked recently (Vexa slow, or the worker busy); `can_end` can still be `true` and the button still works. If `worker_stale` is `true` show the meeting-level banner as well.
-19. **The bot may leave on its own.** With `BOT_LEFT_ALONE_SECONDS` (default 300) the bot leaves after that long with nobody else speaking, so a quiet meeting (a long screen-share with no talking) can be cut short; the notes are written from what it recorded. The owner is not warned in advance (nothing in the API says so): do not promise "the bot stays until you end it".
+19. **The bot may leave on its own.** With `BOT_LEFT_ALONE_SECONDS` (default 300) the bot leaves after that long with nobody else speaking, so a quiet meeting (a long screen-share with no talking) can be cut short; the notes are written from what it recorded. The window starts when the bot is let in, so a bot admitted early while the host waits silently for others can leave before the meeting starts. The owner is not warned and is not told afterwards that this is why it left (nothing in the API says so; Vexa counts it as a normal end): do not promise "the bot stays until you end it".
 
 ## 9. Re-deriving everything here
 
@@ -2010,11 +2033,12 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | `refresh_after_seconds` is 30 while a failed join's wait counts down | Verified live | `99` |
 | `status_text` for the unknown, joining, awaiting admission, in-the-meeting, recording and needs-help states, same shape and fields as before | Verified live (the real worker with a fake Vexa answer per state, read over HTTP) | `104`–`110` |
 | Vexa really reporting those states during a call | **NOT EXERCISED** in this change: the names come from Vexa's lifecycle schema at `31122f9`, and from the lead's note that meeting 12 on 2026-11-03 went `joining`, `awaiting_admission`, `active`, done; the fakes follow that order | `tests/test_bot_live_state.py` |
-| `status_text` for starting (`requested`), the call ended and the recording being finished, and a state the worker has not renewed (`Checking on the bot...`) | Verified live (the real worker with a fake Vexa answer, the stale one with an old timestamp) | `111`, `117`, `121` |
+| `status_text` for starting (`requested`), the call ended and the recording being finished, and a state the worker has not renewed (`Checking on the bot...`) | Verified live (the real worker with a fake Vexa answer, the stale one with an old timestamp) | `111`, `117`, `123` |
 | `stopping` read without an End press (`The bot is leaving the meeting`); `needs_help` with segments reads `Bot is in the meeting`; one failed lookup keeps the state and two clear it | Test only | `tests/test_bot_live_state.py` |
-| `can_end` and `worker_stale` on every detail; `refresh_after_seconds` on the list | Verified live | `10`, `53`, `54`, `55`, `110`, `111`–`122` |
-| `worker_stale` true on a meeting the worker is not moving | Verified live (heartbeat 30 minutes old, seeded by SQL) | `122` |
-| End now: ok, a second press, the wrong state, Vexa failing | Verified live (fake Vexa) | `114`, `115`, `118`, `113` |
+| `can_end` and `worker_stale` on every detail; `refresh_after_seconds` on the list | Verified live | `10`, `53`, `54`, `55`, `110`, `111`–`124` |
+| `worker_stale` true on a meeting the worker is not moving | Verified live (heartbeat 30 minutes old, seeded by SQL) | `124` |
+| End now: ok, a second press, the wrong state, Vexa failing; Cancel refused after End | Verified live (fake Vexa) | `114`, `115`, `118`, `113`, `122` |
+| `meeting_busy` (End or Cancel while the worker holds the meeting) | Test only | `tests/test_end_meeting.py` |
 | End now before anything was recorded: the meeting ends `failed` with `no_audio` | Verified live (the real worker, three fake Vexa answers) | `119`, `120` |
 | End now on an unknown or foreign id (404), without the CSRF header (403) | Test | `tests/test_api.py` (route enumeration) |
 | After End, the recording is downloaded and the meeting reaches `ready` with notes | Test only (real pipeline, fake Vexa and OpenAI) | `tests/test_end_meeting.py` |
