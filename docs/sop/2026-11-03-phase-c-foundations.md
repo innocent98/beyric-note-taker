@@ -56,8 +56,16 @@ Differences from the plan text, all deliberate:
 
 ## Operate / roll back
 - Migration `0010` is additive. Roll back with `alembic downgrade 0009`: it drops the three tables and any connection, event or scheduled join in them; meetings are untouched.
-- New environment variables, none required yet: `TOKEN_ENC_KEY` (`openssl rand -base64 32`; **required in production once `GOOGLE_CLIENT_ID` is set**, so set it before C3 ships), `TOKEN_ENC_KEY_PREVIOUS`, `TOKEN_ENC_KEY_VERSION` (1), `TEAMS_JOIN_ENABLED` (false), `ICS_ALLOWED_HOSTS` (the three defaults). The key must live only in the server `.env`, not in the database or a backup.
+- **Before this deploys, a production server with `GOOGLE_CLIENT_ID` set needs `TOKEN_ENC_KEY` in `.env`** (`openssl rand -base64 32`; keep a copy, losing it means users reconnect their calendars). Without it `web` refuses to start. Append it without printing it, then recreate the services:
+  ```bash
+  printf 'TOKEN_ENC_KEY=%s\n' "$(openssl rand -base64 32)" >> .env
+  docker compose up -d --force-recreate web worker
+  ```
+- New environment variables: `TOKEN_ENC_KEY` (as above), `TOKEN_ENC_KEY_PREVIOUS`, `TOKEN_ENC_KEY_VERSION` (1), `TEAMS_JOIN_ENABLED` (false), `ICS_ALLOWED_HOSTS` (the three defaults). The key must live only in the server `.env`, not in the database or a backup.
 - Rotation: new key into `TOKEN_ENC_KEY`, old into `TOKEN_ENC_KEY_PREVIOUS`, raise `TOKEN_ENC_KEY_VERSION` by one, run the re-encrypt script (C9, not written yet), then drop the previous key.
+
+## Incident: the #45 deploy (2026-11-03)
+The server `.env` had `GOOGLE_CLIENT_ID` and no `TOKEN_ENC_KEY`, so `vault.check_settings` correctly refused to start `web` and it crash-looped; the site was down about 12 minutes until Adebayo added the key by hand. The PR was merged without a deploy note. A second fault made it worse: **`deploy/deploy.sh` did not roll back.** `docker compose up -d` exits non-zero when a dependency is unhealthy, and under `set -e` the script ended there, before the health check and the rollback, leaving `next` in the `Created` state. Fixed in `fix/deploy-rollback-and-token-key`: `up` no longer decides on its own (the health check does), the rollback's own `up` and build are tolerant, stuck `Created` containers are started, and a failed build restores the previous checkout. Proved by `tests/test_deploy_script.py` (stand-ins for `docker`, `git`, `curl`). Rule from now on: a PR that adds a required environment variable lists it under "Server steps before merge" in its body.
 
 ## Follow-ups
 - **C4 (disconnect) must delete `calendar_events` and `scheduled_joins` rows explicitly.** `meeting_url` carries the Zoom `pwd` in plaintext in both tables, and `scheduled_joins` outlives its event (`ON DELETE SET NULL`), so the cascade from the connection does not reach it. **C12 should null `meeting_url` once a join is terminal** (`completed`, `failed`, `cancelled`, `skipped`).

@@ -1,0 +1,49 @@
+{
+  "note": "Nothing to check.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/3",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "title": "Google Meet vag-cccc-ddd",
+      "platform": "google_meet",
+      "native_id": "vag-cccc-ddd",
+      "status": "ready",
+      "step": "done",
+      "status_text": "Ready",
+      "status_tone": "success",
+      "template_id": 5,
+      "created_at": "2026-11-02T20:30:51.726855Z",
+      "failure_reason": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": false,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": true,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "extraction_status": "done",
+      "notes": "## Summary\nThe meeting covered the partner portal, data export, and new-hire job description, along with a staging-server update. The group agreed to keep the export in CSV for version one; the estimate and response to the auditors remain unassigned.\n\n## Key points\n- The portal design is done. Segun will build the login screens, and the dashboard is expected in the coming weeks, with no firm date.\n- Ebuka will write the data-export spec. Work will need an estimate afterward, but capacity is unknown.\n- The auditors asked for the export format soon.\n- HR wants the new-hire job description signed off sometime next quarter. Priya will review it but did not commit to a date.\n- Segun said he will update the staging server tonight.\n\n## Decisions\n- Keep the data export in CSV for version one; Excel can wait.\n- Leave the work estimate unassigned for now.\n- The dashboard has no firm date; the target is the coming weeks.\n\n## Action items\n- Segun: Build the portal login screens (tomorrow).\n- Segun: Deliver the portal dashboard (in the coming weeks).\n- Ebuka: Write the data-export spec (by next Monday).\n- Unassigned: Estimate the data-export work (no due date stated).\n- Unassigned: Reply to the auditors about the export format (no due date stated).\n- Priya: Review the new-hire job description (no due date stated).\n- Segun: Update the staging server (tonight).\n\n## Open questions\n- Who has capacity to estimate the export work?\n- Who will pick up the export and reply to the auditors?\n- Who will sign off on the job description?\n\n## Please check\nNone noted\n",
+      "notes_html": "<h2>Summary</h2>\n<p>The meeting covered the partner portal, data export, and new-hire job description, along with a staging-server update. The group agreed to keep the export in CSV for version one; the estimate and response to the auditors remain unassigned.</p>\n<h2>Key points</h2>\n<ul>\n<li>The portal design is done. Segun will build the login screens, and the dashboard is expected in the coming weeks, with no firm date.</li>\n<li>Ebuka will write the data-export spec. Work will need an estimate afterward, but capacity is unknown.</li>\n<li>The auditors asked for the export format soon.</li>\n<li>HR wants the new-hire job description signed off sometime next quarter. Priya will review it but did not commit to a date.</li>\n<li>Segun said he will update the staging server tonight.</li>\n</ul>\n<h2>Decisions</h2>\n<ul>\n<li>Keep the data export in CSV for version one; Excel can wait.</li>\n<li>Leave the work estimate unassigned for now.</li>\n<li>The dashboard has no firm date; the target is the coming weeks.</li>\n</ul>\n<h2>Action items</h2>\n<ul>\n<li>Segun: Build the portal login screens (tomorrow).</li>\n<li>Segun: Deliver the portal dashboard (in the coming weeks).</li>\n<li>Ebuka: Write the data-export spec (by next Monday).</li>\n<li>Unassigned: Estimate the data-export work (no due date stated).</li>\n<li>Unassigned: Reply to the auditors about the export format (no due date stated).</li>\n<li>Priya: Review the new-hire job description (no due date stated).</li>\n<li>Segun: Update the staging server (tonight).</li>\n</ul>\n<h2>Open questions</h2>\n<ul>\n<li>Who has capacity to estimate the export work?</li>\n<li>Who will pick up the export and reply to the auditors?</li>\n<li>Who will sign off on the job description?</li>\n</ul>\n<h2>Please check</h2>\n<p>None noted</p>\n",
+      "transcript": "[Priya]: Let's get going. Three things: the partner portal, the data export, and the new hire.\n[Segun]: Portal first. Design is done. I will build the login screens tomorrow and have the dashboard in the coming weeks.\n[Priya]: Fine. The dashboard has no firm date, so let's say in the coming weeks.\n[Ebuka]: For the data export, I will write the spec by next Monday. After that someone has to estimate the work, but we do not know who has capacity.\n[Priya]: Agreed, leave the estimate unassigned for now.\n[Segun]: The auditors asked for the export format soon. Whoever picks it up should reply to them.\n[Priya]: Nobody volunteers, so it stays open.\n[Ebuka]: New hire. HR wants the job description signed off sometime next quarter, no rush.\n[Priya]: I'll review the job description at some point, but I will not commit to a date.\n[Segun]: Also I will update the staging server tonight.\n[Priya]: Good. We decided to keep the export in CSV for version one.\n[Ebuka]: Agreed. Excel can wait.\n[Priya]: Thanks all."
+    }
+  }
+}

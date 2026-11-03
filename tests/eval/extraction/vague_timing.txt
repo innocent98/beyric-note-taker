@@ -1,0 +1,13 @@
+[Priya]: Let's get going. Three things: the partner portal, the data export, and the new hire.
+[Segun]: Portal first. Design is done. I will build the login screens tomorrow and have the dashboard in the coming weeks.
+[Priya]: Fine. The dashboard has no firm date, so let's say in the coming weeks.
+[Ebuka]: For the data export, I will write the spec by next Monday. After that someone has to estimate the work, but we do not know who has capacity.
+[Priya]: Agreed, leave the estimate unassigned for now.
+[Segun]: The auditors asked for the export format soon. Whoever picks it up should reply to them.
+[Priya]: Nobody volunteers, so it stays open.
+[Ebuka]: New hire. HR wants the job description signed off sometime next quarter, no rush.
+[Priya]: I'll review the job description at some point, but I will not commit to a date.
+[Segun]: Also I will update the staging server tonight.
+[Priya]: Good. We decided to keep the export in CSV for version one.
+[Ebuka]: Agreed. Excel can wait.
+[Priya]: Thanks all.

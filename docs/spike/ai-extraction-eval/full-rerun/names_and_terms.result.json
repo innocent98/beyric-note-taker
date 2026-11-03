@@ -1,0 +1,69 @@
+{
+  "case": "names_and_terms",
+  "extraction_failed": false,
+  "score": {
+    "case": "names_and_terms",
+    "bullets": 4,
+    "covered": 4,
+    "quotes_given": 4,
+    "quotes_verified": 4,
+    "invented_owners": 0,
+    "raw_invented_owners": 0,
+    "wrong_owners": 0,
+    "dates_stated": 3,
+    "dates_right": 3,
+    "dates_invented": 0,
+    "missing_from_notes": 0,
+    "review_expected": 1,
+    "review_found": 1,
+    "review_extra": 0,
+    "problems": []
+  },
+  "raw": {
+    "action_items": [
+      {
+        "index": 0,
+        "title": "Set up the tracking plan by Friday.",
+        "spoken_owner": "Chidi",
+        "due_phrase": "by Friday",
+        "due_date": "2026-11-06",
+        "quote": "I will set up the tracking plan by Friday.",
+        "confidence": "high"
+      },
+      {
+        "index": 1,
+        "title": "Share a draft of the dashboards on Wednesday of next week.",
+        "spoken_owner": "Amina",
+        "due_phrase": "on Wednesday of next week",
+        "due_date": "2026-11-11",
+        "quote": "I'll share a draft on Wednesday of next week.",
+        "confidence": "high"
+      },
+      {
+        "index": 2,
+        "title": "Check the vendor site for the spelling.",
+        "spoken_owner": "Amina",
+        "due_phrase": null,
+        "due_date": null,
+        "quote": "I'll look at the vendor site.",
+        "confidence": "high"
+      },
+      {
+        "index": 3,
+        "title": "Ask finance tomorrow to confirm the contract number.",
+        "spoken_owner": "Chidi",
+        "due_phrase": "tomorrow",
+        "due_date": "2026-11-04",
+        "quote": "I will ask finance tomorrow.",
+        "confidence": "high"
+      }
+    ],
+    "review": [
+      {
+        "index": 0,
+        "heard_as": "Metrika"
+      }
+    ],
+    "milestones": []
+  }
+}

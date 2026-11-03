@@ -17,8 +17,18 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import api_accounts, api_admin, auth, notifications, services, usage
+from app import (
+    api_accounts,
+    api_admin,
+    api_workspace,
+    auth,
+    notifications,
+    services,
+    usage,
+    workspace,
+)
 from app.api_schemas import (
+    BadgesOut,
     ErrorResponse,
     Login,
     MeetingDetail,
@@ -139,6 +149,7 @@ def _session_state(request: Request, db: Session) -> SessionState:
             user=None,
             usage=None,
             unread_notifications=None,
+            badges=None,
         )
     settings = request.app.state.settings
     used = usage.hours_used(db, user, datetime.now(UTC), settings.max_poll_hours * 3600)
@@ -153,6 +164,7 @@ def _session_state(request: Request, db: Session) -> SessionState:
         ),
         usage=UsageOut(used_seconds=used, cap_seconds=usage.effective_cap(db, user)),
         unread_notifications=notifications.unread_count(db, user),
+        badges=BadgesOut(review_open=workspace.open_review_count(db, user)),
     )
 
 
@@ -199,8 +211,7 @@ def log_out(request: Request, session: Session = Depends(get_session)) -> Sessio
 # ---- meetings ----
 
 
-def _title(meeting: Meeting) -> str:
-    return f"{'Zoom' if meeting.platform == 'zoom' else 'Google Meet'} {meeting.native_id}"
+_title = services.meeting_title
 
 
 def _summary(meeting: Meeting) -> MeetingSummary:
@@ -242,6 +253,7 @@ def _detail(meeting: Meeting, session: Session) -> MeetingDetail:
         ),
         worker_stale=active and services.worker_is_stale(session),
         join_retry_at=join_retry_at(meeting),
+        extraction_status=meeting.extraction_status if ready else None,
         notes=meeting.notes if ready else None,
         notes_html=str(services.render_markdown(meeting.notes)) if ready else None,
         transcript=meeting.speaker_transcript or meeting.transcript or None,
@@ -469,3 +481,4 @@ def delete_term(
 
 router.include_router(api_accounts.router)
 router.include_router(api_admin.router)
+router.include_router(api_workspace.router)

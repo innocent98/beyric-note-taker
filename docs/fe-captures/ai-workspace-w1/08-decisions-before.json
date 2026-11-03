@@ -1,0 +1,24 @@
+{
+  "note": "Nothing read from the notes yet: an empty list, not an error.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisions",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "groups": [],
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

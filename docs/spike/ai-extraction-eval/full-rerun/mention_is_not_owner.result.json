@@ -1,0 +1,55 @@
+{
+  "case": "mention_is_not_owner",
+  "extraction_failed": false,
+  "score": {
+    "case": "mention_is_not_owner",
+    "bullets": 3,
+    "covered": 3,
+    "quotes_given": 3,
+    "quotes_verified": 3,
+    "invented_owners": 0,
+    "raw_invented_owners": 0,
+    "wrong_owners": 0,
+    "dates_stated": 1,
+    "dates_right": 1,
+    "dates_invented": 0,
+    "missing_from_notes": 0,
+    "review_expected": 0,
+    "review_found": 0,
+    "review_extra": 0,
+    "problems": []
+  },
+  "raw": {
+    "action_items": [
+      {
+        "index": 0,
+        "title": "Send the signed copy to the vendor on Thursday.",
+        "spoken_owner": "Olu",
+        "due_phrase": "on Thursday",
+        "due_date": "2026-11-05",
+        "quote": "I will send it to them on Thursday.",
+        "confidence": "high"
+      },
+      {
+        "index": 1,
+        "title": "Call the bank about the invoice dispute.",
+        "spoken_owner": null,
+        "due_phrase": null,
+        "due_date": null,
+        "quote": "Someone needs to call the bank. I do not know who.",
+        "confidence": "medium"
+      },
+      {
+        "index": 2,
+        "title": "Ask the vendor to confirm the claimed discount in writing.",
+        "spoken_owner": null,
+        "due_phrase": null,
+        "due_date": null,
+        "quote": "Someone has to ask the vendor, I think Daniel would know who, but it is not decided.",
+        "confidence": "medium"
+      }
+    ],
+    "review": [],
+    "milestones": []
+  }
+}
