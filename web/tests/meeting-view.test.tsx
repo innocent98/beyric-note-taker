@@ -177,7 +177,7 @@ describe("waiting and working", () => {
     ["111-meeting-detail-bot-requested.json", "Starting the bot"],
     ["116-meeting-detail-bot-leaving.json", "The bot is leaving the meeting. The notes start once it has gone"],
     ["117-meeting-detail-call-ended-finishing-recording.json", "The call ended; finishing the recording"],
-    ["121-meeting-detail-bot-state-stale.json", "Checking on the bot..."],
+    ["123-meeting-detail-bot-state-stale.json", "Checking on the bot..."],
   ])("says %s in words the page can show", (file, words) => {
     show(meeting(file));
     expect(screen.getAllByText(words).length).toBeGreaterThan(0);
@@ -185,7 +185,7 @@ describe("waiting and working", () => {
   });
 
   it("warns when the worker has gone quiet while the meeting is waiting on it", () => {
-    show(meeting("122-meeting-detail-worker-stale.json"));
+    show(meeting("124-meeting-detail-worker-stale.json"));
     expect(screen.getByRole("alert").textContent).toMatch(/background worker has not checked in for over 20 minutes/);
     cleanup();
     show(meeting("112-meeting-detail-bot-recording-can-end.json"));

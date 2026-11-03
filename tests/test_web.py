@@ -1124,18 +1124,15 @@ def test_a_long_bot_state_badge_may_wrap_and_a_short_one_may_not(client, templat
     assert 'class="badge badge-warning"' in client.get(f"/meetings/{short.id}").text
 
 
-def test_the_list_page_refreshes_while_a_listed_meeting_is_being_worked_on(
-    client, template, session
-):
-    ready_meeting(session, template)
-    assert "refresh" not in client.get("/").text
-    waiting = add_meeting(session, template)
-    assert 'http-equiv="refresh" content="30"' in client.get("/").text
-    waiting.status, waiting.step = "failed", "waiting"
-    session.commit()
-    assert "refresh" not in client.get("/").text
+def test_the_home_page_holds_a_form_so_it_never_reloads_itself(client, template, session):
+    """A meta refresh would wipe a link being typed or pasted and reset focus every 30 s. The
+    Next list polls with `router.refresh()`, which keeps what is typed; this page does not poll."""
+    add_meeting(session, template)  # a bot is live
+    page = client.get("/").text
+    assert 'name="url"' in page  # the form is there
+    assert "http-equiv" not in page and "refresh" not in page
     add_meeting(session, template, status="processing", step="notes")
-    assert 'http-equiv="refresh" content="30"' in client.get("/").text
+    assert "http-equiv" not in client.get("/").text
 
 
 def test_the_meeting_page_warns_when_the_worker_has_gone_quiet(client, template, session):

@@ -2713,7 +2713,7 @@
     },
     "/api/meetings/{meeting_id}/cancel": {
       "post": {
-        "description": "Take the bot out of a meeting that is still `bot_sent`.",
+        "description": "Take the bot out of a meeting that is still `bot_sent` and discard it. Only when `can_cancel`\nis true: once the bot has been ended with `POST /end` (the notes are being written) it is 409\n`already_ending`; 409 `meeting_busy` when the worker holds the meeting, try again.",
         "operationId": "cancel_meeting",
         "parameters": [
           {
@@ -2806,7 +2806,7 @@
     },
     "/api/meetings/{meeting_id}/end": {
       "post": {
-        "description": "\"End now and write the notes\": take the bot out of the call and write the notes from what\nit recorded. Only when `can_end` is true (409 `not_endable` otherwise, 409 `already_ending`\nwhen it was asked already). The meeting stays `bot_sent` while the bot leaves, then follows\nthe usual steps; it is not a cancel and nothing is discarded.",
+        "description": "\"End now and write the notes\": take the bot out of the call and write the notes from what\nit recorded. Only when `can_end` is true (409 `not_endable` otherwise, 409 `already_ending`\nwhen it was asked already, 409 `meeting_busy` when the worker holds the meeting: try again).\nThe meeting stays `bot_sent` while the bot leaves, then follows the usual steps; it is not a\ncancel and nothing is discarded.",
         "operationId": "end_meeting",
         "parameters": [
           {

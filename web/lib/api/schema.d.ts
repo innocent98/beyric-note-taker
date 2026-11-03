@@ -286,7 +286,9 @@ export interface paths {
         put?: never;
         /**
          * Cancel Meeting
-         * @description Take the bot out of a meeting that is still `bot_sent`.
+         * @description Take the bot out of a meeting that is still `bot_sent` and discard it. Only when `can_cancel`
+         *     is true: once the bot has been ended with `POST /end` (the notes are being written) it is 409
+         *     `already_ending`; 409 `meeting_busy` when the worker holds the meeting, try again.
          */
         post: operations["cancel_meeting"];
         delete?: never;
@@ -308,8 +310,9 @@ export interface paths {
          * End Meeting
          * @description "End now and write the notes": take the bot out of the call and write the notes from what
          *     it recorded. Only when `can_end` is true (409 `not_endable` otherwise, 409 `already_ending`
-         *     when it was asked already). The meeting stays `bot_sent` while the bot leaves, then follows
-         *     the usual steps; it is not a cancel and nothing is discarded.
+         *     when it was asked already, 409 `meeting_busy` when the worker holds the meeting: try again).
+         *     The meeting stays `bot_sent` while the bot leaves, then follows the usual steps; it is not a
+         *     cancel and nothing is discarded.
          */
         post: operations["end_meeting"];
         delete?: never;

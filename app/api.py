@@ -229,7 +229,7 @@ def _detail(meeting: Meeting, session: Session) -> MeetingDetail:
         failure_reason=(meeting.failure_reason or REASON_UNEXPECTED) if failed else None,
         retry_block=block,
         retry_block_message=services.retry_block_message(meeting, block),
-        can_cancel=meeting.status == "bot_sent",
+        can_cancel=services.can_cancel(meeting),
         can_end=services.can_end(meeting),
         can_retry=failed and block is None,
         can_regenerate=ready,
@@ -313,7 +313,9 @@ def cancel_meeting(
     user: User = Depends(auth.current_user),
     vexa=Depends(get_vexa),
 ) -> MeetingDetail:
-    """Take the bot out of a meeting that is still `bot_sent`."""
+    """Take the bot out of a meeting that is still `bot_sent` and discard it. Only when `can_cancel`
+    is true: once the bot has been ended with `POST /end` (the notes are being written) it is 409
+    `already_ending`; 409 `meeting_busy` when the worker holds the meeting, try again."""
     meeting = services.meeting_or_404(session, user, meeting_id)
     return _detail(services.cancel_meeting(session, vexa, meeting), session)
 
@@ -331,8 +333,9 @@ def end_meeting(
 ) -> MeetingDetail:
     """ "End now and write the notes": take the bot out of the call and write the notes from what
     it recorded. Only when `can_end` is true (409 `not_endable` otherwise, 409 `already_ending`
-    when it was asked already). The meeting stays `bot_sent` while the bot leaves, then follows
-    the usual steps; it is not a cancel and nothing is discarded."""
+    when it was asked already, 409 `meeting_busy` when the worker holds the meeting: try again).
+    The meeting stays `bot_sent` while the bot leaves, then follows the usual steps; it is not a
+    cancel and nothing is discarded."""
     meeting = services.meeting_or_404(session, user, meeting_id)
     return _detail(services.end_meeting(session, vexa, meeting), session)
 

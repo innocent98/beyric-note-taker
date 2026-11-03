@@ -152,8 +152,10 @@ def test_a_good_lookup_between_two_failures_starts_the_count_again(session, meet
 def test_a_state_the_worker_has_not_renewed_is_not_shown_as_current(session, meeting):
     run(session, meeting, FakeVexa(VexaMeeting(status="active")))
     assert meeting.bot_state_seen_at == NOW
-    assert said(meeting, NOW + 2 * POLL) == IN_MEETING
-    assert said(meeting, NOW + 2 * POLL + timedelta(seconds=1)) == CHECKING
+    window = services.BOT_STATE_STALE_POLLS * POLL
+    assert services.BOT_STATE_STALE_POLLS == 4  # room for a slow Vexa and one slow worker pass
+    assert said(meeting, NOW + window) == IN_MEETING
+    assert said(meeting, NOW + window + timedelta(seconds=1)) == CHECKING
 
 
 def test_a_failed_lookup_does_not_renew_the_state(session, meeting):

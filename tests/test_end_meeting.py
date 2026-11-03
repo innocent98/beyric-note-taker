@@ -12,6 +12,7 @@ with the same reason and has recorded nothing. None of this has run against a re
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app import pipeline, services
@@ -52,8 +53,8 @@ def seen(session, template, state, **fields) -> Meeting:
 # ---- what can be ended ----
 
 
-@pytest.mark.parametrize("state", ["awaiting_admission", "active", "recording"])
-def test_a_bot_in_the_call_or_at_the_door_can_be_ended(api, session, template, fake_vexa, state):
+@pytest.mark.parametrize("state", ["active", "recording"])
+def test_a_bot_in_the_call_can_be_ended(api, session, template, fake_vexa, state):
     meeting = seen(session, template, state)
     assert api.get(f"/api/meetings/{meeting.id}").json()["can_end"] is True
     response = api.post(f"/api/meetings/{meeting.id}/end")
@@ -70,14 +71,23 @@ def test_a_bot_in_the_call_or_at_the_door_can_be_ended(api, session, template, f
 
 
 @pytest.mark.parametrize(
-    "state", [None, "requested", "joining", "needs_help", "stopping", "google_meet_join_refused"]
+    "state",
+    [
+        None,
+        "requested",
+        "joining",
+        "awaiting_admission",  # at the door Vexa ends it `failed`: nothing to write notes from
+        "needs_help",
+        "stopping",
+        "google_meet_join_refused",
+    ],
 )
 def test_a_bot_that_is_not_in_the_call_cannot_be_ended(api, session, template, fake_vexa, state):
     meeting = seen(session, template, state)
     assert api.get(f"/api/meetings/{meeting.id}").json()["can_end"] is False
     error = error_of(api.post(f"/api/meetings/{meeting.id}/end"), 409, "not_endable")
     assert error["message"] == (
-        "The bot can only be ended while it is in the call or waiting to be let in."
+        "The bot can only be ended while it is in the call. Cancel it instead if it is not in yet."
     )
     assert not hasattr(fake_vexa, "stopped")
     session.refresh(meeting)
@@ -161,6 +171,8 @@ def test_the_page_offers_the_button_only_while_the_bot_can_be_ended(
     page = client.get(f"/meetings/{meeting.id}").text
     assert f'action="/meetings/{meeting.id}/end"' in page
     assert "End now and write the notes" in page
+    assert 'data-dialog-open="end-dialog"' in page  # a confirmation first, as the Next page asks
+    assert 'id="end-dialog"' in page
     assert "The bot leaves the meeting now and the notes are written from what it heard" in page
     response = post(client, f"/meetings/{meeting.id}/end", page=f"/meetings/{meeting.id}")
     assert response.status_code == 303
@@ -239,7 +251,9 @@ def test_after_the_bot_has_left_the_recording_becomes_a_normal_meeting_with_note
     assert (waiting.status, waiting.step) == ("ready", "done")
     assert waiting.notes and waiting.transcript and waiting.speaker_transcript
     assert openai.transcriptions == 1
-    assert waiting.completion_reason == "stopped"  # Vexa's own reason replaced the marker
+    assert (
+        waiting.completion_reason == pipeline.BOT_END_REQUESTED
+    )  # Vexa's reason never replaces it
     assert waiting.failure_reason is None
 
 
@@ -271,6 +285,7 @@ def test_while_the_recording_is_being_finished_the_words_say_so_not_leaving(sess
     run(session, waiting, FakeVexa(finishing), now=NOW + POLL)
     assert waiting.status == "bot_sent"
     assert services.status_text(waiting, NOW + POLL) == "The call ended; finishing the recording"
+    assert waiting.completion_reason == pipeline.BOT_END_REQUESTED
 
 
 def test_ending_before_anything_was_recorded_fails_the_meeting_the_usual_way(session, waiting):
@@ -317,3 +332,108 @@ def test_an_ended_meeting_with_no_speech_gives_the_same_result_as_any_other(
     run(session, waiting, FakeVexa(stopped), openai=FakeOpenAI(transcript="uh"), now=NOW + POLL)
     assert waiting.status == "failed"
     assert waiting.failure_reason == pipeline.REASON_NO_SPEECH
+
+
+# ---- the reasons are told by the owner's press, not by Vexa's word "stopped" ----
+
+
+def test_a_stop_the_owner_did_not_ask_for_does_not_say_you_ended_the_meeting(session, waiting):
+    """The worker's own stop can reach Vexa and still look failed on our side; Vexa then says
+    `stopped` for a meeting nobody pressed End on."""
+    run(
+        session,
+        waiting,
+        FakeVexa(VexaMeeting(status="failed", completion_reason="stopped")),
+        now=NOW + POLL,
+    )
+    assert waiting.status == "failed"
+    assert waiting.failure_reason == pipeline.REASON_BOT_FAILED
+
+
+def test_no_recording_after_a_stop_nobody_asked_for_keeps_the_old_words(session, waiting):
+    nothing = VexaMeeting(status="completed", completion_reason="stopped")
+    for tick in (1, 2, 3):
+        run(session, waiting, FakeVexa(nothing), now=NOW + tick * POLL)
+    assert waiting.failure_reason == pipeline.REASON_NOT_ADMITTED
+
+
+def test_the_marker_is_kept_through_the_polls_that_wait_for_a_recording(session, waiting):
+    ended(session, waiting)
+    nothing = VexaMeeting(status="completed", completion_reason="stopped")
+    run(session, waiting, FakeVexa(nothing), now=NOW + POLL)
+    assert waiting.completion_reason == pipeline.BOT_END_REQUESTED
+    run(session, waiting, FakeVexa(nothing), now=NOW + 2 * POLL)
+    run(session, waiting, FakeVexa(nothing), now=NOW + 3 * POLL)
+    assert waiting.failure_reason == pipeline.REASON_ENDED_NOTHING_RECORDED
+
+
+# ---- Cancel after End ----
+
+
+def test_cancel_is_not_offered_once_the_bot_has_been_told_to_leave(
+    api, session, template, fake_vexa
+):
+    meeting = seen(session, template, "active")
+    assert api.get(f"/api/meetings/{meeting.id}").json()["can_cancel"] is True
+    body = api.post(f"/api/meetings/{meeting.id}/end").json()
+    assert body["can_cancel"] is False
+    assert api.get(f"/api/meetings/{meeting.id}").json()["can_cancel"] is False
+
+
+def test_cancel_after_end_is_refused_so_the_recording_is_not_thrown_away(
+    api, session, template, fake_vexa
+):
+    meeting = seen(session, template, "active")
+    api.post(f"/api/meetings/{meeting.id}/end")
+    error = error_of(api.post(f"/api/meetings/{meeting.id}/cancel"), 409, "already_ending")
+    assert "can't be cancelled" in error["message"]
+    assert fake_vexa.stopped == [("google_meet", "abc-defg-hij")]  # End's stop only
+    session.refresh(meeting)
+    assert meeting.status == "bot_sent"
+
+
+def test_the_page_has_no_cancel_form_once_the_bot_is_leaving(client, session, template, fake_vexa):
+    meeting = seen(session, template, "active")
+    assert f'action="/meetings/{meeting.id}/cancel"' in client.get(f"/meetings/{meeting.id}").text
+    post(client, f"/meetings/{meeting.id}/end", page=f"/meetings/{meeting.id}")
+    assert (
+        f'action="/meetings/{meeting.id}/cancel"' not in client.get(f"/meetings/{meeting.id}").text
+    )
+
+
+# ---- a stop Vexa's client refuses, and a row the worker is holding ----
+
+
+def test_a_meeting_code_the_client_refuses_is_a_plain_failure_not_a_crash(
+    api, session, template, fake_vexa
+):
+    fake_vexa.stop_error = ValueError("unsupported platform or meeting code")
+    meeting = seen(session, template, "active")
+    error_of(api.post(f"/api/meetings/{meeting.id}/end"), 502, "bot_stop_failed")
+    session.refresh(meeting)
+    assert meeting.completion_reason == "active"
+
+
+@pytest.mark.parametrize("action", ["end", "cancel"])
+def test_a_row_the_worker_holds_gives_a_plain_409_instead_of_waiting_for_minutes(
+    engine, session, template, fake_vexa, monkeypatch, action
+):
+    meeting = seen(session, template, "active")
+    monkeypatch.setattr(services, "LOCK_WAIT", "200ms")
+    call = services.end_meeting if action == "end" else services.cancel_meeting
+    with Session(engine) as worker:  # the worker, in the middle of a pass
+        worker.execute(select(Meeting).where(Meeting.id == meeting.id).with_for_update())
+        with pytest.raises(services.Refused) as raised:
+            call(session, fake_vexa, meeting)
+    assert raised.value.status == 409 and raised.value.code == "meeting_busy"
+    assert "being worked on right now" in raised.value.message
+    assert not hasattr(fake_vexa, "stopped")
+    session.refresh(meeting)
+    assert meeting.completion_reason == "active" and meeting.status == "bot_sent"
+
+
+def test_the_lock_wait_does_not_leak_into_the_next_statements(session, template, fake_vexa):
+    meeting = seen(session, template, "active")
+    services.end_meeting(session, fake_vexa, meeting)
+    session.execute(select(Meeting))  # a new transaction, with the connection's own setting
+    assert session.execute(text("show lock_timeout")).scalar() == "0"

@@ -170,7 +170,7 @@ class MeetingDetail(MeetingSummary):
     retry_block: RetryBlock | None
     retry_block_message: str | None
     can_cancel: bool
-    # True while the bot is in the call or waiting to be let in (status_text says which):
+    # True while the bot is in the call (waiting to be let in does not count; use cancel):
     # `POST /end` stops it and the notes are written from what it recorded.
     can_end: bool
     can_retry: bool

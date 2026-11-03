@@ -26,14 +26,20 @@
   {% endif %}
 
   {% if can_end %}
+  <div class="stack-sm">
+    <p class="muted">The bot leaves the meeting now and the notes are written from what it heard so far.</p>
+    {{ ui.button("End now and write the notes", type="button", attrs='data-dialog-open="end-dialog"') }}
+  </div>
+  {% call ui.dialog("end-dialog", "End the meeting and write the notes?") %}
   <form method="post" action="/meetings/{{ meeting.id }}/end" class="stack-sm" data-disable-on-submit>
     {{ ui.csrf_field(csrf) }}
-    <p class="muted">The bot leaves the meeting now and the notes are written from what it heard so far.</p>
-    {{ ui.button("End now and write the notes") }}
+    <p>The bot will leave the meeting now and the notes will be written from what it heard so far. Anything said after it leaves is not in the notes. To throw the recording away instead, cancel the meeting.</p>
+    <div class="dialog-actions">{{ ui.button("Keep recording", kind="secondary", type="button", attrs="data-dialog-close") }}{{ ui.button("End now and write the notes") }}</div>
   </form>
+  {% endcall %}
   {% endif %}
 
-  {% if meeting.status == "bot_sent" %}
+  {% if can_cancel %}
   <form method="post" action="/meetings/{{ meeting.id }}/cancel" data-disable-on-submit>
     {{ ui.csrf_field(csrf) }}
     {{ ui.button("Cancel and remove the bot", kind="secondary") }}
