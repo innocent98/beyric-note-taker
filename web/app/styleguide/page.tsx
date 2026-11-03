@@ -44,6 +44,10 @@ const swatches = [
   ["sw-warning", "warning", "Notices"],
   ["sw-success", "success", "Ready"],
   ["sw-info", "info", "Working"],
+  ["sw-teal-light", "teal-light", "Logo on dark"],
+  ["sw-night", "night", "Dark landing section"],
+  ["sw-ink-2", "ink-2", "Labels, copy inside notes"],
+  ["sw-surface-active", "surface-active", "Current nav item"],
 ] as const;
 
 // Every component and token in the current theme: the parity reference for the designer. In
@@ -59,7 +63,7 @@ export default async function StyleGuidePage() {
       <div className="stack">
         <PageHead
           title="Style guide"
-          subtitle="Every shared component and design token, in the current light or dark theme. Change the theme in your system settings; narrow the window to check phones."
+          subtitle="Every shared component and design token, as the designer drew them (light only). Narrow the window to check phones."
         />
 
         <section className="sg-section">
@@ -92,7 +96,7 @@ export default async function StyleGuidePage() {
           <h2>Logo</h2>
           <div className="card sg-demo">
             <Logo href={null} />
-            <Logo large href={null} />
+            <Logo size="lg" href={null} />
             <Logo href={null} label={false} />
           </div>
         </section>
@@ -106,12 +110,22 @@ export default async function StyleGuidePage() {
             <Button kind="ghost" type="button">Ghost</Button>
             <Button kind="link" type="button">Link</Button>
             <Button size="sm" type="button">Small</Button>
+            <Button size="md" type="button">Medium (36px)</Button>
             <Button size="lg" type="button">Large</Button>
+            <Button size="field" type="button">Sign-in size</Button>
+            <Button size="xl" type="button">Landing size</Button>
+            <Button kind="quiet" type="button">Show</Button>
             <Button disabled type="button">Disabled</Button>
             <Button href="#">As a link</Button>
           </div>
           <div className="card">
             <Button block type="button">Full width</Button>
+          </div>
+          <div className="sg-night">
+            <Logo tone="dark" href={null} />
+          </div>
+          <div className="sg-teal">
+            <Button kind="outline-light" size="xl" type="button">On the teal band</Button>
           </div>
         </section>
 
@@ -130,6 +144,7 @@ export default async function StyleGuidePage() {
             <Badge tone="danger" dot>Failed</Badge>
             <Badge tone="warning" dot>Bot sent</Badge>
             <Badge tone="info" dot>Writing the notes</Badge>
+            <Badge tone="success" dot small>Small, in previews</Badge>
           </div>
         </section>
 
@@ -146,7 +161,15 @@ export default async function StyleGuidePage() {
             <form className="stack-sm" method="get" action="/styleguide">
               <Field id="sg-text" label="Text field" hint="A hint sits under the field." placeholder="Placeholder" />
               <Field id="sg-icon" label="Field with an icon" icon="link" placeholder="Paste a link" />
+              <Field
+                id="sg-large"
+                label="Sign-in size, with a control inside"
+                large
+                placeholder="Your password"
+                end={<Button kind="quiet" type="button">Show</Button>}
+              />
               <Field id="sg-bad" label="Field with an error" defaultValue="oops" error="This value is not valid." />
+              <SelectField id="sg-select-sm" label="Compact select" compact options={[["a", "First"], ["b", "Second"]]} />
               <SelectField
                 id="sg-select"
                 label="Select"
@@ -191,7 +214,7 @@ export default async function StyleGuidePage() {
           <div className="card sg-demo">
             <Icon name="link" /><Icon name="video" /><Icon name="copy" /><Icon name="check" /><Icon name="plus" />
             <Icon name="chevron" /><Icon name="back" /><Icon name="info" /><Icon name="warning" />
-            <Icon name="trash" /><Icon name="logout" />
+            <Icon name="trash" /><Icon name="logout" /><Icon name="arrow" />
             <IconButton icon="copy" label="Copy" />
             <IconButton icon="trash" label="Delete" tone="danger" />
           </div>

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AppLink, IconButton, Logo, NavLink } from "@/components/ui";
+import { IconButton, Logo, NavLink } from "@/components/ui";
 
 export type NavSection = "meetings" | "templates" | "vocabulary";
 
@@ -7,11 +7,9 @@ export type NavSection = "meetings" | "templates" | "vocabulary";
 // plain form post to /logout (app/logout/route.ts), so it works without JavaScript.
 export function AppShell({
   current,
-  narrow = false,
   children,
 }: {
   current: NavSection;
-  narrow?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -44,13 +42,9 @@ export function AppShell({
         </div>
       </aside>
       <div className="shell-main">
-        <main id="main" className={`page${narrow ? " page-narrow" : ""}`}>
+        <main id="main" className="page">
           {children}
         </main>
-        <footer className="app-foot">
-          <AppLink href="/privacy">Privacy</AppLink>
-          <AppLink href="/terms">Terms</AppLink>
-        </footer>
       </div>
     </div>
   );

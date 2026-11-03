@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/app/shell";
 import { MeetingList } from "@/components/app/meeting-list";
 import { NewMeetingForm } from "@/components/app/new-meeting-form";
-import { Landing, LandingBand, LandingClose } from "@/components/landing/landing";
+import { Landing, LandingFooter, LandingHeader } from "@/components/landing/landing";
 import { JsonLd, organizationJsonLd, softwareJsonLd } from "@/components/site/json-ld";
-import { PublicShell } from "@/components/site/public-shell";
 import { Alert, PageHead } from "@/components/ui";
 import { getSession, load, serverApi } from "@/lib/api/server";
 
@@ -25,18 +24,17 @@ export default async function HomePage() {
 
 function LandingPage() {
   return (
-    <>
+    <div className="ld">
       <JsonLd data={[organizationJsonLd(), softwareJsonLd()]} />
-      <PublicShell mainClass="">
-        <div className="pub-main">
-          <Landing />
-        </div>
-        <LandingBand />
-        <div className="pub-main">
-          <LandingClose />
-        </div>
-      </PublicShell>
-    </>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
+      <LandingHeader />
+      <main id="main">
+        <Landing />
+      </main>
+      <LandingFooter />
+    </div>
   );
 }
 

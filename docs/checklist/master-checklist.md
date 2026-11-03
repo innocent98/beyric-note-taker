@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status (2026-11-02, night):** MVP live at notes.beyrictech.com (PRs #1–#17 merged and deployed). The UI foundation (Module 2a) and the JSON API are shipped; the frontend is moving to Next.js (Module 2b, stream A in progress). The Pilot module (accounts plus calendar auto-join) has a design draft in progress. Next steps and Adebayo's queued items are in `docs/HANDOFF-master.md`.
+**Status (2026-11-03):** MVP live at notes.beyrictech.com (PRs #1–#21 merged; #19 and #21 deployed 2026-11-03). The UI foundation (Module 2a) and the JSON API are shipped; the frontend is moving to Next.js (Module 2b: the front door and the owner screens are merged and live; the UI parity pass, stream P, is in a PR). The Pilot module (accounts plus calendar auto-join) has a design draft in progress. Next steps and Adebayo's queued items are in `docs/HANDOFF-master.md`.
 
 Legend: `[x]` done and verified, `[ ]` not done.
 
@@ -108,7 +108,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Live captures (`scripts/capture_owner_api.py`, 81 files) and `docs/fe-integration-guide-owner-app.md`; SOP `docs/sop/2026-11-02-json-api.md`
   - [ ] Opus review of the auth path before merge (lead)
   - [ ] Follow-ups for stream A and the lead: nginx `/api/` locations (regenerate 300 s timeout, login limit zone), real visitor address through the Next proxy, TypeScript type generation
-- [ ] Stream C, owner app screens to designer parity (`feature/nextjs-app-screens`, 2026-11-03, PR open against `feature/nextjs-scaffold`, not merged; SOP `docs/sop/2026-11-03-nextjs-owner-screens.md`)
+- [x] Stream C, owner app screens (`feature/nextjs-app-screens`, PR #21, merged 2026-11-03; parity pass in stream P below; SOP `docs/sop/2026-11-03-nextjs-owner-screens.md`)
   - [x] Typed API client generated from `docs/openapi.json`; one error shape, CSRF on every write, 401 to `/login`; tested against the captured responses
   - [x] Next owns `/`, `/login`, `/logout`, `/meetings/[id]`, `/templates`, `/vocabulary`; `/styleguide` owner-only; `/welcome` redirects to `/`; the rest still falls through to FastAPI (rollback: SOP "Operate")
   - [x] App shell (sidebar, phone top bar), Meetings (new meeting, list, paging, stale-worker alert, empty state), meeting page (notes, transcript, copy, rewrite, cancel with confirm, retry, notices, 30 s polling), Templates, Vocabulary, login; light and dark
@@ -116,6 +116,16 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] CI green on the PR (runs on GitHub)
   - [ ] Not built, waiting on the API (stream D): Download menu, Share dialog, translation, template delete, participants and duration
   - [ ] Not verified: real Vexa bot and real OpenAI rewrite through the screens, Safari and Firefox, the live server
+- [ ] Stream P, UI parity with the designer's files (`feature/nextjs-ui-parity`, 2026-11-03, PR open against `main`, not merged; SOP `docs/sop/2026-11-03-ui-parity.md`; report `docs/ui/parity-report.md`)
+  - [x] Gap check of every designer file against the Next pages at 1440, 768 and 390 px; report with before and after screenshots
+  - [x] Brand tokens from `Brand.dc.html` (light only: the dark overrides are gone), new "b" logo, favicon, PWA and Apple icons, share image
+  - [x] App shell, Meetings, meeting page (notes split into decisions, questions, "Please check"), Templates, Vocabulary at parity
+  - [x] Sign-in screen (form plus teal panel), landing page, privacy and terms frames with "On this page", 404 and error pages
+  - [x] Guard tests kept; new tests for notes sections, legal contents list, logo, landing links, Show / Hide
+  - [ ] CI green on the PR (runs on GitHub)
+  - [x] Decided 2026-11-03 (Adebayo): keep the designer's landing and sign-in words even though some run ahead of the product (Teams, tasks, integrations, sharing); revisit before the Google verification submission
+  - [ ] Run `owner-e2e.mjs` and `owner-browser-check.mjs` on the compose stack before the deploy
+  - [ ] Needs backend, not built (listed in the report): sign-up, forgot password, SSO, accounts and sidebar identity, calendar and auto-join card, series, tasks, projects, decisions, review, team, settings, download, share, translation, agenda, template delete, Emails
 - [ ] Stream D, new designed screens: accounts and pilot, calendar and auto-join, team, tasks, sprints, share and download, translation
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated
 - [ ] Measure Next.js memory on the server (Adebayo runs the SSH steps)
