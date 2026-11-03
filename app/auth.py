@@ -124,6 +124,11 @@ def password_matches(settings: Settings, given: str) -> bool:
     return bool(expected) and hmac.compare_digest(given.encode(), expected)
 
 
+def account_key(account: str) -> str:
+    """How an account name is compared: trimmed, lower-cased, capped."""
+    return account.strip().lower()[:MAX_ACCOUNT_KEY]
+
+
 class _Window:
     """Timestamps of recent attempts per key; entries older than `window` seconds expire.
 
@@ -209,7 +214,7 @@ class LoginLimiter:
 
     @staticmethod
     def _account_key(account: str) -> str:
-        return account.strip().lower()[:MAX_ACCOUNT_KEY]
+        return account_key(account)
 
     def check(
         self, client: str, account: str, now: float | None = None, known_device: bool = False
@@ -256,13 +261,16 @@ def device_key(settings: Settings) -> bytes:
     ).digest()
 
 
-def sign_device(key: bytes, now: float | None = None) -> str:
-    body = _b64(json.dumps({"dev": 1, "iat": int(now or time.time())}).encode())
+def sign_device(key: bytes, account: str, now: float | None = None) -> str:
+    """A device cookie for one account: it only helps when logging in to that account, so one
+    user's cookie cannot be used to skip the account window of another user's."""
+    payload = {"dev": 1, "acct": account_key(account), "iat": int(now or time.time())}
+    body = _b64(json.dumps(payload).encode())
     return f"{body}.{_signature(key, body)}"
 
 
-def device_is_known(key: bytes, cookie: str | None, now: float | None = None) -> bool:
-    """True for a device cookie this app signed, less than DEVICE_SECONDS old."""
+def device_is_known(key: bytes, cookie: str | None, account: str, now: float | None = None) -> bool:
+    """True for a device cookie this app signed for this account, less than DEVICE_SECONDS old."""
     if not cookie or cookie.count(".") != 1:
         return False
     body, signature = cookie.split(".")
@@ -272,9 +280,15 @@ def device_is_known(key: bytes, cookie: str | None, now: float | None = None) ->
         data = json.loads(_unb64(body))
         issued = data["iat"]
         known = data["dev"] == 1
+        bound_to = data["acct"]
     except (ValueError, KeyError, TypeError):
         return False
     if not (known and isinstance(issued, int) and not isinstance(issued, bool)):
+        return False
+    if not (
+        isinstance(bound_to, str)
+        and hmac.compare_digest(bound_to.encode(), account_key(account).encode())
+    ):
         return False
     age = (now or time.time()) - issued
     return 0 <= age <= DEVICE_SECONDS

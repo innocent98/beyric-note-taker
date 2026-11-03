@@ -398,16 +398,16 @@ def device_settings(**overrides):
 
 def test_a_signed_device_cookie_is_known_until_it_expires():
     key = auth.device_key(device_settings())
-    cookie = auth.sign_device(key, now=1_000)
-    assert auth.device_is_known(key, cookie, now=1_000)
-    assert auth.device_is_known(key, cookie, now=1_000 + auth.DEVICE_SECONDS)
-    assert not auth.device_is_known(key, cookie, now=1_000 + auth.DEVICE_SECONDS + 1)
-    assert not auth.device_is_known(key, cookie, now=999)  # from the future
+    cookie = auth.sign_device(key, "owner", now=1_000)
+    assert auth.device_is_known(key, cookie, "owner", now=1_000)
+    assert auth.device_is_known(key, cookie, "owner", now=1_000 + auth.DEVICE_SECONDS)
+    assert not auth.device_is_known(key, cookie, "owner", now=1_000 + auth.DEVICE_SECONDS + 1)
+    assert not auth.device_is_known(key, cookie, "owner", now=999)  # from the future
 
 
 def test_forged_or_malformed_device_cookies_are_not_known():
     key = auth.device_key(device_settings())
-    good = auth.sign_device(key)
+    good = auth.sign_device(key, "owner")
     body, signature = good.split(".")
     other_key = auth.device_key(make_settings(session_secret="y" * 40))
     for bad in (
@@ -417,24 +417,33 @@ def test_forged_or_malformed_device_cookies_are_not_known():
         "a.b.c",
         good + "x",
         f"{body}.{signature[::-1]}",
-        auth.sign_device(other_key),
+        auth.sign_device(other_key, "owner"),
         f"{auth._b64(b'{}')}.{auth._signature(key, auth._b64(b'{}'))}",  # signed, wrong content
     ):
-        assert not auth.device_is_known(key, bad), bad
+        assert not auth.device_is_known(key, bad, "owner"), bad
+
+
+def test_a_device_cookie_only_counts_for_its_own_account():
+    """With accounts, one user's cookie must not skip the account window of another's."""
+    key = auth.device_key(device_settings())
+    cookie = auth.sign_device(key, "Ada@Example.com")
+    assert auth.device_is_known(key, cookie, " ada@example.com ")  # same account, normalised
+    assert not auth.device_is_known(key, cookie, "ben@example.com")
+    assert not auth.device_is_known(key, cookie, "owner")
 
 
 def test_a_session_cookie_is_not_a_device_cookie_and_the_reverse():
     settings = device_settings()
     session_cookie = auth.sign_session(auth.signing_key(settings), auth.new_session(auth=True))
-    assert not auth.device_is_known(auth.device_key(settings), session_cookie)
-    device_cookie = auth.sign_device(auth.device_key(settings))
+    assert not auth.device_is_known(auth.device_key(settings), session_cookie, "owner")
+    device_cookie = auth.sign_device(auth.device_key(settings), "owner")
     assert auth.read_session(auth.signing_key(settings), device_cookie) is None
 
 
 def test_a_new_owner_password_retires_every_device_cookie():
-    old = auth.sign_device(auth.device_key(device_settings()))
+    old = auth.sign_device(auth.device_key(device_settings()), "owner")
     changed = auth.device_key(device_settings(owner_password="a different password"))
-    assert not auth.device_is_known(changed, old)
+    assert not auth.device_is_known(changed, old, "owner")
 
 
 def test_known_device_skips_the_account_window_but_not_the_address_window():
@@ -497,7 +506,7 @@ def test_the_owner_gets_a_device_cookie_only_by_logging_in(secured):
     low = cookie.lower()
     assert "httponly" in low and "samesite=lax" in low and "path=/" in low
     assert f"max-age={auth.DEVICE_SECONDS}" in low
-    assert auth.device_is_known(secured.state.device_key, jar.get(auth.DEVICE_COOKIE_NAME))
+    assert auth.device_is_known(secured.state.device_key, jar.get(auth.DEVICE_COOKIE_NAME), "owner")
 
 
 def test_the_device_cookie_is_secure_when_the_site_is_https_only(app, engine):  # noqa: F811
@@ -528,8 +537,8 @@ def test_a_forged_or_expired_device_cookie_gets_no_bypass(secured):
     lock_the_account(secured)
     key = secured.state.device_key
     other = auth.device_key(make_settings(session_secret="y" * 40))
-    expired = auth.sign_device(key, now=1)
-    for forged in ("garbage", auth.sign_device(other), expired, "x." + "y" * 43):
+    expired = auth.sign_device(key, "owner", now=1)
+    for forged in ("garbage", auth.sign_device(other, "owner"), expired, "x." + "y" * 43):
         response, _ = owner_logs_in(secured, "198.51.100.77", {auth.DEVICE_COOKIE_NAME: forged})
         assert response.status_code == 429, forged
 

@@ -82,7 +82,7 @@ def log_in(request: Request, session: Session, password: str, account: str = OWN
     limiter: auth.LoginLimiter = request.app.state.limiter
     client = edge.client_address(request, settings)
     known_device = auth.device_is_known(
-        request.app.state.device_key, request.cookies.get(auth.DEVICE_COOKIE_NAME)
+        request.app.state.device_key, request.cookies.get(auth.DEVICE_COOKIE_NAME), account
     )
     refused = limiter.check(client, account, known_device=known_device)  # counts this attempt
     if refused:
@@ -100,7 +100,7 @@ def log_in(request: Request, session: Session, password: str, account: str = OWN
     # A fresh token, never a promoted old one, stamped with the current epoch.
     request.state.session = auth.new_session(auth=True, epoch=auth.current_epoch(session))
     request.state.session_changed = True
-    request.state.set_device_cookie = True  # only after the password was right
+    request.state.device_account = account  # a device cookie for this account, only now
 
 
 def log_out(request: Request, session: Session) -> None:

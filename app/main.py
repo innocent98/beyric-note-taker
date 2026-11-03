@@ -54,13 +54,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 secure=settings.cookie_secure,
                 path="/",
             )
-        if getattr(request.state, "set_device_cookie", False):
+        device_account = getattr(request.state, "device_account", None)
+        if device_account is not None:
             # Marks this browser as the owner's, so a lockout caused by someone else's failed
             # guesses cannot keep it out. It grants no access by itself: the password is still
             # checked, and the address limit still applies.
             response.set_cookie(
                 auth.DEVICE_COOKIE_NAME,
-                auth.sign_device(app.state.device_key),
+                auth.sign_device(app.state.device_key, device_account),
                 max_age=auth.DEVICE_SECONDS,
                 httponly=True,
                 samesite="lax",
