@@ -786,6 +786,35 @@ def run_refusal(owner, engine, general_id) -> None:
         f"/api/meetings/{refused_id}/retry",
         note="Sends a NEW bot (fake Vexa here) and puts the meeting back to `bot_sent`.",
     )
+    with Session(engine) as session:
+        # The new bot is finished by SQL so only the paused meeting below holds a bot.
+        session.execute(
+            text("update meetings set status = 'ready', step = 'done' where id = :id"),
+            {"id": refused_id},
+        )
+        paused = Meeting(
+            owner_user_id=owner_id_of(engine),
+            url=MEET,
+            platform="google_meet",
+            native_id="abc-defg-hij",
+            template_id=general_id,
+            status="bot_sent",
+            step="waiting",
+            completion_reason="google_meet_join_refused",
+            terminal_seen_at=datetime.now(UTC) - timedelta(minutes=1),
+            join_attempts=1,
+            vexa_meeting_id="4243",
+        )
+        session.add(paused)
+        session.commit()
+        paused_id = paused.id
+    owner.call(
+        "meeting-detail-refused-paused-before-retry",
+        "GET",
+        f"/api/meetings/{paused_id}",
+        note="Google refused the first bot a minute ago; the worker has stopped it and will send "
+        "the second at `join_retry_at` (4 to 5 minutes after the refusal). Still `bot_sent`.",
+    )
 
 
 if __name__ == "__main__":

@@ -26,9 +26,10 @@ from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
+    MEET_REFUSED,
     REASON_CANCELLED,
     REASON_NO_SPEECH,
-    is_refusal_failure,
+    is_join_failure,
     manual_retry_wait,
     send_again,
 )
@@ -215,12 +216,13 @@ def retry_block(meeting: Meeting, now: datetime | None = None) -> str | None:
 
     Retrying resumes at the step that failed, so it needs either the saved transcript or the
     downloaded audio. A bot that never recorded anything (step `waiting`) has neither, except one
-    Google refused: that retry sends a new bot, and is held back for a few minutes.
+    whose join the worker ended (Google refused it, or it hung on a prompt): that retry sends a
+    new bot, and is held back for a few minutes.
     """
     if meeting.status != "failed":
         return "not_failed"
     if meeting.step == "waiting":
-        if is_refusal_failure(meeting) and not manual_retry_wait(meeting, now or datetime.now(UTC)):
+        if is_join_failure(meeting) and not manual_retry_wait(meeting, now or datetime.now(UTC)):
             return None
         return "no_audio"
     if meeting.failure_reason == REASON_NO_SPEECH:
@@ -233,14 +235,19 @@ def retry_block(meeting: Meeting, now: datetime | None = None) -> str | None:
 def retry_block_message(
     meeting: Meeting, block: str | None, now: datetime | None = None
 ) -> str | None:
-    """The words for a retry block. A refused bot's wait says how long is left."""
-    if block == "no_audio" and is_refusal_failure(meeting):
+    """The words for a retry block. The wait after a failed join says how long is left."""
+    if block == "no_audio" and is_join_failure(meeting):
         wait = manual_retry_wait(meeting, now or datetime.now(UTC))
         minutes = max(1, math.ceil(wait.total_seconds() / 60))
         unit = "minute" if minutes == 1 else "minutes"
+        if meeting.completion_reason == MEET_REFUSED:
+            return (
+                f"Google refused the bot a moment ago. To be polite to Google, you can send it "
+                f"again in {minutes} {unit}."
+            )
         return (
-            f"Google refused the bot a moment ago. To be polite to Google, you can send it "
-            f"again in {minutes} {unit}."
+            "The bot was just taken out of this meeting. "
+            f"You can send it again in {minutes} {unit}."
         )
     return RETRY_BLOCK_TEXT.get(block)
 
@@ -451,7 +458,7 @@ def cancel_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meet
 
 def retry_meeting(session: Session, meeting: Meeting, vexa: VexaClient | None = None) -> Meeting:
     now = datetime.now(UTC)
-    refused = is_refusal_failure(meeting)
+    refused = is_join_failure(meeting)
     if retry_block(meeting, now) is not None:
         raise Refused(
             409,

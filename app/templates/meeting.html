@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "components.html" as ui %}
 {% block title %}Meeting {{ meeting.native_id }} - Beyric Notes{% endblock %}
-{% block head %}{% if meeting.status in ("bot_sent", "processing") %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
+{% block head %}{% if meeting.status in ("bot_sent", "processing") or refused_wait %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
 {% block content %}
 {% set template_options = [] %}{% for t in templates %}{% set _ = template_options.append((t.id, t.name)) %}{% endfor %}
 <div class="stack">
@@ -11,7 +11,7 @@
     {% call ui.page_head("Zoom " ~ meeting.native_id if meeting.platform == "zoom" else "Google Meet " ~ meeting.native_id, meeting.created_at|local_time) %}{{ head_end }}{% endcall %}
   </div>
 
-  {% if meeting.status in ("bot_sent", "processing") %}
+  {% if meeting.status in ("bot_sent", "processing") or refused_wait %}
   <p class="muted">This page updates every 30 seconds.</p>
   {% endif %}
 

@@ -114,6 +114,27 @@ describe("waiting and working", () => {
     expect(screen.getByText(/Zoom turned the bot away, so a new one was sent \(attempt 2 of 3\)\./)).toBeTruthy();
   });
 
+  it("says when the second bot goes after Google refused the first, with the same wait page", () => {
+    show(meeting("103-meeting-detail-refused-paused-before-retry.json"));
+    expect(screen.getByText(/Google would not let the bot ask to join, so it was taken out/)).toBeTruthy();
+    expect(screen.getByText(/A new bot will be sent at about/)).toBeTruthy();
+    expect(screen.getByText(/UTC \(attempt 2 of 2\)/)).toBeTruthy();
+  });
+
+  it("counts the wait down on a refused meeting by asking the server again", async () => {
+    vi.useFakeTimers();
+    mocks.get
+      .mockResolvedValueOnce(meeting("99-meeting-detail-refused-waiting.json"))
+      .mockResolvedValue(meeting("101-meeting-detail-refused-can-send-again.json"));
+    show(meeting("99-meeting-detail-refused-waiting.json"));
+    expect(screen.getByText(/you can send it again in 4 minutes/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    await act(async () => vi.advanceTimersByTime(30_500));
+    expect(mocks.get).toHaveBeenCalledTimes(1); // refresh_after_seconds is 30 while the wait runs
+    await act(async () => vi.advanceTimersByTime(30_000));
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
   it("shows the step in plain words while processing, with no cancel", () => {
     show(meeting("44-meeting-detail-processing-transcribing.json"));
     expect(screen.getAllByText("Writing the transcript").length).toBeGreaterThan(0);

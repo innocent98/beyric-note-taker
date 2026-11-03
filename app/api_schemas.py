@@ -114,8 +114,12 @@ class MeetingDetail(MeetingSummary):
     max_join_attempts: int
     bot_left_early: bool
     speakers_incomplete: bool
-    # Seconds until the page should ask again; null once the meeting is ready or failed.
+    # Seconds until the page should ask again; null once the meeting is ready or failed, except
+    # while a failed join counts down its wait before it can be sent again.
     refresh_after_seconds: int | None
+    # While Google has refused the first bot and the worker is pausing before it sends the second:
+    # about when that happens (the status is still "bot_sent"). Null otherwise.
+    join_retry_at: UtcDatetime | None
     # Only when status is "ready", else null. `notes_html` is `notes` rendered by the server's
     # escaping markdown renderer: show it as HTML, and copy `notes`.
     notes: str | None

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app import auth, services
 from app.db import get_session
 from app.models import User
-from app.pipeline import MAX_JOIN_ATTEMPTS, REMOVAL_REASONS, is_refusal_failure
+from app.pipeline import MAX_JOIN_ATTEMPTS, REMOVAL_REASONS, is_join_failure
 from app.services import (
     Refused,
     get_openai_client,
@@ -148,7 +148,7 @@ def _meeting_page(request, session: Session, meeting, status_code=200, **context
         meeting=meeting,
         templates=services.list_templates(session, request.state.user),
         retry_block=block,
-        refused_wait=block is not None and is_refusal_failure(meeting),
+        refused_wait=block is not None and is_join_failure(meeting),
         retry_block_message=services.retry_block_message(meeting, block),
         bot_left_early=meeting.completion_reason in REMOVAL_REASONS,
         max_join_attempts=MAX_JOIN_ATTEMPTS,

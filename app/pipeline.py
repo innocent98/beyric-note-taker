@@ -51,20 +51,37 @@ REASON_JOIN_REFUSED = (
     "blocking guests."
 )
 
+REASON_NEEDS_HELP = (
+    "The bot is waiting on a prompt in the meeting, such as a consent or verification screen, "
+    "and could not continue. Check the meeting for a prompt, then send the bot again."
+)
+
 # Google sometimes answers the bot's "Ask to join" with a refusal (HTTP 403, "You can't join this
-# video call"). Vexa v0.12.29 reports it as this completion reason after re-knocking up to 3 times
-# itself; v0.12.28 (no typed reason) shows `needs_help` or a join-button error instead.
+# video call"). Vexa v0.12.29 reports it as a typed denial: status `failed`, completion reason
+# `awaiting_admission_rejected` (a host declining gets the same) and `data.reason` starting with
+# this code, after re-knocking up to 3 times itself. v0.12.28 has no typed reason; its refusal
+# ends as the join-button error below.
 MEET_REFUSED = "google_meet_join_refused"
+# Vexa `needs_help`: the bot is held behind a human decision (the Gemini consent gate, a
+# reCAPTCHA) and keeps polling; it can still turn `active`. It is not a refusal.
+NEEDS_HELP_MARK = "needs_help"
+# Stored in `Meeting.completion_reason` (with `terminal_seen_at` as the time) when the worker ended
+# a join itself, so what follows reads the structured marker, never the wording of the reason.
+JOIN_FAILURE_MARKS = (MEET_REFUSED, NEEDS_HELP_MARK)
 # Bots sent for one meeting when Google refuses them, the first included. Vexa already knocks up to
 # 3 times inside one bot, so more sends only look like hammering.
 REFUSAL_MAX_SENDS = 2
 # The pause before the second bot, counted from the refusal, plus a stable 0 to 60 s per meeting.
 REFUSAL_RETRY_GAP = timedelta(minutes=4)
 REFUSAL_JITTER_SECONDS = 60
-# The shortest time between a refusal and a manual "Try again".
+# The shortest time between a failed join and a manual "Try again".
 MANUAL_RETRY_GAP = timedelta(minutes=5)
-# `needs_help` is Vexa giving up on the lobby; it fails the join after this long.
-NEEDS_HELP_GRACE = timedelta(seconds=30)
+# A bot in `needs_help` this long, with no segments and no recording, has its join failed. Long
+# enough for a person to answer a consent prompt.
+NEEDS_HELP_GRACE = timedelta(minutes=2)
+# How often a bot that will not stop is asked again, and how often the second send checks that the
+# first bot has gone before it gives up checking.
+STOP_TRIES = 3
 # A refusal whose page says this is the Meet marketing page the bot lands on after Google's 403.
 JOIN_BUTTON_ERROR = "could not locate join button"
 MEET_MARKETING_URL = "workspace.google.com/products/meet"
@@ -88,6 +105,10 @@ _no_audio_polls: dict[int, int] = {}
 # When each meeting's bot was first seen in `needs_help` (this run of it). Lost on a restart, which
 # only gives the bot a fresh grace period.
 _needs_help_since: dict[int, datetime] = {}
+# Failed `stop_bot` calls per meeting, and checks that a refused bot had left before the second
+# send. Lost on a restart, which only gives them a fresh count.
+_stop_tries: dict[int, int] = {}
+_gone_checks: dict[int, int] = {}
 
 
 def audio_path(meeting_id: int) -> Path:
@@ -179,6 +200,8 @@ def send_again(meeting: Meeting, vexa) -> bool:
     meeting.terminal_seen_at = None
     _no_audio_polls.pop(meeting.id, None)
     _needs_help_since.pop(meeting.id, None)
+    _stop_tries.pop(meeting.id, None)
+    _gone_checks.pop(meeting.id, None)
     logger.info("meeting %s: sent a new bot (attempt %s)", meeting.id, meeting.join_attempts)
     return True
 
@@ -200,18 +223,19 @@ def refusal_retry_gap(meeting: Meeting) -> timedelta:
     return REFUSAL_RETRY_GAP + timedelta(seconds=jitter)
 
 
-def is_refusal_failure(meeting: Meeting) -> bool:
-    """A meeting that failed because Google refused the bot (not for some later reason)."""
+def is_join_failure(meeting: Meeting) -> bool:
+    """A meeting whose join the worker ended (Google refused it, or it hung on a prompt), told
+    by the marker stored with it and not by the wording of the reason."""
     return (
         meeting.status == "failed"
         and meeting.step == "waiting"
         and meeting.terminal_seen_at is not None
-        and (meeting.failure_reason or "").startswith(REASON_JOIN_REFUSED)
+        and meeting.completion_reason in JOIN_FAILURE_MARKS
     )
 
 
 def manual_retry_wait(meeting: Meeting, now: datetime) -> timedelta:
-    """Time left before a refused meeting may be sent again by hand; zero when it may."""
+    """Time left before a failed join may be sent again by hand; zero when it may."""
     if meeting.terminal_seen_at is None:
         return timedelta(0)
     return max(timedelta(0), meeting.terminal_seen_at + MANUAL_RETRY_GAP - now)
@@ -219,42 +243,92 @@ def manual_retry_wait(meeting: Meeting, now: datetime) -> timedelta:
 
 def _paused_for_retry(meeting: Meeting) -> bool:
     """Google refused the first bot and the second has not been sent yet."""
-    return meeting.completion_reason == MEET_REFUSED and meeting.terminal_seen_at is not None
+    return (
+        meeting.status == "bot_sent"
+        and meeting.completion_reason == MEET_REFUSED
+        and meeting.terminal_seen_at is not None
+    )
 
 
-def _join_refused(meeting: Meeting, info: VexaMeeting, now: datetime) -> bool:
-    """Did Google refuse this Meet bot? Any one of three symptoms, on either Vexa version."""
+def join_retry_at(meeting: Meeting) -> datetime | None:
+    """When the second bot will be sent, while the meeting is paused for it; otherwise None."""
+    if not _paused_for_retry(meeting):
+        return None
+    return meeting.terminal_seen_at + refusal_retry_gap(meeting)
+
+
+def _join_problem(meeting: Meeting, info: VexaMeeting, now: datetime) -> str | None:
+    """Why a Meet join should be ended (a marker from `JOIN_FAILURE_MARKS`), or None."""
     if meeting.platform != "google_meet":
-        return False
+        return None
     text = info.failure_reason or ""
-    if info.completion_reason == MEET_REFUSED or MEET_REFUSED in text:
-        return True
     lowered = text.lower()
-    if JOIN_BUTTON_ERROR in lowered and MEET_MARKETING_URL in lowered:
-        return True
+    if text.lstrip().startswith(MEET_REFUSED) or (
+        JOIN_BUTTON_ERROR in lowered and MEET_MARKETING_URL in lowered
+    ):
+        return MEET_REFUSED
     # A bot that is already recording is Vexa asking for help for another reason: leave it be.
     if info.status == "needs_help" and not info.segments and info.recording_id is None:
         since = _needs_help_since.setdefault(meeting.id, now)
-        return now - since >= NEEDS_HELP_GRACE
+        return NEEDS_HELP_MARK if now - since >= NEEDS_HELP_GRACE else None
     _needs_help_since.pop(meeting.id, None)
-    return False
+    return None
 
 
-def _on_refusal(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
-    """Stop the bot so it does not hold the slot, then pause for one polite retry or fail.
-    True when the meeting was failed."""
-    _needs_help_since.pop(meeting.id, None)
+def _stop_bot(meeting: Meeting, vexa) -> bool:
+    """Ask Vexa to take the bot out. False when it could not, until it has been tried
+    `STOP_TRIES` times: then it is given up on, so Vexa being down cannot hold the meeting."""
     try:
-        vexa.stop_bot(meeting.platform, meeting.native_id)
-    except (VexaError, ValueError) as exc:
-        logger.warning("meeting %s: stop_bot failed (%s)", meeting.id, type(exc).__name__)
-    meeting.completion_reason, meeting.terminal_seen_at = MEET_REFUSED, now
-    if meeting.join_attempts >= REFUSAL_MAX_SENDS:
-        logger.info("meeting %s: Google refused the bot again; giving up", meeting.id)
-        _fail(session, meeting, REASON_JOIN_REFUSED)
+        vexa.stop_bot(meeting.platform, meeting.native_id)  # keyed by platform and meeting code
         return True
-    logger.info("meeting %s: Google refused the bot; pausing before one retry", meeting.id)
+    except ValueError:
+        return True  # a code Vexa would never accept; nothing to retry
+    except VexaError as exc:
+        tries = _stop_tries.get(meeting.id, 0) + 1
+        _stop_tries[meeting.id] = tries
+        logger.warning(
+            "meeting %s: stop_bot failed (%s), try %s of %s",
+            meeting.id,
+            type(exc).__name__,
+            tries,
+            STOP_TRIES,
+        )
+        return tries >= STOP_TRIES
+
+
+def _old_bot_gone(meeting: Meeting, vexa) -> bool:
+    """Before the second bot is sent: has the refused one left? Not gone means stop it again and
+    look again on the next poll, for `STOP_TRIES` checks; after that the send goes ahead and
+    Vexa says no itself if the slot is still taken."""
+    checks = _gone_checks.get(meeting.id, 0)
+    if checks >= STOP_TRIES:
+        return True
+    _gone_checks[meeting.id] = checks + 1
+    try:
+        old = _lookup(vexa, meeting)
+    except VexaError:
+        return False
+    if old.status in ("failed", "completed"):
+        return True
+    _stop_bot(meeting, vexa)
     return False
+
+
+def _on_join_problem(session: Session, meeting: Meeting, vexa, mark: str, now: datetime) -> bool:
+    """Stop the bot so it does not hold the slot, then fail the meeting, or pause for one polite
+    retry after a refusal. True when the meeting was failed. When the bot could not be stopped
+    yet, nothing changes and the next poll finds the same problem and tries again."""
+    if not _stop_bot(meeting, vexa):
+        return False
+    _needs_help_since.pop(meeting.id, None)
+    _stop_tries.pop(meeting.id, None)
+    meeting.completion_reason, meeting.terminal_seen_at = mark, now
+    if mark == MEET_REFUSED and meeting.join_attempts < REFUSAL_MAX_SENDS:
+        logger.info("meeting %s: Google refused the bot; pausing before one retry", meeting.id)
+        return False
+    logger.info("meeting %s: join ended by the worker (%s)", meeting.id, mark)
+    _fail(session, meeting, REASON_JOIN_REFUSED if mark == MEET_REFUSED else REASON_NEEDS_HELP)
+    return True
 
 
 def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
@@ -263,8 +337,10 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
         meeting.started_polling_at = now
     info: VexaMeeting | None = None
     if _paused_for_retry(meeting):
-        # The refused bot is gone; looking it up would only report the refusal again.
-        if now - meeting.terminal_seen_at >= refusal_retry_gap(meeting):
+        # Looking the refused bot up would only report the refusal again, except to check it left.
+        if now - meeting.terminal_seen_at >= refusal_retry_gap(meeting) and _old_bot_gone(
+            meeting, vexa
+        ):
             _resend(
                 session,
                 meeting,
@@ -285,8 +361,8 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
 
     if info is None:
         pass
-    elif _join_refused(meeting, info, now):
-        if _on_refusal(session, meeting, vexa, now):
+    elif (mark := _join_problem(meeting, info, now)) is not None:
+        if _on_join_problem(session, meeting, vexa, mark, now):
             return False
     elif info.status == "failed":
         if _zoom_blocked(info) and meeting.join_attempts < MAX_JOIN_ATTEMPTS:
