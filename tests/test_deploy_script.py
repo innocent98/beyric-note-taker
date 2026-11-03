@@ -30,11 +30,19 @@ case "$1 $2" in
     fi
     [[ "$*" == *" next"* && -f "$state/has_next" ]] && echo next-id
     exit 0 ;;
+  "compose config")
+    [ "$head" = "$STUB_NEW" ] && [ "$STUB_SCHED" = "1" ] && echo scheduler
+    exit 0 ;;
+  "compose exec")
+    echo "scheduler-beat-query @${head:0:1}" >> "$state/log"
+    if [ -f "$state/beat" ]; then echo 1; else echo 0; fi
+    exit 0 ;;
   "compose build")
     [ "$head" = "$STUB_BAD_BUILD_SHA" ] && exit 1
     exit 0 ;;
   "compose up")
-    rm -f "$state/healthy"
+    rm -f "$state/healthy" "$state/beat"
+    [ "$head" = "$STUB_NEW" ] && [ "$STUB_BEAT" = "yes" ] && touch "$state/beat"
     if [ "$head" = "$STUB_NEW" ]; then behaviour="$STUB_NEW_UP"; else behaviour="$STUB_OLD_UP"; fi
     case "$behaviour" in
       ok) touch "$state/healthy"; rm -f "$state/created"; exit 0 ;;
@@ -85,7 +93,17 @@ def server(tmp_path):
     (state / "healthy").touch()  # the old version is up when the deploy starts
 
     class Server:
-        def deploy(self, *, new_up="ok", old_up="ok", bad_build=None, on_main=True, sha=NEW):
+        def deploy(
+            self,
+            *,
+            new_up="ok",
+            old_up="ok",
+            bad_build=None,
+            on_main=True,
+            sha=NEW,
+            scheduler=False,
+            beat=True,
+        ):
             env = {
                 **os.environ,
                 "PATH": f"{bin_dir}:{os.environ['PATH']}",
@@ -96,6 +114,8 @@ def server(tmp_path):
                 "STUB_OLD_UP": old_up,
                 "STUB_BAD_BUILD_SHA": bad_build or "",
                 "STUB_ON_MAIN": "1" if on_main else "0",
+                "STUB_SCHED": "1" if scheduler else "0",
+                "STUB_BEAT": "yes" if beat else "no",
             }
             result = subprocess.run(
                 ["bash", str(project / "deploy" / "deploy.sh"), sha],
@@ -185,3 +205,30 @@ def test_a_sha_not_on_main_is_refused_before_anything_changes(server):
 def test_a_bad_argument_is_a_usage_error(server):
     result = server.deploy(sha="not-a-sha")
     assert result.returncode == 2 and "usage" in result.stderr
+
+
+def test_a_scheduler_that_beats_after_the_deploy_passes(server):
+    result = server.deploy(scheduler=True, beat=True)
+    assert result.returncode == 0 and f"deployed {NEW}" in result.stdout
+    assert "scheduler-beat-query @b" in server.log and server.head == NEW
+
+
+def test_a_scheduler_that_never_beats_rolls_back_after_a_bounded_wait(server):
+    result = server.deploy(scheduler=True, beat=False)
+    assert result.returncode == 1
+    assert "no heartbeat within 60 s" in result.stderr
+    assert f"starting {OLD} again" in result.stderr and server.head == OLD
+    assert server.log.count("scheduler-beat-query @b") == 15  # bounded, never forever
+
+
+def test_the_rollback_to_a_commit_without_a_scheduler_does_not_wait_for_one(server):
+    result = server.deploy(scheduler=True, beat=False)
+    assert result.returncode == 1
+    assert not [line for line in server.log if line == "scheduler-beat-query @a"]
+    assert "previous version is not healthy either" not in result.stderr
+
+
+def test_a_commit_without_a_scheduler_is_not_asked_for_a_beat(server):
+    result = server.deploy(scheduler=False)
+    assert result.returncode == 0
+    assert not [line for line in server.log if line.startswith("scheduler-beat-query")]
