@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status (2026-11-03):** MVP live at notes.beyrictech.com (PRs #1–#23, #25 and #26 merged and deployed 2026-11-03; #24 docs open). The UI foundation (Module 2a) and the JSON API are shipped; the frontend is moving to Next.js (Module 2b: the front door, the owner screens and the UI parity pass are merged and live). The Pilot module (accounts plus calendar auto-join) has an approved design (Adebayo answered the questions 2026-11-03); the plan and the Phase 0 spikes are next. Next steps and Adebayo's queued items are in `docs/HANDOFF-master.md`.
+**Status (2026-11-03, updated for the sign-up PR):** MVP live at notes.beyrictech.com (PRs #1–#23, #25 and #26 merged and deployed 2026-11-03; #24 docs open). The UI foundation (Module 2a) and the JSON API are shipped; the frontend is moving to Next.js (Module 2b: the front door, the owner screens and the UI parity pass are merged and live). The Pilot module (accounts plus calendar auto-join) has an approved design (Adebayo answered the questions 2026-11-03); the plan and the Phase 0 spikes are next. Next steps and Adebayo's queued items are in `docs/HANDOFF-master.md`.
 
 Legend: `[x]` done and verified, `[ ]` not done.
 
@@ -168,7 +168,19 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [ ] Phase A, accounts: **in progress, owned by other sessions** (`feature/pilot-accounts-core`, then `feature/pilot-accounts-signup`; tasks A1 to A20 in spec section 15, not re-planned): sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap, admin API
   - [x] Phase A core (PR `feature/pilot-accounts-core`, 2026-11-03; SOP `docs/sop/2026-11-03-pilot-accounts-core.md`; open, not merged): A1 migration 0006 (users, tokens, oauth flows, waitlist, notifications, mail outbox, settings, admin from `OWNER_EMAIL`), A2 argon2id and password rules, A4 session cookie `{uid, csrf, iat, epoch, gepoch}` and guard, A5 email login with per-email limiter, A6 migration 0007 (ownership, usage ledger), A7/A8 meetings, templates, vocabulary scoped by user (foreign id 404), A9 hours formula, gate and `usage` in `/api/session`
   - [ ] **Deploy step for Adebayo:** add `OWNER_EMAIL` to the server `.env` before merging (the owner then signs in with email plus the same password)
-  - [ ] A3 mailer; A10 sign-up with the cap lock and `GET /api/pilot`; A11 verification; A12 reset; A13/A14 Google sign-in; A15 waitlist; A16/A17 admin API; A18 notifications API; A19 nginx zones and deploy order; A20 privacy and terms rows (second PR)
+  - [x] Phase A sign-up (branch `feature/pilot-accounts-signup`, 2026-11-03; SOP `docs/sop/2026-11-03-pilot-accounts-signup.md`; FE guide `docs/fe-integration-guide-pilot-accounts.md` with 119 live captures; open, not merged; **sign-up stays closed**, `signups_open` false):
+    - [x] A3 `Mailer` (Resend, console refused in production), outbox sender with retries at 0, 1, 6 and 36 minutes and scrubbing
+    - [x] A10 sign-up with the advisory lock (ten parallel at nine accounts make one), `pilot_full`/`pilot_closed`, `GET /api/pilot`, terms version recorded, 202 for every outcome
+    - [x] A11 email verification (each link confirms only its own submission's password, typed again; 5 wrong tries kill it), resend limits, 48 h sweep, `password_signup_enabled` switch
+    - [x] A12 password reset (30 minutes, bumps the user's epoch, no enumeration)
+    - [x] A13/A14 Google sign-in (PKCE, ID-token checks, matching order, unverified password account loses its password, `pilot_full` cookie), off unless `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` are set
+    - [x] A15 waitlist and invitations (reserve a place 7 days; redeemed by password sign-up or by the Google address)
+    - [x] A16/A17 admin API (users, pilot settings, waitlist, reset link, mail failures; last-admin guard under a lock) and `scripts/delete_user.py` with the worker's purge of deleted accounts
+    - [x] A18 notifications API and `unread_notifications` on the session
+    - [x] A19 nginx zones for the account routes and the waitlist (proved with a throwaway nginx), deploy notes (`deploy/README.md` section 10)
+    - [x] A20 privacy and terms rows for accounts (Jinja pages and the Next copies), SOP, checklist, FE guide
+    - [x] From the accounts-core review: `bot_already_active` is per user and a neutral `bot_busy` covers a full note taker (`MAX_ACTIVE_BOTS`, default 1); usage committed before transcription; Jinja IDOR tests
+    - [ ] **Before sign-up opens:** the frontend pages the mail links open (`/verify-email`, `/reset-password`, `/signup?invite=`, `/pilot-full`, `/login?error=`) must exist (stream D); Adebayo confirms a real verification mail is delivered, then turns `password_signup_enabled` on; a real Google round trip with a test account
 - [ ] Phase C, Google Calendar auto-join plus the ICS source (needs A6, A9, A13, A18 for most tasks)
   - [ ] C1 migration for connections, events, scheduled joins
   - [ ] C2 token vault (AES-GCM, Opus review)
@@ -211,9 +223,10 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [x] Remove the default trusted-proxy fallback (`172.28.0.1`, `trusted_proxy_ips`, hard-coded `next` trust) once `EDGE_SHARED_SECRET` is live on the server (done 2026-11-03, `chore/remove-trusted-proxy-fallback`; Opus review finding 6; `docs/sop/2026-11-03-edge-secret-and-login-limits.md`)
 - [ ] Run `deploy/nginx-limit-check.sh` (and, if cheap, `docs/spike/edge-secret/e2e.sh`) in CI
 - [ ] Alert the owner on an account lockout (today a log line only). The device cookie is per account (email) since the accounts core PR
-- [ ] Accounts core review follow-ups (`docs/sop/2026-11-03-pilot-accounts-core.md`): (3) `bot_already_active` is global and leaks other users' activity, **fix before sign-up opens**; (4) `record_usage` not committed before `transcribe_chunks`, a failed transcription loses the ledger row, **fix before sign-up opens or in the second PR**; (5) cap checked only at meeting start (overshoot up to `max_poll_hours`); (6) IDOR test covers `/api` only, add Jinja regenerate, cancel and vocabulary delete; (7) non-ASCII `OWNER_EMAIL` can fail `ck_users_email_lower`
+- [ ] Accounts core review follow-ups (`docs/sop/2026-11-03-pilot-accounts-core.md`): (3), (4) and (6) fixed in `feature/pilot-accounts-signup` (2026-11-03); still open: (5) cap checked only at meeting start (overshoot up to `max_poll_hours`); (7) non-ASCII `OWNER_EMAIL` can fail `ck_users_email_lower`
+- [ ] Sign-up PR follow-ups (`docs/sop/2026-11-03-pilot-accounts-signup.md`): a signed ID token is not checked (received over TLS from Google's token endpoint, which OIDC allows); a rate-limited second sign-up for one address within a minute is dropped silently (an attacker could delay a real owner by a minute at a time); notifications are written for two kinds only; resend cannot take a new password; the worker's mail send has no metrics; mail templates are plain (the designer's `Emails.dc.html` is not applied); `slots_taken` has no admin screen yet
 - [ ] Replace `app/data/common-passwords.txt` (384 entries) with the 10,000-entry list; add a breached-password lookup
-- [ ] Neutral `bot_busy` message instead of the global `bot_already_active` (Phase C, before more than one or two testers)
+- [x] Neutral `bot_busy` message instead of the global `bot_already_active` (2026-11-03, `feature/pilot-accounts-signup`; the real per-host placement is still Phase C/D)
 - [ ] Run the updated `web/scripts/owner-e2e.mjs`, `owner-browser-check.mjs` and `docs/spike/edge-secret/e2e.sh` once against a compose stack (changed for email login, not run)
 - [ ] Test paid Zoom accounts
 - [x] Vexa licence for commercial use: Adebayo confirmed 2026-11-03 that Vexa allows it (his statement; the licence text itself was not re-read here)

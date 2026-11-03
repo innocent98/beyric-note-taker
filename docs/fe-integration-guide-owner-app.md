@@ -1,6 +1,6 @@
 # Frontend integration guide: owner app JSON API
 
-**Status:** written 2026-11-02 from `feature/json-api`; **updated 2026-11-03 for accounts** (`feature/pilot-accounts-core`: email plus password login, per-user data, recorded hours; the new captures are `82`–`97`). Every request, response body, status code, header and error string below was captured from the running app by `scripts/capture_owner_api.py` and is pasted verbatim from `docs/fe-captures/owner-app/` (97 files, one per exchange; each block names its file). Anything that could not be exercised live is marked **NOT EXERCISED** inline and in the table in section 10.
+**Status:** written 2026-11-02 from `feature/json-api`; **updated 2026-11-03 for accounts** (`feature/pilot-accounts-core`: email plus password login, per-user data, recorded hours; the new captures are `82`–`97`) and again for the sign-up PR (`feature/pilot-accounts-signup`: `unread_notifications` on the session, `bot_busy`; every capture was re-run, and sign-up, verification, reset, waitlist, Google, admin and notifications are in `docs/fe-integration-guide-pilot-accounts.md`). Every request, response body, status code, header and error string below was captured from the running app by `scripts/capture_owner_api.py` and is pasted verbatim from `docs/fe-captures/owner-app/` (97 files, one per exchange; each block names its file). Anything that could not be exercised live is marked **NOT EXERCISED** inline and in the table in section 10.
 
 All names, email addresses, meeting codes, links and passwords in the examples are fake placeholders (`Ada Example`, `owner@example.test`, `pilot@example.test`, `abc-defg-hij`, `PLACEHOLDERPWD`). CSRF tokens and the cookie value are masked in the captures: `<csrf-A>`, `<csrf-B>`… are different tokens in order of first appearance, so you can see when a token changes.
 
@@ -44,7 +44,7 @@ content-type: application/json
 set-cookie: session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax
 ```
 ```json
-{"authenticated": false, "csrf_token": "<csrf-A>", "user": null, "usage": null}
+{"authenticated": false, "csrf_token": "<csrf-A>", "user": null, "usage": null, "unread_notifications": null}
 ```
 _First visit: no cookie yet. The response sets one._
 _Capture: `docs/fe-captures/owner-app/01-session-anonymous.json`_
@@ -78,12 +78,12 @@ content-type: application/json
 set-cookie: session=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax
 ```
 ```json
-{"authenticated": true, "csrf_token": "<csrf-C>", "user": {"email": "owner@example.test", "name": null, "is_admin": true, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": null}}
+{"authenticated": true, "csrf_token": "<csrf-C>", "user": {"email": "owner@example.test", "name": null, "is_admin": true, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": null}, "unread_notifications": 0}
 ```
 _The csrf_token here replaces the one from before login._
 _Capture: `docs/fe-captures/owner-app/08-login-ok.json`_
 
-**What the login response holds.** `user` (`email`, `name`, `is_admin`, `email_verified`) and `usage` (`used_seconds`, `cap_seconds`) are `null` while logged out and set once logged in, on `POST /api/session` and `GET /api/session` alike. **`cap_seconds` is `null` for an admin** (no cap) and for any account when the pilot's cap has been removed; show no usage bar then. This capture is the admin account, so its cap is `null`; the ordinary account in section 3, "Accounts", has `18000` (5 hours).
+**What the login response holds.** `user` (`email`, `name`, `is_admin`, `email_verified`), `usage` (`used_seconds`, `cap_seconds`) and `unread_notifications` (a number, the bell's count) are `null` while logged out and set once logged in, on `POST /api/session` and `GET /api/session` alike. **`cap_seconds` is `null` for an admin** (no cap) and for any account when the pilot's cap has been removed; show no usage bar then. This capture is the admin account, so its cap is `null`; the ordinary account in section 3, "Accounts", has `18000` (5 hours).
 
 Wrong password, missing fields and wrong type:
 
@@ -215,7 +215,7 @@ HTTP 200
 content-type: application/json
 ```
 ```json
-{"authenticated": true, "csrf_token": "<csrf-C>", "user": {"email": "owner@example.test", "name": null, "is_admin": true, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": null}}
+{"authenticated": true, "csrf_token": "<csrf-C>", "user": {"email": "owner@example.test", "name": null, "is_admin": true, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": null}, "unread_notifications": 0}
 ```
 _Capture: `docs/fe-captures/owner-app/09-session-logged-in.json`_
 
@@ -233,7 +233,7 @@ content-type: application/json
 set-cookie: session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax
 ```
 ```json
-{"authenticated": false, "csrf_token": "<csrf-D>", "user": null, "usage": null}
+{"authenticated": false, "csrf_token": "<csrf-D>", "user": null, "usage": null, "unread_notifications": null}
 ```
 _Logs out everywhere; the response carries a new anonymous token._
 _Capture: `docs/fe-captures/owner-app/72-logout.json`_
@@ -362,7 +362,7 @@ content-type: application/json
 set-cookie: session=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax
 ```
 ```json
-{"authenticated": true, "csrf_token": "<csrf-H>", "user": {"email": "pilot@example.test", "name": "Pilot Example", "is_admin": false, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": 18000}}
+{"authenticated": true, "csrf_token": "<csrf-H>", "user": {"email": "pilot@example.test", "name": "Pilot Example", "is_admin": false, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": 18000}, "unread_notifications": 0}
 ```
 _An ordinary account: a capped `usage`, not an admin._
 _Capture: `docs/fe-captures/owner-app/88-login-ok-pilot-user.json`_
@@ -484,7 +484,7 @@ HTTP 200
 content-type: application/json
 ```
 ```json
-{"authenticated": true, "csrf_token": "<csrf-H>", "user": {"email": "pilot@example.test", "name": "Pilot Example", "is_admin": false, "email_verified": true}, "usage": {"used_seconds": 18000, "cap_seconds": 18000}}
+{"authenticated": true, "csrf_token": "<csrf-H>", "user": {"email": "pilot@example.test", "name": "Pilot Example", "is_admin": false, "email_verified": true}, "usage": {"used_seconds": 18000, "cap_seconds": 18000}, "unread_notifications": 0}
 ```
 _Five recorded hours are in the ledger (inserted by SQL: the worker is not running)._
 _Capture: `docs/fe-captures/owner-app/96-session-pilot-user-hours-used.json`_
@@ -553,6 +553,7 @@ Every error the captures produced (`status`, `code`, exact `message`, and the fi
 | 404 | `not_found` | Not Found | `64-meeting-id-too-long.json` |
 | 405 | `method_not_allowed` | Method Not Allowed | `68-method-not-allowed.json` |
 | 409 | `bot_already_active` | A bot is already on a meeting. Wait for it to finish first. | `34-meeting-create-while-active.json` |
+| 409 | `bot_busy` | The note taker is busy right now. Try again in a few minutes. | `docs/fe-captures/pilot-accounts/93-wendy-create-meeting-busy.json` (the pilot-accounts captures) |
 | 409 | `not_ready` | Notes can only be rewritten once a meeting is ready. | `60-meeting-regenerate-not-ready.json` |
 | 409 | `not_retryable` | This meeting cannot be retried. | `38-meeting-retry-cancelled.json` |
 | 409 | `not_waiting_for_bot` | Only a meeting that is still waiting for its bot can be cancelled. | `37-meeting-cancel-again.json` |
@@ -915,7 +916,7 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/39-meeting-create-vexa-down.json`_
 
-**One bot at a time.** While any meeting is `bot_sent` or `processing` the server refuses with 409 `bot_already_active`. The old page does the same.
+**One bot at a time per user, and a limit across users.** While one of the caller's own meetings is `bot_sent` or `processing` the server refuses with 409 `bot_already_active` (it names the caller's own meeting only). When the note taker is full with someone else's meeting it refuses with 409 `bot_busy` ("The note taker is busy right now. Try again in a few minutes."), which says nothing about whose; the limit is `MAX_ACTIVE_BOTS`, default 1 (captured in `docs/fe-captures/pilot-accounts/93-wendy-create-meeting-busy.json`). Show either `message` as it comes.
 
 A Zoom link carries its meeting password. It is **never** returned by any endpoint and never echoed in an error:
 
@@ -1551,7 +1552,7 @@ _Capture: `docs/fe-captures/owner-app/69-unknown-api-path.json`_
 ## 6. Field-nesting and shape traps
 
 - **Lists are wrapped objects**, never bare arrays: `{"meetings": […]}`, `{"templates": […]}`, `{"terms": […]}`.
-- **`csrf_token`, `user` and `usage` are top-level on the three session responses and nowhere else.** `user` and `usage` are present-but-`null` while logged out (not absent), and `usage.cap_seconds` is present-but-`null` when there is no cap.
+- **`csrf_token`, `user`, `usage` and `unread_notifications` are top-level on the three session responses and nowhere else.** `user`, `usage` and `unread_notifications` are present-but-`null` while logged out (not absent), and `usage.cap_seconds` is present-but-`null` when there is no cap.
 - **A meeting detail is the summary plus more, in one flat object.** The list gives summaries (no notes, no `can_*` flags, no `failure_reason`); the page needs the detail. `create`, `cancel`, `retry` and `regenerate` all return the **full detail**, so replace your cached detail with the response; no refetch is needed.
 - **Every field is always present.** Fields that do not apply are `null`, never missing. `notes` and `notes_html` are `null` unless the meeting is `ready`; `transcript` is `null` until one is saved (it can exist on a failed meeting whose notes failed).
 - **`failure_reason` is a string whenever `status` is `failed`** (a fallback text is used if the database has none) and `null` otherwise.

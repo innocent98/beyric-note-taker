@@ -1,0 +1,74 @@
+"""The privacy policy and terms say only what the app does for accounts (spec 12.3), and the
+version a new account records is the date the pages show."""
+
+import re
+from datetime import datetime
+
+import pytest
+
+from app import signup
+from tests.test_web import anon_client, app, fake_openai, fake_vexa  # noqa: F401
+
+PRIVACY = "/privacy"
+TERMS = "/terms"
+
+
+def text(client, path: str) -> str:
+    page = client.get(path).text
+    return " ".join(re.sub(r"<[^>]+>", " ", page).replace("&middot;", "").split())
+
+
+@pytest.mark.parametrize("path", [PRIVACY, TERMS])
+def test_the_terms_version_is_the_last_updated_date_on_both_pages(anon_client, path):
+    match = re.search(r"Last updated (\d{1,2} \w+ \d{4})", text(anon_client, path))
+    assert match, "the page has no 'Last updated' date"
+    shown = datetime.strptime(match[1], "%d %B %Y").date().isoformat()
+    assert shown == signup.TERMS_VERSION
+
+
+def test_the_account_details_say_password_or_google_hours_and_waiting_list(anon_client):
+    page = text(anon_client, PRIVACY)
+    assert (
+        "Account details: your name and email address, and a password (stored only in hashed "
+        "form) or, if you sign in with Google, your Google account identifier. We also keep a "
+        "count of the hours of meetings recorded for your account, and, if you join the waiting "
+        "list, your email address." in page
+    )
+
+
+def test_google_sign_in_is_described_as_identity_only(anon_client):
+    page = text(anon_client, PRIVACY)
+    assert (
+        "If you sign in with Google, we receive your name, email address and Google account "
+        "identifier, and nothing else, unless you also connect your calendar." in page
+    )
+
+
+def test_the_email_use_names_only_the_mail_that_is_sent(anon_client):
+    page = text(anon_client, PRIVACY)
+    assert "To send service emails, such as account verification and password resets." in page
+    assert "notices about meetings" not in page  # not sent yet: calendar auto-join is later
+
+
+def test_the_retention_covers_unconfirmed_accounts_the_waiting_list_and_the_hours_ledger(
+    anon_client,
+):
+    page = text(anon_client, PRIVACY)
+    assert "An account whose email address is not confirmed within 48 hours is deleted." in page
+    assert "Waiting list: your email address is kept until" in page
+    assert "we keep only the number of recorded hours counted for it" in page
+
+
+def test_the_terms_say_the_pilot_has_a_limited_number_of_accounts(anon_client):
+    page = text(anon_client, TERMS)
+    assert (
+        "The pilot has a limited number of accounts. When it is full you can join a waiting "
+        "list." in page
+    )
+    assert "Each pilot account has a limit on recorded hours, shown in the app" in page
+
+
+def test_nothing_is_claimed_about_calendar_features_that_are_not_built(anon_client):
+    """Accounts only: the calendar and Meet sentences stay as they were until those ship."""
+    page = text(anon_client, PRIVACY)
+    assert "Outlook" not in page and "Microsoft" not in page

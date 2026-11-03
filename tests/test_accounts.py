@@ -424,15 +424,38 @@ def test_a_meeting_cannot_be_started_with_someone_elses_template(
     body = {"url": MEET, "template_id": strangers_data["template"].id}
     error_of(api.post("/api/meetings", body), 400, "template_required")
     assert fake_vexa.sent == []
+    assert session.scalars(select(Meeting).where(Meeting.status == "bot_sent")).all() == []
 
 
 def test_notes_cannot_be_rewritten_with_someone_elses_template(
     api, session, template, strangers_data, fake_openai
 ):
     meeting = ready(session, template)
+    notes_before, template_before = meeting.notes, meeting.template_id
     body = {"template_id": strangers_data["template"].id}
     error_of(api.post(f"/api/meetings/{meeting.id}/regenerate", body), 400, "template_required")
     assert fake_openai.chat_calls == []
+    session.refresh(meeting)
+    assert (meeting.notes, meeting.template_id) == (notes_before, template_before)
+
+
+def test_the_page_cannot_rewrite_notes_with_someone_elses_template(
+    client, session, template, strangers_data, fake_openai
+):
+    meeting = ready(session, template)
+    notes_before, template_before = meeting.notes, meeting.template_id
+    response = client.post(
+        f"/meetings/{meeting.id}/regenerate",
+        data={
+            "template_id": str(strangers_data["template"].id),
+            "csrf_token": token_from(client.get("/").text),
+        },
+    )
+    assert response.status_code == 400
+    assert "Choose a template." in response.text
+    assert fake_openai.chat_calls == []
+    session.refresh(meeting)
+    assert (meeting.notes, meeting.template_id) == (notes_before, template_before)
 
 
 def test_two_users_may_use_the_same_template_name_and_term(api, session, template, strangers_data):

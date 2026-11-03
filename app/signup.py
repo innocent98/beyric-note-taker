@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # The "Last updated" date of the terms and privacy pages the person accepted at sign-up. Bump it
 # with the pages: it is recorded on the account (`users.terms_version`).
-TERMS_VERSION = "2026-11-02"
+TERMS_VERSION = "2026-11-03"
 SIGNUP_LOCK = 6002  # serialises "count the slots" + "take one" (next to services.NEW_MEETING_LOCK)
 MAX_NAME_CHARS = 200
 MAX_EMAIL_CHARS = 254
