@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     transcription_model: str = "gpt-transcribe"
     notes_model: str = "gpt-6-luna"
+    # The one call that reads the notes and transcript into decisions, open questions and review
+    # items (app/extraction.py). Kept apart from `notes_model` so a stronger model can take over
+    # this call alone if the eval gate (docs/spike/ai-extraction-eval.md) says luna is not enough.
+    extract_model: str = "gpt-6-luna"
 
     audio_retention_days: int = 7
     audio_dir: str = "data/audio"

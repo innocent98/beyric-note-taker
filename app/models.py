@@ -49,6 +49,8 @@ JOIN_STATES = (
 )
 # A join in one of these states holds its meeting code: only one bot per code at a time.
 LIVE_JOIN_STATES = ("dispatching", "no_capacity", "joined")
+AI_RUN_KINDS = ("extract", "translate")
+AI_RUN_STATUSES = ("ok", "failed")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -455,6 +457,30 @@ class UsageEntry(Base):
     )
     seconds: Mapped[int] = mapped_column(Integer)
     counted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AiRun(Base):
+    """One model call made for the AI workspace, kept so the real cost per meeting hour can be
+    read off. Like `usage_entries` it outlives the meeting (`meeting_id` is nulled, not cascaded),
+    and `error` is the exception class name only: exception text can hold transcript words."""
+
+    __tablename__ = "ai_runs"
+    __table_args__ = (
+        CheckConstraint(_in("kind", AI_RUN_KINDS), name="ck_ai_runs_kind"),
+        CheckConstraint(_in("status", AI_RUN_STATUSES), name="ck_ai_runs_status"),
+        Index("ix_ai_runs_meeting_id", "meeting_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="SET NULL"))
+    kind: Mapped[str] = mapped_column(String(16))
+    model: Mapped[str] = mapped_column(String(100))
+    prompt_version: Mapped[str | None] = mapped_column(String(32))
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(16), default="ok", server_default="ok")
+    error: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AppState(Base):

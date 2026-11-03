@@ -1,0 +1,13 @@
+{
+  "transcript": "mention_is_not_owner.txt",
+  "meeting_date": "2026-11-03",
+  "timezone": "Africa/Lagos",
+  "vocabulary": [],
+  "action_items": [
+    {"match": ["signed"], "owner": "Olu", "due_date": "2026-11-05"},
+    {"match": ["bank"], "owner": null, "due_date": null},
+    {"match": ["discount"], "owner": null, "due_date": null}
+  ],
+  "review": [],
+  "forbidden_owners": ["Daniel"]
+}
