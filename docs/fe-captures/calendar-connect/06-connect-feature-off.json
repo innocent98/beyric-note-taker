@@ -1,0 +1,26 @@
+{
+  "note": "`CALENDAR_ENABLED` is false: the whole feature answers 404.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/google/connect",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "calendar_unavailable",
+        "message": "Google Calendar is not available."
+      }
+    }
+  }
+}

@@ -522,6 +522,61 @@
         "title": "BadgesOut",
         "type": "object"
       },
+      "ConnectIn": {
+        "additionalProperties": false,
+        "description": "`features` are what to ask Google for: `calendar` (read events, to decide which meetings\nto join) and/or `meet` (learn that a Meet call you host began). `return_to` is a relative\npath to land on afterwards; anything else becomes `/settings/calendar`.",
+        "properties": {
+          "features": {
+            "default": [
+              "calendar"
+            ],
+            "items": {
+              "enum": [
+                "calendar",
+                "meet"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Features",
+            "type": "array"
+          },
+          "return_to": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return To"
+          }
+        },
+        "title": "ConnectIn",
+        "type": "object"
+      },
+      "ConnectOut": {
+        "description": "`authorize_url` is where to send the browser (navigate to it; do not fetch it).\n`show_unverified_notice` is true until Google has verified the app: show the \"Google hasn't\nverified this app\" explainer first.",
+        "properties": {
+          "authorize_url": {
+            "title": "Authorize Url",
+            "type": "string"
+          },
+          "show_unverified_notice": {
+            "title": "Show Unverified Notice",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "authorize_url",
+          "show_unverified_notice"
+        ],
+        "title": "ConnectOut",
+        "type": "object"
+      },
       "DecisionGroup": {
         "properties": {
           "decisions": {
@@ -2722,6 +2777,201 @@
         "summary": "Google Start",
         "tags": [
           "google"
+        ]
+      }
+    },
+    "/api/calendar/google/callback": {
+      "get": {
+        "description": "Where Google sends the browser back after the consent screen. Public in the guard (it\nanswers a signed-out visitor itself) but checked by the single-use `state`, the signed-in\nuser the flow was started for, and the `calendar_flow` cookie. Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with `?calendar=connected`; a failure goes there with\n`?calendar_error=` `google_denied`, `google_failed`, `scope_missing` (the calendar box was\nunticked), `no_refresh_token` or `wrong_account`; nobody signed in goes to\n`/login?error=google_failed`. 404 `calendar_unavailable` while the feature is off.",
+        "operationId": "calendar_google_callback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Redirect"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Calendar Google Callback",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
+    "/api/calendar/google/connect": {
+      "post": {
+        "description": "Start connecting Google Calendar (CSRF header needed). Returns the Google consent URL to\nnavigate to. Only the permissions in `features` are asked for, each at the moment its feature\nis switched on; permissions given earlier are kept. Sets the `calendar_flow` cookie that ties\nthe callback to this browser. 404 `calendar_unavailable` when the calendar features are off,\n503 `calendar_unavailable` when the server cannot store a token safely.",
+        "operationId": "calendar_google_connect",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Calendar Google Connect",
+        "tags": [
+          "calendar"
         ]
       }
     },

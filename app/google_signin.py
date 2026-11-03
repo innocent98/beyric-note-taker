@@ -50,7 +50,8 @@ TERMS_FLAG = ".t"  # a flow cookie "<state>.t" means the terms were accepted at 
 MAX_NAME_CHARS = 200
 
 # A relative path with exactly one leading slash: never `//host`, a scheme or a backslash.
-RETURN_TO_PATTERN = re.compile(r"^/(?![/\\])[A-Za-z0-9._~!$&'()*+,;=:@%/?-]{0,200}$")
+# `\Z`, not `$`: `$` also matches before a trailing newline.
+RETURN_TO_PATTERN = re.compile(r"^/(?![/\\])[A-Za-z0-9._~!$&'()*+,;=:@%/?-]{0,200}\Z")
 
 
 def safe_return_to(value: str | None) -> str:

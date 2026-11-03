@@ -250,7 +250,10 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [ ] Phase C, Google Calendar auto-join plus the ICS source (needs A6, A9, A13, A18 for most tasks)
   - [x] C1 migration for connections, events, scheduled joins (2026-11-03, `feature/phase-c-foundations`; migration `0010`, SOP `docs/sop/2026-11-03-phase-c-foundations.md`; open, not merged)
   - [x] C2 token vault (AES-GCM, Opus review) (2026-11-03, same PR #45; Opus reviewed, no Critical or High, its fixes applied; the privacy "Security" row waits for C3)
-  - [ ] C3 connect flow with incremental consent (Opus review)
+  - [ ] C3 connect flow with incremental consent (Opus review) (2026-11-03, PR `feature/c3-google-connect`, open, not merged; SOP `docs/sop/2026-11-03-phase-c-google-connect.md`, FE guide `docs/fe-integration-guide-calendar-connect.md`). Built and tested, routes dark until `CALENDAR_ENABLED=true`: not ticked until the **live step** (a real Google consent with Adebayo's Gmail test account) is done
+    - [x] connect URL (offline, consent prompt, PKCE S256, login hint, granted scopes carried), single-use state bound to user and browser, callback classified public-but-state-checked, granted scopes from Google, refresh token only through the vault with the user id as owner, reconnect replaces, `return_to` allow-list, redirect-URI allow-list, no secrets in logs (71 tests, mutation-checked; a different Google account is refused while a connection works; captured against the running app with Google faked)
+    - [x] privacy "Security" row (Jinja and Next copies)
+    - [ ] live check with a real Google account: consent screen, stored row (token is bytes), real scope names and `hd`, unticked box
   - [ ] C4 disconnect flow
   - [ ] C5 calendar client and `CalendarSource` protocol; live check that `calendar.events.readonly` covers `events.list` and `events.get`
     - [x] Protocol, `SyncBatch`, errors and `GoogleSource` / `AccessTokenCache` (2026-11-03, `feature/c5-calendar-source`; SOP `docs/sop/2026-11-03-phase-c-calendar-source.md`; 101 tests against synthetic Google bodies; open, not merged)

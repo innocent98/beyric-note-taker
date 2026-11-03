@@ -23,6 +23,7 @@ from app import (
     api_admin,
     api_workspace,
     auth,
+    calendar_api,
     export,
     notifications,
     services,
@@ -566,4 +567,5 @@ def delete_term(
 
 router.include_router(api_accounts.router)
 router.include_router(api_admin.router)
+router.include_router(calendar_api.router)
 router.include_router(api_workspace.router)
