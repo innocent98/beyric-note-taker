@@ -140,6 +140,7 @@ Edit `.env`:
 | `SESSION_SECRET` | `openssl rand -hex 48`. The app refuses to start if it is shorter than 32 characters (it is the only key behind every session cookie) |
 | `APP_ENV`, `COOKIE_SECURE` | `production`, `true` |
 | `EDGE_SHARED_SECRET` | `openssl rand -hex 32`, the **same value** nginx sends as `X-Edge-Secret` (section 6, "Edge secret"). Empty = not configured: the app starts and logs a warning, and every client is limited as the proxy's address (one shared login limit for all visitors, so set it). `X-Forwarded-For` is never believed without it |
+| `BOT_LEFT_ALONE_SECONDS` | Optional, default `300`. How long the bot stays in a call after the last other person stops speaking before it leaves on its own (sent to Vexa as `automatic_leave.max_time_left_alone`, in milliseconds; Vexa's own default is 10 minutes, and `0` sends nothing so Vexa's default applies). **It is a silence rule, not a headcount**: a short window can cut a quiet meeting (a long screen-share with no talking, a reading break), and the notes then cover only what the bot heard. Change it by editing `.env` and recreating `web` and `worker` (`docker compose up -d --force-recreate web worker`, with no meeting `bot_sent` or `processing`): no image rebuild, no code deploy. It applies to bots sent after that; a bot already in a call keeps the window it was sent with |
 | `AUDIO_RETENTION_DAYS` | Optional, default `7`. The same value is shown on `/privacy` (compose passes it to `next`) |
 
 ## 4. Start Vexa and create the app's key
