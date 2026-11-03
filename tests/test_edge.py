@@ -769,7 +769,7 @@ def test_no_nginx_location_sets_proxy_headers_of_its_own():
         body = text[match.end() : i - 1]
         blocks += 1
         assert "proxy_set_header" not in body, match.group(0)
-    assert blocks >= 3  # the parse found the login, regenerate and catch-all locations
+    assert blocks >= 5  # login, account routes, waitlist, regenerate and the catch-all
 
 
 # ---- the second review's fixes ----
@@ -842,3 +842,66 @@ def test_the_limiter_comment_matches_what_it_evicts():
     limiter.try_acquire("b", "x2", now=1)
     limiter.try_acquire("c", "x3", now=2)  # "a" and "x1" were created first
     assert limiter._clients.attempts.keys() == {"b", "c"}
+
+
+# ---- nginx: the public account routes are limited at the edge ----
+
+
+def _nginx_locations() -> list[tuple[re.Pattern, str]]:
+    """(path pattern, the limit_req zone in that location) for every regex location."""
+    text = (ROOT / "deploy" / "nginx.conf").read_text()
+    text = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+    found = []
+    for match in re.finditer(r"\blocation\s+~\s+(\S+)\s*\{([^}]*)\}", text):
+        zone = re.search(r"limit_req\s+zone=(\w+)", match[2])
+        found.append((re.compile(match[1]), zone[1] if zone else ""))
+    return found
+
+
+# Public routes that need no zone of their own: reads, and the one that is only cheap failures.
+NO_ZONE = {
+    ("GET", "/api/session"),
+    ("GET", "/api/pilot"),
+    ("GET", "/api/auth/google/callback"),
+}
+
+
+def test_every_public_route_that_sends_mail_or_takes_a_secret_has_an_nginx_zone():
+    """A public route added to `auth.PUBLIC_API` without a limit in nginx.conf is a spam target:
+    sign-up, resend, forgot and the waitlist send mail or take slots."""
+    locations = _nginx_locations()
+    for method, path in sorted(auth.PUBLIC_API - NO_ZONE):
+        zones = {zone for pattern, zone in locations if pattern.match(path) and zone}
+        assert zones, f"{method} {path} has no limit_req zone in deploy/nginx.conf"
+
+
+def test_the_account_routes_share_one_zone_and_the_waitlist_has_its_own():
+    zones = {
+        path: next(zone for pattern, zone in _nginx_locations() if pattern.match(path))
+        for path in (
+            "/api/signup",
+            "/api/signup/resend",
+            "/api/verify-email",
+            "/api/password/forgot",
+            "/api/password/reset",
+            "/api/auth/google/start",
+            "/api/signup/",
+        )
+    }
+    assert set(zones.values()) == {"notes_api_auth"}
+    waitlist = [z for p, z in _nginx_locations() if p.match("/api/waitlist")]
+    assert waitlist == ["notes_waitlist"]
+
+
+def test_the_new_zones_are_defined_with_the_documented_rates():
+    text = (ROOT / "deploy" / "nginx.conf").read_text()
+    assert re.search(r"zone=notes_api_auth:\d+m\s+rate=10r/m;", text)
+    assert re.search(r"zone=notes_waitlist:\d+m\s+rate=5r/m;", text)
+    assert re.search(r"limit_req\s+zone=notes_api_auth\s+burst=10\s+nodelay;", text)
+    assert re.search(r"limit_req\s+zone=notes_waitlist\s+burst=5\s+nodelay;", text)
+
+
+def test_the_callback_and_reads_are_not_in_the_account_zone():
+    for path in ("/api/auth/google/callback", "/api/pilot", "/api/session"):
+        zones = {zone for pattern, zone in _nginx_locations() if pattern.match(path)}
+        assert "notes_api_auth" not in zones and "notes_waitlist" not in zones

@@ -1,0 +1,31 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/notifications?limit=0",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "limit",
+            "message": "Input should be greater than or equal to 1"
+          }
+        ]
+      }
+    }
+  }
+}

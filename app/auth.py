@@ -367,10 +367,26 @@ def check_start(settings: Settings) -> None:
 
 
 PUBLIC_PATHS = frozenset({"/login", "/privacy", "/terms"})
-# The JSON API needs a login except the two calls that start a session. Everything else under
-# `/api/` needs a login, and every call that is not a read needs the CSRF header.
+# The JSON API needs a login except these exact public routes: the two calls that start a
+# session, and the account routes a visitor needs before they have one (sign-up, email
+# verification, password reset, the waitlist, Google sign-in). Everything else under `/api/`
+# needs a login, and every call that is not a read still sends the CSRF header, public or not.
 API_PREFIX = "/api/"
-PUBLIC_API = frozenset({("GET", "/api/session"), ("POST", "/api/session")})
+PUBLIC_API = frozenset(
+    {
+        ("GET", "/api/session"),
+        ("POST", "/api/session"),
+        ("GET", "/api/pilot"),
+        ("POST", "/api/signup"),
+        ("POST", "/api/signup/resend"),
+        ("POST", "/api/verify-email"),
+        ("POST", "/api/password/forgot"),
+        ("POST", "/api/password/reset"),
+        ("POST", "/api/waitlist"),
+        ("GET", "/api/auth/google/start"),
+        ("GET", "/api/auth/google/callback"),
+    }
+)
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 CSRF_HEADER = "X-CSRF-Token"
 

@@ -249,10 +249,22 @@ def concrete(path: str) -> str:
     return re.sub(r"\{\w+\}", "1", path)
 
 
-PUBLIC = {("GET", "/api/session"), ("POST", "/api/session")}
+PUBLIC = {
+    ("GET", "/api/session"),
+    ("POST", "/api/session"),
+    ("GET", "/api/pilot"),
+    ("POST", "/api/signup"),
+    ("POST", "/api/signup/resend"),
+    ("POST", "/api/verify-email"),
+    ("POST", "/api/password/forgot"),
+    ("POST", "/api/password/reset"),
+    ("POST", "/api/waitlist"),
+    ("GET", "/api/auth/google/start"),
+    ("GET", "/api/auth/google/callback"),
+}
 
 
-def test_every_api_route_needs_login_except_the_two_session_starters(anon, app):
+def test_every_api_route_needs_login_except_the_listed_public_ones(anon, app):
     for method, path in api_routes(app):
         response = anon.call(method, concrete(path), csrf=False)
         if (method, path) in PUBLIC:
@@ -276,7 +288,9 @@ def test_every_write_needs_the_csrf_header(api, app, template):
 def test_reads_work_without_the_header_and_no_route_is_cross_wired(api, app, template):
     for method, path in api_routes(app):
         if method == "GET":
-            assert api.get(concrete(path)).status_code in (200, 404)
+            # an ordinary user is refused the admin routes (tests/test_admin.py covers each)
+            allowed = (403,) if path.startswith("/api/admin/") else (200, 404)
+            assert api.get(concrete(path)).status_code in allowed
 
 
 def test_malformed_json_is_422_before_the_login_check_and_leaks_nothing(anon):
@@ -698,6 +712,30 @@ def test_create_refuses_while_a_bot_is_active(api, template, session, fake_vexa)
     error = error_of(create(api, template), 409, "bot_already_active")
     assert error["message"] == "A bot is already on a meeting. Wait for it to finish first."
     assert fake_vexa.sent == []
+
+
+def test_a_bot_busy_with_someone_elses_meeting_is_a_neutral_busy(
+    api, template, session, fake_vexa, stranger
+):
+    """A capacity refusal must not say whose meeting holds the bot (or that anyone is recording)."""
+    theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
+    session.add(theirs)
+    session.commit()
+    add_meeting(session, theirs, status="bot_sent")
+    error = error_of(create(api, template), 409, "bot_busy")
+    assert error["message"] == "The note taker is busy right now. Try again in a few minutes."
+    assert fake_vexa.sent == []
+
+
+def test_someone_elses_meeting_does_not_block_when_there_is_room(
+    api, app, template, session, fake_vexa, stranger
+):
+    app.state.settings.max_active_bots = 2
+    theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
+    session.add(theirs)
+    session.commit()
+    add_meeting(session, theirs, status="bot_sent")
+    assert create(api, template).status_code == 201
 
 
 def test_create_reports_a_vexa_failure_without_its_detail(api, template, fake_vexa, session):

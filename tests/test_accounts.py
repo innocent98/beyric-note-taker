@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app import accounts, auth, passwords
-from app.models import Meeting, Template, UserSettings, VocabularyTerm
+from app.models import Meeting, Notification, Template, UserSettings, VocabularyTerm
 from tests.test_api import Api, anon, api, error_of, ready  # noqa: F401  (fixtures used by name)
 from tests.test_web import (  # noqa: F401
     MEET,
@@ -207,11 +207,64 @@ def test_an_account_without_a_password_cannot_log_in_that_way(anon, session):
 
 def test_an_unverified_account_gets_no_session_even_with_the_right_password(anon, session):
     make_user(session, "new@example.test", email_verified_at=None)
-    error = error_of(anon.log_in(email="new@example.test"), 403, "email_not_verified")
-    assert error["message"]
+    error_of(anon.log_in(email="new@example.test"), 401, "invalid_credentials")
     assert anon.get("/api/session").json()["authenticated"] is False
-    # a wrong password does not reveal that the account is unverified
-    error_of(anon.log_in("wrong", email="new@example.test"), 401, "invalid_credentials")
+
+
+def test_login_answers_alike_for_no_account_an_unverified_one_and_a_wrong_password(
+    app, session, owner
+):
+    """Otherwise sign-up plus login would tell whether an address has a confirmed account: sign
+    up with a password, then log in with it. The answer must not depend on which case it is."""
+    make_user(session, "new@example.test", email_verified_at=None)
+    answers = []
+    for i, (email, password) in enumerate(
+        [
+            ("nobody@example.test", PASSWORD),  # no account
+            ("new@example.test", PASSWORD),  # unverified, right password
+            (OWNER_EMAIL, "-".join(["a", "wrong", "one", "7"])),  # verified, wrong password
+        ]
+    ):
+        response = visitor(app, f"198.51.100.{i + 1}").log_in(password, email=email)
+        answers.append((response.status_code, response.json()))
+    assert answers[0] == answers[1] == answers[2]
+    assert answers[0][1]["error"]["code"] == "invalid_credentials"
+
+
+def test_an_unverified_login_costs_one_hash_check_like_every_other_case(anon, session, monkeypatch):
+    make_user(session, "new@example.test", email_verified_at=None)
+    calls = []
+    real = passwords.verify_password
+
+    def counting(stored, password):
+        calls.append(stored is not None)
+        return real(stored, password)
+
+    monkeypatch.setattr(passwords, "verify_password", counting)
+    anon.log_in(email="new@example.test")
+    anon.log_in(email="nobody@example.test")
+    assert calls == [True, False]  # one check each: against its hash, against the dummy
+
+
+def test_sign_up_then_login_gives_the_same_answer_for_a_new_and_an_existing_address(
+    app, session, owner
+):
+    from tests.test_signup import open_pilot, sign_up
+
+    open_pilot(session)
+    new = visitor(app, "198.51.100.10")
+    sign_up(new, email="fresh@example.test", password=PASSWORD)
+    existing = visitor(app, "198.51.100.11")
+    sign_up(existing, email=OWNER_EMAIL, password=PASSWORD)  # the owner's address, a known password
+    seen = []
+    for web, email in ((new, "fresh@example.test"), (existing, OWNER_EMAIL)):
+        response = web.log_in(
+            PASSWORD + "x", email=email
+        )  # the password they just submitted, wrong
+        seen.append((response.status_code, response.json()))
+    right_new = new.log_in(PASSWORD, email="fresh@example.test")
+    assert right_new.status_code == 401  # an unconfirmed account does not sign in
+    assert seen[0] == seen[1]
 
 
 def test_a_suspended_account_cannot_log_in(anon, session):
@@ -234,10 +287,10 @@ def test_a_login_stamps_the_time_and_issues_a_fresh_cookie(anon, session, owner)
     assert anon.csrf != before
 
 
-def test_the_right_password_of_a_proven_account_is_not_held_against_the_limit(anon, session):
+def test_an_unverified_login_counts_against_the_limit_like_any_failure(anon, session):
     make_user(session, "new@example.test", email_verified_at=None)
-    for _ in range(8):  # more than the 5 an address may fail
-        error_of(anon.log_in(email="new@example.test"), 403, "email_not_verified")
+    codes = [anon.log_in(email="new@example.test").status_code for _ in range(6)]
+    assert codes == [401] * 5 + [429]
 
 
 def test_failures_on_one_email_from_many_addresses_lock_that_email(app, owner):
@@ -346,21 +399,116 @@ def test_the_pages_hide_foreign_meetings_and_templates_too(client, template, str
     assert edit.status_code == 404
 
 
+def test_the_pages_refuse_regenerate_cancel_and_term_delete_on_foreign_rows(
+    client, session, template, strangers_data, fake_vexa, fake_openai
+):
+    """The Jinja routes are scoped by the same service calls as the API; this proves it for the
+    three that act on a row (retry and template edit are above)."""
+    token = token_from(client.get("/").text)
+    meeting = strangers_data["meeting"]
+    notes_before = meeting.notes
+    regenerate = client.post(
+        f"/meetings/{meeting.id}/regenerate",
+        data={"template_id": str(template.id), "csrf_token": token},
+    )
+    assert regenerate.status_code == 404
+    waiting = add_meeting(
+        session,
+        strangers_data["template"],
+        status="bot_sent",
+        native_id="zzz-zzzz-zzz",
+    )
+    cancel = client.post(f"/meetings/{waiting.id}/cancel", data={"csrf_token": token})
+    assert cancel.status_code == 404
+    delete = client.post(
+        f"/vocabulary/{strangers_data['term'].id}/delete", data={"csrf_token": token}
+    )
+    assert delete.status_code == 303  # the page never says whether the row exists
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).notes == notes_before
+    assert session.get(Meeting, waiting.id).status == "bot_sent"
+    assert session.get(VocabularyTerm, strangers_data["term"].id) is not None
+    assert getattr(fake_vexa, "stopped", []) == [] and fake_openai.chat_calls == []
+
+
+def test_every_page_route_with_an_id_returns_404_for_another_users_row(
+    anon_client, app, session, owner, template, stranger, strangers_data
+):
+    """Page routes that act on an id: the stranger calls each with the owner's row. A new one
+    that is not classified here fails, so nobody adds one unscoped."""
+    from fastapi.routing import APIRoute
+
+    from app import web
+
+    mine = add_meeting(session, template)
+    term = VocabularyTerm(owner_user_id=owner.id, term="MyTerm")
+    session.add(term)
+    session.commit()
+    ids = {"meeting_id": mine.id, "template_id": template.id, "term_id": term.id}
+    token = token_from(anon_client.get("/login").text)
+    login = anon_client.post("/login", data=login_data(token, email=OTHER_EMAIL))
+    assert login.status_code == 303
+    token = token_from(anon_client.get("/").text)
+    checked = 0
+    for route in web.router.routes:
+        assert isinstance(route, APIRoute)
+        names = re.findall(r"\{(\w+)(?::\w+)?\}", route.path)
+        if not names:
+            continue
+        assert set(names) <= set(ids), f"classify the id in {route.path} and scope it"
+        url = re.sub(r"\{(\w+)(?::\w+)?\}", lambda m: str(ids[m[1]]), route.path)
+        for method in route.methods:
+            data = {"template_id": str(strangers_data["template"].id), "csrf_token": token}
+            data |= {"name": "x", "instructions": "y"}
+            response = anon_client.request(method, url, data=data if method == "POST" else None)
+            if route.path.endswith("/delete"):
+                assert response.status_code == 303  # a term delete never says "no such term"
+            else:
+                assert response.status_code == 404, f"{method} {route.path}"
+            checked += 1
+    assert checked >= 6
+    session.expire_all()
+    assert session.get(VocabularyTerm, term.id) is not None
+
+
 def test_a_meeting_cannot_be_started_with_someone_elses_template(
     api, fake_vexa, session, strangers_data
 ):
     body = {"url": MEET, "template_id": strangers_data["template"].id}
     error_of(api.post("/api/meetings", body), 400, "template_required")
     assert fake_vexa.sent == []
+    assert session.scalars(select(Meeting).where(Meeting.status == "bot_sent")).all() == []
 
 
 def test_notes_cannot_be_rewritten_with_someone_elses_template(
     api, session, template, strangers_data, fake_openai
 ):
     meeting = ready(session, template)
+    notes_before, template_before = meeting.notes, meeting.template_id
     body = {"template_id": strangers_data["template"].id}
     error_of(api.post(f"/api/meetings/{meeting.id}/regenerate", body), 400, "template_required")
     assert fake_openai.chat_calls == []
+    session.refresh(meeting)
+    assert (meeting.notes, meeting.template_id) == (notes_before, template_before)
+
+
+def test_the_page_cannot_rewrite_notes_with_someone_elses_template(
+    client, session, template, strangers_data, fake_openai
+):
+    meeting = ready(session, template)
+    notes_before, template_before = meeting.notes, meeting.template_id
+    response = client.post(
+        f"/meetings/{meeting.id}/regenerate",
+        data={
+            "template_id": str(strangers_data["template"].id),
+            "csrf_token": token_from(client.get("/").text),
+        },
+    )
+    assert response.status_code == 400
+    assert "Choose a template." in response.text
+    assert fake_openai.chat_calls == []
+    session.refresh(meeting)
+    assert (meeting.notes, meeting.template_id) == (notes_before, template_before)
 
 
 def test_two_users_may_use_the_same_template_name_and_term(api, session, template, strangers_data):
@@ -407,13 +555,21 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     term = VocabularyTerm(owner_user_id=owner.id, term="MyTerm")
     session.add(term)
     session.commit()
-    ids = {"meeting_id": mine.id, "template_id": template.id, "term_id": term.id}
+    note = Notification(user_id=owner.id, kind="k", title="t", dedupe_key="d")
+    session.add_all([term, note])
+    session.commit()
+    ids = {
+        "meeting_id": mine.id,
+        "template_id": template.id,
+        "term_id": term.id,
+        "notification_id": note.id,
+    }
     anon.log_in(email=OTHER_EMAIL)
     checked = 0
     for method, path in api_routes(app):
         names = re.findall(r"\{(\w+)\}", path)
-        if not names:
-            continue
+        if not names or path.startswith("/api/admin/"):
+            continue  # admin routes answer 403 to any non-admin: tests/test_admin.py
         assert set(names) <= set(ids), f"classify the id in {method} {path} and scope it"
         url = re.sub(r"\{(\w+)\}", lambda m: str(ids[m[1]]), path)
         bodies = {  # a valid body for each route that takes one, so only the id can be wrong

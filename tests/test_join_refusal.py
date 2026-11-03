@@ -15,7 +15,7 @@ import pytest
 
 from app import pipeline, services
 from app.config import Settings
-from app.models import Meeting
+from app.models import Meeting, Template
 from app.services import Refused, retry_meeting
 from app.vexa import VexaError, VexaMeeting
 from tests.test_pipeline import (  # noqa: F401  (fixtures used by name)
@@ -446,6 +446,35 @@ def test_a_manual_send_cannot_start_a_second_bot(session, meeting, owner):
     with pytest.raises(Refused) as caught:
         services.retry_meeting(session, meeting, vexa)
     assert caught.value.code == "bot_already_active"
+    assert not getattr(vexa, "sent", [])
+
+
+def test_a_manual_send_while_the_note_taker_is_on_someone_elses_meeting_is_a_neutral_busy(
+    session, meeting, owner
+):
+    """The same rule as a new meeting: someone else's bot never shows up as "your" meeting."""
+    from tests.test_web import make_user
+
+    refused_meeting(session, meeting, ago=10 * MINUTE)
+    stranger = make_user(session, "stranger@example.test")
+    theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
+    session.add(theirs)
+    session.flush()
+    session.add(
+        Meeting(
+            owner_user_id=stranger.id,
+            url=meeting.url,
+            platform="google_meet",
+            native_id="zzz-zzzz-zzz",
+            template_id=theirs.id,
+        )
+    )
+    session.commit()
+    vexa = FakeVexa()
+    with pytest.raises(Refused) as caught:
+        services.retry_meeting(session, meeting, vexa)
+    assert caught.value.code == "bot_busy"
+    assert "someone" not in caught.value.message.lower()
     assert not getattr(vexa, "sent", [])
 
 

@@ -31,7 +31,8 @@
       "usage": {
         "used_seconds": 1,
         "cap_seconds": null
-      }
+      },
+      "unread_notifications": 0
     }
   }
 }

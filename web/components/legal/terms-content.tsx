@@ -6,7 +6,7 @@ export function TermsContent() {
   return (
     <>
       <h1>Terms of Service</h1>
-      <p className="meta">Effective 2 November 2026 &middot; Last updated 2 November 2026</p>
+      <p className="meta">Effective 2 November 2026 &middot; Last updated 3 November 2026</p>
       <p>These terms set out the rules for using Beyric Note Taker, including your responsibilities when recording meetings. Please read them carefully.</p>
 
       <h2 id="accept">Agreement to these terms</h2>
@@ -26,7 +26,7 @@ export function TermsContent() {
       <p>The Service is in a pilot. We may change, add or remove features, and we may limit how many accounts or recorded hours are available.</p>
 
       <h2 id="pilot">Pilot, fees and limits</h2>
-      <p>The Service is free during the pilot. Each pilot account has a limit on recorded hours, shown in the app; when it is used up, the note taker stops joining new meetings. If we introduce paid plans, we will tell you the price before anything is charged, and nothing will be charged without your agreement.</p>
+      <p>The Service is free during the pilot. Each pilot account has a limit on recorded hours, shown in the app; when it is used up, the note taker stops joining new meetings. The pilot has a limited number of accounts. When it is full you can join a waiting list. If we introduce paid plans, we will tell you the price before anything is charged, and nothing will be charged without your agreement.</p>
 
       <h2 id="recording">Recording laws and consent</h2>
       <p>You are solely responsible for complying with every law that applies to recording conversations, including laws that require the consent of all participants. Before the note taker records, you must:</p>

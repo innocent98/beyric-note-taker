@@ -712,3 +712,61 @@ def test_heartbeat_is_recorded_on_the_single_state_row(session):
     later = NOW + timedelta(minutes=1)
     worker.record_heartbeat(session, later)
     assert session.get(AppState, 1).worker_heartbeat_at == later
+
+
+# ---- a meeting whose owner was deleted is left alone ----
+
+
+def delete_owner(session, meeting):
+    from app.models import User
+
+    session.get(User, meeting.owner_user_id).status = "deleted"
+    session.commit()
+
+
+def test_a_meeting_of_a_deleted_owner_is_not_advanced_at_all(session, meeting, env):
+    delete_owner(session, meeting)
+    vexa, openai = FakeVexa(DONE), FakeOpenAI()
+    run(session, meeting, vexa, openai)
+    assert (meeting.status, meeting.step) == ("bot_sent", "waiting")
+    assert vexa.get_calls == 0 and vexa.downloads == 0
+    assert openai.transcriptions == 0 and openai.chats == 0
+    assert not (env / "a" / str(meeting.id)).exists()
+    from sqlalchemy import select
+
+    from app.models import UsageEntry
+
+    assert session.scalars(select(UsageEntry)).all() == []
+
+
+def test_the_worker_does_not_even_pick_up_a_deleted_owners_meeting(session, meeting):
+    from app import worker
+
+    assert worker.next_meeting_id(session, 0) == meeting.id
+    session.rollback()
+    delete_owner(session, meeting)
+    assert worker.next_meeting_id(session, 0) is None
+
+
+def test_an_owner_deleted_between_two_steps_stops_the_run_before_openai(session, meeting, env):
+    """The admin deletes the account mid-meeting: the next step must not run."""
+    real = pipeline._step_audio
+
+    def audio_then_delete(db, meeting_row, vexa):
+        proceed = real(db, meeting_row, vexa)
+        delete_owner(db, meeting_row)  # the admin's click lands right after the download
+        return proceed
+
+    pipeline_step = pytest.MonkeyPatch()
+    pipeline_step.setattr(pipeline, "_step_audio", audio_then_delete)
+    try:
+        openai = run(session, meeting, FakeVexa(DONE))
+    finally:
+        pipeline_step.undo()
+    assert openai.transcriptions == 0 and openai.chats == 0
+    assert meeting.step == "transcribing"  # left exactly where it was
+    from sqlalchemy import select
+
+    from app.models import UsageEntry
+
+    assert session.scalars(select(UsageEntry)).all() == []

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 from app import audio, usage
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
-from app.models import Meeting, Template, VocabularyTerm
+from app.models import Meeting, Template, User, VocabularyTerm
 from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
 from app.vexa import VexaClient, VexaError, VexaMeeting
@@ -483,6 +483,12 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
         # Counted now, in the same commit as whatever this step ends with: a recording that turns
         # out to hold no speech was still transcribed, and a retry counts it only once.
         usage.record_usage(session, meeting, recording.seconds)
+        # Committed before the OpenAI call: if it fails, the failure path rolls the session back,
+        # and the cost already spent would otherwise leave the ledger. Retaking the row lock
+        # keeps another worker off the meeting.
+        session.commit()
+        if _lock(session, meeting.id) is None:
+            return False
         text = transcribe_chunks(
             recording.chunks, _terms(session, meeting.owner_user_id), client=openai_client
         )
@@ -520,6 +526,14 @@ def _step_notes(session: Session, meeting: Meeting, openai_client) -> bool:
     return True
 
 
+def _owner_deleted(session: Session, meeting: Meeting) -> bool:
+    """Whether the meeting's owner is being deleted. Such a meeting is left exactly as it is:
+    nothing is downloaded, transcribed, written or counted for an account that is going away
+    (`app/deletion.py` stops the bot and removes the rows and the recordings)."""
+    status = session.scalar(select(User.status).where(User.id == meeting.owner_user_id))
+    return status == "deleted"
+
+
 def advance_meeting(
     session: Session,
     meeting_id: int,
@@ -539,6 +553,9 @@ def advance_meeting(
     meeting = _lock(session, meeting_id)
     try:
         while meeting is not None and meeting.status in ("bot_sent", "processing"):
+            if _owner_deleted(session, meeting):
+                session.rollback()  # looked at on every step, so a deletion mid-run stops it
+                return
             if meeting.step == "waiting":
                 proceed = _poll(session, meeting, vexa, now)
                 if proceed:

@@ -1,0 +1,26 @@
+{
+  "note": "Someone else's: 404.",
+  "client": "wendy",
+  "request": {
+    "method": "POST",
+    "path": "/api/notifications/1/read",
+    "headers": {
+      "X-CSRF-Token": "<csrf-L>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such notification"
+      }
+    }
+  }
+}

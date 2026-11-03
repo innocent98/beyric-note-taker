@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import HTTPException, Request
 from markdown_it import MarkdownIt
 from markupsafe import Markup
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
@@ -107,9 +107,9 @@ def log_in(request: Request, session: Session, email: str, password: str) -> Non
     """Check the email and password and give the request a fresh logged-in session.
 
     The attempt is counted against the client address and the email (`auth.LoginLimiter`) before
-    the password is looked at. An unknown email, an account with no password and a wrong password
-    are the same answer, and each costs one hash check, so neither the reply nor its timing says
-    whether an account exists.
+    the password is looked at. An unknown email, an account with no password, an account whose email
+    was never confirmed and a wrong password are the same answer, and each costs one hash check, so
+    neither the reply nor its timing says whether an account exists.
     """
     settings = request.app.state.settings
     limiter: auth.LoginLimiter = request.app.state.limiter
@@ -142,28 +142,31 @@ def log_in(request: Request, session: Session, email: str, password: str) -> Non
     except passwords.HashBusy:
         limiter.refund(client, account, device)  # the password was never checked: not a failure
         raise Refused(429, "server_busy", "The server is busy. Try again in a moment.") from None
-    if user is None or not right:
+    # An account that never confirmed its email fails exactly like a wrong password, after the
+    # same one hash check. Telling it apart ("confirm your email") would let anyone find out
+    # whether an address has a confirmed account: sign up with a password, then log in with it.
+    if user is None or user.email_verified_at is None or not right:
         raise Refused(401, "invalid_credentials", "That email or password is not right.")
     limiter.succeeded(client, account, device)  # the password was right, whatever happens next
-    if user.email_verified_at is None:
-        raise Refused(
-            403,
-            "email_not_verified",
-            "Confirm your email first: open the link we sent you.",
-        )
     if user.status != "active":
         raise Refused(403, "account_suspended", "This account has been suspended.")
+    start_session(request, session, user)
+    # A device cookie for this account, only now that the password was right; a known device
+    # keeps its id so its failures stay on one counter.
+    request.state.device_cookie = (account, device)
+
+
+def start_session(request: Request, session: Session, user: User) -> None:
+    """Give the request a fresh logged-in session for `user` and stamp the login time. The one
+    place a session is issued (password login and Google sign-in both end here): a fresh token,
+    never a promoted old one, stamped with this user's and the global epoch."""
     user.last_login_at = datetime.now(UTC)
     session.commit()
-    # A fresh token, never a promoted old one, stamped with this user's and the global epoch.
     request.state.session = auth.new_session(
         uid=user.id, epoch=user.session_epoch, gepoch=auth.current_epoch(session)
     )
     request.state.session_changed = True
     request.state.user = user
-    # A device cookie for this account, only now that the password was right; a known device
-    # keeps its id so its failures stay on one counter.
-    request.state.device_cookie = (account, device)
 
 
 def log_out(request: Request, session: Session) -> None:
@@ -344,6 +347,25 @@ def hours_cap_message(cap_seconds: int) -> str:
     )
 
 
+def _require_bot_room(session: Session, user: User, settings: Settings) -> None:
+    """Refuse when no bot may be sent for `user` now. Two different refusals, so one user's
+    activity is never visible to another: your own running meeting is named as yours
+    (`bot_already_active`); a full note taker is only "busy" (`bot_busy`) and says nothing about
+    whose meeting holds it. Call under `NEW_MEETING_LOCK`."""
+    own = session.scalars(
+        select(Meeting.id).where(Meeting.owner_user_id == user.id, Meeting.status.in_(ACTIVE))
+    ).first()
+    if own is not None:
+        raise Refused(
+            409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."
+        )
+    busy = session.scalar(select(func.count()).where(Meeting.status.in_(ACTIVE)))
+    if busy >= settings.max_active_bots:
+        raise Refused(
+            409, "bot_busy", "The note taker is busy right now. Try again in a few minutes."
+        )
+
+
 def create_meeting(
     session: Session,
     vexa: VexaClient,
@@ -391,11 +413,7 @@ def _create_meeting(
         >= cap
     ):
         raise Refused(403, "hours_cap_reached", hours_cap_message(cap))
-    active = session.scalars(select(Meeting.id).where(Meeting.status.in_(ACTIVE)).limit(1)).first()
-    if active is not None:
-        raise Refused(
-            409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."
-        )
+    _require_bot_room(session, user, settings)
     try:
         vexa_id = vexa.send_bot(url)
     except VexaError as exc:
@@ -508,12 +526,11 @@ def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Mee
     ):
         session.rollback()
         raise Refused(403, "hours_cap_reached", hours_cap_message(cap))
-    active = session.scalars(select(Meeting.id).where(Meeting.status.in_(ACTIVE)).limit(1)).first()
-    if active is not None:
+    try:
+        _require_bot_room(session, owner, get_settings())
+    except Refused:
         session.rollback()
-        raise Refused(
-            409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."
-        )
+        raise
     if not send_again(meeting, vexa):
         session.rollback()
         raise Refused(

@@ -1,0 +1,26 @@
+{
+  "note": "No free place: 409.",
+  "client": "admin",
+  "request": {
+    "method": "POST",
+    "path": "/api/admin/waitlist/1/invite",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "pilot_full",
+        "message": "There is no free place to reserve. Raise the limit first."
+      }
+    }
+  }
+}

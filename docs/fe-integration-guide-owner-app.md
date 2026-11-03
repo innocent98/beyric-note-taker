@@ -1,6 +1,6 @@
 # Frontend integration guide: owner app JSON API
 
-**Status:** written 2026-11-02 from `feature/json-api`; **updated 2026-11-03 for accounts** (`feature/pilot-accounts-core`: email plus password login, per-user data, recorded hours; the new captures are `82`–`97`). Every request, response body, status code, header and error string below was captured from the running app by `scripts/capture_owner_api.py` and is pasted verbatim from `docs/fe-captures/owner-app/` (97 files, one per exchange; each block names its file). Anything that could not be exercised live is marked **NOT EXERCISED** inline and in the table in section 10.
+**Status:** written 2026-11-02 from `feature/json-api`; **updated 2026-11-03 for accounts** (`feature/pilot-accounts-core`: email plus password login, per-user data, recorded hours; the new captures are `82`–`97`) and again for the sign-up PR (`feature/pilot-accounts-signup`: `unread_notifications` on the session, `bot_busy`; every capture was re-run, and sign-up, verification, reset, waitlist, Google, admin and notifications are in `docs/fe-integration-guide-pilot-accounts.md`). Every request, response body, status code, header and error string below was captured from the running app by `scripts/capture_owner_api.py` and is pasted verbatim from `docs/fe-captures/owner-app/` (97 files, one per exchange; each block names its file). Anything that could not be exercised live is marked **NOT EXERCISED** inline and in the table in section 10.
 
 All names, email addresses, meeting codes, links and passwords in the examples are fake placeholders (`Ada Example`, `owner@example.test`, `pilot@example.test`, `abc-defg-hij`, `PLACEHOLDERPWD`). CSRF tokens and the cookie value are masked in the captures: `<csrf-A>`, `<csrf-B>`… are different tokens in order of first appearance, so you can see when a token changes.
 
@@ -44,7 +44,7 @@ content-type: application/json
 set-cookie: session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax
 ```
 ```json
-{"authenticated": false, "csrf_token": "<csrf-A>", "user": null, "usage": null}
+{"authenticated": false, "csrf_token": "<csrf-A>", "user": null, "usage": null, "unread_notifications": null}
 ```
 _First visit: no cookie yet. The response sets one._
 _Capture: `docs/fe-captures/owner-app/01-session-anonymous.json`_
@@ -78,12 +78,12 @@ content-type: application/json
 set-cookie: session=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax
 ```
 ```json
-{"authenticated": true, "csrf_token": "<csrf-C>", "user": {"email": "owner@example.test", "name": null, "is_admin": true, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": null}}
+{"authenticated": true, "csrf_token": "<csrf-C>", "user": {"email": "owner@example.test", "name": null, "is_admin": true, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": null}, "unread_notifications": 0}
 ```
 _The csrf_token here replaces the one from before login._
 _Capture: `docs/fe-captures/owner-app/08-login-ok.json`_
 
-**What the login response holds.** `user` (`email`, `name`, `is_admin`, `email_verified`) and `usage` (`used_seconds`, `cap_seconds`) are `null` while logged out and set once logged in, on `POST /api/session` and `GET /api/session` alike. **`cap_seconds` is `null` for an admin** (no cap) and for any account when the pilot's cap has been removed; show no usage bar then. This capture is the admin account, so its cap is `null`; the ordinary account in section 3, "Accounts", has `18000` (5 hours).
+**What the login response holds.** `user` (`email`, `name`, `is_admin`, `email_verified`), `usage` (`used_seconds`, `cap_seconds`) and `unread_notifications` (a number, the bell's count) are `null` while logged out and set once logged in, on `POST /api/session` and `GET /api/session` alike. **`cap_seconds` is `null` for an admin** (no cap) and for any account when the pilot's cap has been removed; show no usage bar then. This capture is the admin account, so its cap is `null`; the ordinary account in section 3, "Accounts", has `18000` (5 hours).
 
 Wrong password, missing fields and wrong type:
 
@@ -215,7 +215,7 @@ HTTP 200
 content-type: application/json
 ```
 ```json
-{"authenticated": true, "csrf_token": "<csrf-C>", "user": {"email": "owner@example.test", "name": null, "is_admin": true, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": null}}
+{"authenticated": true, "csrf_token": "<csrf-C>", "user": {"email": "owner@example.test", "name": null, "is_admin": true, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": null}, "unread_notifications": 0}
 ```
 _Capture: `docs/fe-captures/owner-app/09-session-logged-in.json`_
 
@@ -233,7 +233,7 @@ content-type: application/json
 set-cookie: session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax
 ```
 ```json
-{"authenticated": false, "csrf_token": "<csrf-D>", "user": null, "usage": null}
+{"authenticated": false, "csrf_token": "<csrf-D>", "user": null, "usage": null, "unread_notifications": null}
 ```
 _Logs out everywhere; the response carries a new anonymous token._
 _Capture: `docs/fe-captures/owner-app/72-logout.json`_
@@ -303,7 +303,7 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/83-login-missing-email.json`_
 
-**Right password, but the email was never confirmed: 403 `email_not_verified`, and no session.** (The confirm-your-email flow itself ships later; until then only the admin exists, so the FE can only meet this code once sign-up is on. Show a "Confirm your email" screen.) A wrong password on that account is a plain 401, so the code never confirms an account exists to someone who does not know the password.
+**Right password, but the email was never confirmed: the same 401 `invalid_credentials` as a wrong password, and no session.** There is deliberately no separate code: telling an unconfirmed account apart ("confirm your email") would reveal which addresses have a confirmed account (sign up with a chosen password, then sign in with it). Show the confirm-your-email screen after sign-up, not as a sign-in answer (`docs/fe-integration-guide-pilot-accounts.md`).
 
 ```http
 POST /api/session
@@ -315,13 +315,14 @@ Cookie: session=<cookie>
 ```
 
 ```http
-HTTP 403
+HTTP 401
 content-type: application/json
+cache-control: no-store
 ```
 ```json
-{"error": {"code": "email_not_verified", "message": "Confirm your email first: open the link we sent you."}}
+{"error": {"code": "invalid_credentials", "message": "That email or password is not right."}}
 ```
-_Right password, but the email was never confirmed: no session._
+_Right password, but the email was never confirmed: the same 401 as a wrong password (the answer must not reveal the account), no session._
 _Capture: `docs/fe-captures/owner-app/85-login-unverified.json`_
 
 **Right password, suspended account: 403 `account_suspended`, no session.**
@@ -362,7 +363,7 @@ content-type: application/json
 set-cookie: session=<cookie>; HttpOnly; Max-Age=7776000; Path=/; SameSite=lax
 ```
 ```json
-{"authenticated": true, "csrf_token": "<csrf-H>", "user": {"email": "pilot@example.test", "name": "Pilot Example", "is_admin": false, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": 18000}}
+{"authenticated": true, "csrf_token": "<csrf-H>", "user": {"email": "pilot@example.test", "name": "Pilot Example", "is_admin": false, "email_verified": true}, "usage": {"used_seconds": 0, "cap_seconds": 18000}, "unread_notifications": 0}
 ```
 _An ordinary account: a capped `usage`, not an admin._
 _Capture: `docs/fe-captures/owner-app/88-login-ok-pilot-user.json`_
@@ -484,7 +485,7 @@ HTTP 200
 content-type: application/json
 ```
 ```json
-{"authenticated": true, "csrf_token": "<csrf-H>", "user": {"email": "pilot@example.test", "name": "Pilot Example", "is_admin": false, "email_verified": true}, "usage": {"used_seconds": 18000, "cap_seconds": 18000}}
+{"authenticated": true, "csrf_token": "<csrf-H>", "user": {"email": "pilot@example.test", "name": "Pilot Example", "is_admin": false, "email_verified": true}, "usage": {"used_seconds": 18000, "cap_seconds": 18000}, "unread_notifications": 0}
 ```
 _Five recorded hours are in the ledger (inserted by SQL: the worker is not running)._
 _Capture: `docs/fe-captures/owner-app/96-session-pilot-user-hours-used.json`_
@@ -525,7 +526,7 @@ One shape everywhere under `/api/`, including 404, 405 and 422:
 {"error": {"code": "not_found", "message": "No such meeting"}}
 ```
 
-Only validation errors add `fields` (see 5.6). **Switch on `code`, never on `message`.** The `message` of a 400, 409, 429 or 502, and of 401 `invalid_credentials`, 403 `email_not_verified`, `account_suspended` and `hours_cap_reached`, is written for the user and safe to show. The `message` of a 404, 405 or 422 is developer text (`"Field required"`, `"Not Found"`): show your own copy.
+Only validation errors add `fields` (see 5.6). **Switch on `code`, never on `message`.** The `message` of a 400, 409, 429 or 502, and of 401 `invalid_credentials`, `account_suspended` and `hours_cap_reached`, is written for the user and safe to show. The `message` of a 404, 405 or 422 is developer text (`"Field required"`, `"Not Found"`): show your own copy.
 
 Every error the captures produced (`status`, `code`, exact `message`, and the first capture that shows it):
 
@@ -544,7 +545,6 @@ Every error the captures produced (`status`, `code`, exact `message`, and the fi
 | 401 | `invalid_credentials` | That email or password is not right. | `05-login-wrong-password.json` |
 | 401 | `not_authenticated` | Log in first. | `02-meetings-not-logged-in.json` |
 | 403 | `account_suspended` | This account has been suspended. | `86-login-suspended.json` |
-| 403 | `email_not_verified` | Confirm your email first: open the link we sent you. | `85-login-unverified.json` |
 | 403 | `hours_cap_reached` | You have used your 5 recorded hours for the pilot, so the note taker will not join new meetings. Write to us at hello@beyrictech.com if you need more. | `97-meeting-create-hours-cap-reached.json` |
 | 403 | `csrf_rejected` | Missing or wrong X-CSRF-Token header. Read it from GET /api/session. | `03-login-without-csrf.json` |
 | 404 | `not_found` | No such meeting | `63-meeting-unknown.json` (and `91-meeting-of-another-user.json`: someone else's id) |
@@ -553,6 +553,7 @@ Every error the captures produced (`status`, `code`, exact `message`, and the fi
 | 404 | `not_found` | Not Found | `64-meeting-id-too-long.json` |
 | 405 | `method_not_allowed` | Method Not Allowed | `68-method-not-allowed.json` |
 | 409 | `bot_already_active` | A bot is already on a meeting. Wait for it to finish first. | `34-meeting-create-while-active.json` |
+| 409 | `bot_busy` | The note taker is busy right now. Try again in a few minutes. | `docs/fe-captures/pilot-accounts/93-wendy-create-meeting-busy.json` (the pilot-accounts captures) |
 | 409 | `not_ready` | Notes can only be rewritten once a meeting is ready. | `60-meeting-regenerate-not-ready.json` |
 | 409 | `not_retryable` | This meeting cannot be retried. | `38-meeting-retry-cancelled.json` |
 | 409 | `not_waiting_for_bot` | Only a meeting that is still waiting for its bot can be cancelled. | `37-meeting-cancel-again.json` |
@@ -602,7 +603,7 @@ With meetings: page 1 of 3, then the next page using `next_before_id`. The respo
   "status_text": "Failed",
   "status_tone": "danger",
   "template_id": 1,
-  "created_at": "2026-11-02T21:16:52.726490Z"
+  "created_at": "2026-11-03T14:02:53.949253Z"
 }
 ```
 _First item of `54-meetings-list-page-1.json`_
@@ -730,7 +731,7 @@ content-type: application/json
   "status_text": "Ready",
   "status_tone": "success",
   "template_id": 1,
-  "created_at": "2026-11-02T21:16:52.726490Z",
+  "created_at": "2026-11-03T14:02:53.949253Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
@@ -812,7 +813,7 @@ location: /api/meetings/1
   "status_text": "Bot sent",
   "status_tone": "warning",
   "template_id": 1,
-  "created_at": "2026-11-02T21:16:52.638257Z",
+  "created_at": "2026-11-03T14:02:53.816443Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
@@ -915,7 +916,7 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/39-meeting-create-vexa-down.json`_
 
-**One bot at a time.** While any meeting is `bot_sent` or `processing` the server refuses with 409 `bot_already_active`. The old page does the same.
+**One bot at a time per user, and a limit across users.** While one of the caller's own meetings is `bot_sent` or `processing` the server refuses with 409 `bot_already_active` (it names the caller's own meeting only). When the note taker is full with someone else's meeting it refuses with 409 `bot_busy` ("The note taker is busy right now. Try again in a few minutes."), which says nothing about whose; the limit is `MAX_ACTIVE_BOTS`, default 1 (captured in `docs/fe-captures/pilot-accounts/93-wendy-create-meeting-busy.json`). Show either `message` as it comes.
 
 A Zoom link carries its meeting password. It is **never** returned by any endpoint and never echoed in an error:
 
@@ -1130,7 +1131,7 @@ Other errors of this retry (now declared in the OpenAPI file): `403 hours_cap_re
   "can_retry": false,
   "join_attempts": 1,
   "refresh_after_seconds": 30,
-  "join_retry_at": "2026-11-03T12:44:57.879429Z"
+  "join_retry_at": "2026-11-03T14:06:50.944446Z"
 }
 ```
 _Response trimmed to the fields that matter here; the capture file has all of them (the time is when it was captured)._
@@ -1617,7 +1618,7 @@ _Capture: `docs/fe-captures/owner-app/69-unknown-api-path.json`_
 ## 6. Field-nesting and shape traps
 
 - **Lists are wrapped objects**, never bare arrays: `{"meetings": […]}`, `{"templates": […]}`, `{"terms": […]}`.
-- **`csrf_token`, `user` and `usage` are top-level on the three session responses and nowhere else.** `user` and `usage` are present-but-`null` while logged out (not absent), and `usage.cap_seconds` is present-but-`null` when there is no cap.
+- **`csrf_token`, `user`, `usage` and `unread_notifications` are top-level on the three session responses and nowhere else.** `user`, `usage` and `unread_notifications` are present-but-`null` while logged out (not absent), and `usage.cap_seconds` is present-but-`null` when there is no cap.
 - **A meeting detail is the summary plus more, in one flat object.** The list gives summaries (no notes, no `can_*` flags, no `failure_reason`); the page needs the detail. `create`, `cancel`, `retry` and `regenerate` all return the **full detail**, so replace your cached detail with the response; no refetch is needed.
 - **Every field is always present.** Fields that do not apply are `null`, never missing. `notes` and `notes_html` are `null` unless the meeting is `ready`; `transcript` is `null` until one is saved (it can exist on a failed meeting whose notes failed).
 - **`failure_reason` is a string whenever `status` is `failed`** (a fallback text is used if the database has none) and `null` otherwise.
@@ -1625,7 +1626,7 @@ _Capture: `docs/fe-captures/owner-app/69-unknown-api-path.json`_
 - **`transcript` is the speaker-labelled version when there is one**, otherwise the plain one. There is no way to ask for the other.
 - **`template_id` on a meeting is the template last used for its notes**; it changes after a successful regenerate.
 - **`title` is composed by the server** (`Google Meet abc-defg-hij`, `Zoom 12345678901`). The meeting link itself is never returned.
-- **`created_at` is ISO 8601 in UTC with a trailing `Z`** (`2026-11-02T21:15:52.633881Z`). Format it in the viewer's timezone yourself.
+- **`created_at` is ISO 8601 in UTC with a trailing `Z`** (`2026-11-03T14:02:53.816443Z`). Format it in the viewer's timezone yourself.
 - **`speakers_incomplete` and `bot_left_early` are independent notices**; see section 7.
 - **Ids are integers**, in JSON bodies and paths alike. `template_id` must be sent as a number.
 
@@ -1695,7 +1696,7 @@ Captured from the running app, with the real worker (`pipeline.advance_meeting`)
   "status_text": "Waiting to be let in. Admit 'Beyric Note Taker (recording)' in the meeting",
   "status_tone": "warning",
   "template_id": 1,
-  "created_at": "2026-11-03T13:27:01.512210Z",
+  "created_at": "2026-11-03T14:02:55.057184Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
@@ -1727,7 +1728,7 @@ The list row for the `needs_help` state (`110-meetings-list-bot-needs-help.json`
   "status_text": "The bot is waiting on a prompt in the meeting, such as a consent or verification screen. Check the meeting for a prompt.",
   "status_tone": "warning",
   "template_id": 1,
-  "created_at": "2026-11-03T13:27:01.512210Z"
+  "created_at": "2026-11-03T14:02:55.057184Z"
 }
 ```
 
@@ -1756,7 +1757,7 @@ Both the `bot_left_early` and `speakers_incomplete` flags are verified live (`48
 9. **A retry shows up as `processing` immediately** and resets the server's time limit; start polling again.
 11. **Recorded hours (`usage`).** Show a bar "2.4 of 5 h" from `used_seconds` and `cap_seconds`; hide it when `cap_seconds` is `null`. When `used_seconds >= cap_seconds` the next "send bot" will be a 403 `hours_cap_reached`: say so before the user pastes a link (disable the form with the message), and **show the 403 `message` as is** if it still happens. A running meeting is never cut off. Refresh the bar from `GET /api/session` after every send and when a meeting finishes.
 12. **A 401 right after the user did something can mean their account was suspended**, not that the cookie expired. The login screen will then show 403 `account_suspended` with its own message; show that message, not "your session expired".
-13. **Never word a login error as "no account with that email"** or "wrong password": the API deliberately answers both the same (401 `invalid_credentials`), and the form must not suggest otherwise. For 403 `email_not_verified` show the "Confirm your email" screen.
+13. **Never word a login error as "no account with that email"** or "wrong password": the API deliberately answers both the same (401 `invalid_credentials`), and the form must not suggest otherwise. An account whose email was never confirmed gets the same 401: put the "Confirm your email" screen after sign-up instead.
 14. **A foreign or missing id is the same 404.** Do not say "this belongs to someone else"; say the meeting, template or term "was not found".
 10. **Validation (422) should be rare**: validate the same limits in the form (template name 100, instructions 4000, term 100, no `<` `>` or line breaks in terms) so the owner never sees a developer message.
 
@@ -1781,7 +1782,7 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | Anonymous `GET /api/session` returns token and sets cookie; `user` and `usage` are `null` | Verified live | `01` |
 | Login (email and password): ok with `user` and `usage`, wrong password, missing fields, wrong type | Verified live | `05`–`08` |
 | Unknown email gives the same status, code and message as a wrong password | Verified live and test | `84`; `test_a_wrong_password_and_an_unknown_email_look_the_same` |
-| Unverified account with the right password: 403 `email_not_verified`, no session; wrong password stays 401 | Verified live (placeholder account inserted by SQL) and test | `85`; `test_an_unverified_account_gets_no_session_even_with_the_right_password` |
+| Unverified account with the right password: the same 401 `invalid_credentials` as a wrong password, no session | Verified live (placeholder account inserted by SQL) and test | `85`; `test_an_unverified_account_gets_no_session_even_with_the_right_password` |
 | Suspended account: 403 `account_suspended`; a session that is open when the account is suspended or removed turns into 401 | Login verified live; the open-session case is a test | `86`; `test_a_suspended_or_deleted_user_is_logged_out_at_once` |
 | Ordinary account: `usage` with a cap of `18000`, its own default templates | Verified live | `88`, `89` |
 | Another account's meeting, template or term by id is 404, as if missing; a foreign `template_id` in a body is 400 `template_required` | Verified live | `91`–`95`; every id route is a test: `test_every_api_route_with_an_id_returns_404_for_another_users_row` |

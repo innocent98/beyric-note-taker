@@ -1,0 +1,28 @@
+{
+  "note": "",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/waitlist",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "x"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_email",
+        "message": "Enter a valid email address."
+      }
+    }
+  }
+}

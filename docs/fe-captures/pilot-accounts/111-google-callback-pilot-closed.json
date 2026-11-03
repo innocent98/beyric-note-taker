@@ -1,0 +1,21 @@
+{
+  "note": "A NEW Google user while the pilot is closed.",
+  "client": "google-visitor",
+  "request": {
+    "method": "GET",
+    "path": "/api/auth/google/callback?code=abc&state=<state>",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 302,
+    "headers": {
+      "cache-control": "no-store",
+      "location": "/login?error=pilot_closed",
+      "set-cookie": "google_flow=<cookie>; expires=Tue, 03 Nov 2026 14:02:59 GMT; Max-Age=0; Path=/api/auth/google; SameSite=lax"
+    },
+    "body": ""
+  }
+}

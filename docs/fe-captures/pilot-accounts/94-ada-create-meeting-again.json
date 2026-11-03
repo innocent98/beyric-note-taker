@@ -1,0 +1,29 @@
+{
+  "note": "Her own running meeting: named as hers.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-I>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "url": "https://meet.google.com/abc-defg-hik",
+      "template_id": 5
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "bot_already_active",
+        "message": "A bot is already on a meeting. Wait for it to finish first."
+      }
+    }
+  }
+}

@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, services, usage
+from app import api_accounts, api_admin, auth, notifications, services, usage
 from app.api_schemas import (
     ErrorResponse,
     Login,
@@ -133,7 +133,13 @@ def install_errors(app: FastAPI) -> None:
 def _session_state(request: Request, db: Session) -> SessionState:
     current, user = request.state.session, request.state.user
     if user is None:
-        return SessionState(authenticated=False, csrf_token=current["csrf"], user=None, usage=None)
+        return SessionState(
+            authenticated=False,
+            csrf_token=current["csrf"],
+            user=None,
+            usage=None,
+            unread_notifications=None,
+        )
     settings = request.app.state.settings
     used = usage.hours_used(db, user, datetime.now(UTC), settings.max_poll_hours * 3600)
     return SessionState(
@@ -146,6 +152,7 @@ def _session_state(request: Request, db: Session) -> SessionState:
             email_verified=user.email_verified_at is not None,
         ),
         usage=UsageOut(used_seconds=used, cap_seconds=usage.effective_cap(db, user)),
+        unread_notifications=notifications.unread_count(db, user),
     )
 
 
@@ -172,10 +179,10 @@ def log_in(body: Login, request: Request, session: Session = Depends(get_session
     """Log in with email and password. Public, but needs the X-CSRF-Token from `GET /session`.
 
     401 `invalid_credentials` for a wrong password or an unknown email (the same answer for
-    both). 403 `email_not_verified` or `account_suspended` when the password was right but the
-    account may not sign in. The login limits are the page's: 5 failed attempts per client
-    address in 5 minutes and 10 per email in an hour, then 429. The response carries the new
-    session's CSRF token: it replaces the one from before login.
+    both, and for an account whose email was never confirmed). 403 `account_suspended` when the
+    password was right but the account is suspended. The login limits are the page's: 5 failed
+    attempts per client address in 5 minutes and 10 per email in an hour, then 429. The response
+    carries the new session's CSRF token: it replaces the one from before login.
     """
     services.log_in(request, session, body.email, body.password)
     return _session_state(request, session)
@@ -430,3 +437,7 @@ def delete_term(
     if not services.delete_term(session, user, term_id):
         raise StarletteHTTPException(404, "No such term")
     return Response(status_code=204)
+
+
+router.include_router(api_accounts.router)
+router.include_router(api_admin.router)

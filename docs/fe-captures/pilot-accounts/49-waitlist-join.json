@@ -1,0 +1,26 @@
+{
+  "note": "",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/waitlist",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "wendy@example.test",
+      "name": "Wendy Example"
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "on_the_list"
+    }
+  }
+}

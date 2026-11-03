@@ -1,6 +1,529 @@
 {
   "components": {
     "schemas": {
+      "Accepted": {
+        "description": "The one answer sign-up, resend and forgot-password give, whatever the address.",
+        "properties": {
+          "status": {
+            "const": "check_your_email",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Accepted",
+        "type": "object"
+      },
+      "AdminDeleting": {
+        "properties": {
+          "status": {
+            "const": "deleting",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "AdminDeleting",
+        "type": "object"
+      },
+      "AdminInvite": {
+        "properties": {
+          "emailed": {
+            "title": "Emailed",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "invite_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Url"
+          }
+        },
+        "required": [
+          "emailed",
+          "invite_url",
+          "expires_at"
+        ],
+        "title": "AdminInvite",
+        "type": "object"
+      },
+      "AdminMailFailure": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "to_email": {
+            "title": "To Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "to_email",
+          "template",
+          "attempts",
+          "last_error",
+          "created_at"
+        ],
+        "title": "AdminMailFailure",
+        "type": "object"
+      },
+      "AdminMailFailures": {
+        "properties": {
+          "failures": {
+            "items": {
+              "$ref": "#/components/schemas/AdminMailFailure"
+            },
+            "title": "Failures",
+            "type": "array"
+          }
+        },
+        "required": [
+          "failures"
+        ],
+        "title": "AdminMailFailures",
+        "type": "object"
+      },
+      "AdminPilot": {
+        "properties": {
+          "default_hours_cap_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Hours Cap Seconds"
+          },
+          "max_accounts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Accounts"
+          },
+          "password_signup_enabled": {
+            "title": "Password Signup Enabled",
+            "type": "boolean"
+          },
+          "signups_open": {
+            "title": "Signups Open",
+            "type": "boolean"
+          },
+          "slots_taken": {
+            "title": "Slots Taken",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "full",
+              "closed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "signups_open",
+          "max_accounts",
+          "default_hours_cap_seconds",
+          "password_signup_enabled",
+          "slots_taken",
+          "state"
+        ],
+        "title": "AdminPilot",
+        "type": "object"
+      },
+      "AdminPilotIn": {
+        "additionalProperties": false,
+        "properties": {
+          "default_hours_cap_seconds": {
+            "anyOf": [
+              {
+                "maximum": 3600000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Hours Cap Seconds"
+          },
+          "max_accounts": {
+            "anyOf": [
+              {
+                "maximum": 10000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Accounts"
+          },
+          "password_signup_enabled": {
+            "title": "Password Signup Enabled",
+            "type": "boolean"
+          },
+          "signups_open": {
+            "title": "Signups Open",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "signups_open",
+          "max_accounts",
+          "default_hours_cap_seconds",
+          "password_signup_enabled"
+        ],
+        "title": "AdminPilotIn",
+        "type": "object"
+      },
+      "AdminResetLink": {
+        "properties": {
+          "reset_url": {
+            "title": "Reset Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reset_url"
+        ],
+        "title": "AdminResetLink",
+        "type": "object"
+      },
+      "AdminUser": {
+        "properties": {
+          "cap_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cap Seconds"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "email_verified": {
+            "title": "Email Verified",
+            "type": "boolean"
+          },
+          "has_google": {
+            "title": "Has Google",
+            "type": "boolean"
+          },
+          "has_password": {
+            "title": "Has Password",
+            "type": "boolean"
+          },
+          "hours_cap_override": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours Cap Override"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_admin": {
+            "title": "Is Admin",
+            "type": "boolean"
+          },
+          "last_login_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Login At"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "suspended"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "used_seconds": {
+            "title": "Used Seconds",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "is_admin",
+          "status",
+          "email_verified",
+          "has_password",
+          "has_google",
+          "created_at",
+          "last_login_at",
+          "used_seconds",
+          "cap_seconds",
+          "hours_cap_override"
+        ],
+        "title": "AdminUser",
+        "type": "object"
+      },
+      "AdminUserList": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_before_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before Id"
+          },
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/AdminUser"
+            },
+            "title": "Users",
+            "type": "array"
+          }
+        },
+        "required": [
+          "users",
+          "has_more",
+          "next_before_id"
+        ],
+        "title": "AdminUserList",
+        "type": "object"
+      },
+      "AdminUserPatch": {
+        "additionalProperties": false,
+        "description": "Only the fields present are changed. `hours_cap_seconds: null` clears the override.",
+        "properties": {
+          "hours_cap_seconds": {
+            "anyOf": [
+              {
+                "maximum": 3600000.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hours Cap Seconds"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "active",
+                  "suspended"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "AdminUserPatch",
+        "type": "object"
+      },
+      "AdminWaitlist": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/AdminWaitlistEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_before_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before Id"
+          }
+        },
+        "required": [
+          "entries",
+          "has_more",
+          "next_before_id"
+        ],
+        "title": "AdminWaitlist",
+        "type": "object"
+      },
+      "AdminWaitlistEntry": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "invited_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invited At"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "enum": [
+              "waiting",
+              "invited",
+              "joined",
+              "removed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "status",
+          "created_at",
+          "invited_at"
+        ],
+        "title": "AdminWaitlistEntry",
+        "type": "object"
+      },
+      "EmailIn": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 2000,
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "EmailIn",
+        "type": "object"
+      },
       "ErrorBody": {
         "properties": {
           "code": {
@@ -459,6 +982,157 @@
         "title": "NewTerm",
         "type": "object"
       },
+      "NotificationList": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_before_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before Id"
+          },
+          "notifications": {
+            "items": {
+              "$ref": "#/components/schemas/NotificationOut"
+            },
+            "title": "Notifications",
+            "type": "array"
+          }
+        },
+        "required": [
+          "notifications",
+          "has_more",
+          "next_before_id"
+        ],
+        "title": "NotificationList",
+        "type": "object"
+      },
+      "NotificationOut": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "meeting_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Id"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Read At"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "severity",
+          "title",
+          "body",
+          "meeting_id",
+          "created_at",
+          "read_at"
+        ],
+        "title": "NotificationOut",
+        "type": "object"
+      },
+      "PasswordChanged": {
+        "properties": {
+          "status": {
+            "const": "password_changed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PasswordChanged",
+        "type": "object"
+      },
+      "PilotOut": {
+        "properties": {
+          "google_signin": {
+            "title": "Google Signin",
+            "type": "boolean"
+          },
+          "prefill_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefill Email"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "full",
+              "closed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "prefill_email",
+          "google_signin"
+        ],
+        "title": "PilotOut",
+        "type": "object"
+      },
       "Regenerate": {
         "additionalProperties": false,
         "properties": {
@@ -473,6 +1147,27 @@
         "title": "Regenerate",
         "type": "object"
       },
+      "ResetIn": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 2000,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 2000,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "ResetIn",
+        "type": "object"
+      },
       "SessionState": {
         "properties": {
           "authenticated": {
@@ -482,6 +1177,17 @@
           "csrf_token": {
             "title": "Csrf Token",
             "type": "string"
+          },
+          "unread_notifications": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unread Notifications"
           },
           "usage": {
             "anyOf": [
@@ -508,9 +1214,54 @@
           "authenticated",
           "csrf_token",
           "user",
-          "usage"
+          "usage",
+          "unread_notifications"
         ],
         "title": "SessionState",
+        "type": "object"
+      },
+      "SignUp": {
+        "additionalProperties": false,
+        "properties": {
+          "accept_terms": {
+            "title": "Accept Terms",
+            "type": "boolean"
+          },
+          "email": {
+            "maxLength": 2000,
+            "title": "Email",
+            "type": "string"
+          },
+          "invite_token": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Token"
+          },
+          "name": {
+            "maxLength": 2000,
+            "title": "Name",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 2000,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "password",
+          "accept_terms"
+        ],
+        "title": "SignUp",
         "type": "object"
       },
       "TemplateIn": {
@@ -605,6 +1356,19 @@
         "title": "TermOut",
         "type": "object"
       },
+      "UnreadCount": {
+        "properties": {
+          "unread_notifications": {
+            "title": "Unread Notifications",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unread_notifications"
+        ],
+        "title": "UnreadCount",
+        "type": "object"
+      },
       "UsageOut": {
         "properties": {
           "cap_seconds": {
@@ -664,6 +1428,82 @@
         ],
         "title": "UserOut",
         "type": "object"
+      },
+      "Verified": {
+        "properties": {
+          "status": {
+            "const": "verified",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Verified",
+        "type": "object"
+      },
+      "VerifyIn": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 2000,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 2000,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "VerifyIn",
+        "type": "object"
+      },
+      "WaitlistAccepted": {
+        "properties": {
+          "status": {
+            "const": "on_the_list",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "WaitlistAccepted",
+        "type": "object"
+      },
+      "WaitlistIn": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 2000,
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "WaitlistIn",
+        "type": "object"
       }
     }
   },
@@ -674,6 +1514,945 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/admin/mail-failures": {
+      "get": {
+        "description": "The most recent mail that could not be sent (never with its link).",
+        "operationId": "mail_failures",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminMailFailures"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not an admin"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Mail Failures",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/pilot": {
+      "get": {
+        "operationId": "admin_read_pilot",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPilot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not an admin"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Admin Read Pilot",
+        "tags": [
+          "admin"
+        ]
+      },
+      "put": {
+        "description": "Open or close sign-up, set the number of accounts (`null` = no limit), the default recorded\nhours per account in seconds (`null` = no cap) and whether password sign-up is on. Every field\nis required.",
+        "operationId": "admin_write_pilot",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminPilotIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPilot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not an admin"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Admin Write Pilot",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "description": "Accounts with their recorded hours, newest first. Accounts being deleted are not listed.",
+        "operationId": "list_users",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not an admin"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Users",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/users/{user_id}": {
+      "delete": {
+        "description": "Delete an account and everything of theirs. The user is signed out and their slot is free\nat once; the worker then removes their data (bots stopped, recordings deleted at Vexa and\nhere). The hours ledger keeps seconds only. 409 `last_admin`.",
+        "operationId": "delete_user",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDeleting"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not an admin"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Delete User",
+        "tags": [
+          "admin"
+        ]
+      },
+      "patch": {
+        "description": "Suspend or reactivate an account (`status`) and set or clear one user's hours override\n(`hours_cap_seconds`). Only the fields sent change. A suspended user is signed out on their\nnext request. 409 `last_admin`: the only active admin cannot be suspended.",
+        "operationId": "patch_user",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminUserPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUser"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not an admin"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Patch User",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/users/{user_id}/reset-link": {
+      "post": {
+        "description": "A one-time password-reset link (30 minutes) for the admin to give the person, for when\nmail is not working. Shown once, never mailed; replaces any earlier reset link and tells the\nuser in the app. Not for admin accounts. 409 `admin_account`, `user_not_verified` or\n`account_suspended`.",
+        "operationId": "reset_link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminResetLink"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not an admin"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Reset Link",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/waitlist": {
+      "get": {
+        "description": "The waiting list, oldest first, without the people removed. `before_id` is the id to\ncontinue after (the last `next_before_id`).",
+        "operationId": "list_waitlist",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminWaitlist"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not an admin"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Waitlist",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/waitlist/{waitlist_id}": {
+      "delete": {
+        "description": "Take someone off the list. A live invitation is cancelled and its place freed.",
+        "operationId": "remove_waitlist_entry",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "waitlist_id",
+            "required": true,
+            "schema": {
+              "title": "Waitlist Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not an admin"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Remove Waitlist Entry",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/admin/waitlist/{waitlist_id}/invite": {
+      "post": {
+        "description": "Reserve a place for this person for 7 days and invite them. With mail working the link\nis emailed (`emailed: true`, `invite_url: null`); without it `invite_url` is returned for the\nadmin to send. Inviting again replaces the earlier link. 409 `pilot_full` when no place is\nfree, `waitlist_entry_closed` for someone who joined or was removed.",
+        "operationId": "invite",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "waitlist_id",
+            "required": true,
+            "schema": {
+              "title": "Waitlist Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminInvite"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not an admin"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Invite",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/api/auth/google/callback": {
+      "get": {
+        "description": "Where Google sends the browser back. Public (checked by the single-use `state` and the\n`google_flow` cookie of the browser that started the flow). Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with a new session; a failure goes to\n`/login?error=<code>` with `google_denied`, `google_failed`, `terms_required`,\n`account_suspended`, `pilot_closed` or `email_unsupported`; a full pilot goes to\n`/pilot-full` and sets a 15-minute cookie that `GET /api/pilot` reads as `prefill_email`\n(the address is never put in a URL).",
+        "operationId": "google_callback",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Redirect"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Google Callback",
+        "tags": [
+          "google"
+        ]
+      }
+    },
+    "/api/auth/google/start": {
+      "get": {
+        "description": "Send the browser to Google's consent screen (scopes `openid email profile` only). Public;\nnavigate to it, do not fetch it. `accept_terms=true` must be sent by the sign-up screen: it\nis what lets a NEW account be created (an existing one signs in without it). `return_to` is\na relative path to land on afterwards; anything else becomes `/`. 404\n`google_signin_unavailable` when the server has no Google client configured.",
+        "operationId": "google_start",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "accept_terms",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Accept Terms",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "return_to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 500,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Return To"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Redirect"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Google Start",
+        "tags": [
+          "google"
+        ]
+      }
+    },
     "/api/meetings": {
       "get": {
         "description": "The caller's meetings, newest first. For the next page pass `before_id` =\n`next_before_id`.",
@@ -1209,6 +2988,411 @@
         ]
       }
     },
+    "/api/notifications": {
+      "get": {
+        "description": "The caller's notifications, newest first. For the next page pass `before_id` =\n`next_before_id`.",
+        "operationId": "list_notifications",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Notifications",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/notifications/read-all": {
+      "post": {
+        "description": "Mark all of the caller's notifications read.",
+        "operationId": "read_all_notifications",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCount"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read All Notifications",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/notifications/{notification_id}/read": {
+      "post": {
+        "description": "Mark one notification read (repeating it keeps the first read time). 404 for someone\nelse's.",
+        "operationId": "read_notification",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "notification_id",
+            "required": true,
+            "schema": {
+              "title": "Notification Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Notification",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/password/forgot": {
+      "post": {
+        "description": "Mail a password-reset link (valid 30 minutes) if the address has a confirmed account.\nPublic. Always 202 with the same body: it never says whether the address has an account.",
+        "operationId": "forgot_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Forgot Password",
+        "tags": [
+          "password"
+        ]
+      }
+    },
+    "/api/password/reset": {
+      "post": {
+        "description": "Choose a new password with the token from the reset mail. Public. Signs that user out\neverywhere and does not sign them in. 400 `token_invalid_or_expired`; 422\n`password_too_weak` leaves the token usable.",
+        "operationId": "reset_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordChanged"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Reset Password",
+        "tags": [
+          "password"
+        ]
+      }
+    },
+    "/api/pilot": {
+      "get": {
+        "description": "Whether sign-up is `open`, `full` or `closed`. Public. No counts of other people.\n\n`prefill_email` is the Google address of a visitor just turned away by `pilot_full` (a signed\n15-minute cookie), so the waitlist form can start filled in. `google_signin` says whether the\nGoogle button should be shown.",
+        "operationId": "read_pilot",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PilotOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Pilot",
+        "tags": [
+          "pilot"
+        ]
+      }
+    },
     "/api/session": {
       "delete": {
         "description": "Log this user out everywhere: every session cookie they were issued stops working.\nOther users are not affected.",
@@ -1311,7 +3495,7 @@
         ]
       },
       "post": {
-        "description": "Log in with email and password. Public, but needs the X-CSRF-Token from `GET /session`.\n\n401 `invalid_credentials` for a wrong password or an unknown email (the same answer for\nboth). 403 `email_not_verified` or `account_suspended` when the password was right but the\naccount may not sign in. The login limits are the page's: 5 failed attempts per client\naddress in 5 minutes and 10 per email in an hour, then 429. The response carries the new\nsession's CSRF token: it replaces the one from before login.",
+        "description": "Log in with email and password. Public, but needs the X-CSRF-Token from `GET /session`.\n\n401 `invalid_credentials` for a wrong password or an unknown email (the same answer for\nboth, and for an account whose email was never confirmed). 403 `account_suspended` when the\npassword was right but the account is suspended. The login limits are the page's: 5 failed\nattempts per client address in 5 minutes and 10 per email in an hour, then 429. The response\ncarries the new session's CSRF token: it replaces the one from before login.",
         "operationId": "log_in",
         "requestBody": {
           "content": {
@@ -1378,6 +3562,160 @@
         "summary": "Log In",
         "tags": [
           "session"
+        ]
+      }
+    },
+    "/api/signup": {
+      "post": {
+        "description": "Create an account with a password. Public (needs the X-CSRF-Token).\n\nAnswers 202 `check_your_email` for a new address AND for one that already has an account (a\nverified one gets a \"you already have an account\" mail), so it cannot be used to find out who\nis registered. The account cannot sign in until the emailed link is confirmed. Errors that do\nnot depend on the address: 403 `pilot_closed`, 409 `pilot_full`, 403\n`password_signup_disabled`, 400 `invite_invalid`, 422 `password_too_weak`, `invalid_email`,\n`invalid_name`, `terms_required`, 429 `too_many_requests` (5 sign-ups per hour per address)\nand `server_busy`. `accept_terms` must be true: the account records the version accepted.\nA second sign-up for the same address within a minute is answered 202 and does nothing.",
+        "operationId": "sign_up",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUp"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Sign Up",
+        "tags": [
+          "signup"
+        ]
+      }
+    },
+    "/api/signup/resend": {
+      "post": {
+        "description": "Mail a new verification link to an unconfirmed account. Public. Always 202, whatever the\naddress and whether or not a mail was sent: one per minute per email and 5 per hour per\nclient address are sent, the rest are dropped silently.",
+        "operationId": "resend_verification",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Resend Verification",
+        "tags": [
+          "signup"
         ]
       }
     },
@@ -1595,6 +3933,88 @@
         ]
       }
     },
+    "/api/verify-email": {
+      "post": {
+        "description": "Confirm an email with the token from the link and the password chosen at sign-up.\nPublic. The page the link opens must show a password field and a button that calls this\n(mail scanners open links, and a GET must not verify). Does not sign the user in.\n400 `token_invalid_or_expired`: wrong, used or older than 24 hours. 400 `password_mismatch`:\nnot the password submitted with this link's sign-up; the link stays usable until 5 wrong\npasswords, after which it answers `token_invalid_or_expired`.",
+        "operationId": "verify_email",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Verified"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Verify Email",
+        "tags": [
+          "signup"
+        ]
+      }
+    },
     "/api/vocabulary": {
       "get": {
         "description": "The caller's terms, sorted alphabetically.",
@@ -1778,6 +4198,68 @@
         "summary": "Delete Term",
         "tags": [
           "vocabulary"
+        ]
+      }
+    },
+    "/api/waitlist": {
+      "post": {
+        "description": "Leave an email (and optionally a name) for when a place opens. Public. Always 202\n`on_the_list`, whether or not the address is already listed or has an account; a repeat\nchanges nothing, and 5 per hour per address and 1 per minute per email are dropped silently.\n422 `invalid_email` for a malformed address.",
+        "operationId": "join_waitlist",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WaitlistIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WaitlistAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Join Waitlist",
+        "tags": [
+          "waitlist"
         ]
       }
     }

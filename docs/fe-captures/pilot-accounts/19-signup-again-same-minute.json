@@ -1,0 +1,28 @@
+{
+  "note": "The same address within a minute: the same 202, and nothing is done (no second mail).",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ada Example",
+      "email": "ada@example.test",
+      "password": "<password>",
+      "accept_terms": true
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "check_your_email"
+    }
+  }
+}

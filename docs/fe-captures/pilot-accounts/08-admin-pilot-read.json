@@ -1,0 +1,27 @@
+{
+  "note": "Default settings: closed, 10 accounts, 5 hours.",
+  "client": "admin",
+  "request": {
+    "method": "GET",
+    "path": "/api/admin/pilot",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "signups_open": false,
+      "max_accounts": 10,
+      "default_hours_cap_seconds": 18000,
+      "password_signup_enabled": false,
+      "slots_taken": 0,
+      "state": "closed"
+    }
+  }
+}

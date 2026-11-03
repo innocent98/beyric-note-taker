@@ -64,6 +64,8 @@ class User(Base):
     terms_version: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When the admin deleted the account (status `deleted`); the purge gives up a day after it.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AuthToken(Base):
@@ -84,6 +86,9 @@ class AuthToken(Base):
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # A verification link confirms the password of the sign-up that made it (never a later
+    # one's): the hash is kept here until the link is used and the person types it again.
+    pending_password_hash: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

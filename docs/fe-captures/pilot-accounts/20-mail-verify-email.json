@@ -1,0 +1,11 @@
+{
+  "note": "What the worker would send (the `mail_outbox` row). The link is built from PUBLIC_BASE_URL; the page it opens belongs to the frontend.",
+  "content": {
+    "to_email": "ada@example.test",
+    "template": "verify_email",
+    "payload": {
+      "link": "https://notes.example.test/verify-email?token=<token-1>",
+      "name": "Ada Example"
+    }
+  }
+}

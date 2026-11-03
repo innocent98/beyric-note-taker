@@ -1,0 +1,28 @@
+{
+  "note": "Unconfirmed accounts hold no place: the pilot (3 places) is still open.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Third",
+      "email": "third@example.test",
+      "password": "<password>",
+      "accept_terms": true
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "check_your_email"
+    }
+  }
+}

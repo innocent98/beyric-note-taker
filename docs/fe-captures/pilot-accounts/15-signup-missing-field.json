@@ -1,0 +1,42 @@
+{
+  "note": "",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "ada@example.test"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "name",
+            "message": "Field required"
+          },
+          {
+            "field": "password",
+            "message": "Field required"
+          },
+          {
+            "field": "accept_terms",
+            "message": "Field required"
+          }
+        ]
+      }
+    }
+  }
+}

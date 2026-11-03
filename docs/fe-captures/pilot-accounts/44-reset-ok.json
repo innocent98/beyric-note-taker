@@ -1,0 +1,26 @@
+{
+  "note": "Signs Ada out everywhere; does not sign anyone in.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/password/reset",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "token": "<token-2>",
+      "password": "<password>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "password_changed"
+    }
+  }
+}

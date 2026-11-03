@@ -1,0 +1,26 @@
+{
+  "note": "Does not sign in.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/verify-email",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "token": "<token-1>",
+      "password": "<password>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "verified"
+    }
+  }
+}
