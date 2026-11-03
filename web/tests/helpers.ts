@@ -31,3 +31,15 @@ export function rel(path: string): string {
 export function captured<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/owner-app", file))).response.body as T;
 }
+
+type AccountCapture = { request: { body: unknown }; response: { status: number; body: unknown } };
+
+// A capture from the running API for the accounts routes (docs/fe-captures/pilot-accounts/<file>).
+export function capturedAccount(file: string): AccountCapture {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/pilot-accounts", file)));
+}
+
+// The body of an account capture.
+export function accountBody<T>(file: string): T {
+  return capturedAccount(file).response.body as T;
+}

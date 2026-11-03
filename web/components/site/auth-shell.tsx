@@ -4,13 +4,27 @@ import { LEGAL_NAME } from "@/lib/site";
 
 // The sign-in layout from Auth.dc.html: the form on the left, a teal panel with a product preview
 // on the right (the panel drops below the form on a narrow screen, as the prototype's grid does).
-// Only what the app can do today is drawn on the left: see docs/ui/parity-report.md.
-export function AuthShell({ children }: { children: ReactNode }) {
+// Only what the app can do today is drawn on the left: see docs/ui/parity-report.md. Every account
+// screen (sign-in, sign-up, confirm email, forgot and reset password, pilot full) uses this frame.
+// `action` is the prototype's link at the top right ("New to Beyric? Create account").
+export function AuthShell({
+  children,
+  action,
+}: {
+  children: ReactNode;
+  action?: { text?: string; label: string; href: string };
+}) {
   return (
     <div className="auth-split">
       <div className="auth-main">
         <div className="auth-bar">
           <Logo size="lg" />
+          {action ? (
+            <div className="auth-bar-link">
+              {action.text ? <span className="auth-bar-text">{action.text}</span> : null}
+              <AppLink href={action.href}>{action.label}</AppLink>
+            </div>
+          ) : null}
         </div>
         <main className="auth-center">
           <div className="auth-box">{children}</div>

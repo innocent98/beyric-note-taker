@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { getSession } from "@/lib/api/server";
 import {
   Alert,
+  AppLink,
   Badge,
   Button,
   Card,
+  Checkbox,
   Dialog,
   EmptyState,
   Field,
@@ -176,6 +178,16 @@ export default async function StyleGuidePage() {
                 options={[["a", "First option"], ["b", "Second option"]]}
                 defaultValue="b"
               />
+              <Field
+                id="sg-label-end"
+                label="Field with a link in the label row"
+                labelEnd={<AppLink href="/styleguide">Forgot password?</AppLink>}
+                placeholder="Your password"
+              />
+              <Checkbox id="sg-check">I agree to the example terms.</Checkbox>
+              <Checkbox id="sg-check-bad" error="Tick this box to continue.">
+                A box with an error
+              </Checkbox>
               <TextareaField id="sg-area" label="Text area" hint="Several lines." />
               <Segmented
                 name="sg-seg"
