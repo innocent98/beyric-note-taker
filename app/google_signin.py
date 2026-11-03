@@ -182,6 +182,7 @@ def _link_by_email(session: Session, user: User, identity: Identity, now: dateti
         return Outcome(full=True, email=user.email)  # confirming would take a place that is gone
     user.google_sub = identity.sub
     if user.email_verified_at is None:
+        signup.redeem_invite(session, user.email, now)  # an invitation for this address is theirs
         # Pre-registration defence: the password on an unverified row may be someone else's.
         user.email_verified_at = now
         user.password_hash = None

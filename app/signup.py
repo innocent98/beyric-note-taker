@@ -105,15 +105,32 @@ def has_room(session: Session, now: datetime) -> bool:
     return slots_taken(session, now) < state.max_accounts
 
 
+def redeem_invite(session: Session, address: str, now: datetime) -> bool:
+    """Use up the live invitation issued to `address` and mark its waiting-list entry `joined`:
+    the place it reserved now belongs to the account (counted through the entry, so never twice).
+    In the caller's transaction. False when the address has no live invitation."""
+    invite = tokens.live_invite_for(session, address, now)
+    if invite is None:
+        return False
+    invite.used_at = now
+    session.execute(
+        update(WaitlistEntry).where(WaitlistEntry.email == address).values(status="joined")
+    )
+    return True
+
+
 def may_confirm(session: Session, user: User, now: datetime) -> bool:
     """Whether an unconfirmed account may become confirmed (take a place) now: it was made from an
-    invitation (its place is already counted), or a place is free."""
+    invitation (its place is already counted), it holds a live invitation of its own (that
+    reserved place is its place: it must not be counted against it), or a place is free."""
     invited = session.scalars(
         select(WaitlistEntry.id).where(
             WaitlistEntry.email == user.email, WaitlistEntry.status == "joined"
         )
     ).first()
-    return invited is not None or has_room(session, now)
+    if invited is not None or tokens.live_invite_for(session, user.email, now) is not None:
+        return True
+    return has_room(session, now)
 
 
 def unverified_count(session: Session) -> int:
@@ -298,7 +315,10 @@ def _sign_up_locked(
         _send_verification(session, settings, user, password_hash, now)
     elif existing.status == "active" and existing.email_verified_at is None:
         # Still unconfirmed: the sign-in answer follows the newest submission, but what a link
-        # confirms is decided by that link's own token (see the module docstring).
+        # confirms is decided by that link's own token (see the module docstring). An invitation
+        # for this address, sent with the form, is redeemed for this account.
+        if invite is not None:
+            redeem_invite(session, address, now)
         existing.name, existing.password_hash = name, password_hash
         existing.terms_accepted_at, existing.terms_version = now, TERMS_VERSION
         _send_verification(session, settings, existing, password_hash, now)

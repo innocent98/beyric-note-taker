@@ -530,6 +530,29 @@ def test_google_cannot_confirm_an_unconfirmed_account_when_the_pilot_has_filled_
     assert logged_in(web)["authenticated"] is False
 
 
+def test_google_redeems_the_invite_of_an_unconfirmed_account_when_the_pilot_is_full(gapp, session):
+    open_pilot(session, max_accounts=2)
+    make_user(session, "a@example.test")
+    make_user(session, "b@example.test")
+    planted = make_user(session, "ada@example.test", password=ATTACKER, email_verified_at=None)
+    open_pilot(session, max_accounts=3)
+    session.add(WaitlistEntry(email="ada@example.test", status="invited"))
+    tokens.issue(
+        session,
+        purpose="waitlist_invite",
+        email="ada@example.test",
+        user_id=None,
+        now=datetime.now(UTC),
+    )
+    session.commit()
+    web = browser(gapp)
+    assert sign_in(web).headers["location"] == "/"
+    user = user_by(session, id=planted.id)
+    assert user.email_verified_at is not None and user.google_sub == "g-ada-1"
+    assert session.scalars(select(WaitlistEntry)).one().status == "joined"
+    assert session.scalars(select(AuthToken).where(AuthToken.used_at.is_(None))).all() == []
+
+
 def test_a_password_account_already_linked_to_another_google_account_is_not_relinked(gapp, session):
     make_user(session, "ada@example.test", google_sub="g-someone-else")
     web = browser(gapp)

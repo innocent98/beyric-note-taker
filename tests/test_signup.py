@@ -161,6 +161,67 @@ def test_an_invited_account_confirms_even_when_the_pilot_is_full(app, session):
     assert verify(web, raw, PASSWORD).status_code == 200
 
 
+def invited_with_an_unconfirmed_account(app, session):
+    """Someone signs up while there is room, the pilot fills, the admin raises the limit by one and
+    invites them from the waitlist. Returns (browser, their verification link, the invite token)."""
+    open_pilot(session, max_accounts=2)
+    web = visitor(app, "198.51.100.1")
+    assert sign_up(web).status_code == 202
+    link = token_of(queued(session)[0])
+    make_user(session, "a@example.test")
+    make_user(session, "b@example.test")  # the pilot is full
+    open_pilot(session, max_accounts=3)  # room for exactly the invited person
+    session.add(WaitlistEntry(email=NEW_EMAIL, status="invited"))
+    invite = tokens.issue(
+        session, purpose="waitlist_invite", email=NEW_EMAIL, user_id=None, now=datetime.now(UTC)
+    )
+    session.commit()
+    assert signup.pilot_state(session, datetime.now(UTC)) == "full"  # their own invite fills it
+    return web, link, invite
+
+
+def test_a_live_invite_for_an_unconfirmed_account_lets_it_confirm_and_is_not_counted_twice(
+    app, session
+):
+    web, link, _ = invited_with_an_unconfirmed_account(app, session)
+    assert verify(web, link).status_code == 200
+    assert user_of(session).email_verified_at is not None
+
+
+def test_signing_up_again_with_the_invite_redeems_it_for_the_existing_account(app, session):
+    web, link, invite = invited_with_an_unconfirmed_account(app, session)
+    a_minute_later(web)
+    assert web.post("/api/signup", form(invite_token=invite)).status_code == 202
+    session.expire_all()
+    entry = session.scalars(select(WaitlistEntry)).one()
+    assert entry.status == "joined"
+    assert (
+        session.scalars(select(AuthToken).where(AuthToken.purpose == "waitlist_invite"))
+        .one()
+        .used_at
+    )
+    assert signup.slots_taken(session, datetime.now(UTC)) == 3  # one place for them, not two
+    new_link = token_of(queued(session, "verify_email")[-1])
+    assert verify(web, new_link).status_code == 200
+    assert signup.pilot_state(session, datetime.now(UTC)) == "full"
+
+
+def test_an_invite_does_not_change_an_account_that_is_already_confirmed(app, session):
+    open_pilot(session, max_accounts=5)
+    make_user(session, NEW_EMAIL)
+    session.add(WaitlistEntry(email=NEW_EMAIL, status="invited"))
+    invite = tokens.issue(
+        session, purpose="waitlist_invite", email=NEW_EMAIL, user_id=None, now=datetime.now(UTC)
+    )
+    session.commit()
+    assert (
+        visitor(app, "198.51.100.1").post("/api/signup", form(invite_token=invite)).status_code
+        == 202
+    )
+    session.expire_all()
+    assert session.scalars(select(WaitlistEntry)).one().status == "invited"  # nothing was redeemed
+
+
 def test_ten_parallel_confirmations_at_nine_accounts_confirm_exactly_one(app, session, monkeypatch):
     open_pilot(session, max_accounts=10)
     for i in range(9):
