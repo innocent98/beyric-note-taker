@@ -155,14 +155,14 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] Needs backend, not built (listed in the report): sign-up, forgot password, SSO, accounts and sidebar identity, calendar and auto-join card, series, tasks, projects, decisions, review, team, settings, download, share, translation, agenda, template delete, Emails
 - [ ] Stream D, new designed screens: accounts and pilot, calendar and auto-join, team, tasks, sprints, share and download, translation
   - [ ] Accounts and pilot screens (branch `feature/stream-d-auth-pages`, 2026-11-03; SOP `2026-11-03-accounts-auth-pages.md`; against `web/scripts/mock-api.mjs` replaying the captures, not against real FastAPI or a real mail)
-    - [x] `/signup`: the form (name, email, password with Show / Hide, Terms checkbox, Google when `google_signin`), the "check your email" screen with a 60 s resend, the `closed` and `full` screens with the waiting list, `?invite=` (form even while closed or full), API refusals switch the screen
+    - [x] `/signup`: the form (invitation token read in the browser and removed from the address, name, email, password with Show / Hide, Terms checkbox, Google when `google_signin`), the "check your email" screen with a 60 s resend, the `closed` and `full` screens with the waiting list, `?invite=` (form even while closed or full), API refusals switch the screen
     - [x] `/verify-email?token=`: password form (a GET never confirms), "Email confirmed", dead-link screen with "Send a new link", `pilot_full` screen that keeps the link
     - [x] `/forgot-password` and its "check your email" state (60 s resend)
     - [x] `/reset-password?token=`: new password and confirm, "Password updated", dead-link screen
     - [x] `/pilot-full`: waiting list form pre-filled from `prefill_email`
     - [x] `/login`: "Forgot password?", Google button only when `GET /api/pilot` says `google_signin`, "Create account" in the header, `?error=<code>` messages, the "confirm your email" line under a wrong-password answer
     - [x] Client: `pilot`, `signup`, `resendVerification`, `verifyEmail`, `forgotPassword`, `resetPassword`, `joinWaitlist`; nginx's non-JSON 429 becomes `too_many_requests`
-    - [x] Tests: 79 new (`accounts-api`, `accounts-pages`, `accounts-server`, `accounts-guards`); mock API extended from the captures
+    - [x] Tests: 85 new (`accounts-api`, `accounts-pages`, `accounts-server`, `accounts-guards`); mock API extended from the captures
     - [ ] Designed and not built (no backend): workspace setup, team invite acceptance, Microsoft sign-in, "Keep me signed in", the 6-digit email code (the API confirms with a link and the password)
     - [ ] Not checked: CI on the pushed head, a real mail, a real Google round trip, Safari and Firefox, the live site. Sign-up stays closed (`signups_open` is false)
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated

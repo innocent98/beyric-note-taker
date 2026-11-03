@@ -7,6 +7,7 @@ import { accountError, isCode } from "@/lib/accounts";
 import { AuthHead } from "./auth-head";
 import { PasswordField } from "./password-field";
 import { PilotScreen } from "./pilot-screen";
+import { useUrlToken } from "./use-url-token";
 import { ResendLinkForm } from "./resend-link-form";
 
 type Screen = "form" | "done" | "dead" | "full";
@@ -16,15 +17,15 @@ type Screen = "form" | "done" | "dead" | "full";
 // visitor types the password they chose at sign-up again, because the link confirms only that
 // sign-up's password (docs/fe-integration-guide-pilot-accounts.md section 5). It does not sign the
 // person in: the next step is the sign-in page.
-export function VerifyEmailForm({ token }: { token: string | null }) {
-  const [screen, setScreen] = useState<Screen>(token ? "form" : "dead");
+export function VerifyEmailForm() {
+  // The token is read from the address bar in the browser and then removed from it (use-url-token.ts).
+  const { ready, token } = useUrlToken("token");
+  const [screen, setScreen] = useState<Screen>("form");
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [formError, setFormError] = useState<string | null>(null);
-  const [deadMessage, setDeadMessage] = useState<string | null>(
-    token ? null : "This link is not complete. Ask for a new one below.",
-  );
+  const [deadMessage, setDeadMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -49,6 +50,10 @@ export function VerifyEmailForm({ token }: { token: string | null }) {
     }
   }
 
+  // No token once the address has been read: the link is missing, or the page was reloaded after
+  // the token was taken out of the address.
+  const missing = ready && !token && screen === "form";
+
   if (screen === "done") {
     return (
       <div className="auth-form" data-screen="email-confirmed">
@@ -71,11 +76,13 @@ export function VerifyEmailForm({ token }: { token: string | null }) {
     );
   }
 
-  if (screen === "dead") {
+  if (screen === "dead" || missing) {
     return (
       <div className="auth-form" data-screen="link-expired">
         <AuthHead tile="mail" tone="warning" title="This link does not work">
-          {deadMessage ?? "This link has expired or was already used. Ask for a new one."}
+          {missing
+            ? "This link is missing or was already used. Ask for a new one below."
+            : (deadMessage ?? "This link has expired or was already used. Ask for a new one.")}
         </AuthHead>
         <ResendLinkForm />
         <p className="auth-small">

@@ -64,6 +64,8 @@ export function createApi(options: ApiOptions = {}) {
   const base = (options.baseUrl ?? "").replace(/\/$/, "");
   const doFetch = options.fetch ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   let csrf: string | null = null;
+  // The token the last write went out with, to tell a stale one from a session that never changed.
+  let sentCsrf: string | null = null;
 
   async function send(method: string, path: string, { body, query, write }: Call): Promise<Response> {
     const search = query
@@ -77,7 +79,10 @@ export function createApi(options: ApiOptions = {}) {
       ...((await options.headers?.()) as Record<string, string> | undefined),
     };
     if (body !== undefined) headers["Content-Type"] = "application/json";
-    if (write) headers["X-CSRF-Token"] = csrf ?? (await readSession()).csrf_token;
+    if (write) {
+      sentCsrf = csrf ?? (await readSession()).csrf_token;
+      headers["X-CSRF-Token"] = sentCsrf;
+    }
     let res: Response;
     try {
       res = await doFetch(`${base}${path}${search ? `?${search}` : ""}`, {
@@ -117,8 +122,12 @@ export function createApi(options: ApiOptions = {}) {
       const data = type.includes("application/json") ? await res.clone().json().catch(() => null) : null;
       if (data?.error?.code === "csrf_rejected") {
         csrf = null;
+        const used = sentCsrf;
         const fresh = await readSession();
-        if (fresh.authenticated) res = await send(method, path, call);
+        // Retry for a signed-in visitor, and for a logged-out one whose token really changed (a login
+        // or logout in another tab): a sign-up or reset then does not fail with the typed text kept.
+        // The same token again would only be refused again.
+        if (fresh.authenticated || fresh.csrf_token !== used) res = await send(method, path, call);
       }
     }
     if (!res.ok) return fail(res);

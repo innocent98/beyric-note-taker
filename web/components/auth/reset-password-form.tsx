@@ -6,6 +6,7 @@ import { api } from "@/lib/api/browser";
 import { accountError, fieldOf, isCode, lengthProblem } from "@/lib/accounts";
 import { AuthHead } from "./auth-head";
 import { PasswordField, PasswordRules } from "./password-field";
+import { useUrlToken } from "./use-url-token";
 
 type Screen = "form" | "done" | "dead";
 
@@ -13,16 +14,16 @@ type Screen = "form" | "done" | "dead";
 // "Password updated". A weak password leaves the link usable (guide section 7), so the form stays;
 // a dead link sends the visitor to ask for another. A reset signs the user out on every device and
 // does not sign anyone in.
-export function ResetPasswordForm({ token }: { token: string | null }) {
-  const [screen, setScreen] = useState<Screen>(token ? "form" : "dead");
+export function ResetPasswordForm() {
+  // The token is read from the address bar in the browser and then removed from it (use-url-token.ts).
+  const { ready, token } = useUrlToken("token");
+  const [screen, setScreen] = useState<Screen>("form");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [show, setShow] = useState(false);
   const [errors, setErrors] = useState<{ password?: string; confirm?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
-  const [deadMessage, setDeadMessage] = useState<string | null>(
-    token ? null : "This link is not complete. Ask for a new one.",
-  );
+  const [deadMessage, setDeadMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -53,6 +54,10 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
     }
   }
 
+  // No token once the address has been read: the link is missing, or the page was reloaded after
+  // the token was taken out of the address.
+  const missing = ready && !token && screen === "form";
+
   if (screen === "done") {
     return (
       <div className="auth-form" data-screen="password-updated">
@@ -66,11 +71,13 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
     );
   }
 
-  if (screen === "dead") {
+  if (screen === "dead" || missing) {
     return (
       <div className="auth-form" data-screen="reset-link-expired">
         <AuthHead tile="lock" tone="warning" title="This link does not work">
-          {deadMessage ?? "This link has expired or was already used. Ask for a new one."}
+          {missing
+            ? "This link is missing or was already used. Ask for a new one."
+            : (deadMessage ?? "This link has expired or was already used. Ask for a new one.")}
         </AuthHead>
         <Button href="/forgot-password" size="field" block>
           Ask for a new link

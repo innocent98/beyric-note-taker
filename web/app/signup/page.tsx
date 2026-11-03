@@ -12,14 +12,16 @@ export const metadata: Metadata = { title: "Create your account", robots: { inde
 export default async function SignupPage({ searchParams }: { searchParams: Promise<{ invite?: string | string[] }> }) {
   if ((await getSession())?.authenticated) redirect("/");
   const { invite } = await searchParams;
-  const token = (Array.isArray(invite) ? invite[0] : invite) || null;
+  // Only whether there is an invitation: the token is read in the browser and removed from the
+  // address, so it is not in the server-rendered page.
+  const hasInvite = Boolean(Array.isArray(invite) ? invite[0] : invite);
   const pilot = await getPilot();
   return (
     <AuthShell action={{ text: "Already have an account?", label: "Sign in", href: "/login" }}>
       <SignupFlow
         pilot={pilot?.state ?? null}
         google={pilot?.google_signin === true}
-        invite={token}
+        hasInvite={hasInvite}
         prefillEmail={pilot?.prefill_email}
       />
     </AuthShell>

@@ -18,6 +18,7 @@ import { MailLinks } from "./mail-links";
 import { PasswordField, PasswordRules } from "./password-field";
 import { PilotScreen } from "./pilot-screen";
 import { useCountdown } from "./use-countdown";
+import { useUrlToken } from "./use-url-token";
 
 type Screen = "form" | "sent" | "closed" | "full";
 type Errors = { name?: string; email?: string; password?: string; terms?: string };
@@ -33,15 +34,20 @@ const TERMS_MESSAGE = "Accept the Terms and the Privacy Policy to create an acco
 export function SignupFlow({
   pilot,
   google,
-  invite,
+  hasInvite,
   prefillEmail,
 }: {
   pilot: PilotState | null;
   google: boolean;
-  invite: string | null;
+  // The address has `?invite=`. The token itself is read in the browser and taken out of the
+  // address (use-url-token.ts), so the server never puts it in the page.
+  hasInvite: boolean;
   prefillEmail?: string | null;
 }) {
-  const initial: Screen = invite ? "form" : pilot === "closed" ? "closed" : pilot === "full" ? "full" : "form";
+  const { ready, token: invite } = useUrlToken("invite");
+  // Until the address has been read, trust the server; after it, an invitation needs its token.
+  const invited = hasInvite && (!ready || invite !== null);
+  const initial: Screen = hasInvite ? "form" : pilot === "closed" ? "closed" : pilot === "full" ? "full" : "form";
   const [screen, setScreen] = useState<Screen>(initial);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -165,7 +171,7 @@ export function SignupFlow({
   return (
     <form className="auth-form" method="post" onSubmit={submit} noValidate>
       <AuthHead title="Create your account">Send the note taker to your next meeting in a few minutes.</AuthHead>
-      {invite ? (
+      {invited ? (
         <Alert kind="info" role="status">
           You have an invitation to the pilot. Use the email address it was sent to: the invitation works for that
           address only.

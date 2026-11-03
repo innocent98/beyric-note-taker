@@ -29,7 +29,7 @@ const closed = accountBody<Pilot>("04-pilot-closed.json");
 const full = accountBody<Pilot>("57-pilot-full.json");
 const prefilled = accountBody<Pilot>("122-google-pilot-prefill.json");
 
-const html = async (page: Promise<React.ReactElement>) => renderToStaticMarkup(await page);
+const html = async (page: React.ReactElement | Promise<React.ReactElement>) => renderToStaticMarkup(await page);
 const query = <T extends object>(q: T) => ({ searchParams: Promise.resolve(q) });
 
 beforeEach(() => {
@@ -69,6 +69,8 @@ describe("/signup", () => {
     const out = await html(SignupPage(query({ invite: "invite-token-placeholder" })));
     expect(out).toContain("Create your account");
     expect(out).toContain("You have an invitation to the pilot");
+    // The server only learns that there is an invitation; the token never reaches the page.
+    expect(out).not.toContain("invite-token-placeholder");
   });
 
   it("sends a signed-in visitor to the app", async () => {
@@ -128,21 +130,18 @@ describe("/pilot-full", () => {
 });
 
 describe("the pages the mails open", () => {
-  it("/verify-email draws a form with the password field and does not confirm anything on GET", async () => {
-    const out = await html(VerifyEmailPage(query({ token: "tok" })));
+  it("/verify-email draws a form with the password field, and the page takes no token from the server", async () => {
+    const out = await html(VerifyEmailPage());
     expect(out).toContain("Confirm your email");
     expect(out).toContain("Your password");
+    expect(VerifyEmailPage.length).toBe(0);
   });
 
-  it("/verify-email and /reset-password with no token say the link is not complete", async () => {
-    expect(await html(VerifyEmailPage(query({})))).toContain("This link does not work");
-    expect(await html(ResetPasswordPage(query({})))).toContain("This link does not work");
-  });
-
-  it("/reset-password draws the new-password form", async () => {
-    const out = await html(ResetPasswordPage(query({ token: "tok" })));
+  it("/reset-password draws the new-password form, and the page takes no token from the server", async () => {
+    const out = await html(ResetPasswordPage());
     expect(out).toContain("Choose a new password");
     expect(out).toContain("Confirm password");
+    expect(ResetPasswordPage.length).toBe(0);
   });
 
   it("/forgot-password draws the form, and sends a signed-in visitor to the app", async () => {
