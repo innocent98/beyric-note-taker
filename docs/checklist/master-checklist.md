@@ -220,7 +220,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [x] **Deploy gate (2026-11-03, after the #45 outage; `fix/deploy-rollback-and-token-key`):** every PR that adds a required environment variable lists it under "Server steps before merge" in its body and the step is done on the server before merging (the app refuses to start without it, by design); `deploy/deploy.sh` now rolls back when `docker compose up` itself fails, restores the checkout on a failed build and starts containers stuck in `Created` (`tests/test_deploy_script.py`); `TOKEN_ENC_KEY` is documented in `deploy/README.md`, `.env.example` and the Phase C foundations SOP. Not yet exercised on the real server
 - [ ] Phase 0, prerequisites and spikes (parallel, no app code)
   - [ ] P0.1 Google console state: **branding verified only; the sensitive scopes are NOT verified** (Adebayo's correction of spec 0a Q7). Record Audience, Data Access and Verification Center; declare the scopes (`docs/spike/pilot-google-console.md`)
-  - [ ] P0.2 Instant-Meet spike S1 to S7 and S9 on a personal Gmail first (gate outcome G1 to G4 decides Phase I)
+  - [ ] P0.2 Instant-Meet spike S1 to S7 and S9 on a personal Gmail first (gate outcome G1 to G4 decides Phase I) **PARKED 2026-11-03 (Adebayo could not set up Google Cloud billing; draft PR #46 stays open; reconsider when billing exists)**
   - [ ] P0.3 Vexa checks: chat posting, per-key limit, bot listing, health endpoint
   - [ ] P0.4 Resend state: domain, SPF/DKIM/DMARC, a delivered test mail, `ADMIN_ALERT_EMAIL`
   - [ ] P0.5 Bots per machine (M1): `docker stats` during live meetings (Adebayo)
