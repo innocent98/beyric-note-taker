@@ -190,7 +190,8 @@ Adebayo (server and accounts)
 - [ ] Nightly backup cron (privacy policy promises 14-day deletion, so it must exist); Cloudflare proxy on or off
 - [ ] `docker stats --no-stream` and `free -h` during a live meeting, and during two overlapping ones (turns the capacity estimates into numbers; also the `next` container's memory)
 - [ ] Mark the 2 GitGuardian findings from #19 as false positives (test placeholders; nobody rewrites history)
-- [ ] Google: only branding is verified (Adebayo, 2026-11-03), NOT the sensitive scopes. Switch the Cloud project to "In production" before testers connect a calendar (else tokens lapse after 7 days); fix the final scope list (`calendar.events.readonly`, Meet only if the spike passes); then submit sensitive-scope verification; Search Console TXT for `beyrictech.com`
+- [x] Google project is **In production** (Adebayo, 2026-11-03, so no 7-day token expiry) and the calendar scope is added to the consent screen, but only branding is verified and the sensitive-scope review has NOT been submitted (nothing to demo until the calendar flow exists)
+- [ ] Fix the final scope list (`calendar.events.readonly`; Meet only if the instant-Meet spike passes), then submit the sensitive-scope verification once the calendar flow works (Phase V); Search Console TXT for `beyrictech.com`
 
 Legal and business
 - [ ] Mailboxes `privacy@`, `legal@`, `security@beyrictech.com` confirmed; hosting country (France per IP lookup; check the Contabo panel); a DPO decision; a lawyer reads privacy and terms
