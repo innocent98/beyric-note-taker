@@ -1,103 +1,85 @@
 # Beyric Note Taker: master handoff
 
-**Written:** 2026-11-02, about 15:50 UTC, by the second lead session. Start here: "Read `docs/HANDOFF-master.md` and continue." The first lead's handoff is in git history (PR #6).
+**Written:** 2026-11-02, about 23:30 WAT, by the third lead session, before Adebayo went to sleep. Start here: "Read `docs/HANDOFF-master.md` and continue." Earlier handoffs are in git history (PRs #6, #11, #12). This file is a map; the checklist, SOPs and specs hold the detail.
+
+## 0. Overnight mode (Adebayo is asleep)
+
+He said: continue overnight, anything that needs him can wait and must be **noted down** (section 5), hand over cleanly, delegate to sub-sessions. So tonight: **never merge, never deploy by hand, never change the server**; open PRs, review them, keep this file current, and queue questions in section 5. His standing rule is unchanged: merge only on his explicit "merge #N" (a bare "merge" needs a follow-up question).
 
 ## 1. Current state
 
 | Thing | State |
 |---|---|
-| Live app | https://notes.beyrictech.com, owner login only (password in `~/beyric-notes-owner-password.txt` on Adebayo's Mac) |
-| `main` / server | `fbd1d94` (PRs #1–#9 and #11 merged and deployed, `/health` 200, migration `0005`). Server `haven-respite`, app at `/opt/beyric-note-taker` (memory `beyric-note-taker-server`) |
-| Open PRs | **#10** `feature/public-pages`: public landing, `/privacy`, `/terms` (code; 327 tests pass locally; not yet viewed in a browser). **This handoff update** on `docs/handoff-3`. Both need Adebayo's "merge #N". No meeting is active, so #10 is safe to deploy |
-| Meeting 5 | **Done:** Google Meet, 15:20 to 16:16 UTC (about 56 min), `ready` at 16:22:50 (transcribing 4 min, speakers 2 min, notes 30 s). 4 named speakers; all six note sections; useful "Please check" items. Reviewed by the second lead; Adebayo: "it went well". Gap: one person appears as both "Godstime America" and "America Godstime" |
-| Updated UI | The designer's latest `docs/ui` adds a **team and tasks** layer (section 6, item 5). Committed in PR #12 with real names and content from meeting 5, by Adebayo's choice ("Commit as is") |
-| Live server change not in git | Vexa DB `transcriptions.language` widened from `varchar(10)` to `varchar(32)` at about 15:36 UTC with Adebayo's OK. See `docs/sop/2026-11-02-vexa-language-column.md` (in PR #10). It must be made permanent (6.2) |
-| Novex side | `innocent98/Novex-News#10` still open (Adebayo to merge) |
+| Live app | https://notes.beyrictech.com, owner login only (password in `~/beyric-notes-owner-password.txt` on his Mac). Server `haven-respite`, app at `/opt/beyric-note-taker` (memory `beyric-note-taker-server`) |
+| `main` / server | `e3e5b87` (PRs #1–#17 merged and deployed, `/health` 200). Latest migration `0005`; no migration came with #13–#17 |
+| Shipped today after the last handoff | #13 Vexa column fix made permanent (compose service `vexa-schema-fix`, confirmed on the server: "already varchar(32)"); #14 designer's download/attach UI edits; #15 frontend decision doc; #16 UI foundation (tokens, Geist, Jinja components, `/styleguide`, guard tests, CSP gained `font-src 'self'`); #17 JSON API under `/api/` (Opus security review: safe; follow-up commit `786a6a2` applied) |
+| Frontend decision | **Next.js** (Adebayo, evening; he first picked Jinja, then reversed because the UI was not at parity with the designer's handoff). Plan: `docs/superpowers/specs/2026-11-02-nextjs-migration-plan.md`. Strangler: Next takes host port 8020 and proxies unowned paths to FastAPI (`rewrites.fallback`), so Jinja pages keep working and no nginx change is needed. **Hosting: VPS for now**, Vercel maybe later (keep `web/` host-agnostic). No `api.` subdomain needed while both run on the VPS |
+| Open PRs | **#18** this handoff (docs). **#19** stream A, `feature/nextjs-scaffold`: the Next.js front door (86 files; web job passes; `test` was still running at last look; **GitGuardian reports 2 findings**: I searched the diff for real secrets (env-style assignments, key-shaped strings, the spike captures, scripts) and found none, so they are probably test placeholders such as `wrong-password` or `capture-password-placeholder`; only the GitGuardian dashboard can say which, so Adebayo should look and mark them false positive or tell me). The Opus security review of #19 says **safe to merge for the single-owner pilot**; its fixes (edge login limit skipped by a trailing slash, CI cancel-in-progress on main, two misleading compose comments, small hardening) are in stream A's follow-up commit `fd7ae90` (CI: `test` and `web` pass, the final `ci` gate then passed; GitGuardian still fails because its 2 findings sit in an earlier commit's history, not in current files, so Adebayo marks them false positive in the dashboard rather than anyone rewriting history); the forwarded-for gap is confirmed and accepted for the pilot, and the default trusted proxy `172.28.0.1` has the same masquerade problem (the sign-up blocker's option 2, a shared secret, closes both). **#21** stream C, `feature/nextjs-app-screens`, base `feature/nextjs-scaffold`: the owner screens in Next (login, meetings list and detail, templates, vocabulary; its builder reports lint, typecheck, 89 tests, build, a 41-check end-to-end and a Chromium pass locally; head branch and attribution checked by me, no `claude/` name and no trailer; CI still pending at last look, `test` skipped by path filter; **merge only after #19, then retarget the base to `main`**). **#20** stream E, `docs/pilot-design`: the pilot accounts and calendar auto-join design draft (docs only, 861 lines, builder-checked) |
+| Sessions | Stream A `nextjs-scaffold` (done, PR #19), stream B `json-api` (done, merged), stream E `pilot-design` (done, PR #20). Stream C `stream-c-owner-app-scree` (`local_c88bc2f3-1432-4119-ad9e-00ae6072636c`) **done, PR #21**, stacked on #19 |
+| Meetings | Meeting 5 was the last live one, done. No meeting should be active; check before any deploy |
+| Local branch note | worktree sessions get a local branch named `claude/...`; sessions renamed to `feature/...` before pushing. No `claude/` branch exists on the remote |
 
 ## 2. Decisions (with reasons)
 
-The first lead's decisions still stand: models, Vexa in our compose, three networks, simple CD, one bot at a time for now, bigint ids, Zoom retry. They're summarised in memory `beyric-note-taker-decisions`. New today:
+Earlier decisions stand (summarised in memory `beyric-note-taker-decisions`): models, Vexa in our compose, simple CD, pilot caps (10 accounts, 5 recorded hours each), auto-join rules, Google verification now, Beyrichq LTD Lagos, translation rules, never deploy during `bot_sent` or `processing`. New since the last handoff:
 
 | Decision | Why / who |
 |---|---|
-| **Pilot:** open sign-up, capped at **10 accounts**; **5 recorded hours per account for the whole pilot** (no reset); both caps removable later | Adebayo wants a few testers, not just himself |
-| Over the cap: the 11th sign-up sees "pilot full" plus a waitlist; at 5 h the bot stops joining and says why; a running meeting finishes; admin (Adebayo) uncapped | Claude's calls, played back, not objected to |
-| **Auto-join rules:** join every calendar meeting that has a link, **and** every Meet he starts as host, whether scheduled, "instant meeting" or meet.new, even with no calendar event. Never meetings not on his calendar that he didn't start | Adebayo. He uses all three ways of starting a Meet |
-| The design adds rule choices: all with a link / only ones I organise / only when I turn it on, plus a per-meeting toggle and a template for calendar meetings | Designer, in `docs/ui` |
-| Zoom links on the calendar are joined too (they can be refused, and the retry is still unproven live) | Claude's call |
-| **Start Google OAuth verification now**, not live with weekly reconnects | Adebayo. Google: "Authorizations by a test user will expire seven days from the time of consent" |
-| Frontend stays **server-rendered** (FastAPI and Jinja, htmx/Alpine where needed); PWA possible; not Next.js | Claude's call, explained, not objected to |
-| Legal entity **Beyrichq LTD, Lagos, Nigeria**, never "Beyric Technologies" | Adebayo |
-| Privacy and terms must only claim what the app does (designer draft trimmed; table in the public-pages SOP) | Google compares the policy to the app; legal risk |
-| **Translation:** the original stays the main version, translation is a separate view, a language for each share, a default notes language, names and vocabulary unchanged | Adebayo's notes, matched by the designs |
-| Never deploy (merge) while a meeting is `bot_sent` or `processing` | The deploy restarts web and the worker |
+| Frontend moves to Next.js, strangler migration, VPS first | Adebayo: sleek UI and parity with the designer's prototypes (stateful component prototypes port almost one to one to React). Plan in the migration spec |
+| No public API hostname while Next and FastAPI share the server | Next calls FastAPI over the private Docker network; the browser sees one origin (no CORS, no cookie-domain trouble). The proxied `/api` is still public, so every route needs login and CSRF (a test enforces this) |
+| A queue for bots is **not acceptable** at launch | Adebayo: a queued meeting is an unrecorded meeting. Pilot may run one bot at a time; launch needs capacity for peak concurrency |
+| Bot capacity plan (estimates, not measured) | Separate the light app part from the heavy bot part. About 1.2 GB per bot on top of about 0.54 GB Vexa idle (meeting 5 peaked 1.7 GB of the 3 GB cap). Pilot: one bot machine 8 GB, 4 vCPU. First paid launch (up to about 50 users): dedicated app machine 4 vCPU, 8 GB, plus two bot machines of 16 GB, 8 vCPU (about 8 bots each). Scale by adding bot machines. CPU per bot unmeasured |
+| Check the **Vexa licence** and how to scale Vexa Lite across machines before charging money | Both unverified; on the checklist. Alternatives: a per-hour bot vendor, or Zoom real-time streaming for Zoom |
+| Lead runs parallel sub-sessions, at most 2 or 3, Sonnet implements, Opus reviews security-critical code | Token economy; the JSON API auth change got an Opus review |
 
 ## 3. Designs and specs
 
-- UI redesign: `docs/ui/Beyric Note Taker redesign/` (PRs #7 and #8, plus #9 pending): app screens including the **Calendar card, Upcoming list and Settings → Calendar**, auth, landing, emails, brand (teal `#0E6B5E`, Geist), privacy and terms. These are `.dc.html` prototypes, not deployable code.
-- First lead's specs: `docs/superpowers/specs/2026-11-02-beyric-note-taker-design.md`, plan `docs/superpowers/plans/2026-11-02-beyric-note-taker-mvp.md`, deploy guide `deploy/README.md`.
-- **Calendar auto-join and the pilot: no written design yet.** The brainstorm is about 80% done (section 6.4).
+- Migration plan and streams A to D: `docs/superpowers/specs/2026-11-02-nextjs-migration-plan.md`. Earlier comparison (Jinja vs Next, superseded): `2026-11-02-frontend-approach.md`.
+- JSON API contract: `docs/fe-integration-guide-owner-app.md` with live captures in `docs/fe-captures/owner-app/` and `docs/openapi.json` (in #17).
+- UI prototypes: `docs/ui/Beyric Note Taker redesign/` (`.dc.html`, not deployable). Design system today: Module 2a CSS and Jinja components, to be ported to React by stream A.
+- MVP design and plan: `docs/superpowers/specs/2026-11-02-beyric-note-taker-design.md`, plan `docs/superpowers/plans/2026-11-02-beyric-note-taker-mvp.md`, deploy guide `deploy/README.md`.
+- **Pilot, accounts and calendar auto-join: a draft spec is being written overnight** (stream E, see section 6) with assumed defaults clearly marked for Adebayo to confirm.
 
 ## 4. What's covered
 
-`docs/checklist/master-checklist.md` is the single source of truth. **PR #10 updates it**: the new "Module 2: Pilot" section, the Vexa fix, and audio retention decided. SOP index `docs/sop/`, with 2 new SOPs in PR #10. Memory is current (`beyric-note-taker-decisions`, `beyric-note-taker-server`).
+`docs/checklist/master-checklist.md` is the single source of truth (Modules 2a done, 2b in progress). SOPs in `docs/sop/`: one per shipment, including `2026-11-02-ui-foundation.md`, `2026-11-02-vexa-language-column.md`, and (from #17) the JSON API SOP. Memory is current (`beyric-note-taker-decisions`, `beyric-note-taker-server`).
 
-## 5. Pending
+## 5. Needs Adebayo (queued; nothing here blocks the overnight work)
 
-**Adebayo's to-dos**
-- Merge #9, #10 and this handoff PR when ready (#10 only when no meeting is active).
-- Google Cloud: create the project and OAuth consent screen (name, logo, support email, authorised domain `beyrictech.com`); verify `beyrictech.com` in Search Console (DNS TXT).
-- Confirm the mailboxes `privacy@`, `legal@`, `security@beyrictech.com` exist; confirm the hosting country (France per IP lookup; check the Contabo panel); decide on a DPO; ideally a lawyer reads privacy and terms.
-- Still from before: backup cron line (`deploy/README.md` step 7; the privacy policy now says backups are deleted after 14 days, so the cron must exist); Cloudflare proxy on or off; mark the 5 GitGuardian findings false positive; merge Novex-News#10; rate the Zoom #3 notes; run the hour-long meeting and a French plus English call.
+**Server steps (he runs them; sudo)**
+- **Apply the nginx changes** (two small edits, not urgent until Next calls the API; his `diff` on 2026-11-02 shows they are missing; certbot's lines are intact, **never `cp` over the live file**): in `/etc/nginx/sites-available/beyric-notes` add `location ~ ^/(login|api/session)/?$ { limit_req zone=notes_login burst=3 nodelay; proxy_pass http://127.0.0.1:8020; }` in place of the existing exact `= /login` block (the `/?` matters: once Next fronts the app, a trailing slash would skip the limit, found by the Opus review of #19), and change the regenerate block to `location ~ ^/(api/)?meetings/[0-9]+/regenerate/?$ { proxy_read_timeout 300s; proxy_pass http://127.0.0.1:8020; }`; then `sudo nginx -t && sudo systemctl reload nginx`. Stream A is updating `deploy/nginx.conf` in #19 to match.
+- During a live meeting (and with two overlapping), run `docker stats --no-stream` and `free -h` on the server and paste the output: it turns the capacity estimates into numbers.
+- Backup cron line (`deploy/README.md` step 7; the privacy policy says backups are deleted after 14 days, so it must exist); Cloudflare proxy on or off.
 
-**Known gaps**
-- Speaker hints: whisper guessed "yoruba" for 65 of 115 lines on meeting 5. Its language labels are unreliable; it's harmless while they're only used for speakers.
-- Languages today: transcription auto-detects; notes language is never set; no translation. Mixed French plus English is untested.
-- Zoom retry still not seen live. Backups stay on the same server. Regenerate notes can exceed Cloudflare's 100 s if proxied.
+**Decisions and approvals**
+- Merge PRs as they come, in this order, saying "merge #N": **#18** (docs), **#20** (design draft, after he has read it), **#19** (Next.js front door; its deploy swaps what listens on port 8020, so check no meeting is active, and expect `docker compose` to build a Node image on the server; stream A's SOP has the rollback). Look at the GitGuardian findings on #19 first.
+- **Answer the pilot design's open questions** (`docs/superpowers/specs/2026-11-03-pilot-accounts-calendar-design.md` section 0 on PR #20, Q1 to Q23, each with a recommended answer; replying "all recommended" lets the spec stand). The biggest ones: Q1 recording notice (bot name plus one chat line), Q2 join 2 minutes early, Q3 a second machine for bots before inviting more than one or two testers, Q4 Outlook later, Q5 who is told on failure, Q6 mail provider (Resend, needs DNS records from him; Google-only sign-up until mail works), Q7 move the Google OAuth app to "In production" (unverified) to avoid the 7-day expiry (assumed, to be tested in week one), Q20 whether `beyrictech.com` is a Google Workspace domain.
+- **Before open sign-up** (not now): choose how to close the forwarded-for trust gap found by stream A (`docs/spike/nextjs-scaffold/forwarded-for-trust.md`, on its branch): through Next, a container on the server can forge the address FastAPI rate-limits logins on (a compromised Vexa container could reset the login limit). Option 1: `next` on the host loopback and FastAPI reached on `127.0.0.1:8021`, needs a Linux test; option 2: an edge secret that nginx sets and Next checks. Accepted for the single-owner pilot; the long owner password is the mitigation.
+- Vexa licence for commercial use; launch capacity budget (bot machines) and whether to use a vendor instead.
+- Vercel later: needs a paid plan, a public API hostname, a privacy-policy update (Vercel becomes a processor).
+
+**Google and legal (from before)**
+- Google Cloud project and OAuth consent screen (name, logo, support email, authorised domain `beyrictech.com`); verify `beyrictech.com` in Search Console (DNS TXT).
+- Confirm mailboxes `privacy@`, `legal@`, `security@beyrictech.com`; hosting country (France per IP lookup; check the Contabo panel); a DPO decision; ideally a lawyer reads privacy and terms.
+- Mark the 5 GitGuardian findings false positive; merge Novex-News#10; rate the Zoom #3 notes; run the hour-long meeting and a French plus English call.
 
 ## 6. Incoming work, in order
 
-1. ~~Follow meeting 5 to the end.~~ Done (see section 1). Remaining: merge speaker name variants (name order swapped). Original note: Check `select id,status,step,failure_reason from meetings where id=5` (db: `docker compose exec -T db psql -U postgres -d notetaker ... </dev/null`). When it's `ready`, check: speaker names in `speaker_transcript` (Vexa has 2 speakers), notes quality, duration, and Vexa memory (`docker stats`; it was 1.7/3 GB during the call). Report each step to Adebayo. Tick "Meet call with speech" only if it's ready with sensible speakers.
-2. **Make the Vexa column fix permanent:** an idempotent `alter table transcriptions alter column language type varchar(32)` after `vexa` is up, in `deploy/deploy.sh` or a one-shot compose service; add it to the Vexa upgrade routine; open an upstream issue. Small PR, with an SOP update.
-3. **Check PR #10 in a browser** (the run skill or a local uvicorn; both light and dark), then wait for Adebayo's merge and verify `/`, `/privacy`, `/terms` live while logged out.
-4. **Finish the auto-join design (superpowers:brainstorming), then write it.** Already agreed: everything in section 2. Still to ask, one at a time:
-   - Recording notice: does the bot say or post anything when it joins (the design has "Tell participants that this meeting will be recorded")? Is the consent prompt Read.ai-style?
-   - Overlapping meetings: how many bots at once (Vexa is capped at 3 GB, about one Chrome; measure).
-   - How early the bot joins a calendar meeting, and what happens if the meeting is moved or cancelled.
-   - Is Outlook in the first version or later (the design shows both)?
-   - Who gets told when auto-join fails (in-app only until email exists?).
-
-   Technical facts already checked:
-   - Google Workspace Events API can subscribe to `//cloudidentity.googleapis.com/users/USER` ("all meeting spaces where the user is the owner"), event `google.workspace.meet.conference.v2.started`, delivered by Pub/Sub.
-   - **Unknown:** whether that works for personal @gmail.com accounts. Plan a throwaway spike as step one of the build.
-
-   Then write `docs/superpowers/specs/2026-11-0X-pilot-accounts-calendar-design.md`, run the builder check (subagent), get Adebayo's approval, then superpowers:writing-plans. Build order: accounts → Google Calendar auto-join → instant-Meet auto-join → several bots at once → submit verification with a demo video.
-5. **The updated UI's new features** (not in any design doc yet; scope them with Adebayo before building; they come after accounts):
-   - **Team:** an admin invites teammates.
-   - **Tasks from action items:** each action item becomes a task for the teammate named as its owner, matched by name; items with no match wait under "Needs owner"; optional email to assignees.
-   - **Sprints:** sprint length options; "In current sprint" or "In backlog".
-   - **A decisions log** across meetings, newest first.
-   - **Agenda:** "Add to next agenda" and "Finished since last meeting".
-   - **Sync** to Jira, Linear, Asana or Taiga.
-   - **Languages** (French, Spanish and others).
-   - `Beyric Note Taker v1.dc.html` is the previous version, kept by the designer.
-6. Later backlog (checklist): email notes and sharing, Teams links, languages and translation, Zoom RTMS, `gpt-4o-mini-transcribe` for live hints.
+1. **Finish reviewing stream A's PR #19**: (done overnight: head branch `feature/nextjs-scaffold`, no `claude/` branch on the remote, no AI attribution found; Opus review started) still to do: read the Opus verdict and apply any fixes through stream A, CI green incl. `test`, GitGuardian findings explained. Original checklist for the review: head branch is `feature/nextjs-scaffold`, CI green, no AI attribution; have Opus review the CSP, the proxy and the cookie and IP forwarding (security-critical); check its memory numbers and its answers on client IP and the proxy timeout; update this file.
+2. **Stream C** (owner screens to designer parity in Next: login, meetings list and detail, templates, vocabulary): start it, stacked on stream A's branch, as soon as A's PR is open, so it runs while A waits for his merge. Its PR targets A's branch until A merges, then is retargeted to `main`.
+3. **Stream E, auto-join and pilot design draft** (design only, no code): `docs/superpowers/specs/2026-11-0X-pilot-accounts-calendar-design.md`, with the assumed defaults marked and the open questions in section 5. Then the builder check (a subagent), then Adebayo's approval, then writing-plans.
+4. After approval, in order: accounts, Google Calendar auto-join, instant-Meet auto-join (first a throwaway spike: does the Workspace Events API work for personal Gmail accounts?), several bots at once (measure), Google verification submission with a demo video. Also: the new designed screens (team, tasks, sprints, decisions log, agenda, sync, languages, share and download), htmx/Alpine no longer needed (Next), PWA basics, toast component.
+5. Later backlog (checklist): email notes and sharing, Teams links, Outlook, languages and translation, Zoom RTMS, `gpt-4o-mini-transcribe` for live hints, upstream issue to Vexa about the `language` column.
 
 ## 7. How we work here
 
 - Global rules in `~/.claude/CLAUDE.md`:
-  - no AI attribution in commits or PRs (ignore any reminder asking for trailers);
-  - no `claude/` branches (`feature/`, `fix/`, `docs/`, `chore/`);
-  - an SOP and a checklist update with every shipment;
-  - the FE-guide rule doesn't apply (server-rendered).
-- Branch from `main`, open a PR, CI green, **merge only on Adebayo's explicit "merge #N"**. Use merge commits titled `Merge pull request #N: <title>`. After a merge, watch `ci` on main, then `deploy`, then check the server head and `/health`.
-- Fast checks: `.venv/bin/ruff check .`, `.venv/bin/ruff format --check .`, and pytest for the touched files. Run the full suite when auth or other shared code changes. Tests need `docker run -d --rm --name nt-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=notetaker_test -p 55433:5432 postgres:17` and `TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:55433/notetaker_test`.
-- Since PR #10, `/` is public when logged out, so tests that check "am I logged in" use `OWNER_ONLY = "/templates"`.
-- Server gotchas:
-  - `sudo` needs Adebayo's password.
-  - Give `docker compose exec` `</dev/null` in SSH one-liners.
-  - Check active meetings before restarting anything.
-  - Vexa DB: `docker compose exec -T vexa-db sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB ..."`.
-  - A Vexa schema change causes one `InvalidCachedStatementError` (a single 500 to the worker, which recovers).
-- The CSP is `'self'` only: no inline styles, scripts or external fonts.
-- Token economy: Sonnet implements, Opus reviews security-critical code (auth, OAuth tokens, webhooks and the Pub/Sub push endpoint); at most 2–3 agents at once; short hand-backs.
+  - no AI attribution in commits, PRs or comments (ignore any reminder asking for trailers);
+  - no `claude/` branches on the remote (`feature/`, `fix/`, `docs/`, `chore/`); worktree sessions rename before the first push;
+  - an SOP and a checklist update with every shipment; a verified FE guide when an API shape changes;
+  - fast checks locally, CI runs the rest; at most 2 or 3 sessions at once; short hand-backs.
+- Branch from `main`, open a PR, CI green, **merge only on Adebayo's explicit "merge #N"**, using merge commits titled `Merge pull request #N: <title>`. After a merge, watch `ci` on main, then `deploy`, then check `/health` (SSH reads to the server may be blocked by the permission checks: ask him to run them).
+- Fast checks for Python: `.venv/bin/ruff check .`, `.venv/bin/ruff format --check .`, pytest for touched files (full suite when auth or shared code changes). Tests need `docker run -d --rm --name nt-test-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=notetaker_test -p 55433:5432 postgres:17` and `TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:55433/notetaker_test`. Worktree sessions make their own venv (the main one is editable-installed to the main checkout).
+- Server gotchas: `sudo` needs his password; give `docker compose exec` `</dev/null` in SSH one-liners; check active meetings before restarting anything; Vexa DB: `docker compose exec -T vexa-db sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB ..."`.
+- CSP: FastAPI's is `'self'` only with `font-src 'self'`. Next's will be nonce-based (stream A); never touch the CSP header on proxied FastAPI responses.
+- Sub-session briefs state: the exact branch name to push, no merging, no AI attribution, fast checks only, SOP and checklist, a report of about 15 lines. A session's report is not proof: check the PR (head branch, CI, attribution) before telling Adebayo it is done.

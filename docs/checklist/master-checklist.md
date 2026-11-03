@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status (2026-11-02, evening):** MVP live at notes.beyrictech.com (PRs #1–#8 merged and deployed). Task 8 acceptance is under way (meeting 5, a Meet call with speech). The next module, Pilot (accounts plus calendar auto-join), is being designed; its public pages are built (`feature/public-pages`).
+**Status (2026-11-02, night):** MVP live at notes.beyrictech.com (PRs #1–#17 merged and deployed). The UI foundation (Module 2a) and the JSON API are shipped; the frontend is moving to Next.js (Module 2b, stream A in progress). The Pilot module (accounts plus calendar auto-join) has a design draft in progress. Next steps and Adebayo's queued items are in `docs/HANDOFF-master.md`.
 
 Legend: `[x]` done and verified, `[ ]` not done.
 

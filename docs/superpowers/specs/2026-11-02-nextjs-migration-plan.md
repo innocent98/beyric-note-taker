@@ -20,6 +20,10 @@ internet -> nginx (unchanged) -> 127.0.0.1:8020 -> Next.js (front door)
 - CSP: pages Next renders get a nonce-based CSP from middleware (no `unsafe-inline`); proxied FastAPI responses keep FastAPI's own CSP header untouched. To be proven in the spike.
 - Fonts, tokens, components: `app/static/tokens.css`, the fonts and `components.css` are ported to `web/` (they are plain CSS). Jinja macros become React components. The no-colour-literal, no-inline-style and "every component in the style guide" guards are ported as tests.
 
+## Hosting
+
+**VPS for now** (Adebayo, 2026-11-02): Next.js runs in our compose stack on `haven-respite`. Vercel is a possible later move, so `web/` stays host-agnostic (FastAPI origin from one env var, no VPS-network assumptions, Docker image kept as the fallback). Before any move: FastAPI needs a public hostname with TLS, cookie domain and SameSite settings, proxy timeouts for slow routes checked, the privacy policy updated (Vercel becomes a processor), and a paid plan.
+
 ## Streams
 
 | Stream | Scope | Branch | Touches |
