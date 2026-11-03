@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app import auth, services
 from app.db import get_session
 from app.models import User
-from app.pipeline import MAX_JOIN_ATTEMPTS, REMOVAL_REASONS
+from app.pipeline import MAX_JOIN_ATTEMPTS, REMOVAL_REASONS, is_join_failure
 from app.services import (
     Refused,
     get_openai_client,
@@ -140,13 +140,16 @@ def create_meeting(
 
 
 def _meeting_page(request, session: Session, meeting, status_code=200, **context):
+    block = retry_block(meeting) if meeting.status == "failed" else None
     return render(
         request,
         "meeting.html",
         status_code,
         meeting=meeting,
         templates=services.list_templates(session, request.state.user),
-        retry_block=retry_block(meeting) if meeting.status == "failed" else None,
+        retry_block=block,
+        refused_wait=block is not None and is_join_failure(meeting),
+        retry_block_message=services.retry_block_message(meeting, block),
         bot_left_early=meeting.completion_reason in REMOVAL_REASONS,
         max_join_attempts=MAX_JOIN_ATTEMPTS,
         **context,
@@ -202,10 +205,11 @@ def retry(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
+    vexa=Depends(get_vexa),
 ):
     meeting = meeting_or_404(session, user, meeting_id)
     try:
-        services.retry_meeting(session, meeting)
+        services.retry_meeting(session, meeting, vexa)
     except Refused as exc:
         return _meeting_page(request, session, meeting, exc.status, error=exc.message)
     return see_other(f"/meetings/{meeting.id}")

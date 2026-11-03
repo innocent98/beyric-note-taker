@@ -77,6 +77,8 @@ Earlier decisions stand (summarised in memory `beyric-note-taker-decisions`): mo
 
 **Found live 2026-11-03 (meeting 8):** a bot that Google refuses to let ask to join (HTTP 403, `DisconnectedError`) sits in a dead lobby for about 8 minutes and the meeting stays `bot_sent`. Fail-fast follow-up with the evidence is in the checklist under "Found in live use" ("Fail fast when Google refuses the bot's join request"); do it before the calendar auto-join work depends on joins, since unattended joins need this failure to be visible quickly.
 
+**Vexa on the server is v0.12.29 since 2026-11-03 ~13:00 WAT** (was v0.12.28). The Mac experiment, arm A (v0.12.28, home address) reached the lobby 0 of 4 times, so the refusal is not specific to the server's address; arm B (v0.12.29) decides whether the upgrade is enough. Plan B/C (signed-in bot account, hosted vendor) is PR #34 / `docs/superpowers/plans/2026-11-03-meet-signed-in-bot-and-vendor.md`.
+
 ## 7. How we work here
 
 - Global rules in `~/.claude/CLAUDE.md`:

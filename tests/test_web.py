@@ -17,7 +17,7 @@ from app.main import create_app
 from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import HEADINGS
 from app.passwords import hash_password
-from app.pipeline import REASON_NO_SPEECH
+from app.pipeline import REASON_JOIN_REFUSED, REASON_NO_SPEECH
 from app.vexa import VexaError
 from app.web import get_openai_client, get_vexa
 
@@ -913,11 +913,55 @@ def test_regenerate_and_cancel_buttons_disable_on_submit(client, template, sessi
 
 
 def test_meeting_page_says_when_a_new_bot_was_sent(client, template, session):
-    retrying = add_meeting(session, template, join_attempts=2)
+    retrying = add_meeting(
+        session, template, platform="zoom", native_id="12345678901", url=ZOOM, join_attempts=2
+    )
     page = client.get(f"/meetings/{retrying.id}").text
     assert "Zoom turned the bot away, so a new one was sent (attempt 2 of 3)." in page
     first = add_meeting(session, template)
-    assert "Zoom turned the bot away" not in client.get(f"/meetings/{first.id}").text
+    assert "turned the bot away" not in client.get(f"/meetings/{first.id}").text
+
+
+def test_meeting_page_says_a_refused_meet_bot_is_paused_before_one_retry(client, template, session):
+    paused = add_meeting(
+        session,
+        template,
+        completion_reason="google_meet_join_refused",
+        terminal_seen_at=datetime.now(UTC),
+    )
+    page = client.get(f"/meetings/{paused.id}").text
+    assert "Google would not let the bot ask to join" in page
+    assert "A new bot will be sent in a few minutes (attempt 2 of 2)." in page
+
+
+def test_a_refused_meeting_page_shows_the_wait_then_a_working_send_again(
+    client, template, session, fake_vexa
+):
+    refused = add_meeting(
+        session,
+        template,
+        status="failed",
+        failure_reason=REASON_JOIN_REFUSED,
+        completion_reason="google_meet_join_refused",
+        terminal_seen_at=datetime.now(UTC) - timedelta(minutes=1),
+        join_attempts=2,
+        vexa_meeting_id="1",
+    )
+    page = client.get(f"/meetings/{refused.id}").text
+    assert "try sending the bot again in a few minutes" in page and "in 4 minutes" in page
+    assert f"/meetings/{refused.id}/retry" not in page
+    assert (
+        post(client, f"/meetings/{refused.id}/retry", page=f"/meetings/{refused.id}").status_code
+        == 409
+    )
+    assert fake_vexa.sent == []
+    refused.terminal_seen_at = datetime.now(UTC) - timedelta(minutes=6)
+    session.commit()
+    assert f"/meetings/{refused.id}/retry" in client.get(f"/meetings/{refused.id}").text
+    response = post(client, f"/meetings/{refused.id}/retry", page=f"/meetings/{refused.id}")
+    assert response.status_code == 303
+    session.refresh(refused)
+    assert refused.status == "bot_sent" and fake_vexa.sent == [MEET]
 
 
 # ---- public pages ----

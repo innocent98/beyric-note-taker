@@ -23,5 +23,8 @@ Tests use the reason string captured live: a refusal sends a new bot and follows
 ## Operate / roll back
 Change the cap with `MAX_JOIN_ATTEMPTS` in `app/pipeline.py`. Roll back by reverting the PR; `alembic downgrade 0004` drops the column.
 
+## Update 2026-11-03
+`_resend` was split: `send_again` (shared) and `_resend`, which fails the meeting with a given reason. Google Meet refusals reuse `send_again` with their own pacing; see `docs/sop/2026-11-03-join-refusal-handling.md`. The Zoom retry itself is unchanged.
+
 ## Follow-ups
 - If Zoom keeps refusing, the lasting fix is Zoom RTMS, which needs a Zoom Marketplace app.
