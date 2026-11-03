@@ -9,6 +9,15 @@ export function formatTime(iso: string): string {
   return `${two(d.getUTCDate())} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${two(d.getUTCHours())}:${two(d.getUTCMinutes())} UTC`;
 }
 
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// "Mon 2 Nov 2026": the day of a meeting in the Decisions and Review groups (UTC, like formatTime).
+export function formatDay(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
 export function platformLabel(platform: "google_meet" | "zoom"): string {
   return platform === "zoom" ? "Zoom" : "Google Meet";
 }

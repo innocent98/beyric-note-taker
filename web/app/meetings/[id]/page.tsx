@@ -3,9 +3,12 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { AppShell } from "@/components/app/shell";
 import { MeetingView } from "@/components/app/meeting-view";
-import { load, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, load, requireOwner } from "@/lib/api/server";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
+};
 
 // Ids are 1 to 10 digits; anything else is a 404 without asking FastAPI (which would say the same).
 function parseId(raw: string): number {
@@ -24,13 +27,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `Meeting ${meeting.native_id}`, robots: { index: false, follow: false } };
 }
 
-export default async function MeetingPage({ params }: Props) {
+export default async function MeetingPage({ params, searchParams }: Props) {
   const id = parseId((await params).id);
+  // The Review screen's "Open transcript" lands on the transcript tab.
+  const { tab } = await searchParams;
   const api = await requireOwner();
   const [meeting, templates] = await Promise.all([fetchMeeting(id), load(api.templates.list())]);
   return (
-    <AppShell current="meetings">
-      <MeetingView initial={meeting} templates={templates} />
+    <AppShell current="meetings" reviewOpen={await getReviewOpen()}>
+      <MeetingView initial={meeting} templates={templates} initialTab={tab === "transcript" ? "transcript" : "notes"} />
     </AppShell>
   );
 }

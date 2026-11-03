@@ -1,15 +1,18 @@
 import type { ReactNode } from "react";
 import { IconButton, Logo, NavLink } from "@/components/ui";
 
-export type NavSection = "meetings" | "templates" | "vocabulary";
+export type NavSection = "meetings" | "decisions" | "review" | "templates" | "vocabulary";
 
 // The owner app's frame: a sidebar on desktop, a top bar on phones (components.css). Log out is a
-// plain form post to /logout (app/logout/route.ts), so it works without JavaScript.
+// plain form post to /logout (app/logout/route.ts), so it works without JavaScript. `reviewOpen` is
+// `badges.review_open` from GET /api/session (null when unknown): the count beside Review.
 export function AppShell({
   current,
+  reviewOpen = null,
   children,
 }: {
   current: NavSection;
+  reviewOpen?: number | null;
   children: ReactNode;
 }) {
   return (
@@ -23,6 +26,8 @@ export function AppShell({
         </div>
         <nav className="nav" aria-label="Main">
           <NavLink href="/" label="Meetings" current={current === "meetings"} />
+          <NavLink href="/decisions" label="Decisions" current={current === "decisions"} />
+          <NavLink href="/review" label="Review" current={current === "review"} badge={reviewOpen ?? 0} />
         </nav>
         <div className="nav-label">Configure</div>
         <nav className="nav" aria-label="Configure">

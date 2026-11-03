@@ -55,6 +55,12 @@ export const getPilot = cache(async (): Promise<Pilot | null> => {
   }
 });
 
+// The count beside Review in the sidebar: `badges.review_open` of the session this request already
+// read. null when it is not known (FastAPI unreachable); the shell then draws no badge.
+export async function getReviewOpen(): Promise<number | null> {
+  return (await getSession())?.badges?.review_open ?? null;
+}
+
 // For pages that are only for the owner. Anyone else goes to /login.
 export async function requireOwner() {
   const session = await getSession();

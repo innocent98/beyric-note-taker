@@ -43,3 +43,15 @@ export function capturedAccount(file: string): AccountCapture {
 export function accountBody<T>(file: string): T {
   return capturedAccount(file).response.body as T;
 }
+
+// The body of a capture from the running API for the AI workspace routes
+// (docs/fe-captures/ai-workspace-w1/<file>).
+export function workspaceBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/ai-workspace-w1", file))).response.body as T;
+}
+
+// The error a captured failing response carries (the `ApiError` arguments).
+export function workspaceError(file: string): { status: number; code: string; message: string } {
+  const { response } = JSON.parse(read(join(REPO, "docs/fe-captures/ai-workspace-w1", file)));
+  return { status: response.status, ...response.body.error };
+}
