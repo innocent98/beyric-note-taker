@@ -175,8 +175,8 @@ def log_in(body: Login, request: Request, session: Session = Depends(get_session
     401 `invalid_credentials` for a wrong password or an unknown email (the same answer for
     both, and for an account whose email was never confirmed). 403 `account_suspended` when the
     password was right but the account is suspended. The login limits are the page's: 5 failed
-    attempts per client address in 5 minutes and 10 per email in an hour, then 429. The response carries the new
-    session's CSRF token: it replaces the one from before login.
+    attempts per client address in 5 minutes and 10 per email in an hour, then 429. The response
+    carries the new session's CSRF token: it replaces the one from before login.
     """
     services.log_in(request, session, body.email, body.password)
     return _session_state(request, session)
