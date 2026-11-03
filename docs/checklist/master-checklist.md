@@ -126,7 +126,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Guard tests kept; new tests for notes sections, legal contents list, logo, landing links, Show / Hide
   - [x] CI green (PR merged and deployed 2026-11-03)
   - [x] Decided 2026-11-03 (Adebayo): keep the designer's landing and sign-in words even though some run ahead of the product (Teams, tasks, integrations, sharing); revisit before the Google verification submission
-  - [ ] Run `owner-e2e.mjs` and `owner-browser-check.mjs` on the compose stack (PR #26 deployed without them; no record that they ran)
+  - [x] Run `owner-e2e.mjs` and `owner-browser-check.mjs` on the compose stack (2026-11-03: 41/41 and all pass, also with `--poll-check` and `--send-check`; SOP `2026-11-03-ui-parity.md`, "Live check"). Live public pages read in a browser; favicon link fixed. Still open: a live authenticated pass by Adebayo, and the designed 404 for unknown URLs (FastAPI JSON shows)
   - [ ] Needs backend, not built (listed in the report): sign-up, forgot password, SSO, accounts and sidebar identity, calendar and auto-join card, series, tasks, projects, decisions, review, team, settings, download, share, translation, agenda, template delete, Emails
 - [ ] Stream D, new designed screens: accounts and pilot, calendar and auto-join, team, tasks, sprints, share and download, translation
 - [ ] Retire Jinja and the Module 2a CSS once every page is migrated
@@ -163,7 +163,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 
 ## Deferred follow-ups
 
-- [ ] Remove the default trusted-proxy fallback (`172.28.0.1`, `trusted_proxy_ips`, hard-coded `next` trust) once `EDGE_SHARED_SECRET` is live on the server (Opus review finding 6; `docs/sop/2026-11-03-edge-secret-and-login-limits.md`)
+- [x] Remove the default trusted-proxy fallback (`172.28.0.1`, `trusted_proxy_ips`, hard-coded `next` trust) once `EDGE_SHARED_SECRET` is live on the server (done 2026-11-03, `chore/remove-trusted-proxy-fallback`; Opus review finding 6; `docs/sop/2026-11-03-edge-secret-and-login-limits.md`)
 - [ ] Run `deploy/nginx-limit-check.sh` (and, if cheap, `docs/spike/edge-secret/e2e.sh`) in CI
 - [ ] Alert the owner on an account lockout (today a log line only); per-account device cookie with the accounts work
 - [ ] Test paid Zoom accounts

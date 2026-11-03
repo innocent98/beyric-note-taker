@@ -1,5 +1,7 @@
 # SOP: Deployment files (Task 7, files only)
 
+> **Update 2026-11-03:** `TRUSTED_PROXY_IPS` and the trusted-proxy rule described below no longer exist. The client address now comes from an edge secret (`docs/sop/2026-11-03-edge-secret-and-login-limits.md`); the setting is ignored if still present in a `.env`.
+
 ## What shipped
 Everything needed to deploy on one Ubuntu 24.04 server, written and validated locally: `deploy/nginx.conf`, `deploy/backup.sh`, `deploy/README.md`, and `compose.yaml`, `Dockerfile`, `.env.example` changes. Commit: `chore: add deployment setup`. **The server steps have not been run**; Task 7 stays open in the checklist.
 

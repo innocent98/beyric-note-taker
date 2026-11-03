@@ -34,7 +34,6 @@ services:
       SESSION_SECRET: ${E2E_SESSION_SECRET}
       COOKIE_SECURE: "false"
       EDGE_SHARED_SECRET: ${E2E_EDGE_SECRET-}
-      TRUSTED_PROXY_IPS: ${E2E_TRUSTED_PROXY_IPS-}
     networks:
       appdb: {}
       front: {ipv4_address: 172.28.1.20}

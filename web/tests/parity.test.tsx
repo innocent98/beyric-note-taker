@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { metadata } from "@/app/layout";
 import { wrapSections } from "@/components/app/notes-html";
 import { Landing, LandingFooter, LandingHeader } from "@/components/landing/landing";
 import { PrivacyContent } from "@/components/legal/privacy-content";
@@ -8,6 +9,14 @@ import { PRIVACY_TOC, TERMS_TOC } from "@/components/legal/toc";
 import { Logo } from "@/components/ui";
 
 // Checks that keep the pages on the designer's structure (docs/ui/parity-report.md).
+
+describe("site icons", () => {
+  it("declares the favicon and the Apple icon in the layout metadata", () => {
+    const icons = metadata.icons as { icon: { url: string }[]; apple: string };
+    expect(icons.icon.map((i) => i.url)).toContain("/icon.svg");
+    expect(icons.apple).toBe("/icons/apple-touch-icon.png");
+  });
+});
 
 describe("notes sections", () => {
   const html = "<h2>Summary</h2>\n<p>Hello</p>\n<h2>Decisions</h2>\n<ul><li>Ship</li></ul>\n<h2>Open questions</h2>\n<p>None noted</p>\n<h2>Please check</h2>\n<p>None noted</p>\n";

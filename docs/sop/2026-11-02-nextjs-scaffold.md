@@ -1,6 +1,6 @@
 # SOP: Next.js scaffold (stream A of the migration)
 
-> **Update 2026-11-03:** the forwarded-for trust gap described below (the `TRUSTED_PROXY_IPS` rule, `--forwarded-allow-ips`, the sign-up blocker) is closed by an edge secret: `docs/sop/2026-11-03-edge-secret-and-login-limits.md`. uvicorn no longer trusts any peer by address.
+> **Update 2026-11-03:** the forwarded-for trust gap described below (the `TRUSTED_PROXY_IPS` rule, `--forwarded-allow-ips`, the sign-up blocker) is closed by an edge secret: `docs/sop/2026-11-03-edge-secret-and-login-limits.md`. uvicorn no longer trusts any peer by address. The app-side address fallback that was left for the rollout (`TRUSTED_PROXY_IPS`, and `next`'s address) was removed on 2026-11-03: without the secret `X-Forwarded-For` is now never believed, and a leftover `TRUSTED_PROXY_IPS` is ignored.
 
 ## What shipped
 `web/`, a Next.js 16 app (App Router, TypeScript, npm, Node 22, standalone output) that becomes the front door on host port `127.0.0.1:8020`. It renders the pages it owns (`/privacy`, `/terms` live; `/welcome` and `/styleguide` for review) and proxies every other path to FastAPI, which moves to `127.0.0.1:8021`. Branch `feature/nextjs-scaffold`, PR against `main` (not merged). Plan: `docs/superpowers/specs/2026-11-02-nextjs-migration-plan.md`.

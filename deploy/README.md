@@ -139,8 +139,7 @@ Edit `.env`:
 | `OWNER_EMAIL`, `OWNER_PASSWORD` | The admin account's email and a long password. Migration `0006` creates the account from them (once; later changes to these two do nothing), and the sign-in is then email plus password. **Both must be in `.env` before the first deploy that contains migration `0006`**, or that migration fails and rolls back. `OWNER_PASSWORD` can be removed after it has run |
 | `SESSION_SECRET` | `openssl rand -hex 48` |
 | `APP_ENV`, `COOKIE_SECURE` | `production`, `true` |
-| `EDGE_SHARED_SECRET` | `openssl rand -hex 32`, the **same value** nginx sends as `X-Edge-Secret` (section 6, "Edge secret"). Empty = not configured: the app starts, logs a warning, and falls back to `TRUSTED_PROXY_IPS`, which a container on the server can forge |
-| `TRUSTED_PROXY_IPS` | Transitional. Read only while `EDGE_SHARED_SECRET` is empty: peers whose `X-Forwarded-For` is believed (default `172.28.0.1`; `next`, `172.28.1.10`, is always on top). Delete it from `.env` once the secret is live; it does nothing then |
+| `EDGE_SHARED_SECRET` | `openssl rand -hex 32`, the **same value** nginx sends as `X-Edge-Secret` (section 6, "Edge secret"). Empty = not configured: the app starts and logs a warning, and every client is limited as the proxy's address (one shared login limit for all visitors, so set it). `X-Forwarded-For` is never believed without it |
 | `AUDIO_RETENTION_DAYS` | Optional, default `7`. The same value is shown on `/privacy` (compose passes it to `next`) |
 
 ## 4. Start Vexa and create the app's key
@@ -252,7 +251,8 @@ shows `arrived without a valid X-Edge-Secret header`, a request reached `next` w
 through nginx, or nginx lost the include: look at the site file first.
 
 The app never refuses to start without the secret; it logs `EDGE_SHARED_SECRET is not set ...`
-at startup, and until the secret is set the address can still be forged by any container. Rotate
+at startup, and until the secret is set every visitor is limited as the proxy's address (one shared
+login limit; the forwarded address is never believed). Rotate
 by repeating steps 1 to 4 with a new value, replacing the old `.env` line and snippet (a short
 window of shared login limits between steps 3 and 4 is harmless). `deploy/nginx-limit-check.sh`
 proves the nginx half (a client-sent `X-Edge-Secret` or `X-Forwarded-For` is replaced) without a
