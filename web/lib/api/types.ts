@@ -22,3 +22,6 @@ export type RetryBlock = NonNullable<Meeting["retry_block"]>;
 export type FieldError = Schemas["FieldError"];
 
 export type ExportFormat = NonNullable<NonNullable<operations["export_meeting"]["parameters"]["query"]>["format"]>;
+export type Pilot = Schemas["PilotOut"];
+export type PilotState = Pilot["state"];
+export type SignUpBody = Schemas["SignUp"];

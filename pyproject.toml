@@ -23,6 +23,8 @@ dependencies = [
     # image already has them through ffmpeg, and the Dockerfile names them anyway.
     "weasyprint>=70",
     "python-docx>=1.1",
+    # AES-256-GCM for the token vault (app/vault.py).
+    "cryptography>=44",
 ]
 
 [project.optional-dependencies]

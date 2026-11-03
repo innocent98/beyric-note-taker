@@ -76,7 +76,10 @@ describe("login", () => {
     await userEvent.type(screen.getByLabelText("Work email"), "owner@example.test");
     await userEvent.type(screen.getByLabelText("Password"), "nope");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    expect((await screen.findByRole("alert")).textContent).toBe("That email or password is not right.");
+    // The API answers an unconfirmed account like a wrong password, so the form adds a line about it.
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "That email or password is not right.If you have just signed up, confirm your email first: check your inbox for the link.",
+    );
     expect((screen.getByRole("button", { name: "Sign in" }) as HTMLButtonElement).disabled).toBe(false);
     expect(mocks.replace).not.toHaveBeenCalled();
   });

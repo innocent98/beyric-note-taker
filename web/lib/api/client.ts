@@ -4,7 +4,9 @@ import type {
   Meeting,
   MeetingList,
   NewMeeting,
+  Pilot,
   SessionState,
+  SignUpBody,
   Template,
   TemplateInput,
   Term,
@@ -36,6 +38,9 @@ export class ApiError extends Error {
 export const GATEWAY_MESSAGE = "The server did not answer in time. Check again in a minute.";
 export const NETWORK_MESSAGE = "Could not reach the server. Check your connection and try again.";
 export const FALLBACK_MESSAGE = "Something went wrong. Please try again.";
+// nginx answers the account routes with its own 429 page (not our JSON) past about 11 calls in a
+// moment from one address (docs/fe-integration-guide-pilot-accounts.md section 4).
+export const RATE_LIMIT_MESSAGE = "Too many attempts. Try again later.";
 
 export type ApiOptions = {
   // "" in the browser (same origin); FastAPI's internal URL on the server.
@@ -78,6 +83,8 @@ export function createApi(options: ApiOptions = {}) {
   const base = (options.baseUrl ?? "").replace(/\/$/, "");
   const doFetch = options.fetch ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   let csrf: string | null = null;
+  // The token the last write went out with, to tell a stale one from a session that never changed.
+  let sentCsrf: string | null = null;
 
   async function send(method: string, path: string, { body, query, write, accept }: Call): Promise<Response> {
     const search = query
@@ -91,7 +98,10 @@ export function createApi(options: ApiOptions = {}) {
       ...((await options.headers?.()) as Record<string, string> | undefined),
     };
     if (body !== undefined) headers["Content-Type"] = "application/json";
-    if (write) headers["X-CSRF-Token"] = csrf ?? (await readSession()).csrf_token;
+    if (write) {
+      sentCsrf = csrf ?? (await readSession()).csrf_token;
+      headers["X-CSRF-Token"] = sentCsrf;
+    }
     let res: Response;
     try {
       res = await doFetch(`${base}${path}${search ? `?${search}` : ""}`, {
@@ -111,6 +121,7 @@ export function createApi(options: ApiOptions = {}) {
   async function fail(res: Response): Promise<never> {
     const type = res.headers.get("content-type") ?? "";
     if (!type.includes("application/json")) {
+      if (res.status === 429) throw new ApiError(429, "too_many_requests", RATE_LIMIT_MESSAGE);
       throw new ApiError(res.status, "gateway_error", GATEWAY_MESSAGE);
     }
     const data = (await res.json().catch(() => null)) as {
@@ -130,8 +141,12 @@ export function createApi(options: ApiOptions = {}) {
       const data = type.includes("application/json") ? await res.clone().json().catch(() => null) : null;
       if (data?.error?.code === "csrf_rejected") {
         csrf = null;
+        const used = sentCsrf;
         const fresh = await readSession();
-        if (fresh.authenticated) res = await send(method, path, call);
+        // Retry for a signed-in visitor, and for a logged-out one whose token really changed (a login
+        // or logout in another tab): a sign-up or reset then does not fail with the typed text kept.
+        // The same token again would only be refused again.
+        if (fresh.authenticated || fresh.csrf_token !== used) res = await send(method, path, call);
       }
     }
     if (!res.ok) return fail(res);
@@ -175,6 +190,23 @@ export function createApi(options: ApiOptions = {}) {
       csrf = state.csrf_token;
       return state;
     },
+    // Public account routes: no session needed, but every write still sends the CSRF token
+    // (docs/fe-integration-guide-pilot-accounts.md section 0).
+    pilot: () => request<Pilot>("GET", "/api/pilot"),
+    signup: (body: SignUpBody) => request<{ status: "check_your_email" }>("POST", "/api/signup", { body, write: true }),
+    resendVerification: (email: string) =>
+      request<{ status: "check_your_email" }>("POST", "/api/signup/resend", { body: { email }, write: true }),
+    verifyEmail: (token: string, password: string) =>
+      request<{ status: "verified" }>("POST", "/api/verify-email", { body: { token, password }, write: true }),
+    forgotPassword: (email: string) =>
+      request<{ status: "check_your_email" }>("POST", "/api/password/forgot", { body: { email }, write: true }),
+    resetPassword: (token: string, password: string) =>
+      request<{ status: "password_changed" }>("POST", "/api/password/reset", { body: { token, password }, write: true }),
+    joinWaitlist: (email: string, name?: string) =>
+      request<{ status: "on_the_list" }>("POST", "/api/waitlist", {
+        body: name ? { email, name } : { email },
+        write: true,
+      }),
     meetings: {
       list: (query: { limit?: number; before_id?: number } = {}) =>
         request<MeetingList>("GET", "/api/meetings", { query }),
