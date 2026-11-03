@@ -21,7 +21,7 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
 <div style="min-height:100vh;display:flex;background:#F6F7F6;font-size:14px;line-height:1.5">
   <aside style="width:232px;flex:none;position:sticky;top:0;height:100vh;background:#FFFFFF;border-right:1px solid #E3E7E5;display:flex;flex-direction:column;padding:16px 12px">
     <div onClick="{{ goMeetings }}" style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:2px 8px 20px">
-      <svg width="28" height="28" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0E6B5E"></rect><path d="M9 8H23a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H15L10.5 24.5V21H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" fill="#FFFFFF"></path><rect x="10.5" y="11.6" width="11" height="1.9" rx=".95" fill="#0E6B5E"></rect><rect x="10.5" y="15.4" width="7" height="1.9" rx=".95" fill="#0E6B5E"></rect></svg>
+      <svg width="28" height="28" viewBox="0 0 120 120"><rect width="120" height="120" rx="28" fill="#0E6B5E"></rect><path d="M38 24V72A24 24 0 1 0 62 48" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round"></path><circle cx="62" cy="72" r="6" fill="#FFFFFF"></circle></svg>
       <div style="display:flex;align-items:baseline;gap:5px;font-size:15px;letter-spacing:-0.01em"><span style="font-weight:650">Beyric</span><span style="font-weight:450;color:#5B6460">Note Taker</span></div>
     </div>
     <nav style="display:flex;flex-direction:column;gap:2px">
@@ -502,7 +502,7 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
           <div style="display:flex;gap:16px;justify-content:space-between;align-items:center;padding:14px 22px 20px;flex-wrap:wrap">
             <div><div style="font-size:14px;font-weight:550">Post tasks to Slack</div><div style="font-size:12px;color:#6E7772">Share new tasks in a channel so the team can track them there.</div></div>
             <sc-if value="{{ slackOff }}"><button onClick="{{ connectSlack }}" style="height:34px;padding:0 14px;border:1px solid #D5DBD8;border-radius:8px;background:#FFFFFF;color:#141917;font-size:13px;font-weight:550;cursor:pointer" style-hover="background:#F6F7F6">{{ slackLabel }}</button></sc-if>
-            <sc-if value="{{ slackOn }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Geist Mono',monospace;font-size:12px;background:#EEF1F0;padding:4px 8px;border-radius:6px">#myway-updates</span><button onClick="{{ disconnectSlack }}" style="border:0;background:transparent;color:#B42318;font-size:13px;font-weight:500;cursor:pointer;padding:4px 0">Disconnect</button></div></sc-if>
+            <sc-if value="{{ slackOn }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px"><span style="font-family:'Geist Mono',monospace;font-size:12px;background:#EEF1F0;padding:4px 8px;border-radius:6px">#beyric-updates</span><button onClick="{{ disconnectSlack }}" style="border:0;background:transparent;color:#B42318;font-size:13px;font-weight:500;cursor:pointer;padding:4px 0">Disconnect</button></div></sc-if>
           </div>
         </section>
         <section style="background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;padding:22px;display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;justify-content:space-between">
@@ -1096,9 +1096,9 @@ const ST = {
 const PEOPLE = {
   Adebayo: { initials: 'AD', avBg: '#E6F1EE', avFg: '#0E6B5E', email: 'adebayo@beyrictech.com' },
   'Adebayo Tosin': { initials: 'AT', avBg: '#E6F1EE', avFg: '#0E6B5E', email: 'adebayo@beyrictech.com' },
-  'Godstime America': { initials: 'GA', avBg: '#FFF1E0', avFg: '#8A4B00', email: 'godstime@beyrictech.com' },
-  Tayo: { initials: 'TA', avBg: '#F7ECF2', avFg: '#8A2E5C', email: 'tayo@beyrictech.com' },
-  MyWay: { initials: 'MW', avBg: '#EEF1F0', avFg: '#4A524E', email: 'team@myway.ng' },
+  'Daniel Okoro': { initials: 'DO', avBg: '#FFF1E0', avFg: '#8A4B00', email: 'daniel@beyrictech.com' },
+  'Amara Nwosu': { initials: 'AN', avBg: '#F7ECF2', avFg: '#8A2E5C', email: 'amara@beyrictech.com' },
+  'Kemi Adeyemi': { initials: 'KA', avBg: '#EEF1F0', avFg: '#4A524E', email: 'kemi.adeyemi@gmail.com' },
   'Ojebola Grace': { initials: 'OG', avBg: '#EEF0F7', avFg: '#3C4A7A', email: 'grace.ojebola@beyrictech.com' },
 };
 const TRANSCRIPT = [
@@ -1211,70 +1211,70 @@ const TR = {
     ],
   },
 };
-const PARTS = { m0: ['Adebayo Tosin', 'Godstime America', 'Tayo', 'MyWay'], default: ['Adebayo', 'Ojebola Grace'] };
+const PARTS = { m0: ['Adebayo Tosin', 'Daniel Okoro', 'Amara Nwosu', 'Kemi Adeyemi'], default: ['Adebayo', 'Ojebola Grace'] };
 const AV = [['#E6F1EE', '#0E6B5E'], ['#EEF0F7', '#3C4A7A'], ['#FFF1E0', '#8A4B00'], ['#F7ECF2', '#8A2E5C'], ['#EEF1F0', '#4A524E']];
 const ini = (n) => n.split(/[\s@.]+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 const COLS = [['todo', 'To do', '#A8AFAB'], ['doing', 'In progress', '#C98A1B'], ['done', 'Done', '#0E6B5E']];
 const DUE_OPTS = ['No due date', 'Today', 'Tomorrow', 'Wed 4 Nov', 'Thu 5 Nov', 'Fri 6 Nov', 'Mon 9 Nov'];
-const MYWAY = {
-  summary: "The meeting covered airport launch preparations, driver recruitment and testing, the move from WhatsApp to Slack for work communications, and weekly team updates. The team plans to test both sides of the booking flow, work on address verification, refine product journeys, and continue preparing for a December 8 launch. No airport parking option was selected.",
+const PLANNING = {
+  summary: "The team reviewed progress on the Client Portal ahead of the December 8 launch. Topics included onboarding testing, payment checkout, the pricing model, moving work updates from WhatsApp to Slack, and hiring a customer success lead. No pricing model was chosen.",
   keyPoints: [
-    "MyWay is exploring three airport parking options: a dedicated space, the general parking lot, or a location outside the airport. Canvassing is planned after the driver supply and booking system are ready.",
-    "The driver-side onboarding screens were updated, and Godstime America reported that Smile ID verification worked in testing. User-to-driver trip synchronization and further user-side testing remain to be checked.",
-    "The discussed driver onboarding flow has four steps: identity verification, address verification, driver and vehicle documents, and payout setup. The driver and vehicle documents are to be reviewed manually.",
-    "Tosin said driver assignments are done and confirmed that corridor-aware matching is implemented.",
-    "Tayo plans to refine the phase one and phase two booking journeys, address pending screens and copy, and log specific work on the tracker. He also raised a need for clarification on outstanding phase two product decisions.",
-    "MyWay said the team is moving official work communications from WhatsApp to Slack so discussions and tasks can be tracked. One-on-one personal conversations may still take place on WhatsApp.",
-    "MyWay said applications had been sent for an operations and pilots lead, but the role had not yet been filled. The person is expected to join on or before Friday.",
+    "Three pricing models are being considered: per seat, per workspace, or usage based. Customer interviews are planned once the onboarding flow is stable.",
+    "Daniel Okoro updated the onboarding screens and reported that email verification worked in testing. Data sync between the web and mobile apps still needs to be checked.",
+    "The onboarding flow has four steps: create account, verify email, invite teammates, and connect a calendar. Workspace approvals for large teams will be reviewed manually.",
+    "Tosin said role-based permissions are done and confirmed that admins can manage billing separately.",
+    "Amara Nwosu plans to refine the phase one and phase two onboarding journeys, finish the empty states and copy, and log specific work on the tracker. She asked for clarity on open phase two product decisions.",
+    "The team is moving official work updates from WhatsApp to Slack so discussions and tasks can be tracked. Personal one-on-one chats may stay on WhatsApp.",
+    "Kemi Adeyemi said interviews for a customer success lead are under way but the role is not filled yet. The person is expected to start on or before Friday.",
     "The planned launch date stated in the meeting is December 8.",
   ],
   decisions: [
-    "Use Slack for official MyWay work discussions and updates going forward.",
-    "Continue with the Monday planning and Friday review cadence.",
-    "Proceed with work on Smile ID address verification; Tosin said he would work on it this week.",
+    "Use Slack for official work discussions and updates going forward.",
+    "Keep the Monday planning and Friday review cadence.",
+    "Finish payment checkout this week; Tosin will own it.",
     "Prepare for the December 8 launch.",
   ],
-  questions: ["Which airport parking option will the team choose?", "What are the outstanding phase two product decisions that Tayo needs clarified?"],
+  questions: ["Which pricing model will the team choose?", "Which phase two product decisions does Amara need clarified?"],
   check: [
-    "The airport company name is transcribed as \u201cBicotni,\u201d and a later phrase appears as \u201cBy coding.\u201d Please confirm the intended name.",
-    "The address-verification status is unclear: the discussion first describes Smile ID as handling it, then says its integration had not been concluded, and Tosin says he will work on it.",
-    "The exact reason for the manual admin approval on Godstime America\u2019s driver account is unclear. The transcript includes both an account approval for NIN verification and a suggestion that manual review may apply when verification is \u201cin review.\u201d",
-    "Tayo\u2019s phrase \u201cfinalize the flying soon, flying soon\u201d is unclear.",
+    "An analytics vendor is transcribed as \u201cMetrika,\u201d and later as \u201cMetric a.\u201d Please confirm the intended name.",
+    "The payment checkout status is unclear: it is first described as working in testing, then as not finished, and Tosin says he will work on it.",
+    "The reason for the manual approval on Daniel Okoro\u2019s test workspace is unclear. The transcript mentions both a large-team approval and a verification that was \u201cin review.\u201d",
+    "Amara\u2019s phrase \u201cfinalize the flow soon, flow soon\u201d is unclear.",
   ],
   transcript: [
-    ['MyWay', '00:12', "Good afternoon everyone. Let's start with the airport. We have three parking options: a dedicated space, the general parking lot, or somewhere just outside the airport."],
-    ['MyWay', '00:41', "We'll canvass once driver supply and the booking system are ready."],
-    ['Godstime America', '02:05', 'I updated the driver onboarding screens. Smile ID verification worked in my test.'],
-    ['Godstime America', '02:31', 'I still need to check that the user and driver sides sync on a trip. I can finish the test this evening.'],
-    ['Adebayo Tosin', '04:10', 'Driver assignment is done, and corridor-aware matching is implemented.'],
-    ['Adebayo Tosin', '04:38', "I'll work on Smile ID address verification this week. It should be ready before Friday."],
-    ['Tayo', '06:02', "I'm refining the phase one and phase two booking journeys and the pending screens. I'll log the specific items on the tracker."],
-    ['Tayo', '06:40', 'I also need clarity on some of the phase two product decisions.'],
-    ['MyWay', '08:15', 'From today, official work goes on Slack, not WhatsApp, so we can track discussions and tasks.'],
-    ['MyWay', '09:02', 'We are still hiring an operations and pilots lead. The person should join on or before Friday. Launch is December 8.'],
+    ['Kemi Adeyemi', '00:12', "Good afternoon everyone. Let's start with pricing. We have three options on the table: per seat, per workspace, or usage based."],
+    ['Kemi Adeyemi', '00:41', "We'll run customer interviews once onboarding is stable."],
+    ['Daniel Okoro', '02:05', 'I updated the onboarding screens. Email verification worked in my test.'],
+    ['Daniel Okoro', '02:31', 'I still need to check that data syncs between web and mobile. I can finish the test this evening.'],
+    ['Adebayo Tosin', '04:10', 'Role-based permissions are done, and admins can manage billing separately.'],
+    ['Adebayo Tosin', '04:38', "I'll take payment checkout this week. It should be ready before Friday."],
+    ['Amara Nwosu', '06:02', "I'm refining the phase one and phase two onboarding journeys and the empty states. I'll log the specific items on the tracker."],
+    ['Amara Nwosu', '06:40', 'I also need clarity on some of the phase two product decisions.'],
+    ['Kemi Adeyemi', '08:15', 'From today, official work goes on Slack, not WhatsApp, so we can track discussions and tasks.'],
+    ['Kemi Adeyemi', '09:02', 'We are still interviewing for a customer success lead. The person should start on or before Friday. Launch is December 8.'],
   ],
 };
-const MW = 'MyWay Monday planning';
+const MW = 'Beyric Monday planning';
 const TASKS = [
-  { id: 't1', title: 'Finish checking user-to-driver booking and trip sync, and test both sides', assignee: 'u2', due: 'Today', status: 'todo', meeting: 'm0', isNew: true, quote: 'Said he could finish the test this evening.' },
+  { id: 't1', title: 'Finish checking web and mobile data sync, and test both apps', assignee: 'u2', due: 'Today', status: 'todo', meeting: 'm0', isNew: true, quote: 'Said he could finish the test this evening.' },
   { id: 't2', title: "Post this week's specific tasks in Slack after testing", assignee: 'u2', due: 'Today', status: 'todo', meeting: 'm0', isNew: true, quote: 'By the end of today.' },
-  { id: 't3', title: 'Specify and log planned design refinements and pending screens on the tracker', assignee: 'u3', due: '', status: 'todo', meeting: 'm0', isNew: true, quote: '' },
-  { id: 't4', title: "Organise the Figma file and move operations back to the team's Figma", assignee: 'u3', due: '', status: 'todo', meeting: 'm0', isNew: true, quote: 'Timing was described as the coming days or weeks.' },
-  { id: 't5', title: 'Work on Smile ID address verification', assignee: 'u1', due: 'Fri 6 Nov', status: 'todo', meeting: 'm0', isNew: true, quote: 'Aim to have it ready before the end of the week.' },
-  { id: 't6', title: 'Support Godstime America during the week', assignee: 'u1', due: 'Fri 6 Nov', status: 'todo', meeting: 'm0', isNew: true, quote: '' },
-  { id: 't7', title: 'Send MyWay the meeting summary', assignee: 'u1', due: '', status: 'todo', meeting: 'm0', isNew: true, quote: 'No due date was stated.' },
-  { id: 't8', title: 'Continue hiring for the operations and pilots lead role', assignee: null, spoken: 'MyWay', due: 'Fri 6 Nov', status: 'todo', meeting: 'm0', isNew: true, quote: 'Intended start on or before Friday.' },
-  { id: 't9', title: 'Set up Slack channels for the MyWay team', assignee: 'u2', due: 'Wed 4 Nov', status: 'doing', meetingTitle: 'Friday review, 30 Oct' },
-  { id: 't10', title: 'Refine phase one booking journey copy', assignee: 'u3', due: 'Thu 5 Nov', status: 'doing', meetingTitle: 'Friday review, 30 Oct' },
-  { id: 't11', title: 'Implement corridor-aware driver matching', assignee: 'u1', due: '', status: 'done', meetingTitle: 'Monday planning, 26 Oct' },
-  { id: 't12', title: 'Update driver onboarding screens', assignee: 'u2', due: '', status: 'done', meetingTitle: 'Monday planning, 26 Oct' },
+  { id: 't3', title: 'Specify and log planned design refinements and empty states on the tracker', assignee: 'u3', due: '', status: 'todo', meeting: 'm0', isNew: true, quote: '' },
+  { id: 't4', title: 'Organise the Figma file and move the design system into the team workspace', assignee: 'u3', due: '', status: 'todo', meeting: 'm0', isNew: true, quote: 'Timing was described as the coming days or weeks.' },
+  { id: 't5', title: 'Finish payment checkout', assignee: 'u1', due: 'Fri 6 Nov', status: 'todo', meeting: 'm0', isNew: true, quote: 'Aim to have it ready before the end of the week.' },
+  { id: 't6', title: 'Support Daniel Okoro with testing during the week', assignee: 'u1', due: 'Fri 6 Nov', status: 'todo', meeting: 'm0', isNew: true, quote: '' },
+  { id: 't7', title: 'Share the meeting summary with the wider team', assignee: 'u1', due: '', status: 'todo', meeting: 'm0', isNew: true, quote: 'No due date was stated.' },
+  { id: 't8', title: 'Continue hiring for the customer success lead role', assignee: null, spoken: 'Kemi Adeyemi', due: 'Fri 6 Nov', status: 'todo', meeting: 'm0', isNew: true, quote: 'Intended start on or before Friday.' },
+  { id: 't9', title: 'Set up Slack channels for the product team', assignee: 'u2', due: 'Wed 4 Nov', status: 'doing', meetingTitle: 'Friday review, 30 Oct' },
+  { id: 't10', title: 'Refine phase one onboarding copy', assignee: 'u3', due: 'Thu 5 Nov', status: 'doing', meetingTitle: 'Friday review, 30 Oct' },
+  { id: 't11', title: 'Implement role-based permissions', assignee: 'u1', due: '', status: 'done', meetingTitle: 'Monday planning, 26 Oct' },
+  { id: 't12', title: 'Update onboarding screens', assignee: 'u2', due: '', status: 'done', meetingTitle: 'Monday planning, 26 Oct' },
 ];
 const MEMBERS = [
   { id: 'u1', name: 'Adebayo Tosin', email: 'adebayo@beyrictech.com', role: 'Owner', status: 'Active', c: 0, you: true, aliases: ['Tosin', 'Adebayo', 's12Adebayo'] },
-  { id: 'u2', name: 'Godstime America', email: 'godstime@beyrictech.com', role: 'Admin', status: 'Active', c: 2, aliases: ['Godstime'] },
-  { id: 'u3', name: 'Tayo', email: 'tayo@beyrictech.com', role: 'Member', status: 'Active', c: 3, aliases: [] },
+  { id: 'u2', name: 'Daniel Okoro', email: 'daniel@beyrictech.com', role: 'Admin', status: 'Active', c: 2, aliases: ['Daniel', 'Dan'] },
+  { id: 'u3', name: 'Amara Nwosu', email: 'amara@beyrictech.com', role: 'Member', status: 'Active', c: 3, aliases: ['Amara'] },
   { id: 'u4', name: 'Ojebola Grace', email: 'grace.ojebola@beyrictech.com', role: 'Member', status: 'Active', c: 1, aliases: ['Grace'] },
-  { id: 'u5', name: '', email: 'ops@myway.ng', role: 'Member', status: 'Invited', c: 4, aliases: [] },
+  { id: 'u5', name: '', email: 'kemi.adeyemi@gmail.com', role: 'Member', status: 'Invited', c: 4, aliases: [] },
 ];
 const TODAY = '2026-11-02';
 const ASSIGNED = { '2026-11-02': 'Today, Mon 2 Nov', '2026-10-30': 'Fri 30 Oct', '2026-10-26': 'Mon 26 Oct' };
@@ -1284,7 +1284,7 @@ const DUE_ORDER = ['Today', 'Tomorrow', 'Wed 4 Nov', 'Thu 5 Nov', 'Fri 6 Nov', '
 const DONE_LABEL = { '2026-11-02': 'Today, Mon 2 Nov', '2026-10-31': 'Sat 31 Oct', '2026-10-30': 'Fri 30 Oct', '2026-10-29': 'Thu 29 Oct' };
 ['t11', 't12'].forEach((id) => { TASKS.find((t) => t.id === id).doneOn = TODAY; });
 const PROJECTS = [
-  { id: 'p1', name: 'MyWay', dot: '#0E6B5E', series: ['s1', 's2'], keywords: ['MyWay', 'driver', 'airport', 'booking'], sprintLen: '' },
+  { id: 'p1', name: 'Client Portal', dot: '#0E6B5E', series: ['s1', 's2'], keywords: ['portal', 'onboarding', 'checkout', 'pricing'], sprintLen: '' },
   { id: 'p2', name: 'Beyric Note Taker', dot: '#3C4A7A', series: [], keywords: ['Beyric', 'note taker', 'transcript'], sprintLen: '' },
 ];
 const PCOLORS = ['#0E6B5E', '#3C4A7A', '#8A4B00', '#8A2E5C', '#1F6FB2', '#4A524E'];
@@ -1317,14 +1317,14 @@ TASKS.push(
   { id: 't14', title: 'Decide how sending the note taker can be automated', assignee: 'u1', due: '', status: 'todo', meetingTitle: 'Zoom 88205679674, 2 Nov', project: 'p2', sprint: null, assignedOn: TODAY },
 );
 const SERIES = [
-  { id: 's1', last: '2026-11-02', lastLabel: 'Mon 2 Nov', name: 'MyWay Monday planning', cadence: 'Weekly on Mondays, 14:00', platform: 'Google Meet', next: 'Mon 9 Nov, 14:00', people: ['Adebayo Tosin', 'Godstime America', 'Tayo', 'MyWay'], re: /Monday planning/ },
-  { id: 's2', last: '2026-10-30', lastLabel: 'Fri 30 Oct', name: 'MyWay Friday review', cadence: 'Weekly on Fridays, 15:00', platform: 'Google Meet', next: 'Fri 6 Nov, 15:00', people: ['Adebayo Tosin', 'Godstime America', 'Tayo', 'MyWay'], re: /Friday review/ },
+  { id: 's1', last: '2026-11-02', lastLabel: 'Mon 2 Nov', name: 'Beyric Monday planning', cadence: 'Weekly on Mondays, 14:00', platform: 'Google Meet', next: 'Mon 9 Nov, 14:00', people: ['Adebayo Tosin', 'Daniel Okoro', 'Amara Nwosu', 'Kemi Adeyemi'], re: /Monday planning/ },
+  { id: 's2', last: '2026-10-30', lastLabel: 'Fri 30 Oct', name: 'Beyric Friday review', cadence: 'Weekly on Fridays, 15:00', platform: 'Google Meet', next: 'Fri 6 Nov, 15:00', people: ['Adebayo Tosin', 'Daniel Okoro', 'Amara Nwosu', 'Kemi Adeyemi'], re: /Friday review/ },
 ];
 const DECISIONS_LOG = [
-  { meeting: 'm0', date: 'Mon 2 Nov', title: 'MyWay Monday planning', items: MYWAY.decisions },
+  { meeting: 'm0', date: 'Mon 2 Nov', title: 'Beyric Monday planning', items: PLANNING.decisions },
   { meeting: 'm2', date: 'Mon 2 Nov', title: 'Zoom 88205679674', items: EN.decisions },
-  { meeting: null, date: 'Fri 30 Oct', title: 'MyWay Friday review', items: ['Launch with one airport corridor before expanding.', 'Driver and vehicle documents will be reviewed manually during the pilot.'] },
-  { meeting: null, date: 'Mon 26 Oct', title: 'MyWay Monday planning', items: ['Corridor-aware matching is required before launch.', 'Use Smile ID for driver identity verification.'] },
+  { meeting: null, date: 'Fri 30 Oct', title: 'Beyric Friday review', items: ['Launch to existing customers first, then open public signups.', 'Workspace approvals for large teams will be reviewed manually during the pilot.'] },
+  { meeting: null, date: 'Mon 26 Oct', title: 'Beyric Monday planning', items: ['Role-based permissions are required before launch.', 'Use email verification for every new account.'] },
 ];
 const LANGS = [{ code: 'en', label: 'English (original)' }, { code: 'fr', label: 'French' }, { code: 'es', label: 'Spanish' }];
 const NOTES_TEXT = `Summary
@@ -1335,7 +1335,7 @@ class Component extends DCLogic {
     screen: 'meetings', tab: 'notes', cur: 'm2', link: '', newTemplate: 'Client call',
     rewriteTpl: 'General', rewriting: false, copied: false,
     meetings: [
-      { id: 'm0', series: 's1', title: 'MyWay Monday planning', platform: 'Google Meet', date: '02 Nov 2026, 13:02 UTC', duration: '46 min', template: 'Team update', status: 'Ready' },
+      { id: 'm0', series: 's1', title: 'Beyric Monday planning', platform: 'Google Meet', date: '02 Nov 2026, 13:02 UTC', duration: '46 min', template: 'Team update', status: 'Ready' },
       { id: 'm1', title: 'Google Meet btp-tkio-gtb', platform: 'Google Meet', date: '02 Nov 2026, 11:58 UTC', duration: '0 min', template: 'Client call', status: 'Failed' },
       { id: 'm2', title: 'Zoom 88205679674', platform: 'Zoom', date: '02 Nov 2026, 11:48 UTC', duration: '3 min', template: 'General', status: 'Ready' },
       { id: 'm3', title: 'Zoom 88205679674', platform: 'Zoom', date: '02 Nov 2026, 11:46 UTC', duration: '0 min', template: 'General', status: 'Failed' },
@@ -1356,15 +1356,15 @@ class Component extends DCLogic {
     taskView: 'board', projectFilter: 'all', sprintView: 's12', currentSprint: 's12', syncTool: 'Jira', syncConnected: false, syncConnecting: false,
     groupBy: 'assigned', decisionQuery: '', agendaInput: '', agenda: { s1: [], s2: [] }, seriesId: 's1', fixes: {},
     oq: [
-      { id: 'q1', text: 'Which airport parking option will the team choose?', meeting: 'm0', series: 's1', carry: true, resolved: false },
-      { id: 'q2', text: 'What are the outstanding phase two product decisions that Tayo needs clarified?', meeting: 'm0', series: 's1', carry: true, resolved: false },
-      { id: 'q3', text: 'Will driver payouts be weekly or daily after the pilot?', meeting: null, src: 'Friday review, 30 Oct', series: 's2', carry: true, resolved: false },
+      { id: 'q1', text: 'Which pricing model will the team choose?', meeting: 'm0', series: 's1', carry: true, resolved: false },
+      { id: 'q2', text: 'Which phase two product decisions does Amara need clarified?', meeting: 'm0', series: 's1', carry: true, resolved: false },
+      { id: 'q3', text: 'Should the free plan include calendar auto-join?', meeting: null, src: 'Friday review, 30 Oct', series: 's2', carry: true, resolved: false },
     ],
     reviews: [
-      { id: 'r1', meeting: 'm0', text: MYWAY.check[0], vocab: 'Bicotni', checked: false },
-      { id: 'r2', meeting: 'm0', text: MYWAY.check[1], checked: false },
-      { id: 'r3', meeting: 'm0', text: MYWAY.check[2], checked: false },
-      { id: 'r4', meeting: 'm0', text: MYWAY.check[3], checked: false },
+      { id: 'r1', meeting: 'm0', text: PLANNING.check[0], vocab: 'Metrika', checked: false },
+      { id: 'r2', meeting: 'm0', text: PLANNING.check[1], checked: false },
+      { id: 'r3', meeting: 'm0', text: PLANNING.check[2], checked: false },
+      { id: 'r4', meeting: 'm0', text: PLANNING.check[3], checked: false },
       { id: 'r5', meeting: 'm2', text: EN.check, checked: false },
     ],
     tasks: TASKS, members: MEMBERS, taskFilter: 'all', taskOpen: null, dragOver: null,
@@ -1373,7 +1373,7 @@ class Component extends DCLogic {
     cal: null, connecting: null, autoRule: 'all', autoTpl: 'General', overrides: {},
     events: [
       { id: 'e1', day: 'Today', time: '14:00', dur: '30 min', title: 'Product sync', platform: 'Google Meet', people: 4, organizer: true },
-      { id: 'e2', day: 'Today', time: '16:30', dur: '45 min', title: 'Client call with Kora Foods', platform: 'Zoom', people: 3, organizer: false },
+      { id: 'e2', day: 'Today', time: '16:30', dur: '45 min', title: 'Client call: quarterly review', platform: 'Zoom', people: 3, organizer: false },
       { id: 'e3', day: 'Tomorrow', time: '09:00', dur: '30 min', title: 'Weekly team update', platform: 'Microsoft Teams', people: 8, organizer: true },
       { id: 'e4', day: 'Tomorrow', time: '11:00', dur: '1 hr', title: 'Interview: Backend engineer', platform: 'Google Meet', people: 3, organizer: false },
       { id: 'e5', day: 'Wed 4 Nov', time: '10:00', dur: '1 hr', title: 'Design review', platform: null, people: 5, organizer: true },
@@ -1531,7 +1531,7 @@ class Component extends DCLogic {
           onKwKey: (e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addKw(); } },
           pjSprintLen: pj.sprintLen || '', onPjSprintLen: (e) => upd({ sprintLen: e.target.value }),
           pjSprintOpts: [{ v: '', l: 'Workspace default (' + wsLabel + ')' }, ...lenOpts],
-          pjMilestone: pj.id === 'p1' ? 'MyWay launch, Tue 8 Dec 2026' : 'None yet',
+          pjMilestone: pj.id === 'p1' ? 'Client Portal launch, Tue 8 Dec 2026' : 'None yet',
           newProject: () => { const id = 'p' + Date.now(); this.setState((st) => ({ screen: 'projects', projSel: id, projects: [...st.projects, { id, name: '', dot: PCOLORS[st.projects.length % PCOLORS.length], series: [], keywords: [], sprintLen: '' }] })); },
           deleteProject: () => { const rest = s.projects.filter((p) => p.id !== pj.id); this.setState((st) => ({ projects: rest, projSel: rest[0] ? rest[0].id : '', projectFilter: st.projectFilter === pj.id ? 'all' : st.projectFilter, tasks: st.tasks.map((t) => (t.project === pj.id ? { ...t, project: null } : t)) })); this.flash('Project deleted. Its tasks now have no project.'); },
           sprintLen: s.sprintCfg.len, sprintLenOpts: [...lenOpts, { v: 'custom', l: 'Custom' }],
@@ -1541,7 +1541,7 @@ class Component extends DCLogic {
           sprintPreview: 'Current sprint: ' + (SPRINTS.find((x) => x.id === s.currentSprint) || SPRINTS[1]).name + ', ' + this.spInfo(s.currentSprint, true).range,
           alignTg: this.tg(s.sprintCfg.align && s.sprintCfg.len === 'week5'),
           toggleAlign: () => { if (this.state.sprintCfg.len !== 'week5') return this.flash('Only available for 1 week, 5 working day sprints'); this.setState((st) => ({ sprintCfg: { ...st.sprintCfg, align: !st.sprintCfg.align } })); },
-          alignDesc: s.sprintCfg.len === 'week5' ? 'Sprints open at MyWay Monday planning and close at MyWay Friday review.' : 'Available for 1 week, 5 working day sprints.',
+          alignDesc: s.sprintCfg.len === 'week5' ? 'Sprints open at Beyric Monday planning and close at Beyric Friday review.' : 'Available for 1 week, 5 working day sprints.',
           remTg: this.tg(s.remOn), toggleRem: () => this.setState((st) => ({ remOn: !st.remOn })), remOn: s.remOn,
           remTiming: s.remTiming, onRemTiming: (e) => this.setState({ remTiming: e.target.value }),
           remOpts: ['1 hour before', '30 minutes before', '1 hour and 30 minutes before'],
@@ -1551,14 +1551,14 @@ class Component extends DCLogic {
       groupOpts: [['assigned', 'Date assigned'], ['due', 'Due date']].map(([k, label]) => ({ label, pick: () => this.setState({ groupBy: k }), bg: s.groupBy === k ? '#FFFFFF' : 'transparent', fg: s.groupBy === k ? '#141917' : '#5B6460', shadow: s.groupBy === k ? '0 1px 2px rgba(20,25,23,0.12)' : 'none' })),
       srSprintNote: !(s.sprintCfg.align && s.sprintCfg.len === 'week5') ? '' : (() => { const ci = SPRINTS.findIndex((x) => x.id === s.currentSprint); return sr.id === 's1' ? 'Opens ' + (SPRINTS[ci + 1] || SPRINTS[ci]).name : 'Closes ' + SPRINTS[ci].name; })(),
       milestones: s.projectFilter === 'p2' ? [] : [{
-        name: 'MyWay launch', date: 'Tue 8 Dec 2026', days: 36, source: 'MyWay Monday planning, 2 Nov',
+        name: 'Client Portal launch', date: 'Tue 8 Dec 2026', days: 36, source: 'Beyric Monday planning, 2 Nov',
         pct: (msTasks.length ? Math.round((msDone / msTasks.length) * 100) : 0) + '%',
         progress: msDone + ' of ' + msTasks.length + ' launch tasks done',
         filterLabel: s.taskFilter === 'ms1' ? 'Show all tasks' : 'Show launch tasks',
         filter: () => this.setState((st) => ({ taskFilter: st.taskFilter === 'ms1' ? 'all' : 'ms1' })),
       }],
       curSeries: !!curSr, curSeriesName: curSr ? curSr.name : '', openCurSeries: () => curSr && this.setState({ screen: 'series', seriesId: curSr.id }),
-      curMilestone: s.cur === 'm0', curMilestoneText: 'MyWay launch, 8 Dec',
+      curMilestone: s.cur === 'm0', curMilestoneText: 'Client Portal launch, 8 Dec',
       seriesCards: SERIES.map((x) => ({ ...x, unfinishedLabel: plural(unfinished(x).length, 'unfinished task'), questionsLabel: plural(carried(x).length, 'open question'), open: () => this.setState({ screen: 'series', seriesId: x.id }) })),
       sr,
       srTasks: unfinished(sr).map(tv), srHasTasks: unfinished(sr).length > 0, srNoTasks: unfinished(sr).length === 0,
@@ -1699,7 +1699,7 @@ class Component extends DCLogic {
       onTaskAssignee: (e) => this.patchTask(s.taskOpen, { assignee: e.target.value || null }),
       onTaskDue: (e) => this.patchTask(s.taskOpen, { due: e.target.value }),
       onTaskMilestone: (e) => this.patchTask(s.taskOpen, { milestone: e.target.value || null }),
-      milestoneOpts: [{ v: '', l: 'None' }, { v: 'ms1', l: 'MyWay launch, 8 Dec' }],
+      milestoneOpts: [{ v: '', l: 'None' }, { v: 'ms1', l: 'Client Portal launch, 8 Dec' }],
       srTasksView: view,
       statusOpts: COLS.map(([v, l]) => ({ v, l })),
       assigneeOpts: [{ v: '', l: 'Unassigned' }, ...active.map((m) => ({ v: m.id, l: m.name + (m.you ? ' (you)' : '') }))],
@@ -1808,8 +1808,8 @@ class Component extends DCLogic {
       copyLabel: s.copied ? 'Copied' : s.tab === 'notes' ? 'Copy notes' : 'Copy transcript',
       ...(() => {
         if (s.cur === 'm0') return {
-          L: EN.L, summary: MYWAY.summary, keyPoints: MYWAY.keyPoints, decisions: MYWAY.decisions, questions: s.oq.filter((q) => q.meeting === 'm0').map((q) => ({ text: q.text, carriable: true, carryLabel: q.resolved ? 'Resolved' : q.carry ? 'On next agenda' : 'Add to next agenda', bg: q.carry && !q.resolved ? '#E6F1EE' : '#FFFFFF', fg: q.carry && !q.resolved ? '#0A5248' : '#2E3532', border: q.carry && !q.resolved ? '#BFDCD5' : '#D5DBD8', toggle: () => this.setState((st) => ({ oq: st.oq.map((x) => (x.id === q.id ? { ...x, carry: !x.carry, resolved: false } : x)) })) })), checks: MYWAY.check,
-          transcript: MYWAY.transcript.map(([name, time, text]) => ({ name, time, text, ...PEOPLE[name] })),
+          L: EN.L, summary: PLANNING.summary, keyPoints: PLANNING.keyPoints, decisions: PLANNING.decisions, questions: s.oq.filter((q) => q.meeting === 'm0').map((q) => ({ text: q.text, carriable: true, carryLabel: q.resolved ? 'Resolved' : q.carry ? 'On next agenda' : 'Add to next agenda', bg: q.carry && !q.resolved ? '#E6F1EE' : '#FFFFFF', fg: q.carry && !q.resolved ? '#0A5248' : '#2E3532', border: q.carry && !q.resolved ? '#BFDCD5' : '#D5DBD8', toggle: () => this.setState((st) => ({ oq: st.oq.map((x) => (x.id === q.id ? { ...x, carry: !x.carry, resolved: false } : x)) })) })), checks: PLANNING.check,
+          transcript: PLANNING.transcript.map(([name, time, text]) => ({ name, time, text, ...PEOPLE[name] })),
         };
         const D = (s.shownLang !== 'en' && TR[s.shownLang]) || EN;
         const tr = D.transcript;

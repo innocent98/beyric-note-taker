@@ -8,85 +8,498 @@
 <body>
 <x-dc>
 <helmet>
-<meta name="design_doc_mode" content="canvas">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>body{margin:0;background:#E9ECEA;font-family:'Geist',system-ui,sans-serif;color:#141917;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#0E6B5E;text-decoration:none}a:hover{color:#0A5248;text-decoration:underline}input::placeholder{color:#9AA19D}</style>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#FFFFFF;font-family:'Geist',system-ui,sans-serif;color:#141917;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}a{color:#0E6B5E;text-decoration:none}a:hover{color:#0A5248;text-decoration:underline}input::placeholder{color:#9AA19D}button{font-family:inherit}input{font-family:inherit}</style>
 </helmet>
-<section style="padding:48px;display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start;font-size:14px;line-height:1.5">
+<div style="min-height:100vh;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,520px),1fr));font-size:14px;line-height:1.5;background:#FFFFFF">
 
-  <div id="sign-in" style="display:flex;flex-direction:column;gap:10px">
-    <div style="font-size:13px;font-weight:600;color:#4A524E">Sign in</div>
-    <div data-screen-label="Sign in" style="width:480px;height:640px;background:#F6F7F6;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px">
-      <svg width="40" height="40" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0E6B5E"></rect><path d="M9 8H23a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H15L10.5 24.5V21H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" fill="#FFFFFF"></path><rect x="10.5" y="11.6" width="11" height="1.9" rx=".95" fill="#0E6B5E"></rect><rect x="10.5" y="15.4" width="7" height="1.9" rx=".95" fill="#0E6B5E"></rect></svg>
-      <h1 style="margin:18px 0 4px;font-size:22px;font-weight:650;letter-spacing:-0.02em">Sign in to Beyric</h1>
-      <p style="margin:0 0 24px;color:#5B6460">Welcome back.</p>
-      <div style="width:100%;background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:14px">
-        <button style="height:40px;border:1px solid #D5DBD8;border-radius:8px;background:#FFFFFF;font-size:14px;font-weight:550;color:#141917;cursor:pointer" style-hover="background:#F6F7F6">Continue with Google</button>
-        <div style="display:flex;align-items:center;gap:10px;color:#8A928E;font-size:12px"><span style="flex:1;height:1px;background:#E3E7E5"></span>or<span style="flex:1;height:1px;background:#E3E7E5"></span></div>
-        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:#2E3532">Email</span><input placeholder="you@company.com" style="height:40px;padding:0 12px;border:1px solid #D5DBD8;border-radius:8px;font-size:14px;outline:none" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB"></label>
-        <label style="display:flex;flex-direction:column;gap:6px"><span style="display:flex;justify-content:space-between;font-size:13px;font-weight:500;color:#2E3532">Password<a href="#forgot" style="font-weight:500">Forgot password?</a></span><input type="password" value="password" style="height:40px;padding:0 12px;border:1px solid #D5DBD8;border-radius:8px;font-size:14px;outline:none" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB"></label>
-        <button style="height:40px;border:0;border-radius:8px;background:#0E6B5E;color:#FFFFFF;font-size:14px;font-weight:550;cursor:pointer;margin-top:4px" style-hover="background:#0A5248">Sign in</button>
+  <div style="display:flex;flex-direction:column;min-height:100vh;padding:28px clamp(24px,5vw,64px)">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+      <a href="Landing.dc.html" style="display:flex;align-items:center;gap:10px;color:#141917;text-decoration:none">
+        <svg width="30" height="30" viewBox="0 0 120 120"><rect width="120" height="120" rx="28" fill="#0E6B5E"></rect><path d="M38 24V72A24 24 0 1 0 62 48" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round"></path><circle cx="62" cy="72" r="6" fill="#FFFFFF"></circle></svg>
+        <span style="display:flex;align-items:baseline;gap:5px;font-size:16px;letter-spacing:-0.01em"><span style="font-weight:650">Beyric</span><span style="font-weight:450;color:#5B6460">Note Taker</span></span>
+      </a>
+      <sc-if value="{{ hd.show }}" hint-placeholder-val="{{ true }}">
+        <div style="font-size:14px;color:#5B6460;display:flex;gap:6px;align-items:center">{{ hd.text }}<button onClick="{{ hd.go }}" style="border:0;background:transparent;padding:0;color:#0E6B5E;font-size:14px;font-weight:600;cursor:pointer">{{ hd.link }}</button></div>
+      </sc-if>
+    </div>
+
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:48px 0">
+      <div style="width:100%;max-width:400px">
+
+        <sc-if value="{{ is.signin }}" hint-placeholder-val="{{ true }}">
+          <form onSubmit="{{ submitSignin }}" noValidate="{{ true }}" style="display:flex;flex-direction:column;gap:24px" data-screen-label="Sign in">
+            <div>
+              <h1 style="margin:0;font-size:30px;font-weight:650;letter-spacing:-0.03em">Welcome back</h1>
+              <p style="margin:8px 0 0;color:#5B6460;font-size:15px">Sign in to see your meeting notes and tasks.</p>
+            </div>
+            <sc-if value="{{ sso }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <button type="button" onClick="{{ ssoGoogle }}" style="height:44px;border:1px solid #D5DBD8;border-radius:9px;background:#FFFFFF;font-size:14px;font-weight:550;color:#141917;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px" style-hover="background:#F6F7F6"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.5z"></path><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"></path><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"></path><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.5z"></path></svg>Google</button>
+                  <button type="button" onClick="{{ ssoMicrosoft }}" style="height:44px;border:1px solid #D5DBD8;border-radius:9px;background:#FFFFFF;font-size:14px;font-weight:550;color:#141917;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px" style-hover="background:#F6F7F6"><svg width="16" height="16" viewBox="0 0 22 22"><rect width="10" height="10" fill="#F25022"></rect><rect x="12" width="10" height="10" fill="#7FBA00"></rect><rect y="12" width="10" height="10" fill="#00A4EF"></rect><rect x="12" y="12" width="10" height="10" fill="#FFB900"></rect></svg>Microsoft</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;color:#8A928E;font-size:12px;margin-top:6px"><span style="flex:1;height:1px;background:#E3E7E5"></span>or sign in with email<span style="flex:1;height:1px;background:#E3E7E5"></span></div>
+              </div>
+            </sc-if>
+            <sc-if value="{{ formErr }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:1px solid #F5C2BD;background:#FDECEA;border-radius:9px;color:#8C1D13;font-size:13px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B42318" stroke-width="2" stroke-linecap="round" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5M12 16h.01"></path></svg>{{ formErr }}</div>
+            </sc-if>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:13px;font-weight:550;color:#2E3532">Work email</span>
+                <input type="email" autoComplete="email" value="{{ f.email }}" onChange="{{ on.email }}" placeholder="you@company.com" style="height:44px;padding:0 14px;border:1px solid {{ b.email }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+                <sc-if value="{{ e.email }}"><span style="font-size:12px;color:#B42318">{{ e.email }}</span></sc-if>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="display:flex;justify-content:space-between;font-size:13px;font-weight:550;color:#2E3532">Password<button type="button" onClick="{{ goForgot }}" style="border:0;background:transparent;padding:0;color:#0E6B5E;font-size:13px;font-weight:550;cursor:pointer">Forgot password?</button></span>
+                <div style="position:relative;display:flex">
+                  <input type="{{ pwType }}" autoComplete="current-password" value="{{ f.password }}" onChange="{{ on.password }}" placeholder="Your password" style="flex:1;min-width:0;height:44px;padding:0 64px 0 14px;border:1px solid {{ b.password }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+                  <button type="button" onClick="{{ togglePw }}" style="position:absolute;right:6px;top:6px;height:32px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:#5B6460;font-size:12px;font-weight:600;cursor:pointer" style-hover="background:#F0F2F1">{{ pwToggleLabel }}</button>
+                </div>
+                <sc-if value="{{ e.password }}"><span style="font-size:12px;color:#B42318">{{ e.password }}</span></sc-if>
+              </label>
+              <div onClick="{{ toggleRemember }}" style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px;color:#2E3532;align-self:flex-start">
+                <div style="width:18px;height:18px;border-radius:5px;border:1.5px solid {{ rm.boxBorder }};background:{{ rm.boxBg }};display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" style="opacity:{{ rm.checkOp }}"><path d="m5 12 5 5 9-10"></path></svg></div>
+                Keep me signed in for 30 days
+              </div>
+            </div>
+            <button type="submit" style="height:46px;border:0;border-radius:9px;background:{{ pbg }};color:#FFFFFF;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#0A5248">{{ lbl.signin }}</button>
+          </form>
+        </sc-if>
+
+        <sc-if value="{{ is.signup }}" hint-placeholder-val="{{ false }}">
+          <form onSubmit="{{ submitSignup }}" noValidate="{{ true }}" style="display:flex;flex-direction:column;gap:24px" data-screen-label="Create account">
+            <div>
+              <h1 style="margin:0;font-size:30px;font-weight:650;letter-spacing:-0.03em">Create your account</h1>
+              <p style="margin:8px 0 0;color:#5B6460;font-size:15px">Send the note taker to your next meeting in a few minutes.</p>
+            </div>
+            <sc-if value="{{ sso }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <button type="button" onClick="{{ ssoGoogle }}" style="height:44px;border:1px solid #D5DBD8;border-radius:9px;background:#FFFFFF;font-size:14px;font-weight:550;color:#141917;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px" style-hover="background:#F6F7F6"><svg width="18" height="18" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.5z"></path><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"></path><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"></path><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.5z"></path></svg>Google</button>
+                  <button type="button" onClick="{{ ssoMicrosoft }}" style="height:44px;border:1px solid #D5DBD8;border-radius:9px;background:#FFFFFF;font-size:14px;font-weight:550;color:#141917;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px" style-hover="background:#F6F7F6"><svg width="16" height="16" viewBox="0 0 22 22"><rect width="10" height="10" fill="#F25022"></rect><rect x="12" width="10" height="10" fill="#7FBA00"></rect><rect y="12" width="10" height="10" fill="#00A4EF"></rect><rect x="12" y="12" width="10" height="10" fill="#FFB900"></rect></svg>Microsoft</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;color:#8A928E;font-size:12px;margin-top:6px"><span style="flex:1;height:1px;background:#E3E7E5"></span>or use your email<span style="flex:1;height:1px;background:#E3E7E5"></span></div>
+              </div>
+            </sc-if>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:13px;font-weight:550;color:#2E3532">Full name</span>
+                <input autoComplete="name" value="{{ f.name }}" onChange="{{ on.name }}" placeholder="Ada Okafor" style="height:44px;padding:0 14px;border:1px solid {{ b.name }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+                <sc-if value="{{ e.name }}"><span style="font-size:12px;color:#B42318">{{ e.name }}</span></sc-if>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:13px;font-weight:550;color:#2E3532">Work email</span>
+                <input type="email" autoComplete="email" value="{{ f.email }}" onChange="{{ on.email }}" placeholder="you@company.com" style="height:44px;padding:0 14px;border:1px solid {{ b.email }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+                <sc-if value="{{ e.email }}"><span style="font-size:12px;color:#B42318">{{ e.email }}</span></sc-if>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:13px;font-weight:550;color:#2E3532">Password</span>
+                <div style="position:relative;display:flex">
+                  <input type="{{ pwType }}" autoComplete="new-password" value="{{ f.password }}" onChange="{{ on.password }}" placeholder="Create a password" style="flex:1;min-width:0;height:44px;padding:0 64px 0 14px;border:1px solid {{ b.password }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+                  <button type="button" onClick="{{ togglePw }}" style="position:absolute;right:6px;top:6px;height:32px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:#5B6460;font-size:12px;font-weight:600;cursor:pointer" style-hover="background:#F0F2F1">{{ pwToggleLabel }}</button>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px">
+                  <sc-for list="{{ rules }}" as="r"><div style="height:4px;border-radius:999px;background:{{ r.bar }}"></div></sc-for>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px 14px">
+                  <sc-for list="{{ rules }}" as="r"><span style="display:flex;align-items:center;gap:5px;font-size:12px;color:{{ r.fg }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="opacity:{{ r.op }}"><path d="m5 12 5 5 9-10"></path></svg>{{ r.label }}</span></sc-for>
+                </div>
+              </label>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <button type="submit" style="height:46px;border:0;border-radius:9px;background:{{ pbg }};color:#FFFFFF;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#0A5248">{{ lbl.signup }}</button>
+              <p style="margin:0;font-size:12px;color:#6E7772;text-align:center">By creating an account you agree to the <a href="Terms of Service.dc.html">Terms</a> and <a href="Privacy Policy.dc.html">Privacy Policy</a>.</p>
+            </div>
+          </form>
+        </sc-if>
+
+        <sc-if value="{{ is.verify }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:24px" data-screen-label="Verify email">
+            <div style="width:52px;height:52px;border-radius:14px;background:#E6F1EE;display:flex;align-items:center;justify-content:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg></div>
+            <div>
+              <h1 style="margin:0;font-size:30px;font-weight:650;letter-spacing:-0.03em">Check your inbox</h1>
+              <p style="margin:8px 0 0;color:#5B6460;font-size:15px">Enter the 6-digit code we sent to <span style="color:#141917;font-weight:600">{{ emailShown }}</span>.</p>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;gap:10px">
+                <sc-for list="{{ codeBoxes }}" as="c">
+                  <input ref="{{ c.ref }}" value="{{ c.val }}" onChange="{{ c.onChange }}" onKeyDown="{{ c.onKeyDown }}" onPaste="{{ c.onPaste }}" inputMode="numeric" autoComplete="one-time-code" aria-label="{{ c.aria }}" style="width:52px;height:60px;text-align:center;border:1px solid {{ c.border }};border-radius:10px;font-family:'Geist Mono',monospace;font-size:24px;font-weight:500;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+                </sc-for>
+              </div>
+              <sc-if value="{{ codeErr }}"><span style="font-size:13px;color:#B42318">{{ codeErr }}</span></sc-if>
+              <sc-if value="{{ loading }}"><span style="font-size:13px;color:#5B6460">Checking code...</span></sc-if>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;color:#5B6460">
+              <div style="display:flex;gap:6px;align-items:center">Did not get it?<sc-if value="{{ canResend }}"><button onClick="{{ resend }}" style="border:0;background:transparent;padding:0;color:#0E6B5E;font-size:13px;font-weight:600;cursor:pointer">Resend code</button></sc-if><sc-if value="{{ waitResend }}"><span style="color:#8A928E">Resend in {{ resendLabel }}</span></sc-if></div>
+              <div style="display:flex;gap:6px;align-items:center">Wrong email?<button onClick="{{ goSignup }}" style="border:0;background:transparent;padding:0;color:#0E6B5E;font-size:13px;font-weight:600;cursor:pointer">Change it</button></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ is.setup }}" hint-placeholder-val="{{ false }}">
+          <form onSubmit="{{ submitSetup }}" noValidate="{{ true }}" style="display:flex;flex-direction:column;gap:24px" data-screen-label="Set up workspace">
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#6E7772;letter-spacing:0.04em">STEP 2 OF 2<span style="flex:1;max-width:120px;height:4px;border-radius:999px;background:#0E6B5E"></span></div>
+            <div>
+              <h1 style="margin:0;font-size:30px;font-weight:650;letter-spacing:-0.03em">Set up your workspace</h1>
+              <p style="margin:8px 0 0;color:#5B6460;font-size:15px">Your team, meetings and tasks live here. You can change this later.</p>
+            </div>
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:13px;font-weight:550;color:#2E3532">Workspace name</span>
+              <input value="{{ f.workspace }}" onChange="{{ on.workspace }}" placeholder="e.g. Beyric" style="height:44px;padding:0 14px;border:1px solid {{ b.workspace }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+              <sc-if value="{{ e.workspace }}"><span style="font-size:12px;color:#B42318">{{ e.workspace }}</span></sc-if>
+            </label>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <div><div style="font-size:13px;font-weight:550;color:#2E3532">Connect your calendar <span style="font-weight:400;color:#8A928E">(optional)</span></div><div style="font-size:12px;color:#6E7772">The note taker joins upcoming meetings that have a video link.</div></div>
+              <sc-for list="{{ calOpts }}" as="c">
+                <button type="button" onClick="{{ c.go }}" style="height:52px;padding:0 14px;border:1px solid {{ c.border }};border-radius:10px;background:{{ c.bg }};display:flex;align-items:center;gap:12px;cursor:pointer;text-align:left" style-hover="border-color:#B9C2BE">
+                  <span style="width:30px;height:30px;border-radius:8px;background:#F0F2F1;display:flex;align-items:center;justify-content:center;flex:none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4A524E" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg></span>
+                  <span style="flex:1;font-size:14px;font-weight:550;color:#141917">{{ c.label }}</span>
+                  <span style="font-size:12px;font-weight:600;color:{{ c.stFg }}">{{ c.state }}</span>
+                </button>
+              </sc-for>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <button type="submit" style="height:46px;border:0;border-radius:9px;background:{{ pbg }};color:#FFFFFF;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#0A5248">{{ lbl.setup }}</button>
+              <button type="button" onClick="{{ goApp }}" style="border:0;background:transparent;padding:4px;color:#5B6460;font-size:13px;font-weight:550;cursor:pointer">Skip for now</button>
+            </div>
+          </form>
+        </sc-if>
+
+        <sc-if value="{{ is.invite }}" hint-placeholder-val="{{ false }}">
+          <form onSubmit="{{ submitInvite }}" noValidate="{{ true }}" style="display:flex;flex-direction:column;gap:24px" data-screen-label="Accept invite">
+            <div style="display:flex;align-items:center;gap:12px;padding:14px;border:1px solid #E3E7E5;border-radius:12px;background:#FAFBFA">
+              <div style="display:flex">
+                <div style="width:36px;height:36px;border-radius:50%;background:#E6F1EE;color:#0E6B5E;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;border:2px solid #FFFFFF">AT</div>
+                <div style="width:36px;height:36px;border-radius:50%;background:#FFF1E0;color:#8A4B00;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;border:2px solid #FFFFFF;margin-left:-10px">DO</div>
+                <div style="width:36px;height:36px;border-radius:50%;background:#F7ECF2;color:#8A2E5C;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;border:2px solid #FFFFFF;margin-left:-10px">AN</div>
+              </div>
+              <div style="font-size:13px;color:#2E3532;line-height:1.45"><span style="font-weight:600">Adebayo Tosin</span> invited you to the <span style="font-weight:600">Beyric</span> workspace</div>
+            </div>
+            <div>
+              <h1 style="margin:0;font-size:30px;font-weight:650;letter-spacing:-0.03em">Join your team</h1>
+              <p style="margin:8px 0 0;color:#5B6460;font-size:15px">You will see shared meeting notes and the tasks assigned to you.</p>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:13px;font-weight:550;color:#2E3532">Email</span>
+                <div style="height:44px;padding:0 14px;border:1px solid #E3E7E5;border-radius:9px;background:#F6F7F6;font-size:15px;color:#4A524E;display:flex;align-items:center;justify-content:space-between">kemi.adeyemi@gmail.com<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A928E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></div>
+              </div>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:13px;font-weight:550;color:#2E3532">Full name</span>
+                <input autoComplete="name" value="{{ f.name }}" onChange="{{ on.name }}" placeholder="Your name" style="height:44px;padding:0 14px;border:1px solid {{ b.name }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+                <sc-if value="{{ e.name }}"><span style="font-size:12px;color:#B42318">{{ e.name }}</span></sc-if>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:13px;font-weight:550;color:#2E3532">Password</span>
+                <div style="position:relative;display:flex">
+                  <input type="{{ pwType }}" autoComplete="new-password" value="{{ f.password }}" onChange="{{ on.password }}" placeholder="Create a password" style="flex:1;min-width:0;height:44px;padding:0 64px 0 14px;border:1px solid {{ b.password }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+                  <button type="button" onClick="{{ togglePw }}" style="position:absolute;right:6px;top:6px;height:32px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:#5B6460;font-size:12px;font-weight:600;cursor:pointer" style-hover="background:#F0F2F1">{{ pwToggleLabel }}</button>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px 14px">
+                  <sc-for list="{{ rules }}" as="r"><span style="display:flex;align-items:center;gap:5px;font-size:12px;color:{{ r.fg }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="opacity:{{ r.op }}"><path d="m5 12 5 5 9-10"></path></svg>{{ r.label }}</span></sc-for>
+                </div>
+              </label>
+            </div>
+            <button type="submit" style="height:46px;border:0;border-radius:9px;background:{{ pbg }};color:#FFFFFF;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#0A5248">{{ lbl.invite }}</button>
+          </form>
+        </sc-if>
+
+        <sc-if value="{{ is.forgot }}" hint-placeholder-val="{{ false }}">
+          <form onSubmit="{{ submitForgot }}" noValidate="{{ true }}" style="display:flex;flex-direction:column;gap:24px" data-screen-label="Forgot password">
+            <div style="width:52px;height:52px;border-radius:14px;background:#E6F1EE;display:flex;align-items:center;justify-content:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg></div>
+            <div>
+              <h1 style="margin:0;font-size:30px;font-weight:650;letter-spacing:-0.03em">Reset your password</h1>
+              <p style="margin:8px 0 0;color:#5B6460;font-size:15px">Enter the email you signed up with and we will send you a reset link.</p>
+            </div>
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:13px;font-weight:550;color:#2E3532">Work email</span>
+              <input type="email" autoComplete="email" value="{{ f.email }}" onChange="{{ on.email }}" placeholder="you@company.com" style="height:44px;padding:0 14px;border:1px solid {{ b.email }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+              <sc-if value="{{ e.email }}"><span style="font-size:12px;color:#B42318">{{ e.email }}</span></sc-if>
+            </label>
+            <button type="submit" style="height:46px;border:0;border-radius:9px;background:{{ pbg }};color:#FFFFFF;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#0A5248">{{ lbl.forgot }}</button>
+          </form>
+        </sc-if>
+
+        <sc-if value="{{ is.sent }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:24px" data-screen-label="Reset link sent">
+            <div style="width:52px;height:52px;border-radius:14px;background:#E6F1EE;display:flex;align-items:center;justify-content:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#0E6B5E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"></path><path d="M22 2 15 22l-4-9-9-4 20-7z"></path></svg></div>
+            <div>
+              <h1 style="margin:0;font-size:30px;font-weight:650;letter-spacing:-0.03em">Check your email</h1>
+              <p style="margin:8px 0 0;color:#5B6460;font-size:15px">If an account exists for <span style="color:#141917;font-weight:600">{{ emailShown }}</span>, a reset link is on its way. It expires in 30 minutes.</p>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <a href="https://mail.google.com" target="_blank" style="height:44px;border:1px solid #D5DBD8;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:550;color:#141917;text-decoration:none" style-hover="background:#F6F7F6;color:#141917">Open Gmail</a>
+              <a href="https://outlook.office.com" target="_blank" style="height:44px;border:1px solid #D5DBD8;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:550;color:#141917;text-decoration:none" style-hover="background:#F6F7F6;color:#141917">Open Outlook</a>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;font-size:13px;color:#5B6460">Did not get it? Check spam, or<sc-if value="{{ canResend }}"><button onClick="{{ resend }}" style="border:0;background:transparent;padding:0;color:#0E6B5E;font-size:13px;font-weight:600;cursor:pointer">resend the link</button></sc-if><sc-if value="{{ waitResend }}"><span style="color:#8A928E">resend in {{ resendLabel }}</span></sc-if></div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ is.reset }}" hint-placeholder-val="{{ false }}">
+          <form onSubmit="{{ submitReset }}" noValidate="{{ true }}" style="display:flex;flex-direction:column;gap:24px" data-screen-label="New password">
+            <div>
+              <h1 style="margin:0;font-size:30px;font-weight:650;letter-spacing:-0.03em">Choose a new password</h1>
+              <p style="margin:8px 0 0;color:#5B6460;font-size:15px">For <span style="color:#141917;font-weight:600">{{ emailShown }}</span>. You will be signed out on other devices.</p>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:13px;font-weight:550;color:#2E3532">New password</span>
+                <div style="position:relative;display:flex">
+                  <input type="{{ pwType }}" autoComplete="new-password" value="{{ f.password }}" onChange="{{ on.password }}" placeholder="Create a password" style="flex:1;min-width:0;height:44px;padding:0 64px 0 14px;border:1px solid {{ b.password }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+                  <button type="button" onClick="{{ togglePw }}" style="position:absolute;right:6px;top:6px;height:32px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:#5B6460;font-size:12px;font-weight:600;cursor:pointer" style-hover="background:#F0F2F1">{{ pwToggleLabel }}</button>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px">
+                  <sc-for list="{{ rules }}" as="r"><div style="height:4px;border-radius:999px;background:{{ r.bar }}"></div></sc-for>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:4px 14px">
+                  <sc-for list="{{ rules }}" as="r"><span style="display:flex;align-items:center;gap:5px;font-size:12px;color:{{ r.fg }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="opacity:{{ r.op }}"><path d="m5 12 5 5 9-10"></path></svg>{{ r.label }}</span></sc-for>
+                </div>
+              </label>
+              <label style="display:flex;flex-direction:column;gap:6px">
+                <span style="font-size:13px;font-weight:550;color:#2E3532">Confirm password</span>
+                <input type="{{ pwType }}" autoComplete="new-password" value="{{ f.confirm }}" onChange="{{ on.confirm }}" placeholder="Type it again" style="height:44px;padding:0 14px;border:1px solid {{ b.confirm }};border-radius:9px;font-size:15px;color:#141917;outline:none;background:#FFFFFF" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB">
+                <sc-if value="{{ e.confirm }}"><span style="font-size:12px;color:#B42318">{{ e.confirm }}</span></sc-if>
+              </label>
+            </div>
+            <button type="submit" style="height:46px;border:0;border-radius:9px;background:{{ pbg }};color:#FFFFFF;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#0A5248">{{ lbl.reset }}</button>
+          </form>
+        </sc-if>
+
+        <sc-if value="{{ is.done }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:24px" data-screen-label="Password updated">
+            <div style="width:52px;height:52px;border-radius:50%;background:#E8F5EC;display:flex;align-items:center;justify-content:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-10"></path></svg></div>
+            <div>
+              <h1 style="margin:0;font-size:30px;font-weight:650;letter-spacing:-0.03em">Password updated</h1>
+              <p style="margin:8px 0 0;color:#5B6460;font-size:15px">You can now sign in with your new password.</p>
+            </div>
+            <button onClick="{{ goSignin }}" style="height:46px;border:0;border-radius:9px;background:#0E6B5E;color:#FFFFFF;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#0A5248">Back to sign in</button>
+          </div>
+        </sc-if>
+
       </div>
-      <p style="margin:20px 0 0;color:#5B6460;font-size:13px">New to Beyric? <a href="#sign-up" style="font-weight:550">Create an account</a></p>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:12px;color:#8A928E">
+      <span>© 2026 Beyric Technologies</span>
+      <div style="display:flex;gap:18px"><a href="Privacy Policy.dc.html" style="color:#6E7772">Privacy</a><a href="Terms of Service.dc.html" style="color:#6E7772">Terms</a><a href="mailto:hello@beyrictech.com" style="color:#6E7772">Help</a></div>
     </div>
   </div>
 
-  <div id="sign-up" style="display:flex;flex-direction:column;gap:10px">
-    <div style="font-size:13px;font-weight:600;color:#4A524E">Create account</div>
-    <div data-screen-label="Create account" style="width:480px;height:640px;background:#F6F7F6;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px">
-      <svg width="40" height="40" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0E6B5E"></rect><path d="M9 8H23a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H15L10.5 24.5V21H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" fill="#FFFFFF"></path><rect x="10.5" y="11.6" width="11" height="1.9" rx=".95" fill="#0E6B5E"></rect><rect x="10.5" y="15.4" width="7" height="1.9" rx=".95" fill="#0E6B5E"></rect></svg>
-      <h1 style="margin:18px 0 4px;font-size:22px;font-weight:650;letter-spacing:-0.02em">Create your account</h1>
-      <p style="margin:0 0 24px;color:#5B6460">Start sending the note taker to your meetings.</p>
-      <div style="width:100%;background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:14px">
-        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:#2E3532">Full name</span><input placeholder="Ada Okafor" style="height:40px;padding:0 12px;border:1px solid #D5DBD8;border-radius:8px;font-size:14px;outline:none" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB"></label>
-        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:#2E3532">Work email</span><input placeholder="you@company.com" style="height:40px;padding:0 12px;border:1px solid #D5DBD8;border-radius:8px;font-size:14px;outline:none" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB"></label>
-        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:#2E3532">Password</span><input type="password" placeholder="At least 8 characters" style="height:40px;padding:0 12px;border:1px solid #D5DBD8;border-radius:8px;font-size:14px;outline:none" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB"></label>
-        <button style="height:40px;border:0;border-radius:8px;background:#0E6B5E;color:#FFFFFF;font-size:14px;font-weight:550;cursor:pointer;margin-top:4px" style-hover="background:#0A5248">Create account</button>
-        <p style="margin:0;font-size:12px;color:#6E7772;text-align:center">By continuing you agree to the <a href="Terms of Service.dc.html">Terms</a> and <a href="Privacy Policy.dc.html">Privacy Policy</a>.</p>
+  <sc-if value="{{ showPanel }}" hint-placeholder-val="{{ true }}">
+    <aside style="background:#0E6B5E;color:#FFFFFF;padding:clamp(32px,5vw,72px);display:flex;flex-direction:column;justify-content:center;gap:48px;overflow:hidden;min-height:100vh">
+      <div style="max-width:480px">
+        <h2 style="margin:0;font-size:clamp(30px,3vw,40px);line-height:1.12;font-weight:650;letter-spacing:-0.03em;text-wrap:balance">Every meeting, written up and assigned.</h2>
+        <p style="margin:16px 0 0;font-size:16px;line-height:1.6;color:#CFE5E0;max-width:420px">Notes, decisions and tasks for each owner, ready minutes after the call ends.</p>
       </div>
-      <p style="margin:20px 0 0;color:#5B6460;font-size:13px">Already have an account? <a href="#sign-in" style="font-weight:550">Sign in</a></p>
-    </div>
-  </div>
-
-  <div id="forgot" style="display:flex;flex-direction:column;gap:10px">
-    <div style="font-size:13px;font-weight:600;color:#4A524E">Forgot password</div>
-    <div data-screen-label="Forgot password" style="width:480px;height:640px;background:#F6F7F6;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px">
-      <svg width="40" height="40" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0E6B5E"></rect><path d="M9 8H23a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H15L10.5 24.5V21H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" fill="#FFFFFF"></path><rect x="10.5" y="11.6" width="11" height="1.9" rx=".95" fill="#0E6B5E"></rect><rect x="10.5" y="15.4" width="7" height="1.9" rx=".95" fill="#0E6B5E"></rect></svg>
-      <h1 style="margin:18px 0 4px;font-size:22px;font-weight:650;letter-spacing:-0.02em">Reset your password</h1>
-      <p style="margin:0 0 24px;color:#5B6460;text-align:center;max-width:340px">Enter your email and we will send you a link to choose a new password.</p>
-      <div style="width:100%;background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:14px">
-        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:#2E3532">Email</span><input placeholder="you@company.com" style="height:40px;padding:0 12px;border:1px solid #D5DBD8;border-radius:8px;font-size:14px;outline:none" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB"></label>
-        <button style="height:40px;border:0;border-radius:8px;background:#0E6B5E;color:#FFFFFF;font-size:14px;font-weight:550;cursor:pointer" style-hover="background:#0A5248">Send reset link</button>
+      <div style="position:relative;max-width:520px;width:100%;padding-bottom:104px">
+        <div style="background:#FFFFFF;color:#141917;border-radius:14px;box-shadow:0 24px 48px rgba(6,40,35,0.35);overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid #EDF0EE">
+            <div><div style="font-weight:600;font-size:14px">Beyric Monday planning</div><div style="font-size:12px;color:#6E7772">Mon 2 Nov · Google Meet · 46 min</div></div>
+            <span style="display:inline-flex;align-items:center;gap:6px;padding:2px 9px 2px 7px;border-radius:999px;background:#E8F5EC;color:#166534;font-size:11px;font-weight:600"><span style="width:6px;height:6px;border-radius:50%;background:#166534"></span>Ready</span>
+          </div>
+          <div style="padding:16px 18px 20px;display:flex;flex-direction:column;gap:14px">
+            <div>
+              <div style="font-size:12px;font-weight:600;margin-bottom:4px">Summary</div>
+              <div style="font-size:13px;color:#2E3532;line-height:1.6">Client Portal progress, onboarding testing and the move to Slack. The team is preparing for a December 8 launch.</div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:600;margin-bottom:6px">Decisions</div>
+              <div style="display:flex;flex-direction:column;gap:5px;font-size:13px;color:#2E3532">
+                <div style="display:flex;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0E6B5E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:3px"><path d="m5 12 5 5 9-10"></path></svg>Use Slack for official work updates</div>
+                <div style="display:flex;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0E6B5E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:3px"><path d="m5 12 5 5 9-10"></path></svg>Prepare for the December 8 launch</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="position:absolute;right:-24px;bottom:0;width:min(300px,80%);background:#FFFFFF;color:#141917;border-radius:12px;box-shadow:0 20px 40px rgba(6,40,35,0.35);padding:14px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:11px;font-weight:600;color:#6E7772;letter-spacing:0.04em">NEW TASK</span><span style="font-size:11px;font-weight:600;color:#0E6B5E;background:#E6F1EE;padding:1px 7px;border-radius:999px">Sprint 12</span></div>
+          <div style="font-size:13px;font-weight:550;line-height:1.4">Finish payment checkout</div>
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;color:#5B6460">Due Fri 6 Nov</span>
+            <span style="display:flex;align-items:center;gap:6px;font-size:12px;color:#2E3532"><span style="width:22px;height:22px;border-radius:50%;background:#E6F1EE;color:#0E6B5E;font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center">AT</span>Adebayo Tosin</span>
+          </div>
+        </div>
       </div>
-      <a href="#sign-in" style="margin-top:20px;font-size:13px;font-weight:550">Back to sign in</a>
-    </div>
-  </div>
-
-  <div id="check-email" style="display:flex;flex-direction:column;gap:10px">
-    <div style="font-size:13px;font-weight:600;color:#4A524E">Check your email</div>
-    <div data-screen-label="Check your email" style="width:480px;height:640px;background:#F6F7F6;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;text-align:center">
-      <div style="width:56px;height:56px;border-radius:14px;background:#E6F1EE;display:flex;align-items:center;justify-content:center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0E6B5E" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg></div>
-      <h1 style="margin:20px 0 6px;font-size:22px;font-weight:650;letter-spacing:-0.02em">Check your email</h1>
-      <p style="margin:0;color:#5B6460;max-width:340px">We sent a link to <span style="color:#141917;font-weight:550">adebayo@beyrictech.com</span>. It expires in 30 minutes.</p>
-      <button style="margin-top:24px;height:40px;padding:0 18px;border:1px solid #D5DBD8;border-radius:8px;background:#FFFFFF;font-size:14px;font-weight:550;color:#141917;cursor:pointer" style-hover="background:#F0F2F1">Open email app</button>
-      <p style="margin:20px 0 0;color:#5B6460;font-size:13px">Did not get it? <a href="#" style="font-weight:550">Resend link</a></p>
-    </div>
-  </div>
-
-  <div id="new-password" style="display:flex;flex-direction:column;gap:10px">
-    <div style="font-size:13px;font-weight:600;color:#4A524E">Choose new password</div>
-    <div data-screen-label="New password" style="width:480px;height:640px;background:#F6F7F6;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px">
-      <svg width="40" height="40" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0E6B5E"></rect><path d="M9 8H23a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H15L10.5 24.5V21H9a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2Z" fill="#FFFFFF"></path><rect x="10.5" y="11.6" width="11" height="1.9" rx=".95" fill="#0E6B5E"></rect><rect x="10.5" y="15.4" width="7" height="1.9" rx=".95" fill="#0E6B5E"></rect></svg>
-      <h1 style="margin:18px 0 24px;font-size:22px;font-weight:650;letter-spacing:-0.02em">Choose a new password</h1>
-      <div style="width:100%;background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:14px">
-        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:#2E3532">New password</span><input type="password" value="password12" style="height:40px;padding:0 12px;border:1px solid #D5DBD8;border-radius:8px;font-size:14px;outline:none" style-focus="border-color:#0E6B5E;box-shadow:0 0 0 3px #E0EFEB"></label>
-        <label style="display:flex;flex-direction:column;gap:6px"><span style="font-size:13px;font-weight:500;color:#2E3532">Confirm password</span><input type="password" value="password1" style="height:40px;padding:0 12px;border:1px solid #B42318;border-radius:8px;font-size:14px;outline:none;box-shadow:0 0 0 3px #FDECEA"><span style="font-size:12px;color:#B42318">Passwords do not match.</span></label>
-        <button style="height:40px;border:0;border-radius:8px;background:#0E6B5E;color:#FFFFFF;font-size:14px;font-weight:550;cursor:pointer;margin-top:4px" style-hover="background:#0A5248">Update password</button>
-      </div>
-    </div>
-  </div>
-</section>
+      <div style="font-size:13px;color:#CFE5E0">Works with Google Meet, Microsoft Teams and Zoom</div>
+    </aside>
+  </sc-if>
+</div>
 </x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;screen&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;signin&quot;, &quot;signup&quot;, &quot;verify&quot;, &quot;setup&quot;, &quot;invite&quot;, &quot;forgot&quot;, &quot;sent&quot;, &quot;reset&quot;, &quot;done&quot;], &quot;default&quot;: &quot;signin&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Flow&quot;}, &quot;showPanel&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Layout&quot;}, &quot;sso&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Layout&quot;}}">
+const SCREENS = ['signin', 'signup', 'verify', 'setup', 'invite', 'forgot', 'sent', 'reset', 'done'];
+const HASH = { 'sign-in': 'signin', 'sign-up': 'signup', forgot: 'forgot', 'check-email': 'sent', 'new-password': 'reset' };
+const okEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+const RULES = [['8+ characters', (p) => p.length >= 8], ['A number', (p) => /\d/.test(p)], ['An uppercase letter', (p) => /[A-Z]/.test(p)]];
+const APP = 'Beyric Note Taker.dc.html';
+
+class Component extends DCLogic {
+  state = {
+    screen: 'signin', f: { name: '', email: '', password: '', confirm: '', workspace: '' },
+    errors: {}, formErr: '', loading: false, showPw: false, remember: true,
+    code: ['', '', '', '', '', ''], codeErr: '', resendIn: 0, cal: null, calBusy: null,
+  };
+  codeRefs = [];
+
+  componentDidMount() {
+    const h = (window.location.hash || '').slice(1);
+    const s = HASH[h] || (SCREENS.includes(h) ? h : null) || (SCREENS.includes(this.props.screen) ? this.props.screen : null);
+    if (s) this.go(s);
+    this._iv = setInterval(() => { if (this.state.resendIn > 0) this.setState((st) => ({ resendIn: st.resendIn - 1 })); }, 1000);
+  }
+  componentWillUnmount() { clearInterval(this._iv); clearTimeout(this._bt); }
+  componentDidUpdate(prev) { if (prev.screen !== this.props.screen && SCREENS.includes(this.props.screen)) this.go(this.props.screen); }
+
+  go = (screen) => {
+    clearTimeout(this._bt);
+    this.setState((s) => ({ screen, errors: {}, formErr: '', loading: false, codeErr: '', showPw: false, code: screen === 'verify' ? ['', '', '', '', '', ''] : s.code, f: { ...s.f, password: screen === 'done' ? '' : s.f.password, confirm: '' } }));
+    if (screen === 'verify' || screen === 'sent') this.setState({ resendIn: 30 });
+    if (screen === 'verify') setTimeout(() => this.codeRefs[0] && this.codeRefs[0].focus(), 50);
+  };
+  busy = (fn) => { this.setState({ loading: true }); this._bt = setTimeout(() => { this.setState({ loading: false }); fn(); }, 900); };
+  set = (k) => (e) => { const v = e.target.value; this.setState((s) => ({ f: { ...s.f, [k]: v }, errors: { ...s.errors, [k]: '' }, formErr: '' })); };
+  pwOk = (p) => RULES.every(([, t]) => t(p));
+  stopIf = (e) => { if (e && e.preventDefault) e.preventDefault(); return this.state.loading; };
+  toApp = () => { window.location.href = APP; };
+
+  submitSignin = (e) => {
+    if (this.stopIf(e)) return;
+    const { email, password } = this.state.f; const er = {};
+    if (!email.trim()) er.email = 'Enter your email.'; else if (!okEmail(email)) er.email = 'Enter a valid email, like you@company.com.';
+    if (!password) er.password = 'Enter your password.';
+    if (Object.keys(er).length) return this.setState({ errors: er });
+    this.busy(() => (password === 'wrong' ? this.setState({ formErr: 'That email and password do not match. Try again or reset your password.' }) : this.toApp()));
+  };
+  submitSignup = (e) => {
+    if (this.stopIf(e)) return;
+    const { name, email, password } = this.state.f; const er = {};
+    if (!name.trim()) er.name = 'Enter your name.';
+    if (!email.trim()) er.email = 'Enter your work email.'; else if (!okEmail(email)) er.email = 'Enter a valid email, like you@company.com.';
+    if (!this.pwOk(password)) er.password = 'Password does not meet the requirements.';
+    if (Object.keys(er).length) return this.setState({ errors: er });
+    this.busy(() => this.go('verify'));
+  };
+  verifyCode = (code) => {
+    this.setState({ codeErr: '' });
+    this.busy(() => {
+      if (code === '000000') { this.setState({ codeErr: 'That code is not right. Check the latest email and try again.', code: ['', '', '', '', '', ''] }); this.codeRefs[0] && this.codeRefs[0].focus(); }
+      else this.go('setup');
+    });
+  };
+  setCode = (next, focusIdx) => {
+    this.setState({ code: next, codeErr: '' });
+    if (focusIdx != null && this.codeRefs[focusIdx]) this.codeRefs[focusIdx].focus();
+    if (next.every((d) => d !== '')) this.verifyCode(next.join(''));
+  };
+  submitSetup = (e) => {
+    if (this.stopIf(e)) return;
+    if (!this.state.f.workspace.trim()) return this.setState({ errors: { workspace: 'Give your workspace a name.' } });
+    this.busy(this.toApp);
+  };
+  submitInvite = (e) => {
+    if (this.stopIf(e)) return;
+    const { name, password } = this.state.f; const er = {};
+    if (!name.trim()) er.name = 'Enter your name.';
+    if (!this.pwOk(password)) er.password = 'Password does not meet the requirements.';
+    if (Object.keys(er).length) return this.setState({ errors: er });
+    this.busy(this.toApp);
+  };
+  submitForgot = (e) => {
+    if (this.stopIf(e)) return;
+    const { email } = this.state.f;
+    if (!okEmail(email)) return this.setState({ errors: { email: email.trim() ? 'Enter a valid email, like you@company.com.' : 'Enter your email.' } });
+    this.busy(() => this.go('sent'));
+  };
+  submitReset = (e) => {
+    if (this.stopIf(e)) return;
+    const { password, confirm } = this.state.f; const er = {};
+    if (!this.pwOk(password)) er.password = 'Password does not meet the requirements.';
+    if (!confirm) er.confirm = 'Type the password again.'; else if (confirm !== password) er.confirm = 'Passwords do not match.';
+    if (Object.keys(er).length) return this.setState({ errors: er });
+    this.busy(() => this.go('done'));
+  };
+
+  renderVals() {
+    const s = this.state;
+    const is = Object.fromEntries(SCREENS.map((k) => [k, s.screen === k]));
+    const bc = (k) => (s.errors[k] ? '#D92D20' : '#D5DBD8');
+    const p = s.f.password;
+    const passed = RULES.filter(([, t]) => t(p)).length;
+    const barCol = passed === 3 ? '#0E6B5E' : passed === 2 ? '#C98A1B' : '#D92D20';
+    const showRuleErr = !!s.errors.password;
+    const head = {
+      signin: { show: true, text: 'New to Beyric?', link: 'Create account', go: () => this.go('signup') },
+      signup: { show: true, text: 'Already have an account?', link: 'Sign in', go: () => this.go('signin') },
+      setup: { show: false },
+      invite: { show: true, text: 'Have an account?', link: 'Sign in', go: () => this.go('signin') },
+    }[s.screen] || { show: true, text: '', link: 'Back to sign in', go: () => this.go('signin') };
+    const L = (idle, busy) => (s.loading ? busy : idle);
+    const fallbackEmail = s.screen === 'reset' ? 'adebayo@beyrictech.com' : 'you@company.com';
+    return {
+      is, f: s.f, e: s.errors, formErr: s.formErr, loading: s.loading,
+      hd: head,
+      sso: this.props.sso ?? true,
+      showPanel: this.props.showPanel ?? true,
+      on: { name: this.set('name'), email: this.set('email'), password: this.set('password'), confirm: this.set('confirm'), workspace: this.set('workspace') },
+      b: { name: bc('name'), email: bc('email'), password: bc('password'), confirm: bc('confirm'), workspace: bc('workspace') },
+      pbg: s.loading ? '#5E9C93' : '#0E6B5E',
+      lbl: {
+        signin: L('Sign in', 'Signing in...'), signup: L('Create account', 'Creating account...'), setup: L('Continue to Beyric', 'Setting up...'),
+        invite: L('Join Beyric', 'Joining...'), forgot: L('Send reset link', 'Sending...'), reset: L('Update password', 'Updating...'),
+      },
+      pwType: s.showPw ? 'text' : 'password', pwToggleLabel: s.showPw ? 'Hide' : 'Show',
+      togglePw: () => this.setState((st) => ({ showPw: !st.showPw })),
+      rm: { boxBg: s.remember ? '#0E6B5E' : '#FFFFFF', boxBorder: s.remember ? '#0E6B5E' : '#C3C9C6', checkOp: s.remember ? 1 : 0 },
+      toggleRemember: () => this.setState((st) => ({ remember: !st.remember })),
+      rules: RULES.map(([label, t], i) => {
+        const ok = t(p);
+        return { label, op: ok ? 1 : 0.35, fg: ok ? '#166534' : showRuleErr ? '#B42318' : '#6E7772', bar: i < passed ? barCol : '#E3E7E5' };
+      }),
+      submitSignin: this.submitSignin, submitSignup: this.submitSignup, submitSetup: this.submitSetup,
+      submitInvite: this.submitInvite, submitForgot: this.submitForgot, submitReset: this.submitReset,
+      ssoGoogle: () => this.busy(() => (s.screen === 'signup' ? this.go('setup') : this.toApp())),
+      ssoMicrosoft: () => this.busy(() => (s.screen === 'signup' ? this.go('setup') : this.toApp())),
+      goForgot: () => this.go('forgot'), goSignup: () => this.go('signup'), goSignin: () => this.go('signin'), goApp: this.toApp,
+      emailShown: s.f.email.trim() || fallbackEmail,
+      codeBoxes: s.code.map((val, i) => ({
+        val, aria: 'Digit ' + (i + 1),
+        border: s.codeErr ? '#D92D20' : val ? '#0E6B5E' : '#D5DBD8',
+        ref: (el) => { this.codeRefs[i] = el; },
+        onChange: (ev) => {
+          const d = ev.target.value.replace(/\D/g, '');
+          const next = [...this.state.code];
+          if (!d) { next[i] = ''; return this.setState({ code: next }); }
+          if (d.length > 1) { d.slice(0, 6 - i).split('').forEach((ch, j) => { next[i + j] = ch; }); return this.setCode(next, Math.min(5, i + d.length)); }
+          next[i] = d; this.setCode(next, i < 5 ? i + 1 : null);
+        },
+        onKeyDown: (ev) => {
+          if (ev.key === 'Backspace' && !this.state.code[i] && i > 0) { const next = [...this.state.code]; next[i - 1] = ''; this.setState({ code: next }); this.codeRefs[i - 1].focus(); ev.preventDefault(); }
+          if (ev.key === 'ArrowLeft' && i > 0) this.codeRefs[i - 1].focus();
+          if (ev.key === 'ArrowRight' && i < 5) this.codeRefs[i + 1].focus();
+        },
+        onPaste: (ev) => {
+          const d = ((ev.clipboardData && ev.clipboardData.getData('text')) || '').replace(/\D/g, '').slice(0, 6);
+          if (!d) return; ev.preventDefault();
+          const next = ['', '', '', '', '', '']; d.split('').forEach((ch, j) => { next[j] = ch; });
+          this.setCode(next, Math.min(5, d.length));
+        },
+      })),
+      codeErr: s.codeErr,
+      canResend: s.resendIn === 0, waitResend: s.resendIn > 0, resendLabel: '0:' + String(s.resendIn).padStart(2, '0'),
+      resend: () => this.setState({ resendIn: 30, codeErr: '' }),
+      calOpts: [['google', 'Google Calendar'], ['outlook', 'Microsoft Outlook']].map(([k, label]) => {
+        const on = s.cal === k; const b = s.calBusy === k;
+        return {
+          label, state: on ? 'Connected' : b ? 'Connecting...' : 'Connect', stFg: on ? '#166534' : '#0E6B5E',
+          border: on ? '#0E6B5E' : '#D5DBD8', bg: on ? '#F3F9F7' : '#FFFFFF',
+          go: () => { if (on) return this.setState({ cal: null }); this.setState({ calBusy: k }); setTimeout(() => this.setState({ calBusy: null, cal: k }), 900); },
+        };
+      }),
+    };
+  }
+}
+</script>
 </body>
 </html>
