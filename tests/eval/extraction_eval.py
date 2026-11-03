@@ -16,10 +16,15 @@ Writes, into OUT_DIR, `<case>.notes.md` (reused by later runs, so two models see
 - at least 90% of the stated due dates are right;
 - the model returned an entry for at least 95% of the action bullets (nothing fell back to the
   parser).
+
+`--mode review` runs the smaller call that W1 actually makes (only which Please check items are
+misheard names or terms) and scores only that: every expected term found, no term where the key
+has none. The default `--mode full` is the call the Tasks phase will use.
 """
 
 import argparse
 import contextlib
+import dataclasses
 import json
 import os
 import pathlib
@@ -240,8 +245,25 @@ def _notes_model(model: str):
         notes_module.get_settings.cache_clear()
 
 
+def review_gate(scores: list[dict]) -> dict:
+    """The W1 call's gate: every expected misheard term found, and none where the key has none."""
+    keys = ("review_expected", "review_found", "review_extra")
+    total = {k: sum(s.get(k, 0) for s in scores) for k in keys}
+    checks = {
+        "every_expected_term_found": total["review_found"] == total["review_expected"],
+        "no_term_where_the_key_has_none": total["review_extra"] == 0,
+    }
+    return dict(passed=all(checks.values()), checks=checks, totals=total)
+
+
 def run_cases(
-    cases, client, *, notes_model: str, extract_model: str, out_dir: pathlib.Path
+    cases,
+    client,
+    *,
+    notes_model: str,
+    extract_model: str,
+    out_dir: pathlib.Path,
+    full: bool = True,
 ) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     tally = dict(notes_input=0, notes_output=0, extract_input=0, extract_output=0)
@@ -260,6 +282,8 @@ def run_cases(
                 )
             notes_path.write_text(text)
         parsed = parse_notes(text)
+        if not full:  # the W1 call is asked about the Please check bullets only
+            parsed = ParsedNotes([], [], [], parsed.please_check)
         record = dict(case=case.name, extraction_failed=False)
         try:
             call = extract(
@@ -269,6 +293,7 @@ def run_cases(
                 case.timezone,
                 client=Counting(client, tally, "extract"),
                 model=extract_model,
+                full=full,
             )
         except ExtractionFailed as exc:
             record.update(extraction_failed=True, error=type(exc).__name__)
@@ -295,15 +320,17 @@ def run_cases(
             )
             continue
         checked = check_extraction(call.result, parsed, case.transcript, case.meeting_date)
-        score = score_case(case, parsed, call.result, checked)
+        scored_case = case if full else dataclasses.replace(case, action_items=[])
+        score = score_case(scored_case, parsed, call.result, checked)
         scores.append(score)
         record.update(score=score, raw=call.result.model_dump())
         results.append(record)
         (out_dir / f"{case.name}.result.json").write_text(json.dumps(record, indent=2))
     summary = dict(
+        mode="full" if full else "review",
         notes_model=notes_model,
         extract_model=extract_model,
-        gate=gate(scores),
+        gate=gate(scores) if full else review_gate(scores),
         cases=results,
         tokens=tally,
     )
@@ -317,6 +344,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("out_dir")
     parser.add_argument("--only", nargs="*")
+    parser.add_argument("--mode", choices=("full", "review"), default="full")
     args = parser.parse_args()
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], max_retries=0, timeout=300)
     summary = run_cases(
@@ -325,6 +353,7 @@ def main() -> None:
         notes_model=os.environ.get("NOTES_MODEL", "gpt-6-luna"),
         extract_model=os.environ.get("EXTRACT_MODEL", "gpt-6-luna"),
         out_dir=pathlib.Path(args.out_dir),
+        full=args.mode == "full",
     )
     print(json.dumps({k: v for k, v in summary.items() if k != "cases"}, indent=2))
     for case in summary["cases"]:

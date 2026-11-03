@@ -3,7 +3,8 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text, update
+from sqlalchemy.orm import Session
 
 from app import ai_runs, workspace
 from app.models import AiRun, Decision, Meeting, OpenQuestion, ReviewItem, Template, User
@@ -34,13 +35,16 @@ Short.
 
 
 class FakeChat:
-    def __init__(self, script):
+    def __init__(self, script, on_call=None):
         self.script = list(script)
+        self.on_call = on_call  # runs while "the model" is being asked
         self.calls = []
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
     def _create(self, **kwargs):
         self.calls.append(kwargs)
+        if self.on_call:
+            self.on_call()
         item = self.script.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -111,10 +115,11 @@ def test_a_run_stores_what_the_notes_say_and_what_the_model_heard(session, meeti
     session.refresh(meeting)
     assert (meeting.extraction_status, meeting.extraction_version) == (
         "done",
-        ai_runs.EXTRACT_PROMPT_VERSION,
+        ai_runs.EXTRACT_REVIEW_PROMPT_VERSION,
     )
     run = session.scalars(select(AiRun)).one()
     assert (run.kind, run.status, run.input_tokens, run.output_tokens) == ("extract", "ok", 700, 90)
+    assert run.prompt_version == ai_runs.EXTRACT_REVIEW_PROMPT_VERSION
     assert run.meeting_id == meeting.id
 
 
@@ -123,7 +128,11 @@ def test_the_call_is_only_asked_about_the_please_check_bullets_in_w1(session, me
     workspace.run_extraction(session, meeting, client=client, now=NOW)
     prompt = "\n".join(m["content"] for m in client.calls[0]["messages"])
     assert '0: "Metrika" may be misheard.' in prompt
-    assert "send the contract" not in prompt.split("<transcript>")[0]  # no action items asked
+    assert (
+        "<action_items>" not in prompt
+        and "send the contract" not in prompt.split("<transcript>")[0]
+    )
+    assert "milestone" not in client.calls[0]["messages"][0]["content"].lower()
 
 
 def test_a_term_the_transcript_never_had_is_not_kept(session, meeting):
@@ -156,6 +165,16 @@ def test_a_failed_call_keeps_the_lists_and_retries_up_to_three_times(session, me
     assert [r.status for r in runs] == ["failed"] * 3
     assert {r.error for r in runs} == {"ExtractionFailed"}
     assert all(r.input_tokens == 700 for r in runs)
+
+
+def test_an_api_failure_is_recorded_as_the_real_cause_not_the_wrapper(session, meeting):
+    import httpx
+    import openai
+
+    request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+    boom = openai.APIConnectionError(request=request)
+    assert workspace.run_extraction(session, meeting, client=FakeChat([boom]), now=NOW) == "pending"
+    assert session.scalars(select(AiRun)).one().error == "APIConnectionError"
 
 
 def test_an_unexpected_error_in_the_call_is_recorded_by_class_name_only(session, meeting):
@@ -334,3 +353,89 @@ def test_the_worker_job_extracts_and_a_failing_job_cannot_stop_the_others(
     worker.background_jobs(session, None, NOW)  # must not raise
     ours = " ".join(r.getMessage() for r in caplog.records)
     assert "extraction job failed (ValueError)" in ours and "secret" not in ours
+
+
+# ---- review findings: lost update, open transaction ----
+
+
+def rewrite_during_the_call(engine, meeting_id, notes):
+    """What "Rewrite the notes" does while the worker is waiting for the model: new notes and the
+    extraction queued again, committed by another connection."""
+
+    def rewrite():
+        with Session(engine) as other:
+            row = other.get(Meeting, meeting_id)
+            row.notes = notes
+            workspace.mark_pending(row)
+            other.commit()
+
+    return rewrite
+
+
+def test_a_rewrite_during_the_model_call_is_not_overwritten_by_done(session, engine, meeting):
+    new_notes = NOTES.replace("Launch moves to 14 March.", "Launch moves to 21 March.")
+    client = FakeChat([GOOD], on_call=rewrite_during_the_call(engine, meeting.id, new_notes))
+    assert workspace.run_extraction(session, meeting, client=client, now=NOW) == "pending"
+    session.expire_all()
+    assert (meeting.extraction_status, meeting.extraction_attempts) == ("pending", 0)
+    assert meeting.extraction_version is None
+    assert [r.heard_as for r in rows(session, ReviewItem)] == [None, None]  # old answer dropped
+    # the next pass reads the new notes and finishes
+    later = NOW + workspace.RETRY_GAP
+    assert workspace.process_next(session, later, client=FakeChat([GOOD])) == meeting.id
+    session.expire_all()
+    assert meeting.extraction_status == "done"
+    assert "Launch moves to 21 March." in [d.text for d in rows(session, Decision)]
+
+
+def test_a_rewrite_during_a_failing_call_does_not_use_up_an_attempt(session, engine, meeting):
+    client = FakeChat(["bad"], on_call=rewrite_during_the_call(engine, meeting.id, NOTES))
+    assert workspace.run_extraction(session, meeting, client=client, now=NOW) == "pending"
+    session.expire_all()
+    assert (meeting.extraction_status, meeting.extraction_attempts) == ("pending", 0)
+
+
+def test_no_transaction_is_open_while_the_model_is_asked(session, engine, meeting):
+    """An open transaction would hold the row locks of the rows just written (a person ticking a
+    review item would wait for the whole call) and a connection."""
+    open_now = []
+
+    def look():
+        with Session(engine) as other:
+            open_now.append(
+                other.scalar(
+                    text(
+                        "select count(*) from pg_stat_activity where datname = current_database()"
+                        " and state like 'idle in transaction%' and pid <> pg_backend_pid()"
+                    )
+                )
+            )
+            # and a write to the rows the run has just written goes straight through
+            other.execute(text("set local lock_timeout = '1s'"))
+            other.execute(update(ReviewItem).values(checked_at=NOW))
+            other.commit()
+
+    workspace.run_extraction(session, meeting, client=FakeChat([GOOD], on_call=look), now=NOW)
+    assert open_now == [0]
+
+
+def test_backfill_leaves_meetings_of_accounts_being_deleted_alone(session, user):
+    ghost = User(email="gone@example.test", status="deleted")
+    session.add(ghost)
+    session.commit()
+    template = session.scalars(select(Template)).first()
+    gone = Meeting(
+        owner_user_id=ghost.id,
+        url="u",
+        platform="zoom",
+        native_id="9",
+        template_id=template.id,
+        status="ready",
+        notes=NOTES,
+        created_at=NOW,
+    )
+    session.add(gone)
+    session.commit()
+    assert workspace.backfill(session, NOW) == {"queued": 0, "decisions_only": 0}
+    session.refresh(gone)
+    assert gone.extraction_status is None

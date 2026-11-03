@@ -1,0 +1,79 @@
+{
+  "case": "weekday_resolution",
+  "extraction_failed": false,
+  "score": {
+    "case": "weekday_resolution",
+    "bullets": 5,
+    "covered": 5,
+    "quotes_given": 5,
+    "quotes_verified": 5,
+    "invented_owners": 0,
+    "raw_invented_owners": 0,
+    "wrong_owners": 0,
+    "dates_stated": 5,
+    "dates_right": 5,
+    "dates_invented": 0,
+    "missing_from_notes": 0,
+    "review_expected": 0,
+    "review_found": 0,
+    "review_extra": 0,
+    "problems": []
+  },
+  "raw": {
+    "action_items": [
+      {
+        "index": 0,
+        "title": "Finish the release notes by Monday.",
+        "spoken_owner": "Bayo",
+        "due_phrase": "by Monday",
+        "due_date": "2026-11-09",
+        "quote": "I will finish the release notes by Monday.",
+        "confidence": "high"
+      },
+      {
+        "index": 1,
+        "title": "Complete the regression run this week.",
+        "spoken_owner": "Sade",
+        "due_phrase": "this week",
+        "due_date": "2026-11-06",
+        "quote": "I'll complete the regression run this week.",
+        "confidence": "high"
+      },
+      {
+        "index": 2,
+        "title": "Draft the customer downtime email by tomorrow morning and send it to Bayo for review.",
+        "spoken_owner": "Sade",
+        "due_phrase": "by tomorrow morning",
+        "due_date": "2026-11-06",
+        "quote": "I will draft it by tomorrow morning and send it to Bayo for review.",
+        "confidence": "high"
+      },
+      {
+        "index": 3,
+        "title": "Review the customer email next Wednesday.",
+        "spoken_owner": "Bayo",
+        "due_phrase": "next Wednesday",
+        "due_date": "2026-11-11",
+        "quote": "I will review it next Wednesday, I am out until then.",
+        "confidence": "high"
+      },
+      {
+        "index": 4,
+        "title": "Book the retrospective for Friday of next week.",
+        "spoken_owner": "Funmi",
+        "due_phrase": "Friday of next week",
+        "due_date": "2026-11-13",
+        "quote": "I will book the retrospective for end of next week, let's say Friday of next week.",
+        "confidence": "high"
+      }
+    ],
+    "review": [],
+    "milestones": [
+      {
+        "name": "Ship",
+        "date": "2026-11-17",
+        "quote": "Yes, agreed, we ship on the Tuesday after next."
+      }
+    ]
+  }
+}

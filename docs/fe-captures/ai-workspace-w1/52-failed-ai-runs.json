@@ -4,19 +4,19 @@
     {
       "meeting_id": 5,
       "status": "failed",
-      "error": "ExtractionFailed",
+      "error": "NotFoundError",
       "model": "no-such-model-w1"
     },
     {
       "meeting_id": 5,
       "status": "failed",
-      "error": "ExtractionFailed",
+      "error": "NotFoundError",
       "model": "no-such-model-w1"
     },
     {
       "meeting_id": 5,
       "status": "failed",
-      "error": "ExtractionFailed",
+      "error": "NotFoundError",
       "model": "no-such-model-w1"
     }
   ]

@@ -18,9 +18,10 @@ def test_prompt_versions_are_named_and_distinct():
         ai_runs.NOTES_PROMPT_VERSION,
         ai_runs.LABEL_PROMPT_VERSION,
         ai_runs.EXTRACT_PROMPT_VERSION,
+        ai_runs.EXTRACT_REVIEW_PROMPT_VERSION,
     ]
     assert all(v and v.strip() == v for v in versions)
-    assert len(set(versions)) == 3
+    assert len(set(versions)) == 4
 
 
 @pytest.fixture
@@ -51,12 +52,30 @@ def test_record_stores_tokens_and_the_prompt_version(session, meeting):
     assert saved.created_at is not None
 
 
+def test_a_run_can_name_its_own_prompt_version(session, meeting):
+    run = ai_runs.record(
+        session, meeting.id, "extract", "m", prompt_version=ai_runs.EXTRACT_REVIEW_PROMPT_VERSION
+    )
+    assert run.prompt_version == ai_runs.EXTRACT_REVIEW_PROMPT_VERSION
+
+
 def test_a_failed_run_keeps_the_class_name_only(session, meeting):
     run = ai_runs.record(
         session, meeting.id, "extract", "m", status="failed", error=ValueError("secret text")
     )
     session.commit()
     assert (run.status, run.error) == ("failed", "ValueError")
+
+
+def test_a_wrapped_error_is_recorded_as_its_cause(session, meeting):
+    try:
+        try:
+            raise TimeoutError("secret words")
+        except TimeoutError as cause:
+            raise ValueError("wrapper") from cause
+    except ValueError as wrapped:
+        run = ai_runs.record(session, meeting.id, "extract", "m", status="failed", error=wrapped)
+    assert run.error == "TimeoutError"
 
 
 def test_the_ledger_outlives_the_meeting(session, meeting):

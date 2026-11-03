@@ -9,9 +9,9 @@ them) and a meeting stuck in `running` by a crash is taken back after a while.
 """
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import ai_runs
@@ -70,19 +70,17 @@ def _reconcile(session: Session, model, meeting_id: int, texts: list[str], **new
     return kept
 
 
-def _fail_or_retry(meeting: Meeting) -> str:
-    meeting.extraction_status = (
-        "failed" if meeting.extraction_attempts >= MAX_ATTEMPTS else "pending"
-    )
-    return meeting.extraction_status
-
-
-def _ask_the_model(session: Session, meeting: Meeting, parsed: ParsedNotes, client) -> dict | None:
+def _ask_the_model(
+    session: Session,
+    meeting_id: int,
+    transcript: str,
+    day: date,
+    parsed: ParsedNotes,
+    client,
+) -> dict | None:
     """The `heard_as` words by please-check index, or None when the call failed (the failure is
-    recorded in `ai_runs`). In W1 only the please-check bullets are asked about: action items are
-    the Tasks phase's, and asking for them now would pay for answers nothing reads."""
-    transcript = meeting.speaker_transcript or meeting.transcript or ""
-    day = (meeting.created_at or datetime.now(UTC)).date()
+    recorded in `ai_runs`, whatever the outcome: the call cost something). Only the please-check
+    bullets are asked about in W1: action items are the Tasks phase's."""
     asked = ParsedNotes([], [], [], parsed.please_check)
     model = None
     try:
@@ -92,28 +90,36 @@ def _ask_the_model(session: Session, meeting: Meeting, parsed: ParsedNotes, clie
     except ExtractionFailed as exc:
         ai_runs.record(
             session,
-            meeting.id,
+            meeting_id,
             "extract",
             model or _configured_model(),
             input_tokens=exc.input_tokens,
             output_tokens=exc.output_tokens,
             status="failed",
             error=exc,
+            prompt_version=ai_runs.EXTRACT_REVIEW_PROMPT_VERSION,
         )
         return None
     except Exception as exc:  # whatever else goes wrong must not fail the meeting either
-        logger.warning("meeting %s: extraction error (%s)", meeting.id, type(exc).__name__)
+        logger.warning("meeting %s: extraction error (%s)", meeting_id, type(exc).__name__)
         ai_runs.record(
-            session, meeting.id, "extract", _configured_model(), status="failed", error=exc
+            session,
+            meeting_id,
+            "extract",
+            _configured_model(),
+            status="failed",
+            error=exc,
+            prompt_version=ai_runs.EXTRACT_REVIEW_PROMPT_VERSION,
         )
         return None
     ai_runs.record(
         session,
-        meeting.id,
+        meeting_id,
         "extract",
         call.model,
         input_tokens=call.input_tokens,
         output_tokens=call.output_tokens,
+        prompt_version=ai_runs.EXTRACT_REVIEW_PROMPT_VERSION,
     )
     return {item.index: item.heard_as for item in checked.review}
 
@@ -137,40 +143,69 @@ def run_extraction(
 
     The lists are written first and kept whatever the model does. `with_ai=False` is the backfill
     for an old meeting: decisions only, nothing else, no model call, status `skipped`.
+
+    Nothing is held across the model call: the claim is committed as `running`, the lists are
+    committed, and only then is the model asked. The result is written with a compare-and-set on
+    `running` and this attempt's time. If the owner rewrote the notes meanwhile
+    (`mark_pending` clears both), the answer belongs to the old notes and is dropped: the meeting
+    stays `pending` and the next pass reads the new notes.
     """
     if meeting.status != "ready" or not meeting.notes:
         return None
+    meeting_id, owner_id = meeting.id, meeting.owner_user_id
     parsed = parse_notes(meeting.notes)
     if not with_ai:
-        _reconcile(session, Decision, meeting.id, parsed.decisions)
+        _reconcile(session, Decision, meeting_id, parsed.decisions)
         meeting.extraction_status = "skipped"
         session.commit()
         return "skipped"
 
+    stamp = now or datetime.now(UTC)
+    transcript = meeting.speaker_transcript or meeting.transcript or ""
+    day = (meeting.created_at or stamp).date()
     meeting.extraction_status = "running"
     meeting.extraction_attempts += 1
-    meeting.extraction_attempted_at = now or datetime.now(UTC)
-    session.commit()
+    meeting.extraction_attempted_at = stamp
+    attempts = meeting.extraction_attempts
+    session.commit()  # also lets go of the claim's row lock
 
-    _reconcile(session, Decision, meeting.id, parsed.decisions)
-    _reconcile(session, OpenQuestion, meeting.id, parsed.open_questions)
-    review = _reconcile(
-        session,
-        ReviewItem,
-        meeting.id,
-        parsed.please_check,
-        owner_user_id=meeting.owner_user_id,
-    )
-    heard = _ask_the_model(session, meeting, parsed, client) if parsed.please_check else {}
-    if heard is None:
-        status = _fail_or_retry(meeting)
+    _reconcile(session, Decision, meeting_id, parsed.decisions)
+    _reconcile(session, OpenQuestion, meeting_id, parsed.open_questions)
+    _reconcile(session, ReviewItem, meeting_id, parsed.please_check, owner_user_id=owner_id)
+    session.commit()  # no row lock or open transaction while the model is being asked
+
+    heard = {}
+    if parsed.please_check:
+        heard = _ask_the_model(session, meeting_id, transcript, day, parsed, client)
+    if heard is not None:
+        status = "done"
+        values = {
+            "extraction_status": "done",
+            "extraction_version": ai_runs.EXTRACT_REVIEW_PROMPT_VERSION,
+        }
     else:
-        if parsed.please_check:
-            for index, text in enumerate(parsed.please_check):
-                review[fingerprint(text)].heard_as = heard.get(index)
-        meeting.extraction_status = status = "done"
-        meeting.extraction_version = ai_runs.EXTRACT_PROMPT_VERSION
+        status = "failed" if attempts >= MAX_ATTEMPTS else "pending"
+        values = {"extraction_status": status}
+    won = session.execute(
+        update(Meeting)
+        .where(
+            Meeting.id == meeting_id,
+            Meeting.extraction_status == "running",
+            Meeting.extraction_attempted_at == stamp,
+        )
+        .values(**values)
+    ).rowcount
+    if not won:
+        session.commit()  # keeps the ledger row; the answer itself is dropped
+        session.expire(meeting)
+        return meeting.extraction_status
+    if heard is not None and parsed.please_check:  # the answer is final: no answer means no hint
+        hints = {fingerprint(text): heard.get(i) for i, text in enumerate(parsed.please_check)}
+        for row in session.scalars(select(ReviewItem).where(ReviewItem.meeting_id == meeting_id)):
+            if row.fingerprint in hints:
+                row.heard_as = hints[row.fingerprint]
     session.commit()
+    session.expire(meeting)
     return status
 
 
@@ -242,6 +277,7 @@ def backfill(session: Session, now: datetime, *, task_days: int = BACKFILL_TASK_
                 Meeting.status == "ready",
                 Meeting.notes.is_not(None),
                 Meeting.extraction_status.is_(None),
+                Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
             )
             .order_by(Meeting.id)
             .limit(1)

@@ -1,0 +1,91 @@
+{
+  "case": "vague_timing",
+  "extraction_failed": false,
+  "score": {
+    "case": "vague_timing",
+    "bullets": 7,
+    "covered": 7,
+    "quotes_given": 7,
+    "quotes_verified": 7,
+    "invented_owners": 0,
+    "raw_invented_owners": 0,
+    "wrong_owners": 0,
+    "dates_stated": 3,
+    "dates_right": 3,
+    "dates_invented": 0,
+    "missing_from_notes": 0,
+    "review_expected": 0,
+    "review_found": 0,
+    "review_extra": 0,
+    "problems": []
+  },
+  "raw": {
+    "action_items": [
+      {
+        "index": 0,
+        "title": "Build the portal login screens",
+        "spoken_owner": "Segun",
+        "due_phrase": "tomorrow",
+        "due_date": "2026-11-04",
+        "quote": "I will build the login screens tomorrow",
+        "confidence": "high"
+      },
+      {
+        "index": 1,
+        "title": "Deliver the portal dashboard",
+        "spoken_owner": "Segun",
+        "due_phrase": "in the coming weeks",
+        "due_date": null,
+        "quote": "I will build the login screens tomorrow and have the dashboard in the coming weeks.",
+        "confidence": "high"
+      },
+      {
+        "index": 2,
+        "title": "Write the data-export spec",
+        "spoken_owner": "Ebuka",
+        "due_phrase": "by next Monday",
+        "due_date": "2026-11-09",
+        "quote": "I will write the spec by next Monday.",
+        "confidence": "high"
+      },
+      {
+        "index": 3,
+        "title": "Estimate the data-export work",
+        "spoken_owner": null,
+        "due_phrase": null,
+        "due_date": null,
+        "quote": "After that someone has to estimate the work, but we do not know who has capacity.",
+        "confidence": "medium"
+      },
+      {
+        "index": 4,
+        "title": "Reply to the auditors about the export format",
+        "spoken_owner": null,
+        "due_phrase": "soon",
+        "due_date": null,
+        "quote": "The auditors asked for the export format soon. Whoever picks it up should reply to them.",
+        "confidence": "medium"
+      },
+      {
+        "index": 5,
+        "title": "Review the new-hire job description",
+        "spoken_owner": "Priya",
+        "due_phrase": null,
+        "due_date": null,
+        "quote": "I'll review the job description at some point, but I will not commit to a date.",
+        "confidence": "high"
+      },
+      {
+        "index": 6,
+        "title": "Update the staging server",
+        "spoken_owner": "Segun",
+        "due_phrase": "tonight",
+        "due_date": "2026-11-03",
+        "quote": "I will update the staging server tonight.",
+        "confidence": "high"
+      }
+    ],
+    "review": [],
+    "milestones": []
+  }
+}

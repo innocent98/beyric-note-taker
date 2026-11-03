@@ -6,9 +6,9 @@
       "kind": "extract",
       "model": "gpt-6-luna",
       "status": "ok",
-      "prompt_version": "extract-v1",
-      "input_tokens": 1088,
-      "output_tokens": 108,
+      "prompt_version": "extract-review-v1",
+      "input_tokens": 596,
+      "output_tokens": 82,
       "error": null
     },
     {
@@ -16,9 +16,9 @@
       "kind": "extract",
       "model": "gpt-6-luna",
       "status": "ok",
-      "prompt_version": "extract-v1",
-      "input_tokens": 1121,
-      "output_tokens": 127,
+      "prompt_version": "extract-review-v1",
+      "input_tokens": 629,
+      "output_tokens": 52,
       "error": null
     },
     {
@@ -26,9 +26,9 @@
       "kind": "extract",
       "model": "gpt-6-luna",
       "status": "ok",
-      "prompt_version": "extract-v1",
-      "input_tokens": 1088,
-      "output_tokens": 136,
+      "prompt_version": "extract-review-v1",
+      "input_tokens": 596,
+      "output_tokens": 80,
       "error": null
     }
   ]

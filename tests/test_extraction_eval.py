@@ -249,3 +249,43 @@ def test_a_failed_extraction_call_counts_as_a_failed_case_not_a_crash(tmp_path):
     )
     assert out["cases"][0]["extraction_failed"] is True
     assert not out["gate"]["passed"]
+
+
+def test_the_review_mode_run_scores_only_the_review_and_asks_the_review_prompt(tmp_path):
+    notes = "\n\n".join(
+        f"## {h}\n{body}"
+        for h, body in [
+            ("Summary", "S"),
+            ("Key points", "- k"),
+            ("Decisions", "None noted"),
+            ("Action items", "- Tunde: send the contract (by Friday)"),
+            ("Open questions", "None noted"),
+            ("Please check", "- Metrika may be misheard"),
+        ]
+    )
+    seen = []
+
+    class Spy(FakeChat):
+        def _create(self, **kw):
+            seen.append(kw)
+            return super()._create(**kw)
+
+    out = ev.run_cases(
+        [CASE],
+        Spy(notes, {"review": [{"index": 0, "heard_as": "Metrika"}]}),
+        notes_model="n",
+        extract_model="m",
+        out_dir=tmp_path,
+        full=False,
+    )
+    schema = [kw for kw in seen if "response_format" in kw][0]["response_format"]["json_schema"]
+    assert set(schema["schema"]["properties"]) == {"review"}
+    assert out["mode"] == "review" and out["gate"]["passed"]
+    assert out["gate"]["totals"]["review_found"] == 1
+
+
+def test_the_review_mode_gate_fails_on_a_missed_or_an_extra_term():
+    base = {"review_expected": 1, "review_found": 1, "review_extra": 0}
+    assert ev.review_gate([base])["passed"]
+    assert not ev.review_gate([{**base, "review_found": 0}])["passed"]
+    assert not ev.review_gate([{**base, "review_extra": 1}])["passed"]

@@ -46,3 +46,11 @@ The first run also passed the gate. Two things in it were wrong and were fixed b
 ## Decision
 
 Go. Build W1 with `EXTRACT_MODEL=gpt-6-luna`.
+
+## Addendum: the call W1 actually makes (review mode)
+
+After an Opus review of PR #49 the W1 call was cut down to the part W1 uses: only which Please check items are misheard names or terms (`extract(..., full=False)`, prompt `extract-review-v1`, one attempt, 60 second timeout, 2000 output tokens). The full call above (`extract-v1`) is unchanged and is what W2 will run. `tests/eval/extraction_eval.py --mode review` scores the smaller call: every expected term found, none where the key has none.
+
+**Review mode (what ships), 2026-11-03 re-run with the same cached notes: PASS.** The one expected misheard term ("Metrika") found, **0** terms where the key has none. Cost: 4.2k input and 248 output tokens for all 7 meetings. Captures: `ai-extraction-eval/review-mode/`.
+
+**Full call re-run with the new limits (60 second timeout, one attempt, 2000 output tokens): still PASS, but not identical to the first run.** 0 invented or wrong owners, 17 of 17 dates, 30 of 30 bullets covered, the term found, and **29 of 30 quotes verified** (96.7%, gate 95%; the first run had 30 of 30). The one that did not verify (`planted`, the VAT item) was a quote stitched from three separate turns, skipping the turns in between: the code check flagged it `unverified` and dropped the quote, as designed, and its owner stayed empty. So the model is not deterministic, the quote check does its job, and a 5% margin is thin on a 30 item set. The 2000 token cap did not cut off any of the 7 answers (extraction output 4.5k tokens in all). Captures: `ai-extraction-eval/full-rerun/`.

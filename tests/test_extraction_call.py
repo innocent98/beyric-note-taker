@@ -6,7 +6,7 @@ import httpx
 import openai
 import pytest
 
-from app import extraction, retry
+from app import extraction
 from app.extraction import ExtractionFailed, ParsedNotes, extract
 
 NOTES = ParsedNotes(
@@ -56,6 +56,7 @@ class FakeChat:
 
 
 def run(client, **kw):
+    kw.setdefault("full", True)  # the tests below that are about the review-only call say so
     return extract(
         NOTES, TRANSCRIPT, date(2026, 11, 3), "Africa/Lagos", client=client, model="m-1", **kw
     )
@@ -79,7 +80,7 @@ def test_the_model_setting_is_used_when_no_model_is_passed(monkeypatch):
     extraction.get_settings.cache_clear()
     try:
         client = FakeChat([REPLY])
-        extract(NOTES, TRANSCRIPT, date(2026, 11, 3), "UTC", client=client)
+        extract(NOTES, TRANSCRIPT, date(2026, 11, 3), "UTC", client=client, full=True)
         assert client.calls[0]["model"] == "from-settings"
     finally:
         extraction.get_settings.cache_clear()
@@ -108,6 +109,7 @@ def test_a_closing_tag_inside_the_transcript_cannot_end_the_block():
         "UTC",
         client=client,
         model="m",
+        full=True,
     )
     assert text_of(client).count("</transcript>") == 1
 
@@ -152,10 +154,46 @@ def test_a_json_reply_in_a_code_fence_is_accepted():
     assert out.result.review[0].index == 0
 
 
-def test_a_transient_api_error_is_retried_and_a_final_one_fails(monkeypatch):
-    monkeypatch.setattr(retry.time, "sleep", lambda s: None)
+def test_one_attempt_only_a_transient_error_fails_the_call_and_is_not_retried():
+    """It is retried across worker passes (5 minutes apart), not inside one: a retry inside would
+    hold up the worker loop and bill again."""
     request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
-    boom = openai.APIConnectionError(request=request)
-    assert run(FakeChat([boom, REPLY])).result.review
+    client = FakeChat([openai.APIConnectionError(request=request), REPLY])
+    with pytest.raises(ExtractionFailed) as caught:
+        run(client)
+    assert len(client.calls) == 1
+    assert "APIConnectionError" in str(caught.value)
+
+
+def test_the_output_is_capped_and_a_cut_off_reply_fails():
+    client = FakeChat([REPLY])
+    run(client)
+    assert client.calls[0]["max_completion_tokens"] == extraction.MAX_OUTPUT_TOKENS
     with pytest.raises(ExtractionFailed):
-        run(FakeChat([boom, boom, boom]))
+        run(FakeChat([("{}", "length")]))
+
+
+def test_the_default_client_is_short_and_makes_no_retries_of_its_own(monkeypatch):
+    seen = {}
+
+    def fake_openai(**kwargs):
+        seen.update(kwargs)
+        return FakeChat([REPLY])
+
+    monkeypatch.setattr(extraction, "OpenAI", fake_openai)
+    extract(NOTES, TRANSCRIPT, date(2026, 11, 3), "UTC", model="m")
+    assert seen["timeout"] == extraction.EXTRACT_TIMEOUT <= 60
+    assert seen["max_retries"] == 0
+
+
+def test_the_review_call_asks_only_about_please_check_and_has_a_review_only_schema():
+    client = FakeChat([{"review": [{"index": 0, "heard_as": "Metrika"}]}])
+    out = extract(NOTES, TRANSCRIPT, date(2026, 11, 3), "UTC", client=client, model="m")
+    prompt = text_of(client)
+    system = client.calls[0]["messages"][0]["content"]
+    assert "<action_items>" not in prompt and "<please_check>" in prompt
+    assert "milestone" not in system.lower() and "action item" not in system.lower()
+    schema = client.calls[0]["response_format"]["json_schema"]["schema"]
+    assert set(schema["properties"]) == {"review"} and schema["required"] == ["review"]
+    assert out.result.review[0].heard_as == "Metrika"
+    assert out.result.action_items == [] and out.result.milestones == []

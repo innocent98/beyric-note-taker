@@ -154,7 +154,7 @@ Three meetings, grouped. `title` is the meeting code label (`Google Meet <code>`
         "id": 3,
         "title": "Google Meet vag-cccc-ddd",
         "platform": "google_meet",
-        "created_at": "2026-11-02T17:55:12.502803Z"
+        "created_at": "2026-11-02T20:30:51.726855Z"
       },
       "decisions": [
         {
@@ -176,7 +176,7 @@ Three meetings, grouped. `title` is the meeting code label (`Google Meet <code>`
         "id": 2,
         "title": "Zoom 81234567890",
         "platform": "zoom",
-        "created_at": "2026-11-01T17:55:12.501570Z"
+        "created_at": "2026-11-01T20:30:51.725590Z"
       },
       "decisions": [
         {
@@ -194,7 +194,7 @@ Three meetings, grouped. `title` is the meeting code label (`Google Meet <code>`
         "id": 1,
         "title": "Google Meet nat-aaaa-bbb",
         "platform": "google_meet",
-        "created_at": "2026-10-31T17:55:12.498416Z"
+        "created_at": "2026-10-31T20:30:51.722621Z"
       },
       "decisions": [
         {
@@ -225,7 +225,7 @@ Words match: only the matching decision of the meeting.
         "id": 1,
         "title": "Google Meet nat-aaaa-bbb",
         "platform": "google_meet",
-        "created_at": "2026-10-31T17:55:12.498416Z"
+        "created_at": "2026-10-31T20:30:51.722621Z"
       },
       "decisions": [
         {
@@ -252,7 +252,7 @@ Meeting-code match: all decisions of that meeting.
         "id": 2,
         "title": "Zoom 81234567890",
         "platform": "zoom",
-        "created_at": "2026-11-01T17:55:12.501570Z"
+        "created_at": "2026-11-01T20:30:51.725590Z"
       },
       "decisions": [
         {
@@ -335,7 +335,7 @@ The list afterwards (`limit=1`): decision 4 is gone from the group.
         "id": 3,
         "title": "Google Meet vag-cccc-ddd",
         "platform": "google_meet",
-        "created_at": "2026-11-02T17:55:12.502803Z"
+        "created_at": "2026-11-02T20:30:51.726855Z"
       },
       "decisions": [
         {
@@ -405,7 +405,7 @@ most 200 come back; `truncated` says there were more.
         "id": 2,
         "title": "Zoom 81234567890",
         "platform": "zoom",
-        "created_at": "2026-11-01T17:55:12.501570Z"
+        "created_at": "2026-11-01T20:30:51.725590Z"
       }
     },
     {
@@ -417,7 +417,7 @@ most 200 come back; `truncated` says there were more.
         "id": 1,
         "title": "Google Meet nat-aaaa-bbb",
         "platform": "google_meet",
-        "created_at": "2026-10-31T17:55:12.498416Z"
+        "created_at": "2026-10-31T20:30:51.722621Z"
       }
     },
     {
@@ -429,7 +429,7 @@ most 200 come back; `truncated` says there were more.
         "id": 1,
         "title": "Google Meet nat-aaaa-bbb",
         "platform": "google_meet",
-        "created_at": "2026-10-31T17:55:12.498416Z"
+        "created_at": "2026-10-31T20:30:51.722621Z"
       }
     }
   ],
@@ -453,12 +453,12 @@ No body; both return the updated item. Checking again keeps the first time.
   "id": 1,
   "text": "Dan said, “I have only heard it said out loud, so I am not sure about the spelling.”",
   "heard_as": "Metrika",
-  "checked_at": "2026-11-03T17:55:24.820373Z",
+  "checked_at": "2026-11-03T20:31:04.573551Z",
   "meeting": {
     "id": 1,
     "title": "Google Meet nat-aaaa-bbb",
     "platform": "google_meet",
-    "created_at": "2026-10-31T17:55:12.498416Z"
+    "created_at": "2026-10-31T20:30:51.722621Z"
   }
 }
 ```
@@ -469,7 +469,7 @@ Again: the same `checked_at` as #31.
 
 ```json
 {
-  "checked_at": "2026-11-03T17:55:24.820373Z"
+  "checked_at": "2026-11-03T20:31:04.573551Z"
 }
 ```
 
@@ -508,12 +508,12 @@ checked**. It does **not** change this meeting's notes.
     "id": 1,
     "text": "Dan said, “I have only heard it said out loud, so I am not sure about the spelling.”",
     "heard_as": "Metrika",
-    "checked_at": "2026-11-03T17:55:24.846688Z",
+    "checked_at": "2026-11-03T20:31:04.604828Z",
     "meeting": {
       "id": 1,
       "title": "Google Meet nat-aaaa-bbb",
       "platform": "google_meet",
-      "created_at": "2026-10-31T17:55:12.498416Z"
+      "created_at": "2026-10-31T20:30:51.722621Z"
     }
   },
   "term": {
@@ -633,10 +633,14 @@ After two items were checked or moved: it follows the items.
 
 ## 7. Server facts that shape the screens
 
-- The model call asks only about Please check items (W1). `ai_runs` shows what it cost, live
-  (#10): about 1,100 input and 100 to 130 output tokens per meeting here (short synthetic meetings;
-  an hour-long one will be larger).
-- A failed call is recorded by exception class only (#52).
+- The model call asks only about Please check items (W1), one attempt with a 60 second limit and a
+  capped answer. `ai_runs` shows what it cost, live (#10): about 600 input and 50 to 80 output
+  tokens per meeting here (short synthetic meetings; an hour-long one will be larger).
+- A failed call is recorded by exception class only, the real cause (`NotFoundError` in #52). A
+  transient network failure (`APIConnectionError`) happened in two of the runs taken while
+  preparing these captures; those runs were discarded and re-taken, so it is **not** in the
+  committed files. It behaves as #49 to #51 show: the meeting goes back to `pending` and is tried
+  again at least 5 minutes later, so `pending` can last longer than a few seconds.
 - The backfill (#53) is `scripts/backfill_extraction.py`: decisions for every ready meeting, the
   full extraction queued for those of the last 14 days. Nothing is ever emailed.
 
