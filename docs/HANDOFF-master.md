@@ -15,7 +15,7 @@ Adebayo is awake. Standing rules: merge only on his explicit "merge #N" (a bare 
 | Edge secret | **Live.** `curl -sI https://notes.beyrictech.com/health` shows `x-edge-ok: true`, so nginx and FastAPI agree. The forwarded-for gap (a container forging the address FastAPI rate-limits on) is closed; the sign-up blocker is gone. Adebayo reported (2026-11-03 morning) that he deleted `TRUSTED_PROXY_IPS` from the server `.env`, redeployed, and logged in once from his browser (sets the `__Host-device` cookie). Not checked from here |
 | Shipped since the last handoff | **#21** owner screens in Next (login, meetings, meeting detail, templates, vocabulary); **#23** the designer's Auth, Landing, Brand, Emails and logo files (docs); **#26** UI parity: the Next pages follow the designer's files (new logo and tokens, app shell, notes sections, sign-in, landing, privacy and terms frames, favicon, PWA icons, share image; SOP `2026-11-03-ui-parity.md`, report `docs/ui/parity-report.md`); **#25** edge secret plus login limits (5 failures per 5 minutes per address, 10 per hour per account, known-device cookie; SOP `2026-11-03-edge-secret-and-login-limits.md`); **#20** pilot design spec |
 | Open PR | **#24** `docs/pilot-decisions` (this branch): Adebayo's pilot answers in the spec (section 0a) plus this handoff, checklist and SOP reconciliation. Docs only; merge on his "merge #24" |
-| Sessions | None running. Sub-session names from the earlier run (`nextjs-scaffold`, `json-api`, `pilot-design`, `stream-c-owner-app-scree`) and the later ones for #25 and #26 are finished and idle |
+| Sessions | Started 2026-11-03 10:30 WAT, all in worktrees, PRs only: `live-qa` (`fix/nextjs-live-qa`), `proxy-fallback` (`chore/remove-trusted-proxy-fallback`), `pilot-plan` (`docs/pilot-plan`), `accounts-core` (`feature/pilot-accounts-core`, Phase A core, stops after one PR; the second PR `feature/pilot-accounts-signup` starts only on the lead's word). Older sessions are finished |
 | Meetings | Meeting 5 was the last live one, done. Not re-checked since; check before any deploy |
 | Local checkout | On `docs/pilot-decisions`; local `main` is behind `origin/main`. Worktree sessions get a local branch named `claude/...`; rename before the first push. No `claude/` branch exists on the remote |
 
@@ -53,18 +53,20 @@ Earlier decisions stand (summarised in memory `beyric-note-taker-decisions`): mo
 - Nginx edits are done (login and regenerate zones). If not already: `sudo nginx -t && sudo systemctl reload nginx`. Never `cp deploy/nginx.conf` over the live file.
 - During a live meeting (and with two overlapping), run `docker stats --no-stream` and `free -h` and paste the output: it turns the capacity estimates into numbers. Also read the Next container's memory (`mem_limit` is set on it).
 - Backup cron line (`deploy/README.md` step 7; the privacy policy says backups are deleted after 14 days, so it must exist); Cloudflare proxy on or off.
-- Add `RESEND_API_KEY` to the server `.env` when the accounts work needs email.
+- `RESEND_API_KEY` is in the server `.env` (done, reported 2026-11-03).
 
 **Decisions and approvals**
 - Say "merge #24" (docs only).
 - **GitGuardian**: the 2 findings that failed #19 sit in an earlier commit; no real secret (test placeholders such as `wrong-password`). He marks them false positive in the dashboard. Nobody rewrites history.
 - Google: confirm the approved scopes cover Calendar read (and Meet if the spike works); Google Cloud project and consent screen; verify `beyrictech.com` in Search Console (DNS TXT); mailboxes `privacy@`, `legal@`, `security@beyrictech.com`.
-- Vexa licence for commercial use; launch bot-machine budget, or a vendor instead.
+- Vexa licence: **confirmed by Adebayo 2026-11-03, commercial use allowed** (his statement; licence text not re-read). Still open: launch bot-machine budget, or a vendor instead.
 - Designer: draw the instant-Meet control; Teams wording for policy and terms waits for the Teams spike.
 - Hosting country (France per IP lookup; check the Contabo panel); a DPO decision; ideally a lawyer reads privacy and terms.
 - Merge Novex-News#10; rate the Zoom #3 notes; run the hour-long meeting and a French plus English call.
 
 ## 6. Incoming work, in order
+
+**2026-11-03 10:30 WAT: items 1, 2, 3 and the accounts part of 4 are in flight in four sessions (section 1, "Sessions"). Check their PRs before starting anything below. Known gaps are in the checklist section "Known gaps recorded 2026-11-03". Pending decision: Vexa's calendar sync is a pasted secret ICS address, not OAuth; see `docs/spike/vexa-calendar-sync-ics.md` for the comparison and the recommendation (Google OAuth stays primary; ICS as the Outlook and fallback path).**
 
 1. **Verify what is live in a browser.** Only status codes and one login (his) have been checked since #26 deployed. Walk `/`, `/login`, `/privacy`, `/terms`, meetings, a meeting detail, templates, vocabulary, light and phone width. Also run `web/scripts/owner-e2e.mjs` and `owner-browser-check.mjs` on the compose stack: they were updated for #26 but never run, and #26 deployed without them. Fix what is off in one small PR (`fix/` or `feature/nextjs-ui-fixes`).
 2. **Remove the trusted-proxy fallback** (small PR, `chore/remove-trusted-proxy-fallback`): `trusted_proxy_ips` in `app/config.py` and its use in `app/edge.py`, the hard-coded `next` address trust, the startup warning's second branch, `.env.example` and `deploy/README.md` rows. The code is still there; deleting the `.env` line only stopped using it. Keep the secret path and tests. Update the SOP follow-up and checklist deferred item.
