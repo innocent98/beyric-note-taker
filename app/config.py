@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     audio_dir: str = "data/audio"
 
     app_env: str = "production"
+    # Read only by migration 0006, which creates the admin account from them. After that the
+    # login uses the `users` table and OWNER_PASSWORD can be removed from .env.
+    owner_email: str = ""
     owner_password: str = ""
     session_secret: str = ""
     cookie_secure: bool = True
