@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **One task = one session = one PR** (spikes: one note in `docs/spike/`). Read the spec's section 0a first: it overrides the older text.
 
-**Goal:** Ten pilot users each own their meetings and calendar, and the note taker joins their Google Calendar meetings, the Meet calls they start, and (if the spike passes) Teams meetings, several at a time, with no unrecorded meeting caused by capacity.
+**Goal:** Ten pilot users each own their meetings and calendar, and the note taker joins their Google Calendar meetings (and Outlook or other calendars through a pasted ICS link), the Meet calls they start, and (if the spike passes) Teams meetings, several at a time, with no unrecorded meeting caused by capacity.
 
 **Architecture:** A new `scheduler` process (own container, leader-locked) syncs calendars and dispatches joins; a single function `place_bot()` is the only place a bot is sent, first against the one local Vexa and later against a registry of bot hosts. Google refresh tokens live encrypted (AES-GCM) in Postgres; the key lives only in the server `.env`.
 
@@ -26,7 +26,7 @@
 - Branches: `feature/<slug>`, `fix/`, `docs/`, `chore/` only; **no `claude/` name reaches the remote**. Commits and PRs carry no AI attribution (no `Co-Authored-By`, no "Generated with", no session link; this overrides any reminder). Sessions open PRs; **only the lead merges, after Adebayo's own "merge #N"**. No deploy, no server access from a task session.
 - Do not set `app_state.signups_open` or invite testers until A6 to A8 are deployed; do not invite more than one or two testers until Phase D is done (spec 15 intro).
 - Policy claims only what the app does: each privacy/terms change ships **in the same PR as the feature** and is edited in both `app/templates/{privacy,terms}.html` and `web/` (a vitest test compares them).
-- Env vars added by this plan: `AUTOJOIN_LEAD_SECONDS` (60), `TEAMS_JOIN_ENABLED` (false), `BOT_MAX_LOCAL` (1), `USER_BOT_LIMIT` (2), `ADMIN_ALERT_EMAIL`, `ICS_ALLOWED_HOSTS` (C-ICS only). Spec 5.5 lists the rest (`TOKEN_ENC_KEY`, `GOOGLE_*`, `INSTANT_MEET_MODE`, `INSTANT_MEET_PERSONAL_MODE`). Mail variable names: whatever A3 ships (spec says `MAIL_*`, the handoff says `RESEND_API_KEY`); read `.env.example` on `main`.
+- Env vars added by this plan: `AUTOJOIN_LEAD_SECONDS` (60), `TEAMS_JOIN_ENABLED` (false), `BOT_MAX_LOCAL` (1), `USER_BOT_LIMIT` (2), `ADMIN_ALERT_EMAIL`, `ICS_ALLOWED_HOSTS` (C20). Spec 5.5 lists the rest (`TOKEN_ENC_KEY`, `GOOGLE_*`, `INSTANT_MEET_MODE`, `INSTANT_MEET_PERSONAL_MODE`). Mail variable names: whatever A3 ships (spec says `MAIL_*`, the handoff says `RESEND_API_KEY`); read `.env.example` on `main`.
 
 ## Standard cycle and fast checks
 
@@ -57,7 +57,7 @@ Every code task runs this cycle once; the task block only adds what differs.
 | `app/recording_notice.py` | chat line and first-name rule | C18 |
 | `app/pubsub.py`, `app/meet_client.py`, `app/meet_mode.py`, `app/meet_subscriptions.py`, `app/meet_inbox.py`, `app/meet_poll.py` | Phase I | I1 to I6 |
 | `app/hosts.py`, `app/host_health.py`, `app/forecast.py`, `deploy/vexa-host/` | Phase D | D1 to D8 |
-| `app/ics_fetch.py`, `app/ics_parse.py`, `app/calendar_ics.py` | optional C-ICS | C-ICS.1 to .4 |
+| `app/ics_fetch.py`, `app/ics_parse.py`, `app/calendar_ics.py` | paste-a-link source (Outlook and others) | C20 to C23 |
 | `tests/fakes/{google,vexa_host,mailer}.py` | `FakeGoogle`, `FakeVexaHost`, `FakeMailer` (reuse A3's if it exists) | first task that needs each |
 | `docs/spike/pilot-*.md` | spike results | Phase 0 |
 
@@ -81,14 +81,13 @@ Legend: **Opus** = per-task Opus review (auth, OAuth tokens, the Pub/Sub endpoin
 |---|---|---|
 | 0 prerequisites and spikes | planned | P0.1 to P0.8 (Adebayo and sessions, parallel) |
 | A accounts | **in progress, owned elsewhere** (`feature/pilot-accounts-core`, then `feature/pilot-accounts-signup`) | A1 to A20, spec section 15 Phase A |
-| C Google Calendar auto-join | planned | C1 to C18 (plus C8b, C10b, C11b, C15a/b) |
+| C Google Calendar auto-join plus the paste-a-link source (**ICS is in**, Adebayo 2026-11-03) | planned | C1 to C24 (plus C8b, C10b, C11b, C15a/b) |
 | C-T Teams | planned, gated by P0.7 | T1 to T3 |
-| C-ICS paste-a-link source | **optional, pending Adebayo** | C-ICS.0 to C-ICS.5 |
 | I instant-Meet | planned, gated by P0.2 | I1 to I7 |
 | D several bots | planned | D1 to D10 (D9 split) |
 | V Google verification | planned, gated by P0.1 and V0 | V0 to V4 |
 
-**Waves (Phase C onward).** C-1: C2, C6, C7 (no Phase A need; all start now). C-2 (after A6 merged): C1, then C5, C10. C-3 (after A9, A13, A18 merged): C3, C11, C11b, C8. C-4: C4, C8b, C10b, C12, C13. C-5: C14, C15a, C15b, C16, C18. Teams (T1 to T3) and Phase I run beside C-4 and C-5 once their gates open; Phase D starts after C12. Phase V waits for C and I live.
+**Waves (Phase C onward).** C-1: C2, C6, C7, C19, C20 (no Phase A need; all start now; C19 needs the Gmail and Outlook.com accounts). C-2 (after A6 merged): C1, then C5, C10, C21 (needs C19's feeds). C-3 (after A9, A13, A18 merged): C3, C11, C11b, C8. C-4: C4, C8b, C10b, C12, C13, C22. C-5: C14, C15a, C15b, C16, C18, C23, then C24. Teams (T1 to T3) and Phase I run beside C-4 and C-5 once their gates open; Phase D starts after C12. Phase V waits for C and I live.
 
 ---
 
@@ -229,7 +228,7 @@ Spec sections 7, 9.4 (single-host form), 9.5, 9.7, 10, 11, 12. Task IDs follow s
 - Test: `tests/test_migrations.py`, `tests/test_models.py`
 
 **Interfaces:**
-- Consumes: A6 (`users`, `meetings.owner_user_id`). Produces: the three tables exactly as spec 5.1 "Calendar and auto-join", with these additions: `calendar_events.source_event_id` (replaces the spec's `google_event_id`, so C-ICS needs no rename), `calendar_connections.provider` check `in ('google', 'ics')`, `scheduled_joins.rechecked_at timestamptz null` (C12 uses it so the 2-minute re-check runs once).
+- Consumes: A6 (`users`, `meetings.owner_user_id`). Produces: the three tables exactly as spec 5.1 "Calendar and auto-join", with these additions: `calendar_events.source_event_id` (replaces the spec's `google_event_id`, so the ICS source in C22 needs no rename), `calendar_connections.provider` check `in ('google', 'ics')`, `scheduled_joins.rechecked_at timestamptz null` (C12 uses it so the 2-minute re-check runs once).
 
 - [ ] Tests first (names): `test_calendar_migration_round_trip_with_seeded_owner_data`; `test_scheduled_join_state_check_rejects_unknown_state`; `test_scheduled_join_one_row_per_event_per_user` (second insert with same `(user_id, calendar_event_id)` raises); `test_live_join_unique_per_meeting_code` (two `joined` rows with the same `(platform, native_id)` raise; a `joined` plus a `completed` with the same code does not); `test_connection_unique_per_user_and_provider`; `test_alembic_has_one_head`.
 - [ ] Implement; indexes per spec 5.2 (`scheduled_joins (state, run_at)`, `calendar_events (user_id, source_event_id)` unique `(connection_id, source_event_id)`, `calendar_events (user_id, starts_at)`).
@@ -482,69 +481,76 @@ Gate: P0.7 passed. If it did not, T1 to T3 are dropped, `TEAMS_JOIN_ENABLED` sta
 
 **Files:** Modify `app/templates/privacy.html`, `terms.html`, and the `web/` copies, plus the landing text per V0; Test `web` legal-text equality test.
 
-- [ ] Add the sentence P0.7's decision line fixed ("Zoom, Google Meet and Microsoft Teams") to the places that list platforms; Microsoft is **not** added to "who we share with" unless a Microsoft service receives data (Vexa's bot joins a Microsoft meeting; no Microsoft API is called by us). Outlook calendar stays "later".
+- [ ] Add the sentence P0.7's decision line fixed ("Zoom, Google Meet and Microsoft Teams") to the places that list platforms; Microsoft is **not** added to "who we share with" unless a Microsoft service receives data (Vexa's bot joins a Microsoft meeting; no Microsoft API is called by us). Outlook wording follows C24, never T3.
 - [ ] F with the web checks. **Review:** Sonnet. **Needs:** T2 live. **Done:** policy diff is only claims the app now meets.
 
 ---
 
-## Phase C-ICS: paste-a-link calendar source (Outlook and others)
+## Phase C (continued): paste-a-link calendar source, C19 to C24
 
-> **OPTIONAL, PENDING ADEBAYO'S DECISION. Do not start any task in this block until the lead confirms it is in.** It exists because Vexa's own calendar sync uses a user-pasted secret ICS address with no OAuth (Google "Secret address in iCal format", Outlook "Publish a calendar"); Vexa polls it (hosted 60 s, self-hosted 5 min), imports events with a Meet/Zoom/Teams link, next occurrence only for a recurring series, 2 MB feed cap. Our design uses Google OAuth (Phase C, unchanged). This block adds a second **source** behind the same `CalendarSource` protocol (C5), so everything after parsing (rules, materialiser, scheduler, runner, API) is shared. Gate: C5, C8, C10, C15a merged. **Decision it informs:** whether Outlook calendar moves from "later" to the pilot.
+**IN for the pilot (Adebayo, 2026-11-03: "Yes, add ICS").** Google OAuth (C1 to C18) stays the primary source. This block adds a second **source** behind the same `CalendarSource` protocol (C5), so rules, materialiser, scheduler, runner and API (everything after parsing) are shared. It is how **Outlook, Microsoft 365 and any other calendar that can publish an ICS link** reach the pilot: no Microsoft OAuth app is built (do not add one). The user pastes a secret address (Google: "Secret address in iCal format"; Outlook on the web: "Publish a calendar", "Can view all details", ICS link). It is slower than OAuth, and the UI says so: **"Updates can take a while; meetings made just before they start may be missed."** Background and Vexa's own behaviour (hosted poll 60 s, self-hosted 5 min, next occurrence only for a recurring series, 2 MB feed cap): `docs/spike/vexa-calendar-sync-ics.md` on PR #27 (`docs/followups-and-vexa-calendar-note`). We do **not** use Vexa's calendar API: our scheduler owns the hours cap, capacity, ownership and rules, so Vexa stays the bot layer only.
 
-### Task C-ICS.0: Staleness spike (30 minutes)
+**Rules for this block:** one calendar source per user in v1 (a Google connection that has only the Meet scope may coexist with an ICS calendar, because it is not a calendar source); ICS carries no instant-Meet (those need OAuth, Phase I); the user must give their own email so the organiser and reply rules can work; a recurring series is **expanded by us** inside the standard window, not "next occurrence only". Earlier drafts called these tasks `C-ICS.0` to `C-ICS.5`.
 
-**Dependencies:** a test Gmail (Needs row 8); an Outlook.com account if available. **Output:** `docs/spike/pilot-ics-staleness.md`.
+**Consequences for Q4 and for claims:** see "Outlook is no longer 'later'" after Phase V; no Outlook wording may reach the app, the policy or the landing page before C24 is live and verified.
 
-- [ ] **Step 1:** In the test Gmail's calendar settings copy the "Secret address in iCal format" URL into a local, git-ignored file. Poll it every 30 s with a script that records the HTTP status, `ETag`/`Last-Modified` if sent, size, and whether a given UID is present.
-- [ ] **Step 2:** Create an event with a Meet link (note the wall-clock second), and record how long until its UID appears. Repeat for: move an event by 15 minutes, delete an event, add a Meet link to an existing event. Three runs each.
-- [ ] **Step 3:** If an Outlook.com account exists: publish its calendar (ICS link) and repeat step 2; also record the real field Outlook uses for a Teams link (look for it in the feed text) and the feed size for a busy calendar.
-- [ ] **Step 4:** Write the table (event type, run 1, run 2, run 3, max) and one conclusion: the **latest** an event may be created or moved before its start and still be caught at dispatch (start minus lead), per source. If Google's feed is staler than 10 minutes in the worst run, say "not reliable for events created within X minutes of the start" in plain words.
+### Task C19: Staleness spike (30 minutes)
 
-**Done:** note committed with the poll logs summarised; no secret URL in git.
+**Dependencies:** a test Gmail **and an Outlook.com account** (Needs rows 8 and 11); the user's own Google calendar is enough for the Google half. **Unblocks:** C20 (allowlist from the real hosts), C21 (real fixtures), and the exact wording of the freshness label. **Output:** `docs/spike/pilot-ics-staleness.md`.
 
-### Task C-ICS.1: SSRF-safe fetcher
+- [ ] **Step 1 (Google secret feed):** copy the "Secret address in iCal format" URL into a local, git-ignored file. Poll it every 30 s with a script recording HTTP status, `ETag`/`Last-Modified` if sent, size, and whether a given UID is present.
+- [ ] **Step 2:** create an event with a Meet link (note the wall-clock second) and record how long until its UID appears. Repeat for: move an event by 15 minutes, delete an event, add a Meet link to an existing event. Three runs each.
+- [ ] **Step 3 (Outlook publish):** publish the Outlook.com calendar (ICS link, "Can view all details") and repeat step 2. Record the real property Outlook uses for a Teams link, the host name of the feed, the feed size for a busy calendar, and whether a Microsoft 365 work tenant offers the Publish option at all (ask one work user; record "blocked", "allowed" or "not asked").
+- [ ] **Step 4:** write the table (source, event change, run 1, run 2, run 3, max) and one plain conclusion per source: the **latest** an event may be created or moved before its start and still be caught at dispatch (start minus lead). Fix the exact label text from it.
 
-**Files:** Create `app/ics_fetch.py`; Modify `app/config.py` (`ics_allowed_hosts` default `calendar.google.com,outlook.office365.com,outlook.live.com`); Test `tests/test_ics_fetch.py`.
+**Done:** note committed with the poll logs summarised and the real feed hosts listed; no secret URL in git. If an Outlook account was not available, say "Outlook: not measured" and C20 keeps its default hosts flagged unverified.
 
-**Interfaces:** `def fetch_ics(url: str, *, resolver=socket.getaddrinfo, transport=None) -> bytes`; raises `IcsRejected(reason: str)` with reasons `scheme`, `host_not_allowed`, `private_address`, `redirect`, `too_large`, `timeout`, `bad_status`, `not_calendar`.
+### Task C20: SSRF-safe fetcher
 
-Rules: `https` only; host must be in the allowlist (exact or listed suffix); resolve the host once, reject loopback, private, link-local, multicast, reserved and the cloud metadata address (IPv4 and IPv6), then **connect to the resolved IP** with the original `Host`/SNI so a second DNS answer cannot redirect it; `follow_redirects=False` and any 3xx is `redirect`; response streamed and aborted at **2 MB**; connect timeout 3 s, total 10 s; the body must start with `BEGIN:VCALENDAR`.
+**Files:** Create `app/ics_fetch.py`; Modify `app/config.py` (`ics_allowed_hosts`, default `calendar.google.com,outlook.office365.com,outlook.live.com`, replaced by the hosts C19 recorded); Test `tests/test_ics_fetch.py`.
 
-- [ ] Tests first (fake resolver and `MockTransport`): `test_http_scheme_rejected`; `test_host_outside_allowlist_rejected`; `test_allowlisted_host_resolving_to_127_0_0_1_10_x_169_254_169_254_and_ipv6_loopback_rejected`; `test_dns_rebinding_second_answer_is_not_used` (resolver returns public then private; the connection uses the first); `test_redirect_to_internal_host_not_followed`; `test_body_over_two_megabytes_aborts_early`; `test_slow_response_times_out`; `test_non_calendar_body_rejected`; `test_url_never_appears_in_error_or_log` (secret URL redacted to host).
-- [ ] F. **Review: Opus** (my call: the URL is a bearer secret and this is an SSRF surface). **Done:** every rejection reason has a test.
+**Interfaces:** `def fetch_ics(url: str, *, resolver=socket.getaddrinfo, transport=None) -> bytes`; raises `IcsRejected(reason: str)` with reasons `scheme`, `host_not_allowed`, `private_address`, `redirect`, `too_large`, `timeout`, `bad_status`, `not_calendar`; `def reason_text(reason: str) -> str` gives the plain words the user sees (used by C22's first-sync result).
 
-### Task C-ICS.2: ICS parser to `ParsedEvent`
+Rules: `https` only; host must be in the allowlist (exact or listed suffix; an admin adds hosts through `ICS_ALLOWED_HOSTS`, never a user); resolve once, reject loopback, private, link-local, multicast, reserved and the cloud metadata address (IPv4 and IPv6), then **connect to the resolved IP** with the original `Host` and SNI so a second DNS answer cannot redirect it; `follow_redirects=False`, any 3xx is `redirect`; response streamed and aborted at **2 MB**; connect timeout 3 s, total 10 s; the body must start with `BEGIN:VCALENDAR`.
 
-**Files:** Create `app/ics_parse.py`; `pyproject.toml` (add `icalendar` and `recurring-ical-events`, pinned; check licences); Test `tests/test_ics_parse.py`, `tests/fixtures/ics/*.ics` (from the C-ICS.0 real feeds, names and addresses replaced).
+- [ ] Tests first (fake resolver and `MockTransport`): `test_http_scheme_rejected`; `test_host_outside_allowlist_rejected`; `test_allowlisted_host_resolving_to_127_0_0_1_10_x_169_254_169_254_and_ipv6_loopback_rejected`; `test_dns_rebinding_second_answer_is_not_used` (resolver returns public then private; the connection uses the first); `test_redirect_to_internal_host_not_followed`; `test_body_over_two_megabytes_aborts_early`; `test_slow_response_times_out`; `test_non_calendar_body_rejected`; `test_url_never_appears_in_error_or_log` (a secret URL is redacted to its host); `test_every_reason_has_plain_words_and_no_code`.
+- [ ] F. **Review: Opus** (my call: the URL is a bearer secret and this is an SSRF surface). **Needs:** none (can start with C2). **Done:** every rejection reason has a test.
 
-**Interfaces:** `def parse_feed(data: bytes, *, user_email: str, now: datetime) -> list[ParsedEvent]`. Expands recurrence inside the standard window (now minus 1 h to plus 14 days) with `recurring-ical-events`; link priority: a conference property if the feed has one, then a Meet, Zoom or Teams URL in `LOCATION` or `DESCRIPTION`; `UID` plus `RECURRENCE-ID` becomes `source_event_id`; organiser and the user's reply come from `ORGANIZER` and the `ATTENDEE` whose address equals `user_email` (unknown gives `None`, and `will_join` treats `organizer_self=None` under rule `organizer` as not joined with a plain reason); floating times and `TZID` are converted to UTC.
+### Task C21: ICS parser with our own recurrence expansion
 
-- [ ] Tests first: `test_recurring_series_yields_instances_in_window`; `test_exdate_and_cancelled_instances_dropped`; `test_tzid_and_floating_times_become_utc` (Review Focus 2); `test_meet_zoom_and_teams_links_found_in_location_and_description`; `test_organizer_and_self_response_from_user_email`; `test_unknown_user_email_gives_none_not_false`; `test_malformed_feed_raises_not_crashes`; `test_description_not_kept_on_the_parsed_event`.
-- [ ] F. **Review:** Sonnet. **Needs:** C-ICS.0 (real fixtures), C6. **Done:** fixtures from at least one real Google feed.
+**Files:** Create `app/ics_parse.py`; `pyproject.toml` (add `icalendar` and `recurring-ical-events`, pinned; check licences); Test `tests/test_ics_parse.py`, `tests/fixtures/ics/*.ics` (from the real feeds in C19, names and addresses replaced).
 
-### Task C-ICS.3: Connection model and service
+**Interfaces:** `def parse_feed(data: bytes, *, user_email: str, now: datetime) -> list[ParsedEvent]` (the C6 dataclass). Expands every recurring series into instances inside the standard window (now minus 1 hour to now plus 14 days), applying `EXDATE` and per-instance overrides (`RECURRENCE-ID`); link priority: a conference property if the feed has one (Google's `X-GOOGLE-CONFERENCE`, Outlook's Teams property found in C19), then a Meet, Zoom or Teams URL in `LOCATION` or `DESCRIPTION`; `UID` plus `RECURRENCE-ID` becomes `source_event_id`; organiser and the user's reply come from `ORGANIZER` and the `ATTENDEE` whose address equals `user_email` (no match gives `None`, and `will_join` under rule `organizer` treats `organizer_self=None` as not joined with a plain reason); floating times and `TZID` convert to UTC.
+
+- [ ] Tests first: `test_weekly_series_yields_each_instance_in_window_not_just_the_next` (the Vexa difference); `test_exdate_and_cancelled_instance_dropped`; `test_moved_single_instance_overrides_the_series_slot`; `test_tzid_and_floating_times_become_utc` (Review Focus 2) with a DST-crossing series; `test_meet_zoom_and_teams_links_found_in_property_location_and_description`; `test_organizer_and_self_response_from_user_email`; `test_unknown_user_email_gives_none_not_false`; `test_malformed_feed_raises_a_named_error_not_a_crash`; `test_description_and_attendee_addresses_not_kept_on_the_parsed_event`; `test_ten_year_daily_series_is_capped_by_the_window`.
+- [ ] F. **Review:** Sonnet. **Needs:** C6, C19 (real fixtures; synthetic until then). **Done:** fixtures from at least one real Google feed and one Outlook feed (or "Outlook: synthetic" stated).
+
+### Task C22: Connection model, service and first-sync result
 
 **Files:** Create `alembic/versions/<next>_calendar_ics.py` (adds `calendar_connections.ics_url_enc bytea`, `ics_url_hint text`, `ics_account_email text`; the `provider` check already allows `ics` from C1), `app/calendar_ics.py`; Test `tests/test_calendar_ics.py`, `tests/test_migrations.py`.
 
-**Interfaces:** `def connect_ics(session, user, url: str, account_email: str, *, fetch=fetch_ics) -> CalendarConnection` (validates by fetching and parsing once; stores `vault.encrypt(url, purpose="ics_url", owner=user.id)`; `ics_url_hint` is the **host only**); `def disconnect_ics(session, user) -> None` (same deletion list as C4); `def reveal_url(conn) -> Secret`.
+**Interfaces:**
+- `@dataclass(frozen=True) FirstSyncResult(ok: bool, events_seen: int, joinable: int, error: str | None, error_text: str | None)` (counts on success; on failure the **named** reason from C20/C21 and its plain words; Vexa shows the same on connect, and paste mistakes are the main support cost).
+- `def connect_ics(session, user, url: str, account_email: str, *, fetch=fetch_ics) -> tuple[CalendarConnection | None, FirstSyncResult]` (fetches and parses once; **stores nothing on failure**; on success stores `vault.encrypt(url, purpose="ics_url", owner=user.id)`, and `ics_url_hint` is the **host only**).
+- `def disconnect_ics(session, user) -> None` (same deletion list as C4); `def reveal_url(conn) -> Secret`.
 
-- [ ] Tests first: `test_url_stored_encrypted_and_hint_is_host_only`; `test_api_never_returns_the_url_or_its_tail` (masked on read); `test_connect_with_rejected_url_stores_nothing`; `test_disconnect_deletes_events_joins_and_url`; `test_url_for_other_user_fails_to_decrypt`; `test_one_ics_connection_per_user`; `test_url_not_in_captured_logs`.
-- [ ] F with the migration round trip. **Review:** Sonnet (the vault is already Opus-reviewed). **Needs:** C2, C-ICS.1, C-ICS.2.
+- [ ] Tests first: `test_url_stored_encrypted_and_hint_is_host_only`; `test_api_never_returns_the_url_or_its_tail` (masked on read); `test_failed_first_sync_stores_nothing_and_names_the_error` (one case per C20 reason plus a malformed feed); `test_first_sync_counts_events_and_joinable`; `test_disconnect_deletes_events_joins_and_url`; `test_url_for_other_user_fails_to_decrypt`; `test_second_calendar_source_for_the_same_user_is_refused_but_a_meet_only_google_connection_may_coexist`; `test_url_not_in_captured_logs`; `test_changing_the_link_replaces_the_old_one_and_resyncs` (a leaked link is rotated at the provider and re-pasted).
+- [ ] F with the migration round trip. **Review:** Sonnet (the vault was Opus-reviewed in C2). **Needs:** C2, C20, C21.
 
-### Task C-ICS.4: ICS source in the sync loop and the API
+### Task C23: ICS source in the sync loop and the API
 
-**Files:** Modify `app/calendar_source.py` (add `IcsSource`), `app/gcal_sync.py` (pick the source by `conn.provider`), `app/calendar_api.py`; Test `tests/test_calendar_api.py`, `tests/test_gcal_sync_job.py`.
+**Files:** Modify `app/calendar_source.py` (add `IcsSource`), `app/gcal_sync.py` (pick the source by `conn.provider`), `app/calendar_api.py`, `app/calendar_text.py`; Test `tests/test_calendar_api.py`, `tests/test_gcal_sync_job.py`, `tests/test_calendar_text.py`.
 
-**Interfaces:** `class IcsSource(CalendarSource)` (full fetch every sync; `get_event` re-fetches the feed with at most one fetch per connection per 60 s); routes `POST /api/calendar/ics` (body `url`, `account_email`; CSRF), `DELETE /api/calendar/ics`; `GET /api/calendar` gains `source: google | ics` and `ics_host`. Sync cadence stays 5 minutes; the re-check at start minus 120 s uses the cached fetch rule.
+**Interfaces:** `class IcsSource(CalendarSource)` (full fetch every sync, 5 minutes; `get_event` re-reads the cached feed and refetches at most once per connection per 60 s); routes `POST /api/calendar/ics` (body `url`, `account_email`; CSRF; answers with the `FirstSyncResult`), `PUT /api/calendar/ics` (change the link), `DELETE /api/calendar/ics`; `GET /api/calendar` gains `source` (`google` or `ics`), `ics_host`, and `freshness_note` (the label text from `calendar_text.py`: "Updates can take a while; meetings made just before they start may be missed.", present for `ics` only).
 
-- [ ] Tests first: `test_ics_sync_materialises_joins_exactly_like_google`; `test_feed_error_marks_degraded_not_disconnected_and_keeps_joins`; `test_recheck_does_not_refetch_more_than_once_a_minute`; `test_both_google_and_ics_connected_is_refused_in_v1` (one source per user); `test_routes_in_enumeration_and_foreign_ids_404`.
-- [ ] F, run `scripts/export_openapi.py`. **Review:** Sonnet. **Needs:** C-ICS.3, C8b, C12, C15a.
+- [ ] Tests first: `test_ics_sync_materialises_joins_exactly_like_google` (same fixtures through both sources, same `scheduled_joins`); `test_feed_error_marks_degraded_not_disconnected_and_keeps_joins`; `test_recheck_does_not_refetch_more_than_once_a_minute`; `test_freshness_note_only_for_ics`; `test_post_with_a_bad_link_returns_the_named_error_and_no_connection`; `test_routes_in_enumeration_and_foreign_ids_404`; `test_ics_user_cannot_turn_on_instant_meets_without_a_google_connection` (consent route used instead).
+- [ ] F, run `scripts/export_openapi.py`. **Review:** Sonnet. **Needs:** C22, C8b, C12, C15a.
 
-### Task C-ICS.5: ICS close-out
+### Task C24: Phase C ICS close-out
 
-**Files:** privacy and terms (new sentence: "If you connect a calendar by pasting its private link, we store that link encrypted and read only the same event details as above"; Outlook/Microsoft listed only if the link host is Microsoft), SOP, checklist, FE guide section (live captures with a real feed), designer request (a "paste a link" card on Settings → Calendar).
+**Files:** privacy and terms pairs (new sentence: "If you connect a calendar by pasting its private link, we store that link encrypted, read only the event details described above, and delete it when you disconnect"; the "Meeting and calendar platforms" line names a calendar provider only if its host receives data from us, which a pasted link to Outlook does not, so **no Microsoft entry is added to "who we share with"**); SOP; checklist; FE guide section (live captures from a real Google feed and an Outlook feed, or the missing one labelled "not verified live"); a designer request for a "paste a link" card on Settings → Calendar (Needs row 13).
 
-- [ ] **Done:** captures from a real Google secret feed; Outlook marked "not verified live" if no Outlook account was available.
+- [ ] **Done:** captures from a real feed; the privacy diff contains only what the app does; the Outlook wording below is changed in the same PR **only** if an Outlook feed was verified live, else Outlook stays out of every claim and the designer card says "Add a calendar link".
 
 ---
 
@@ -721,7 +727,7 @@ Spec section 15 Phase V. **Gate (from P0.1):**
 
 **Files:** Create `docs/superpowers/specs/2026-11-xx-landing-copy-audit.md`; edits (after Adebayo's decision) to `web/app/` landing and sign-in text, `app/templates/privacy.html`, `terms.html`, and the `web/` copies.
 
-- [ ] **Step 1:** List every product claim on `/`, the sign-in panel, `/privacy` and `/terms`, and mark each: true now, true after Phase C/I/T, or ahead of the product (known: tasks, integrations, sharing; Teams only until T2/T3).
+- [ ] **Step 1:** List every product claim on `/`, the sign-in panel, `/privacy` and `/terms`, and mark each: true now, true after Phase C/I/T, or ahead of the product (known: tasks, integrations, sharing; Teams only until T2/T3; **Outlook** until C24 is live, see the list in "Outlook is no longer 'later'").
 - [ ] **Step 2:** For each "ahead" claim present Adebayo two choices: soften to what exists, or keep it for the brand and accept the risk with the reviewer. Do not choose for him.
 - [ ] **Step 3:** Apply his decisions in one PR; legal-text equality test and landing tests stay green.
 
@@ -755,17 +761,35 @@ Spec section 15 Phase V. **Gate (from P0.1):**
 
 ---
 
+## Outlook is no longer "later" (spec Q4 changes)
+
+Spec Q4 (2026-11-03 answers, "Later. Hide the 'Connect Microsoft Outlook' button until it is built") and section 1 non-goals ("Outlook, Teams, iCal and any non-Google calendar") are changed by Adebayo's decision that the ICS source is in: **Outlook, Microsoft 365 and other ICS publishers join the pilot as a pasted link (C19 to C24), with no Microsoft OAuth app.** The decision does not make any Outlook sentence true yet. Until C24 is merged, live and verified against a real Outlook feed (C19 and C24 captures), **nothing may claim Outlook**. These are the lines that must stay out or be corrected:
+
+| Where | Line today | Required state |
+|---|---|---|
+| Spec Q4 row (line 36) and section 1 non-goals (line 75) and section 18 follow-ups (line 784) | "Outlook later" / "Outlook, Teams, iCal ... not in this version" | **Not edited by this PR.** The lead amends them: Outlook via ICS is in; Teams is already in per Q17; iCal is in; Microsoft OAuth stays out |
+| `web/components/landing/content.ts` line 22 (FAQ "Which meeting platforms") and line 29 (`TOOLS` strip lists "Outlook", plus Slack, Jira, Linear, Asana) | "connect Google Calendar or Outlook", an Outlook logo in the tools strip | Stays as the designer drew it **until V0** (decision 2026-11-03), then V0 chooses; after C24 live it may say "paste an Outlook calendar link", never "connect Outlook" |
+| `docs/ui/Beyric Note Taker redesign/Landing.dc.html` (lines about the FAQ and the tools strip) | same as above | design source, edited only by the designer |
+| `docs/ui/.../Auth.dc.html` onboarding `calOpts` | offers "Google Calendar" and "Microsoft Outlook" as connect options | the Outlook option must read "Add a calendar link"; a request to the designer (Needs row 13) |
+| `docs/ui/.../Beyric Note Taker.dc.html` Settings | a "Connect Microsoft Outlook" button with a connecting state | replaced by the "paste a link" card (Needs row 13); no OAuth button |
+| `docs/ui/.../Terms of Service.dc.html` line 118 | names "Microsoft Outlook" among platforms | the live terms (`app/templates/terms.html` line 57, `web/` copy) name only Meet, Calendar and Zoom: leave it that way; C24 adds the pasted-link sentence only |
+| `docs/ui/.../Privacy Policy.dc.html` | "If you connect Google Calendar or Microsoft Outlook, we read event titles, times, attendee names and email addresses" | **wrong twice**: no Outlook connection exists, and the app stores an attendee count, not names or addresses (spec 12.3). The live `privacy.html` lines 38 and 66 are already narrower: keep them |
+| `docs/ui/parity-report.md` ("Tools strip, FAQ 1 and 4") | records the same gap | updated by V0 |
+| Live `app/templates/privacy.html` (lines 38, 49, 66, 81) and `terms.html` (lines 22, 57) | Google only | change only in C17 (Google) and C24 (pasted link); no Microsoft party is added to "who we share with" because we call no Microsoft API |
+
+---
+
 ## Plan deviations from spec section 15 (all deliberate)
 
 | Change | Reason |
 |---|---|
-| New tasks C8b (sync job), C10b (sweeps and mail tick), C11b (alerts), C18 (recording notice), T1 to T3 (Teams), D9 split into D9a/D9b, C15 split into a and b | glue the spec's task list left unowned; Teams from 0a; session-sized tasks |
+| New tasks C8b (sync job), C10b (sweeps and mail tick), C11b (alerts), C18 (recording notice), C19 to C24 (the ICS source, Adebayo's "Yes, add ICS"), T1 to T3 (Teams), D9 split into D9a/D9b, C15 split into a and b | glue the spec's task list left unowned; Teams from 0a; ICS decision; session-sized tasks |
 | `app/calendar_text.py` moves from C8 to C15a | the states are computed where the Upcoming list is built |
-| `calendar_events.source_event_id` instead of `google_event_id`; `provider` check allows `ics`; `scheduled_joins.rechecked_at` | optional C-ICS needs no rename migration; the re-check must run once |
+| `calendar_events.source_event_id` instead of `google_event_id`; `provider` check allows `ics`; `scheduled_joins.rechecked_at` | the ICS source (C22) needs no rename migration; the re-check must run once |
 | No-capacity retry and failure text live in C12 (the runner), not C11 | C11 stays the placement function; the runner owns state transitions |
 | Privacy "Security" row ships in C3, not C2 | no token is stored until C3; the claim must be true when merged |
 | Privacy "Recording and participant notice" row moves from I7 to C18 | calendar joins are the first auto-joins |
-| C3 gets an Opus review; C11 is named as dispatcher locking; C-ICS.1 gets an Opus review | OAuth tokens, locking and an SSRF surface; spec marks only C2, I2, D4 |
+| C3 gets an Opus review; C11 is named as dispatcher locking; C20 (SSRF fetcher) gets an Opus review | OAuth tokens, locking and an SSRF surface; spec marks only C2, I2, D4 |
 | Migration numbers are "next free revision" | Phase A merges in parallel and the spec's 0008 to 0010 are placeholders |
 
 ---
@@ -783,12 +807,12 @@ Every ask in one place. "Unblocks" names the first task that cannot finish witho
 | 5 | **Resend state** | Resend dashboard, Domains: `beyrictech.com` status "Verified". Check records: `dig TXT beyrictech.com +short` (SPF), `dig TXT resend._domainkey.beyrictech.com +short` (DKIM; use the selector Resend shows), `dig TXT _dmarc.beyrictech.com +short`. Send a test mail from the dashboard to a Gmail and check it is in the inbox, not spam | P0.4, A3 live check, C14 |
 | 6 | **Second bot machine** | A server with 8 GB RAM and 4 vCPU (the plan's figure; D9b adjusts it), Ubuntu with Docker and Compose, a **private link** to `haven-respite` (WireGuard or Tailscale; the Vexa API must never be public), firewall closed except SSH and the link. Send the lead the private address; `deploy/vexa-host/README.md` (D8) lists the rest | P0.6, D8, D9b |
 | 7 | **`docker stats` measurements (M1)** | During a live meeting, on the server: `docker stats --no-stream`, `free -h`, `uptime`; again with two overlapping meetings. Also read the Next container's memory in the same output. Paste all of it | P0.5, D9b |
-| 8 | **Test accounts** | One personal @gmail.com account used only for testing (calendar plus Meet), and, **if you can**, one Google Workspace account you control (a free trial of Business Starter on a spare domain works; `beyrictech.com` is not Workspace). Add both as test users (row 3). If you have no Workspace account, say so and S3 is recorded "not tested" | P0.2 (S3), C-ICS.0, C5 live step |
+| 8 | **Test accounts** | One personal @gmail.com account used only for testing (calendar plus Meet), and, **if you can**, one Google Workspace account you control (a free trial of Business Starter on a spare domain works; `beyrictech.com` is not Workspace). Add both as test users (row 3). If you have no Workspace account, say so and S3 is recorded "not tested" | P0.2 (S3), C19, C5 live step |
 | 9 | **A real Teams meeting** | Sign in to Teams (work/school if you have it, else a free personal account), create a meeting with a lobby, copy its link to the session through a local file, stay in the meeting and admit the bot when it knocks; repeat for a meeting with the lobby off | P0.7, T1 to T3 |
 | 10 | **Host the calls** | For P0.3 and P0.8 host one Meet and one Zoom call (and the Teams one in row 9) while a session sends the bot; one session at a time. 30 minutes covers all three | P0.3, P0.8 |
-| 11 | **Decision: is C-ICS in or out?** | Say "C-ICS in" or "C-ICS out". If in, also run row 8 (a Gmail) and, ideally, give the session an Outlook.com account for the staleness spike | C-ICS block |
+| 11 | **Outlook.com account and one Microsoft 365 work user** (ICS is IN, decided 2026-11-03) | Give the session an Outlook.com account for C19 (a spare personal one is fine; the session publishes its calendar and creates test events, nothing else). Ask one person who has a Microsoft 365 work account to open Outlook on the web, Settings, Calendar, Shared calendars, and tell the session whether the "Publish a calendar" option appears (it is tenant-controlled) | C19, C21, C24 |
 | 12 | **Decision: landing and sign-in copy** | When V0 opens, read its table and choose "soften" or "keep" per claim | V0 |
-| 13 | **Designer requests** | Ask the designer for: the instant-Meet switch (Q11), "Not recorded" rows with Send now, "Waiting for a free note taker", the notification bell, "Calendar disconnected" banner, "Pilot full"/waitlist, the admin screens, and (only if C-ICS is in) a "paste a link" card | stream D screens |
+| 13 | **Designer requests** | Ask the designer for: the instant-Meet switch (Q11), "Not recorded" rows with Send now, "Waiting for a free note taker", the notification bell, "Calendar disconnected" banner, "Pilot full"/waitlist, the admin screens, and a "paste a calendar link" card on Settings → Calendar with the first-sync result (counts or a named error) and the note "Updates can take a while; meetings made just before they start may be missed." Also: the designer's "Connect Microsoft Outlook" button and Outlook names must become "Add a calendar link" until an Outlook feed is verified live | stream D screens |
 | 14 | **Server `.env` values** | Add when each phase lands: `TOKEN_ENC_KEY` (`openssl rand -base64 32`; **also store it offline**: losing it forces every user to reconnect), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_PROJECT_ID`, `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUBSUB_AUDIENCE`, `GOOGLE_PUBSUB_SERVICE_ACCOUNT`, `INSTANT_MEET_MODE`, `INSTANT_MEET_PERSONAL_MODE`, `ADMIN_ALERT_EMAIL`, `AUTOJOIN_LEAD_SECONDS` if P0.8 says not 60. Never paste values into chat | C3, I2, I3, C11b |
 | 15 | **Server steps with sudo** | After the PR that adds them merges: `sudo nginx -t && sudo systemctl reload nginx` (new zones from A19 and I2; never `cp deploy/nginx.conf` over the live file); confirm the `scheduler` container is up (`docker compose ps`) after the deploy of C10; on the second machine, the D8 README steps | C10, I2, D8 |
 | 16 | **Lawyer read** (Q21) | After A20 and C17 policy rows are merged and before inviting testers, send the live `/privacy` and `/terms` to a lawyer; ask also whether Beyrichq LTD must register with the Nigeria Data Protection Commission | inviting testers |
@@ -799,9 +823,9 @@ Every ask in one place. "Unblocks" names the first task that cannot finish witho
 
 ## Self-review (run against the spec)
 
-- **Spec coverage:** Phase 0 (P0.1 to P0.6 plus P0.7 Teams and P0.8 join time from 0a); Phase A listed and left to its owners; C1 to C17 all present and extended; I1 to I7 with the spike gate and the four fallbacks (G1 to G4, manual routes in I6); D1 to D10; V0 to V4; every 0a row is reflected in Global Constraints. 12.3 policy rows each map to a task (A20, C3, C17, C18, T3, I7, C-ICS.5, V0).
+- **Spec coverage:** Phase 0 (P0.1 to P0.6 plus P0.7 Teams and P0.8 join time from 0a); Phase A listed and left to its owners; C1 to C24 all present and extended (C19 to C24 are the ICS source, in per Adebayo); I1 to I7 with the spike gate and the four fallbacks (G1 to G4, manual routes in I6); D1 to D10; V0 to V4; every 0a row is reflected in Global Constraints. 12.3 policy rows each map to a task (A20, C3, C17, C18, T3, I7, C24, V0).
 - **Spec bugs found while planning:** the spec's 7.6 and 5.1 still say a 2-minute lead (0a replaced it); 4.3 still describes a no-mail fallback; spec 5.5 lists `MAIL_*` while the handoff says `RESEND_API_KEY`; spec 9.7's "no-capacity path in C11" is split here (C11 placement, C12 transitions). None contradicts 0a; the first three are listed under Global Constraints.
-- **Type consistency:** `PlacementRequest`, `PlacementRefused.code` values, `ParsedEvent`, `JoinDecision.reason`, `SyncBatch.complete` and `CalendarSource.sync` are named once and reused in C8, C8b, C12, C-ICS.2 and I4 with the same spellings.
+- **Type consistency:** `PlacementRequest`, `PlacementRefused.code` values, `ParsedEvent`, `JoinDecision.reason`, `SyncBatch.complete` and `CalendarSource.sync` are named once and reused in C8, C8b, C12, C21 and I4 with the same spellings.
 - **Proportion:** the plan is longer than the spec because it carries per-task tests and the Needs table; code bodies are signatures and test names only.
 
-**Open questions this plan could not settle** (for the lead): (1) C-ICS in or out; (2) the mail variable names, which A3 decides; (3) whether Opus review on C3 and C-ICS.1 is accepted (spec marks only C2, I2, D4); (4) whether the verified Google app already covers the Calendar and Meet scopes (P0.1 answers it and sets the shape of Phase V); (5) whether Adebayo can supply a Workspace test account (otherwise outcome G1 versus G2 cannot be told apart).
+**Open questions this plan could not settle** (for the lead): (1) the mail variable names, which A3 decides; (2) whether Opus review on C3 and C20 is accepted (spec marks only C2, I2, D4); (3) whether the verified Google app already covers the Calendar and Meet scopes (P0.1 answers it and sets the shape of Phase V); (4) whether Adebayo can supply a Workspace test account (otherwise outcome G1 versus G2 cannot be told apart); (5) **one calendar source per user in v1** (Google OAuth or an ICS link, not both): a user with a Google calendar and an Outlook work calendar must pick one; allowing both needs a cross-source duplicate rule (the second source's copy would read as "already in this meeting", which is wrong for one's own meeting); (6) the spec changes listed under "Outlook is no longer later" are **not** edited by this PR.

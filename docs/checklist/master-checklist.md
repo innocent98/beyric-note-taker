@@ -155,7 +155,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] P0.7 Teams spike with a real Teams meeting (Q17)
   - [ ] P0.8 Join-time measurement fixes `AUTOJOIN_LEAD_SECONDS` (default 60)
 - [ ] Phase A, accounts: **in progress, owned by other sessions** (`feature/pilot-accounts-core`, then `feature/pilot-accounts-signup`; tasks A1 to A20 in spec section 15, not re-planned): sign-up (email+password, Google sign-in), verification email, password reset, per-user data, 10-account cap with waitlist, hours cap, admin API
-- [ ] Phase C, Google Calendar auto-join (needs A6, A9, A13, A18 for most tasks)
+- [ ] Phase C, Google Calendar auto-join plus the ICS source (needs A6, A9, A13, A18 for most tasks)
   - [ ] C1 migration for connections, events, scheduled joins
   - [ ] C2 token vault (AES-GCM, Opus review)
   - [ ] C3 connect flow with incremental consent (Opus review)
@@ -173,8 +173,8 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] C16 deploy gate (Q19)
   - [ ] C17 close-out: policy rows, SOP, FE guide with live captures, phase Opus review
   - [ ] C18 recording notice (chat line if P0.3 allows)
+  - [ ] Paste-a-link (ICS) calendar source for Outlook, Microsoft 365 and others (**in**, Adebayo 2026-11-03; no Microsoft OAuth app): C19 staleness spike (Google secret feed and Outlook publish), C20 SSRF-safe fetcher (Opus review), C21 parser with our own recurrence expansion, C22 connection, encrypted masked link and first-sync result, C23 source and API with the "updates can take a while" label, C24 close-out. No Outlook wording anywhere until C24 is live and verified (list in the plan)
 - [ ] Phase C-T, Teams (Q17, gated by P0.7): T1 pasted Teams link, T2 Teams events from the calendar, T3 Teams wording in policy, terms, landing
-- [ ] Phase C-ICS, paste-a-link calendar source (Outlook and others): **OPTIONAL, pending Adebayo** (in or out): C-ICS.0 staleness spike, .1 SSRF-safe fetcher (Opus), .2 ICS parser, .3 connection and encrypted URL, .4 source and API, .5 close-out
 - [ ] Phase I, instant-Meet auto-join (gated by P0.2; the Settings switch is drawn by the designer)
   - [ ] I1 incremental Meet consent, mode resolution, switch; I2 `pubsub_inbox` and the push endpoint (Opus review); I3 Meet client and subscription manager
   - [ ] I4 inbox processor and ownership rule; I5 `poll` mode (only if the spike says so); I6 manual routes and PWA share-target note; I7 close-out
