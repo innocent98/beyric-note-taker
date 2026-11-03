@@ -245,6 +245,8 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] C3 connect flow with incremental consent (Opus review)
   - [ ] C4 disconnect flow
   - [ ] C5 calendar client and `CalendarSource` protocol; live check that `calendar.events.readonly` covers `events.list` and `events.get`
+    - [x] Protocol, `SyncBatch`, errors and `GoogleSource` / `AccessTokenCache` (2026-11-03, `feature/c5-calendar-source`; SOP `docs/sop/2026-11-03-phase-c-calendar-source.md`; 101 tests against synthetic Google bodies; open, not merged)
+    - [ ] **Live step, needs C3 and Adebayo:** one real `events.list` and one `events.get` with only `calendar.events.readonly`, redacted captures in `docs/spike/pilot-calendar-captures/`, fixtures and fake switched to them. If `events.get` refuses the scope, stop: the re-check would need `calendar.readonly`
   - [x] C6 event parsing (2026-11-03, same PR; synthetic fixtures until C5's live captures exist)
   - [x] C7 `will_join` rule function (2026-11-03, same PR; full rule x organiser x response x platform x override matrix; an unanswered invite from outside your organisation does not auto-join under `all`: **decision for Adebayo**, see the SOP)
   - [ ] C8 materialiser (events to rows); C8b sync job
