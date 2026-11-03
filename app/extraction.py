@@ -31,6 +31,7 @@ MAX_ITEM_CHARS = 1000
 MAX_TITLE_CHARS = 200
 MAX_QUOTE_CHARS = 300
 MAX_HEARD_CHARS = 100
+MAX_HEARD_WORDS = 3
 QUOTE_FUZZY_RATIO = 0.9
 MIN_FUZZY_WORDS = 3
 TITLE_SHARED_WORDS = 0.6
@@ -226,6 +227,13 @@ def _fuzzy_found(words: list[str], heard: list[str]) -> bool:
     return False
 
 
+def term_ok(heard: str | None) -> bool:
+    """Whether `heard` looks like a name or term (at most three words, no digits), not a number,
+    a price or a sentence."""
+    words = normalise(heard or "").split()
+    return 0 < len(words) <= MAX_HEARD_WORDS and not any(c.isdigit() for c in heard or "")
+
+
 def name_in_transcript(name: str | None, transcript: str) -> bool:
     """Whether `name` is a whole word (or run of words) in the transcript or a speaker label."""
     wanted = normalise(name or "")
@@ -308,6 +316,7 @@ def check_extraction(
         if (
             0 <= raw_review.index < len(notes.please_check)
             and raw_review.index not in review
+            and term_ok(heard)
             and name_in_transcript(heard, transcript)
         ):
             review[raw_review.index] = CheckedReview(raw_review.index, heard or "")
@@ -376,9 +385,10 @@ or after the meeting date. "This week" resolves to that week's Friday.
 Every item needs one.
 - confidence: "high" when the owner and the task are both plainly said, "medium" or "low" \
 otherwise.
-- review: only for a "Please check" item that is a name or term that may have been misheard. \
-heard_as is that name or term exactly as it is written in the transcript. Leave out every other \
-item.
+- review: only for a "Please check" item about a person's name, a company, product or technical \
+term that may have been misheard or misspelled. heard_as is just that name or term (one to three \
+words), exactly as the transcript writes it. Never for a number, price, date, quantity or a whole \
+sentence. If the item is not about a name or term, leave it out; most items are left out.
 - milestones: only when a speaker states a date for a launch, deadline or release as a fixed \
 point; name it briefly, give the date as YYYY-MM-DD and copy the words that said it. Otherwise an \
 empty list.

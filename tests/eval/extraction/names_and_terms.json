@@ -9,7 +9,7 @@
     {"match": ["contract number"], "owner": "Chidi", "due_date": "2026-11-04"}
   ],
   "review": [
-    {"match": ["metrika"], "heard_as": "Metrika"}
+    {"match": ["spelling"], "heard_as": "Metrika"}
   ],
   "forbidden_owners": []
 }

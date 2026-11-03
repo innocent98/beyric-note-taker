@@ -151,6 +151,24 @@ def test_heard_as_must_be_in_the_transcript():
     assert {r.index: r.heard_as for r in out.review} == {0: "Metrika"}
 
 
+def test_heard_as_is_a_short_name_or_term_never_a_number_or_a_sentence():
+    transcript = TRANSCRIPT + "\n[A]: the number was four seven two or four seven three, room 12"
+    notes = parsed(actions=(), check=("a", "b", "c"))
+    out = check_extraction(
+        ModelExtraction(
+            review=[
+                ModelReview(index=0, heard_as="four seven two or four seven three"),
+                ModelReview(index=1, heard_as="room 12"),
+                ModelReview(index=2, heard_as="Metrika"),
+            ]
+        ),
+        notes,
+        transcript,
+        MEETING_DATE,
+    )
+    assert [r.heard_as for r in out.review] == ["Metrika"]
+
+
 def test_milestones_need_a_real_date_and_a_verified_quote():
     out = check(
         [],

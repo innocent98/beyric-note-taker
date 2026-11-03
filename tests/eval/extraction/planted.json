@@ -5,10 +5,10 @@
   "vocabulary": ["Beyric", "Postmark", "Resend"],
   "action_items": [
     {"match": ["contract"], "owner": "Tunde", "due_date": "2027-02-05"},
-    {"match": ["test", "provider"], "owner": "Amaka", "due_date": "2027-02-03"},
+    {"match": ["test batch"], "owner": "Amaka", "due_date": "2027-02-03"},
     {"match": ["venue"], "owner": "Amaka", "due_date": null},
     {"match": ["vat"], "owner": null, "due_date": null},
-    {"match": ["beyric"], "owner": "Amaka", "due_date": "2027-02-01"}
+    {"match": ["typo"], "owner": "Amaka", "due_date": "2027-02-01"}
   ],
   "review": [],
   "forbidden_owners": []
