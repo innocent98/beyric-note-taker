@@ -603,7 +603,7 @@ With meetings: page 1 of 3, then the next page using `next_before_id`. The respo
   "status_text": "Failed",
   "status_tone": "danger",
   "template_id": 1,
-  "created_at": "2026-11-03T13:00:01.395027Z"
+  "created_at": "2026-11-03T13:54:18.576804Z"
 }
 ```
 _First item of `54-meetings-list-page-1.json`_
@@ -731,7 +731,7 @@ content-type: application/json
   "status_text": "Ready",
   "status_tone": "success",
   "template_id": 1,
-  "created_at": "2026-11-03T13:00:01.395027Z",
+  "created_at": "2026-11-03T13:54:18.576804Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
@@ -813,7 +813,7 @@ location: /api/meetings/1
   "status_text": "Bot sent",
   "status_tone": "warning",
   "template_id": 1,
-  "created_at": "2026-11-03T13:00:01.278483Z",
+  "created_at": "2026-11-03T13:54:18.441370Z",
   "failure_reason": null,
   "retry_block": null,
   "retry_block_message": null,
@@ -1131,7 +1131,7 @@ Other errors of this retry (now declared in the OpenAPI file): `403 hours_cap_re
   "can_retry": false,
   "join_attempts": 1,
   "refresh_after_seconds": 30,
-  "join_retry_at": "2026-11-03T12:44:57.879429Z"
+  "join_retry_at": "2026-11-03T13:58:15.383479Z"
 }
 ```
 _Response trimmed to the fields that matter here; the capture file has all of them (the time is when it was captured)._
@@ -1626,7 +1626,7 @@ _Capture: `docs/fe-captures/owner-app/69-unknown-api-path.json`_
 - **`transcript` is the speaker-labelled version when there is one**, otherwise the plain one. There is no way to ask for the other.
 - **`template_id` on a meeting is the template last used for its notes**; it changes after a successful regenerate.
 - **`title` is composed by the server** (`Google Meet abc-defg-hij`, `Zoom 12345678901`). The meeting link itself is never returned.
-- **`created_at` is ISO 8601 in UTC with a trailing `Z`** (`2026-11-03T13:00:01.278483Z`). Format it in the viewer's timezone yourself.
+- **`created_at` is ISO 8601 in UTC with a trailing `Z`** (`2026-11-03T13:54:18.441370Z`). Format it in the viewer's timezone yourself.
 - **`speakers_incomplete` and `bot_left_early` are independent notices**; see section 7.
 - **Ids are integers**, in JSON bodies and paths alike. `template_id` must be sent as a number.
 

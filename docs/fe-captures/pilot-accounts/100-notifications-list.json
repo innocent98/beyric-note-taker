@@ -24,7 +24,7 @@
           "title": "Example notice 2",
           "body": "Most of your recorded hours are used.",
           "meeting_id": null,
-          "created_at": "2026-11-03T12:59:57.667922Z",
+          "created_at": "2026-11-03T13:54:22.865698Z",
           "read_at": null
         },
         {
@@ -34,7 +34,7 @@
           "title": "Example notice 1",
           "body": "Most of your recorded hours are used.",
           "meeting_id": null,
-          "created_at": "2026-11-03T12:59:57.667922Z",
+          "created_at": "2026-11-03T13:54:22.865698Z",
           "read_at": null
         },
         {
@@ -44,7 +44,7 @@
           "title": "A password reset link was made for your account",
           "body": "An administrator made a one-time password reset link for your account. If you did not ask for this, tell us at once.",
           "meeting_id": null,
-          "created_at": "2026-11-03T12:59:55.485967Z",
+          "created_at": "2026-11-03T13:54:22.415136Z",
           "read_at": null
         }
       ],

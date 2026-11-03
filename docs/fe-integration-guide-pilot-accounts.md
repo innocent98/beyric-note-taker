@@ -244,7 +244,7 @@ Google test account before relying on it.**
     { "id": 1, "kind": "account.reset_link_issued", "severity": "warning",
       "title": "A password reset link was made for your account",
       "body": "An administrator made a one-time password reset link for your account. If you did not ask for this, tell us at once.",
-      "meeting_id": null, "created_at": "2026-11-03T12:59:55.485967Z", "read_at": null }
+      "meeting_id": null, "created_at": "2026-11-03T13:54:22.415136Z", "read_at": null }
   ],
   "has_more": false, "next_before_id": null
 }
@@ -290,7 +290,7 @@ route to read another user's meetings, notes or calendar.
 ```json
 { "users": [ { "id": 5, "email": "late@example.test", "name": "Late Example", "is_admin": false,
     "status": "active", "email_verified": false, "has_password": true, "has_google": false,
-    "created_at": "2026-11-03T12:59:54.569972Z", "last_login_at": null, "used_seconds": 0,
+    "created_at": "2026-11-03T13:54:22.028306Z", "last_login_at": null, "used_seconds": 0,
     "cap_seconds": 18000, "hours_cap_override": null } ],
   "has_more": true, "next_before_id": 5 }
 ```
@@ -334,9 +334,9 @@ off until a real verification mail has been delivered once.
 `before_id` means "continue after this id" (`next_before_id`).
 
 `POST /api/admin/waitlist/{id}/invite` reserves a place for 7 days:
-- mail configured → `{"emailed": true, "invite_url": null, "expires_at": "2026-11-10T12:59:55.614989Z"}` (#78);
+- mail configured → `{"emailed": true, "invite_url": null, "expires_at": "2026-11-10T13:54:22.439259Z"}` (#78);
   the entry becomes `invited` and the person is mailed;
-- **no mail provider** → `{"emailed": false, "invite_url": "https://notes.example.test/signup?invite=<token-8>", "expires_at": "2026-11-10T12:59:56.326566Z"}`
+- **no mail provider** → `{"emailed": false, "invite_url": "https://notes.example.test/signup?invite=<token-8>", "expires_at": "2026-11-10T13:54:22.627748Z"}`
   (#87): the admin sends the link himself;
 - no free place → 409 `pilot_full` — "There is no free place to reserve. Raise the limit first." (#63);
 - someone who already joined or was removed → 409 `waitlist_entry_closed` (**not captured live**, tested).

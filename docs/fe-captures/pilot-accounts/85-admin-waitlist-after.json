@@ -22,8 +22,8 @@
           "email": "wendy@example.test",
           "name": "Wendy Example",
           "status": "joined",
-          "created_at": "2026-11-03T12:59:54.339750Z",
-          "invited_at": "2026-11-03T12:59:55.614989Z"
+          "created_at": "2026-11-03T13:54:21.890938Z",
+          "invited_at": "2026-11-03T13:54:22.439259Z"
         }
       ],
       "has_more": false,
