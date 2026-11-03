@@ -249,10 +249,22 @@ def concrete(path: str) -> str:
     return re.sub(r"\{\w+\}", "1", path)
 
 
-PUBLIC = {("GET", "/api/session"), ("POST", "/api/session")}
+PUBLIC = {
+    ("GET", "/api/session"),
+    ("POST", "/api/session"),
+    ("GET", "/api/pilot"),
+    ("POST", "/api/signup"),
+    ("POST", "/api/signup/resend"),
+    ("POST", "/api/verify-email"),
+    ("POST", "/api/password/forgot"),
+    ("POST", "/api/password/reset"),
+    ("POST", "/api/waitlist"),
+    ("GET", "/api/auth/google/start"),
+    ("GET", "/api/auth/google/callback"),
+}
 
 
-def test_every_api_route_needs_login_except_the_two_session_starters(anon, app):
+def test_every_api_route_needs_login_except_the_listed_public_ones(anon, app):
     for method, path in api_routes(app):
         response = anon.call(method, concrete(path), csrf=False)
         if (method, path) in PUBLIC:

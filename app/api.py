@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, services, usage
+from app import api_accounts, auth, services, usage
 from app.api_schemas import (
     ErrorResponse,
     Login,
@@ -416,3 +416,6 @@ def delete_term(
     if not services.delete_term(session, user, term_id):
         raise StarletteHTTPException(404, "No such term")
     return Response(status_code=204)
+
+
+router.include_router(api_accounts.router)

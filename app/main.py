@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import api, auth, edge, mail, web
+from app import api, auth, edge, limits, mail, web
 from app.config import Settings, get_settings
 from app.db import get_session
 
@@ -34,6 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.limiter = auth.LoginLimiter()
+    app.state.public_limits = limits.PublicLimits()
     key = app.state.session_key = auth.signing_key(settings)
     app.state.device_key = auth.device_key(settings)
 

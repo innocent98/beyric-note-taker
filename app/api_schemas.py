@@ -6,7 +6,7 @@ The frontend generates its TypeScript types from these (see `scripts/export_open
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 
 def _utc(value: datetime) -> datetime:
@@ -74,6 +74,62 @@ class SessionState(BaseModel):
 class Login(Body):
     email: str
     password: str
+
+
+# ---- public account routes ----
+
+PilotStateName = Literal["open", "full", "closed"]
+
+
+class SignUp(Body):
+    name: str = Field(max_length=2000)
+    email: str = Field(max_length=2000)
+    password: str = Field(max_length=2000)
+    accept_terms: bool  # must be true: sign-up refuses with 422 `terms_required` otherwise
+    invite_token: str | None = Field(default=None, max_length=2000)
+
+
+class EmailIn(Body):
+    email: str = Field(max_length=2000)
+
+
+class TokenIn(Body):
+    token: str = Field(max_length=2000)
+
+
+class ResetIn(Body):
+    token: str = Field(max_length=2000)
+    password: str = Field(max_length=2000)
+
+
+class Accepted(BaseModel):
+    """The one answer sign-up, resend and forgot-password give, whatever the address."""
+
+    status: Literal["check_your_email"]
+
+
+class Verified(BaseModel):
+    status: Literal["verified"]
+
+
+class PasswordChanged(BaseModel):
+    status: Literal["password_changed"]
+
+
+class PilotOut(BaseModel):
+    state: PilotStateName
+    # The Google email of a visitor who was turned away by `pilot_full` (a 15-minute cookie), so
+    # the waitlist form can be pre-filled; otherwise null.
+    prefill_email: str | None
+
+
+class WaitlistIn(Body):
+    email: str = Field(max_length=2000)
+    name: str | None = Field(default=None, max_length=2000)
+
+
+class WaitlistAccepted(BaseModel):
+    status: Literal["on_the_list"]
 
 
 # ---- meetings ----

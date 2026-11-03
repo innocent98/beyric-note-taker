@@ -1,6 +1,36 @@
 {
   "components": {
     "schemas": {
+      "Accepted": {
+        "description": "The one answer sign-up, resend and forgot-password give, whatever the address.",
+        "properties": {
+          "status": {
+            "const": "check_your_email",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Accepted",
+        "type": "object"
+      },
+      "EmailIn": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 2000,
+            "title": "Email",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "EmailIn",
+        "type": "object"
+      },
       "ErrorBody": {
         "properties": {
           "code": {
@@ -446,6 +476,50 @@
         "title": "NewTerm",
         "type": "object"
       },
+      "PasswordChanged": {
+        "properties": {
+          "status": {
+            "const": "password_changed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "PasswordChanged",
+        "type": "object"
+      },
+      "PilotOut": {
+        "properties": {
+          "prefill_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prefill Email"
+          },
+          "state": {
+            "enum": [
+              "open",
+              "full",
+              "closed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "prefill_email"
+        ],
+        "title": "PilotOut",
+        "type": "object"
+      },
       "Regenerate": {
         "additionalProperties": false,
         "properties": {
@@ -458,6 +532,27 @@
           "template_id"
         ],
         "title": "Regenerate",
+        "type": "object"
+      },
+      "ResetIn": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "maxLength": 2000,
+            "title": "Password",
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 2000,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ],
+        "title": "ResetIn",
         "type": "object"
       },
       "SessionState": {
@@ -498,6 +593,50 @@
           "usage"
         ],
         "title": "SessionState",
+        "type": "object"
+      },
+      "SignUp": {
+        "additionalProperties": false,
+        "properties": {
+          "accept_terms": {
+            "title": "Accept Terms",
+            "type": "boolean"
+          },
+          "email": {
+            "maxLength": 2000,
+            "title": "Email",
+            "type": "string"
+          },
+          "invite_token": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invite Token"
+          },
+          "name": {
+            "maxLength": 2000,
+            "title": "Name",
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 2000,
+            "title": "Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "email",
+          "password",
+          "accept_terms"
+        ],
+        "title": "SignUp",
         "type": "object"
       },
       "TemplateIn": {
@@ -592,6 +731,21 @@
         "title": "TermOut",
         "type": "object"
       },
+      "TokenIn": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "maxLength": 2000,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "TokenIn",
+        "type": "object"
+      },
       "UsageOut": {
         "properties": {
           "cap_seconds": {
@@ -650,6 +804,20 @@
           "email_verified"
         ],
         "title": "UserOut",
+        "type": "object"
+      },
+      "Verified": {
+        "properties": {
+          "status": {
+            "const": "verified",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "Verified",
         "type": "object"
       }
     }
@@ -1186,6 +1354,202 @@
         ]
       }
     },
+    "/api/password/forgot": {
+      "post": {
+        "description": "Mail a password-reset link (valid 30 minutes) if the address has a confirmed account.\nPublic. Always 202 with the same body: it never says whether the address has an account.",
+        "operationId": "forgot_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Forgot Password",
+        "tags": [
+          "password"
+        ]
+      }
+    },
+    "/api/password/reset": {
+      "post": {
+        "description": "Choose a new password with the token from the reset mail. Public. Signs that user out\neverywhere and does not sign them in. 400 `token_invalid_or_expired`; 422\n`password_too_weak` leaves the token usable.",
+        "operationId": "reset_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordChanged"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Reset Password",
+        "tags": [
+          "password"
+        ]
+      }
+    },
+    "/api/pilot": {
+      "get": {
+        "description": "Whether sign-up is `open`, `full` or `closed`. Public. No counts of other people.",
+        "operationId": "read_pilot",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PilotOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Pilot",
+        "tags": [
+          "pilot"
+        ]
+      }
+    },
     "/api/session": {
       "delete": {
         "description": "Log this user out everywhere: every session cookie they were issued stops working.\nOther users are not affected.",
@@ -1355,6 +1719,160 @@
         "summary": "Log In",
         "tags": [
           "session"
+        ]
+      }
+    },
+    "/api/signup": {
+      "post": {
+        "description": "Create an account with a password. Public (needs the X-CSRF-Token).\n\nAnswers 202 `check_your_email` for a new address AND for one that already has an account (a\nverified one gets a \"you already have an account\" mail), so it cannot be used to find out who\nis registered. The account cannot sign in until the emailed link is confirmed. Errors that do\nnot depend on the address: 403 `pilot_closed`, 409 `pilot_full`, 403\n`password_signup_disabled`, 400 `invite_invalid`, 422 `password_too_weak`, `invalid_email`,\n`invalid_name`, `terms_required`, 429 `too_many_requests` (5 sign-ups per hour per address)\nand `server_busy`. `accept_terms` must be true: the account records the version accepted.",
+        "operationId": "sign_up",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignUp"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Sign Up",
+        "tags": [
+          "signup"
+        ]
+      }
+    },
+    "/api/signup/resend": {
+      "post": {
+        "description": "Mail a new verification link to an unconfirmed account. Public. Always 202, whatever the\naddress and whether or not a mail was sent: one per minute per email and 5 per hour per\nclient address are sent, the rest are dropped silently.",
+        "operationId": "resend_verification",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Accepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Resend Verification",
+        "tags": [
+          "signup"
         ]
       }
     },
@@ -1569,6 +2087,78 @@
         "summary": "Update Template",
         "tags": [
           "templates"
+        ]
+      }
+    },
+    "/api/verify-email": {
+      "post": {
+        "description": "Confirm an email with the token from the link. Public. The page the link opens must\nshow a button that calls this (mail scanners open links, and a GET must not verify). Does not\nsign the user in. 400 `token_invalid_or_expired`: wrong, used or older than 24 hours.",
+        "operationId": "verify_email",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Verified"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Verify Email",
+        "tags": [
+          "signup"
         ]
       }
     },
