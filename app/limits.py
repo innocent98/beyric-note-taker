@@ -61,6 +61,9 @@ class PublicLimits:
         self.resend_email = Limit(s, "resend_email", 1, 60.0)
         self.resend_address = Limit(s, "resend_address", 5, HOUR)
         self.forgot_email = Limit(s, "forgot_email", 1, 60.0)
+        # Each request revokes the earlier link and mails a new one: three an hour per account is
+        # plenty for a person and bounds what someone who knows an address can make us send.
+        self.forgot_email_hour = Limit(s, "forgot_email_hour", 3, HOUR)
         self.forgot_address = Limit(s, "forgot_address", 5, HOUR)
         self.waitlist_address = Limit(s, "waitlist_address", 5, HOUR)
         self.waitlist_email = Limit(s, "waitlist_email", 1, 60.0)

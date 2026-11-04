@@ -230,6 +230,12 @@ class LoginLimiter:
         else:
             self._store.refund("login_account", self._account_key(account))
 
+    def unlock(self, account: str) -> int:
+        """Forget the failed logins counted against this account (a successful password reset, or
+        the operator's script): the lockout ends. Other accounts, addresses and devices keep
+        theirs. Returns how many hits were forgotten."""
+        return self._store.clear("login_account", self._account_key(account))
+
     def __len__(self) -> int:
         return self._store.size()
 

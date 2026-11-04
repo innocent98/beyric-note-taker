@@ -549,9 +549,17 @@ def request_reset(session: Session, settings: Settings, email: str, now: datetim
     session.commit()
 
 
-def reset_password(session: Session, raw_token: str, password: str, now: datetime) -> None:
+def reset_password(
+    session: Session,
+    raw_token: str,
+    password: str,
+    now: datetime,
+    unlock: Callable[[str], object] | None = None,
+) -> None:
     """Set a new password with a reset token and sign the user out everywhere. Commits. A weak
-    password is refused before the token is touched, so the person can try again."""
+    password is refused before the token is touched, so the person can try again. `unlock(email)`
+    ends a login lockout on the account: someone who proved they own the mailbox must not stay
+    locked out by guesses another person made."""
     _check_password(password)
     password_hash = _hash(password)
     token = tokens.consume(session, raw_token, "reset_password", now)
@@ -562,7 +570,10 @@ def reset_password(session: Session, raw_token: str, password: str, now: datetim
     user.password_hash = password_hash
     user.session_epoch = User.session_epoch + 1
     tokens.revoke(session, "reset_password", user.id, now)
+    email = user.email
     session.commit()
+    if unlock is not None:
+        unlock(email)
 
 
 # ---- the waitlist ----

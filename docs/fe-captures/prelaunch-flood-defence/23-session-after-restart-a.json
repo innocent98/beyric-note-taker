@@ -1,0 +1,24 @@
+{
+  "note": "",
+  "client": "visitor-a-after-restart",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "authenticated": false,
+      "csrf_token": "<csrf-E>",
+      "user": null,
+      "usage": null,
+      "unread_notifications": null,
+      "badges": null
+    }
+  }
+}

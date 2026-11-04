@@ -1,6 +1,6 @@
 {
   "note": "A wrong password: 401, counted in the database.",
-  "client": "visitor",
+  "client": "visitor-a",
   "request": {
     "method": "POST",
     "path": "/api/session",

@@ -17,7 +17,10 @@ logger = logging.getLogger(__name__)
 
 TOKEN_KEEP = timedelta(days=7)  # a spent or expired token is only kept this long, for debugging
 NOTIFICATION_KEEP = timedelta(days=90)
-RATE_HIT_KEEP = timedelta(hours=49)  # longer than any limit's window (the longest is 48 hours)
+# How long the sweep keeps a hit, by bucket: the sign-up cap counts 48 hours, every other window is
+# an hour or less. A key nobody touches again is otherwise never trimmed.
+RATE_HIT_KEEP = timedelta(hours=2)
+RATE_HIT_KEEP_SIGNUP_ORIGIN = timedelta(hours=49)
 CALENDAR_EVENT_KEEP = timedelta(days=2)  # after the event ENDS (spec 12.2)
 
 
@@ -60,7 +63,16 @@ def _delete_stale_rows(session: Session, now: datetime) -> None:
 def sweep_rate_hits(session: Session, now: datetime) -> None:
     """Hits of the login and sign-up limits older than any window: a key nobody touched again is
     otherwise never trimmed (`ratelimit.DbStore` trims a key when it is used). Commits."""
-    session.execute(delete(RateHit).where(RateHit.at <= (now - RATE_HIT_KEEP).timestamp()))
+    session.execute(
+        delete(RateHit).where(
+            or_(
+                (RateHit.bucket != "signup_origin")
+                & (RateHit.at <= (now - RATE_HIT_KEEP).timestamp()),
+                (RateHit.bucket == "signup_origin")
+                & (RateHit.at <= (now - RATE_HIT_KEEP_SIGNUP_ORIGIN).timestamp()),
+            )
+        )
+    )
     session.commit()
 
 

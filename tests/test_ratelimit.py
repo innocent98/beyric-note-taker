@@ -108,11 +108,13 @@ def test_refund_gives_back_the_newest_hit_only(store):
     assert store.acquire([g], now=101.0) is None  # t=0 expired; t=60 remains
 
 
-def test_clear_forgets_every_hit_for_the_key(store):
-    g = gate(limit=1)
+def test_clear_forgets_every_hit_for_the_key_and_says_how_many(store):
+    g = gate(limit=3)
     store.acquire([g], now=0.0)
-    store.clear("b", "k")
-    assert store.acquire([g], now=0.0) is None
+    store.acquire([g], now=1.0)
+    assert store.clear("b", "k") == 2
+    assert store.clear("b", "k") == 0
+    assert store.acquire([gate(limit=1)], now=0.0) is None
 
 
 def test_refund_and_clear_on_an_unknown_key_do_nothing(store):
@@ -188,14 +190,6 @@ def test_the_hash_depends_on_a_secret_so_a_reader_of_the_table_cannot_check_a_gu
     two = DbStore(lambda: Session(engine), b"b" * 32)
     one.acquire([gate(key="same", limit=1)], now=0.0)
     assert two.acquire([gate(key="same", limit=1)], now=0.0) is None  # a different key to it
-
-
-def test_sweep_deletes_old_hits_only(engine, db_store):
-    db_store.acquire([gate(key="old")], now=0.0)
-    db_store.acquire([gate(key="new")], now=9000.0)
-    db_store.sweep(now=10_000.0, keep=3600.0)
-    assert db_store.size() == 1
-    assert db_store.full(gate(key="new", limit=1), now=9001.0) is True
 
 
 def test_expired_hits_of_a_key_are_dropped_when_it_is_touched(engine, db_store):

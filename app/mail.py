@@ -343,12 +343,12 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
     capped = 0 < settings.mail_daily_cap <= sent_today
     notes = list(NOTES_TEMPLATES)
 
-    def pending_ids(*conditions) -> list[int]:
+    def pending_ids(*conditions, first=()) -> list[int]:
         return list(
             session.scalars(
                 select(MailOutbox.id)
                 .where(MailOutbox.status == "pending", *conditions)
-                .order_by(case((MailOutbox.template == ALERT_TEMPLATE, 0), else_=1), MailOutbox.id)
+                .order_by(*first, MailOutbox.id)
                 .limit(BATCH * 4)
             )
         )
@@ -356,7 +356,20 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
     # Sign-in mail first and on its own, so notes mail held for the day's quota (pending for up to
     # a day) can never fill the batch and starve a verification or reset mail. Once the quota is
     # spent notes mail is not even loaded.
-    ids = pending_ids(MailOutbox.template.not_in(notes))
+    # Three loads, so a backlog of one kind can never hide another: an admin alert or a protected
+    # mail (a reset link, an invitation) is loaded on its own, before the verification and
+    # "already registered" mail a flood can pile up past a whole batch, which is held and stays
+    # pending; of that mail, rows never held come first, so a real person's new verification mail
+    # is not stuck behind the held backlog.
+    privileged = [ALERT_TEMPLATE, *PROTECTED_TEMPLATES]
+    ids = pending_ids(
+        MailOutbox.template.in_(privileged),
+        first=(case((MailOutbox.template == ALERT_TEMPLATE, 0), else_=1),),
+    )
+    ids += pending_ids(
+        MailOutbox.template.not_in(notes), MailOutbox.template.not_in(privileged),
+        first=(case((MailOutbox.last_error == OVER_BUDGET, 1), else_=0),),
+    )  # fmt: skip
     if not capped:
         ids += pending_ids(MailOutbox.template.in_(notes))
     session.rollback()
@@ -388,7 +401,7 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
         if notes_mail and 0 < settings.mail_daily_cap <= sent_today:
             session.rollback()  # still pending, no attempt used: tomorrow's quota will send it
             continue
-        if settings.mail_hourly_budget > 0 and row.template != ALERT_TEMPLATE:
+        if settings.mail_hourly_budget > 0 and not _is_admin_alert(session, row, settings):
             # One count and one send at a time across every worker (the lock lasts to the commit),
             # so two workers cannot each see room and both send past the budget.
             session.execute(
@@ -459,6 +472,24 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
     if held["account"] or held["bulk"]:
         _report_budget(session, settings, now, held, in_hour)
     return sent
+
+
+def _is_admin_alert(session: Session, row: MailOutbox, settings: Settings) -> bool:
+    """An alert to an admin (a user who is one, or the `ADMIN_ALERT_EMAIL` mailbox): the only mail
+    the budget never holds, so the admins can still be told. An alert to anyone else is held like
+    other mail."""
+    if row.template != ALERT_TEMPLATE:
+        return False
+    if row.to_email == settings.admin_alert_email.strip().lower() != "":
+        return True
+    return (
+        session.scalar(
+            select(User.id).where(
+                User.email == row.to_email, User.is_admin.is_(True), User.status == "active"
+            )
+        )
+        is not None
+    )
 
 
 def _report_budget(

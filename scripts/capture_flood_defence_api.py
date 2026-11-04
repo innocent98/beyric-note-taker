@@ -33,6 +33,7 @@ OUT = ROOT / "docs" / "fe-captures" / "prelaunch-flood-defence"
 DB_NAME = "notetaker_capture_flood_defence"
 ADMIN_EMAIL = "admin@example.test"  # created by migration 0006 from these (placeholders)
 ADMIN_PASSWORD = "-".join(["capture", "admin", "placeholder"])
+EDGE_SECRET = "capture-edge-secret-" + "e" * 20  # a placeholder
 ADA = "ada@example.test"  # a placeholder, not a real person
 ADA_PASSWORD = "-".join(["ada", "chosen", "password", "1"])
 
@@ -47,12 +48,12 @@ import httpx  # noqa: E402
 import uvicorn  # noqa: E402
 from alembic import command  # noqa: E402
 from alembic.config import Config  # noqa: E402
-from sqlalchemy import create_engine, text  # noqa: E402
+from sqlalchemy import create_engine, select, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import AppState  # noqa: E402
+from app.models import AppState, MailOutbox  # noqa: E402
 
 
 class Recorder:
@@ -61,8 +62,12 @@ class Recorder:
     count = 0
     masks: dict[str, str] = {}
 
-    def __init__(self, base_url: str, who: str) -> None:
-        self.http = httpx.Client(base_url=base_url, follow_redirects=False, timeout=60)
+    def __init__(self, base_url: str, who: str, address: str) -> None:
+        # nginx's job: the secret says the address is genuine, the address is who is calling.
+        headers = {"X-Edge-Secret": EDGE_SECRET, "X-Forwarded-For": address}
+        self.http = httpx.Client(
+            base_url=base_url, follow_redirects=False, timeout=60, headers=headers
+        )
         self.csrf: str | None = None
         self.who = who
 
@@ -143,10 +148,10 @@ def run(base: str, engine, settings: Settings) -> None:
         state = session.get(AppState, 1)  # made by the migrations
         state.signups_open, state.max_accounts, state.password_signup_enabled = True, None, True
         session.commit()
-    anon = Recorder(base, "visitor")
+    anon = Recorder(base, "visitor-a", "203.0.113.10")
     anon.call("session-anonymous", "GET", "/api/session")
 
-    # --- sign-up: one address may hold only a few unconfirmed accounts at once ---
+    # --- sign-up: one address may make only a few sign-ups in 48 hours ---
     for n in range(3):
         anon.call(
             f"signup-{n + 1}", "POST", "/api/signup",
@@ -165,7 +170,7 @@ def run(base: str, engine, settings: Settings) -> None:
         "about who has an account.",
     )  # fmt: skip
 
-    # --- login: a lockout survives a restart ---
+    # --- login: guesses from two addresses lock the account, and the lock survives a restart ---
     for n in range(5):
         anon.call(
             f"login-wrong-{n + 1}", "POST", "/api/session",
@@ -173,15 +178,31 @@ def run(base: str, engine, settings: Settings) -> None:
             note="A wrong password: 401, counted in the database.",
         )  # fmt: skip
     anon.call(
-        "login-locked", "POST", "/api/session",
+        "login-locked-address", "POST", "/api/session",
         body={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
         note="The sixth attempt from this address is refused: 429 `too_many_attempts`, even with "
         "the right password.",
     )  # fmt: skip
+    other = Recorder(base, "visitor-b", "203.0.113.11")
+    other.call("session-anonymous-b", "GET", "/api/session")
+    for n in range(5):
+        other.call(
+            f"login-wrong-from-a-second-address-{n + 1}", "POST", "/api/session",
+            body={"email": ADMIN_EMAIL, "password": "wrong-guess-" + str(n + 5)},
+            note="Guesses from a second address: ten in all now count against the account.",
+        )  # fmt: skip
+    third = Recorder(base, "visitor-c", "203.0.113.12")
+    third.call("session-anonymous-c", "GET", "/api/session")
+    third.call(
+        "login-locked-account", "POST", "/api/session",
+        body={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+        note="A third address that never guessed, with the RIGHT password: 429 "
+        "`too_many_attempts`. The account is locked against logins from new devices.",
+    )  # fmt: skip
 
 
-def after_restart(base: str) -> None:
-    again = Recorder(base, "visitor-after-restart")
+def after_restart(base: str, engine) -> None:
+    again = Recorder(base, "visitor-c-after-restart", "203.0.113.12")
     again.call("session-after-restart", "GET", "/api/session")
     again.call(
         "login-locked-after-restart", "POST", "/api/session",
@@ -189,13 +210,41 @@ def after_restart(base: str) -> None:
         note="A NEW process on the same database: the lockout is still on (429 "
         "`too_many_attempts`), with the right password.",
     )  # fmt: skip
-    again.call(
+    first = Recorder(base, "visitor-a-after-restart", "203.0.113.10")
+    first.call("session-after-restart-a", "GET", "/api/session")
+    first.call(
         "signup-fourth-after-restart", "POST", "/api/signup",
         body=form("ada4@example.test", 4),
         note=(
-            "429 `too_many_requests` again: by now this address has also used its 5 sign-ups "
-            "for the hour, and that count survived the restart too (it is in the database)."
+            "429 `too_many_requests` again: this address's sign-ups are still counted (they are "
+            "in the database), by now also its 5 an hour."
         ),
+    )  # fmt: skip
+
+    # --- a password reset ends the lockout ---
+    again.call(
+        "forgot-password", "POST", "/api/password/forgot", body={"email": ADMIN_EMAIL},
+        note="Asking for a reset link while the account is locked: 202, as ever.",
+    )  # fmt: skip
+    with Session(engine) as session:
+        row = session.scalars(
+            select(MailOutbox)
+            .where(MailOutbox.template == "reset_password")
+            .order_by(MailOutbox.id.desc())
+        ).first()
+        token = row.payload["link"].split("token=")[1]
+    new_password = "-".join(["a", "fresh", "capture", "pass", "9"])
+    again.call(
+        "reset-password", "POST", "/api/password/reset",
+        body={"token": token, "password": new_password},
+        note="Using the link: 200. It also ends the lockout on this account.",
+    )  # fmt: skip
+    fourth = Recorder(base, "visitor-d", "203.0.113.13")
+    fourth.call("session-anonymous-d", "GET", "/api/session")
+    fourth.call(
+        "login-after-reset", "POST", "/api/session",
+        body={"email": ADMIN_EMAIL, "password": new_password},
+        note="Another new address logs in at once: 200, no longer refused.",
     )  # fmt: skip
 
 
@@ -213,6 +262,7 @@ def main() -> None:
         database_url=scratch_url,
         public_base_url="https://notes.example.test",
         resend_api_key="re_capture_never_used",  # makes password sign-up possible; nothing is sent
+        edge_shared_secret=EDGE_SECRET,  # so the address in the header is believed
     )
     engine = create_engine(scratch_url)
     server, base = start_server(create_app(settings))
@@ -223,7 +273,7 @@ def main() -> None:
     time.sleep(0.5)
     second, base2 = start_server(create_app(settings))  # a restart: a new app, the same database
     try:
-        after_restart(base2)
+        after_restart(base2, engine)
     finally:
         second.should_exit = True
         engine.dispose()

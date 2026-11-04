@@ -1,6 +1,6 @@
 {
   "note": "An email this address already holds gets the SAME answer: the cap says nothing about who has an account.",
-  "client": "visitor",
+  "client": "visitor-a",
   "request": {
     "method": "POST",
     "path": "/api/signup",

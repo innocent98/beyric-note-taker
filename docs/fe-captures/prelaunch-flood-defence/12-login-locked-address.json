@@ -1,11 +1,11 @@
 {
-  "note": "A NEW process on the same database: the lockout is still on (429 `too_many_attempts`), with the right password.",
-  "client": "visitor-after-restart",
+  "note": "The sixth attempt from this address is refused: 429 `too_many_attempts`, even with the right password.",
+  "client": "visitor-a",
   "request": {
     "method": "POST",
     "path": "/api/session",
     "headers": {
-      "X-CSRF-Token": "<csrf-B>",
+      "X-CSRF-Token": "<csrf-A>",
       "Cookie": "session=<cookie>"
     },
     "body": {

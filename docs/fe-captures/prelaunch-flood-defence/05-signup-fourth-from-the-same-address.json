@@ -1,6 +1,6 @@
 {
   "note": "A fourth from the same address: 429 `too_many_requests`, nothing created, no mail.",
-  "client": "visitor",
+  "client": "visitor-a",
   "request": {
     "method": "POST",
     "path": "/api/signup",

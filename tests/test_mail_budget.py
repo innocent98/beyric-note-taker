@@ -134,6 +134,7 @@ def test_account_mail_goes_before_bulk_mail_queued_earlier(session, plain):
 
 
 def test_admin_alert_mail_is_never_held_by_the_budget(session):
+    make_user(session, "boss@example.test", admin=True)
     links(session, 6)
     assert go(session, budget=3)[0] == 3  # the budget is used up
     queue(session, "alert", {"title": "T", "body": "B"}, to="boss@example.test")
@@ -142,6 +143,7 @@ def test_admin_alert_mail_is_never_held_by_the_budget(session):
 
 
 def test_admin_alert_mail_goes_before_the_sign_in_mail_queued_ahead_of_it(session):
+    make_user(session, "boss@example.test", admin=True)
     links(session, 6)
     queue(session, "alert", {"title": "T", "body": "B"}, to="boss@example.test")
     sent, mailer = go(session, budget=3)

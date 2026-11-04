@@ -13,7 +13,8 @@ refused attempt costs nothing and a client over its limit does not spend an acco
 What is stored is no more than a login or sign-up limit needs: the bucket's name, a keyed hash of
 the key (an email address or a client address is personal data: the hash uses a key derived from
 the session secret, so someone reading the table cannot check a guess) and the time of the hit.
-Rows older than their window are deleted when the key is next touched and by an hourly sweep.
+Rows older than their window are deleted when the key is next touched; the hourly sweep
+(`maintenance.sweep_rate_hits`) deletes the rest, bucket by bucket.
 
 A database failure raises: the callers (login, sign-up) need the database anyway, and a limiter
 that failed open would let a guessing attack through during an outage.
@@ -59,9 +60,7 @@ class Store(Protocol):
 
     def refund(self, bucket: str, key: str) -> None: ...
 
-    def clear(self, bucket: str, key: str) -> None: ...
-
-    def sweep(self, now: float | None = None, keep: float = ...) -> None: ...
+    def clear(self, bucket: str, key: str) -> int: ...
 
     def size(self) -> int: ...
 
@@ -165,14 +164,11 @@ class MemoryStore:
             if window is not None:
                 window.refund(key)
 
-    def clear(self, bucket: str, key: str) -> None:
+    def clear(self, bucket: str, key: str) -> int:
+        """Forget every hit for the key; how many were forgotten."""
         with self._lock:
             window = self._windows.get(bucket)
-            if window is not None:
-                window.attempts.pop(key, None)
-
-    def sweep(self, now: float | None = None, keep: float = 0.0) -> None:
-        """Nothing to do: expired keys are dropped as they are touched."""
+            return len(window.attempts.pop(key, ())) if window is not None else 0
 
     def size(self) -> int:
         with self._lock:
@@ -268,23 +264,17 @@ class DbStore:
             )
             session.commit()
 
-    def clear(self, bucket: str, key: str) -> None:
+    def clear(self, bucket: str, key: str) -> int:
+        """Delete every hit for the key; how many were deleted."""
         hashed = self._hash(bucket, key)
         with self._open() as session:
             self._lock(session, bucket, hashed)
-            session.execute(
+            result = session.execute(
                 text("delete from rate_hits where bucket = :b and key = :k"),
                 {"b": bucket, "k": hashed},
             )
             session.commit()
-
-    def sweep(self, now: float | None = None, keep: float = 49 * 3600.0) -> None:
-        """Delete every hit older than `keep` seconds (longer than any window: the longest is 48
-        hours): the hourly sweep for keys nobody touched again."""
-        now = time.time() if now is None else now
-        with self._open() as session:
-            session.execute(text("delete from rate_hits where at <= :cut"), {"cut": now - keep})
-            session.commit()
+            return result.rowcount
 
     def size(self) -> int:
         with self._open() as session:

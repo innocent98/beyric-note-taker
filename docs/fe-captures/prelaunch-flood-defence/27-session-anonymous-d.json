@@ -1,6 +1,6 @@
 {
   "note": "",
-  "client": "visitor-after-restart",
+  "client": "visitor-d",
   "request": {
     "method": "GET",
     "path": "/api/session",
@@ -14,7 +14,7 @@
     },
     "body": {
       "authenticated": false,
-      "csrf_token": "<csrf-B>",
+      "csrf_token": "<csrf-F>",
       "user": null,
       "usage": null,
       "unread_notifications": null,

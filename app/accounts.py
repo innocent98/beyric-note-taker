@@ -8,6 +8,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.models import (
+    MailOutbox,
     Template,
     User,
     UserSettings,
@@ -100,6 +101,15 @@ def delete_unverified(session: Session, ids: list[int], emails: list[str]) -> in
         update(WaitlistEntry)
         .where(WaitlistEntry.email.in_(emails), WaitlistEntry.status == "joined")
         .values(status="waiting", invite_token_id=None)
+    )
+    # Its verification mail, if not sent yet: the link died with the account's tokens, and sending
+    # it would only spend the mail budget and puzzle the person.
+    session.execute(
+        delete(MailOutbox).where(
+            MailOutbox.to_email.in_(emails),
+            MailOutbox.status == "pending",
+            MailOutbox.template == "verify_email",
+        )
     )
     session.execute(delete(VocabularyTerm).where(VocabularyTerm.owner_user_id.in_(ids)))
     session.execute(delete(UserSettings).where(UserSettings.user_id.in_(ids)))

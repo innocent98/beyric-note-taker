@@ -1,11 +1,11 @@
 {
-  "note": "429 `too_many_requests` again: by now this address has also used its 5 sign-ups for the hour, and that count survived the restart too (it is in the database).",
-  "client": "visitor-after-restart",
+  "note": "429 `too_many_requests` again: this address's sign-ups are still counted (they are in the database), by now also its 5 an hour.",
+  "client": "visitor-a-after-restart",
   "request": {
     "method": "POST",
     "path": "/api/signup",
     "headers": {
-      "X-CSRF-Token": "<csrf-B>",
+      "X-CSRF-Token": "<csrf-E>",
       "Cookie": "session=<cookie>"
     },
     "body": {
