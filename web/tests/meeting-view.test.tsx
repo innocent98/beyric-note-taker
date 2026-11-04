@@ -210,7 +210,9 @@ describe("waiting and working", () => {
     show(meeting("103-meeting-detail-refused-paused-before-retry.json"));
     expect(screen.getByText(/Google would not let the bot ask to join, so it was taken out/)).toBeTruthy();
     expect(screen.getByText(/A new bot will be sent at about/)).toBeTruthy();
-    expect(screen.getByText(/UTC \(attempt 2 of 2\)/)).toBeTruthy();
+    // The time is its own <time> element (the zone is UTC here: vitest.config.mts pins TZ).
+    expect(screen.getByText(/\(attempt 2 of 2\)/)).toBeTruthy();
+    for (const el of screen.getAllByText(/ UTC$/)) expect(el.tagName).toBe("TIME");
   });
 
   it("counts the wait down on a refused meeting by asking the server again", async () => {

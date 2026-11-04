@@ -7,7 +7,7 @@ import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
 import type { AutoJoinRule, CalendarSettingsInput, CalendarState, Template } from "@/lib/api/types";
 import type { CalendarNotice } from "@/lib/calendar-notice";
-import { formatTime } from "@/lib/format";
+import { LocalTime } from "@/components/app/local-time";
 
 type Message = { kind: AlertKind; text: string; revokeNote?: boolean };
 
@@ -310,9 +310,13 @@ export function SettingsCalendar({
               ) : null}
 
               <p className="meta">
-                {state.last_sync_at
-                  ? `Last updated ${formatTime(state.last_sync_at)}`
-                  : "Waiting for the first update. This usually takes a minute."}
+                {state.last_sync_at ? (
+                  <>
+                    Last updated <LocalTime iso={state.last_sync_at} />
+                  </>
+                ) : (
+                  "Waiting for the first update. This usually takes a minute."
+                )}
               </p>
             </div>
           </div>

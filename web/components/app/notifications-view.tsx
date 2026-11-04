@@ -5,7 +5,7 @@ import { AppLink, Badge, Alert, Button, Card, EmptyState, PageHead } from "@/com
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
 import type { Notice } from "@/lib/api/types";
-import { formatDay, formatTime } from "@/lib/format";
+import { LocalTime } from "@/components/app/local-time";
 
 // Where a notice points. The API has no link field: the only target is the meeting a notice is about.
 export function noticeLink(notice: Notice): { href: string; label: string } | null {
@@ -58,7 +58,7 @@ export function NotificationsView({ initial }: { initial: Notice[] }) {
                   </div>
                   <p>{notice.body}</p>
                   <div className="muted">
-                    {formatDay(notice.created_at)}, {formatTime(notice.created_at)}
+                    <LocalTime iso={notice.created_at} kind="day" />, <LocalTime iso={notice.created_at} />
                     {link ? (
                       <>
                         {" · "}

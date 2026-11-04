@@ -45,7 +45,7 @@ describe("transcript", () => {
 });
 
 describe("formatting", () => {
-  it("formats times in UTC with the words of the Jinja pages", () => {
+  it("formats times in UTC, with the words of the Jinja pages, when no zone is given", () => {
     expect(formatTime("2026-11-02T21:16:52.726490Z")).toBe("02 Nov 2026, 21:16 UTC");
     expect(formatTime("not a date")).toBe("not a date");
   });

@@ -164,7 +164,9 @@ describe("connected", () => {
     expect(screen.getByText(/Waiting for the first update/)).toBeTruthy();
     cleanup();
     view(withEvents);
-    expect(screen.getByText(/Last updated 04 Nov 2026, 14:57 UTC/)).toBeTruthy();
+    expect(screen.getByText(/Last updated/)).toBeTruthy();
+    // The zone is UTC here: vitest.config.mts pins TZ.
+    expect(screen.getByText("04 Nov 2026, 14:57 UTC").getAttribute("datetime")).toBe("2026-11-04T14:57:42.885017Z");
   });
 
   it("shows the designer's three auto-join rules as radios, the person's current one chosen", () => {
