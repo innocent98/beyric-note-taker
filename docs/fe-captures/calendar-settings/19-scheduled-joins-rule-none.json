@@ -1,0 +1,31 @@
+{
+  "note": "Under `none` the joins are cancelled with the reason `rule_none`.",
+  "content": {
+    "joins": [
+      {
+        "event": "Weekly planning",
+        "state": "cancelled",
+        "skip_reason": "rule_none",
+        "template_id": null
+      },
+      {
+        "event": "Customer call",
+        "state": "cancelled",
+        "skip_reason": "rule_none",
+        "template_id": null
+      },
+      {
+        "event": "Sprint 🚀 planning · 週次",
+        "state": "cancelled",
+        "skip_reason": "rule_none",
+        "template_id": null
+      },
+      {
+        "event": "Quarterly offsite",
+        "state": "cancelled",
+        "skip_reason": "rule_none",
+        "template_id": null
+      }
+    ]
+  }
+}

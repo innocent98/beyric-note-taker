@@ -40,5 +40,7 @@ export type SignUpBody = Schemas["SignUp"];
 
 export type CalendarState = Schemas["CalendarOut"];
 export type CalendarEvent = Schemas["UpcomingEvent"];
+export type CalendarSettingsInput = Schemas["SettingsIn"];
+export type AutoJoinRule = CalendarState["rule"];
 export type ConnectStart = Schemas["ConnectOut"];
 export type DisconnectResult = Schemas["DisconnectOut"];

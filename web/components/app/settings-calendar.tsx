@@ -1,11 +1,11 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Alert, Button, Icon } from "@/components/ui";
+import { Alert, Button, Icon, SelectField } from "@/components/ui";
 import type { AlertKind } from "@/components/ui/alert";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
-import type { CalendarState } from "@/lib/api/types";
+import type { AutoJoinRule, CalendarSettingsInput, CalendarState, Template } from "@/lib/api/types";
 import type { CalendarNotice } from "@/lib/calendar-notice";
 import { formatTime } from "@/lib/format";
 
@@ -44,8 +44,7 @@ function messageFor(notice: CalendarNotice, email: string | null): Message {
   }
 }
 
-// The designer's three rules (`autoRules` in Beyric Note Taker.dc.html). Read-only here: choosing
-// one needs the settings route (C15a part 2), which does not exist yet.
+// The designer's three rules (`autoRules` in Beyric Note Taker.dc.html).
 const RULES = [
   ["all", "All meetings with a video link", "Every event on your calendar with a meeting link."],
   ["organizer", "Only meetings I organise", "Skip meetings other people invited you to."],
@@ -58,16 +57,20 @@ const PERMISSIONS_URL = "https://myaccount.google.com/permissions";
 const goTo = (url: string) => window.location.assign(url);
 
 // The Calendar section of the Settings screen (the designer's, in `Beyric Note Taker.dc.html`):
-// the not-connected buttons, or the connected row with Disconnect and the current rule. `initial`
-// is `GET /api/calendar`, or null while the server has the feature off (404 `calendar_unavailable`).
+// the not-connected buttons, or the connected row with Disconnect, the "Join automatically" rules
+// and the "Template for calendar meetings" select. `initial` is `GET /api/calendar`, or null while
+// the server has the feature off (404 `calendar_unavailable`); `templates` are the person's own, for
+// the select. A rule or template is written as soon as it is chosen (`PUT /api/calendar/settings`).
 // The words that come from the server (the last failure) are shown as they are.
 export function SettingsCalendar({
   initial,
   notice,
+  templates = [],
   navigate = goTo,
 }: {
   initial: CalendarState | null;
   notice: CalendarNotice | null;
+  templates?: Template[];
   navigate?: (url: string) => void;
 }) {
   const [state, setState] = useState<CalendarState | null>(initial);
@@ -81,6 +84,10 @@ export function SettingsCalendar({
   const [confirming, setConfirming] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
   const busy = useRef(false);
+  // A rule or template being written: shown as chosen while the server answers, then replaced by
+  // its answer (or dropped, with a message, when it fails).
+  const [saving, setSaving] = useState<{ rule?: AutoJoinRule; template?: number } | null>(null);
+  const writing = useRef(false);
 
   // The redirect's query has been read; drop it so a reload does not show the message again.
   useEffect(() => {
@@ -128,6 +135,20 @@ export function SettingsCalendar({
     }
     busy.current = false;
     setDisconnecting(false);
+  }
+
+  async function save(body: CalendarSettingsInput, shown: { rule?: AutoJoinRule; template?: number }) {
+    if (writing.current) return;
+    writing.current = true;
+    setSaving(shown);
+    setError(null);
+    try {
+      setState(await api.calendar.settings(body));
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+    writing.current = false;
+    setSaving(null);
   }
 
   const connected = state !== null && state.state !== "not_connected";
@@ -244,22 +265,48 @@ export function SettingsCalendar({
                 <div id="cal-rules-label" className="cal-field-label">
                   Join automatically
                 </div>
-                {RULES.map(([code, label, description]) => (
-                  <div
-                    key={code}
-                    className={`cal-rule${state.rule === code ? " cal-rule-on" : ""}`}
-                    role="radio"
-                    aria-checked={state.rule === code}
-                    aria-disabled="true"
-                  >
-                    <span className="cal-radio" aria-hidden="true" />
-                    <div>
-                      <div className="cal-rule-label">{label}</div>
-                      <div className="cal-rule-desc">{description}</div>
-                    </div>
-                  </div>
-                ))}
+                {RULES.map(([code, label, description]) => {
+                  const chosen = (saving?.rule ?? state.rule) === code;
+                  return (
+                    <label key={code} className={`cal-rule${chosen ? " cal-rule-on" : ""}`}>
+                      <input
+                        className="cal-rule-input"
+                        type="radio"
+                        name="auto-join-rule"
+                        value={code}
+                        checked={chosen}
+                        disabled={saving !== null}
+                        onChange={() => {
+                          if (code !== state.rule) void save({ rule: code }, { rule: code });
+                        }}
+                      />
+                      <span className="cal-radio" aria-hidden="true" />
+                      <div>
+                        <div className="cal-rule-label">{label}</div>
+                        <div className="cal-rule-desc">{description}</div>
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
+
+              {templates.length > 0 ? (
+                <div className="cal-template">
+                  <SelectField
+                    id="calendar-template"
+                    label="Template for calendar meetings"
+                    options={templates.map((t) => [t.id, t.name] as const)}
+                    value={String(saving?.template ?? state.calendar_template_id ?? defaultTemplate(templates))}
+                    disabled={saving !== null}
+                    onChange={(event) => {
+                      const id = Number(event.target.value);
+                      if (id !== (state.calendar_template_id ?? defaultTemplate(templates))) {
+                        void save({ calendar_template_id: id }, { template: id });
+                      }
+                    }}
+                  />
+                </div>
+              ) : null}
 
               <p className="meta">
                 {state.last_sync_at
@@ -274,6 +321,12 @@ export function SettingsCalendar({
   );
 }
 
+// What "no template chosen" means on screen: the person's first (oldest) template, the General copy
+// sign-up gave them. The list arrives sorted by name, so it is not simply the first entry.
+function defaultTemplate(templates: Template[]): number {
+  return templates.reduce((first, t) => (t.id < first ? t.id : first), templates[0].id);
+}
+
 // The page's state once the server has forgotten the connection (what GET would now answer).
 function disconnectedFrom(current: CalendarState): CalendarState {
   return {
@@ -285,6 +338,7 @@ function disconnectedFrom(current: CalendarState): CalendarState {
     last_error: null,
     rule: current.rule,
     rule_text: current.rule_text,
+    calendar_template_id: current.calendar_template_id,
     upcoming: [],
   };
 }

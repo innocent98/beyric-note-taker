@@ -3,13 +3,16 @@ that one user never sees another's meetings, templates or vocabulary."""
 
 import json
 import re
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app import accounts, auth, passwords
+from app import accounts, auth, google_oauth, passwords
 from app.models import (
+    CalendarConnection,
+    CalendarEvent,
     Decision,
     Meeting,
     Notification,
@@ -552,7 +555,7 @@ def test_a_started_meeting_belongs_to_the_caller(api, session, owner, template):
 
 
 def test_every_api_route_with_an_id_returns_404_for_another_users_row(
-    anon, app, session, owner, template, strangers_data
+    anon, app, session, owner, stranger, template, strangers_data
 ):
     """The IDOR guard (spec 5.3): sign in as the stranger and call every route that has an id in
     its path with the OWNER's row. A new id route that is not listed here fails the test, so
@@ -570,7 +573,36 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     )
     session.add_all([term, note, decision, review])
     session.commit()
+    # The calendar routes answer 404 `calendar_unavailable` while the feature is off, which would
+    # hide an unscoped id: switch it on, and give BOTH people a live connection so that only the
+    # owner filter on the event row can refuse the stranger.
+    app.state.settings = app.state.settings.model_copy(
+        update={"calendar_enabled": True, "google_client_id": "id", "google_client_secret": "s"}
+    )
+    app.dependency_overrides[google_oauth.get_google] = lambda: object()  # only "is there one"
+    for user in (owner, stranger):
+        session.add(CalendarConnection(user_id=user.id, granted_scopes=google_oauth.CALENDAR_SCOPE))
+    session.commit()
+    start = datetime.now(UTC) + timedelta(hours=2)
+    event = CalendarEvent(
+        user_id=owner.id,
+        connection_id=session.scalars(
+            select(CalendarConnection.id).where(CalendarConnection.user_id == owner.id)
+        ).one(),
+        source_event_id="evt-1",
+        title="Owner meeting",
+        starts_at=start,
+        ends_at=start + timedelta(hours=1),
+        platform="google_meet",
+        meeting_url="https://meet.google.com/abc-defg-hij",
+        native_id="abc-defg-hij",
+        organizer_self=True,
+        self_response="accepted",
+    )
+    session.add(event)
+    session.commit()
     ids = {
+        "event_id": event.id,
         "meeting_id": mine.id,
         "template_id": template.id,
         "term_id": term.id,
@@ -589,12 +621,24 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         bodies = {  # a valid body for each route that takes one, so only the id can be wrong
             "/regenerate": {"template_id": strangers_data["template"].id},
             "/vocabulary": {"term": "Metrika"},
+            "/override": {"override": False},
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
         }
         body = next((b for key, b in bodies.items() if path.endswith(key)), None)
         error_of(anon.call(method, url, body), 404, "not_found")
         checked += 1
-    assert checked >= 6
+    assert checked >= 7
+    # The 404 above is the owner filter, not a dead route: the owner's own call works, and the
+    # stranger's attempt changed nothing.
+    session.expire_all()
+    assert session.get(CalendarEvent, event.id).override is None
+    anon.log_in(email=OWNER_EMAIL)
+    assert (
+        anon.put(f"/api/calendar/events/{event.id}/override", {"override": False}).status_code
+        == 200
+    )
+    session.expire_all()
+    assert session.get(CalendarEvent, event.id).override is False
 
 
 # ---- defaults for a new user ----

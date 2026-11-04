@@ -1,0 +1,26 @@
+{
+  "note": "No session cookie: 401.",
+  "client": "visitor",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/settings",
+    "headers": {},
+    "body": {
+      "rule": "none"
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "note": "Another person's event id: 404, nothing changes.",
+  "client": "a different user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/events/1/override",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "override": false
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such event"
+      }
+    }
+  }
+}
