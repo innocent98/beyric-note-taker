@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Badge, Button, Card, EmptyState, Icon, ListRow } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import type { MeetingList as MeetingListData, MeetingSummary, Template } from "@/lib/api/types";
-import { formatTime, plural } from "@/lib/format";
+import { LocalTime } from "@/components/app/local-time";
+import { plural } from "@/lib/format";
 
 // The list of meetings, newest first. The first page comes from the server render; older pages are
 // fetched on request with before_id (docs/fe-integration-guide-owner-app.md 5.1). The page asks for a
@@ -87,7 +88,9 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
                   <span className="list-row-text">
                     <span className="list-title">{m.title}</span>
                     <span className="meta-line">
-                      <span>{formatTime(m.created_at)}</span>
+                      <span>
+                        <LocalTime iso={m.created_at} />
+                      </span>
                       {names.get(m.template_id) ?? m.template_name ? (
                         <span>{names.get(m.template_id) ?? m.template_name}</span>
                       ) : null}

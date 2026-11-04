@@ -20,7 +20,8 @@ import {
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { Meeting, NoteLanguage, RetryBlock, Template } from "@/lib/api/types";
-import { formatTime, platformLabel } from "@/lib/format";
+import { LocalTime } from "@/components/app/local-time";
+import { platformLabel } from "@/lib/format";
 
 // What a failed meeting says about retrying, from `retry_block` (the same words as the Jinja page).
 // The API's own `retry_block_message` is used when it is there; these cover the rest.
@@ -164,7 +165,9 @@ export function MeetingView({
             </Badge>
           </div>
           <p className="meta-line">
-            <span>{formatTime(m.created_at)}</span>
+            <span>
+              <LocalTime iso={m.created_at} />
+            </span>
             <span>{platformLabel(m.platform)}</span>
           </p>
         </div>
@@ -193,7 +196,7 @@ export function MeetingView({
       {m.status === "bot_sent" && m.join_retry_at !== null ? (
         <Alert kind="notice">
           Google would not let the bot ask to join, so it was taken out. A new bot will be sent at about{" "}
-          {formatTime(m.join_retry_at)} (attempt 2 of 2).
+          <LocalTime iso={m.join_retry_at} /> (attempt 2 of 2).
         </Alert>
       ) : m.status === "bot_sent" && m.join_attempts > 1 ? (
         <Alert kind="notice">
@@ -240,7 +243,9 @@ export function MeetingView({
               <h2 className="side-title">Details</h2>
               <dl className="details">
                 <dt>Date</dt>
-                <dd>{formatTime(m.created_at)}</dd>
+                <dd>
+                  <LocalTime iso={m.created_at} />
+                </dd>
                 <dt>Platform</dt>
                 <dd>{platformLabel(m.platform)}</dd>
                 {templateName ? (
