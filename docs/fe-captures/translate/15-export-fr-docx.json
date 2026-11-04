@@ -1,0 +1,23 @@
+{
+  "note": "Built from the cached French translation.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export?format=docx&transcript=true&language=fr",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "content-disposition": "attachment; filename=\"Google Meet abc-defg-hij.docx\"; filename*=UTF-8''Google%20Meet%20abc-defg-hij.docx",
+      "cache-control": "no-store"
+    },
+    "file": {
+      "saved_as": "files/15-export-fr-docx.docx",
+      "bytes": 39000
+    }
+  }
+}

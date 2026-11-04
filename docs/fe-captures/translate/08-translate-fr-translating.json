@@ -1,0 +1,29 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/translations/fr",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "language": "fr",
+      "status": "translating",
+      "stale": false,
+      "notes": null,
+      "notes_html": null,
+      "transcript": null,
+      "failure_code": null,
+      "failure_message": null,
+      "updated_at": "2026-11-04T15:53:45.807986Z"
+    }
+  }
+}

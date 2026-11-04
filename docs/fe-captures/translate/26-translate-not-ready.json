@@ -1,0 +1,27 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/2/translations",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "language": "fr"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_ready",
+        "message": "The notes are not ready yet."
+      }
+    }
+  }
+}

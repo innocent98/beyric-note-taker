@@ -370,12 +370,15 @@ def export_meeting(
                 MeetingTranslation.language == language,
             )
         ).first()
-        if row is None or row.status != "ready" or translation.is_stale(row, meeting):
+        name = translation.language_name(language)
+        if row is not None and translation.is_stale(row, meeting):
             raise Refused(
                 409,
                 "translation_missing",
-                f"Translate the notes to {translation.language_name(language)} first.",
+                f"The {name} translation is out of date. Translate again first.",
             )
+        if row is None or row.status != "ready":
+            raise Refused(409, "translation_missing", f"Translate the notes to {name} first.")
         notes, words = row.notes_md, row.transcript
     doc = build_notes_document(
         title=title,

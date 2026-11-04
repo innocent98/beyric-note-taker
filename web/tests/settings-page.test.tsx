@@ -34,7 +34,10 @@ vi.mock("@/lib/api/server", () => ({
           return state.answer!();
         },
       },
-      settings: { email: { get: async () => ({ notify_email: true }) } },
+      settings: {
+        email: { get: async () => ({ notify_email: true }) },
+        language: { get: async () => ({ default_language: "en" }) },
+      },
     };
   },
   getReviewOpen: async () => 2,

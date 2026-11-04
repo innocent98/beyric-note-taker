@@ -1,0 +1,55 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "title": "Google Meet abc-defg-hij",
+      "platform": "google_meet",
+      "native_id": "abc-defg-hij",
+      "status": "ready",
+      "step": "done",
+      "status_text": "Ready",
+      "status_tone": "success",
+      "template_id": 1,
+      "created_at": "2026-11-04T15:53:45.230004Z",
+      "failure_reason": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": false,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": true,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "extraction_status": null,
+      "notes": "## Summary\nThe meeting introduced Beyric Note Taker, an app being developed for internal use. Adebayo described problems with inaccurate transcripts from another note-taking app and said he wanted to test how well the new app captures this meeting. Automation and the app's effectiveness remain to be explored.\n\n## Key points\n- Adebayo said a transcript from a September 12 meeting was inaccurate and did not provide a useful summary.\n- He has previously used another note taker that joined and recorded meetings, but said he had not used it extensively.\n- Beyric Note Taker is being developed for internal use. Adebayo said it may cost money to run.\n- The note taker was present in this meeting so Adebayo could see how it performed.\n- Grace said the network was affecting Adebayo's speech and asked whether he could hear her.\n\n## Decisions\n- Beyric Note Taker is intended for internal use.\n- The app would be tested during this meeting.\n\n## Action items\nNone noted\n\n## Open questions\n- How can the app be automated?\n- How well will it capture and summarize meetings?\n- Could Adebayo hear Grace after she raised the network issue?\n\n## Please check\n- Grace's phrase \"Network is obstructing your speech\" may have been misheard or transcribed oddly.\n",
+      "notes_html": "<h2>Summary</h2>\n<p>The meeting introduced Beyric Note Taker, an app being developed for internal use. Adebayo described problems with inaccurate transcripts from another note-taking app and said he wanted to test how well the new app captures this meeting. Automation and the app's effectiveness remain to be explored.</p>\n<h2>Key points</h2>\n<ul>\n<li>Adebayo said a transcript from a September 12 meeting was inaccurate and did not provide a useful summary.</li>\n<li>He has previously used another note taker that joined and recorded meetings, but said he had not used it extensively.</li>\n<li>Beyric Note Taker is being developed for internal use. Adebayo said it may cost money to run.</li>\n<li>The note taker was present in this meeting so Adebayo could see how it performed.</li>\n<li>Grace said the network was affecting Adebayo's speech and asked whether he could hear her.</li>\n</ul>\n<h2>Decisions</h2>\n<ul>\n<li>Beyric Note Taker is intended for internal use.</li>\n<li>The app would be tested during this meeting.</li>\n</ul>\n<h2>Action items</h2>\n<p>None noted</p>\n<h2>Open questions</h2>\n<ul>\n<li>How can the app be automated?</li>\n<li>How well will it capture and summarize meetings?</li>\n<li>Could Adebayo hear Grace after she raised the network issue?</li>\n</ul>\n<h2>Please check</h2>\n<ul>\n<li>Grace's phrase &quot;Network is obstructing your speech&quot; may have been misheard or transcribed oddly.</li>\n</ul>\n",
+      "transcript": "[Adebayo]: So, I'm just going to introduce the app to you.\n[Adebayo]: It is a note taker application, being developed by us, Beyric. So I named it Beyric Note Taker, right?\n[Adebayo]: Now, the problem that occurred yesterday. I had a meeting on September 12th with one of my colleagues, and the meeting was very long, which I had this other note taker on my system that recorded for me.\n[Adebayo]: So hoping that going back to the meeting transcript yesterday, I was going to be able to capture what was recorded.\n[Adebayo]: But then on getting there, I thought that the transcripts, there were a lot of inaccuracies. Like, it doesn't even relate to what we were discussing.\n[Adebayo]: What we discussed then were feature updates, corrections, and all of that, which I cannot remember everything at the moment.\n[Adebayo]: Have you been using the apps before?\n[Adebayo]: Yes, I've been using the note taker before, but I've not really used it much. I just plugged it into my system.\n[Adebayo]: When I first started using it, it was working a bit. I could get some summary of the meetings and all of that. But the one I wanted yesterday was a total flop. There was no proper summary.\n[Adebayo]: And they were charging much. This one I'm building now is also going to be costing us money. But I just want to see how it's going to go first.\n[Adebayo]: It's going to be like internal stuff.\n[Ojebola Grace]: I said the effectiveness.\n[Adebayo]: Yes, yes, it's going to be for internal.\n[Ojebola Grace]: Okay.\n[Adebayo]: But I'm still looking at how it can be automated, do you understand? So that was the purpose, actually.\n[Adebayo]: And the note taker is here in this meeting now, so listen to our conversation. I want to see how far it can take us.\n[Ojebola Grace]: Yes.\n[Adebayo]: At least for this meeting now, I'm going to be spending a few dollars. So at least let's see.\n[Ojebola Grace]: Okay. I think the network is...\n[Ojebola Grace]: Network is obstructing your speech. Can you hear me?",
+      "translations": [
+        {
+          "language": "fr",
+          "status": "ready",
+          "stale": false
+        }
+      ]
+    }
+  }
+}

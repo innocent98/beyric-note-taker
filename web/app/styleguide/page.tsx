@@ -23,6 +23,7 @@ import {
   SelectField,
   TabButtons,
   Tabs,
+  Toast,
   Toggle,
   TextareaField,
 } from "@/components/ui";
@@ -156,6 +157,7 @@ export default async function StyleGuidePage() {
           <Alert kind="info">Information: something worth knowing.</Alert>
           <Alert kind="notice">Notice: the notes may be incomplete.</Alert>
           <Alert kind="error">Error: something went wrong.</Alert>
+          <Toast inline message="Default notes language updated" />
         </section>
 
         <section className="sg-section">

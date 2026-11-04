@@ -1,0 +1,24 @@
+{
+  "note": "",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/language",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "default_language": "en"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "default_language": "en"
+    }
+  }
+}

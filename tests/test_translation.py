@@ -166,6 +166,14 @@ def test_a_none_noted_section_is_written_by_code_and_not_sent():
     assert not any("None noted" in t for call in model.calls for t in sent_texts(call))
 
 
+def test_an_empty_action_items_section_uses_the_designers_own_words():
+    notes = NOTES.replace("- Tunde: send the contract (by Friday)", "None noted")
+    fr = do_notes(FakeModel(), notes=notes, language="fr").text
+    es = do_notes(FakeModel(), notes=notes, language="es").text
+    assert "## Actions à mener\nAucune action notée." in fr
+    assert "## Tareas\nNo se anotaron tareas." in es
+
+
 def test_bullets_and_nesting_are_kept_by_code_and_only_the_words_are_translated():
     model = FakeModel()
     out = do_notes(model)

@@ -1,0 +1,31 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/translations",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "language",
+            "message": "Field required"
+          }
+        ]
+      }
+    }
+  }
+}

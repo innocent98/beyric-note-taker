@@ -510,6 +510,10 @@ export interface paths {
          * Export Meeting
          * @description The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.
          *
+         *     `language` `fr` or `es` builds it from the finished, current translation (409
+         *     `translation_missing` when there is none: translate first); `en`, the default, is the
+         *     original.
+         *
          *     Built when asked and never stored. One file is built at a time per server process: a second
          *     request meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's
          *     title, cleaned, in `Content-Disposition`.
@@ -560,6 +564,56 @@ export interface paths {
          */
         post: operations["retry_meeting"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{meeting_id}/translations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Translation
+         * @description Translate the notes and transcript of a ready meeting into French or Spanish. 200 with the
+         *     translation when one is already cached for the current text; otherwise 202 with
+         *     `status: "translating"` and the work is queued. A failed or stale translation asked for again
+         *     is queued again. Asking again while it is being made changes nothing.
+         */
+        post: operations["request_translation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{meeting_id}/translations/{language}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Translation
+         * @description The translation in one language: its `status` (poll every 2 seconds while `translating`),
+         *     and when `ready` the `notes`, `notes_html` and `transcript`. 404 `no_translation` when none
+         *     was asked for, or for a language that is not offered.
+         */
+        get: operations["get_translation"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Translation
+         * @description Throw the translation away so it can be made again (also cancels one still queued). It does
+         *     not give back one of the day's 20.
+         */
+        delete: operations["delete_translation"];
         options?: never;
         head?: never;
         patch?: never;
@@ -835,6 +889,32 @@ export interface paths {
          *     setting when it is sent, so turning it off also stops one already queued.
          */
         put: operations["write_email_preferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/language": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Language Preferences
+         * @description The language meetings open in when a translation exists: `en` (the original, the default,
+         *     also for an account that has no settings row yet), `fr` or `es`.
+         */
+        get: operations["read_language_preferences"];
+        /**
+         * Write Language Preferences
+         * @description Set the default notes language. Nothing is translated by this: a meeting opens in it only
+         *     when that translation already exists, otherwise it opens in the original with an offer.
+         */
+        put: operations["write_language_preferences"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1352,6 +1432,19 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** LanguagePreferencesIn */
+        LanguagePreferencesIn: {
+            /** Default Language */
+            default_language: string;
+        };
+        /** LanguagePreferencesOut */
+        LanguagePreferencesOut: {
+            /**
+             * Default Language
+             * @enum {string}
+             */
+            default_language: "en" | "fr" | "es";
+        };
         /** Login */
         Login: {
             /** Email */
@@ -1430,6 +1523,8 @@ export interface components {
             title: string;
             /** Transcript */
             transcript: string | null;
+            /** Translations */
+            translations: components["schemas"]["TranslationBrief"][];
             /** Worker Stale */
             worker_stale: boolean;
         };
@@ -1699,6 +1794,59 @@ export interface components {
             id: number;
             /** Term */
             term: string;
+        };
+        /**
+         * TranslationBrief
+         * @description What the meeting page needs to know about a translation without fetching it.
+         */
+        TranslationBrief: {
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "fr" | "es";
+            /** Stale */
+            stale: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "translating" | "ready" | "failed";
+        };
+        /** TranslationIn */
+        TranslationIn: {
+            /** Language */
+            language: string;
+        };
+        /** TranslationOut */
+        TranslationOut: {
+            /** Failure Code */
+            failure_code: string | null;
+            /** Failure Message */
+            failure_message: string | null;
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "fr" | "es";
+            /** Notes */
+            notes: string | null;
+            /** Notes Html */
+            notes_html: string | null;
+            /** Stale */
+            stale: boolean;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "translating" | "ready" | "failed";
+            /** Transcript */
+            transcript: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** UnreadCount */
         UnreadCount: {
@@ -3224,6 +3372,7 @@ export interface operations {
             query?: {
                 format?: "pdf" | "docx";
                 transcript?: boolean;
+                language?: "en" | "fr" | "es";
             };
             header?: never;
             path: {
@@ -3270,7 +3419,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `not_ready`: the notes are not written yet */
+            /** @description `not_ready`: the notes are not written yet; `translation_missing`: no finished, current translation in that language */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3473,6 +3622,209 @@ export interface operations {
             };
             /** @description Bad Gateway */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    request_translation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranslationIn"];
+            };
+        };
+        responses: {
+            /** @description A finished translation of the current text, from the cache. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationOut"];
+                };
+            };
+            /** @description Queued, or already being made: ask again every 2 seconds. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such meeting (or not the caller's) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_ready`: the notes are not written yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `language_unsupported`: only French or Spanish */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `translation_limit`: 20 translations a day */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_translation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+                language: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_translation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+                language: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4291,6 +4643,104 @@ export interface operations {
                 };
             };
             /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_language_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LanguagePreferencesOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_language_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LanguagePreferencesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LanguagePreferencesOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `language_unsupported` */
             422: {
                 headers: {
                     [name: string]: unknown;

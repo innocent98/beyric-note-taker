@@ -1,0 +1,29 @@
+{
+  "note": "`notes` has the dictionary's headings; `transcript` has the original's lines and labels.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/translations/fr",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "language": "fr",
+      "status": "ready",
+      "stale": false,
+      "notes": "## Résumé\nLa réunion a présenté Beyric Note Taker, une application développée pour un usage interne. Adebayo a décrit des problèmes de transcriptions inexactes avec une autre application de prise de notes et a voulu tester la qualité de capture de la nouvelle application lors de cette réunion. L'automatisation et l'efficacité de l'application restent à explorer.\n\n## Points clés\n- Adebayo a indiqué que la transcription d'une réunion du 12 septembre était inexacte et ne fournissait pas de résumé utile.\n- Il a déjà utilisé un autre outil de prise de notes qui rejoignait et enregistrait les réunions, mais il ne l'a pas beaucoup utilisé.\n- Beyric Note Taker est développé pour un usage interne. Adebayo a précisé que son fonctionnement pourrait avoir un coût.\n- L'outil était présent à cette réunion afin qu'Adebayo puisse évaluer ses performances.\n- Grace a signalé que le réseau perturbait la voix d'Adebayo et lui a demandé s'il l'entendait.\n\n## Décisions\n- Beyric Note Taker est destiné à un usage interne.\n- L'application serait testée pendant cette réunion.\n\n## Actions à mener\nAucune action notée.\n\n## Questions ouvertes\n- Comment automatiser l'application ?\n- Dans quelle mesure capturera-t-elle et résumera-t-elle les réunions ?\n- Adebayo a-t-il entendu Grace après qu'elle a signalé le problème de réseau ?\n\n## À vérifier\n- La phrase de Grace « Le réseau gêne ta voix » a peut-être été mal entendue ou mal transcrite.\n",
+      "notes_html": "<h2>Résumé</h2>\n<p>La réunion a présenté Beyric Note Taker, une application développée pour un usage interne. Adebayo a décrit des problèmes de transcriptions inexactes avec une autre application de prise de notes et a voulu tester la qualité de capture de la nouvelle application lors de cette réunion. L'automatisation et l'efficacité de l'application restent à explorer.</p>\n<h2>Points clés</h2>\n<ul>\n<li>Adebayo a indiqué que la transcription d'une réunion du 12 septembre était inexacte et ne fournissait pas de résumé utile.</li>\n<li>Il a déjà utilisé un autre outil de prise de notes qui rejoignait et enregistrait les réunions, mais il ne l'a pas beaucoup utilisé.</li>\n<li>Beyric Note Taker est développé pour un usage interne. Adebayo a précisé que son fonctionnement pourrait avoir un coût.</li>\n<li>L'outil était présent à cette réunion afin qu'Adebayo puisse évaluer ses performances.</li>\n<li>Grace a signalé que le réseau perturbait la voix d'Adebayo et lui a demandé s'il l'entendait.</li>\n</ul>\n<h2>Décisions</h2>\n<ul>\n<li>Beyric Note Taker est destiné à un usage interne.</li>\n<li>L'application serait testée pendant cette réunion.</li>\n</ul>\n<h2>Actions à mener</h2>\n<p>Aucune action notée.</p>\n<h2>Questions ouvertes</h2>\n<ul>\n<li>Comment automatiser l'application ?</li>\n<li>Dans quelle mesure capturera-t-elle et résumera-t-elle les réunions ?</li>\n<li>Adebayo a-t-il entendu Grace après qu'elle a signalé le problème de réseau ?</li>\n</ul>\n<h2>À vérifier</h2>\n<ul>\n<li>La phrase de Grace « Le réseau gêne ta voix » a peut-être été mal entendue ou mal transcrite.</li>\n</ul>\n",
+      "transcript": "[Adebayo]: Alors, je vais juste vous présenter l'application.\n[Adebayo]: C'est une application de prise de notes, développée par nous, Beyric. Je l'ai donc appelée Beyric Note Taker, d'accord ?\n[Adebayo]: Maintenant, le problème d'hier. J'ai eu une réunion le 12 septembre avec un de mes collègues, une réunion très longue, et j'avais cet autre outil de prise de notes qui l'a enregistrée pour moi.\n[Adebayo]: J'espérais donc, en revenant à la transcription hier, retrouver ce qui avait été enregistré.\n[Adebayo]: Mais en y arrivant, j'ai trouvé beaucoup d'inexactitudes dans les transcriptions. Ça n'avait même aucun rapport avec ce dont on parlait.\n[Adebayo]: On avait parlé de mises à jour de fonctionnalités, de corrections et de tout ça, dont je ne me souviens pas entièrement pour l'instant.\n[Adebayo]: Est-ce que tu as déjà utilisé ces applications ?\n[Adebayo]: Oui, j'ai déjà utilisé l'outil de prise de notes, mais pas vraiment beaucoup. Je l'ai juste installé sur mon système.\n[Adebayo]: Quand j'ai commencé à l'utiliser, ça marchait un peu. J'obtenais un résumé des réunions et tout ça. Mais celle que je voulais hier, c'était un échec total. Il n'y avait pas de vrai résumé.\n[Adebayo]: Et ils facturaient cher. Celle que je construis maintenant va aussi nous coûter de l'argent. Mais je veux d'abord voir comment ça va se passer.\n[Adebayo]: Ce sera pour un usage interne.\n[Ojebola Grace]: J'ai dit l'efficacité.\n[Adebayo]: Oui, oui, ce sera pour l'interne.\n[Ojebola Grace]: D'accord.\n[Adebayo]: Mais je cherche encore comment l'automatiser, tu comprends ? C'était ça l'objectif, en fait.\n[Adebayo]: Et l'outil est présent dans cette réunion, donc il écoute notre conversation. Je veux voir jusqu'où il peut nous mener.\n[Ojebola Grace]: Oui.\n[Adebayo]: Au moins pour cette réunion, je vais dépenser quelques dollars. Alors voyons.\n[Ojebola Grace]: D'accord. Je crois que le réseau...\n[Ojebola Grace]: Le réseau gêne ta voix. Tu m'entends ?",
+      "failure_code": null,
+      "failure_message": null,
+      "updated_at": "2026-11-04T15:53:45.880147Z"
+    }
+  }
+}

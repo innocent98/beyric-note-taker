@@ -241,6 +241,49 @@ describe("calendar calls", () => {
     expect(header(calls[0].init, "X-CSRF-Token")).toBeUndefined();
   });
 
+  it("asks for a translation with the token and a language, and reads, deletes and exports it", async () => {
+    const { api, calls } = setup((url, init) =>
+      url === "/api/session"
+        ? sessionBody()
+        : init.method === "DELETE"
+          ? new Response(null, { status: 204 })
+          : new Response(JSON.stringify({ language: "fr", status: "translating" }), {
+              status: 202,
+              headers: { "content-type": "application/json" },
+            }),
+    );
+    await api.meetings.translations.request(7, "fr");
+    await api.meetings.translations.get(7, "fr");
+    await api.meetings.translations.remove(7, "es");
+    const post = calls.find((c) => c.url === "/api/meetings/7/translations" && c.init.method === "POST")!;
+    expect(header(post.init, "X-CSRF-Token")).toBe("<csrf-A>");
+    expect(JSON.parse(post.init.body as string)).toEqual({ language: "fr" });
+    const get = calls.find((c) => c.url === "/api/meetings/7/translations/fr")!;
+    expect(get.init.method).toBe("GET");
+    expect(header(get.init, "X-CSRF-Token")).toBeUndefined();
+    const del = calls.find((c) => c.url === "/api/meetings/7/translations/es")!;
+    expect(del.init.method).toBe("DELETE");
+    expect(header(del.init, "X-CSRF-Token")).toBe("<csrf-A>");
+  });
+
+  it("reads and writes the default language with PUT, and asks for an export in a language", async () => {
+    const { api, calls } = setup((url) =>
+      url === "/api/session"
+        ? sessionBody()
+        : url.startsWith("/api/settings/language")
+          ? new Response(JSON.stringify({ default_language: "fr" }), { status: 200, headers: { "content-type": "application/json" } })
+          : new Response("x", { status: 200, headers: { "content-type": "application/pdf" } }),
+    );
+    expect(await api.settings.language.get()).toEqual({ default_language: "fr" });
+    await api.settings.language.set("es");
+    await api.meetings.export(7, "pdf", true, "fr");
+    const put = calls.find((c) => c.init.method === "PUT")!;
+    expect(put.url).toBe("/api/settings/language");
+    expect(JSON.parse(put.init.body as string)).toEqual({ default_language: "es" });
+    expect(header(put.init, "X-CSRF-Token")).toBe("<csrf-A>");
+    expect(calls.at(-1)!.url).toBe("/api/meetings/7/export?format=pdf&transcript=true&language=fr");
+  });
+
   it("starts the connect with the CSRF token and a return to the settings page", async () => {
     const { api, calls } = setup((url) =>
       url === "/api/session"

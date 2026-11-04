@@ -76,9 +76,15 @@ HEADINGS = {
         "Please check": "Revisar",
     },
 }
-# The line under a heading that has nothing for it. The prototype's own word is about action items
-# only ("Aucune action notée."), so the other sections need a neutral one: the design is silent.
-NONE_NOTED = {"en": NONE_NOTED_SOURCE, "fr": "Aucun point noté", "es": "Nada que anotar"}
+# The line under a heading that has nothing for it. The prototype draws one only for action items
+# (`L.none`: "Aucune action notée.", "No se anotaron tareas."), so those are used there; every other
+# section gets a neutral line, because the design is silent about them.
+NONE_NOTED = {"en": NONE_NOTED_SOURCE, "fr": "Aucun point noté.", "es": "Nada que anotar."}
+NONE_NOTED_ACTIONS = {
+    "en": NONE_NOTED_SOURCE,
+    "fr": "Aucune action notée.",
+    "es": "No se anotaron tareas.",
+}
 
 DAILY_LIMIT = 20
 # One call translates a chunk of lines: at most this many words and lines, so the answer stays
@@ -415,17 +421,19 @@ class _Line:
     unit: int | None = None
 
 
-def _none_noted_lines(lines: list[str]) -> set[int]:
-    """Indexes of the lines that are the whole body of a section reading "None noted". Code
-    writes those in the target language, so the model is never asked about them."""
+def _none_noted_lines(lines: list[str]) -> dict[int, str]:
+    """The lines that are the whole body of a section reading "None noted", each with its section's
+    name. Code writes those in the target language, so the model is never asked about them."""
     heads = [
-        i for i, line in enumerate(lines) if any(p.match(line) for p in _HEADING_LINE.values())
+        (i, next(h for h, p in _HEADING_LINE.items() if p.match(line)))
+        for i, line in enumerate(lines)
+        if any(p.match(line) for p in _HEADING_LINE.values())
     ]
-    marked: set[int] = set()
-    for start, stop in zip(heads, [*heads[1:], len(lines)], strict=True):
+    marked: dict[int, str] = {}
+    for (start, name), stop in zip(heads, [i for i, _ in heads[1:]] + [len(lines)], strict=True):
         body = range(start + 1, stop)
         if _is_none_noted([lines[i] for i in body]):
-            marked.update(i for i in body if lines[i].strip())
+            marked.update({i: name for i in body if lines[i].strip()})
     return marked
 
 
@@ -448,7 +456,8 @@ def translate_notes(
         if matched is not None:
             plan.append(_Line(fixed=f"## {HEADINGS[language][matched]}"))
         elif index in none_noted:
-            plan.append(_Line(fixed=NONE_NOTED[language]))
+            words = NONE_NOTED_ACTIONS if none_noted[index] == "Action items" else NONE_NOTED
+            plan.append(_Line(fixed=words[language]))
         elif not line.strip():
             plan.append(_Line(fixed=line))
         else:

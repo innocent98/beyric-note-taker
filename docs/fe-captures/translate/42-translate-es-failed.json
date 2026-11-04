@@ -1,0 +1,29 @@
+{
+  "note": "Provoked inside the capture: the fake model dropped a line, so the structure check failed.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/translations/es",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "language": "es",
+      "status": "failed",
+      "stale": false,
+      "notes": null,
+      "notes_html": null,
+      "transcript": null,
+      "failure_code": "structure",
+      "failure_message": "The translation did not come out right, so it was not kept. You can try again.",
+      "updated_at": "2026-11-04T15:53:47.948726Z"
+    }
+  }
+}

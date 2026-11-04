@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 
 // The Settings sections the designer drew below Calendar (`isSettings` in Beyric Note Taker.dc.html):
-// Sprints and reminders, Tasks, Default notes language. Their features are not built yet (tasks,
-// sprints, reminders, translation, tool sync, Slack), so every control here is drawn as the designer
-// drew it and switched off: a real `disabled` on each button and select (the switches carry
+// Sprints and reminders, Tasks. Their features are not built yet (tasks, sprints, reminders, tool
+// sync, Slack), so every control here is drawn as the designer drew it and switched off: a real `disabled` on each button and select (the switches carry
 // `aria-disabled` too), no state, no network, nothing stored. Each section says so in one line;
-// those three lines are the only words the design does not have. Sample values (the select
+// those two lines are the only words the design does not have. Sample values (the select
 // choices) are the designer's own; no sprint dates and no connected state are shown, because there
 // is no data behind them. Plain server markup on purpose: nothing here may ever call anything.
+// The third section the designer drew there, Default notes language, is live: `settings-language.tsx`.
 
 const SPRINT_LENGTHS = [
   ["week5", "1 week, 5 working days"],
@@ -20,11 +20,6 @@ const SPRINT_LENGTHS = [
 ] as const;
 const REMINDER_TIMINGS = ["1 hour before", "30 minutes before", "1 hour and 30 minutes before"] as const;
 const PROJECT_TOOLS = ["Jira", "Linear", "Asana", "Taiga"] as const;
-const LANGUAGES = [
-  ["en", "Original (no translation)"],
-  ["fr", "French"],
-  ["es", "Spanish"],
-] as const;
 
 // A switch that is off and cannot be turned on.
 function Switch({ label }: { label: string }) {
@@ -63,27 +58,6 @@ function Text({ title, children }: { title: string; children?: ReactNode }) {
       <div className="pl-row-title">{title}</div>
       {children ? <div className="pl-row-sub">{children}</div> : null}
     </div>
-  );
-}
-
-function Globe() {
-  return (
-    <svg
-      className="pl-globe"
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
-    </svg>
   );
 }
 
@@ -168,30 +142,6 @@ export function SettingsPlannedSections() {
           <button type="button" className="btn btn-secondary pl-btn" disabled>
             Connect Slack
           </button>
-        </div>
-      </section>
-
-      <section className="card pl-language" aria-labelledby="set-language">
-        <div className="pl-language-text">
-          <h2 id="set-language" className="set-title">
-            Default notes language
-          </h2>
-          <p className="set-sub">
-            Notes and transcripts open in this language. You can switch back to the original on any meeting.
-          </p>
-          <p className="meta pl-soon">This setting is not available yet.</p>
-        </div>
-        <div className="pl-language-control">
-          <div className="pl-language-select">
-            <Globe />
-            <select className="select pl-lang" aria-label="Default notes language" defaultValue="en" disabled>
-              {LANGUAGES.map(([code, label]) => (
-                <option key={code} value={code}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
       </section>
     </>

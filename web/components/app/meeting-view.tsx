@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { CopyButton } from "@/components/app/copy-button";
 import { DownloadMenu } from "@/components/app/download-menu";
 import { NotesHtml } from "@/components/app/notes-html";
+import { LanguageSelect, TranslationBanner, useTranslation } from "@/components/app/translation";
 import { TranscriptPanel } from "@/components/app/transcript-panel";
 import {
   Alert,
@@ -18,7 +19,7 @@ import {
 } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
-import type { Meeting, RetryBlock, Template } from "@/lib/api/types";
+import type { Meeting, NoteLanguage, RetryBlock, Template } from "@/lib/api/types";
 import { formatTime, platformLabel } from "@/lib/format";
 
 // What a failed meeting says about retrying, from `retry_block` (the same words as the Jinja page).
@@ -47,10 +48,13 @@ export function MeetingView({
   initial,
   templates,
   initialTab = "notes",
+  defaultLanguage = "en",
 }: {
   initial: Meeting;
   templates: Template[];
   initialTab?: "notes" | "transcript";
+  // The account's default notes language (Settings): opened when that translation exists.
+  defaultLanguage?: NoteLanguage;
 }) {
   const [meeting, setMeeting] = useState(initial);
   const [tab, setTab] = useState<string>(initialTab);
@@ -61,6 +65,7 @@ export function MeetingView({
   const [notice, setNotice] = useState<string | null>(null);
   const [rewriteId, setRewriteId] = useState(String(initial.template_id));
   const busyRef = useRef<Busy>(null);
+  const translation = useTranslation(initial.id, initial.translations, defaultLanguage, meeting.notes);
 
   const refetch = useCallback(async () => {
     try {
@@ -135,6 +140,9 @@ export function MeetingView({
   const templateName = templates.find((t) => t.id === m.template_id)?.name;
   const working = m.status === "bot_sent" || m.status === "processing";
   const tabs = [{ id: "notes", label: "Notes" }, ...(m.transcript ? [{ id: "transcript", label: "Transcript" }] : [])];
+  // The words on the page: the translation's when one is shown, else the original's.
+  const shownNotes = translation.translated?.notes ?? m.notes;
+  const shownTranscript = translation.translated?.transcript ?? null;
   const retryText = m.retry_block !== null ? (m.retry_block_message ?? RETRY_BLOCKED[m.retry_block]) : null;
 
   return (
@@ -162,6 +170,7 @@ export function MeetingView({
             title={m.title}
             ready={m.status === "ready" && Boolean(m.notes)}
             hasTranscript={Boolean(m.transcript)}
+            language={translation.shown}
             onNotReady={() => void refetch()}
           />
         ) : null}
@@ -174,6 +183,7 @@ export function MeetingView({
         </Alert>
       ) : null}
       {error ? <Alert kind="error">{error}</Alert> : null}
+      {translation.error ? <Alert kind="error">{translation.error}</Alert> : null}
       {notice ? <Alert kind="info">{notice}</Alert> : null}
 
       {m.status === "bot_sent" && m.join_retry_at !== null ? (
@@ -201,19 +211,23 @@ export function MeetingView({
               ) : (
                 <h2 className="panel-title">Notes</h2>
               )}
-              {tab === "transcript" && m.transcript ? (
-                <CopyButton text={m.transcript} label="Copy transcript" />
-              ) : (
-                <CopyButton text={m.notes ?? ""} label="Copy notes" />
-              )}
+              <div className="panel-tools">
+                <LanguageSelect value={translation.lang} onChange={translation.choose} />
+                {tab === "transcript" && m.transcript ? (
+                  <CopyButton key="transcript" text={shownTranscript ?? m.transcript} label="Copy transcript" />
+                ) : (
+                  <CopyButton key="notes" text={shownNotes ?? ""} label="Copy notes" />
+                )}
+              </div>
             </div>
+            <TranslationBanner view={translation} />
             {tab === "transcript" && m.transcript ? (
-              <div role="tabpanel" id="panel-transcript" aria-labelledby="tab-transcript">
-                <TranscriptPanel text={m.transcript} incomplete={m.speakers_incomplete} />
+              <div role="tabpanel" id="panel-transcript" aria-labelledby="tab-transcript" lang={translation.shown}>
+                <TranscriptPanel text={shownTranscript ?? m.transcript} incomplete={m.speakers_incomplete} />
               </div>
             ) : (
-              <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes">
-                <NotesHtml html={m.notes_html ?? ""} />
+              <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" lang={translation.shown}>
+                <NotesHtml html={translation.translated?.notes_html ?? m.notes_html ?? ""} />
               </div>
             )}
           </section>
