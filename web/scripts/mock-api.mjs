@@ -35,16 +35,22 @@ const { values } = parseArgs({
     prefill: { type: "string" },
     "google-outcome": { type: "string", default: "google_denied" },
     calendar: { type: "string", default: "not_connected" },
+    recurring: { type: "string", default: "series" },
   },
 });
 
 // `--calendar not_connected|connected|off`: what GET /api/calendar answers (the captures in
 // docs/fe-captures/calendar-state/; `off` is the feature being dark: 404 calendar_unavailable).
+// GET /api/calendar/recurring follows the same flag: `connected` replays the captures in
+// docs/fe-captures/calendar-recurring/ (by `?tz=`: Africa/Lagos, Pacific/Auckland, else UTC), the
+// other two answer the empty list and the 404 of those captures. `--recurring none` forces the
+// empty list while connected, `--recurring two` keeps the two weekly series (the designer's sample).
 const captureDir = join(dirname(fileURLToPath(import.meta.url)), "../../docs/fe-captures");
 const captures = join(captureDir, "owner-app");
 const body = (name) => JSON.parse(readFileSync(join(captures, `${name}.json`), "utf8")).response.body;
 const prelaunchBody = (name) => JSON.parse(readFileSync(join(captureDir, "prelaunch-mail-prefs", `${name}.json`), "utf8")).response.body;
 const calendarCapture = (name) => JSON.parse(readFileSync(join(captureDir, "calendar-state", `${name}.json`), "utf8")).response.body;
+const recurringCapture = (name) => JSON.parse(readFileSync(join(captureDir, "calendar-recurring", `${name}.json`), "utf8")).response.body;
 const accountBody = (name) => JSON.parse(readFileSync(join(captureDir, "pilot-accounts", `${name}.json`), "utf8")).response.body;
 
 // One meeting per state, from the captures. Titles vary so the list reads like a real one.
@@ -203,6 +209,17 @@ const server = http.createServer(async (req, res) => {
   if (path === "/api/calendar" && method === "GET") {
     if (values.calendar === "off") return json(res, 404, calendarCapture("04-state-feature-off"));
     return json(res, 200, calendarCapture(values.calendar === "connected" ? "09-state-connected-with-upcoming" : "05-state-not-connected"));
+  }
+  if (path === "/api/calendar/recurring" && method === "GET") {
+    if (values.calendar === "off") return json(res, 404, recurringCapture("04-feature-off"));
+    if (values.calendar !== "connected" || values.recurring === "none") return json(res, 200, recurringCapture("05-not-connected"));
+    const zone = url.searchParams.get("tz");
+    if (zone === "Mars/Olympus") return json(res, 422, recurringCapture("12-unknown-timezone"));
+    const file = zone === "Africa/Lagos" ? "10-series-lagos" : zone === "Pacific/Auckland" ? "11-series-auckland" : "09-series-utc";
+    const answer = recurringCapture(file);
+    // `--recurring two`: only the two weekly "Beyric" series, the two cards the designer drew.
+    if (values.recurring === "two") answer.series = answer.series.filter((card) => card.name.startsWith("Beyric"));
+    return json(res, 200, answer);
   }
   if (path === "/api/calendar/google/connect" && method === "POST") {
     return json(res, 200, { authorize_url: "https://accounts.example.test/consent", show_unverified_notice: false });

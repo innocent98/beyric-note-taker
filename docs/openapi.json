@@ -1525,6 +1525,58 @@
         "title": "PilotOut",
         "type": "object"
       },
+      "RecurringOut": {
+        "description": "The cards, soonest next occurrence first; empty when no calendar is connected or it holds no\nrecurring meeting (draw nothing then). `timezone` is the zone the texts are written in.",
+        "properties": {
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/RecurringSeries"
+            },
+            "title": "Series",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timezone",
+          "series"
+        ],
+        "title": "RecurringOut",
+        "type": "object"
+      },
+      "RecurringSeries": {
+        "description": "One recurring meeting. `name` is the event's title; `cadence` is `Daily, 14:00`,\n`Weekly on Mondays, 14:00` (several days: `Mondays and Wednesdays`) or just `Recurring` when\nthe stored times do not prove more. `next_starts_at` is the next occurrence that has not\nstarted, and `next_text` the same moment in the asked-for zone as `Mon 9 Nov, 14:00`. Show the\ntexts as they are. No attendees, link, passcode or source id is carried.",
+        "properties": {
+          "cadence": {
+            "title": "Cadence",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "next_starts_at": {
+            "format": "date-time",
+            "title": "Next Starts At",
+            "type": "string"
+          },
+          "next_text": {
+            "title": "Next Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "cadence",
+          "next_starts_at",
+          "next_text"
+        ],
+        "title": "RecurringSeries",
+        "type": "object"
+      },
       "Regenerate": {
         "additionalProperties": false,
         "properties": {
@@ -3496,6 +3548,89 @@
           }
         },
         "summary": "Calendar Google Disconnect",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
+    "/api/calendar/recurring": {
+      "get": {
+        "description": "The Recurring cards of the Meetings screen (no CSRF header needed): each recurring meeting\non the connected calendar with a cadence worked out from its stored times, and its next\noccurrence. `tz` is the viewer's zone (the browser's `Intl.DateTimeFormat().resolvedOptions().\ntimeZone`); without it the texts are in UTC, and the answer says which zone it used. Empty\nwhen no calendar is connected or nothing recurs. Nothing is fetched from Google. 404\n`calendar_unavailable` while the calendar features are off, 422 `invalid_timezone` for a zone\nname that is not known.",
+        "operationId": "calendar_recurring",
+        "parameters": [
+          {
+            "description": "IANA zone name, e.g. Africa/Lagos",
+            "in": "query",
+            "name": "tz",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "IANA zone name, e.g. Africa/Lagos",
+              "title": "Tz"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecurringOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Calendar Recurring",
         "tags": [
           "calendar"
         ]

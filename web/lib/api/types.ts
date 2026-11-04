@@ -42,3 +42,5 @@ export type CalendarState = Schemas["CalendarOut"];
 export type CalendarEvent = Schemas["UpcomingEvent"];
 export type ConnectStart = Schemas["ConnectOut"];
 export type DisconnectResult = Schemas["DisconnectOut"];
+export type RecurringState = Schemas["RecurringOut"];
+export type RecurringSeries = Schemas["RecurringSeries"];
