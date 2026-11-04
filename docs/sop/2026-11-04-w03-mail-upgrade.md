@@ -28,7 +28,7 @@ The mail layer W2 (Tasks), W6 (Share) and W8 (reminders) will use: the designer'
 - Tests: `tests/test_mail_upgrade.py` (74), `tests/test_mail.py` (greeting text), `tests/test_pipeline.py` (4, notes mail queued with the notes and never failing the meeting), `tests/test_migrations.py` (0012 round trip with data).
 
 ## Verification
-- Unit and integration tests above against Postgres 17; the whole suite, `ruff check .` and `ruff format --check .` run locally (results in the PR). Migration `0012` upgraded, downgraded to `0011` and upgraded again on a scratch database with the Alembic CLI, and again inside the test with a `skipped` row.
+- Unit and integration tests above against Postgres 17; the whole suite (2,525 tests: 2,523 passed, then the two privacy-text tests that pinned the old wording were updated and re-run green), `ruff check .` and `ruff format --check .` run locally. The Next test `web/tests/legal.test.tsx` (Jinja and Next privacy text must be equal) was **not run locally** (no `node_modules`); the two files were edited with identical sentences and CI runs it. Migration `0012` upgraded, downgraded to `0011` and upgraded again on a scratch database with the Alembic CLI, and again inside the test with a `skipped` row.
 - **Not done:** no real mail was sent (no Resend call from this session); the HTML was not opened in Gmail, Outlook or Apple Mail, only inspected as text and in tests; the Resend limits are from documentation (see the spike's "could not verify live").
 
 ## Operate / roll back
