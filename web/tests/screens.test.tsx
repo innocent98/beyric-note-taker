@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginForm } from "@/components/app/login-form";
@@ -9,7 +9,7 @@ import { TemplatesEditor } from "@/components/app/templates-editor";
 import { VocabularyManager } from "@/components/app/vocabulary-manager";
 import { ApiError } from "@/lib/api/client";
 import type { Meeting, MeetingList as MeetingListData, Template, Term } from "@/lib/api/types";
-import { captured } from "./helpers";
+import { captured, capturedDelete } from "./helpers";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   tplCreate: vi.fn(),
   tplUpdate: vi.fn(),
+  tplRemove: vi.fn(),
   termAdd: vi.fn(),
   termList: vi.fn(),
   termRemove: vi.fn(),
@@ -31,7 +32,7 @@ vi.mock("@/lib/api/browser", () => ({
   api: {
     login: mocks.login,
     meetings: { create: mocks.create, list: mocks.list },
-    templates: { create: mocks.tplCreate, update: mocks.tplUpdate },
+    templates: { create: mocks.tplCreate, update: mocks.tplUpdate, remove: mocks.tplRemove },
     vocabulary: { add: mocks.termAdd, list: mocks.termList, remove: mocks.termRemove },
   },
 }));
@@ -138,6 +139,13 @@ describe("new meeting form", () => {
 describe("meeting list", () => {
   const page1 = captured<MeetingListData>("54-meetings-list-page-1.json");
   const page2 = captured<MeetingListData>("55-meetings-list-page-2.json");
+
+  it("shows the name a meeting's template had when that template is no longer listed", () => {
+    const list = captured<MeetingListData>("53-meetings-list.json");
+    const gone = { ...list, meetings: list.meetings.map((m, i) => (i === 0 ? { ...m, template_id: 99, template_name: "Interview" } : m)) };
+    render(<MeetingList initial={gone as MeetingListData} templates={templates} />);
+    expect(within(screen.getAllByRole("listitem")[0]).getByText("Interview")).toBeTruthy();
+  });
 
   it("lists the captured meetings with status badges, template names and links", () => {
     render(<MeetingList initial={captured<MeetingListData>("53-meetings-list.json")} templates={templates} />);
@@ -258,6 +266,117 @@ describe("templates", () => {
     const submit = screen.getAllByRole("button", { name: "Add template" }).pop()!;
     await userEvent.click(submit);
     expect((await screen.findByRole("alert")).textContent).toBe("A template with that name already exists.");
+  });
+});
+
+describe("deleting a template", () => {
+  // The messages are the ones the running API answered (docs/fe-captures/template-delete/).
+  const lastBody = capturedDelete("25-delete-last.json").response.body as { error: { code: string; message: string } };
+  const deleteButton = () => screen.getByRole("button", { name: "Delete template" });
+  const names = () => screen.getAllByRole("button").filter((b) => b.classList.contains("pick")).map((b) => b.querySelector(".pick-name")?.textContent);
+
+  beforeEach(() => {
+    mocks.tplRemove.mockReset(); // not returned: a returned function would run as a cleanup
+  });
+
+  it("draws the red text button on the left of the foot and Save on its right", () => {
+    render(<TemplatesEditor initial={templates} />);
+    const foot = deleteButton().closest(".form-foot")!;
+    expect(foot.firstElementChild).toBe(deleteButton().closest(".tpl-foot-left") ?? deleteButton());
+    expect(foot.querySelector(".tpl-foot-right")?.textContent).toContain("Save");
+    expect(deleteButton().getAttribute("type")).toBe("button");
+  });
+
+  it("asks first, and Cancel sends nothing", async () => {
+    render(<TemplatesEditor initial={templates} />);
+    await userEvent.click(deleteButton());
+    const ask = screen.getByRole("group", { name: "Delete this template?" });
+    expect(ask.textContent).toContain("Delete this template? Meetings already written with it keep their notes.");
+    expect(mocks.tplRemove).not.toHaveBeenCalled();
+    await userEvent.click(within(ask).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("group", { name: "Delete this template?" })).toBeNull();
+    expect(mocks.tplRemove).not.toHaveBeenCalled();
+    expect(names()).toHaveLength(templates.length);
+  });
+
+  it("deletes the chosen template, drops it from the list and selects the first one", async () => {
+    mocks.tplRemove.mockResolvedValue(undefined);
+    render(<TemplatesEditor initial={templates} />);
+    const second = templates.slice().sort((a, b) => a.name.localeCompare(b.name))[1];
+    await userEvent.click(screen.getByRole("button", { name: new RegExp(second.name) }));
+    await userEvent.click(deleteButton());
+    await userEvent.click(within(screen.getByRole("group", { name: "Delete this template?" })).getByRole("button", { name: "Delete" }));
+    expect(mocks.tplRemove).toHaveBeenCalledWith(second.id);
+    await waitFor(() => expect(names()).not.toContain(second.name));
+    expect(names()).toHaveLength(templates.length - 1);
+    // the designer selects the first template of the list after a delete
+    const first = templates.slice().sort((a, b) => a.name.localeCompare(b.name))[0];
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(first.name);
+    expect(screen.queryByRole("group", { name: "Delete this template?" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("holds the buttons while the call is out", async () => {
+    let finish: () => void = () => {};
+    mocks.tplRemove.mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
+    render(<TemplatesEditor initial={templates} />);
+    await userEvent.click(deleteButton());
+    const ask = screen.getByRole("group", { name: "Delete this template?" });
+    await userEvent.click(within(ask).getByRole("button", { name: "Delete" }));
+    expect((within(ask).getByRole("button", { name: "Deleting..." }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(ask).getByRole("button", { name: "Cancel" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(mocks.tplRemove).toHaveBeenCalledTimes(1);
+    await act(async () => finish());
+  });
+
+  it("says why for the last template (409) and keeps the list", async () => {
+    mocks.tplRemove.mockRejectedValue(new ApiError(409, lastBody.error.code, lastBody.error.message));
+    render(<TemplatesEditor initial={templates} />);
+    await userEvent.click(deleteButton());
+    await userEvent.click(within(screen.getByRole("group", { name: "Delete this template?" })).getByRole("button", { name: "Delete" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(lastBody.error.message);
+    expect(names()).toHaveLength(templates.length);
+    expect(screen.queryByRole("group", { name: "Delete this template?" })).toBeNull();
+  });
+
+  it("drops a template that is already gone (404) and says so plainly", async () => {
+    mocks.tplRemove.mockRejectedValue(new ApiError(404, "not_found", "No such template"));
+    render(<TemplatesEditor initial={templates} />);
+    const first = templates.slice().sort((a, b) => a.name.localeCompare(b.name))[0];
+    await userEvent.click(deleteButton());
+    await userEvent.click(within(screen.getByRole("group", { name: "Delete this template?" })).getByRole("button", { name: "Delete" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("That template was already deleted.");
+    expect(names()).not.toContain(first.name);
+  });
+
+  it("shows the network message when the server cannot be reached", async () => {
+    mocks.tplRemove.mockRejectedValue(new ApiError(0, "network_error", "Could not reach the server. Check your connection and try again."));
+    render(<TemplatesEditor initial={templates} />);
+    await userEvent.click(deleteButton());
+    await userEvent.click(within(screen.getByRole("group", { name: "Delete this template?" })).getByRole("button", { name: "Delete" }));
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not reach the server. Check your connection and try again.");
+    expect(names()).toHaveLength(templates.length);
+  });
+
+  it("closes the ask when another template is chosen", async () => {
+    render(<TemplatesEditor initial={templates} />);
+    await userEvent.click(deleteButton());
+    expect(screen.getByRole("group", { name: "Delete this template?" })).toBeTruthy();
+    await userEvent.click(screen.getAllByRole("button").filter((b) => b.classList.contains("pick"))[1]);
+    expect(screen.queryByRole("group", { name: "Delete this template?" })).toBeNull();
+  });
+
+  it("discards an unsaved new template without asking or calling the server", async () => {
+    render(<TemplatesEditor initial={templates} />);
+    await userEvent.click(screen.getAllByRole("button", { name: "Add template" })[0]);
+    expect(names()).toContain("New template");
+    await userEvent.click(deleteButton());
+    expect(screen.queryByRole("group", { name: "Delete this template?" })).toBeNull();
+    expect(mocks.tplRemove).not.toHaveBeenCalled();
+    expect(names()).not.toContain("New template");
+    expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
+      templates.slice().sort((a, b) => a.name.localeCompare(b.name))[0].name,
+    );
   });
 });
 

@@ -208,6 +208,22 @@ def test_another_users_template_is_refused_and_nothing_is_stored(
     assert web.get(URL).json()["calendar_template_id"] == mine.id
 
 
+def test_a_deleted_template_is_refused_like_one_that_never_existed(web, session, owner, linked):
+    kept, gone = make_template(session, owner), make_template(session, owner, "Interview")
+    assert web.delete(f"/api/templates/{gone.id}").status_code == 204
+    error_of(web.put(SETTINGS_URL, {"calendar_template_id": gone.id}), 404, "not_found")
+    assert web.put(SETTINGS_URL, {"calendar_template_id": kept.id}).status_code == 200
+
+
+def test_deleting_the_calendar_template_moves_the_setting_to_the_oldest_left(
+    web, session, owner, linked
+):
+    oldest, chosen = make_template(session, owner), make_template(session, owner, "Interview")
+    web.put(SETTINGS_URL, {"calendar_template_id": chosen.id})
+    assert web.delete(f"/api/templates/{chosen.id}").status_code == 204
+    assert web.get(URL).json()["calendar_template_id"] == oldest.id
+
+
 @pytest.mark.parametrize("template_id", [0, -1, 999_999, 2**62])
 def test_a_template_that_does_not_exist_is_refused(web, linked, template_id):
     error_of(web.put(SETTINGS_URL, {"calendar_template_id": template_id}), 404, "not_found")

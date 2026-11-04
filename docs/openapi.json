@@ -1125,6 +1125,10 @@
             "title": "Template Id",
             "type": "integer"
           },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -1162,6 +1166,7 @@
           "status_text",
           "status_tone",
           "template_id",
+          "template_name",
           "created_at",
           "failure_reason",
           "retry_block",
@@ -1333,6 +1338,10 @@
             "title": "Template Id",
             "type": "integer"
           },
+          "template_name": {
+            "title": "Template Name",
+            "type": "string"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -1348,6 +1357,7 @@
           "status_text",
           "status_tone",
           "template_id",
+          "template_name",
           "created_at"
         ],
         "title": "MeetingSummary",
@@ -6479,6 +6489,80 @@
       }
     },
     "/api/templates/{template_id}": {
+      "delete": {
+        "description": "Delete a template. Meetings written with it keep their notes and the template name they\nshow; the calendar setting that pointed at it moves to the oldest template left. 409\n`last_template` for the only one.",
+        "operationId": "delete_template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Delete Template",
+        "tags": [
+          "templates"
+        ]
+      },
       "put": {
         "description": "Replace the name and instructions.",
         "operationId": "update_template",

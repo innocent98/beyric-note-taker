@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError, createApi, errorMessage, GATEWAY_MESSAGE, NETWORK_MESSAGE } from "@/lib/api/client";
-import { read, REPO } from "./helpers";
+import { capturedDelete, read, REPO } from "./helpers";
 
 // The client is tested against the responses stream B captured from the running API
 // (docs/fe-captures/owner-app/), replayed byte for byte, so no shape here is a guess.
@@ -113,6 +113,28 @@ describe("api client", () => {
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status, code, message });
     expect(errorMessage(error)).toBe(message);
+  });
+
+  it("deletes a template: DELETE with the token, 204 and nothing to read", async () => {
+    const ok = capturedDelete("07-delete.json");
+    const { api, calls } = setup((url, init) => (init.method === "GET" ? anonymous() : respond(ok as unknown as Capture)));
+    await expect(api.templates.remove(4)).resolves.toBeUndefined();
+    const sent = calls.find((c) => c.init.method === "DELETE")!;
+    expect(sent.url).toBe(ok.request.path);
+    expect(header(sent.init, "X-CSRF-Token")).toBe("<csrf-A>");
+  });
+
+  it.each([
+    ["25-delete-last.json", 409, "last_template", "Keep at least one template. Add another one first, then delete this."],
+    ["12-delete-again.json", 404, "not_found", "No such template"],
+  ])("turns the captured %s into an ApiError", async (file, status, code, message) => {
+    const c = capturedDelete(file);
+    const { api } = setup((url, init) => (init.method === "GET" ? anonymous() : respond(c as unknown as Capture)));
+    const error = await api.templates.remove(1).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error).toMatchObject({ status, code, message });
+    // 409 is written for the person; 404 is developer text and shows the plain fallback
+    expect(errorMessage(error)).toBe(status === 409 ? message : "Something went wrong. Please try again.");
   });
 
   it("keeps the field list of a 422 and shows our own copy, not the developer text", async () => {

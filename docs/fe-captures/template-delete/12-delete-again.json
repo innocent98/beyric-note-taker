@@ -1,0 +1,25 @@
+{
+  "note": "A second delete (a double click, another tab): 404 not_found, never 500.",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/templates/4",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such template"
+      }
+    }
+  }
+}

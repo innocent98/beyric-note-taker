@@ -59,6 +59,8 @@ const SCREENS = {
   "app-detail": [APP, [["Beyric Monday planning", "last"]], "/meetings/1", true],
   "app-templates": [APP, [["Templates", "first"]], "/templates", true],
   "app-vocabulary": [APP, [["Vocabulary", "first"]], "/vocabulary", true],
+  // The two-step ask the design does not have (it deletes at once): Next alone, after pressing the button.
+  "app-templates-ask": [null, [], "/templates", true, [{ text: "Delete template" }]],
   // The calendar: the design's cal state is set by pressing "Connect Google Calendar" (it answers
   // after 1 s), so those clicks wait. The Next side shows what the mock's --calendar flag says.
   "app-settings": [APP, [["Settings", "first"]], "/settings", true],
