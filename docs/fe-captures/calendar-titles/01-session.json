@@ -1,0 +1,23 @@
+{
+  "note": "Read the CSRF token.",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": false,
+      "csrf_token": "<csrf-A>",
+      "user": null,
+      "usage": null,
+      "unread_notifications": null,
+      "badges": null
+    }
+  }
+}

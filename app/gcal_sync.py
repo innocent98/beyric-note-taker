@@ -39,6 +39,7 @@ from app.gcal_client import WINDOW_AFTER, WINDOW_BEFORE, GoogleSource
 from app.gcal_events import NO_TIME, ParsedEvent, parse_event
 from app.gcal_rules import JoinSettings, will_join
 from app.models import (
+    AppState,
     CalendarConnection,
     CalendarEvent,
     Meeting,
@@ -76,6 +77,10 @@ NATIVE_ID_LIMIT = 200  # `calendar_events.native_id`
 # Where a join still can follow its event. `scheduled` is waiting; `no_capacity` is retrying until
 # the deadline with no bot sent, so its times may move.
 MOVABLE = ("scheduled", "no_capacity")
+# A skipped row the runner is still retrying (the reason can clear) follows its event too: moved
+# later, it goes back to waiting for the new time instead of ending "not recorded" at the old
+# deadline. (The reasons are the join runner's `RETRYABLE_SKIPS`.)
+MOVABLE_SKIPS = ("hours_cap", "user_limit", "code_in_use")
 # No bot has been sent from these, so the calendar may cancel them. (`dispatching` is cancelled
 # too: the runner re-reads the state before it sends, spec 7.7 and plan C12.)
 CANCELLABLE = ("scheduled", "dispatching", "no_capacity", "skipped")
@@ -334,11 +339,22 @@ def _reconcile(run: _Run, row: CalendarEvent, join: ScheduledJoin | None) -> Non
         if run.now <= deadline_at:  # past it and still on is "In progress", not an automatic join
             _create_join(run, row, deadline_at)
     elif join.state == "cancelled":
-        if run.now <= deadline_at:
+        if run.now <= deadline_at and not _closed_before_the_runner(run, join, row):
             _revive_join(run, join, row, deadline_at)
-    elif join.state in MOVABLE:
+    elif join.state in MOVABLE or (join.state == "skipped" and join.skip_reason in MOVABLE_SKIPS):
         _move_join(run, join, row, deadline_at)
     # Anything else has a bot sent or is finished: the meeting is the truth now (spec 7.7).
+
+
+def _closed_before_the_runner(run: _Run, join: ScheduledJoin, row: CalendarEvent) -> bool:
+    """A join the runner closed silently because its time came before the runner ever led (or
+    while the operator's switch was off) must not be revived by a later sync, rule change or
+    switch: that would send a bot into a meeting already in progress. It may come back only when
+    the event moved so that its run time is after the moment the runner started."""
+    if join.skip_reason != "before_runner":
+        return False
+    started = run.session.scalar(select(AppState.autojoin_started_at))
+    return started is None or row.starts_at - run.lead < started
 
 
 def _create_join(run: _Run, row: CalendarEvent, deadline_at: datetime) -> None:
@@ -386,6 +402,9 @@ def _move_join(run: _Run, join: ScheduledJoin, row: CalendarEvent, deadline_at) 
     if join.state == "scheduled":
         _set_link(join, row)  # a `no_capacity` row holds its meeting code: leave the link alone
     elif join.run_at > run.now:
+        if join.state == "skipped":  # the new time is a fresh start: tried and re-checked again
+            _set_link(join, row)
+            join.skip_reason, join.attempts, join.rechecked_at = None, 0, None
         join.state = "scheduled"  # moved to later: stop retrying now, wait for the new time
     if before != (join.starts_at, join.ends_at, join.run_at, join.deadline_at):
         run.result.moved += 1

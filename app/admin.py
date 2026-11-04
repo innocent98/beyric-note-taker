@@ -9,12 +9,20 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from app import mail, signup, tokens, usage
 from app.config import Settings
-from app.models import AppState, AuthToken, MailOutbox, Notification, User, WaitlistEntry
+from app.models import (
+    AppState,
+    AuthToken,
+    MailOutbox,
+    Notification,
+    ScheduledJoin,
+    User,
+    WaitlistEntry,
+)
 from app.services import Refused
 
 logger = logging.getLogger(__name__)
@@ -87,6 +95,31 @@ def update_user(session: Session, user: User, changes: dict) -> User:
             session.rollback()
             raise _refuse_last_admin()
         user.session_epoch = User.session_epoch + 1
+        # Open calendar joins end now (the join runner would otherwise stop at its own check);
+        # the update waits for a row the runner is sending for, so a bot is never sent after
+        # the suspend commits. A bot already in a meeting follows the meeting.
+        session.execute(
+            update(ScheduledJoin)
+            .where(
+                ScheduledJoin.user_id == user.id,
+                ScheduledJoin.state.in_(("scheduled", "dispatching", "no_capacity", "skipped")),
+            )
+            .values(state="skipped", skip_reason="account_suspended")
+        )
+    reactivating = changes.get("status") == "active" and user.status == "suspended"
+    if reactivating:
+        # Joins ended by the suspension come back for meetings that have not started yet (the
+        # runner then judges each one afresh); one already under way or over stays ended.
+        session.execute(
+            update(ScheduledJoin)
+            .where(
+                ScheduledJoin.user_id == user.id,
+                ScheduledJoin.state == "skipped",
+                ScheduledJoin.skip_reason == "account_suspended",
+                ScheduledJoin.starts_at > datetime.now(UTC),
+            )
+            .values(state="scheduled", skip_reason=None, attempts=0, rechecked_at=None)
+        )
     if changes.get("status") is not None:
         user.status = changes["status"]
     if "hours_cap_seconds" in changes:

@@ -1,0 +1,45 @@
+{
+  "note": "The detail carries the same title.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "title": "Q3 gnirts review Bcc: attacker@example.test <script>alert(1)</script> https://evil.example.test/login",
+      "platform": "google_meet",
+      "native_id": "aaa-bbbb-ccc",
+      "status": "ready",
+      "step": "done",
+      "status_text": "Ready",
+      "status_tone": "success",
+      "template_id": 1,
+      "created_at": "2026-11-04T17:34:56.063762Z",
+      "failure_reason": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": false,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": true,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "extraction_status": null,
+      "notes": "## Summary\nPlaceholder notes.\n\n## Decisions\nNone noted",
+      "notes_html": "<h2>Summary</h2>\n<p>Placeholder notes.</p>\n<h2>Decisions</h2>\n<p>None noted</p>\n",
+      "transcript": "Placeholder transcript."
+    }
+  }
+}

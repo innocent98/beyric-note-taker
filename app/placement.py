@@ -46,16 +46,17 @@ and rules out a deadlock.
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import usage
+from app import titles, usage
 from app.config import Settings, get_settings
 from app.models import MEETING_SOURCES, Meeting, Template, User, UserSettings
-from app.vexa import VexaClient, VexaDuplicateBot, VexaError, VexaSendUncertain
+from app.vexa import VexaClient, VexaDuplicateBot, VexaError, VexaSendUncertain, _within
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,8 @@ LOCAL_HOST_ID = 1
 # looks. A send itself is bounded by `app.vexa.SEND_DEADLINE_SECONDS`.
 LOCK_WAIT_SECONDS = 3.0
 LOCK_POLL_SECONDS = 0.2
+# The most a calendar join waits for Vexa to say what bot is on a code (see `_orphan_to_adopt`).
+ADOPT_LOOKUP_SECONDS = 5.0
 # Stored in `completion_reason` of a meeting whose send got no clear answer (see the module doc).
 SEND_UNCONFIRMED = "send_unconfirmed"
 # A bot counts against the user limit and the host's capacity from the moment it is sent until the
@@ -85,11 +88,22 @@ class PlacementRequest:
     meeting_url: str  # may carry a Zoom passcode: never logged, never echoed
     template_id: int | None  # None = the user's calendar template
     source: str  # one of `MEETING_SOURCES`: manual, calendar, instant_meet
+    # The calendar event's title, stored on the meeting (cleaned: it is text from an invite).
+    # None for a pasted link, which is then named by platform and code.
+    title: str | None = None
+    # A calendar join at the start of a meeting: if Vexa says a bot is already in that meeting but
+    # no meeting of ours holds the code, it may be our own orphan (a send killed between Vexa
+    # accepting it and the commit), so a LIVE bot no row holds is adopted instead of telling the
+    # owner someone else's note taker is there. The identity is only the meeting code under the one
+    # shared API key (no per-row dispatch marker exists): see the SOP's known gaps.
+    adopt_orphan: bool = False
 
 
 class PlacementRefused(Exception):
     """No bot may be sent now. `code` is one of `hours_cap_reached`, `already_in_meeting`,
-    `meeting_has_note_taker`, `user_limit`, `bot_busy`; the caller words it for its own reader."""
+    `meeting_has_note_taker`, `user_limit`, `bot_busy`, `account_suspended`, `code_busy` (a calendar
+    join found a bot still leaving the code); the caller words it
+    for its own reader."""
 
     def __init__(
         self,
@@ -138,11 +152,16 @@ def reserve_slot(
 ) -> None:
     """Take the placement lock and run the pre-flight checks. `wait_seconds` is how long to poll for
     the lock (default `LOCK_WAIT_SECONDS`; 0 for a caller holding a row lock, which a wait would
-    drop). Returns holding the lock, which
-    lasts until the caller commits or rolls back; the caller must do that, and must send the bot
-    before it commits. Raises `PlacementRefused` (the caller rolls back)."""
+    drop). Returns holding the lock, which lasts until the caller commits or rolls back; the
+    caller must do that, and must send the bot before it commits. Raises `PlacementRefused` (the
+    caller rolls back)."""
     settings = settings or get_settings()
     _take_lock(session, LOCK_WAIT_SECONDS if wait_seconds is None else wait_seconds)
+    # Under the lock, from the database (not the identity map): an account suspended while this
+    # request waited for the lock must not get a bot.
+    status = session.scalar(select(User.status).where(User.id == user.id))
+    if status != "active":
+        raise PlacementRefused("account_suspended")
 
     cap = usage.effective_cap(session, user)
     if (
@@ -220,8 +239,16 @@ def place_bot(
     *,
     now: datetime,
     settings: Settings | None = None,
+    wait_seconds: float | None = None,
+    on_placed: Callable[[Session, Meeting], None] | None = None,
 ) -> Meeting:
     """Send a bot to `req.meeting_url` and record the meeting, or raise `PlacementRefused`.
+
+    `wait_seconds` is passed to `reserve_slot` (0 for a caller that holds a row lock). `on_placed`
+    runs once the meeting row exists (flushed, with its id) and before the commit, in the same
+    transaction: the join runner marks its join `joined` there, so a crash can never leave a
+    meeting with a join row that does not know it. If it raises, the bot is stopped and nothing
+    is recorded, as for a failed flush.
 
     Commits (the meeting row and the lock leave together). A `VexaError` from the send is raised
     after a rollback: no meeting exists and the slot is free again. If the send may have reached
@@ -237,15 +264,22 @@ def place_bot(
             native_id=req.native_id,
             now=now,
             settings=settings,
+            wait_seconds=wait_seconds,
         )
     except PlacementRefused:
         session.rollback()  # also releases the lock
         raise
     try:
         vexa_id = vexa.send_bot(req.meeting_url)
-    except VexaDuplicateBot:  # a bot that is not ours is there (another host, a race)
-        session.rollback()
-        raise PlacementRefused("meeting_has_note_taker") from None
+    except VexaDuplicateBot:  # a bot that is not ours is there (another host, a race)...
+        if not req.adopt_orphan:
+            session.rollback()
+            raise PlacementRefused("meeting_has_note_taker") from None
+        # ...or, for a calendar join, our own orphan (a send killed between Vexa accepting the bot
+        # and the commit; the pre-flight found no meeting of anyone on the code). Look the bot up
+        # and adopt it only if it is arriving or live and no row holds its Vexa id; a leftover that
+        # is still leaving (a cancelled meeting's bot) is a retry, not an adoption.
+        vexa_id = _orphan_to_adopt(session, vexa, req)
     except VexaSendUncertain:  # it may be joining in a moment: keep the code, let the worker settle
         logger.warning("send_bot gave no clear answer: the meeting is kept as an unconfirmed start")
         vexa_id = None
@@ -261,6 +295,7 @@ def place_bot(
         vexa_meeting_id=None if vexa_id is None else str(vexa_id),
         started_polling_at=now,
         source=req.source,
+        title=titles.event_title(req.title),
     )
     if vexa_id is None:
         # The grace counts from after the send, not from the caller's `now`, which was taken
@@ -271,12 +306,41 @@ def place_bot(
     try:
         session.add(meeting)
         session.flush()
+        if on_placed is not None:
+            on_placed(session, meeting)
+            session.flush()
     except BaseException:
         stop_unrecorded_bot(vexa, req.platform, req.native_id)  # before the lock is let go
         session.rollback()
         raise
     commit_or_stop(session, vexa, platform=req.platform, native_id=req.native_id, vexa_id=vexa_id)
     return meeting
+
+
+def _orphan_to_adopt(session: Session, vexa: VexaClient, req: PlacementRequest) -> int:
+    """The Vexa id of the live bot on the code, or `PlacementRefused("code_busy")` (after a
+    rollback) when there is none to adopt: it is leaving, finished, unknown, or some row's."""
+    from app.pipeline import ADOPTABLE_STATES  # imports this module, so not at the top
+
+    try:
+        # A short whole-call deadline: this runs under the placement, row and event locks, and the
+        # client's own timeouts are per phase (30 s each).
+        info = _within(ADOPT_LOOKUP_SECONDS, lambda: vexa.get_meeting(req.platform, req.native_id))
+    except (VexaError, TimeoutError):
+        info = None
+    if (
+        info is None
+        or info.status not in ADOPTABLE_STATES
+        or info.vexa_id is None
+        or session.scalar(
+            select(Meeting.id).where(Meeting.vexa_meeting_id == str(info.vexa_id)).limit(1)
+        )
+        is not None
+    ):
+        session.rollback()
+        raise PlacementRefused("code_busy")
+    logger.warning("a live bot with no row for it was adopted for a calendar join")
+    return info.vexa_id
 
 
 def commit_or_stop(

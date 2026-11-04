@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% import "components.html" as ui %}
-{% block title %}Meeting {{ meeting.native_id }} - Beyric Notes{% endblock %}
+{% block title %}{{ meeting_title(meeting) }} - Beyric Notes{% endblock %}
 {% block head %}{% if meeting.status in ("bot_sent", "processing") or refused_wait %}<meta http-equiv="refresh" content="30">{% endif %}{% endblock %}
 {% block content %}
 {% set template_options = [] %}{% for t in templates %}{% set _ = template_options.append((t.id, t.name)) %}{% endfor %}
@@ -8,7 +8,7 @@
   <div>
     <p class="meta"><a href="/">&larr; All meetings</a></p>
     {% set head_end %}{{ ui.badge(status_text(meeting), status_tone(meeting)) }}{% endset %}
-    {% call ui.page_head("Zoom " ~ meeting.native_id if meeting.platform == "zoom" else "Google Meet " ~ meeting.native_id, meeting.created_at|local_time) %}{{ head_end }}{% endcall %}
+    {% call ui.page_head(meeting_title(meeting), meeting.created_at|local_time) %}{{ head_end }}{% endcall %}
   </div>
 
   {% if worker_stale %}

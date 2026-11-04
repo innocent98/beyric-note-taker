@@ -691,3 +691,28 @@ def test_0016_adds_rate_hits_and_the_signup_origin_and_downgrades_cleanly(scratc
     assert _rows(engine, "select email from users where email = 'old@example.test'") != []
     command.upgrade(cfg, "head")  # and up again
     engine.dispose()
+
+
+# ---- 0017 auto-join markers ----
+
+
+def _app_state_columns(engine) -> set[str]:
+    rows = _rows(
+        engine, "select column_name from information_schema.columns where table_name = 'app_state'"
+    )
+    return {row[0] for row in rows}
+
+
+def test_autojoin_marker_columns_round_trip_and_start_unset(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0016")
+    engine = create_engine(scratch_url)
+    assert "autojoin_started_at" not in _app_state_columns(engine)
+    command.upgrade(cfg, "head")
+    assert {"autojoin_started_at", "autojoin_paused_since"} <= _app_state_columns(engine)
+    assert _rows(engine, "select autojoin_started_at, autojoin_paused_since from app_state") == [
+        (None, None)
+    ]
+    command.downgrade(cfg, "0016")
+    assert "autojoin_started_at" not in _app_state_columns(engine)
+    engine.dispose()

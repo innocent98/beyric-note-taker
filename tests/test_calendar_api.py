@@ -93,6 +93,72 @@ def test_it_is_dark_without_a_google_client(engine, google, fake_vexa, fake_open
     error_of(browser(app).get(URL), 404, "calendar_unavailable")
 
 
+# ---- the operator's emergency stop shows ----
+
+
+def test_the_answer_says_when_the_scheduler_recorded_that_auto_join_is_off(web, session, linked):
+    from app.models import AppState
+
+    state = session.get(AppState, 1) or AppState(id=1)
+    state.autojoin_paused_since = NOW
+    session.add(state)
+    session.commit()
+    body = web.get(URL).json()
+    assert body["auto_join_paused"] is True
+    assert body["auto_join_paused_text"] == (
+        "Auto-join is paused for now. The note taker is not joining meetings from your calendar."
+    )
+    assert web.put(URL + "/settings", json={"rule": "organizer"}).json()["auto_join_paused"] is True
+
+
+def test_the_web_processs_own_environment_does_not_decide_the_notice(
+    engine, google, fake_vexa, fake_openai, owner, session
+):
+    """`web` keeps the environment it started with: the scheduler's record is the only source, so
+    switching auto-join back on needs no restart of `web`."""
+    stale = make_settings(
+        google_client_id="id.apps.example.test",
+        google_client_secret="s3cret",
+        calendar_enabled=True,
+        autojoin_enabled=False,
+        token_enc_key="K" * 43 + "=",
+    )
+    web = browser(build_app(engine, stale, google, fake_vexa, fake_openai))
+    connect_google(web, google)
+    assert web.get(URL).json()["auto_join_paused"] is False
+
+
+def test_the_answer_is_not_paused_by_default(web, linked):
+    body = web.get(URL).json()
+    assert body["auto_join_paused"] is False and body["auto_join_paused_text"] is None
+
+
+def test_the_notice_follows_the_schedulers_record_not_only_this_process(web, session, linked):
+    """The runbook restarts only the scheduler: the scheduler's note that auto-join is off is what
+    the page reads, so `web` (still on its old environment) shows it too, and stops showing it
+    once the scheduler has recorded that it is back."""
+    from app.models import AppState
+
+    assert web.get(URL).json()["auto_join_paused"] is False
+    state = session.get(AppState, 1) or AppState(id=1)
+    state.autojoin_paused_since = NOW
+    session.add(state)
+    session.commit()
+    body = web.get(URL).json()
+    assert body["auto_join_paused"] is True and body["auto_join_paused_text"]
+    state.autojoin_paused_since = None
+    session.commit()
+    assert web.get(URL).json()["auto_join_paused"] is False
+
+
+def test_upcoming_titles_are_cleaned_like_every_other_title(web, session, linked):
+    add_event(session, linked, 1, title="Q3 \u202egnirts\u202c review\r\nBcc: x@example.test")
+    add_event(session, linked, 2, hours=2, title="y" * 900)
+    titles_seen = [e["title"] for e in web.get(URL).json()["upcoming"]]
+    assert titles_seen[0] == "Q3 gnirts review Bcc: x@example.test"
+    assert len(titles_seen[1]) == 200 and titles_seen[1].endswith("…")
+
+
 # ---- not connected ----
 
 
@@ -109,6 +175,8 @@ def test_a_person_who_never_connected_gets_the_not_connected_answer(web):
         "rule": "all",
         "rule_text": "Joining all meetings",
         "calendar_template_id": None,
+        "auto_join_paused": False,
+        "auto_join_paused_text": None,
         "upcoming": [],
     }
 

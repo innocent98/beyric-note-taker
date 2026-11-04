@@ -34,6 +34,23 @@ const show = (state: CalendarState | null, tz = "UTC") =>
   render(<CalendarBand state={state} timeZone={tz} now={NOW} />);
 const rows = () => within(screen.getByRole("list", { name: "Upcoming meetings" })).getAllByRole("listitem");
 
+describe("the operator has paused auto-join", () => {
+  const paused = calendarBody<CalendarState>("22-state-auto-join-paused.json");
+
+  it("puts the server's line above the list, the rows unchanged", () => {
+    show({ ...withEvents, auto_join_paused: true, auto_join_paused_text: paused.auto_join_paused_text });
+    expect(
+      screen.getByText("Auto-join is paused for now. The note taker is not joining meetings from your calendar."),
+    ).toBeTruthy();
+    expect(rows().length).toBeGreaterThan(0);
+  });
+
+  it("draws no line when it is not paused", () => {
+    show(withEvents);
+    expect(screen.queryByText(/Auto-join is paused/)).toBeNull();
+  });
+});
+
 describe("no calendar connected", () => {
   it("draws the designer's band that leads to Settings", () => {
     show(notConnected);

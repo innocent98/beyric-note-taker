@@ -523,8 +523,23 @@
         "type": "object"
       },
       "CalendarOut": {
-        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`google_email` is the Google account that was connected, and is null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`upcoming` is empty unless connected.",
+        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`google_email` is the Google account that was connected, and is null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`upcoming` is empty unless connected.",
         "properties": {
+          "auto_join_paused": {
+            "title": "Auto Join Paused",
+            "type": "boolean"
+          },
+          "auto_join_paused_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Join Paused Text"
+          },
           "calendar_template_id": {
             "anyOf": [
               {
@@ -619,6 +634,8 @@
           "rule",
           "rule_text",
           "calendar_template_id",
+          "auto_join_paused",
+          "auto_join_paused_text",
           "upcoming"
         ],
         "title": "CalendarOut",

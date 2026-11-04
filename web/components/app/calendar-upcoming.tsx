@@ -106,6 +106,11 @@ function Upcoming({ state, timeZone, now }: { state: CalendarState; timeZone?: s
           {state.rule_text}
         </AppLink>
       </div>
+      {state.auto_join_paused_text ? (
+        <div className="cal-up-error">
+          <Alert kind="notice">{state.auto_join_paused_text}</Alert>
+        </div>
+      ) : null}
       {error ? (
         <div className="cal-up-error">
           <Alert kind="error">{error}</Alert>

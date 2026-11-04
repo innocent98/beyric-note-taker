@@ -408,10 +408,12 @@ a minute; an automatic refresh is a later improvement.
   browser after the page loads (the server does not know the zone), so the day and time cells are empty
   for a moment in the server-rendered HTML. The API gives UTC; the Settings "Last updated" line is in
   UTC and says so.
-- **"Will join" is a promise about the rules, not about the bot.** Nothing sends a bot from the
-  calendar yet (the runner, task C12, and `place_bot()`, task C11, are not built). The pages show the
-  answer as the rules give it. It is dark until the server turns `CALENDAR_ENABLED` on: do not switch it
-  on for other users before C11 and C12, or "Will join" will promise something that does not happen.
+- **"Will join" is a promise about the rules, and since C12 the runner keeps it** (2026-11-04): the
+  scheduler sends the bot at the start minus 60 s, unless the host is full (then it tries every
+  15 s, tells the owner, and ends as "not recorded" at start + 15 minutes), the account is suspended
+  or the calendar was disconnected. The routes do not show those join states yet (C15a); see
+  `docs/fe-integration-guide-calendar-join.md` for the notifications the runner writes and the
+  meeting titles. Switching a meeting or the rule off is honoured up to the moment the bot is sent.
 - The recording reminder ("Tell participants that this meeting will be recorded.") is the New meeting
   card's own line, as designed; the Upcoming list does not repeat it.
 - **The switch on each row writes the person's own choice for that meeting** and beats the rule in

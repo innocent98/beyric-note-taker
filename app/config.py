@@ -125,6 +125,11 @@ class Settings(BaseSettings):
     # How long before a calendar meeting starts the bot is sent (spec 0a Q2: a bot needs about a
     # minute to open the browser and ask to join). Not required; P0.8 measures the real number.
     autojoin_lead_seconds: int = 60
+    # Auto-join is ON by default (decision 2026-11-04: people connect their calendar and leave, so
+    # it must work with no switch). This is the operator's emergency stop, not a user setting: set
+    # it to false and the scheduler stops sending bots from calendars (rows wait; nothing else
+    # changes) and records since when, which the app shows. Restart `scheduler` after changing it.
+    autojoin_enabled: bool = True
 
 
 @lru_cache

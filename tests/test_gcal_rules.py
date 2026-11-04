@@ -60,6 +60,10 @@ TABLE = [
     # is the user) or comes from their own organisation; a stranger's invite waits for a switch.
     ("all", False, "needsAction", ANY, None, (False, "not_accepted")),
     ("all", None, "needsAction", ANY, None, (False, "not_accepted")),
+    # The same for an invite with no entry for the user at all (sent to a group address): somebody
+    # else organises it and nothing says the user accepted. No organiser information means a solo
+    # event.
+    ("all", False, None, ANY, None, (False, "not_accepted")),
     ("all", ANY, ANY, ANY, None, (True, "ok")),
 ]
 
@@ -129,7 +133,7 @@ def test_an_unanswered_invite_from_the_users_own_organisation_is_joined():
     )
 
 
-@pytest.mark.parametrize("response", ["accepted", "tentative", None])
+@pytest.mark.parametrize("response", ["accepted", "tentative"])
 def test_only_an_unanswered_invite_waits_for_the_user(response):
     event = make(self_response=response, organizer_self=False, organizer_same_org=False)
     assert will_join(event, None, settings("all"), now=NOW) == JoinDecision(True, "ok")
@@ -252,3 +256,14 @@ def test_it_accepts_a_stored_event_row_not_only_a_parsed_event():
 
 def test_teams_join_enabled_defaults_to_false_in_config():
     assert Settings(_env_file=None).teams_join_enabled is False
+
+
+def test_an_outside_invite_with_no_entry_for_the_owner_waits_like_an_unanswered_one():
+    """An invite sent to a group address has no `self` attendee: it is not an accepted invite."""
+    group = make(self_response=None, organizer_self=False, organizer_same_org=False)
+    assert will_join(group, None, settings("all"), now=NOW).reason == "not_accepted"
+    assert will_join(group, True, settings("all"), now=NOW).join is True  # the owner's switch wins
+    colleague = make(self_response=None, organizer_self=False, organizer_same_org=True)
+    assert will_join(colleague, None, settings("all"), now=NOW).join is True
+    solo = make(attendee_count=0, organizer_self=None, self_response=None)
+    assert will_join(solo, None, settings("all"), now=NOW).join is True

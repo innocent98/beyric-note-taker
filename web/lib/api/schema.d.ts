@@ -1353,9 +1353,16 @@ export interface components {
          *     `rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)
          *     and `rule_text` its label ("Joining all meetings"). `calendar_template_id` is the person's own
          *     template chosen for calendar meetings, null for the default (their first, oldest, template).
+         *     `auto_join_paused` is true while the operator has stopped calendar auto-join for everyone
+         *     (`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and
+         *     `auto_join_paused_text` is the line to show (null when it is not paused).
          *     `upcoming` is empty unless connected.
          */
         CalendarOut: {
+            /** Auto Join Paused */
+            auto_join_paused: boolean;
+            /** Auto Join Paused Text */
+            auto_join_paused_text: string | null;
             /** Calendar Template Id */
             calendar_template_id: number | null;
             /** Connected */

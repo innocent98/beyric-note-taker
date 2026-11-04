@@ -6,17 +6,20 @@ they use the same database as the rest of the suite.
 
 import logging
 import threading
-from datetime import timedelta
+import time
+from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import sessionmaker
 
 from app.clock import Clock, SystemClock
-from app.models import AppState
+from app.models import AppState, MailOutbox
 from app.scheduler import Scheduler, direct_connection_factory
 from tests.conftest import TEST_DATABASE_URL
 from tests.helpers import FakeClock
+
+NOW = datetime(2026, 11, 4, 10, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -237,6 +240,84 @@ def test_slow_sync_job_does_not_delay_a_dispatch_tick(make_scheduler, session_fa
     finally:
         release.set()
         thread.join(timeout=10)
+
+
+def test_slow_mail_provider_does_not_delay_a_dispatch_tick(make_scheduler, session_factory):
+    """The C10b follow-up: a mail send that hangs (a provider timing out on every mail) holds only
+    the mail loop. A dispatch job due now still runs on time, and the heartbeat still moves."""
+    scheduler = make_scheduler()
+    started, release = threading.Event(), threading.Event()
+    ran = []
+
+    def slow_mail(session, now):
+        started.set()
+        release.wait(timeout=20)
+
+    scheduler.register("mail_outbox_send", 1, slow_mail, loop="mail")
+    scheduler.register("joins", 1, lambda s, now: ran.append(now), loop="dispatch")
+    scheduler.tick_dispatch()  # becomes leader, runs the dispatch job
+    thread = threading.Thread(target=scheduler.tick_mail)
+    thread.start()
+    try:
+        assert started.wait(timeout=10)
+        before = heartbeat(session_factory)
+        make_scheduler.clock.advance(10)
+        scheduler.tick_dispatch()  # must return and run the job while mail is still blocked
+        assert thread.is_alive()
+        assert len(ran) == 2
+        assert heartbeat(session_factory) == before + timedelta(seconds=10)
+    finally:
+        release.set()
+        thread.join(timeout=10)
+
+
+def test_the_mail_loop_has_its_own_thread_and_session(make_scheduler):
+    scheduler = make_scheduler(dispatch_every=0.05, sync_every=0.05, mail_every=0.05)
+    seen = {}
+
+    def note(name):
+        def job(session, now):
+            seen[name] = (threading.get_ident(), session)
+
+        return job
+
+    scheduler.register("d", 10, note("dispatch"), loop="dispatch")
+    scheduler.register("m", 10, note("mail"), loop="mail")
+    stop = threading.Event()
+    thread = threading.Thread(target=scheduler.run_forever, args=(stop,))
+    thread.start()
+    try:
+        deadline = time.monotonic() + 10
+        while {"dispatch", "mail"} - seen.keys() and time.monotonic() < deadline:
+            time.sleep(0.05)
+    finally:
+        stop.set()
+        thread.join(timeout=15)
+    assert seen["dispatch"][0] != seen["mail"][0]
+    assert seen["dispatch"][1] is not seen["mail"][1]
+
+
+def test_a_mail_pass_stops_starting_mails_once_its_budget_is_spent(session, monkeypatch):
+    """`deliver_pending(budget_seconds=...)`: with a provider that hangs on every call the pass
+    ends after the budget, with the rest still pending for the next pass."""
+    import itertools
+
+    from app import mail
+    from tests.test_mail import FakeMailer
+    from tests.test_web import make_settings
+
+    for n in range(5):
+        row = mail.enqueue(
+            session, f"u{n}@example.test", "verify_email", {"link": "https://x.test"}
+        )
+        row.created_at = NOW
+    session.commit()
+    ticks = itertools.count(0, 40)  # every look at the clock is 40 s later
+    monkeypatch.setattr(mail.time, "monotonic", lambda: next(ticks))
+    mailer = FakeMailer()
+    sent = mail.deliver_pending(session, mailer, make_settings(), NOW, budget_seconds=60)
+    assert sent < 5
+    assert session.scalar(select(func.count(MailOutbox.id)).where(MailOutbox.status == "pending"))
 
 
 def test_heartbeat_written_every_dispatch_tick(make_scheduler, session_factory):

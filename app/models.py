@@ -16,7 +16,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 STATUSES = ("bot_sent", "processing", "ready", "failed")
 STEPS = ("waiting", "audio", "transcribing", "speakers", "notes", "done")
@@ -694,3 +694,35 @@ class AppState(Base):
         Boolean, default=False, server_default=sa.false()
     )
     scheduler_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The join runner (app/join_runner.py): when it first led (joins due before then are closed
+    # silently, never joined retroactively), and since when the operator's switch has been off
+    # (joins whose deadline passed meanwhile are closed silently when it comes back on).
+    autojoin_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    autojoin_paused_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+@sa.event.listens_for(Session, "before_flush")
+def _complete_the_join_with_its_meeting(session: Session, flush_context, instances) -> None:
+    """A calendar join that is `joined` becomes `completed` in the SAME transaction as its meeting
+    leaving `bot_sent` (spec 7.7, plan C12), whichever code moves the meeting: the worker (the bot
+    left, or the join failed), Cancel, End, a purge. Done here, at the one place every status
+    change passes, so no path can forget it and no crash can leave the two disagreeing. It frees
+    the meeting code: a recurring meeting's next event may then join (`uq_scheduled_joins_live_code`
+    holds a code while its join is live)."""
+    # No look at the old value: an attribute that was never loaded has no history, and the update
+    # below only touches a `joined` join, so it is a harmless no-op when the meeting was not live.
+    leaving = [
+        obj.id
+        for obj in session.dirty
+        if isinstance(obj, Meeting)
+        and obj.id is not None
+        and obj.status != "bot_sent"
+        and sa.inspect(obj).attrs.status.history.has_changes()
+    ]
+    if leaving:
+        session.execute(
+            sa.update(ScheduledJoin)
+            .where(ScheduledJoin.meeting_id.in_(leaving), ScheduledJoin.state == "joined")
+            .values(state="completed")
+            .execution_options(synchronize_session="fetch")
+        )

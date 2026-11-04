@@ -9,9 +9,12 @@ cannot wait behind that.
   dispatch tick (10 s), so failover takes about 10 s. This stack has no connection pooler in
   front of Postgres; if one is ever added, this connection must bypass it, because a pooled
   connection can return to the pool still holding the lock.
-* **Two loops, two threads, two sessions.** The dispatch loop (every 10 s) writes the heartbeat
-  and runs the dispatch jobs; the sync loop (wakes every 60 s) runs the sync jobs. A slow Google
-  call therefore never delays a dispatch. Only the dispatch loop touches the leader connection.
+* **Three loops, three threads, three sessions.** The dispatch loop (every 10 s) writes the
+  heartbeat and runs the dispatch jobs (the join runner); the sync loop (wakes every 60 s) runs the
+  sync jobs; the mail loop (every 10 s) sends the outbox. A slow Google call or a hung mail
+  provider therefore never delays a dispatch: a join due at 10:00 is sent at 10:00 even while a
+  mail call sits in a 15 s timeout (the C10b follow-up, decided in C12). Only the dispatch loop
+  touches the leader connection; the other two only read whether this process leads.
 * **Jobs** are `fn(session, now)` registered by name with an interval. Each run gets a fresh
   session; whatever a job raises is logged by type only (an exception can hold an address, a
   link or a token) and never reaches the loop or the other jobs. A job that failed is tried again
@@ -49,7 +52,7 @@ logger = logging.getLogger("app.scheduler")
 # transaction; this one is session-level and held for the life of the process.
 SCHEDULER_LOCK = 6010
 
-Loop = Literal["dispatch", "sync"]
+Loop = Literal["dispatch", "sync", "mail"]
 JobFn = Callable[[Session, datetime], object]
 
 
@@ -99,13 +102,15 @@ class Scheduler:
         leader_conn_factory: Callable[[], Connection],
         dispatch_every: float = 10,
         sync_every: float = 60,
+        mail_every: float = 10,
     ) -> None:
         self._clock = clock
         self._session_factory = session_factory
         self._leader_conn_factory = leader_conn_factory
         self._dispatch_every = dispatch_every
         self._sync_every = sync_every
-        self._jobs: dict[Loop, list[_Job]] = {"dispatch": [], "sync": []}
+        self._mail_every = mail_every
+        self._jobs: dict[Loop, list[_Job]] = {"dispatch": [], "sync": [], "mail": []}
         self._names: set[str] = set()
         self._leader_conn: Connection | None = None
         self._stop = threading.Event()
@@ -116,7 +121,7 @@ class Scheduler:
         if every_seconds <= 0:
             raise ValueError("every_seconds must be positive")
         if loop not in self._jobs:
-            raise ValueError(f"loop must be 'dispatch' or 'sync', not {loop!r}")
+            raise ValueError(f"loop must be 'dispatch', 'sync' or 'mail', not {loop!r}")
         if name in self._names:
             raise ValueError(f"a job named {name!r} is already registered")
         self._names.add(name)
@@ -178,6 +183,11 @@ class Scheduler:
             return
         self._run_due("sync", self._clock.now())
 
+    def tick_mail(self) -> None:
+        if not self.is_leader:  # one process sends mail, the one that leads
+            return
+        self._run_due("mail", self._clock.now())
+
     def _write_heartbeat(self, now: datetime) -> None:
         with self._session_factory() as session:
             state = session.get(AppState, 1)
@@ -209,7 +219,9 @@ class Scheduler:
         if stop is not None:
             self._stop = stop
         sync_thread = threading.Thread(target=self._sync_loop, name="scheduler-sync", daemon=True)
+        mail_thread = threading.Thread(target=self._mail_loop, name="scheduler-mail", daemon=True)
         sync_thread.start()
+        mail_thread.start()
         try:
             while not self._stop.is_set():
                 try:
@@ -220,6 +232,7 @@ class Scheduler:
         finally:
             self._stop.set()
             sync_thread.join(timeout=30)
+            mail_thread.join(timeout=30)
             self.release()
 
     def _sync_loop(self) -> None:
@@ -229,6 +242,14 @@ class Scheduler:
             except Exception as exc:
                 logger.error("sync tick failed (%s)", type(exc).__name__)
             self._stop.wait(self._sync_every)
+
+    def _mail_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                self.tick_mail()
+            except Exception as exc:
+                logger.error("mail tick failed (%s)", type(exc).__name__)
+            self._stop.wait(self._mail_every)
 
 
 def _close_quietly(conn: Connection) -> None:
@@ -246,9 +267,33 @@ def register_jobs(scheduler: Scheduler, settings) -> None:
 
     register_default_sweeps(scheduler, settings)
     if settings.calendar_enabled:
+        from app.gcal_client import GoogleSource
         from app.gcal_sync import register_calendar_sync
 
-        register_calendar_sync(scheduler, settings)
+        source = GoogleSource(
+            settings
+        )  # one source, so the sync and the runner share a token cache
+        register_calendar_sync(scheduler, settings, source=source)
+        if settings.autojoin_enabled:
+            from app.join_runner import register_join_runner
+
+            register_join_runner(scheduler, settings, source=source)
+        else:
+            logger.warning("AUTOJOIN_ENABLED is false: no bot will be sent from any calendar")
+
+
+def _remember_if_autojoin_is_off(settings) -> None:
+    """Record since when calendar auto-join has been off, so the runner can close, silently, the
+    joins whose 15 minutes passed meanwhile when it comes back (`join_runner._baseline`)."""
+    if settings.calendar_enabled and settings.autojoin_enabled:
+        return
+    from app.join_runner import note_switch
+
+    try:
+        with SessionLocal() as session:
+            note_switch(session, settings, SystemClock().now())
+    except Exception as exc:  # a missing marker only means a few old notices; never stop starting
+        logger.warning("could not record that auto-join is off (%s)", type(exc).__name__)
 
 
 def main() -> None:
@@ -260,8 +305,10 @@ def main() -> None:
         leader_conn_factory=direct_connection_factory(settings.database_url),
         dispatch_every=settings.scheduler_dispatch_seconds,
         sync_every=settings.scheduler_sync_seconds,
+        mail_every=settings.scheduler_dispatch_seconds,
     )
     register_jobs(scheduler, settings)
+    _remember_if_autojoin_is_off(settings)
     signal.signal(signal.SIGTERM, lambda *_: scheduler.stop())
     signal.signal(signal.SIGINT, lambda *_: scheduler.stop())
     logger.info("scheduler started")
