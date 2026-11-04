@@ -678,3 +678,36 @@ def test_autojoin_marker_columns_round_trip_and_start_unset(scratch_url):
     command.downgrade(cfg, "0015")
     assert "autojoin_started_at" not in _app_state_columns(engine)
     engine.dispose()
+
+
+def test_0016_adds_rate_hits_and_the_signup_origin_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0015")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(
+            text("insert into users (email, status) values ('old@example.test', 'active')")
+        )
+    command.upgrade(cfg, "0016")
+    assert {c["name"] for c in inspect(engine).get_columns("rate_hits")} == {
+        "id",
+        "bucket",
+        "key",
+        "at",
+    }
+    assert "signup_origin" in {c["name"] for c in inspect(engine).get_columns("users")}
+    with engine.begin() as conn:
+        conn.execute(text("insert into rate_hits (bucket, key, at) values ('b', 'k', 1.5)"))
+        conn.execute(
+            text("update users set signup_origin = :o where email = 'old@example.test'"),
+            {"o": "f" * 32},
+        )
+    assert _rows(engine, "select email from users where signup_origin is not null") == [
+        ("old@example.test",)
+    ]
+    command.downgrade(cfg, "0015")
+    assert "rate_hits" not in inspect(engine).get_table_names()
+    assert "signup_origin" not in {c["name"] for c in inspect(engine).get_columns("users")}
+    assert _rows(engine, "select email from users where email = 'old@example.test'") != []
+    command.upgrade(cfg, "head")  # and up again
+    engine.dispose()

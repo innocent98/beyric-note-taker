@@ -1,0 +1,28 @@
+{
+  "note": "Guesses from a second address: ten in all now count against the account.",
+  "client": "visitor-b",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "admin@example.test",
+      "password": "wrong-guess-5"
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_credentials",
+        "message": "That email or password is not right."
+      }
+    }
+  }
+}

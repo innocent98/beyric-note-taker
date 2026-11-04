@@ -1,0 +1,28 @@
+{
+  "note": "A third address that never guessed, with the RIGHT password: 429 `too_many_attempts`. The account is locked against logins from new devices.",
+  "client": "visitor-c",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "admin@example.test",
+      "password": "capture-admin-placeholder"
+    }
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "too_many_attempts",
+        "message": "Too many failed attempts. Try again later."
+      }
+    }
+  }
+}

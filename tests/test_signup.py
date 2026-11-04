@@ -607,7 +607,8 @@ def test_sign_up_is_limited_per_address(app, session):
     codes = [
         client.post("/api/signup", form(email=f"u{i}@example.test")).status_code for i in range(7)
     ]
-    assert codes[:5] == [202] * 5 and codes[5:] == [429, 429]
+    # three sign-ups an address may make while they could still be unconfirmed (and 5 an hour)
+    assert codes[:3] == [202] * 3 and codes[3:] == [429] * 4
 
 
 def test_a_second_sign_up_for_one_address_within_a_minute_sends_no_second_mail(app, session):

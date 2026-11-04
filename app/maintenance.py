@@ -11,12 +11,16 @@ from sqlalchemy import delete, or_
 from sqlalchemy.orm import Session
 
 from app import accounts, mail
-from app.models import AuthToken, CalendarEvent, Notification, OAuthFlow
+from app.models import AuthToken, CalendarEvent, Notification, OAuthFlow, RateHit
 
 logger = logging.getLogger(__name__)
 
 TOKEN_KEEP = timedelta(days=7)  # a spent or expired token is only kept this long, for debugging
 NOTIFICATION_KEEP = timedelta(days=90)
+# How long the sweep keeps a hit, by bucket: the sign-up cap counts 48 hours, every other window is
+# an hour or less. A key nobody touches again is otherwise never trimmed.
+RATE_HIT_KEEP = timedelta(hours=2)
+RATE_HIT_KEEP_SIGNUP_ORIGIN = timedelta(hours=49)
 CALENDAR_EVENT_KEEP = timedelta(days=2)  # after the event ENDS (spec 12.2)
 
 
@@ -56,6 +60,22 @@ def _delete_stale_rows(session: Session, now: datetime) -> None:
     sweep_notifications(session, now)
 
 
+def sweep_rate_hits(session: Session, now: datetime) -> None:
+    """Hits of the login and sign-up limits older than any window: a key nobody touched again is
+    otherwise never trimmed (`ratelimit.DbStore` trims a key when it is used). Commits."""
+    session.execute(
+        delete(RateHit).where(
+            or_(
+                (RateHit.bucket != "signup_origin")
+                & (RateHit.at <= (now - RATE_HIT_KEEP).timestamp()),
+                (RateHit.bucket == "signup_origin")
+                & (RateHit.at <= (now - RATE_HIT_KEEP_SIGNUP_ORIGIN).timestamp()),
+            )
+        )
+    )
+    session.commit()
+
+
 def run_hourly(session: Session, now: datetime) -> None:
     """Drop expired sign-in flows, spent tokens and old notifications, delete accounts that never
     confirmed their email, and tidy the mail outbox. Each part commits on its own and is isolated:
@@ -65,6 +85,7 @@ def run_hourly(session: Session, now: datetime) -> None:
         ("stale rows", lambda: _delete_stale_rows(session, now)),
         ("unverified accounts", lambda: accounts.sweep_unverified(session, now)),
         ("mail outbox", lambda: mail.sweep_outbox(session, now)),
+        ("rate limits", lambda: sweep_rate_hits(session, now)),
     ):
         try:
             part()

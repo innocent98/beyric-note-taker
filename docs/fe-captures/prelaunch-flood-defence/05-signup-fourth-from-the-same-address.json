@@ -1,0 +1,30 @@
+{
+  "note": "A fourth from the same address: 429 `too_many_requests`, nothing created, no mail.",
+  "client": "visitor-a",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ada Example",
+      "email": "ada3@example.test",
+      "password": "capture-password-3-ok",
+      "accept_terms": true
+    }
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "too_many_requests",
+        "message": "Too many attempts. Try again later."
+      }
+    }
+  }
+}

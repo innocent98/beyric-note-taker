@@ -8,6 +8,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.models import (
+    MailOutbox,
     Template,
     User,
     UserSettings,
@@ -88,11 +89,27 @@ def purge_unverified(
     rows = list(session.execute(query.with_for_update(skip_locked=True, of=User)))
     if not rows:
         return 0
-    ids, emails = [r[0] for r in rows], [r[1] for r in rows]
+    return delete_unverified(session, [r[0] for r in rows], [r[1] for r in rows])
+
+
+def delete_unverified(session: Session, ids: list[int], emails: list[str]) -> int:
+    """Delete these unconfirmed accounts (ids and their emails) with their templates, vocabulary
+    and settings; someone who came in with an invitation goes back on the waiting list. Does not
+    commit. The callers (the sweep, the sign-up flood defence) have chosen rows that are unconfirmed
+    and not admins."""
     session.execute(
         update(WaitlistEntry)
         .where(WaitlistEntry.email.in_(emails), WaitlistEntry.status == "joined")
         .values(status="waiting", invite_token_id=None)
+    )
+    # Its verification mail, if not sent yet: the link died with the account's tokens, and sending
+    # it would only spend the mail budget and puzzle the person.
+    session.execute(
+        delete(MailOutbox).where(
+            MailOutbox.to_email.in_(emails),
+            MailOutbox.status == "pending",
+            MailOutbox.template == "verify_email",
+        )
     )
     session.execute(delete(VocabularyTerm).where(VocabularyTerm.owner_user_id.in_(ids)))
     session.execute(delete(UserSettings).where(UserSettings.user_id.in_(ids)))
