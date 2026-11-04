@@ -139,14 +139,12 @@ def reserve_slot(
     now: datetime,
     settings: Settings | None = None,
     wait_seconds: float | None = None,
-    exclude_meeting_id: int | None = None,
 ) -> None:
     """Take the placement lock and run the pre-flight checks. `wait_seconds` is how long to poll for
     the lock (default `LOCK_WAIT_SECONDS`; 0 for a caller holding a row lock, which a wait would
-    drop). `exclude_meeting_id` is a meeting that is itself being sent again (its row is still
-    `bot_sent` and would count against its own slot, user limit and code). Returns holding the
-    lock, which lasts until the caller commits or rolls back; the caller must do that, and must
-    send the bot before it commits. Raises `PlacementRefused` (the caller rolls back)."""
+    drop). Returns holding the lock, which lasts until the caller commits or rolls back; the
+    caller must do that, and must send the bot before it commits. Raises `PlacementRefused` (the
+    caller rolls back)."""
     settings = settings or get_settings()
     _take_lock(session, LOCK_WAIT_SECONDS if wait_seconds is None else wait_seconds)
 
@@ -157,10 +155,9 @@ def reserve_slot(
     ):
         raise PlacementRefused("hours_cap_reached", cap_seconds=cap)
 
-    not_this = [] if exclude_meeting_id is None else [Meeting.id != exclude_meeting_id]
     own = session.scalar(
         select(func.count(Meeting.id)).where(
-            Meeting.owner_user_id == user.id, Meeting.status.in_(HOLDS_A_SLOT), *not_this
+            Meeting.owner_user_id == user.id, Meeting.status.in_(HOLDS_A_SLOT)
         )
     )
     if own >= settings.user_bot_limit:
@@ -173,7 +170,6 @@ def reserve_slot(
             Meeting.platform == platform,
             Meeting.native_id == native_id,
             Meeting.status == IN_THE_CALL,
-            *not_this,
         )
         .limit(1)
     )
@@ -186,15 +182,12 @@ def reserve_slot(
             Meeting.platform == platform,
             Meeting.native_id == native_id,
             Meeting.status == IN_THE_CALL,
-            *not_this,
         )
         .limit(1)
     ):
         raise PlacementRefused("meeting_has_note_taker")  # someone else's: the own check ran first
 
-    busy = session.scalar(
-        select(func.count(Meeting.id)).where(Meeting.status.in_(HOLDS_A_SLOT), *not_this)
-    )
+    busy = session.scalar(select(func.count(Meeting.id)).where(Meeting.status.in_(HOLDS_A_SLOT)))
     if busy >= settings.bot_max_local:
         raise PlacementRefused("bot_busy")
 

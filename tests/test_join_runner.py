@@ -815,6 +815,63 @@ def test_the_first_weeks_join_row_still_holding_the_code_cannot_block_the_next(
     assert state_of(session, week2)[0] in ("skipped", "no_capacity")
 
 
+# ---- the owner's own choices (the settings page writes these rows) ----
+
+
+def test_an_override_on_lets_a_stranger_invite_join(session, host, cal, ada):
+    """Under rule `all` an unanswered invite from outside waits; the owner's switch is the way in
+    (the join row exists once they switch it on). The runner honours the switch, not only the rule."""
+    join = materialise(session, ada, cal)
+    event = session.get(CalendarEvent, join.calendar_event_id)
+    event.organizer_self, event.self_response, event.organizer_same_org = (
+        False,
+        "needsAction",
+        False,
+    )
+    event.override = True
+    session.commit()
+    run(session, host, cal, at(-1))
+    assert state_of(session, join) == ("joined", None)
+
+
+def test_a_stranger_invite_without_the_switch_is_not_sent_even_if_a_row_exists(
+    session, host, cal, ada
+):
+    join = materialise(session, ada, cal)
+    event = session.get(CalendarEvent, join.calendar_event_id)
+    event.organizer_self, event.self_response, event.organizer_same_org = (
+        False,
+        "needsAction",
+        False,
+    )
+    session.commit()
+    run(session, host, cal, at(-1))
+    assert host.bots_sent == 0 and state_of(session, join) == ("cancelled", "not_accepted")
+
+
+def test_the_template_recorded_on_the_join_is_the_one_the_meeting_gets(session, host, cal, ada):
+    from app.models import Template
+
+    other = Template(owner_user_id=ada.user.id, name="Short", instructions="Short notes.")
+    session.add(other)
+    session.commit()
+    join = materialise(session, ada, cal)
+    join.template_id = other.id  # what the settings page writes when the owner changes it
+    session.commit()
+    run(session, host, cal, at(-1))
+    [meeting] = meetings(session)
+    assert meeting.template_id == other.id
+
+
+def test_a_join_without_a_recorded_template_uses_the_calendar_template(session, host, cal, ada):
+    join = materialise(session, ada, cal)
+    join.template_id = None
+    session.commit()
+    run(session, host, cal, at(-1))
+    [meeting] = meetings(session)
+    assert meeting.template_id == ada.template.id
+
+
 # ---- the kill switch, and registration ----
 
 
