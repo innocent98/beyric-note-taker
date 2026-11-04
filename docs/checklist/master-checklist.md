@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status (2026-11-04, evening):** MVP live at notes.beyrictech.com; his Google Calendar is connected and syncs (no bot is sent from the calendar yet). Merged and deployed 2026-11-04: sweeps and alerts (C10b, C11b), `place_bot()` (C11), calendar connect page, rule and template pickers and per-event switch (C15a), Settings sections drawn off and Recurring cards, Translate (W7), the extraction review tool, terms, privacy and email preferences, CI sharding (about 5 minutes), template delete (#73, migration 0015) times in the viewer's browser zone (#76) and the Outlook sign-in design spec (#77, build is Phase O below). In review: #72 C12 join runner (four Opus rounds, last small batch pending), #75 pre-sign-up PR 2 (flood defence, counters in the database, mail budget; Opus: merge-ready, small polish pending). Not started: C13 to C18, ICS (C19 to C24), W0.4 team foundation, W0.5 meeting delete, W2 Tasks, W3 Team, W4, W6 Share, W8, W9, W10, the Outlook build (phase O, ships dark until Teams joining works), Phases I, D, V. Everything designed in `docs/ui/` is pilot work and is built to full parity (Adebayo). The next steps and his queued items are in `docs/HANDOFF-master.md`.
+**Status (2026-11-04, 21:45 WAT):** MVP live at notes.beyrictech.com; server head `e00ecd7`, migrations at 0017, no PR open. His Google Calendar is connected and syncs, and **C12 is live: the bot now joins calendar meetings by itself** (auto-join on by default). Merged and deployed 2026-11-04: sweeps and alerts (C10b, C11b), `place_bot()` (C11), the join runner (C12, #72), calendar connect page, rule and template pickers and per-event switch (C15a), Settings sections drawn off and Recurring cards, Translate (W7), the extraction review tool, terms, privacy and email preferences, pre-sign-up PR 2 (flood defence, database counters, mail budget, #75), template delete (#73), times in the viewer's browser zone (#76), the Outlook design spec (#77), CI sharding (about 5 minutes). **Not built:** the meeting detail page parity (right-hand Details and Participants, Action items, Open questions) and the recurring meeting detail page (D12 below, reported by Adebayo 2026-11-04), C13 to C18, ICS (C19 to C24), W0.4 team foundation, W0.5 meeting delete, W2 Tasks, W3 Team, W4, W6 Share, W8, W9, W10, the Outlook build (phase O, ships dark until Teams joining works), pre-sign-up PR 3, Phases I, D, V. Everything designed in `docs/ui/` is pilot work and is built to full parity (Adebayo). The next steps and his queued items are in `docs/HANDOFF-master.md`.
 
 Legend: `[x]` done and verified, `[ ]` not done.
 
@@ -194,6 +194,11 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] D9, Download (W5, 2026-11-03): menu with PDF and Word, transcript tick, the states for preparing, done, failed and not ready; the language note and the download in French or Spanish shipped with W7 (2026-11-04)
   - [ ] D10, Share (needs W6, and W3 for participants): dialog, recipients, language, attachment, transcript, message, "Shared with ..." note, "Add email" on a participant (designer gap), share-limit message (designer gap)
   - [x] D11, Translate (W7, 2026-11-04, SOP `docs/sop/2026-11-04-w7-translate.md`, FE guide `docs/fe-integration-guide-translate.md`): language select on the notes toolbar, "Translating ..." and "Translated from ..." bars, Show original, the transcript tab, Copy, Download in a language, the live "Default notes language" card in Settings with the designer's toast; failed, stale and "Translate to X" states are the smallest things (designer gaps)
+  - [ ] **D12, Meeting detail page parity and the recurring meeting detail page (Adebayo, 2026-11-04 21:33: the live meeting page differs a lot from the designer's file)**: compare the live page with `docs/ui/Beyric Note Taker redesign/` at 1440, 768 and 390 and list every difference first, then build to full parity with a parity table and screenshots under `docs/ui/parity/after/`
+    - [ ] Right-hand side: the full **Details** block and the **Participants** block as designed (check which fields the API already has; add API fields only where the design needs them)
+    - [ ] **Action items** and **Open questions** blocks drawn as designed (layout, wording, empty states; the Tasks content itself is W2)
+    - [ ] The **recurring meeting detail page** (not built; Series is W8: draw what exists, no dead buttons on the meeting page)
+    - [ ] Ask the designer only for what the file truly lacks
   - [ ] D12, Settings (needs W2, W7, W8, W9, W10): Tasks card, default language, sprints and reminders card, Slack and tracker cards
   - [ ] D13, meeting page details (needs W0.4 and W8): duration (`recorded_seconds`), participants (names from speaker labels), series, milestone
   - [ ] D14, Emails in the designer's layout (W0.3 done 2026-11-04 for verify, reset, already registered, invite and Notes ready; open: Notes shared (W6), New tasks (W2), Team invite (W3), reminders (W8), Could not join (C14))
@@ -303,7 +308,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
     - [ ] FE guide rewrite for `bot_busy`, `user_limit`, `already_in_meeting`, `meeting_has_note_taker` with a captured response, queued for C17 (the owner-app guide still names `bot_already_active` and `MAX_ACTIVE_BOTS`)
     - [ ] Decide with C12 or D9a whether capacity counts `bot_sent` only (spec 9.4 step 3); today `processing` still holds the slot, as before, because the worker handles one meeting at a time
   - [x] C11b alerts helper (2026-11-04, same PR; `app/alerts.py` `notify_user`, `notify_admins`, `bucket_key`, `alert` mail template, optional `ADMIN_ALERT_EMAIL`; nothing calls it yet, C12 to C14 will). Open, not merged
-  - [x] C12 join runner (2026-11-04, `feature/c12-join-runner`; `app/join_runner.py`, SOP `docs/sop/2026-11-04-phase-c-join-runner.md`, FE note `docs/fe-integration-guide-calendar-join.md`; dispatch at start minus `AUTOJOIN_LEAD_SECONDS`, the 2-minute re-check, no-capacity retry every 15 s with an owner and admin alert and "not recorded" at the deadline, late-join catch-up, `joined` to `completed` with the meeting; auto-join ON by default with `AUTOJOIN_ENABLED` as the operator's stop). Open, not merged
+  - [x] C12 join runner (merged and deployed 2026-11-04 as #72 `e00ecd7`, migration 0017; `feature/c12-join-runner`; `app/join_runner.py`, SOP `docs/sop/2026-11-04-phase-c-join-runner.md`, FE note `docs/fe-integration-guide-calendar-join.md`; dispatch at start minus `AUTOJOIN_LEAD_SECONDS`, the 2-minute re-check, no-capacity retry every 15 s with an owner and admin alert and "not recorded" at the deadline, late-join catch-up, `joined` to `completed` with the meeting; auto-join ON by default with `AUTOJOIN_ENABLED` as the operator's stop). Open, not merged
     - [x] Tests first (injected clock, `FakeVexaHost`, `FakeGoogleCalendar`): every plan C12 test name, plus both-runners-at-once, a switch that lands during a send, a cancel that lands while a refusal is written; ten mutation checks on the two hard requirements (one bot per meeting; nothing sent after disconnect, rule off, suspension or an override off)
     - [x] Meeting titles: `Meeting.title` set from the event at placement; `services.meeting_title`, mail, exports, Decisions and Review, legacy pages and alerts all use one cleaner (`app/titles.py`)
     - [x] Mail send moved off the dispatch tick onto its own loop and thread (`loop="mail"`), bounded by a 60 s budget per pass; `test_slow_mail_provider_does_not_delay_a_dispatch_tick`
@@ -405,7 +410,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] Go or no-go on `gpt-6-luna` for W2 decided from those verdicts (spec asks for five real meetings; one is the first step)
 - [ ] W2 Tasks (needs W1 and the gate above; Opus)
 - [ ] W5 Export (merged), W3 Team, W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
-- [x] W7 Translate (PR open 2026-11-04, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
+- [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)
   - [x] Headings from a fixed dictionary in code; transcript and notes split in code into lines, only the words go to the model; checks for count, structure, links and markup, numbers, names; one retry per chunk
   - [x] Cache by (meeting, language) with `source_hash`; stale when notes or transcript change
@@ -477,7 +482,7 @@ Legal and business
 - [ ] Launch capacity: bot-machine budget, or a per-hour vendor instead
 - [ ] Revisit the designer's landing and sign-in copy before the Google verification submission (decided 2026-11-03)
 
-## Template delete (2026-11-04, `feature/template-delete`, PR open)
+## Template delete (2026-11-04, `feature/template-delete`, merged as #73 `ba7d9d3`, migration 0015)
 
 - [x] `DELETE /api/templates/{id}`: soft delete (`templates.deleted_at`, migration 0015, name unique among live rows); 404 for foreign, unknown, already deleted; 409 `last_template`; row locked so two deletes at once are decided in turn
 - [x] What points at a template: meetings keep notes and id, new `template_name` on every meeting body; calendar setting and planned joins move to the oldest left; in-flight meeting and rewrite finish; deleted ids refused for new choices
@@ -487,7 +492,7 @@ Legal and business
 - [ ] Follow-up: the Review page's "Rewrite with the corrected spelling" offer fails with "Choose a template." for a meeting whose template was deleted
 - [ ] Follow-up: designer to rule on the confirmation ask and on deleting the last template
 
-## Local time display (2026-11-04, `feature/local-time-display`, PR open, SOP `docs/sop/2026-11-04-local-time-display.md`)
+## Local time display (2026-11-04, `feature/local-time-display`, merged as #76 `32b612d`, SOP `docs/sop/2026-11-04-local-time-display.md`)
 
 - [x] Web pages show every date and time in the viewer's own browser zone with a short zone label ("02 Nov 2026, 22:16 GMT+1"); the server render and first browser render stay UTC, then `LocalTime` swaps in the zone after mount (no hydration warning)
 - [x] Applied to Meetings list, meeting detail (header, Details, retry notice), Notifications, Decisions and Review day labels, Settings "Last updated"; Upcoming already was local and now shares the same zone helper
