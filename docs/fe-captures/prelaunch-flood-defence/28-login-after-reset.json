@@ -1,0 +1,40 @@
+{
+  "note": "Another new address logs in at once: 200, no longer refused.",
+  "client": "visitor-d",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "admin@example.test",
+      "password": "a-fresh-capture-pass-9"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-G>",
+      "user": {
+        "email": "admin@example.test",
+        "name": null,
+        "is_admin": true,
+        "email_verified": true
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": null
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0
+      }
+    }
+  }
+}

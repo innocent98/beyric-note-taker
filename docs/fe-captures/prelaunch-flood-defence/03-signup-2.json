@@ -1,0 +1,27 @@
+{
+  "note": "One of the three sign-ups this address may make in 48 hours: 202.",
+  "client": "visitor-a",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ada Example",
+      "email": "ada1@example.test",
+      "password": "capture-password-1-ok",
+      "accept_terms": true
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "status": "check_your_email"
+    }
+  }
+}

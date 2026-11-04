@@ -841,7 +841,7 @@ def test_the_limiter_comment_matches_what_it_evicts():
     limiter.try_acquire("a", "x1", now=0)
     limiter.try_acquire("b", "x2", now=1)
     limiter.try_acquire("c", "x3", now=2)  # "a" and "x1" were created first
-    assert limiter._clients.attempts.keys() == {"b", "c"}
+    assert limiter._store._windows["login_client"].attempts.keys() == {"b", "c"}
 
 
 # ---- nginx: the public account routes are limited at the edge ----

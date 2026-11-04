@@ -77,6 +77,12 @@ class User(Base):
     __table_args__ = (
         CheckConstraint(_in("status", USER_STATUSES), name="ck_users_status"),
         CheckConstraint("email = lower(email)", name="ck_users_email_lower"),
+        # The sign-up flood defence counts unconfirmed rows by where they were made from.
+        Index(
+            "ix_users_signup_origin_unconfirmed",
+            "signup_origin",
+            postgresql_where=sa.text("email_verified_at is null"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -97,6 +103,10 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # When the admin deleted the account (status `deleted`); the purge gives up a day after it.
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # A keyed hash of the client address an unconfirmed account was made from
+    # (`ratelimit.origin_key`), so the sign-up flood defence can tell one address's rows from
+    # another's. Set at creation and never changed by a later submission; null for older rows.
+    signup_origin: Mapped[str | None] = mapped_column(String(32))
 
 
 class AuthToken(Base):
@@ -649,6 +659,19 @@ class MeetingTranslation(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class RateHit(Base):
+    """One hit on a login or sign-up limit (`app/ratelimit.py`): the bucket's name, a keyed hash of
+    the key (never an address or an email), and when (seconds since the epoch)."""
+
+    __tablename__ = "rate_hits"
+    __table_args__ = (Index("ix_rate_hits_bucket_key_at", "bucket", "key", "at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    bucket: Mapped[str] = mapped_column(String(32))
+    key: Mapped[str] = mapped_column(String(32))
+    at: Mapped[float] = mapped_column(sa.Float(precision=53))
 
 
 class AppState(Base):

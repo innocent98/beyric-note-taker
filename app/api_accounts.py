@@ -8,13 +8,24 @@ need the CSRF header on every non-GET. Their work is in `app/signup.py`, whose f
 no answer may depend on whether an address already has an account.
 """
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app import auth, edge, google_oauth, google_signin, limits, notifications, services, signup
+from app import (
+    auth,
+    edge,
+    google_oauth,
+    google_signin,
+    limits,
+    notifications,
+    ratelimit,
+    services,
+    signup,
+)
 from app.api_schemas import (
     Accepted,
     EmailIn,
@@ -34,6 +45,8 @@ from app.api_schemas import (
 from app.db import get_session
 from app.models import User
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 CHECK_YOUR_EMAIL = Accepted(status="check_your_email")
@@ -45,6 +58,29 @@ def _now() -> datetime:
 
 def _address(request: Request) -> str:
     return edge.client_address(request, request.app.state.settings)
+
+
+_origin_warned = edge.Throttle(86400.0)
+
+
+def _origin(request: Request) -> str | None:
+    """The keyed hash of the client address to remember on a new account, or None where the
+    address cannot be told apart from everyone else's: in production with no EDGE_SHARED_SECRET
+    configured at all, every visitor carries the proxy's address, and a cap per address would be a
+    cap for the whole site (three sign-ups would close the form for two days). The cap is skipped,
+    and the log says so, once a day. When a secret IS configured, a request without it did not
+    come through nginx (anything on the host can reach the app on localhost): it keeps the cap,
+    on the address it really has."""
+    settings = request.app.state.settings
+    if settings.app_env == "production" and not settings.edge_shared_secret:
+        if _origin_warned.ready():
+            logger.warning(
+                "no per-address sign-up cap: EDGE_SHARED_SECRET is not set, so every client "
+                "carries the proxy's address. Set it in .env and in nginx (deploy/README.md, "
+                "'Edge secret')."
+            )
+        return None
+    return ratelimit.origin_key(ratelimit.store_secret(settings), _address(request))
 
 
 def _limits(request: Request) -> limits.PublicLimits:
@@ -100,6 +136,8 @@ def sign_up(body: SignUp, request: Request, session: Session = Depends(get_sessi
         invite_token=body.invite_token,
         now=_now(),
         mail_allowed=lambda address: _limits(request).signup_email.hit(limits.email_key(address)),
+        origin=_origin(request),
+        origin_allowed=_limits(request).signup_origin.hit,
     )
     return CHECK_YOUR_EMAIL
 
@@ -133,7 +171,14 @@ def verify_email(
     400 `token_invalid_or_expired`: wrong, used or older than 24 hours. 400 `password_mismatch`:
     not the password submitted with this link's sign-up; the link stays usable until 5 wrong
     passwords, after which it answers `token_invalid_or_expired`."""
-    signup.verify_email(session, body.token, body.password, _now(), _limits(request).verify_wrong)
+    signup.verify_email(
+        session,
+        body.token,
+        body.password,
+        _now(),
+        _limits(request).verify_wrong,
+        _limits(request).signup_origin,
+    )
     return Verified(status="verified")
 
 
@@ -143,8 +188,11 @@ def forgot_password(
 ) -> Accepted:
     """Mail a password-reset link (valid 30 minutes) if the address has a confirmed account.
     Public. Always 202 with the same body: it never says whether the address has an account."""
-    allowed = _limits(request).forgot_address.hit(_address(request)) and (
-        _limits(request).forgot_email.hit(limits.email_key(body.email))
+    key = limits.email_key(body.email)
+    allowed = (
+        _limits(request).forgot_address.hit(_address(request))
+        and _limits(request).forgot_email.hit(key)
+        and _limits(request).forgot_email_hour.hit(key)
     )
     if allowed:
         signup.request_reset(session, request.app.state.settings, body.email, _now())
@@ -156,11 +204,15 @@ def forgot_password(
     tags=["password"],
     responses={code: {"model": ErrorResponse} for code in (400, 422, 429)},
 )
-def reset_password(body: ResetIn, session: Session = Depends(get_session)) -> PasswordChanged:
+def reset_password(
+    body: ResetIn, request: Request, session: Session = Depends(get_session)
+) -> PasswordChanged:
     """Choose a new password with the token from the reset mail. Public. Signs that user out
     everywhere and does not sign them in. 400 `token_invalid_or_expired`; 422
     `password_too_weak` leaves the token usable."""
-    signup.reset_password(session, body.token, body.password, _now())
+    signup.reset_password(
+        session, body.token, body.password, _now(), request.app.state.limiter.unlock
+    )
     return PasswordChanged(status="password_changed")
 
 

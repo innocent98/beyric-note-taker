@@ -81,7 +81,7 @@ If the PR deploys **before** steps 1 to 3, nothing breaks: the app logs the warn
 - ~~Until step 3 of the rollout, and while `TRUSTED_PROXY_IPS` is honoured, the old forgeable trust still applies.~~ Closed by the fallback removal: no address is trusted any more. The cost is that a deploy without a working secret puts every visitor in one limit bucket.
 - A process that can read the server `.env` or nginx's root-only file has the secret; at that point it already has the owner password and the database password.
 - uvicorn's access log now shows the peer (Next's address), not the visitor; nginx's access log has the real address. The app does not log the resolved address.
-- In-memory counters reset on restart and are per process (one `web` process today). With more workers, or a restart loop, the limit weakens; move them to the database or Redis with the accounts work.
+- In-memory counters reset on restart and are per process (one `web` process today). With more workers, or a restart loop, the limit weakens; move them to the database or Redis with the accounts work. **Superseded 2026-11-04:** the login and sign-up counters are in the database (`rate_hits`), so a restart or a second process no longer resets or weakens them (`docs/sop/2026-11-04-prelaunch-flood-mail-budget.md`).
 
 ## Follow-ups
 - ~~Remove the default trusted-proxy fallback~~ **Done** (2026-11-03, PR #28): see "Fallback removal" below. (Opus review, finding 6.)

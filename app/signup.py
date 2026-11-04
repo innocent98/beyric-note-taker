@@ -30,7 +30,7 @@ from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import accounts, mail, passwords, tokens
+from app import accounts, limits, mail, passwords, tokens
 from app.config import Settings
 from app.limits import Limit
 from app.models import AppState, AuthToken, User, WaitlistEntry
@@ -46,6 +46,11 @@ MAX_NAME_CHARS = 200
 # Unconfirmed password accounts that may exist at once, so the form cannot be used to fill the
 # database; each is swept 48 hours after its last submission (`accounts.sweep_unverified`).
 MAX_UNVERIFIED = 100
+# And per client address: how many sign-ups one address may make while their rows could still be
+# unconfirmed (`limits.SIGNUP_ORIGIN_CAP` in 48 hours, counted for every submission, new email or
+# not, so it tells nobody which emails have an account). An address is also limited to 5 sign-ups
+# an hour; this keeps 20 of them from filling the table above.
+MAX_UNVERIFIED_PER_ORIGIN = limits.SIGNUP_ORIGIN_CAP
 MAX_EMAIL_CHARS = 254
 
 _LOCAL = r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+"
@@ -221,13 +226,17 @@ def sign_up(
     invite_token: str | None,
     now: datetime,
     mail_allowed: Callable[[str], bool] = lambda address: True,
+    origin: str | None = None,
+    origin_allowed: Callable[[str], bool] = lambda origin: True,
 ) -> None:
     """Create an unverified account and queue its verification mail, or do the quiet equivalent
     for an address that already has one. Commits. Raises `Refused` for what the person can fix
     (a weak password, no terms) and for the pilot's state; never for who has an account.
     `mail_allowed(address)` is asked once the request would touch an account or send a mail, and
     answers whether this address may be mailed now (the caller's per-email limit); when it says
-    no, nothing happens and the caller still answers 202."""
+    no, nothing happens and the caller still answers 202. `origin` is the keyed hash of the client
+    address (`ratelimit.origin_key`): it is remembered on a new account and limits how many
+    unconfirmed accounts one address can hold (see `_check_unconfirmed_caps`)."""
     address = normalise_email(email)
     name = name.strip()
     if address is None:
@@ -243,7 +252,16 @@ def sign_up(
     try:
         session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": SIGNUP_LOCK})
         _sign_up_locked(
-            session, settings, name, address, password_hash, invite_token, now, mail_allowed
+            session,
+            settings,
+            name,
+            address,
+            password_hash,
+            invite_token,
+            now,
+            mail_allowed,
+            origin,
+            origin_allowed,
         )
         session.commit()
     except IntegrityError:  # lost a race on the unique email: the address has an account now
@@ -251,6 +269,77 @@ def sign_up(
     except Refused:
         session.rollback()
         raise
+
+
+def _unconfirmed_plain():
+    """Unconfirmed password accounts that hold no invitation: the rows the caps count and the only
+    ones that may be cleared (an invited person's place was promised)."""
+    return (
+        User.is_admin.is_(False),
+        User.email_verified_at.is_(None),
+        User.status == "active",
+        User.email.not_in(_invited_emails()),
+    )
+
+
+def _check_unconfirmed_caps(
+    session: Session,
+    origin: str | None,
+    now: datetime,
+    origin_allowed: Callable[[str], bool],
+) -> None:
+    """Refuse (429, the same answer for every email) when this client address has used its
+    `MAX_UNVERIFIED_PER_ORIGIN` sign-ups, or when the table is full and no room can be made. Under
+    the sign-up lock.
+
+    The per-address count is a hit counted for EVERY submission that gets here, whatever the
+    lookup later finds. Counting the rows the address holds instead would differ between a new
+    email (a row appears) and one that already has an account (none does): after two sign-ups an
+    attacker could submit a third email and see from the next refusal whether it was new."""
+    if origin is not None and not origin_allowed(origin):
+        raise Refused(429, "too_many_requests", "Too many attempts. Try again later.")
+    while unverified_count(session) >= MAX_UNVERIFIED:
+        if not _make_room(session, now):
+            raise Refused(429, "too_many_requests", "Too many attempts. Try again later.")
+
+
+def _make_room(session: Session, now: datetime) -> bool:
+    """Delete one unconfirmed account to make room at the cap; whether one went.
+
+    Chosen by address, not by age, so a flood cannot push out a real person: the oldest row of the
+    client address that holds the MOST unconfirmed rows goes first, as long as that address holds
+    at least two. A row nobody can tell from a real person's (every address holds one) is touched
+    only when it is over an hour old, oldest first, and a fresh one never is. Rows with no recorded
+    origin (older accounts) are each their own address. Invited people's rows are not candidates.
+    """
+    last = func.coalesce(User.terms_accepted_at, User.created_at)
+    rows = list(
+        session.execute(
+            select(User.id, User.email, User.signup_origin, last)
+            .where(*_unconfirmed_plain())
+            .order_by(last, User.id)
+        )
+    )
+    sizes: dict[str, int] = {}
+    for _id, _email, origin, _when in rows:
+        if origin is not None:
+            sizes[origin] = sizes.get(origin, 0) + 1
+    busiest = max(sizes.values(), default=0)
+    victim = None
+    if busiest >= 2:
+        victim = next(r for r in rows if r[2] is not None and sizes[r[2]] == busiest)
+    else:
+        abandoned = [r for r in rows if r[3] < now - accounts.ABANDONED_AFTER]
+        victim = abandoned[0] if abandoned else None
+    if victim is None:
+        return False
+    locked = session.execute(
+        select(User.id).where(User.id == victim[0]).with_for_update(skip_locked=True, of=User)
+    ).first()
+    if locked is None:  # someone else holds the row: leave it and refuse
+        return False
+    accounts.delete_unverified(session, [victim[0]], [victim[1]])
+    return True
 
 
 def _sign_up_locked(
@@ -262,6 +351,8 @@ def _sign_up_locked(
     invite_token: str | None,
     now: datetime,
     mail_allowed: Callable[[str], bool],
+    origin: str | None,
+    origin_allowed: Callable[[str], bool],
 ) -> None:
     invite = None
     if invite_token:
@@ -281,13 +372,9 @@ def _sign_up_locked(
             "password_signup_disabled",
             "Creating an account with a password is not available yet. Use Google to sign up.",
         )
-    if invite is None and unverified_count(session) >= MAX_UNVERIFIED:
-        # Rows nobody came back to for an hour make room first, so a flood cannot lock everyone
-        # out. Refused only when they are all fresh, and before the lookup, so a new address and an
-        # existing one get the same answer.
-        accounts.purge_unverified(session, now, accounts.ABANDONED_AFTER, include_invited=False)
-        if unverified_count(session) >= MAX_UNVERIFIED:
-            raise Refused(429, "too_many_requests", "Too many attempts. Try again later.")
+    if invite is None:
+        # Before the lookup, so a new address and an existing one get the same answer.
+        _check_unconfirmed_caps(session, origin, now, origin_allowed)
     if not mail_allowed(address):
         return
     # The row is locked from here to the commit: `verify_email` takes the same lock before it
@@ -303,6 +390,7 @@ def _sign_up_locked(
             password_hash=password_hash,
             terms_accepted_at=now,
             terms_version=TERMS_VERSION,
+            signup_origin=origin,  # set once: a later submission from elsewhere never moves it
         )
         session.add(user)
         session.flush()
@@ -337,6 +425,7 @@ def verify_email(
     password: str,
     now: datetime,
     wrong_guesses: Limit | None = None,
+    origin_hits: Limit | None = None,
 ) -> None:
     """Confirm the email the token was sent to, given the password chosen with that sign-up.
     Commits. The token is used up only when the password is right, so a typo can be fixed, but
@@ -388,7 +477,10 @@ def verify_email(
     user.email_verified_at = user.email_verified_at or now
     user.password_hash = token.pending_password_hash
     tokens.revoke(session, "verify_email", user.id, now)
+    origin = user.signup_origin
     session.commit()
+    if origin_hits is not None and origin is not None:
+        origin_hits.refund(origin)  # a confirmed account no longer counts against its address
 
 
 def _can_mail(settings: Settings) -> bool:
@@ -457,9 +549,17 @@ def request_reset(session: Session, settings: Settings, email: str, now: datetim
     session.commit()
 
 
-def reset_password(session: Session, raw_token: str, password: str, now: datetime) -> None:
+def reset_password(
+    session: Session,
+    raw_token: str,
+    password: str,
+    now: datetime,
+    unlock: Callable[[str], object] | None = None,
+) -> None:
     """Set a new password with a reset token and sign the user out everywhere. Commits. A weak
-    password is refused before the token is touched, so the person can try again."""
+    password is refused before the token is touched, so the person can try again. `unlock(email)`
+    ends a login lockout on the account: someone who proved they own the mailbox must not stay
+    locked out by guesses another person made."""
     _check_password(password)
     password_hash = _hash(password)
     token = tokens.consume(session, raw_token, "reset_password", now)
@@ -470,7 +570,13 @@ def reset_password(session: Session, raw_token: str, password: str, now: datetim
     user.password_hash = password_hash
     user.session_epoch = User.session_epoch + 1
     tokens.revoke(session, "reset_password", user.id, now)
+    email = user.email
     session.commit()
+    if unlock is not None:
+        try:
+            unlock(email)
+        except Exception as exc:  # the password did change: say so, and only log the failure
+            logger.warning("could not end a login lockout after a reset (%s)", type(exc).__name__)
 
 
 # ---- the waitlist ----
