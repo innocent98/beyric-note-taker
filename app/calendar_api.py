@@ -1,8 +1,8 @@
 """The calendar routes of the JSON API. Included into `app.api.router`, so they share its `/api`
 prefix, its error shape and its OpenAPI file.
 
-This file holds the two OAuth routes (the work is in `app/calendar_connect.py`). The calendar
-state, settings and upcoming meetings are added here by later tasks.
+This file holds the OAuth routes and disconnect (the work is in `app/calendar_connect.py`). The
+calendar state, settings and upcoming meetings are added here by later tasks.
 """
 
 from datetime import UTC, datetime
@@ -44,6 +44,13 @@ class ConnectOut(BaseModel):
 
     authorize_url: str
     show_unverified_notice: bool
+
+
+class DisconnectOut(BaseModel):
+    """Always `disconnected`: the call is safe to repeat, and also answers 200 when nothing was
+    connected."""
+
+    status: Literal["disconnected"] = "disconnected"
 
 
 def _now() -> datetime:
@@ -126,3 +133,20 @@ def calendar_google_callback(
     response = RedirectResponse(result.redirect_to, status_code=302)
     response.delete_cookie(calendar_connect.FLOW_COOKIE, path=calendar_connect.FLOW_COOKIE_PATH)
     return response
+
+
+@router.post("/google/disconnect")
+def calendar_google_disconnect(
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+    google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
+) -> DisconnectOut:
+    """Disconnect the caller's Google account (CSRF header needed, no body). Revokes the access at
+    Google, then deletes the caller's calendar events, all their scheduled joins (every state) and
+    calendar notifications, and the stored token. Meetings already recorded, the hours used and
+    the settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),
+    and it works while the calendar features are switched off. If Google cannot be reached the
+    local deletion still happens (the person can also revoke at myaccount.google.com/permissions).
+    Afterwards `connect` works again, for the same or another Google account."""
+    calendar_connect.disconnect(session, user, google)
+    return DisconnectOut()

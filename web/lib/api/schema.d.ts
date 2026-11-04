@@ -282,6 +282,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar/google/disconnect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calendar Google Disconnect
+         * @description Disconnect the caller's Google account (CSRF header needed, no body). Revokes the access at
+         *     Google, then deletes the caller's calendar events, all their scheduled joins (every state) and
+         *     calendar notifications, and the stored token. Meetings already recorded, the hours used and
+         *     the settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),
+         *     and it works while the calendar features are switched off. If Google cannot be reached the
+         *     local deletion still happens (the person can also revoke at myaccount.google.com/permissions).
+         *     Afterwards `connect` works again, for the same or another Google account.
+         */
+        post: operations["calendar_google_disconnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/decisions": {
         parameters: {
             query?: never;
@@ -1141,6 +1167,19 @@ export interface components {
             id: number;
             /** Text */
             text: string;
+        };
+        /**
+         * DisconnectOut
+         * @description Always `disconnected`: the call is safe to repeat, and also answers 200 when nothing was
+         *     connected.
+         */
+        DisconnectOut: {
+            /**
+             * Status
+             * @default disconnected
+             * @constant
+             */
+            status: "disconnected";
         };
         /** EmailIn */
         EmailIn: {
@@ -2357,6 +2396,53 @@ export interface operations {
             };
             /** @description Service Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    calendar_google_disconnect: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisconnectOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

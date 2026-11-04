@@ -8,6 +8,9 @@ placeholders below), starts the real app under uvicorn on a free local port and 
 journeys with httpx. Each exchange is written to `docs/fe-captures/calendar-connect/NN-name.json`,
 so every claim in `docs/fe-integration-guide-calendar-connect.md` can be re-derived.
 
+The disconnect journeys (the last captures) seed a few placeholder calendar rows straight into the
+scratch database, because nothing here syncs a calendar yet, so the deletion is visible.
+
 What is real: the app, the guard, CSRF, validation, cookies, the consent URL (built by the real
 `GoogleOAuth`), the PKCE and token-exchange code, the vault and the database row. What is not:
 Google's own servers. `tests/fakes/google.py` stands in for the consent screen and the token
@@ -26,6 +29,7 @@ import socket
 import sys
 import threading
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -63,7 +67,13 @@ from sqlalchemy.orm import Session  # noqa: E402
 from app import google_oauth  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import CalendarConnection, User  # noqa: E402
+from app.models import (  # noqa: E402
+    CalendarConnection,
+    CalendarEvent,
+    Notification,
+    ScheduledJoin,
+    User,
+)
 from app.passwords import hash_password  # noqa: E402
 from app.services import get_vexa  # noqa: E402
 from tests.fakes.google import FakeGoogle  # noqa: E402
@@ -188,7 +198,9 @@ def row_summary(engine) -> list[dict]:
                     "google_hosted_domain": conn.google_hosted_domain,
                     "status": conn.status,
                     "granted_scopes": conn.granted_scopes,
-                    "refresh_token_enc": f"<{type(blob).__name__}, {len(blob)} bytes>",
+                    "refresh_token_enc": (
+                        None if blob is None else f"<{type(blob).__name__}, {len(blob)} bytes>"
+                    ),
                     "key_version": conn.key_version,
                     "last_sync_at": conn.last_sync_at,
                     "sync_token": conn.sync_token,
@@ -196,6 +208,62 @@ def row_summary(engine) -> list[dict]:
                 }
             )
         return json.loads(json.dumps(rows, default=str))
+
+
+def seed_calendar_rows(engine, round_: int = 1) -> None:
+    """Placeholder calendar data for user 1: two events with joins (one still scheduled, one
+    already joined), a calendar notification and an unrelated one."""
+    start = datetime(2026, 11, 5, 9, 0, tzinfo=UTC)
+    with Session(engine) as session:
+        conn = session.scalars(select(CalendarConnection)).one()
+        for n, state in enumerate(("scheduled", "joined"), start=1):
+            event = CalendarEvent(
+                user_id=conn.user_id,
+                connection_id=conn.id,
+                source_event_id=f"placeholder-event-{round_}-{n}",
+                title=f"Placeholder meeting {n}",
+                starts_at=start + timedelta(hours=n),
+                ends_at=start + timedelta(hours=n + 1),
+                platform="google_meet",
+                meeting_url=f"https://meet.google.com/aaa-bbbb-cc{round_}{n}",
+                native_id=f"aaa-bbbb-cc{round_}{n}",
+                status="confirmed",
+            )
+            session.add(event)
+            session.flush()
+            session.add(
+                ScheduledJoin(
+                    user_id=conn.user_id,
+                    calendar_event_id=event.id,
+                    platform="google_meet",
+                    native_id=event.native_id,
+                    meeting_url=event.meeting_url,
+                    starts_at=event.starts_at,
+                    ends_at=event.ends_at,
+                    run_at=event.starts_at - timedelta(seconds=60),
+                    deadline_at=event.starts_at + timedelta(minutes=15),
+                    state=state,
+                )
+            )
+        for kind, key in (
+            ("calendar.not_recorded", f"cap-{round_}-1"),
+            ("usage.hours_low", f"cap-{round_}-2"),
+        ):
+            session.add(
+                Notification(user_id=conn.user_id, kind=kind, title="Placeholder", dedupe_key=key)
+            )
+        session.commit()
+
+
+def calendar_counts(engine) -> dict:
+    """How many calendar rows the user has, to show what a disconnect removed and kept."""
+    with Session(engine) as session:
+        kinds = session.scalars(select(Notification.kind).order_by(Notification.kind)).all()
+        return {
+            "calendar_events": len(session.scalars(select(CalendarEvent.id)).all()),
+            "scheduled_joins": len(session.scalars(select(ScheduledJoin.id)).all()),
+            "notification_kinds": list(kinds),
+        }
 
 
 def login(client: Recorder, name: str, email: str, password: str) -> None:
@@ -417,6 +485,84 @@ def run(app, base, engine, settings, google) -> None:
         "stored-row-after-different-account",
         "Unchanged: still the first account.",
         {"rows": row_summary(engine)},
+    )
+    disconnect_journeys(base, engine, google, user)
+
+
+def disconnect_journeys(base, engine, google, user) -> None:
+    """Disconnect (C4): the refusals, the deletion, a repeat, a Google outage, then connecting
+    again (a switch to another Google account goes through disconnect first)."""
+    Recorder(base, "visitor").call(
+        "disconnect-without-login",
+        "POST",
+        "/api/calendar/google/disconnect",
+        csrf=None,
+        note="No session cookie and no CSRF header.",
+    )
+    user.call(
+        "disconnect-without-csrf",
+        "POST",
+        "/api/calendar/google/disconnect",
+        csrf=None,
+        note="Signed in, but no X-CSRF-Token.",
+    )
+    # The earlier journeys left a working connection (the first Google account) in place.
+    seed_calendar_rows(engine)
+    note_file(
+        "rows-before-disconnect",
+        "The connection and the calendar data it owns (placeholders).",
+        {"rows": row_summary(engine), "calendar": calendar_counts(engine)},
+    )
+    revoked_before = len(google.revoked)
+    user.call(
+        "disconnect",
+        "POST",
+        "/api/calendar/google/disconnect",
+        note="Disconnect: no body. Revokes at Google, deletes events, every join and the "
+        "calendar notifications.",
+    )
+    note_file(
+        "rows-after-disconnect",
+        f"Status `disconnected`, no token, no Google identity; calendar rows gone; the unrelated "
+        f"notification stays. Google was asked to revoke {len(google.revoked) - revoked_before} "
+        f"token.",
+        {"rows": row_summary(engine), "calendar": calendar_counts(engine)},
+    )
+    user.call(
+        "disconnect-again",
+        "POST",
+        "/api/calendar/google/disconnect",
+        note="A repeat (double click, second tab): the same 200, nothing to revoke any more.",
+    )
+    # Switching accounts: disconnect first, then connect the other one.
+    consent_and_callback(
+        user,
+        google,
+        "connect-after-disconnect",
+        return_to="/settings/calendar",
+        email="other.person@example.test",
+        sub="g-other-2",
+        note="After a disconnect any Google account can be connected, here the other one that "
+        "was refused earlier.",
+    )
+    note_file(
+        "rows-after-connect-again", "The same row, connected again.", {"rows": row_summary(engine)}
+    )
+    # Google cannot be reached: the local deletion still happens.
+    seed_calendar_rows(engine, round_=2)
+    google.revoke_override = 503
+    user.call(
+        "disconnect-while-google-is-down",
+        "POST",
+        "/api/calendar/google/disconnect",
+        note="Google's revoke endpoint answers 503. Still 200: the local data is deleted (the "
+        "server logs a warning). The person can also revoke at myaccount.google.com/permissions.",
+    )
+    google.revoke_override = None
+    note_file(
+        "rows-after-disconnect-while-google-is-down",
+        "Deleted locally even though the revoke failed.",
+        {"rows": row_summary(engine), "calendar": calendar_counts(engine)},
     )
 
 

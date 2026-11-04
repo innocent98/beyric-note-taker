@@ -50,6 +50,10 @@ class FakeGoogle:
         self.codes: dict[str, dict] = {}
         self.token_requests: list[dict[str, str]] = []
         self.revoked: list[str] = []
+        self.revoke_requests: list[httpx.Request] = []
+        # What the revoke endpoint answers instead of the normal 200/400 (a status, or an
+        # exception to raise as if the network failed); None means behave normally.
+        self.revoke_override: int | Exception | None = None
         self.refresh_tokens: list[str] = []
         self._counter = 0
         self.oauth = GoogleOAuth(settings, transport=httpx.MockTransport(self._handle))
@@ -94,11 +98,27 @@ class FakeGoogle:
 
     # ---- Google's servers ----
 
+    def _revoke(self, request: httpx.Request, form: dict[str, str]) -> httpx.Response:
+        """The revoke endpoint. SYNTHETIC from Google's documented behaviour (200 for a live
+        token, 400 `invalid_token` for one already revoked or expired), not a live capture."""
+        self.revoke_requests.append(request)
+        if isinstance(self.revoke_override, Exception):
+            raise self.revoke_override
+        if self.revoke_override is not None:
+            return httpx.Response(self.revoke_override, json={"error": "backend_error"})
+        token = form["token"]
+        if token in self.revoked:
+            return httpx.Response(
+                400,
+                json={"error": "invalid_token", "error_description": "Token expired or revoked"},
+            )
+        self.revoked.append(token)
+        return httpx.Response(200, json={})
+
     def _handle(self, request: httpx.Request) -> httpx.Response:
         form = {k: v[0] for k, v in parse_qs(request.content.decode()).items()}
-        if str(request.url) == REVOKE_URL:
-            self.revoked.append(form["token"])
-            return httpx.Response(200, json={})
+        if request.url.host == "oauth2.googleapis.com" and request.url.path == "/revoke":
+            return self._revoke(request, form)
         assert str(request.url) == TOKEN_URL, request.url
         self.token_requests.append(form)
         if self.fail_token_endpoint:

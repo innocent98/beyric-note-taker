@@ -1,0 +1,21 @@
+{
+  "note": "After a disconnect any Google account can be connected, here the other one that was refused earlier.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar/google/callback?code=<code>&state=<state>",
+    "headers": {
+      "Cookie": "calendar_flow=<cookie>; device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 302,
+    "headers": {
+      "cache-control": "no-store",
+      "location": "/settings/calendar?calendar=connected",
+      "set-cookie": "calendar_flow=<cookie>; expires=Wed, 04 Nov 2026 08:45:55 GMT; Max-Age=0; Path=/api/calendar/google; SameSite=lax"
+    },
+    "body": ""
+  }
+}

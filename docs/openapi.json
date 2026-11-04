@@ -648,6 +648,19 @@
         "title": "DecisionOut",
         "type": "object"
       },
+      "DisconnectOut": {
+        "description": "Always `disconnected`: the call is safe to repeat, and also answers 200 when nothing was\nconnected.",
+        "properties": {
+          "status": {
+            "const": "disconnected",
+            "default": "disconnected",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "DisconnectOut",
+        "type": "object"
+      },
       "EmailIn": {
         "additionalProperties": false,
         "properties": {
@@ -2970,6 +2983,58 @@
           }
         },
         "summary": "Calendar Google Connect",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
+    "/api/calendar/google/disconnect": {
+      "post": {
+        "description": "Disconnect the caller's Google account (CSRF header needed, no body). Revokes the access at\nGoogle, then deletes the caller's calendar events, all their scheduled joins (every state) and\ncalendar notifications, and the stored token. Meetings already recorded, the hours used and\nthe settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),\nand it works while the calendar features are switched off. If Google cannot be reached the\nlocal deletion still happens (the person can also revoke at myaccount.google.com/permissions).\nAfterwards `connect` works again, for the same or another Google account.",
+        "operationId": "calendar_google_disconnect",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisconnectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Calendar Google Disconnect",
         "tags": [
           "calendar"
         ]

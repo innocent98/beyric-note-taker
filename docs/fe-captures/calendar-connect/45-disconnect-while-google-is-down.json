@@ -1,0 +1,23 @@
+{
+  "note": "Google's revoke endpoint answers 503. Still 200: the local data is deleted (the server logs a warning). The person can also revoke at myaccount.google.com/permissions.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/google/disconnect",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "disconnected"
+    }
+  }
+}

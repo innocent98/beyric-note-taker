@@ -25,12 +25,18 @@ is ever logged or put in a URL we build: results come back as a short code in th
 
 A reconnect updates the user's one Google row rather than adding another. A different Google
 account than before also drops the old account's events and the joins that had not started,
-because they belong to a calendar that is no longer connected. Setting `last_sync_at` to null asks
-the sync loop for a first sync.
+because they belong to a calendar that is no longer connected, and revokes the old refresh token
+at Google. Setting `last_sync_at` to null asks the sync loop for a first sync.
+
+`disconnect` is the user's own "Disconnect Google" (spec 7.9, 12.2). It revokes the refresh token
+at Google (best effort), runs the `ON_DISCONNECT` hooks, deletes the user's events, every
+scheduled join in every state and the calendar-kind notifications, and empties the connection row
+(status `disconnected`, no token, no Google identity). Meetings, usage and settings stay.
 """
 
 import logging
 import secrets
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
@@ -46,6 +52,7 @@ from app.models import (
     LIVE_JOIN_STATES,
     CalendarConnection,
     CalendarEvent,
+    Notification,
     OAuthFlow,
     ScheduledJoin,
     User,
@@ -68,6 +75,16 @@ MAX_DOMAIN_CHARS = 253
 FEATURE_SCOPES = {"calendar": CALENDAR_SCOPE, "meet": MEET_SCOPE}
 PURPOSES = {"calendar": "calendar", "meet": "meet_scope"}
 REQUIRED_SCOPE = {"calendar": CALENDAR_SCOPE, "meet_scope": MEET_SCOPE}
+
+# A notification whose `kind` starts with this belongs to the calendar and is deleted on
+# disconnect (spec 12.2). Features that notify about calendar events or joins must use it.
+CALENDAR_NOTIFICATION_PREFIX = "calendar."
+
+# Called by `disconnect` (and when a dead connection is replaced by another Google account) as
+# `hook(session, conn, google)`, with the connection still holding its fields, so a feature can
+# undo what it set up at Google (I3 deletes the Events subscription here). `google` may be None.
+# A hook that raises is logged by type only and never stops the deletion.
+ON_DISCONNECT: list[Callable[[Session, CalendarConnection, GoogleOAuth | None], None]] = []
 
 
 class ConnectUnavailable(Exception):
@@ -214,7 +231,7 @@ def finish_connect(
         return _failure("google_failed", back)
     if REQUIRED_SCOPE[flow.purpose] not in grant.scopes:
         return _failure("scope_missing", back)
-    problem = _store(session, user, grant, flow.purpose, settings, now)
+    problem = _store(session, user, grant, flow.purpose, settings, now, google)
     if problem is not None:
         session.rollback()
         return _failure(problem, back)
@@ -229,6 +246,7 @@ def _store(
     purpose: str,
     settings: Settings,
     now: datetime,
+    google: GoogleOAuth,
 ) -> str | None:
     """Write the connection. None on success, else the error code (nothing is committed then)."""
     identity = grant.identity
@@ -285,7 +303,7 @@ def _store(
         conn = CalendarConnection(user_id=user.id, provider="google")
         session.add(conn)
     elif not same_account and conn.google_sub is not None:
-        _drop_old_account(session, conn)
+        _drop_old_account(session, conn, google)
     conn.google_account_email = email
     conn.google_sub = identity.sub
     conn.google_hosted_domain = domain
@@ -311,14 +329,55 @@ def _commit(session: Session) -> str | None:
     return None
 
 
-def _drop_old_account(session: Session, conn: CalendarConnection) -> None:
-    """A dead connection is being replaced by a different Google account: the old account's
-    events go, and so do the joins that had not started (a join already live keeps going), and
-    the Meet subscription of the old account is forgotten. The old refresh token is overwritten
-    unrevoked: it belonged to a connection that was already dead (revoking waits for C4)."""
+def _release_at_google(
+    session: Session, conn: CalendarConnection, google: GoogleOAuth | None
+) -> None:
+    """Undo, at Google, what the connection set up: revoke its refresh token and run the
+    `ON_DISCONNECT` hooks. Best effort: every failure is logged without detail (the token, or a
+    hook's message, could be in it) and the caller carries on, because the local deletion is what
+    the user asked for and what the privacy policy promises."""
+    if conn.refresh_token_enc is not None:
+        revoked = False
+        if google is not None and conn.key_version is not None:
+            try:
+                token = vault.decrypt(
+                    conn.refresh_token_enc,
+                    conn.key_version,
+                    purpose="refresh_token",
+                    owner=conn.user_id,
+                )
+                google.revoke(token)
+                revoked = True
+            except vault.VaultError:
+                pass
+            except GoogleError:
+                pass  # the client already logged the HTTP status or the error type
+        if not revoked:
+            logger.warning("google token for user %s was not revoked", conn.user_id)
+    for hook in list(ON_DISCONNECT):
+        try:
+            hook(session, conn, google)
+        except Exception as exc:
+            logger.warning(
+                "disconnect hook failed for user %s (%s)", conn.user_id, type(exc).__name__
+            )
+
+
+def _forget_meet_subscription(conn: CalendarConnection) -> None:
     conn.meet_subscription_name = None
     conn.meet_subscription_expires_at = None
     conn.meet_subscription_state = "none"
+
+
+def _drop_old_account(
+    session: Session, conn: CalendarConnection, google: GoogleOAuth | None
+) -> None:
+    """A dead connection is being replaced by a different Google account: the old refresh token
+    is revoked (it may still be alive at Google even though the connection died), the old
+    account's events go, and so do the joins that had not started (a join already live keeps
+    going), and the Meet subscription of the old account is forgotten."""
+    _release_at_google(session, conn, google)
+    _forget_meet_subscription(conn)
     session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
     session.execute(
         delete(ScheduledJoin).where(
@@ -327,3 +386,51 @@ def _drop_old_account(session: Session, conn: CalendarConnection) -> None:
             ScheduledJoin.state.not_in(LIVE_JOIN_STATES),
         )
     )
+
+
+# ---- disconnecting ----
+
+
+def disconnect(session: Session, user: User, google: GoogleOAuth | None) -> None:
+    """The user's own "Disconnect Google". Commits. Idempotent: with no connection, or one that
+    is already disconnected, it only repeats the deletions (nothing is created).
+
+    Order: revoke the token at Google and run the hooks first (best effort, inside the same
+    transaction as the deletions, so a crash cannot leave the token live at Google with its
+    local copy gone), then delete the user's events, every scheduled join in every state and the
+    calendar-kind notifications, then empty the row. A running meeting is a `meetings` row and is
+    never touched. Every statement is scoped to `user`: nobody else's rows are reachable.
+    `google` is None when no Google client is configured; the local deletion still happens."""
+    conn = session.scalars(
+        select(CalendarConnection)
+        .where(CalendarConnection.user_id == user.id, CalendarConnection.provider == "google")
+        .with_for_update()
+    ).first()
+    if conn is not None:
+        _release_at_google(session, conn, google)
+    session.execute(delete(CalendarEvent).where(CalendarEvent.user_id == user.id))
+    session.execute(delete(ScheduledJoin).where(ScheduledJoin.user_id == user.id))
+    session.execute(
+        delete(Notification).where(
+            Notification.user_id == user.id,
+            Notification.kind.startswith(CALENDAR_NOTIFICATION_PREFIX, autoescape=True),
+        )
+    )
+    if conn is not None:
+        conn.status = "disconnected"
+        conn.needs_reconnect_reason = None
+        conn.refresh_token_enc = None
+        conn.key_version = None
+        conn.granted_scopes = None
+        conn.google_account_email = None
+        conn.google_sub = None
+        conn.google_hosted_domain = None
+        conn.sync_token = None
+        conn.last_sync_at = None
+        conn.last_error = None
+        conn.last_error_at = None
+        conn.expected_expiry_at = None
+        _forget_meet_subscription(conn)
+    session.commit()
+    if conn is not None:
+        logger.info("calendar disconnected for user %s", user.id)

@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
+REVOKE_URL = "https://oauth2.googleapis.com/revoke"  # fixed: no part of it comes from a request
 ISSUERS = ("https://accounts.google.com", "accounts.google.com")
 SCOPES = "openid email profile"
 CALLBACK_PATH = "/api/auth/google/callback"
@@ -215,6 +216,25 @@ class GoogleOAuth:
             scopes=frozenset(scope.split()),
             refresh_token=Secret(refresh) if refresh else None,
         )
+
+    def revoke(self, token: Secret) -> None:
+        """Tell Google to stop honouring a refresh token (and the access tokens made from it), or
+        raise `GoogleError`. A token Google already considers dead (HTTP 400 `invalid_token`:
+        revoked at myaccount.google.com, expired) counts as done. The URL is fixed; the token goes
+        in the form body only, never in a URL, a log line or an error."""
+        try:
+            with httpx.Client(timeout=TIMEOUT_SECONDS, transport=self._transport) as client:
+                response = client.post(REVOKE_URL, data={"token": token.reveal()})
+            body = response.json() if response.status_code == 400 else None
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("google token revoke failed (%s)", type(exc).__name__)
+            raise GoogleError from None
+        if response.status_code == 200:
+            return
+        if isinstance(body, dict) and body.get("error") == "invalid_token":
+            return
+        logger.warning("google token revoke refused (HTTP %s)", response.status_code)
+        raise GoogleError
 
     def check_id_token(self, id_token: str, *, nonce: str, now: datetime) -> Identity:
         claims = _claims(id_token)

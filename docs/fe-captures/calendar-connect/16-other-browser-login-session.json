@@ -19,7 +19,8 @@
       "csrf_token": "<csrf-C>",
       "user": null,
       "usage": null,
-      "unread_notifications": null
+      "unread_notifications": null,
+      "badges": null
     }
   }
 }
