@@ -893,6 +893,38 @@
         "title": "FieldError",
         "type": "object"
       },
+      "LanguagePreferencesIn": {
+        "additionalProperties": false,
+        "properties": {
+          "default_language": {
+            "title": "Default Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "default_language"
+        ],
+        "title": "LanguagePreferencesIn",
+        "type": "object"
+      },
+      "LanguagePreferencesOut": {
+        "properties": {
+          "default_language": {
+            "enum": [
+              "en",
+              "fr",
+              "es"
+            ],
+            "title": "Default Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "default_language"
+        ],
+        "title": "LanguagePreferencesOut",
+        "type": "object"
+      },
       "Login": {
         "additionalProperties": false,
         "properties": {
@@ -1125,6 +1157,13 @@
             ],
             "title": "Transcript"
           },
+          "translations": {
+            "items": {
+              "$ref": "#/components/schemas/TranslationBrief"
+            },
+            "title": "Translations",
+            "type": "array"
+          },
           "worker_stale": {
             "title": "Worker Stale",
             "type": "boolean"
@@ -1158,7 +1197,8 @@
           "extraction_status",
           "notes",
           "notes_html",
-          "transcript"
+          "transcript",
+          "translations"
         ],
         "title": "MeetingDetail",
         "type": "object"
@@ -1958,6 +1998,151 @@
           "term"
         ],
         "title": "TermOut",
+        "type": "object"
+      },
+      "TranslationBrief": {
+        "description": "What the meeting page needs to know about a translation without fetching it.",
+        "properties": {
+          "language": {
+            "enum": [
+              "fr",
+              "es"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "translating",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "language",
+          "status",
+          "stale"
+        ],
+        "title": "TranslationBrief",
+        "type": "object"
+      },
+      "TranslationIn": {
+        "additionalProperties": false,
+        "properties": {
+          "language": {
+            "title": "Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "language"
+        ],
+        "title": "TranslationIn",
+        "type": "object"
+      },
+      "TranslationOut": {
+        "properties": {
+          "failure_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Code"
+          },
+          "failure_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failure Message"
+          },
+          "language": {
+            "enum": [
+              "fr",
+              "es"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "notes_html": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes Html"
+          },
+          "stale": {
+            "title": "Stale",
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "translating",
+              "ready",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "language",
+          "status",
+          "stale",
+          "notes",
+          "notes_html",
+          "transcript",
+          "failure_code",
+          "failure_message",
+          "updated_at"
+        ],
+        "title": "TranslationOut",
         "type": "object"
       },
       "UnreadCount": {
@@ -4293,7 +4478,7 @@
     },
     "/api/meetings/{meeting_id}/export": {
       "get": {
-        "description": "The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.\n\nBuilt when asked and never stored. One file is built at a time per server process: a second\nrequest meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's\ntitle, cleaned, in `Content-Disposition`.",
+        "description": "The notes (and, with `transcript=true`, the full transcript) as a PDF or Word file.\n\n`language` `fr` or `es` builds it from the finished, current translation (409\n`translation_missing` when there is none: translate first); `en`, the default, is the\noriginal.\n\nBuilt when asked and never stored. One file is built at a time per server process: a second\nrequest meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's\ntitle, cleaned, in `Content-Disposition`.",
         "operationId": "export_meeting",
         "parameters": [
           {
@@ -4327,6 +4512,21 @@
               "default": false,
               "title": "Transcript",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "language",
+            "required": false,
+            "schema": {
+              "default": "en",
+              "enum": [
+                "en",
+                "fr",
+                "es"
+              ],
+              "title": "Language",
+              "type": "string"
             }
           }
         ],
@@ -4386,7 +4586,7 @@
                 }
               }
             },
-            "description": "`not_ready`: the notes are not written yet"
+            "description": "`not_ready`: the notes are not written yet; `translation_missing`: no finished, current translation in that language"
           },
           "422": {
             "content": {
@@ -4638,6 +4838,267 @@
         "summary": "Retry Meeting",
         "tags": [
           "meetings"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/translations": {
+      "post": {
+        "description": "Translate the notes and transcript of a ready meeting into French or Spanish. 200 with the\ntranslation when one is already cached for the current text; otherwise 202 with\n`status: \"translating\"` and the work is queued. A failed or stale translation asked for again\nis queued again. Asking again while it is being made changes nothing.",
+        "operationId": "request_translation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslationIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationOut"
+                }
+              }
+            },
+            "description": "A finished translation of the current text, from the cache."
+          },
+          "202": {
+            "description": "Queued, or already being made: ask again every 2 seconds."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such meeting (or not the caller's)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_ready`: the notes are not written yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`language_unsupported`: only French or Spanish"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`translation_limit`: 20 translations a day"
+          }
+        },
+        "summary": "Request Translation",
+        "tags": [
+          "translations"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/translations/{language}": {
+      "delete": {
+        "description": "Throw the translation away so it can be made again (also cancels one still queued). It does\nnot give back one of the day's 20.",
+        "operationId": "delete_translation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "language",
+            "required": true,
+            "schema": {
+              "title": "Language",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Delete Translation",
+        "tags": [
+          "translations"
+        ]
+      },
+      "get": {
+        "description": "The translation in one language: its `status` (poll every 2 seconds while `translating`),\nand when `ready` the `notes`, `notes_html` and `transcript`. 404 `no_translation` when none\nwas asked for, or for a language that is not offered.",
+        "operationId": "get_translation",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "language",
+            "required": true,
+            "schema": {
+              "title": "Language",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Get Translation",
+        "tags": [
+          "translations"
         ]
       }
     },
@@ -5642,6 +6103,118 @@
           }
         },
         "summary": "Write Email Preferences",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/language": {
+      "get": {
+        "description": "The language meetings open in when a translation exists: `en` (the original, the default,\nalso for an account that has no settings row yet), `fr` or `es`.",
+        "operationId": "read_language_preferences",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LanguagePreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Language Preferences",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Set the default notes language. Nothing is translated by this: a meeting opens in it only\nwhen that translation already exists, otherwise it opens in the original with an offer.",
+        "operationId": "write_language_preferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LanguagePreferencesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LanguagePreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`language_unsupported`"
+          }
+        },
+        "summary": "Write Language Preferences",
         "tags": [
           "settings"
         ]

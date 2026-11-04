@@ -171,6 +171,20 @@ class MeetingSummary(BaseModel):
     created_at: UtcDatetime
 
 
+TranslationLanguage = Literal["fr", "es"]
+TranslationStatus = Literal["translating", "ready", "failed"]
+
+
+class TranslationBrief(BaseModel):
+    """What the meeting page needs to know about a translation without fetching it."""
+
+    language: TranslationLanguage
+    status: TranslationStatus
+    # True for a finished translation of text that has since changed (the notes were rewritten):
+    # offer "Translate again".
+    stale: bool
+
+
 class MeetingDetail(MeetingSummary):
     # Set (never null) when status is "failed", null otherwise.
     failure_reason: str | None
@@ -208,6 +222,8 @@ class MeetingDetail(MeetingSummary):
     notes_html: str | None
     # The speaker-labelled transcript when there is one, else the plain one, else null.
     transcript: str | None
+    # The translations this meeting has (any state), at most one per language; empty unless ready.
+    translations: list[TranslationBrief]
 
 
 class MeetingList(BaseModel):
@@ -457,3 +473,39 @@ class ReviewTermIn(Body):
 class ReviewTermOut(BaseModel):
     item: ReviewItemOut
     term: TermOut
+
+
+# ---- translation and settings ----
+
+
+class TranslationIn(Body):
+    # `fr` or `es`. Anything else is 422 `language_unsupported` (English is the original).
+    language: str
+
+
+class TranslationOut(BaseModel):
+    language: TranslationLanguage
+    status: TranslationStatus
+    stale: bool
+    # Only when status is "ready", else null. `notes` is Markdown whose headings come from a fixed
+    # dictionary; `notes_html` is it rendered with links and raw HTML off (show it as HTML, copy
+    # `notes`). `transcript` has the original's lines and `[Name]:` labels, as plain text to show
+    # escaped; it is null when the meeting has no transcript.
+    notes: str | None
+    notes_html: str | None
+    transcript: str | None
+    # Only when status is "failed": a short code and a plain sentence to show.
+    failure_code: str | None
+    failure_message: str | None
+    updated_at: UtcDatetime
+
+
+class LanguagePreferencesOut(BaseModel):
+    # `en` means the original (no translation); `fr` or `es` opens meetings in that language
+    # when a translation exists.
+    default_language: Literal["en", "fr", "es"]
+
+
+class LanguagePreferencesIn(Body):
+    # `en`, `fr` or `es`; anything else is 422 `language_unsupported`.
+    default_language: str

@@ -95,7 +95,7 @@ describe("the Download menu", () => {
     show(meeting("47-meeting-detail-ready.json"));
     await open();
     await userEvent.click(screen.getByRole("button", { name: /PDF Best for/ }));
-    expect(mocks.export).toHaveBeenCalledWith(READY_ID, "pdf", false);
+    expect(mocks.export).toHaveBeenCalledWith(READY_ID, "pdf", false, "en");
     expect(statusText()).toContain("Preparing PDF...");
     expect(screen.getAllByText(/Preparing PDF/).length).toBeGreaterThan(0); // the button says so too
     finish(FILE);
@@ -118,7 +118,7 @@ describe("the Download menu", () => {
     await userEvent.click(
       screen.getByRole("button", { name: /Word document/ }),
     );
-    expect(mocks.export).toHaveBeenCalledWith(READY_ID, "docx", true);
+    expect(mocks.export).toHaveBeenCalledWith(READY_ID, "docx", true, "en");
   });
 
   it("names the file itself when the server sent no name", async () => {

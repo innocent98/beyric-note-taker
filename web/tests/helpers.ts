@@ -29,7 +29,23 @@ export function rel(path: string): string {
 
 // A response body captured from the running API (docs/fe-captures/owner-app/<file>).
 export function captured<T>(file: string): T {
-  return JSON.parse(read(join(REPO, "docs/fe-captures/owner-app", file))).response.body as T;
+  const body = JSON.parse(read(join(REPO, "docs/fe-captures/owner-app", file))).response.body;
+  // Meeting captures made before W7 lack `translations`, which the API now always sends.
+  if (body && typeof body === "object" && "notes_html" in body && !("translations" in body)) body.translations = [];
+  return body as T;
+}
+
+// A capture from the running API for the translation routes and the default language
+// (docs/fe-captures/translate/<file>, `python scripts/capture_translate_api.py`).
+type TranslateCapture = {
+  request: { body: unknown };
+  response: { status: number; body: { error: { code: string; message: string } } & Record<string, unknown> };
+};
+export function translateCapture(file: string): TranslateCapture {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/translate", file)));
+}
+export function translateBody<T>(file: string): T {
+  return translateCapture(file).response.body as T;
 }
 
 type AccountCapture = { request: { body: unknown }; response: { status: number; body: unknown } };

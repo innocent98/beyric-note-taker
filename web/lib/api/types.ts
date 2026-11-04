@@ -30,6 +30,12 @@ export type RetryBlock = NonNullable<Meeting["retry_block"]>;
 
 export type FieldError = Schemas["FieldError"];
 export type EmailPreferences = Schemas["EmailPreferencesOut"];
+export type LanguagePreferences = Schemas["LanguagePreferencesOut"];
+export type Translation = Schemas["TranslationOut"];
+export type TranslationBrief = Schemas["TranslationBrief"];
+// `en` is the original; only `fr` and `es` are translated into.
+export type NoteLanguage = LanguagePreferences["default_language"];
+export type TranslationLanguage = Translation["language"];
 export type Notice = Schemas["NotificationOut"];
 export type NoticeList = Schemas["NotificationList"];
 

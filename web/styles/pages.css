@@ -46,6 +46,7 @@
 .dl-rule { height: 1px; margin: 6px 4px; border: 0; background: var(--border-soft); }
 .dl-check { display: flex; align-items: center; gap: 10px; padding: 8px 10px; color: var(--ink-2); font-size: var(--text-sm); cursor: pointer; }
 .dl-check input { width: 16px; height: 16px; accent-color: var(--teal); }
+.dl-lang { margin: 0; padding: 2px 10px 8px 38px; color: var(--text-3); font-size: var(--text-xs); }
 .detail-title { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; }
 .detail-grid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px; }
 .detail-main { flex: 1 1 560px; min-width: 0; }
@@ -54,6 +55,29 @@
 .panel-bar .tabs { gap: var(--space-5); border-bottom: 0; }
 .panel-bar .tab { padding: 16px 0 14px; }
 .panel-bar .btn { flex: none; }
+/* Language and translation (components/app/translation.tsx): the toolbar select, the bars under it */
+.panel-tools { display: flex; align-items: center; gap: var(--space-2); }
+.lang-select { position: relative; display: flex; align-items: center; }
+.lang-globe { position: absolute; left: 10px; color: var(--ink-3); pointer-events: none; }
+.select.lang-field {
+  width: auto; height: 32px; min-height: 0; padding: 0 30px; border-radius: var(--radius-sm); font-size: var(--text-sm);
+  font-weight: 500; color: var(--ink-2); background-position: right 9px center; cursor: pointer;
+}
+.tr-working { padding: 10px 20px; border-bottom: 1px solid var(--border-soft); background: var(--surface-soft); color: var(--text-2); font-size: var(--text-sm); }
+.tr-done, .tr-note {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 10px 20px;
+  border-bottom: 1px solid var(--teal-line); background: var(--teal-wash-2); color: var(--teal-deep); font-size: var(--text-sm);
+}
+.tr-note { border-bottom-color: var(--border-soft); background: var(--surface-soft); color: var(--text-2); }
+.tr-failed { border-bottom-color: var(--danger-line); background: var(--danger-tint); color: var(--danger-text); }
+.tr-link { border: 0; background: transparent; padding: 0; color: var(--teal); font: inherit; font-size: var(--text-sm); font-weight: 550; text-decoration: underline; cursor: pointer; }
+.tr-failed .tr-link { color: inherit; }
+@media (max-width: 640px) { .panel-bar { flex-wrap: wrap; padding-bottom: var(--space-2); } .tr-working, .tr-done, .tr-note { padding-inline: var(--space-4); } }
+/* The designer's toast (components/ui/toast.tsx) */
+.toast-region { position: fixed; left: 50%; bottom: 28px; z-index: 60; transform: translateX(-50%); pointer-events: none; }
+.toast-inline { width: fit-content; }
+.toast-tick { flex: none; stroke: var(--teal-mint); }
+.toast { display: flex; align-items: center; gap: var(--space-2); padding: 10px 16px; border-radius: 9px; background: var(--text); color: var(--on-night); font-size: var(--text-sm); font-weight: 500; box-shadow: var(--shadow-snackbar); }
 .notes-body { max-width: 760px; padding: 24px 28px 28px; color: var(--ink-2); line-height: 1.65; }
 .notes-body h2 { margin: 0 0 var(--space-2); font-size: var(--text-md); font-weight: 600; color: var(--text); }
 .notes-body p { margin: 0; color: var(--ink-2); }

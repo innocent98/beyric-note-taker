@@ -1,0 +1,27 @@
+{
+  "note": "5 translations were counted by the earlier calls and 15 more were queued just before this one: the 21st of the day.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/20/translations",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "language": "fr"
+    }
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "translation_limit",
+        "message": "You have used today's 20 translations. Try again tomorrow."
+      }
+    }
+  }
+}

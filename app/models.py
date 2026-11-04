@@ -56,6 +56,9 @@ AI_RUN_STATUSES = ("ok", "failed")
 # `failed` gave up after the retries, `skipped` means only the decisions were read from the notes
 # and the model was not asked (an old meeting, per the backfill rules). Null = notes not written.
 EXTRACTION_STATUSES = ("pending", "running", "done", "failed", "skipped")
+# English is the original, so only these two are translated into (spec section 11, D8).
+NOTE_LANGUAGES = ("en", "fr", "es")
+TRANSLATION_STATUSES = ("translating", "ready", "failed")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -248,6 +251,9 @@ class UserSettings(Base):
             + _in("instant_meet_mode_override", INSTANT_MEET_MODES),
             name="ck_user_settings_instant_mode",
         ),
+        CheckConstraint(
+            _in("default_language", NOTE_LANGUAGES), name="ck_user_settings_default_language"
+        ),
     )
 
     user_id: Mapped[int] = mapped_column(
@@ -262,6 +268,8 @@ class UserSettings(Base):
     )
     instant_meet_mode_override: Mapped[str | None] = mapped_column(String(16))
     notify_email: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    # The language notes and transcripts open in when a translation exists; `en` is the original.
+    default_language: Mapped[str] = mapped_column(String(2), default="en", server_default="en")
 
 
 class CalendarConnection(Base):
@@ -580,10 +588,16 @@ class AiRun(Base):
         CheckConstraint(_in("kind", AI_RUN_KINDS), name="ck_ai_runs_kind"),
         CheckConstraint(_in("status", AI_RUN_STATUSES), name="ck_ai_runs_status"),
         Index("ix_ai_runs_meeting_id", "meeting_id"),
+        Index("ix_ai_runs_user_id_created_at", "user_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="SET NULL"))
+    # Whose call it was, for the per-account daily limit on translations: the meeting may be
+    # deleted later (`meeting_id` is then nulled), the account's count must not drop with it.
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
     kind: Mapped[str] = mapped_column(String(16))
     model: Mapped[str] = mapped_column(String(100))
     prompt_version: Mapped[str | None] = mapped_column(String(32))
@@ -592,6 +606,36 @@ class AiRun(Base):
     status: Mapped[str] = mapped_column(String(16), default="ok", server_default="ok")
     error: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MeetingTranslation(Base):
+    """The notes and transcript of one meeting in one other language, as a separate view: the
+    original is never changed. `source_hash` is the hash of the notes and transcript that were
+    translated, so a rewrite of the notes shows up as stale. `failure_code` is a short code, never
+    meeting words. `started_at` and `attempts` are the worker's claim (see `app/translation.py`)."""
+
+    __tablename__ = "meeting_translations"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", "language", name="uq_meeting_translations_meeting_lang"),
+        CheckConstraint(_in("status", TRANSLATION_STATUSES), name="ck_meeting_translations_status"),
+        CheckConstraint(_in("language", NOTE_LANGUAGES), name="ck_meeting_translations_language"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
+    language: Mapped[str] = mapped_column(String(2))
+    status: Mapped[str] = mapped_column(
+        String(16), default="translating", server_default="translating"
+    )
+    notes_md: Mapped[str | None] = mapped_column(Text)
+    transcript: Mapped[str | None] = mapped_column(Text)
+    source_hash: Mapped[str] = mapped_column(String(64))
+    model: Mapped[str | None] = mapped_column(String(100))
+    failure_code: Mapped[str | None] = mapped_column(String(32))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AppState(Base):

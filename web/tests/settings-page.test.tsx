@@ -36,7 +36,10 @@ vi.mock("@/lib/api/server", () => ({
         },
       },
       templates: { list: async () => (state.templates ? state.templates() : []) },
-      settings: { email: { get: async () => ({ notify_email: true }) } },
+      settings: {
+        email: { get: async () => ({ notify_email: true }) },
+        language: { get: async () => ({ default_language: "en" }) },
+      },
     };
   },
   getReviewOpen: async () => 2,
@@ -129,6 +132,21 @@ describe("page", () => {
     expect(html).toContain("Join automatically");
     expect(html).not.toContain("Template for calendar meetings");
     state.templates = null;
+  });
+
+  it("draws the designer's other sections below Calendar, in order, whatever the calendar's state", async () => {
+    const off = async () => {
+      throw new ApiError(404, "calendar_unavailable", "Google Calendar is not available.");
+    };
+    for (const answer of [async () => connected, off]) {
+      state.answer = answer;
+      const html = await render();
+      const order = ["Calendar", "Sprints and reminders", "Tasks", "Default notes language"].map((title) =>
+        html.indexOf(`>${title}</h2>`),
+      );
+      expect(order.every((at) => at > -1)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+    }
   });
 
   it("shows the message for the callback's redirect", async () => {

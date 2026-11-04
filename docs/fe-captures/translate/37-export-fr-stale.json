@@ -1,0 +1,24 @@
+{
+  "note": "A stale translation is not downloaded.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export?format=docx&language=fr",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "translation_missing",
+        "message": "The French translation is out of date. Translate again first."
+      }
+    }
+  }
+}

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/shell";
 import { EmailSettingsSection } from "@/components/app/email-settings-section";
 import { SettingsCalendar } from "@/components/app/settings-calendar";
+import { SettingsLanguage } from "@/components/app/settings-language";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 import { PageHead } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
@@ -39,13 +40,14 @@ export default async function SettingsPage({
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect("/login");
   }
-  const email = await load(api.settings.email.get());
+  const [email, language] = await Promise.all([load(api.settings.email.get()), load(api.settings.language.get())]);
   return (
     <AppShell current="settings" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()}>
       <div className="stack-md measure">
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
         <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} templates={templates} />
         <SettingsPlannedSections />
+        <SettingsLanguage initial={language.default_language} />
         <EmailSettingsSection email={email} />
       </div>
     </AppShell>

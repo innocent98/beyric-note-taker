@@ -10,8 +10,14 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import auth
-from app.api_schemas import EmailPreferencesIn, EmailPreferencesOut
+from app import auth, services, translation
+from app.api_schemas import (
+    EmailPreferencesIn,
+    EmailPreferencesOut,
+    ErrorResponse,
+    LanguagePreferencesIn,
+    LanguagePreferencesOut,
+)
 from app.db import get_session
 from app.models import User, UserSettings
 
@@ -44,3 +50,39 @@ def write_email_preferences(
     )
     session.commit()
     return EmailPreferencesOut(notify_email=body.notify_email)
+
+
+@router.get("/language")
+def read_language_preferences(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> LanguagePreferencesOut:
+    """The language meetings open in when a translation exists: `en` (the original, the default,
+    also for an account that has no settings row yet), `fr` or `es`."""
+    value = session.scalar(
+        select(UserSettings.default_language).where(UserSettings.user_id == user.id)
+    )
+    return LanguagePreferencesOut(default_language=value or "en")
+
+
+@router.put(
+    "/language",
+    responses={422: {"model": ErrorResponse, "description": "`language_unsupported`"}},
+)
+def write_language_preferences(
+    body: LanguagePreferencesIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> LanguagePreferencesOut:
+    """Set the default notes language. Nothing is translated by this: a meeting opens in it only
+    when that translation already exists, otherwise it opens in the original with an offer."""
+    if body.default_language not in translation.LANGUAGES:
+        raise services.Refused(422, "language_unsupported", translation.unsupported_message())
+    session.execute(
+        insert(UserSettings)
+        .values(user_id=user.id, default_language=body.default_language)
+        .on_conflict_do_update(
+            index_elements=["user_id"], set_={"default_language": body.default_language}
+        )
+    )
+    session.commit()
+    return LanguagePreferencesOut(default_language=body.default_language)

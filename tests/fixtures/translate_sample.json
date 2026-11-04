@@ -1,0 +1,143 @@
+{
+  "note": "The designer's own sample meeting (Beyric Note Taker.dc.html, EN, TR.fr and TR.es): the notes and transcript as the app stores them, and the designer's French and Spanish for each sentence. Used only to fake the model in docs/fe-captures/translate/ and the parity screenshots.",
+  "original": {
+    "notes": "## Summary\nThe meeting introduced Beyric Note Taker, an app being developed for internal use. Adebayo described problems with inaccurate transcripts from another note-taking app and said he wanted to test how well the new app captures this meeting. Automation and the app's effectiveness remain to be explored.\n\n## Key points\n- Adebayo said a transcript from a September 12 meeting was inaccurate and did not provide a useful summary.\n- He has previously used another note taker that joined and recorded meetings, but said he had not used it extensively.\n- Beyric Note Taker is being developed for internal use. Adebayo said it may cost money to run.\n- The note taker was present in this meeting so Adebayo could see how it performed.\n- Grace said the network was affecting Adebayo's speech and asked whether he could hear her.\n\n## Decisions\n- Beyric Note Taker is intended for internal use.\n- The app would be tested during this meeting.\n\n## Action items\nNone noted\n\n## Open questions\n- How can the app be automated?\n- How well will it capture and summarize meetings?\n- Could Adebayo hear Grace after she raised the network issue?\n\n## Please check\n- Grace's phrase \"Network is obstructing your speech\" may have been misheard or transcribed oddly.\n",
+    "transcript": "[Adebayo]: So, I'm just going to introduce the app to you.\n[Adebayo]: It is a note taker application, being developed by us, Beyric. So I named it Beyric Note Taker, right?\n[Adebayo]: Now, the problem that occurred yesterday. I had a meeting on September 12th with one of my colleagues, and the meeting was very long, which I had this other note taker on my system that recorded for me.\n[Adebayo]: So hoping that going back to the meeting transcript yesterday, I was going to be able to capture what was recorded.\n[Adebayo]: But then on getting there, I thought that the transcripts, there were a lot of inaccuracies. Like, it doesn't even relate to what we were discussing.\n[Adebayo]: What we discussed then were feature updates, corrections, and all of that, which I cannot remember everything at the moment.\n[Adebayo]: Have you been using the apps before?\n[Adebayo]: Yes, I've been using the note taker before, but I've not really used it much. I just plugged it into my system.\n[Adebayo]: When I first started using it, it was working a bit. I could get some summary of the meetings and all of that. But the one I wanted yesterday was a total flop. There was no proper summary.\n[Adebayo]: And they were charging much. This one I'm building now is also going to be costing us money. But I just want to see how it's going to go first.\n[Adebayo]: It's going to be like internal stuff.\n[Ojebola Grace]: I said the effectiveness.\n[Adebayo]: Yes, yes, it's going to be for internal.\n[Ojebola Grace]: Okay.\n[Adebayo]: But I'm still looking at how it can be automated, do you understand? So that was the purpose, actually.\n[Adebayo]: And the note taker is here in this meeting now, so listen to our conversation. I want to see how far it can take us.\n[Ojebola Grace]: Yes.\n[Adebayo]: At least for this meeting now, I'm going to be spending a few dollars. So at least let's see.\n[Ojebola Grace]: Okay. I think the network is...\n[Ojebola Grace]: Network is obstructing your speech. Can you hear me?"
+  },
+  "fr": {
+    "notes": "## Résumé\nLa réunion a présenté Beyric Note Taker, une application développée pour un usage interne. Adebayo a décrit des problèmes de transcriptions inexactes avec une autre application de prise de notes et a voulu tester la qualité de capture de la nouvelle application lors de cette réunion. L'automatisation et l'efficacité de l'application restent à explorer.\n\n## Points clés\n- Adebayo a indiqué que la transcription d'une réunion du 12 septembre était inexacte et ne fournissait pas de résumé utile.\n- Il a déjà utilisé un autre outil de prise de notes qui rejoignait et enregistrait les réunions, mais il ne l'a pas beaucoup utilisé.\n- Beyric Note Taker est développé pour un usage interne. Adebayo a précisé que son fonctionnement pourrait avoir un coût.\n- L'outil était présent à cette réunion afin qu'Adebayo puisse évaluer ses performances.\n- Grace a signalé que le réseau perturbait la voix d'Adebayo et lui a demandé s'il l'entendait.\n\n## Décisions\n- Beyric Note Taker est destiné à un usage interne.\n- L'application serait testée pendant cette réunion.\n\n## Actions à mener\nNone noted\n\n## Questions ouvertes\n- Comment automatiser l'application ?\n- Dans quelle mesure capturera-t-elle et résumera-t-elle les réunions ?\n- Adebayo a-t-il entendu Grace après qu'elle a signalé le problème de réseau ?\n\n## À vérifier\n- La phrase de Grace « Le réseau gêne ta voix » a peut-être été mal entendue ou mal transcrite.\n",
+    "transcript": "[Adebayo]: Alors, je vais juste vous présenter l'application.\n[Adebayo]: C'est une application de prise de notes, développée par nous, Beyric. Je l'ai donc appelée Beyric Note Taker, d'accord ?\n[Adebayo]: Maintenant, le problème d'hier. J'ai eu une réunion le 12 septembre avec un de mes collègues, une réunion très longue, et j'avais cet autre outil de prise de notes qui l'a enregistrée pour moi.\n[Adebayo]: J'espérais donc, en revenant à la transcription hier, retrouver ce qui avait été enregistré.\n[Adebayo]: Mais en y arrivant, j'ai trouvé beaucoup d'inexactitudes dans les transcriptions. Ça n'avait même aucun rapport avec ce dont on parlait.\n[Adebayo]: On avait parlé de mises à jour de fonctionnalités, de corrections et de tout ça, dont je ne me souviens pas entièrement pour l'instant.\n[Adebayo]: Est-ce que tu as déjà utilisé ces applications ?\n[Adebayo]: Oui, j'ai déjà utilisé l'outil de prise de notes, mais pas vraiment beaucoup. Je l'ai juste installé sur mon système.\n[Adebayo]: Quand j'ai commencé à l'utiliser, ça marchait un peu. J'obtenais un résumé des réunions et tout ça. Mais celle que je voulais hier, c'était un échec total. Il n'y avait pas de vrai résumé.\n[Adebayo]: Et ils facturaient cher. Celle que je construis maintenant va aussi nous coûter de l'argent. Mais je veux d'abord voir comment ça va se passer.\n[Adebayo]: Ce sera pour un usage interne.\n[Ojebola Grace]: J'ai dit l'efficacité.\n[Adebayo]: Oui, oui, ce sera pour l'interne.\n[Ojebola Grace]: D'accord.\n[Adebayo]: Mais je cherche encore comment l'automatiser, tu comprends ? C'était ça l'objectif, en fait.\n[Adebayo]: Et l'outil est présent dans cette réunion, donc il écoute notre conversation. Je veux voir jusqu'où il peut nous mener.\n[Ojebola Grace]: Oui.\n[Adebayo]: Au moins pour cette réunion, je vais dépenser quelques dollars. Alors voyons.\n[Ojebola Grace]: D'accord. Je crois que le réseau...\n[Ojebola Grace]: Le réseau gêne ta voix. Tu m'entends ?"
+  },
+  "es": {
+    "notes": "## Resumen\nLa reunión presentó Beyric Note Taker, una aplicación en desarrollo para uso interno. Adebayo describió problemas de transcripciones inexactas con otra aplicación de notas y quiso comprobar qué tan bien la nueva aplicación captura esta reunión. La automatización y la eficacia de la aplicación quedan por explorar.\n\n## Puntos clave\n- Adebayo dijo que la transcripción de una reunión del 12 de septiembre fue inexacta y no ofreció un resumen útil.\n- Ya había usado otra herramienta de notas que se unía y grababa reuniones, pero dijo que no la había usado mucho.\n- Beyric Note Taker se está desarrollando para uso interno. Adebayo dijo que su funcionamiento podría tener un costo.\n- La herramienta estuvo presente en esta reunión para que Adebayo pudiera ver su desempeño.\n- Grace dijo que la red estaba afectando la voz de Adebayo y le preguntó si la escuchaba.\n\n## Decisiones\n- Beyric Note Taker está pensado para uso interno.\n- La aplicación se probaría durante esta reunión.\n\n## Tareas\nNone noted\n\n## Preguntas abiertas\n- ¿Cómo se puede automatizar la aplicación?\n- ¿Qué tan bien capturará y resumirá las reuniones?\n- ¿Adebayo escuchó a Grace después de que ella mencionó el problema de red?\n\n## Revisar\n- La frase de Grace \"La red está obstruyendo tu voz\" pudo haberse escuchado o transcrito mal.\n",
+    "transcript": "[Adebayo]: Bueno, solo voy a presentarles la aplicación.\n[Adebayo]: Es una aplicación para tomar notas, desarrollada por nosotros, Beyric. Así que la llamé Beyric Note Taker, ¿sí?\n[Adebayo]: Ahora, el problema de ayer. Tuve una reunión el 12 de septiembre con uno de mis colegas, fue muy larga, y tenía otra herramienta de notas en mi sistema que la grabó por mí.\n[Adebayo]: Esperaba que, al volver a la transcripción ayer, pudiera recuperar lo que se había grabado.\n[Adebayo]: Pero al llegar, vi que las transcripciones tenían muchas inexactitudes. Ni siquiera tenían que ver con lo que hablábamos.\n[Adebayo]: Lo que hablamos fueron actualizaciones de funciones, correcciones y todo eso, que ahora mismo no recuerdo del todo.\n[Adebayo]: ¿Has usado estas aplicaciones antes?\n[Adebayo]: Sí, he usado la herramienta de notas antes, pero no mucho. Solo la instalé en mi sistema.\n[Adebayo]: Cuando empecé a usarla, funcionaba un poco. Obtenía algún resumen de las reuniones y eso. Pero la de ayer fue un fracaso total. No hubo un resumen adecuado.\n[Adebayo]: Y cobraban bastante. Esta que estoy construyendo también nos va a costar dinero. Pero primero quiero ver cómo funciona.\n[Adebayo]: Va a ser algo interno.\n[Ojebola Grace]: Dije la eficacia.\n[Adebayo]: Sí, sí, va a ser para uso interno.\n[Ojebola Grace]: Vale.\n[Adebayo]: Pero todavía estoy viendo cómo se puede automatizar, ¿me entiendes? Ese era el propósito, en realidad.\n[Adebayo]: Y la herramienta está aquí en esta reunión, escuchando nuestra conversación. Quiero ver hasta dónde nos puede llevar.\n[Ojebola Grace]: Sí.\n[Adebayo]: Al menos para esta reunión voy a gastar unos dólares. Así que veamos.\n[Ojebola Grace]: Vale. Creo que la red...\n[Ojebola Grace]: La red está obstruyendo tu voz. ¿Me escuchas?"
+  },
+  "units": {
+    "original": {
+      "summary": "The meeting introduced Beyric Note Taker, an app being developed for internal use. Adebayo described problems with inaccurate transcripts from another note-taking app and said he wanted to test how well the new app captures this meeting. Automation and the app's effectiveness remain to be explored.",
+      "key": [
+        "Adebayo said a transcript from a September 12 meeting was inaccurate and did not provide a useful summary.",
+        "He has previously used another note taker that joined and recorded meetings, but said he had not used it extensively.",
+        "Beyric Note Taker is being developed for internal use. Adebayo said it may cost money to run.",
+        "The note taker was present in this meeting so Adebayo could see how it performed.",
+        "Grace said the network was affecting Adebayo's speech and asked whether he could hear her."
+      ],
+      "decisions": [
+        "Beyric Note Taker is intended for internal use.",
+        "The app would be tested during this meeting."
+      ],
+      "questions": [
+        "How can the app be automated?",
+        "How well will it capture and summarize meetings?",
+        "Could Adebayo hear Grace after she raised the network issue?"
+      ],
+      "check": "Grace's phrase \"Network is obstructing your speech\" may have been misheard or transcribed oddly.",
+      "transcript": [
+        "So, I'm just going to introduce the app to you.",
+        "It is a note taker application, being developed by us, Beyric. So I named it Beyric Note Taker, right?",
+        "Now, the problem that occurred yesterday. I had a meeting on September 12th with one of my colleagues, and the meeting was very long, which I had this other note taker on my system that recorded for me.",
+        "So hoping that going back to the meeting transcript yesterday, I was going to be able to capture what was recorded.",
+        "But then on getting there, I thought that the transcripts, there were a lot of inaccuracies. Like, it doesn't even relate to what we were discussing.",
+        "What we discussed then were feature updates, corrections, and all of that, which I cannot remember everything at the moment.",
+        "Have you been using the apps before?",
+        "Yes, I've been using the note taker before, but I've not really used it much. I just plugged it into my system.",
+        "When I first started using it, it was working a bit. I could get some summary of the meetings and all of that. But the one I wanted yesterday was a total flop. There was no proper summary.",
+        "And they were charging much. This one I'm building now is also going to be costing us money. But I just want to see how it's going to go first.",
+        "It's going to be like internal stuff.",
+        "I said the effectiveness.",
+        "Yes, yes, it's going to be for internal.",
+        "Okay.",
+        "But I'm still looking at how it can be automated, do you understand? So that was the purpose, actually.",
+        "And the note taker is here in this meeting now, so listen to our conversation. I want to see how far it can take us.",
+        "Yes.",
+        "At least for this meeting now, I'm going to be spending a few dollars. So at least let's see.",
+        "Okay. I think the network is...",
+        "Network is obstructing your speech. Can you hear me?"
+      ]
+    },
+    "fr": {
+      "summary": "La réunion a présenté Beyric Note Taker, une application développée pour un usage interne. Adebayo a décrit des problèmes de transcriptions inexactes avec une autre application de prise de notes et a voulu tester la qualité de capture de la nouvelle application lors de cette réunion. L'automatisation et l'efficacité de l'application restent à explorer.",
+      "key": [
+        "Adebayo a indiqué que la transcription d'une réunion du 12 septembre était inexacte et ne fournissait pas de résumé utile.",
+        "Il a déjà utilisé un autre outil de prise de notes qui rejoignait et enregistrait les réunions, mais il ne l'a pas beaucoup utilisé.",
+        "Beyric Note Taker est développé pour un usage interne. Adebayo a précisé que son fonctionnement pourrait avoir un coût.",
+        "L'outil était présent à cette réunion afin qu'Adebayo puisse évaluer ses performances.",
+        "Grace a signalé que le réseau perturbait la voix d'Adebayo et lui a demandé s'il l'entendait."
+      ],
+      "decisions": [
+        "Beyric Note Taker est destiné à un usage interne.",
+        "L'application serait testée pendant cette réunion."
+      ],
+      "questions": [
+        "Comment automatiser l'application ?",
+        "Dans quelle mesure capturera-t-elle et résumera-t-elle les réunions ?",
+        "Adebayo a-t-il entendu Grace après qu'elle a signalé le problème de réseau ?"
+      ],
+      "check": "La phrase de Grace « Le réseau gêne ta voix » a peut-être été mal entendue ou mal transcrite.",
+      "transcript": [
+        "Alors, je vais juste vous présenter l'application.",
+        "C'est une application de prise de notes, développée par nous, Beyric. Je l'ai donc appelée Beyric Note Taker, d'accord ?",
+        "Maintenant, le problème d'hier. J'ai eu une réunion le 12 septembre avec un de mes collègues, une réunion très longue, et j'avais cet autre outil de prise de notes qui l'a enregistrée pour moi.",
+        "J'espérais donc, en revenant à la transcription hier, retrouver ce qui avait été enregistré.",
+        "Mais en y arrivant, j'ai trouvé beaucoup d'inexactitudes dans les transcriptions. Ça n'avait même aucun rapport avec ce dont on parlait.",
+        "On avait parlé de mises à jour de fonctionnalités, de corrections et de tout ça, dont je ne me souviens pas entièrement pour l'instant.",
+        "Est-ce que tu as déjà utilisé ces applications ?",
+        "Oui, j'ai déjà utilisé l'outil de prise de notes, mais pas vraiment beaucoup. Je l'ai juste installé sur mon système.",
+        "Quand j'ai commencé à l'utiliser, ça marchait un peu. J'obtenais un résumé des réunions et tout ça. Mais celle que je voulais hier, c'était un échec total. Il n'y avait pas de vrai résumé.",
+        "Et ils facturaient cher. Celle que je construis maintenant va aussi nous coûter de l'argent. Mais je veux d'abord voir comment ça va se passer.",
+        "Ce sera pour un usage interne.",
+        "J'ai dit l'efficacité.",
+        "Oui, oui, ce sera pour l'interne.",
+        "D'accord.",
+        "Mais je cherche encore comment l'automatiser, tu comprends ? C'était ça l'objectif, en fait.",
+        "Et l'outil est présent dans cette réunion, donc il écoute notre conversation. Je veux voir jusqu'où il peut nous mener.",
+        "Oui.",
+        "Au moins pour cette réunion, je vais dépenser quelques dollars. Alors voyons.",
+        "D'accord. Je crois que le réseau...",
+        "Le réseau gêne ta voix. Tu m'entends ?"
+      ]
+    },
+    "es": {
+      "summary": "La reunión presentó Beyric Note Taker, una aplicación en desarrollo para uso interno. Adebayo describió problemas de transcripciones inexactas con otra aplicación de notas y quiso comprobar qué tan bien la nueva aplicación captura esta reunión. La automatización y la eficacia de la aplicación quedan por explorar.",
+      "key": [
+        "Adebayo dijo que la transcripción de una reunión del 12 de septiembre fue inexacta y no ofreció un resumen útil.",
+        "Ya había usado otra herramienta de notas que se unía y grababa reuniones, pero dijo que no la había usado mucho.",
+        "Beyric Note Taker se está desarrollando para uso interno. Adebayo dijo que su funcionamiento podría tener un costo.",
+        "La herramienta estuvo presente en esta reunión para que Adebayo pudiera ver su desempeño.",
+        "Grace dijo que la red estaba afectando la voz de Adebayo y le preguntó si la escuchaba."
+      ],
+      "decisions": [
+        "Beyric Note Taker está pensado para uso interno.",
+        "La aplicación se probaría durante esta reunión."
+      ],
+      "questions": [
+        "¿Cómo se puede automatizar la aplicación?",
+        "¿Qué tan bien capturará y resumirá las reuniones?",
+        "¿Adebayo escuchó a Grace después de que ella mencionó el problema de red?"
+      ],
+      "check": "La frase de Grace \"La red está obstruyendo tu voz\" pudo haberse escuchado o transcrito mal.",
+      "transcript": [
+        "Bueno, solo voy a presentarles la aplicación.",
+        "Es una aplicación para tomar notas, desarrollada por nosotros, Beyric. Así que la llamé Beyric Note Taker, ¿sí?",
+        "Ahora, el problema de ayer. Tuve una reunión el 12 de septiembre con uno de mis colegas, fue muy larga, y tenía otra herramienta de notas en mi sistema que la grabó por mí.",
+        "Esperaba que, al volver a la transcripción ayer, pudiera recuperar lo que se había grabado.",
+        "Pero al llegar, vi que las transcripciones tenían muchas inexactitudes. Ni siquiera tenían que ver con lo que hablábamos.",
+        "Lo que hablamos fueron actualizaciones de funciones, correcciones y todo eso, que ahora mismo no recuerdo del todo.",
+        "¿Has usado estas aplicaciones antes?",
+        "Sí, he usado la herramienta de notas antes, pero no mucho. Solo la instalé en mi sistema.",
+        "Cuando empecé a usarla, funcionaba un poco. Obtenía algún resumen de las reuniones y eso. Pero la de ayer fue un fracaso total. No hubo un resumen adecuado.",
+        "Y cobraban bastante. Esta que estoy construyendo también nos va a costar dinero. Pero primero quiero ver cómo funciona.",
+        "Va a ser algo interno.",
+        "Dije la eficacia.",
+        "Sí, sí, va a ser para uso interno.",
+        "Vale.",
+        "Pero todavía estoy viendo cómo se puede automatizar, ¿me entiendes? Ese era el propósito, en realidad.",
+        "Y la herramienta está aquí en esta reunión, escuchando nuestra conversación. Quiero ver hasta dónde nos puede llevar.",
+        "Sí.",
+        "Al menos para esta reunión voy a gastar unos dólares. Así que veamos.",
+        "Vale. Creo que la red...",
+        "La red está obstruyendo tu voz. ¿Me escuchas?"
+      ]
+    }
+  }
+}

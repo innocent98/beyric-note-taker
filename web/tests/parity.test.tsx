@@ -38,6 +38,19 @@ describe("notes sections", () => {
     expect(out.replace(/<section class="notes-sec ">|<\/section>/g, "")).toBe(hostile);
   });
 
+  it("draws the translated headings (the fixed dictionary) the same way as the English ones", () => {
+    const kinds = {
+      fr: ["Résumé", "Points clés", "Décisions", "Actions à mener", "Questions ouvertes", "À vérifier"],
+      es: ["Resumen", "Puntos clave", "Decisiones", "Tareas", "Preguntas abiertas", "Revisar"],
+    };
+    const classes = ["summary", "key", "decisions", "actions", "questions", "check"];
+    for (const names of Object.values(kinds)) {
+      names.forEach((name, i) => {
+        expect(wrapSections(`<h2>${name}</h2><p>x</p>`)).toContain(`<section class="notes-sec notes-sec-${classes[i]}">`);
+      });
+    }
+  });
+
   it("gives a heading named like an Object property no class", () => {
     for (const name of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
       expect(wrapSections(`<h2>${name}</h2><p>x</p>`)).toBe(`<section class="notes-sec "><h2>${name}</h2><p>x</p></section>`);
