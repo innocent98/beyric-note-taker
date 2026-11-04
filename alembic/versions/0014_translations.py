@@ -51,6 +51,17 @@ def upgrade() -> None:
             "language in ('en', 'fr', 'es')", name="ck_meeting_translations_language"
         ),
     )
+    # Whose call a ledger row was, so the daily translation limit survives a deleted meeting.
+    op.add_column(
+        "ai_runs",
+        sa.Column(
+            "user_id",
+            sa.BigInteger(),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
+    )
+    op.create_index("ix_ai_runs_user_id_created_at", "ai_runs", ["user_id", "created_at"])
     op.add_column(
         "user_settings",
         sa.Column("default_language", sa.String(2), nullable=False, server_default="en"),
@@ -65,4 +76,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_constraint("ck_user_settings_default_language", "user_settings", type_="check")
     op.drop_column("user_settings", "default_language")
+    op.drop_index("ix_ai_runs_user_id_created_at", table_name="ai_runs")
+    op.drop_column("ai_runs", "user_id")
     op.drop_table("meeting_translations")

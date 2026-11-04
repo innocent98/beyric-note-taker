@@ -40,12 +40,15 @@ def record(
     status: str = "ok",
     error: BaseException | None = None,
     prompt_version: str | None = None,
+    user_id: int | None = None,
 ) -> AiRun:
     """Add one call to the ledger (the caller commits). `error` is stored as a class name only:
     the underlying one when the exception wraps another (an `ExtractionFailed` over a
-    `RateLimitError` reads `RateLimitError`). `prompt_version` defaults to the kind's usual one."""
+    `RateLimitError` reads `RateLimitError`). `prompt_version` defaults to the kind's usual
+    one. `user_id` is set where a per-account count is needed (translations)."""
     run = AiRun(
         meeting_id=meeting_id,
+        user_id=user_id,
         kind=kind,
         model=model,
         prompt_version=prompt_version or _VERSION_OF_KIND.get(kind),

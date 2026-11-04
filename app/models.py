@@ -588,10 +588,16 @@ class AiRun(Base):
         CheckConstraint(_in("kind", AI_RUN_KINDS), name="ck_ai_runs_kind"),
         CheckConstraint(_in("status", AI_RUN_STATUSES), name="ck_ai_runs_status"),
         Index("ix_ai_runs_meeting_id", "meeting_id"),
+        Index("ix_ai_runs_user_id_created_at", "user_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="SET NULL"))
+    # Whose call it was, for the per-account daily limit on translations: the meeting may be
+    # deleted later (`meeting_id` is then nulled), the account's count must not drop with it.
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
     kind: Mapped[str] = mapped_column(String(16))
     model: Mapped[str] = mapped_column(String(100))
     prompt_version: Mapped[str | None] = mapped_column(String(32))

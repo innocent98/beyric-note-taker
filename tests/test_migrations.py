@@ -613,4 +613,5 @@ def test_0014_adds_translations_and_the_default_language_and_downgrades_cleanly(
     }
     command.upgrade(cfg, "head")  # and back up again
     assert "meeting_translations" in inspect(engine).get_table_names()
+    assert "user_id" in {c["name"] for c in inspect(engine).get_columns("ai_runs")}
     engine.dispose()

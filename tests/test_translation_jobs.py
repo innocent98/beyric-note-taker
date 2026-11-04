@@ -471,3 +471,19 @@ def test_the_worker_starts_the_translation_thread_and_it_stops_with_the_worker(m
     stop.set()
     thread.join(2)
     assert not thread.is_alive() and seen["stop"] is stop
+
+
+def test_deleting_meetings_does_not_give_translations_back(session, user):
+    """The limit counts by account, not through the meeting: a meeting's ledger rows lose their
+    `meeting_id` when it is deleted, which must not lower the count."""
+    meetings = [make_meeting(session, user) for _ in range(20)]
+    for meeting in meetings:
+        request(session, user, meeting)
+        work(session)
+    session.execute(text("delete from meetings"))
+    session.commit()
+    assert translation.daily_count(session, user.id, NOW) == 20
+    fresh = make_meeting(session, user)
+    with pytest.raises(Refused) as refused:
+        request(session, user, fresh)
+    assert refused.value.code == "translation_limit"

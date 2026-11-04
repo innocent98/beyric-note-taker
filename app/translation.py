@@ -528,12 +528,13 @@ def daily_count(session: Session, user_id: int, now: datetime) -> int:
     ledger row each) plus the ones still queued. A cached answer or one already running uses
     none, and deleting a translation does not give one back."""
     mine = select(Meeting.id).where(Meeting.owner_user_id == user_id)
+    # By the account, not through the meeting: a deleted meeting must not give translations back.
     spent = session.scalar(
         select(func.count())
         .select_from(AiRun)
         .where(
             AiRun.kind == "translate",
-            AiRun.meeting_id.in_(mine),
+            AiRun.user_id == user_id,
             AiRun.created_at > now - timedelta(hours=24),
         )
     )
@@ -642,6 +643,7 @@ def _claim(session: Session, now: datetime) -> MeetingTranslation | None:
 def _ledger(
     session: Session,
     meeting_id: int,
+    user_id: int,
     model: str,
     usage: tuple[int, int],
     now: datetime,
@@ -661,6 +663,7 @@ def _ledger(
                 status="ok" if error is None else "failed",
                 error=error,
                 prompt_version=TRANSLATE_PROMPT_VERSION,
+                user_id=user_id,
             )
             run.created_at = now
     except IntegrityError:
@@ -744,16 +747,16 @@ def process_next(session: Session, now: datetime | None = None, *, client=None) 
             model=model,
             failure_code=None,
         )
-        _ledger(session, job.meeting_id, model, (spent[0], spent[1]), now)
+        _ledger(session, job.meeting_id, job.owner_id, model, (spent[0], spent[1]), now)
     except TranslationFailed as exc:
         spent = [spent[0] + exc.input_tokens, spent[1] + exc.output_tokens]
         won = _finish(session, job, now, status="failed", failure_code=exc.code, model=model)
-        _ledger(session, job.meeting_id, model, (spent[0], spent[1]), now, exc)
+        _ledger(session, job.meeting_id, job.owner_id, model, (spent[0], spent[1]), now, exc)
     except Exception as exc:  # whatever else must not stop the worker
         session.rollback()
         logger.warning("translation %s: unexpected %s", row_id, type(exc).__name__)
         won = _finish(session, job, now, status="failed", failure_code="error", model=model)
-        _ledger(session, job.meeting_id, model, (spent[0], spent[1]), now, exc)
+        _ledger(session, job.meeting_id, job.owner_id, model, (spent[0], spent[1]), now, exc)
     session.commit()
     if not won:
         logger.info(
