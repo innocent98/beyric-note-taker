@@ -22,15 +22,22 @@ connection.
 
 Locking. The checks and the send run under `pg_try_advisory_xact_lock(PLACEMENT_LOCK, host)`,
 taken first and held until the meeting row is committed (or the transaction is rolled back), so two
-requests can never both read the one free slot. A request that finds the lock taken answers
-`bot_busy` AT ONCE instead of waiting: a waiter would hold a pooled database connection and an open
-transaction for as long as the holder's send, and a handful of them would starve every other
-endpoint. The holder is bounded too: `VexaClient.send_bot` has a total deadline
+requests can never both read the one free slot. A request that finds it taken polls the try-lock for
+at most `LOCK_WAIT_SECONDS` (3 s) and gives its pooled database connection back between looks
+(a rollback), so a few waiters cannot starve every other endpoint; if the lock is still taken it
+answers `bot_busy` with `slot_locked` set (words: a note taker is being set up, try again in a
+minute), and if the slot is simply full it answers `bot_busy` (words: busy, try in a few minutes).
+A caller that holds a row lock passes `wait_seconds=0`: the rollback between looks would drop it.
+The holder is bounded too: `VexaClient.send_bot` has a total deadline
 (`app.vexa.SEND_DEADLINE_SECONDS`).
 
-When a send may have reached the host (a timeout, a lost answer), the bot is stopped by meeting code
-BEFORE the lock is let go. Stopping by code is only safe while no other placement can use the code,
-and the pre-flight check made sure no live meeting of any user has it.
+An uncertain send (`VexaSendUncertain`: a timeout, a lost answer, a 5xx) may have reached the
+host, which keeps handling the request after the client leaves, so the bot can join seconds later.
+A stop sent now would find nothing, so instead the meeting is kept as a placeholder: `bot_sent`, no
+Vexa id, `completion_reason = SEND_UNCONFIRMED` (the owner reads "Starting the bot"), counted for
+capacity and for the duplicate checks, so the code stays taken. The worker settles it
+(`pipeline._poll`): it adopts a bot that shows up for the code, or after `UNCONFIRMED_GRACE` stops
+the code and fails the meeting with a plain "not recorded" reason.
 
 A caller that holds a row lock must take it before calling in, never after: nothing here ever
 waits for a row while holding the placement lock, which keeps the order row -> placement everywhere
@@ -38,6 +45,7 @@ and rules out a deadlock.
 """
 
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -55,6 +63,13 @@ logger = logging.getLogger(__name__)
 # two-int form; the second is the host id.
 PLACEMENT_LOCK = 6004
 LOCAL_HOST_ID = 1
+# How long a request polls for the lock before it answers `bot_busy` ("being set up"). Short on
+# purpose: it is time spent behind another request's send, and the connection is let go between
+# looks. A send itself is bounded by `app.vexa.SEND_DEADLINE_SECONDS`.
+LOCK_WAIT_SECONDS = 3.0
+LOCK_POLL_SECONDS = 0.2
+# Stored in `completion_reason` of a meeting whose send got no clear answer (see the module doc).
+SEND_UNCONFIRMED = "send_unconfirmed"
 # A bot counts against the user limit and the host's capacity from the moment it is sent until the
 # meeting is over for the pipeline too, as before placement existed (`processing` still counts).
 # The duplicate check is narrower: once the bot has left (`processing`), the same code is free.
@@ -77,22 +92,38 @@ class PlacementRefused(Exception):
     `meeting_has_note_taker`, `user_limit`, `bot_busy`; the caller words it for its own reader."""
 
     def __init__(
-        self, code: str, *, cap_seconds: int | None = None, limit: int | None = None
+        self,
+        code: str,
+        *,
+        cap_seconds: int | None = None,
+        limit: int | None = None,
+        slot_locked: bool = False,
     ) -> None:
         super().__init__(code)
         self.code = code
+        self.slot_locked = slot_locked  # `bot_busy` because a send was in flight, not because full
         self.cap_seconds = cap_seconds  # `hours_cap_reached`: the user's cap
         self.limit = limit  # `user_limit`: how many bots a user may have
 
 
-def _take_lock(session: Session) -> None:
-    """Take the placement lock or answer `bot_busy` at once (never wait for it)."""
-    got = session.scalar(
-        text("select pg_try_advisory_xact_lock(cast(:key as int), cast(:host as int))"),
-        {"key": PLACEMENT_LOCK, "host": LOCAL_HOST_ID},
-    )
-    if not got:
-        raise PlacementRefused("bot_busy")
+def _take_lock(session: Session, wait_seconds: float) -> None:
+    """Take the placement lock, polling for at most `wait_seconds`, else `bot_busy` (locked).
+
+    Between looks the transaction is rolled back so the pooled connection goes back to the pool
+    while this request sleeps; nothing the caller needs may be pending (see the module doc)."""
+    deadline = time.monotonic() + wait_seconds
+    while True:
+        got = session.scalar(
+            text("select pg_try_advisory_xact_lock(cast(:key as int), cast(:host as int))"),
+            {"key": PLACEMENT_LOCK, "host": LOCAL_HOST_ID},
+        )
+        if got:
+            return
+        if time.monotonic() >= deadline:
+            session.rollback()
+            raise PlacementRefused("bot_busy", slot_locked=True)
+        session.rollback()  # the connection is not held while we wait
+        time.sleep(LOCK_POLL_SECONDS)
 
 
 def reserve_slot(
@@ -103,12 +134,15 @@ def reserve_slot(
     native_id: str,
     now: datetime,
     settings: Settings | None = None,
+    wait_seconds: float | None = None,
 ) -> None:
-    """Take the placement lock and run the four pre-flight checks. Returns holding the lock, which
+    """Take the placement lock and run the pre-flight checks. `wait_seconds` is how long to poll for
+    the lock (default `LOCK_WAIT_SECONDS`; 0 for a caller holding a row lock, which a wait would
+    drop). Returns holding the lock, which
     lasts until the caller commits or rolls back; the caller must do that, and must send the bot
     before it commits. Raises `PlacementRefused` (the caller rolls back)."""
     settings = settings or get_settings()
-    _take_lock(session)
+    _take_lock(session, LOCK_WAIT_SECONDS if wait_seconds is None else wait_seconds)
 
     cap = usage.effective_cap(session, user)
     if (
@@ -191,7 +225,8 @@ def place_bot(
 
     Commits (the meeting row and the lock leave together). A `VexaError` from the send is raised
     after a rollback: no meeting exists and the slot is free again. If the send may have reached
-    the host without an answer (`VexaSendUncertain`), or recording the meeting fails after a
+    the host without an answer (`VexaSendUncertain`), the meeting is returned as an unconfirmed
+    start (see the module doc) for the worker to settle. If recording the meeting fails after a
     send, the bot is stopped, best effort, before the failure is raised."""
     user, template_id = _resolve(session, req)
     try:
@@ -211,10 +246,9 @@ def place_bot(
     except VexaDuplicateBot:  # a bot that is not ours is there (another host, a race)
         session.rollback()
         raise PlacementRefused("meeting_has_note_taker") from None
-    except VexaSendUncertain:  # it may have been taken: stop it while the lock is still ours
-        stop_unrecorded_bot(vexa, req.platform, req.native_id)
-        session.rollback()
-        raise
+    except VexaSendUncertain:  # it may be joining in a moment: keep the code, let the worker settle
+        logger.warning("send_bot gave no clear answer: the meeting is kept as an unconfirmed start")
+        vexa_id = None
     except BaseException:  # the host said no, or anything else: no meeting, free the slot
         session.rollback()
         raise
@@ -224,10 +258,12 @@ def place_bot(
         platform=req.platform,
         native_id=req.native_id,
         template_id=template_id,
-        vexa_meeting_id=str(vexa_id),
+        vexa_meeting_id=None if vexa_id is None else str(vexa_id),
         started_polling_at=now,
         source=req.source,
     )
+    if vexa_id is None:
+        meeting.completion_reason, meeting.bot_state_seen_at = SEND_UNCONFIRMED, now
     try:
         session.add(meeting)
         session.flush()
@@ -240,16 +276,17 @@ def place_bot(
 
 
 def commit_or_stop(
-    session: Session, vexa: VexaClient, *, platform: str, native_id: str, vexa_id: int
+    session: Session, vexa: VexaClient, *, platform: str, native_id: str, vexa_id: int | None
 ) -> None:
-    """Commit a meeting row that points at the bot `vexa_id`. If the commit fails, roll back and
-    stop that bot unless the row did land after all (a lost answer to a commit that succeeded):
-    that bot is a recorded one and stopping it would throw a meeting away."""
+    """Commit a meeting row that points at the bot `vexa_id` (None: an unconfirmed start). If the
+    commit fails, roll back FIRST (the lock is gone from then on), then stop that bot, unless the
+    row did land after all (a lost answer to a commit that succeeded): that bot is a recorded one
+    and stopping it would throw a meeting away. With no id there is nothing to check: it stops."""
     try:
         session.commit()
     except BaseException:
         session.rollback()
-        if not _is_recorded(session, platform, native_id, vexa_id):
+        if vexa_id is None or not _is_recorded(session, platform, native_id, vexa_id):
             stop_unrecorded_bot(vexa, platform, native_id)
         raise
 

@@ -182,13 +182,39 @@ def test_send_bot_conflict_is_a_duplicate_bot(httpx_mock, client):
 
 
 @pytest.mark.parametrize(
-    "error", [httpx.ReadTimeout("slow"), httpx.ConnectError("down"), httpx.WriteError("cut")]
+    "error", [httpx.ReadTimeout("slow"), httpx.WriteError("cut"), httpx.RemoteProtocolError("eof")]
 )
 def test_send_bot_timeout_or_transport_error_is_uncertain(httpx_mock, client, error):
     """The host may have taken the bot before the answer was lost."""
     httpx_mock.add_exception(error, method="POST", url="http://vexa.test/bots")
     with pytest.raises(VexaSendUncertain):
         client.send_bot("https://meet.google.com/abc-defg-hij")
+
+
+@pytest.mark.parametrize("error", [httpx.ConnectError("down"), httpx.ConnectTimeout("no route")])
+def test_send_bot_that_never_connected_is_a_clear_no_not_uncertain(httpx_mock, client, error):
+    """No connection was made, so nothing reached the host: no stop, no misleading error log."""
+    httpx_mock.add_exception(error, method="POST", url="http://vexa.test/bots")
+    with pytest.raises(VexaError) as caught:
+        client.send_bot("https://meet.google.com/abc-defg-hij")
+    assert not isinstance(caught.value, VexaSendUncertain | VexaDuplicateBot)
+
+
+@pytest.mark.parametrize("status", [500, 502, 503, 504])
+def test_send_bot_server_error_is_uncertain_a_gateway_may_answer_after_the_bot_manager_acted(
+    httpx_mock, client, status
+):
+    httpx_mock.add_response(method="POST", url="http://vexa.test/bots", status_code=status)
+    with pytest.raises(VexaSendUncertain):
+        client.send_bot("https://meet.google.com/abc-defg-hij")
+
+
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
+def test_send_bot_client_error_is_a_clear_no(httpx_mock, client, status):
+    httpx_mock.add_response(method="POST", url="http://vexa.test/bots", status_code=status)
+    with pytest.raises(VexaError) as caught:
+        client.send_bot("https://meet.google.com/abc-defg-hij")
+    assert not isinstance(caught.value, VexaSendUncertain | VexaDuplicateBot)
 
 
 def test_send_bot_unreadable_success_is_uncertain(httpx_mock, client):

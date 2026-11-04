@@ -33,12 +33,19 @@ from app.pipeline import (
     MEET_REFUSED,
     REASON_CANCELLED,
     REASON_NO_SPEECH,
+    SEND_UNCONFIRMED,
     is_join_failure,
     manual_retry_wait,
     send_again,
 )
 from app.placement import PlacementRefused, PlacementRequest
-from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError, parse_meeting_url
+from app.vexa import (
+    UnsupportedMeetingUrl,
+    VexaClient,
+    VexaDuplicateBot,
+    VexaError,
+    parse_meeting_url,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +76,7 @@ STEP_TEXT = {
 # being captured (`BOT_RECORDING`); `active` alone only means the bot is in.
 BOT_STATE_TEXT = {
     "requested": "Starting the bot",
+    SEND_UNCONFIRMED: "Starting the bot",
     "joining": "Bot is joining the meeting",
     "awaiting_admission": "Waiting to be let in. Admit '{bot}' in the meeting",
     "active": "Bot is in the meeting",
@@ -417,6 +425,12 @@ def placement_refusal(exc: PlacementRefused) -> Refused:
             f"You have reached the most bots allowed at once ({exc.limit}). "
             "Wait for one to finish first.",
         )
+    if exc.slot_locked:  # not full: another request's bot is being set up right now
+        return Refused(
+            409,
+            "bot_busy",
+            "A note taker is being set up for another meeting. Try again in a minute.",
+        )
     return Refused(409, "bot_busy", "The note taker is busy right now. Try again in a few minutes.")
 
 
@@ -670,11 +684,17 @@ def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Mee
             native_id=locked.native_id,
             now=now,
             settings=get_settings(),
+            wait_seconds=0,  # the meeting row is locked: a wait would roll that lock away
         )
     except PlacementRefused as exc:
         session.rollback()
         raise placement_refusal(exc) from None
-    if not send_again(locked, vexa):
+    try:
+        sent = send_again(locked, vexa, raise_duplicate=True)
+    except VexaDuplicateBot:  # a bot that is not ours is in that meeting
+        session.rollback()
+        raise placement_refusal(PlacementRefused("meeting_has_note_taker")) from None
+    if not sent:
         session.rollback()
         raise _send_failed()
     locked.started_polling_at = now
@@ -684,7 +704,7 @@ def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Mee
         vexa,
         platform=locked.platform,
         native_id=locked.native_id,
-        vexa_id=int(locked.vexa_meeting_id),
+        vexa_id=int(locked.vexa_meeting_id) if locked.vexa_meeting_id else None,
     )
     return locked
 

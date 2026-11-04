@@ -19,7 +19,14 @@ import threading
 import time
 from collections.abc import Callable
 
-from app.vexa import VexaDuplicateBot, VexaError, VexaSendUncertain, parse_meeting_url
+from app.vexa import (
+    VexaDuplicateBot,
+    VexaError,
+    VexaMeeting,
+    VexaNotFound,
+    VexaSendUncertain,
+    parse_meeting_url,
+)
 
 
 class FakeVexaHost:
@@ -27,6 +34,8 @@ class FakeVexaHost:
         self.send_delay = send_delay  # seconds each send takes: widens a race window on purpose
         self.error: Exception | None = None  # raised by every send while set
         self.timeout_after_accept = False  # take the bot, then raise VexaSendUncertain
+        self.late_accept = False  # raise VexaSendUncertain now; the bot lands on `land_late_bots()`
+        self._late: list[tuple[str, str]] = []
         self.on_send: Callable[[], None] | None = None  # runs inside the send, before it returns
         self.stop_error: Exception | None = None
         self.sent: list[str] = []  # the URLs, in the order the host took them
@@ -58,6 +67,9 @@ class FakeVexaHost:
             if self.error is not None:
                 raise self.error
             key = parse_meeting_url(meeting_url)
+            if self.late_accept:  # the answer is lost; Vexa is still handling the request
+                self._late.append(key)
+                raise VexaSendUncertain("send_bot failed: read timed out")
             with self._guard:
                 if key in self.live:
                     raise VexaDuplicateBot("send_bot refused: a bot is already in that meeting")
@@ -71,6 +83,20 @@ class FakeVexaHost:
         finally:
             with self._guard:
                 self._in_flight -= 1
+
+    def land_late_bots(self) -> None:
+        """Vexa finishes handling the requests whose answers were lost: the bots join now."""
+        for key in self._late:
+            self._next_id += 1
+            self.live[key] = self._next_id
+            self.sent.append(f"late:{key[1]}")
+        self._late.clear()
+
+    def get_meeting(self, platform: str, native_id: str) -> VexaMeeting:
+        """What the worker asks by meeting code: a joining bot if one is live, else nothing."""
+        if (platform, native_id) in self.live:
+            return VexaMeeting(status="joining")
+        raise VexaNotFound("get_meeting failed: 404")
 
     def stop_bot(self, platform: str, native_id: str) -> None:
         if self.stop_error is not None:

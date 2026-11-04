@@ -24,7 +24,7 @@ from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
 from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
-from app.vexa import VexaClient, VexaError, VexaMeeting, VexaSendUncertain
+from app.vexa import VexaClient, VexaDuplicateBot, VexaError, VexaMeeting, VexaSendUncertain
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +108,17 @@ BOT_LIVE_STATES = (
 # bot is leaving. Not a live state, so a poll never replaces it; Vexa's own completion reason
 # replaces it once the bot has gone.
 BOT_END_REQUESTED = "end_requested"
+# A bot was sent and Vexa gave no clear answer: it may be joining, or not at all. The meeting is
+# kept as a placeholder (`bot_sent`, no Vexa id) with this in `completion_reason`, read as
+# "Starting the bot", until `_settle_unconfirmed` adopts a bot that shows up for the code or gives
+# up.
+SEND_UNCONFIRMED = placement.SEND_UNCONFIRMED
+# How long the worker waits for a bot to show up before it stops the code and fails the meeting.
+UNCONFIRMED_GRACE = timedelta(seconds=60)
+REASON_SEND_UNCONFIRMED = (
+    "The bot could not be confirmed in the meeting, so this meeting was not recorded. "
+    "Please send the bot again."
+)
 # The states in which the owner may end the bot with "End now and write the notes": in the call.
 # At the door Vexa tears the bot down and ends it `failed`, so there would be nothing to write
 # notes from (Cancel says that better); a bot still joining, one asking for help, and one already
@@ -261,24 +272,34 @@ def bot_failure_reason(meeting: Meeting, info: VexaMeeting) -> str:
     return REASON_BOT_FAILED
 
 
-def send_again(meeting: Meeting, vexa) -> bool:
+def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool:
     """Send a fresh bot to the same link and point the meeting at it. The caller commits.
 
-    False, with the meeting untouched, when Vexa could not take the bot."""
+    False, with the meeting untouched, when Vexa could not take the bot. A send that got no clear
+    answer (`VexaSendUncertain`) leaves the meeting as an unconfirmed start for the worker to
+    settle, and counts as sent. A Vexa duplicate refusal (a bot that is not ours is in that
+    meeting) is raised when `raise_duplicate`, else it is a plain failure."""
+    unconfirmed = False
     try:
         vexa_id = vexa.send_bot(meeting.url)
+    except VexaDuplicateBot:
+        logger.warning("meeting %s: Vexa has another bot in that meeting", meeting.id)
+        if raise_duplicate:
+            raise
+        return False
+    except VexaSendUncertain:
+        logger.warning("meeting %s: resending the bot got no clear answer", meeting.id)
+        vexa_id, unconfirmed = None, True
     except VexaError as exc:
         logger.warning("meeting %s: resending the bot failed (%s)", meeting.id, type(exc).__name__)
-        if isinstance(exc, VexaSendUncertain):  # Vexa may have taken it: do not leave it running
-            placement.stop_unrecorded_bot(vexa, meeting.platform, meeting.native_id)
         return False
     meeting.join_attempts += 1
     meeting.status, meeting.step, meeting.failure_reason = "bot_sent", "waiting", None
-    meeting.vexa_meeting_id = str(vexa_id)
+    meeting.vexa_meeting_id = None if vexa_id is None else str(vexa_id)
     meeting.vexa_recording_id = None
-    meeting.completion_reason = None
+    meeting.completion_reason = SEND_UNCONFIRMED if unconfirmed else None
     meeting.terminal_seen_at = None
-    meeting.bot_state_seen_at = None
+    meeting.bot_state_seen_at = datetime.now(UTC) if unconfirmed else None
     _no_audio_polls.pop(meeting.id, None)
     _needs_help_since.pop(meeting.id, None)
     _stop_tries.pop(meeting.id, None)
@@ -416,10 +437,41 @@ def _on_join_problem(session: Session, meeting: Meeting, vexa, mark: str, now: d
     return True
 
 
+def _settle_unconfirmed(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
+    """A meeting whose send got no clear answer. True once a live bot for its code has shown up
+    (the meeting then carries on as any other); False while it is still waiting or has been given
+    up on. Only a bot in a LIVE state counts: the code of a recurring meeting can match an older,
+    finished Vexa meeting, and that is not ours. The code is the meeting's alone meanwhile (the
+    placeholder is `bot_sent`, so no other placement can use it)."""
+    try:
+        info = vexa.get_meeting(meeting.platform, meeting.native_id)
+    except VexaError:
+        info = None
+    if info is not None and info.status in BOT_LIVE_STATES:
+        meeting.completion_reason, meeting.bot_state_seen_at = None, None  # adopted
+        _lookup_misses.pop(meeting.id, None)
+        logger.info("meeting %s: the bot of an unconfirmed send showed up", meeting.id)
+        return True
+    if now - meeting.started_polling_at >= UNCONFIRMED_GRACE:
+        _stop_bot(meeting, vexa)  # in case it lands late; only ever this meeting's own bot
+        meeting.completion_reason, meeting.bot_state_seen_at = None, None
+        _fail(session, meeting, REASON_SEND_UNCONFIRMED)
+        return False
+    meeting.bot_state_seen_at = now  # keeps "Starting the bot" fresh for the page
+    session.commit()
+    return False
+
+
 def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
     """One look at Vexa while waiting. True once the recording is ready to download."""
     if meeting.started_polling_at is None:
         meeting.started_polling_at = now
+    if (
+        meeting.completion_reason == SEND_UNCONFIRMED
+        and meeting.vexa_meeting_id is None
+        and not _settle_unconfirmed(session, meeting, vexa, now)
+    ):
+        return False
     info: VexaMeeting | None = None
     if _paused_for_retry(meeting):
         # Looking the refused bot up would only report the refusal again, except to check it left.

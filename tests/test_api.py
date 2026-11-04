@@ -755,6 +755,28 @@ def test_create_refuses_a_third_bot_for_one_user(api, app, template, session, fa
     assert fake_vexa.sent == []
 
 
+def test_a_slot_that_is_only_locked_says_a_note_taker_is_being_set_up(
+    api, template, session, fake_vexa, engine, monkeypatch
+):
+    """Not full, only locked by a send in flight: different words, same code, no user, no id."""
+    from sqlalchemy import text
+
+    from app import placement
+
+    monkeypatch.setattr(placement, "LOCK_WAIT_SECONDS", 0.2)
+    with engine.connect() as holder:
+        holder.execute(
+            text("select pg_advisory_xact_lock(cast(:a as int), cast(:b as int))"),
+            {"a": placement.PLACEMENT_LOCK, "b": placement.LOCAL_HOST_ID},
+        )
+        error = error_of(create(api, template), 409, "bot_busy")
+        holder.rollback()
+    assert error["message"] == (
+        "A note taker is being set up for another meeting. Try again in a minute."
+    )
+    assert fake_vexa.sent == []
+
+
 def test_user_limit_zero_does_not_claim_the_user_has_bots(api, app, template, fake_vexa):
     app.state.settings.user_bot_limit = 0
     response = create(api, template)

@@ -26,9 +26,13 @@ class VexaDuplicateBot(VexaError):
 
 
 class VexaSendUncertain(VexaError):
-    """`send_bot` did not get a clear answer: the request timed out, the connection broke, the
-    deadline ran out, or Vexa said yes in a body we could not read. The bot MAY be in the meeting,
-    so the caller must stop it (by meeting code) rather than assume nothing was sent."""
+    """`send_bot` did not get a clear answer: the request timed out after it was sent, the
+    connection broke, the deadline ran out, Vexa answered 5xx (a gateway can time out after the bot
+    manager acted), or said yes in a body we could not read. The bot MAY be in the meeting or
+    arrive in a moment (Vexa keeps handling a request the client has left), so the caller keeps the
+    code reserved and lets the worker adopt the bot or give up (`pipeline.SEND_UNCONFIRMED`); a
+    stop sent now could find nothing. A connection that was never made is NOT this: that is a
+    plain `VexaError`, nothing was sent."""
 
 
 class VexaNotFound(VexaError):
@@ -185,12 +189,17 @@ class VexaClient:
             payload["automatic_leave"] = {"max_time_left_alone": self._left_alone_seconds * 1000}
         try:
             return _within(self._send_deadline, lambda: self._post_bot(payload))
-        except httpx.HTTPStatusError as exc:  # Vexa answered, and said no: nothing was started
-            if exc.response.status_code == 409:
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status == 409:
                 raise VexaDuplicateBot(
                     "send_bot refused: a bot is already in that meeting"
                 ) from exc
-            raise VexaError(f"send_bot failed: {exc}") from exc
+            if status >= 500:  # a gateway can time out after the bot manager already took the bot
+                raise VexaSendUncertain(f"send_bot failed: {exc}") from exc
+            raise VexaError(f"send_bot failed: {exc}") from exc  # a 4xx: Vexa said no
+        except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+            raise VexaError(f"send_bot failed: {exc}") from exc  # never connected: nothing was sent
         except (httpx.HTTPError, KeyError, TypeError, ValueError, TimeoutError) as exc:
             raise VexaSendUncertain(f"send_bot failed: {exc}") from exc
 

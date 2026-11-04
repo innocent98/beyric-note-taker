@@ -527,16 +527,32 @@ def test_a_manual_send_whose_commit_fails_stops_the_bot_it_just_sent(session, me
     assert meeting.status == "failed"
 
 
-def test_a_manual_send_that_times_out_after_vexa_took_the_bot_stops_it(session, meeting):
+def test_a_manual_send_that_times_out_keeps_the_meeting_as_an_unconfirmed_start(session, meeting):
+    """Vexa may still be taking the bot: the row becomes a placeholder the worker adopts or reaps
+    (a stop now would find nothing), not a 502 that frees the code for a second bot."""
     from app.vexa import VexaSendUncertain
 
     refused_meeting(session, meeting, ago=10 * MINUTE)
     vexa = FakeVexa()
     vexa.send_error = VexaSendUncertain("read timed out")
+    retry_meeting(session, meeting, vexa)
+    session.refresh(meeting)
+    assert (meeting.status, meeting.step) == ("bot_sent", "waiting")
+    assert meeting.vexa_meeting_id is None
+    assert meeting.completion_reason == pipeline.SEND_UNCONFIRMED
+    assert getattr(vexa, "stopped", []) == []
+
+
+def test_a_manual_send_into_a_meeting_vexa_says_has_a_bot_is_the_neutral_refusal(session, meeting):
+    from app.vexa import VexaDuplicateBot
+
+    refused_meeting(session, meeting, ago=10 * MINUTE)
+    vexa = FakeVexa()
+    vexa.send_error = VexaDuplicateBot("a bot is already in that meeting")
     with pytest.raises(Refused) as caught:
         retry_meeting(session, meeting, vexa)
-    assert caught.value.status == 502
-    assert vexa.stopped == [CODE]
+    assert (caught.value.status, caught.value.code) == (409, "meeting_has_note_taker")
+    assert caught.value.message == "A note taker is already in this meeting."
     assert meeting.status == "failed"
 
 
