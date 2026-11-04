@@ -31,7 +31,9 @@ MAX_ADDRESS_CHARS = 254
 # character. International addresses are allowed: only the characters that could end the address
 # or start another header are not.
 _ADDRESS = re.compile(r"[^\s<>(),;:\\\"\[\]@]+@[^\s<>(),;:\\\"\[\]@]+")
-_HEADER_NAME = re.compile(r"[A-Za-z][A-Za-z0-9-]{0,63}")
+# The only extra headers a mail may carry (case-insensitive): the opt-out pair. From, To, Cc, Bcc,
+# Reply-To and Subject have their own fields, and anything else is a template reaching past them.
+ALLOWED_HEADERS = frozenset({"list-unsubscribe", "list-unsubscribe-post"})
 _INVISIBLE = ("Cc", "Cf", "Zl", "Zp")  # controls, bidi and zero-width marks, line separators
 
 
@@ -111,7 +113,7 @@ class Message:
         if self.reply_to is not None and not valid_address(self.reply_to):
             raise ValueError("reply-to address")
         for name, value in self.headers:
-            if not _HEADER_NAME.fullmatch(name) or has_control(value):
+            if name.lower() not in ALLOWED_HEADERS or has_control(value):
                 raise ValueError("header")
         if len(self.attachments) > MAX_ATTACHMENTS:
             raise ValueError("too many attachments")

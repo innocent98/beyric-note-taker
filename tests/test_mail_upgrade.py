@@ -76,6 +76,24 @@ def notes_row(session, meeting, created=NOW):
     return row
 
 
+@pytest.fixture
+def plain(monkeypatch):
+    """A notes template that builds a trivial message: for tests of the caps, which need many rows
+    that may all be sent (the real one allows a single mail per meeting)."""
+
+    def build(session, payload, to, settings, now):
+        return Message(to, "Plain", "t", "h")
+
+    monkeypatch.setitem(mail_templates.NOTES_TEMPLATES, "test_plain", build)
+
+
+def plain_row(session, n, to="owner@example.test", created=NOW):
+    row = mail.enqueue(session, to, "test_plain", {"n": n})
+    row.created_at = created
+    session.commit()
+    return row
+
+
 def deliver(session, now=NOW, **overrides):
     mailer = FakeMailer()
     sent = mail.deliver_pending(session, mailer, settings(**overrides), now)
@@ -119,13 +137,21 @@ def test_a_subject_with_a_line_break_is_refused(subject):
 
 
 def test_reply_to_and_headers_are_checked():
-    ok = Message("a@b.test", "s", "t", "h", reply_to="x@y.test", headers=(("List-Id", "notes"),))
+    ok = Message(
+        "a@b.test",
+        "s",
+        "t",
+        "h",
+        reply_to="x@y.test",
+        headers=(("List-Unsubscribe", "<https://example.test/u>"),),
+    )
     assert ok.reply_to == "x@y.test"
     for bad in (
         {"reply_to": "x@y.test\r\nBcc: z@y.test"},
         {"headers": (("X-A", "v\r\nBcc: z@y.test"),)},
         {"headers": (("X A", "v"),)},
         {"headers": (("X-A:", "v"),)},
+        {"headers": (("X-Custom", "v"),)},
     ):
         with pytest.raises(ValueError):
             Message("a@b.test", "s", "t", "h", **bad)
@@ -179,12 +205,12 @@ def test_resend_sends_attachments_as_base64_with_reply_to_and_headers():
         "a@b.test", "s", "t", "h",
         attachments=(Attachment("n.pdf", b"%PDF-1", PDF),),
         reply_to="sender@example.test",
-        headers=(("List-Id", "notes"),),
+        headers=(("List-Unsubscribe", "<https://example.test/u>"),),
     )  # fmt: skip
     resend(handler).send(message, "mail-1")
     body = seen["body"]
     assert body["reply_to"] == "sender@example.test"
-    assert body["headers"] == {"List-Id": "notes"}
+    assert body["headers"] == {"List-Unsubscribe": "<https://example.test/u>"}
     [attachment] = body["attachments"]
     assert attachment["filename"] == "n.pdf" and attachment["content_type"] == PDF
     assert base64.b64decode(attachment["content"]) == b"%PDF-1"
@@ -284,7 +310,8 @@ def test_notes_ready_reads_the_notes_when_it_is_sent_and_stores_none(session, re
     assert "left early" not in message.text
     assert "Zoom 88205679674 · 03 Nov 2026, 11:30 UTC" in message.text
     session.refresh(row)
-    assert (row.status, row.payload, row.last_error) == ("sent", {}, None)
+    # the ids stay (no secret in them; they stop a second mail for the meeting), the text never is
+    assert (row.status, row.payload, row.last_error) == ("sent", {"meeting_id": ready.id}, None)
     # nothing of the meeting is in any column of any outbox row
     dump = json.dumps(
         [[str(v) for v in r] for r in session.execute(text("select * from mail_outbox")).all()]
@@ -354,9 +381,15 @@ def test_the_notes_are_never_a_link_that_logs_anyone_in(session, ready):
 # ---- the sender decides at send time ----
 
 
-def skipped(session, row, reason):
+def skipped(session, row, reason, *, ids_only=True):
     session.refresh(row)
-    assert (row.status, row.last_error, row.payload) == ("skipped", reason, {})
+    assert (row.status, row.last_error) == ("skipped", reason)
+    if row.template in mail_templates.NOTES_TEMPLATES:  # ids only, never text
+        if not ids_only:
+            return
+        assert all(isinstance(v, int) for v in row.payload.values())
+    else:
+        assert row.payload == {}  # a link row never keeps its link
 
 
 def test_a_meeting_deleted_after_queueing_is_not_mailed(session, ready):
@@ -414,7 +447,7 @@ def test_a_malformed_meeting_id_in_a_row_is_skipped_not_crashing(session):
     session.add(row)
     session.commit()
     deliver(session)
-    skipped(session, row, "meeting_gone")
+    skipped(session, row, "meeting_gone", ids_only=False)
 
 
 def test_a_skipped_row_is_not_a_failure_for_the_admin(session, ready):
@@ -493,7 +526,7 @@ def test_a_builder_that_raises_is_counted_and_never_blocks_the_next_row(
     for minutes in (1, 6, 36):
         deliver(session, now=NOW + timedelta(minutes=minutes))
     session.refresh(bad)
-    assert (bad.status, bad.attempts, bad.payload) == ("failed", 4, {})
+    assert (bad.status, bad.attempts, bad.payload) == ("failed", 4, {"n": 1})
     assert "leaked" not in caplog.text and "owner@example.test" not in caplog.text
     session.refresh(good)
     assert good.status == "sent"
@@ -565,15 +598,15 @@ def test_a_suppressed_row_never_builds_the_message(session, ready, monkeypatch):
 # ---- caps ----
 
 
-def test_one_address_gets_at_most_the_recipient_cap_of_notes_mails_a_day(session, ready):
-    rows = [notes_row(session, ready) for _ in range(3)]
+def test_one_address_gets_at_most_the_recipient_cap_of_notes_mails_a_day(session, plain):
+    rows = [plain_row(session, n) for n in range(3)]
     sent, mailer = deliver(session, mail_recipient_daily_cap=2)
     assert sent == 2
     session.expire_all()
     assert [r.status for r in rows] == ["sent", "sent", "skipped"]
     assert rows[2].last_error == "recipient_cap"
     # a day later the allowance is back
-    row = notes_row(session, ready, created=NOW + timedelta(days=1))
+    row = plain_row(session, 9, created=NOW + timedelta(days=1))
     assert (
         deliver(session, now=NOW + timedelta(days=1, minutes=1), mail_recipient_daily_cap=2)[0] == 1
     )
@@ -608,15 +641,15 @@ def test_link_mail_goes_even_when_the_daily_quota_is_spent(session, ready):
     assert deliver(session, mail_daily_cap=1)[0] == 3
 
 
-def test_a_cap_of_zero_means_no_cap(session, ready):
-    rows = [notes_row(session, ready) for _ in range(3)]
+def test_a_cap_of_zero_means_no_cap(session, plain):
+    rows = [plain_row(session, n) for n in range(3)]
     assert deliver(session, mail_daily_cap=0, mail_recipient_daily_cap=0)[0] == 3
     assert {r.status for r in rows} == {"sent"}
 
 
-def test_notes_mail_is_held_a_day_not_an_hour(session, ready):
-    held = notes_row(session, ready, created=NOW - timedelta(hours=5))
-    old = notes_row(session, ready, created=NOW - timedelta(hours=25))
+def test_notes_mail_is_held_a_day_not_an_hour(session, plain):
+    held = plain_row(session, 1, created=NOW - timedelta(hours=5))
+    old = plain_row(session, 2, created=NOW - timedelta(hours=25))
     link = queue(session, created=NOW - timedelta(hours=2))
     mail.sweep_outbox(session, NOW)
     session.expire_all()
@@ -696,3 +729,149 @@ def test_the_suppress_script_adds_checks_and_removes(session, monkeypatch, capsy
     assert suppress_email.run(["check", "not an address"]) == 1
     with pytest.raises(SystemExit):
         suppress_email.run(["add", "a@example.test", "spam"])
+
+
+# ---- review findings: no second mail, no starvation, hard reasons win, headers allow-listed ----
+
+
+def test_a_second_notes_ready_mail_is_never_queued_even_after_the_first_was_sent(session, ready):
+    row = mail.queue_notes_ready(session, ready)
+    session.commit()
+    row.created_at = NOW
+    session.commit()
+    assert deliver(session)[0] == 1
+    session.refresh(row)
+    assert row.status == "sent" and row.payload == {"meeting_id": ready.id}
+    assert mail.queue_notes_ready(session, ready) is None
+    session.commit()
+    assert len(session.scalars(select(MailOutbox)).all()) == 1
+
+
+@pytest.mark.parametrize("how", ["skipped", "failed", "expired"])
+def test_no_second_mail_after_the_first_was_skipped_failed_or_expired(session, ready, how):
+    row = mail.queue_notes_ready(session, ready)
+    row.created_at = NOW - timedelta(hours=26 if how == "expired" else 0)
+    session.commit()
+    if how == "skipped":
+        mail.suppress(session, "owner@example.test", "bounce")
+        session.commit()
+        deliver(session)
+    elif how == "failed":
+        mail.deliver_pending(
+            session, FakeMailer(mail.MailError("HTTP 422", permanent=True)), settings(), NOW
+        )
+    else:
+        mail.sweep_outbox(session, NOW)
+    session.refresh(row)
+    assert row.status != "pending" and row.payload == {"meeting_id": ready.id}
+    assert mail.queue_notes_ready(session, ready) is None
+
+
+def test_the_database_allows_one_notes_ready_row_per_meeting(session, ready):
+    from sqlalchemy.exc import IntegrityError
+
+    mail.enqueue(session, "owner@example.test", "notes_ready", {"meeting_id": ready.id})
+    session.commit()
+    with pytest.raises(IntegrityError):
+        mail.enqueue(session, "owner@example.test", "notes_ready", {"meeting_id": ready.id})
+    session.rollback()
+
+
+def test_a_racing_duplicate_loses_quietly_and_the_transaction_stays_usable(
+    session, ready, monkeypatch
+):
+    """Two transactions both pass any pre-check; the index makes the second one fail inside its
+    savepoint, so the caller (the pipeline, in the notes commit) is not harmed."""
+    mail.enqueue(session, "owner@example.test", "notes_ready", {"meeting_id": ready.id})
+    session.commit()
+    assert mail.queue_notes_ready(session, ready) is None
+    mail.enqueue(session, "x@example.test", "verify_email", {"link": LINK})  # still usable
+    session.commit()
+    assert len(session.scalars(select(MailOutbox)).all()) == 2
+
+
+def test_other_meetings_and_templates_are_not_blocked_by_the_index(session, ready):
+    mail.enqueue(session, "owner@example.test", "notes_ready", {"meeting_id": ready.id})
+    mail.enqueue(session, "owner@example.test", "notes_ready", {"meeting_id": ready.id + 1})
+    mail.enqueue(session, "a@example.test", "verify_email", {"link": LINK})
+    mail.enqueue(session, "a@example.test", "verify_email", {"link": LINK})
+    session.commit()
+
+
+def test_held_notes_mail_cannot_starve_a_verification_mail(session):
+    """The quota is spent and 130 notes mails wait for tomorrow; a verify mail queued after them
+    still goes in the next pass (and is not failed as expired by the sweep)."""
+    for i in range(2):
+        done = queue(session, to=f"sent{i}@example.test")
+        done.status, done.sent_at, done.payload = "sent", NOW, {}
+    for meeting_id in range(1, 131):
+        row = mail.enqueue(session, "owner@example.test", "notes_ready", {"meeting_id": meeting_id})
+        row.created_at = NOW - timedelta(hours=3)
+    fresh = queue(session, to="new@example.test")
+    session.commit()
+    sent, mailer = deliver(session, mail_daily_cap=2)
+    assert sent == 1 and mailer.sent[0][0].to == "new@example.test"
+    session.refresh(fresh)
+    assert fresh.status == "sent"
+    held = session.scalars(select(MailOutbox).where(MailOutbox.template == "notes_ready")).all()
+    assert len(held) == 130 and {r.status for r in held} == {"pending"}
+
+
+def test_link_mail_is_loaded_before_a_backlog_of_notes_mail_below_the_cap(session):
+    for meeting_id in range(1, 131):
+        row = mail.enqueue(session, "owner@example.test", "notes_ready", {"meeting_id": meeting_id})
+        row.created_at = NOW - timedelta(hours=3)
+    fresh = queue(session, to="new@example.test")
+    session.commit()
+    sent, mailer = deliver(session, mail_daily_cap=0)
+    assert mailer.sent[0][0].to == "new@example.test"  # it went first, ahead of 130 older rows
+    session.refresh(fresh)
+    assert fresh.status == "sent"
+
+
+def test_a_bounce_or_complaint_replaces_an_unsubscribe_but_never_the_reverse(session):
+    mail.suppress(session, "a@example.test", "unsubscribed")
+    mail.suppress(session, "a@example.test", "bounce")
+    assert mail.suppression_reason(session, "a@example.test") == "bounce"
+    mail.suppress(session, "a@example.test", "unsubscribed")
+    mail.suppress(session, "a@example.test", "complaint")
+    assert mail.suppression_reason(session, "a@example.test") == "bounce"  # the first hard one
+    mail.suppress(session, "b@example.test", "complaint")
+    mail.suppress(session, "b@example.test", "unsubscribed")
+    assert mail.suppression_reason(session, "b@example.test") == "complaint"
+    session.commit()
+
+
+def test_an_unsubscribed_address_that_then_bounces_stops_getting_sign_in_mail(session):
+    mail.suppress(session, "owner@example.test", "unsubscribed")
+    session.commit()
+    first = queue(session, to="owner@example.test")
+    assert deliver(session)[0] == 1  # sign-in mail still goes after an unsubscribe
+    mail.suppress(session, "owner@example.test", "bounce")
+    second = queue(session, to="owner@example.test")
+    assert deliver(session)[0] == 0
+    skipped(session, second, "suppressed")
+    session.refresh(first)
+    assert first.status == "sent"
+
+
+@pytest.mark.parametrize(
+    "name", ["From", "from", "To", "Cc", "Bcc", "Reply-To", "Subject", "Sender", "Content-Type"]
+)
+def test_headers_cannot_reach_the_address_fields(name):
+    with pytest.raises(ValueError):
+        Message("a@b.test", "s", "t", "h", headers=((name, "evil@x.test"),))
+
+
+def test_only_the_opt_out_headers_are_allowed_in_any_case():
+    message = Message(
+        "a@b.test",
+        "s",
+        "t",
+        "h",
+        headers=(
+            ("list-unsubscribe", "<https://x.test/u>"),
+            ("List-Unsubscribe-Post", "List-Unsubscribe=One-Click"),
+        ),
+    )
+    assert len(message.headers) == 2

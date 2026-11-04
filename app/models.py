@@ -178,7 +178,17 @@ class Notification(Base):
 
 class MailOutbox(Base):
     __tablename__ = "mail_outbox"
-    __table_args__ = (CheckConstraint(_in("status", MAIL_STATUSES), name="ck_mail_outbox_status"),)
+    __table_args__ = (
+        CheckConstraint(_in("status", MAIL_STATUSES), name="ck_mail_outbox_status"),
+        # One notes-ready mail per meeting, however many workers or retries (the payload of a
+        # notes row keeps its ids when the row is done).
+        Index(
+            "uq_mail_outbox_notes_ready_meeting",
+            sa.text("(payload->>'meeting_id')"),
+            unique=True,
+            postgresql_where=sa.text("template = 'notes_ready'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     to_email: Mapped[str] = mapped_column(String(254))

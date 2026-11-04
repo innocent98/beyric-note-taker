@@ -38,6 +38,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import mail_templates
@@ -175,12 +176,17 @@ HARD_REASONS = ("bounce", "complaint")
 
 
 def suppress(session: Session, email: str, reason: str) -> None:
-    """Never mail `email` again (in the caller's transaction, no commit). Idempotent: the first
-    reason stays. Only the address's hash is kept."""
+    """Never mail `email` again (in the caller's transaction, no commit). Only the address's hash
+    is kept. An existing entry stays as it is, except that an `unsubscribed` one becomes a bounce
+    or complaint (which also stops sign-in mail), never the other way round."""
+    statement = insert(MailSuppression).values(email_hash=email_hash(email), reason=reason)
     session.execute(
-        insert(MailSuppression)
-        .values(email_hash=email_hash(email), reason=reason)
-        .on_conflict_do_nothing(index_elements=["email_hash"])
+        statement.on_conflict_do_update(
+            index_elements=["email_hash"],
+            set_={"reason": statement.excluded.reason},
+            where=(MailSuppression.reason == "unsubscribed")
+            & (statement.excluded.reason != "unsubscribed"),
+        )
     )
 
 
@@ -223,23 +229,20 @@ def enqueue(session: Session, to: str, template: str, payload: dict) -> MailOutb
 
 def queue_notes_ready(session: Session, meeting: Meeting) -> MailOutbox | None:
     """Queue the notes-ready mail for a meeting that has just become ready, in the caller's
-    transaction. Not queued for an owner who is not active or has switched the mail off, nor
-    while one is already queued for the meeting (the sender checks all of it again at send time,
-    so this only saves rows)."""
+    transaction. At most one is ever queued for a meeting: a notes row keeps its ids-only payload
+    when it is done, and a unique index on (template, meeting id) stops two transactions that
+    race (the loser gets None). Not queued for an owner who is not active or has switched the mail
+    off (the sender checks that again at send time, so this only saves rows)."""
     owner = session.get(User, meeting.owner_user_id)
     if owner is None or owner.status != "active":
         return None
     if not mail_templates.notes_ready_wanted(session, owner):
         return None
-    queued = session.scalar(
-        select(MailOutbox.id).where(
-            MailOutbox.template == "notes_ready",
-            MailOutbox.payload["meeting_id"].as_integer() == meeting.id,
-        )
-    )
-    if queued is not None:
+    try:
+        with session.begin_nested():
+            return enqueue(session, owner.email, "notes_ready", {"meeting_id": meeting.id})
+    except IntegrityError:
         return None
-    return enqueue(session, owner.email, "notes_ready", {"meeting_id": meeting.id})
 
 
 def _due(row: MailOutbox, now: datetime) -> bool:
@@ -247,7 +250,11 @@ def _due(row: MailOutbox, now: datetime) -> bool:
 
 
 def _finish(row: MailOutbox, status: str, error: str | None) -> None:
-    row.status, row.payload, row.last_error = status, {}, error
+    """Close a row. A link row loses its payload (it holds a raw token); a notes row keeps its
+    ids, which hold no secret and are what stops a second mail for the same meeting."""
+    row.status, row.last_error = status, error
+    if row.template not in NOTES_TEMPLATES:
+        row.payload = {}
 
 
 def _sent_since(session: Session, since: datetime, to: str | None = None) -> int:
@@ -282,17 +289,28 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
     """Send every pending mail that is due; returns how many went. Each row is handled and
     committed on its own, under a row lock another worker skips, so one failure never holds up
     or undoes the rest."""
-    ids = list(
-        session.scalars(
-            select(MailOutbox.id)
-            .where(MailOutbox.status == "pending")
-            .order_by(MailOutbox.id)
-            .limit(BATCH * 4)
-        )
-    )
     # Resend counts the day in UTC and counts every mail, account mail included.
     day_start = now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     sent_today = _sent_since(session, day_start) if settings.mail_daily_cap > 0 else 0
+    capped = 0 < settings.mail_daily_cap <= sent_today
+    notes = list(NOTES_TEMPLATES)
+
+    def pending_ids(*conditions) -> list[int]:
+        return list(
+            session.scalars(
+                select(MailOutbox.id)
+                .where(MailOutbox.status == "pending", *conditions)
+                .order_by(MailOutbox.id)
+                .limit(BATCH * 4)
+            )
+        )
+
+    # Sign-in mail first and on its own, so notes mail held for the day's quota (pending for up to
+    # a day) can never fill the batch and starve a verification or reset mail. Once the quota is
+    # spent notes mail is not even loaded.
+    ids = pending_ids(MailOutbox.template.not_in(notes))
+    if not capped:
+        ids += pending_ids(MailOutbox.template.in_(notes))
     session.rollback()
     sent = 0
     for mail_id in ids:
@@ -389,11 +407,15 @@ def sweep_outbox(session: Session, now: datetime) -> None:
             MailOutbox.template.in_(notes),
             MailOutbox.created_at < now - HOLD_NOTES_MAIL_FOR,
         )
-        .values(status="failed", last_error="expired", payload={})
+        .values(status="failed", last_error="expired")
     )
     session.execute(
         update(MailOutbox)
-        .where(MailOutbox.status == "failed", MailOutbox.created_at < now - SCRUB_AFTER)
+        .where(
+            MailOutbox.status == "failed",
+            MailOutbox.template.not_in(notes),
+            MailOutbox.created_at < now - SCRUB_AFTER,
+        )
         .values(payload={})
     )
     session.execute(

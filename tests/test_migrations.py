@@ -492,9 +492,18 @@ def test_0012_adds_suppressions_and_the_skipped_status_and_downgrades_cleanly(sc
         conn.execute(
             text("insert into mail_suppressions (email_hash, reason) values ('b', 'spam')")
         )
+    notes_ready = (
+        "insert into mail_outbox (to_email, template, payload) "
+        "values ('a@example.test', 'notes_ready', '{\"meeting_id\": 5}')"
+    )
+    with engine.begin() as conn:
+        conn.execute(text(notes_ready))
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text(notes_ready))  # one notes_ready mail per meeting
     command.downgrade(cfg, "0011")
     assert "mail_suppressions" not in inspect(engine).get_table_names()
-    assert _rows(engine, "select status from mail_outbox") == [("failed",)]  # was skipped
+    statuses = _rows(engine, "select status from mail_outbox")
+    assert sorted(statuses) == [("failed",), ("pending",)]  # the skipped row became failed
     with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
         conn.execute(
             text(
