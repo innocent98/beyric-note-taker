@@ -455,3 +455,12 @@ Legal and business
 - [x] FE guide section 5.6a with real captures (`docs/fe-captures/template-delete/`); SOP `docs/sop/2026-11-04-template-delete.md`
 - [ ] Follow-up: the Review page's "Rewrite with the corrected spelling" offer fails with "Choose a template." for a meeting whose template was deleted
 - [ ] Follow-up: designer to rule on the confirmation ask and on deleting the last template
+
+## Local time display (2026-11-04, `feature/local-time-display`, PR open, SOP `docs/sop/2026-11-04-local-time-display.md`)
+
+- [x] Web pages show every date and time in the viewer's own browser zone with a short zone label ("02 Nov 2026, 22:16 GMT+1"); the server render and first browser render stay UTC, then `LocalTime` swaps in the zone after mount (no hydration warning)
+- [x] Applied to Meetings list, meeting detail (header, Details, retry notice), Notifications, Decisions and Review day labels, Settings "Last updated"; Upcoming already was local and now shares the same zone helper
+- [x] Tests with fixed zones (Lagos, New York across the 2026-11-01 clock change, Kolkata, UTC), day boundary, post-mount swap, hydration without a console error; vitest pins `TZ=UTC`
+- [x] Parity: Lagos and UTC runs at 1440/768/390 (`docs/ui/parity/after/local-time-{lagos,utc}/`) and a layout check (`web/scripts/parity-local-time.mjs`)
+- [ ] Follow-up: mail and the old Jinja pages are still UTC (needs a stored per-user zone)
+- [ ] Follow-up: designer to draw a "Time zone" row in Settings before any stored zone is built

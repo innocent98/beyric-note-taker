@@ -5,7 +5,7 @@ import { Alert, AppLink, Button, EmptyState, Field, Icon, PageHead } from "@/com
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { DecisionGroup, DecisionList } from "@/lib/api/types";
-import { formatDay } from "@/lib/format";
+import { LocalTime } from "@/components/app/local-time";
 
 // How long typing pauses before the search is sent.
 const SEARCH_DELAY_MS = 300;
@@ -151,7 +151,7 @@ export function DecisionsView({ initial }: { initial: DecisionList }) {
             <section className={`card card-flush${searching ? " is-busy" : ""}`} key={group.meeting.id}>
               <div className="dec-head">
                 <div className="dec-head-text">
-                  <span className="dec-date">{formatDay(group.meeting.created_at)}</span>
+                  <span className="dec-date"><LocalTime iso={group.meeting.created_at} kind="day" /></span>
                   <h2 className="dec-title">{group.meeting.title}</h2>
                 </div>
                 <AppLink className="dec-open" href={`/meetings/${group.meeting.id}`}>

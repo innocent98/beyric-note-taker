@@ -11,10 +11,14 @@
 //
 //   PLAYWRIGHT=/path/to/playwright/index.mjs [CHROME=/path/to/chrome] node scripts/parity-shots.mjs \
 //     --design http://127.0.0.1:8700 --next http://127.0.0.1:3100 --out /tmp/parity [--only landing,signin] \
-//     [--mock http://127.0.0.1:8031]
+//     [--mock http://127.0.0.1:8031] [--tz Africa/Lagos]
 //
 // `--mock` is the mock API's own address: before each Next shot of a screen that changes state (the
 // translation screens) it is asked to start again from nothing (`/__mock/reset`).
+//
+// `--tz` sets the browser's time zone (Playwright `timezoneId`) on every page, so a run in
+// `Africa/Lagos` and one in `UTC` show what a viewer in each place sees. Console errors and page
+// errors of the Next pages are printed (a hydration mismatch shows as one).
 //
 // The prototype of the main app is one stateful page, so its screens are reached by clicking the
 // same way a person would. Screens with no prototype (error and empty states) are shot alone.
@@ -28,6 +32,7 @@ const { values } = parseArgs({
     out: { type: "string" },
     only: { type: "string" },
     mock: { type: "string" },
+    tz: { type: "string" },
   },
 });
 for (const key of ["design", "next", "out"]) {
@@ -66,6 +71,8 @@ const SCREENS = {
   "app-settings": [APP, [["Settings", "first"]], "/settings", true],
   "app-settings-connected": [APP, [["Settings", "first"], ["Connect Google Calendar", "first", 1500]], "/settings", true],
   "app-meetings-calendar": [APP, [["Settings", "first"], ["Connect Google Calendar", "first", 1500], ["Meetings", "first"]], "/", true],
+  // The notifications list shows each notice's day and time (no prototype).
+  "app-notifications": [null, [], "/notifications", true],
   "app-detail-processing": [null, [], "/meetings/2", true],
   "app-detail-waiting": [null, [], "/meetings/3", true],
   "app-detail-failed": [null, [], "/meetings/4", true],
@@ -102,9 +109,13 @@ async function reset() {
 }
 
 async function shoot(url, width, clicks, signedIn, side = "design") {
-  const context = await browser.newContext({ viewport: { width, height: 900 } });
+  const context = await browser.newContext({ viewport: { width, height: 900 }, timezoneId: values.tz });
   if (signedIn) await context.addCookies([{ name: "session", value: "owner", url: NEXT }]);
   const page = await context.newPage();
+  if (side === "next") {
+    page.on("console", (message) => message.type() === "error" && console.log(`  console error on ${url}: ${message.text()}`));
+    page.on("pageerror", (error) => console.log(`  page error on ${url}: ${error.message}`));
+  }
   // The Meetings list polls while a meeting is being worked on, so the network may never go idle.
   await page.goto(url, { waitUntil: "load" });
   await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});

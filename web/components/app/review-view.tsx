@@ -6,7 +6,7 @@ import { Alert, AppLink, Button, EmptyState, Field, Icon, PageHead } from "@/com
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { ReviewItem, ReviewList } from "@/lib/api/types";
-import { formatDay } from "@/lib/format";
+import { LocalTime } from "@/components/app/local-time";
 
 const NOT_THERE = "This item is no longer there. It may have been replaced when the notes were rewritten.";
 const REWRITE_SLOW =
@@ -235,7 +235,7 @@ export function ReviewView({ open, checked }: { open: ReviewList; checked: Revie
         return (
           <section className="card rv-card" key={item.id} aria-busy={working}>
             <p className="rv-source">
-              {item.meeting.title} <span aria-hidden="true">·</span> {formatDay(item.meeting.created_at)}
+              {item.meeting.title} <span aria-hidden="true">·</span> <LocalTime iso={item.meeting.created_at} kind="day" />
             </p>
             <p className="rv-text">{item.text}</p>
             {item.heard_as !== null ? (
@@ -313,7 +313,7 @@ export function ReviewView({ open, checked }: { open: ReviewList; checked: Revie
                   <div className="rv-done-body">
                     <p className="rv-done-text">{item.text}</p>
                     <p className="rv-done-source">
-                      {item.meeting.title} <span aria-hidden="true">·</span> {formatDay(item.meeting.created_at)}
+                      {item.meeting.title} <span aria-hidden="true">·</span> <LocalTime iso={item.meeting.created_at} kind="day" />
                     </p>
                     {errors[item.id] ? <p className="rv-done-error">{errors[item.id]}</p> : null}
                   </div>
