@@ -348,7 +348,11 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] FE guide with live captures (`docs/fe-captures/ai-workspace-w1/`)
   - [ ] Open questions endpoint (with the series screens, W8)
   - [ ] Regenerate `web/lib/api/schema.d.ts` (`npm run gen:api`) with the first screen
-- [ ] W2 Tasks (needs W1; Opus)
+- [ ] W2 gate: real-transcript review of the full extraction (`extract-v1`) by Adebayo, before W2 starts
+  - [x] Review tool `scripts/extraction_review.py` (2026-11-04, `docs/sop/2026-11-04-extraction-review-tool.md`): one HTML page per run, transcript left, extracted items right, Right / Wrong / Partly per item
+  - [ ] Adebayo reviews "the myway meeting" and pastes his verdicts back (owner, due date and quote right?)
+  - [ ] Go or no-go on `gpt-6-luna` for W2 decided from those verdicts (spec asks for five real meetings; one is the first step)
+- [ ] W2 Tasks (needs W1 and the gate above; Opus)
 - [ ] W5 Export, W3 Team, W4 Projects, W6 Share, W7 Translate, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 
 ## Backlog
