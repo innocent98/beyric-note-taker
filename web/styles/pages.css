@@ -239,6 +239,7 @@
 /* ---- Settings: the sections drawn before their features exist (Sprints and reminders, Tasks,
    Default notes language), and the Recurring cards on Meetings. Measures are the designer's. ---- */
 .pl-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); padding: 22px 22px 6px; }
+.pl-head-plain { display: block; }
 .pl-sub { margin: 4px 0 0; font-size: var(--text-sm); color: var(--text-2); }
 .pl-soon { margin: 6px 0 0; }
 .pl-pill { align-self: flex-start; padding: 3px 8px; border-radius: var(--radius-pill); background: var(--surface-active); color: var(--ink-3); font-size: 11px; font-weight: 600; }
@@ -270,6 +271,7 @@
 .rec-title { margin: 0; font-size: var(--text-md); font-weight: 600; letter-spacing: 0; }
 .rec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
 .rec-card { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.rec-card > div:first-child { align-self: flex-start; max-width: 100%; }
 .rec-name { font-weight: 600; overflow-wrap: anywhere; }
 .rec-cadence { font-size: var(--text-xs); color: var(--text-3); }
 .rec-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-xs); }
