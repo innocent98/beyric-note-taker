@@ -8,7 +8,7 @@ import { PageHead } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { getReviewOpen, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
 import { calendarNotice } from "@/lib/calendar-notice";
-import type { CalendarState } from "@/lib/api/types";
+import type { CalendarState, Template } from "@/lib/api/types";
 
 export const metadata: Metadata = { title: "Settings", robots: { index: false, follow: false } };
 
@@ -31,12 +31,20 @@ export default async function SettingsPage({
     if (error instanceof ApiError && error.code === "calendar_unavailable") calendar = null;
     else throw error;
   }
+  // The select of the Calendar section lists the person's own templates. Without them the select is
+  // left out; the rest of the page does not depend on them.
+  let templates: Template[] = [];
+  try {
+    templates = await api.templates.list();
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) redirect("/login");
+  }
   const email = await load(api.settings.email.get());
   return (
     <AppShell current="settings" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()}>
       <div className="stack-md measure">
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
-        <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} />
+        <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} templates={templates} />
         <SettingsPlannedSections />
         <EmailSettingsSection email={email} />
       </div>

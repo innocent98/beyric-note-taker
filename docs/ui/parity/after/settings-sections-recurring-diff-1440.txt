@@ -25,7 +25,7 @@ DIFF Settings / Default notes language / [box]: h 113 -> 138
 DIFF Settings / Default notes language / [select 1]: opacity 1 -> 0.55
 DIFF Recurring / Beyric Monday planning / Beyric Monday planning: h 18 -> 21
 DIFF Recurring / Beyric Monday planning / Weekly on Mondays, 14:00: w 146 -> 160; h 16 -> 18
-DIFF Recurring / Beyric Friday review / Beyric Friday review: w 134 -> 136; h 18 -> 21
+DIFF Recurring / Beyric Friday review / Beyric Friday review: h 18 -> 21
 DIFF Recurring / Beyric Friday review / Weekly on Fridays, 15:00: h 16 -> 18
 
 40 boxes and labels compared, 29 with a difference (positions inside each section; y within 1 px counts as equal).

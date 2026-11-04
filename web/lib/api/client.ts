@@ -1,4 +1,6 @@
 import type {
+  CalendarEvent,
+  CalendarSettingsInput,
   CalendarState,
   ConnectStart,
   DecisionList,
@@ -268,7 +270,10 @@ export function createApi(options: ApiOptions = {}) {
     },
     // Google Calendar (docs/fe-integration-guide-calendar-settings.md). `get` answers 404
     // `calendar_unavailable` while the feature is off. `connect` returns the Google consent URL to
-    // navigate to; the browser comes back to /settings/calendar with the result in the query string.
+    // navigate to; the browser comes back to /settings with the result in the query string.
+    // `settings` changes the auto-join rule and/or the template for calendar meetings and answers
+    // with the whole state; `override` is the switch on one Upcoming row (true joins, false does
+    // not, null clears it) and answers with that row, or 409 `not_joinable` with the reason.
     calendar: {
       get: () => request<CalendarState>("GET", "/api/calendar"),
       connect: () =>
@@ -280,6 +285,13 @@ export function createApi(options: ApiOptions = {}) {
       // The Recurring cards. `timeZone` is the browser's own zone: the texts come back written in it.
       recurring: (timeZone?: string) =>
         request<RecurringState>("GET", "/api/calendar/recurring", { query: timeZone ? { tz: timeZone } : {} }),
+      settings: (body: CalendarSettingsInput) =>
+        request<CalendarState>("PUT", "/api/calendar/settings", { body, write: true }),
+      override: (eventId: number, override: boolean | null) =>
+        request<CalendarEvent>("PUT", `/api/calendar/events/${eventId}/override`, {
+          body: { override },
+          write: true,
+        }),
     },
     vocabulary: {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,

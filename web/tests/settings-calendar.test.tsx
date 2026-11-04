@@ -5,16 +5,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsCalendar } from "@/components/app/settings-calendar";
 import { calendarNotice } from "@/lib/calendar-notice";
 import { ApiError } from "@/lib/api/client";
-import type { CalendarState, ConnectStart, DisconnectResult } from "@/lib/api/types";
-import { calendarBody, connectBody } from "./helpers";
+import type { CalendarState, ConnectStart, DisconnectResult, Template } from "@/lib/api/types";
+import { calendarBody, connectBody, settingsBody, settingsError } from "./helpers";
 
 // The settings screen is fed the bodies captured from the running app
 // (docs/fe-captures/calendar-state/ and calendar-connect/, cited in
 // docs/fe-integration-guide-calendar-settings.md).
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), connect: vi.fn(), disconnect: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), connect: vi.fn(), disconnect: vi.fn(), settings: vi.fn() }));
 vi.mock("@/lib/api/browser", () => ({
-  api: { calendar: { get: mocks.get, connect: mocks.connect, disconnect: mocks.disconnect } },
+  api: {
+    calendar: { get: mocks.get, connect: mocks.connect, disconnect: mocks.disconnect, settings: mocks.settings },
+  },
 }));
 
 const notConnected = calendarBody<CalendarState>("05-state-not-connected.json");
@@ -28,6 +30,14 @@ const needsReconnect = calendarBody<CalendarState>("15-state-needs-reconnect-rev
 const disconnected = calendarBody<DisconnectResult>("20-disconnect.json");
 const unverified = connectBody<ConnectStart>("08-first-connect-connect.json");
 const verified = connectBody<ConnectStart>("32-connect-verified-app.json");
+// The person's templates (calendar-settings #07) and what the write routes answered.
+const templates = settingsBody<{ templates: Template[] }>("07-templates.json").templates;
+const afterRuleOrganizer = settingsBody<CalendarState>("32-settings-rule-organizer.json");
+const afterRuleNone = settingsBody<CalendarState>("18-settings-rule-none.json");
+const afterTemplate = settingsBody<CalendarState>("08-settings-template.json");
+const afterTemplateNull = settingsBody<CalendarState>("10-settings-template-null.json");
+const withTemplates = (initial: CalendarState | null) =>
+  render(<SettingsCalendar initial={initial} notice={null} navigate={vi.fn()} templates={templates} />);
 
 beforeEach(() => {
   Object.values(mocks).forEach((fn) => fn.mockReset());
@@ -127,33 +137,33 @@ describe("connected", () => {
     expect(screen.getByText(/Waiting for the first update/)).toBeTruthy();
     cleanup();
     view(withEvents);
-    expect(screen.getByText(/Last updated 04 Nov 2026, 13:08 UTC/)).toBeTruthy();
+    expect(screen.getByText(/Last updated 04 Nov 2026, 14:57 UTC/)).toBeTruthy();
   });
 
-  it("shows the three auto-join rules read only, with the person's current one chosen", () => {
+  it("shows the designer's three auto-join rules as radios, the person's current one chosen", () => {
     view(withEvents);
     const group = screen.getByRole("radiogroup", { name: "Join automatically" });
-    const radios = within(group).getAllByRole("radio");
-    expect(radios.map((r) => r.textContent)).toEqual([
+    const radios = within(group).getAllByRole("radio") as HTMLInputElement[];
+    expect(radios.map((r) => r.closest("label")!.textContent)).toEqual([
       "All meetings with a video linkEvery event on your calendar with a meeting link.",
       "Only meetings I organiseSkip meetings other people invited you to.",
       "Only when I turn it onPick meetings one by one from the Upcoming list.",
     ]);
-    expect(radios.map((r) => r.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
-    expect(radios.every((r) => r.getAttribute("aria-disabled") === "true")).toBe(true);
+    expect(radios.map((r) => r.checked)).toEqual([true, false, false]);
+    expect(radios.every((r) => !r.disabled)).toBe(true);
   });
 
   it("follows the stored rule", () => {
+    const checked = () => (within(screen.getByRole("radiogroup")).getAllByRole("radio") as HTMLInputElement[]).map((r) => r.checked);
     view(organizerRule);
-    expect(within(screen.getByRole("radiogroup")).getAllByRole("radio").map((r) => r.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+    expect(checked()).toEqual([false, true, false]);
     cleanup();
     view(noRule);
-    expect(within(screen.getByRole("radiogroup")).getAllByRole("radio").map((r) => r.getAttribute("aria-checked"))).toEqual(["false", "false", "true"]);
+    expect(checked()).toEqual([false, false, true]);
   });
 
-  it("does not draw the template select or the upcoming list here (they are not part of this section)", () => {
+  it("does not draw the upcoming list here (it is on the Meetings screen)", () => {
     view(withEvents);
-    expect(screen.queryByText("Template for calendar meetings")).toBeNull();
     expect(screen.queryByText("Weekly planning")).toBeNull();
     expect(screen.queryByText("Upcoming")).toBeNull();
   });
@@ -334,5 +344,195 @@ describe("the message after coming back from Google", () => {
   it("never prints an unknown code", () => {
     view(notConnected, { notice: { kind: "error", code: "<b>boom</b>" } });
     expect(document.body.textContent).not.toContain("boom");
+  });
+});
+
+
+const radio = (name: RegExp) => screen.getByRole("radio", { name }) as HTMLInputElement;
+const rulesChecked = () =>
+  (within(screen.getByRole("radiogroup")).getAllByRole("radio") as HTMLInputElement[]).map((r) => r.checked);
+
+describe("choosing the auto-join rule", () => {
+  it("writes the rule through the settings route and shows the answer's rule", async () => {
+    mocks.settings.mockResolvedValue(afterRuleOrganizer);
+    view(withEvents);
+    await userEvent.click(radio(/Only meetings I organise/));
+    expect(mocks.settings).toHaveBeenCalledTimes(1);
+    expect(mocks.settings).toHaveBeenCalledWith({ rule: "organizer" });
+    await waitFor(() => expect(rulesChecked()).toEqual([false, true, false]));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("writes `none` for 'Only when I turn it on'", async () => {
+    mocks.settings.mockResolvedValue(afterRuleNone);
+    view(withEvents);
+    await userEvent.click(radio(/Only when I turn it on/));
+    expect(mocks.settings).toHaveBeenCalledWith({ rule: "none" });
+    await waitFor(() => expect(rulesChecked()).toEqual([false, false, true]));
+  });
+
+  it("shows the new rule at once, and holds the radios until the server has answered", async () => {
+    let answer: (state: CalendarState) => void = () => {};
+    mocks.settings.mockReturnValue(new Promise<CalendarState>((resolve) => (answer = resolve)));
+    view(withEvents);
+    await userEvent.click(radio(/Only meetings I organise/));
+    expect(rulesChecked()).toEqual([false, true, false]);
+    expect((radio(/All meetings with a video link/)).disabled).toBe(true);
+    answer(afterRuleOrganizer);
+    await waitFor(() => expect(radio(/All meetings with a video link/).disabled).toBe(false));
+    expect(mocks.settings).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call the server when the chosen rule is already the current one", async () => {
+    view(withEvents);
+    await userEvent.click(radio(/All meetings with a video link/));
+    expect(mocks.settings).not.toHaveBeenCalled();
+  });
+
+  it("goes back to the stored rule and says so in plain words when the server cannot be reached", async () => {
+    mocks.settings.mockRejectedValue(new ApiError(0, "network_error", "Could not reach the server. Check your connection and try again."));
+    view(withEvents);
+    await userEvent.click(radio(/Only when I turn it on/));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Could not reach the server"));
+    expect(rulesChecked()).toEqual([true, false, false]);
+    expect(radio(/Only when I turn it on/).disabled).toBe(false);
+  });
+
+  it("goes back and shows the server's words when it refuses", async () => {
+    mocks.settings.mockRejectedValue(new ApiError(409, "conflict", "Try again in a moment."));
+    view(withEvents);
+    await userEvent.click(radio(/Only meetings I organise/));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Try again in a moment."));
+    expect(rulesChecked()).toEqual([true, false, false]);
+  });
+
+  it("never shows developer text for an error the owner cannot act on (a 404 or 422)", async () => {
+    mocks.settings.mockRejectedValue(new ApiError(404, "calendar_unavailable", "Google Calendar is not available."));
+    view(withEvents);
+    await userEvent.click(radio(/Only meetings I organise/));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Something went wrong. Please try again."));
+  });
+
+  it("clears an earlier error when the next write works", async () => {
+    mocks.settings.mockRejectedValueOnce(new ApiError(0, "network_error", "Could not reach the server. Check your connection and try again."));
+    mocks.settings.mockResolvedValueOnce(afterRuleOrganizer);
+    view(withEvents);
+    await userEvent.click(radio(/Only meetings I organise/));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
+    await userEvent.click(radio(/Only meetings I organise/));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(rulesChecked()).toEqual([false, true, false]);
+  });
+
+  it("can be chosen by keyboard: a focused rule is chosen with Space", async () => {
+    mocks.settings.mockResolvedValue(afterRuleOrganizer);
+    view(withEvents);
+    radio(/Only meetings I organise/).focus();
+    await userEvent.keyboard(" ");
+    expect(mocks.settings).toHaveBeenCalledWith({ rule: "organizer" });
+  });
+});
+
+describe("the template for calendar meetings", () => {
+  const select = () => screen.getByRole("combobox", { name: "Template for calendar meetings" }) as HTMLSelectElement;
+
+  it("is the designer's select under the rules, listing the person's own templates", () => {
+    withTemplates(withEvents);
+    expect(select().tagName).toBe("SELECT");
+    expect(Array.from(select().options).map((o) => o.textContent)).toEqual(templates.map((t) => t.name));
+    const rules = screen.getByRole("radiogroup");
+    expect(rules.compareDocumentPosition(select()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows the person's first template (the oldest) while none is chosen: the default", () => {
+    expect(afterTemplateNull.calendar_template_id).toBeNull();
+    withTemplates(afterTemplateNull);
+    // The list is sorted by name (Client call is 2); the default is the first one made, General (1).
+    expect(templates[0].id).toBe(2);
+    expect(select().value).toBe("1");
+    expect(select().selectedOptions[0].textContent).toBe("General");
+  });
+
+  it("shows the template sign-up chose for the person (the General copy)", () => {
+    expect(withEvents.calendar_template_id).toBe(1);
+    withTemplates(withEvents);
+    expect(select().selectedOptions[0].textContent).toBe("General");
+  });
+
+  it("shows the chosen template", () => {
+    withTemplates(afterTemplate);
+    expect(select().value).toBe(String(afterTemplate.calendar_template_id));
+    expect(select().selectedOptions[0].textContent).toBe("Client call");
+  });
+
+  it("writes the chosen template's id through the settings route", async () => {
+    mocks.settings.mockResolvedValue(afterTemplate);
+    withTemplates(withEvents);
+    await userEvent.selectOptions(select(), "Client call");
+    expect(mocks.settings).toHaveBeenCalledWith({ calendar_template_id: afterTemplate.calendar_template_id });
+    await waitFor(() => expect(select().value).toBe(String(afterTemplate.calendar_template_id)));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("does not send the rule along, and a rule change does not send the template", async () => {
+    mocks.settings.mockResolvedValue(afterRuleOrganizer);
+    withTemplates(withEvents);
+    await userEvent.click(radio(/Only meetings I organise/));
+    expect(mocks.settings).toHaveBeenCalledWith({ rule: "organizer" });
+  });
+
+  it("goes back to the earlier template and says so when the write fails", async () => {
+    mocks.settings.mockRejectedValue(new ApiError(0, "network_error", "Could not reach the server. Check your connection and try again."));
+    withTemplates(afterTemplate);
+    await userEvent.selectOptions(select(), "General");
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Could not reach the server"));
+    expect(select().value).toBe(String(afterTemplate.calendar_template_id));
+  });
+
+  it("goes back when the server no longer knows the template (404): plain words, no developer text", async () => {
+    const gone = settingsError("14-settings-template-foreign.json");
+    mocks.settings.mockRejectedValue(new ApiError(gone.status, gone.code, gone.message));
+    withTemplates(afterTemplate);
+    await userEvent.selectOptions(select(), "General");
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Something went wrong. Please try again."));
+    expect(screen.getByRole("alert").textContent).not.toContain("No such template");
+  });
+
+  it("is held while its write is in flight", async () => {
+    let answer: (state: CalendarState) => void = () => {};
+    mocks.settings.mockReturnValue(new Promise<CalendarState>((resolve) => (answer = resolve)));
+    withTemplates(withEvents);
+    await userEvent.selectOptions(select(), "Client call");
+    expect(select().disabled).toBe(true);
+    answer(afterTemplate);
+    await waitFor(() => expect(select().disabled).toBe(false));
+  });
+
+  it("is not drawn when the person has no templates, nor when nothing is connected", () => {
+    view(withEvents);
+    expect(screen.queryByText("Template for calendar meetings")).toBeNull();
+    cleanup();
+    withTemplates(notConnected);
+    expect(screen.queryByText("Template for calendar meetings")).toBeNull();
+  });
+
+  it("shows the default when the answer says no template is chosen (null)", async () => {
+    mocks.settings.mockResolvedValue(afterTemplateNull);
+    withTemplates(afterTemplate);
+    await userEvent.selectOptions(select(), "General");
+    await waitFor(() => expect(mocks.settings).toHaveBeenCalledWith({ calendar_template_id: 1 }));
+    await waitFor(() => expect(select().value).toBe("1"));
+  });
+});
+
+describe("what a disconnect does to the controls", () => {
+  it("leaves no rule or template once the calendar is disconnected", async () => {
+    mocks.disconnect.mockResolvedValue(disconnected);
+    withTemplates(withEvents);
+    await userEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    const sure = screen.getByRole("group", { name: "Disconnect Google Calendar?" });
+    await userEvent.click(within(sure).getByRole("button", { name: "Disconnect" }));
+    await waitFor(() => expect(screen.queryByRole("radiogroup")).toBeNull());
+    expect(screen.queryByText("Template for calendar meetings")).toBeNull();
   });
 });

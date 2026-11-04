@@ -20,7 +20,7 @@ After C3 (connect), C4 (disconnect), C5 (client) and C8/C8b (materialiser, sync)
 | Meetings, calendar part | `web/components/app/calendar-upcoming.tsx` (`CalendarBand`): the band while not connected (a link to `/settings`), the Upcoming list when connected. Days and times are the viewer's own ("Today", "Tomorrow", "Wed 4 Nov", "14:00"), written in the browser after load (`useSyncExternalStore`, empty cells until then, so server and browser render the same HTML) | The design shows local times; the server does not know the zone |
 | Callback return path | `DEFAULT_RETURN_TO` is `/settings` (`app/calendar_connect.py`, its tests, both capture scripts, the connect SOP and guide) | Adebayo's instruction: the page is `/settings`, not `/settings/calendar` |
 | Sidebar | The designer's `navConfig` is Templates, Vocabulary, Settings, so the shell has **Settings** (to `/settings`) after Vocabulary | Designed |
-| Rejected | The Outlook button and every Outlook word (not shipped); the template select and the rule radios as controls (the settings route does not exist); the per-meeting switch (no override route); polling for the first sync (a reload shows it) | Each is a later slice |
+| Rejected | The Outlook button and every Outlook word (not shipped); the template select, the rule radios as controls and the per-meeting switch (built in the next slice, `2026-11-04-calendar-settings-override.md`); polling for the first sync (a reload shows it) | Each is a later slice |
 
 ## What's involved
 | Path | Change |
@@ -56,7 +56,7 @@ Checked as `docs/ui/parity-report.md` describes: the built app (`next build`, st
 | Upcoming card header and rule link | 15/600 title, chip, teal 13/550 rule label | same | positions within 1 px |
 | Upcoming row | 66 high, padding 12/20, columns 76 px / 1fr / auto, gap 14, 1 px `--border-soft` | same | identical (66 px, same padding, gap, border) |
 | Row text lines | day 12, time mono 14/500, title 550, meta 13 with `·` separators, state 12 | same | identical styles; the meta separators are drawn by the existing `meta-line` |
-| State text | followed by the 36 px switch | **the switch is not drawn** (no override route): the state text sits 46 px further right | gap listed below |
+| State text | followed by the 36 px switch | the switch is drawn since `2026-11-04-calendar-settings-override.md` | identical (see that SOP) |
 | Sidebar Settings entry | under Templates and Vocabulary | same | identical |
 | 768 and 390 px | the prototype's main app is not responsive (it crushes its own content, see `parity-report.md`) | the engineered phone layout of the app (stacked rows, the date and time on one line above the title) | not comparable, as for every screen |
 
@@ -82,8 +82,7 @@ Seen while comparing, **not caused here:** in the mock the New meeting card is 5
 ## Designer gaps (for the designer to review)
 | Gap | What was built |
 |---|---|
-| The switch on each Upcoming row | Not drawn (its route is C15a part 2): the state text only, its reason on hover |
-| "Join automatically" rules and the "Template for calendar meetings" select | The three rule cards are drawn read only (disabled radios) with the stored rule chosen; the template select is not drawn |
+| ~~The switch on each Upcoming row~~, ~~"Join automatically" rules and the "Template for calendar meetings" select~~ | **Built** in `2026-11-04-calendar-settings-override.md` (radios write, select drawn, switch per row); the gaps that slice added are listed there |
 | "Connect Microsoft Outlook" | Not built, no Outlook wording anywhere (the paste-a-link source is C19 to C24) |
 | The Calendar sentence names Microsoft Teams, but Teams cannot be joined yet (an event row says "Cannot join: Microsoft Teams meetings cannot be joined yet") | The designer's sentence as designed; **decide whether to name Teams until it works** |
 | Not-connected card: what Google is asked for | One paragraph under the button (read-only access to the events, nothing is written, what is kept and not kept) |
@@ -98,7 +97,7 @@ Seen while comparing, **not caused here:** in the mock the New meeting card is 5
 | The other Settings sections: Sprints and reminders, Tasks, Default notes language (and the Recurring cards on Meetings) | Not part of this slice; they belong to later work (W2, W7 to W10, series) |
 
 ## Follow-ups
-- **The rest of C15a:** `PUT /api/calendar/settings` (rule, template, instant-Meet switch with the 409 `consent_required`), the override route (409 `not_joinable`) and the switch on each row, `GET /api/calendar/upcoming`, the full `state_text` for scheduled-join states, and `_reconcile` on a rule or template change (from the sync SOP). The plan's `test_will_join_text_carries_the_tell_participants_reminder` belongs there: here the reminder is the New meeting card's own line.
+- **The rest of C15a:** the settings write, the override route and the switch are built (`2026-11-04-calendar-settings-override.md`). Still to do: the instant-Meet switch with the 409 `consent_required`, `GET /api/calendar/upcoming`, the full `state_text` for scheduled-join states. The plan's `test_will_join_text_carries_the_tell_participants_reminder` belongs there: here the reminder is the New meeting card's own line.
 - **C13** must set `degraded` and `needs_reconnect`; until then a revoked grant shows only the `last_error` sentence while `state` stays `connected`.
 - **The privacy sentence** ("you can disconnect in the app") the C4 SOP and the checklist say goes back with this button: the legal pages are outside this slice (other sessions are in them), so the lead should add it when merging, and re-check the Security row wording.
 - Another session adds an "Email preferences" section to the same Settings page: it goes in its own component beside `SettingsCalendar` in `web/app/settings/page.tsx`.

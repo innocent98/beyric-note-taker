@@ -1,0 +1,28 @@
+{
+  "note": "409 `not_joinable`: You declined this invite. Nothing is stored; `message` is the reason in words.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/events/5/override",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "override": true
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_joinable",
+        "message": "You declined this invite"
+      }
+    }
+  }
+}

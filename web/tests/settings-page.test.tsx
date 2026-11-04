@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   authenticated: true,
   answer: null as null | (() => Promise<unknown>),
   calls: 0,
+  templates: null as null | (() => Promise<unknown>),
 }));
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => {
@@ -34,6 +35,7 @@ vi.mock("@/lib/api/server", () => ({
           return state.answer!();
         },
       },
+      templates: { list: async () => (state.templates ? state.templates() : []) },
       settings: { email: { get: async () => ({ notify_email: true }) } },
     };
   },
@@ -104,6 +106,29 @@ describe("page", () => {
       expect(order.every((at) => at > -1)).toBe(true);
       expect([...order].sort((a, b) => a - b)).toEqual(order);
     }
+  });
+
+  it("gives the section the person's own templates for the select, sorted as the API gives them", async () => {
+    state.answer = async () => connected;
+    state.templates = async () => [
+      { id: 2, name: "Client call", instructions: "x" },
+      { id: 1, name: "General", instructions: "y" },
+    ];
+    const html = await render();
+    expect(html).toContain("Template for calendar meetings");
+    expect(html.indexOf("Client call")).toBeLessThan(html.indexOf("General"));
+    state.templates = null;
+  });
+
+  it("is still drawn, without the select, when the templates cannot be read", async () => {
+    state.answer = async () => connected;
+    state.templates = async () => {
+      throw new ApiError(500, "server_error", "Something went wrong on our side.");
+    };
+    const html = await render();
+    expect(html).toContain("Join automatically");
+    expect(html).not.toContain("Template for calendar meetings");
+    state.templates = null;
   });
 
   it("shows the message for the callback's redirect", async () => {
