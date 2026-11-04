@@ -36,7 +36,10 @@
         "used_seconds": 0,
         "cap_seconds": 18000
       },
-      "unread_notifications": 0
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0
+      }
     }
   }
 }

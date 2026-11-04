@@ -1,4 +1,4 @@
-# Frontend integration guide: connecting Google Calendar (task C3)
+# Frontend integration guide: connecting and disconnecting Google Calendar (tasks C3, C4)
 
 Everything below is copied from responses captured against the running app by
 `scripts/capture_calendar_connect.py` (real app, real migrations, real database, real HTTP). The files
@@ -14,7 +14,7 @@ Adebayo's Gmail test account and is listed in the last section.
 
 Read this with `docs/fe-integration-guide-owner-app.md` (session cookie, CSRF, error shape) and
 `docs/fe-integration-guide-pilot-accounts.md`. Only the connect step is covered here; the calendar
-state, settings and upcoming meetings are later tasks (C15a), and disconnect is C4.
+state, settings and upcoming meetings are later tasks (C15a). Disconnect (C4) is section 6.
 
 ## 1. What this is, in the frontend's terms
 
@@ -94,7 +94,7 @@ cookie. The `Location` values below are exact (#09, #12, #14, #15, #19, #23, #25
 | `...?calendar_error=scope_missing` | The user **unticked the calendar box** on Google's screen. Nothing was stored | "To join your meetings automatically we need permission to read your calendar events. Try again and leave the calendar box ticked." (The old connection, if there was one, is untouched) |
 | `...?calendar_error=no_refresh_token` | Google gave no long-lived key (it sometimes does not), and the old one cannot stand in (first connect, a different Google account, a dead connection, or a new permission). Nothing stored | "Google didn't finish connecting. Remove Beyric at myaccount.google.com/permissions and try again." **Not reproduced live** (the fake can omit the key; a real Google that omits it was not seen) |
 | `...?calendar_error=google_failed` | Anything else: an unknown, used or expired state; a different browser; Google or the exchange failed | "Something went wrong connecting Google. Try again." |
-| `...?calendar_error=different_account` | A Google account is **already connected and working**, and the person picked a **different** Google account in Google's chooser (#34). Nothing was changed: the first connection, its events and its permissions stay as they were (#35) | "A different Google account is already connected ({email}). To use another one, disconnect first." Needs the connected email from `GET /api/calendar` (C15a); the disconnect button arrives with C4 |
+| `...?calendar_error=different_account` | A Google account is **already connected and working**, and the person picked a **different** Google account in Google's chooser (#34). Nothing was changed: the first connection, its events and its permissions stay as they were (#35) | "A different Google account is already connected ({email}). To use another one, disconnect first." Needs the connected email from `GET /api/calendar` (C15a); the disconnect call is section 6 |
 | `...?calendar_error=wrong_account` | The signed-in user is not the one who started the connect (a link forwarded or planted) | "This connection was started from a different account. Sign in with the right account and start again." |
 | `/login?error=google_failed` | Nobody was signed in when Google came back (#25) | The login page already handles `google_failed` |
 
@@ -147,7 +147,7 @@ unticked box can never switch a feature on.
 - A **reconnect with the same Google account replaces** the row (#26–#28): still one connection per
   user. A **different** Google account is refused (`different_account`, #34) while the connection
   works (`status` `connected` or `degraded`), so an accidental pick in Google's chooser can never
-  swap or wipe the calendar. A switch needs the old connection removed first (disconnect, C4) or dead
+  swap or wipe the calendar. A switch needs the old connection removed first (disconnect, section 6) or dead
   (`needs_reconnect`); only then is the different account accepted, and the old account's events,
   the joins that had not started and its Meet subscription are dropped (a join already running keeps
   going).
@@ -171,7 +171,75 @@ unticked box can never switch a feature on.
 - **Do not retry silently.** Each connect makes a new Google consent; a failed one needs the user's
   own click.
 
-## 6. Verification table
+## 6. Disconnect (task C4)
+
+`POST /api/calendar/google/disconnect`: signed in, `X-CSRF-Token`, **no body**. The "Disconnect Google"
+button calls it, after a confirmation (it deletes data, see below).
+
+Request and response, captured (#39):
+
+```
+POST /api/calendar/google/disconnect        (X-CSRF-Token: <csrf-B>, no body)
+200 {"status": "disconnected", "revoked": true}
+```
+
+`revoked` is `true` when Google confirmed the access is gone (#39) and `false` when Google could not
+be asked (#45: Google's revoke endpoint answered 503, or the server could not read its stored key).
+**When it is `false`, show it** (see 6.1): the data is deleted here either way, but Google may still
+list Beyric as having access.
+
+- **Always 200 with `status` `disconnected`**, including a second click (#41, `revoked: true`: a repeat
+  has nothing left to revoke and cannot re-check an earlier failure, so **act on the first answer**),
+  a second tab, and a user who has no connection at all (`revoked: true`, tested only). There is no "not connected" error to handle. After it, re-read the
+  calendar state and show the not-connected card.
+- **It works while the calendar feature is switched off** (`CALENDAR_ENABLED=false`): unlike connect it
+  never answers 404 `calendar_unavailable`. Tested only (`tests/test_calendar_connect.py`), not captured.
+- **A Google outage is not an HTTP error** (#45): if Google cannot be asked to revoke, the call is
+  still 200 and the data is still deleted here, with `"revoked": false`. Do not show a failure, but do
+  show the notice in 6.1.
+- Errors, exactly as returned: signed out `401` `{"error": {"code": "not_authenticated", "message":
+  "Log in first."}}` (#36); missing or wrong CSRF `403` `{"error": {"code": "csrf_rejected",
+  "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."}}` (#37).
+
+**What it deletes and what stays** (state of the database before #38, after #40):
+
+| Deleted | Kept |
+|---|---|
+| The stored Google key (the revoke is sent to Google first), the Google email, account id and permissions | Meetings already recorded, with their titles and links |
+| The user's calendar events | The hours used |
+| **Every** scheduled join, in every state | The user's calendar settings (rule, template) |
+| Calendar notifications | Other notifications (for example the hours notice) |
+
+The row after (#40): `"status": "disconnected"`, `"google_account_email": null`, `"google_sub": null`,
+`"granted_scopes": null`, `"refresh_token_enc": null`, `"key_version": null`, calendar rows 0. The
+counts before were 2 events and 2 joins (one `scheduled`, one `joined`) and the notification kinds
+`calendar.not_recorded` and `usage.hours_low`; after, 0, 0 and `usage.hours_low` only.
+
+**A meeting being recorded right now carries on** and ends up in Meetings as usual (tested, not
+captured: the captures have no running meeting). Its scheduled join is gone, so it no longer shows as
+a calendar join in Upcoming.
+
+**Connecting again** works at once (#42, #43): the same 302 to `/settings/calendar?calendar=connected`,
+for the same Google account or **another** one (#44 shows the other account connected). This is the
+way to **switch accounts**: `different_account` is refused while one works, so show "Disconnect, then
+connect the other account".
+
+### 6.1 UX consequences the frontend must surface for disconnect
+
+- **When `revoked` is `false`, tell the person**: "Your calendar data is deleted from Beyric, but we
+  could not reach Google to remove our access. Remove Beyric at
+  https://myaccount.google.com/permissions to finish." Show it once, on the response to the click
+  (a repeat answers `true`). Not captured with a real Google outage, only with Google's endpoint
+  scripted to answer 503 (#45).
+- **Confirm first, and say what goes**: "This stops Beyric joining your calendar meetings and deletes
+  your upcoming calendar meetings and join schedule from Beyric. Meetings already recorded stay."
+  Disconnecting cannot be undone; a reconnect starts a fresh first sync.
+- **Do not promise the meeting in progress will stop**: it keeps recording.
+- **Do not treat `disconnected` as a lapse.** The user chose it: no red "your calendar is disconnected"
+  banner, no reconnect nag. That banner is for `needs_reconnect` (C14, C15a).
+- After success, clear any cached upcoming list and the join switches on screen.
+
+## 7. Verification table
 
 | Behaviour | Verified |
 |---|---|
@@ -184,3 +252,7 @@ unticked box can never switch a feature on.
 | `different_account` while a working connection exists | **live** against the running app, Google faked (#33–#35) |
 | Replacing a dead connection with another account (events dropped), merge of scopes without a new key | tested only (`tests/test_calendar_connect.py`), not captured |
 | `show_unverified_notice` after Google verifies the app | the flag flips in #32; Google's side not seen |
+| `POST disconnect`: 200 `{"status": "disconnected", "revoked": true}`, a repeat, the 401 and 403 errors, the row emptied, events, joins and calendar notifications deleted, the unrelated notification kept, connect again with another account | **live** against the running app, Google faked (#36–#44) |
+| Disconnect while Google's revoke endpoint answers 503: still 200 with `"revoked": false`, deleted locally | **live**, Google faked (#45, #46). Google's real answer to a revoke was not seen |
+| Disconnect with the feature flag off; a running meeting carries on; meetings, usage and settings kept; only the caller's rows touched | tested only (`tests/test_calendar_connect.py`), not captured |
+| A real Google revoke (token stops working, Beyric leaves myaccount.google.com/permissions) | **not verified**: needs Adebayo's Gmail test account |

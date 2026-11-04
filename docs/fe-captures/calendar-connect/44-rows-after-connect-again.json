@@ -1,0 +1,21 @@
+{
+  "note": "The same row, connected again.",
+  "content": {
+    "rows": [
+      {
+        "user_id": 1,
+        "provider": "google",
+        "google_account_email": "other.person@example.test",
+        "google_sub": "g-other-2",
+        "google_hosted_domain": null,
+        "status": "connected",
+        "granted_scopes": "email https://www.googleapis.com/auth/calendar.events.readonly openid",
+        "refresh_token_enc": "<bytes, 51 bytes>",
+        "key_version": 1,
+        "last_sync_at": null,
+        "sync_token": null,
+        "expected_expiry_at": null
+      }
+    ]
+  }
+}

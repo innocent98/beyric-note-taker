@@ -1,0 +1,29 @@
+{
+  "note": "Deleted locally even though the revoke failed.",
+  "content": {
+    "rows": [
+      {
+        "user_id": 1,
+        "provider": "google",
+        "google_account_email": null,
+        "google_sub": null,
+        "google_hosted_domain": null,
+        "status": "disconnected",
+        "granted_scopes": null,
+        "refresh_token_enc": null,
+        "key_version": null,
+        "last_sync_at": null,
+        "sync_token": null,
+        "expected_expiry_at": null
+      }
+    ],
+    "calendar": {
+      "calendar_events": 0,
+      "scheduled_joins": 0,
+      "notification_kinds": [
+        "usage.hours_low",
+        "usage.hours_low"
+      ]
+    }
+  }
+}
