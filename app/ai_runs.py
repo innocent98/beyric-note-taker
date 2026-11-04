@@ -13,6 +13,7 @@ from app.ai_versions import (
     EXTRACT_REVIEW_PROMPT_VERSION,
     LABEL_PROMPT_VERSION,
     NOTES_PROMPT_VERSION,
+    TRANSLATE_PROMPT_VERSION,
 )
 from app.models import AiRun
 
@@ -21,10 +22,11 @@ __all__ = [
     "EXTRACT_REVIEW_PROMPT_VERSION",
     "LABEL_PROMPT_VERSION",
     "NOTES_PROMPT_VERSION",
+    "TRANSLATE_PROMPT_VERSION",
     "record",
 ]
 
-_VERSION_OF_KIND = {"extract": EXTRACT_PROMPT_VERSION}
+_VERSION_OF_KIND = {"extract": EXTRACT_PROMPT_VERSION, "translate": TRANSLATE_PROMPT_VERSION}
 
 
 def record(

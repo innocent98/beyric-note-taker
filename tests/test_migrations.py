@@ -547,3 +547,70 @@ def test_0013_adds_suppressions_and_the_skipped_status_and_downgrades_cleanly(sc
         )
     command.upgrade(cfg, "head")  # and up again
     engine.dispose()
+
+
+def test_0014_adds_translations_and_the_default_language_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    columns = {c["name"] for c in inspect(engine).get_columns("meeting_translations")}
+    assert columns == {
+        "id",
+        "meeting_id",
+        "language",
+        "status",
+        "notes_md",
+        "transcript",
+        "source_hash",
+        "model",
+        "failure_code",
+        "attempts",
+        "started_at",
+        "created_at",
+        "updated_at",
+    }
+    with engine.begin() as conn:
+        user = conn.execute(
+            text("insert into users (email) values ('m@example.test') returning id")
+        ).scalar()
+        template = conn.execute(
+            text(
+                "insert into templates (owner_user_id, name, instructions) "
+                "values (:u, 'T', 'x') returning id"
+            ),
+            {"u": user},
+        ).scalar()
+        meeting = conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
+                "values (:u, 'u', 'zoom', '1', :t) returning id"
+            ),
+            {"u": user, "t": template},
+        ).scalar()
+        insert = (
+            "insert into meeting_translations (meeting_id, language, source_hash) "
+            "values (:m, :l, 'h')"
+        )
+        conn.execute(text(insert), {"m": meeting, "l": "fr"})
+        conn.execute(text("insert into user_settings (user_id) values (:u)"), {"u": user})
+    row = _rows(engine, "select status, attempts from meeting_translations")
+    assert row == [("translating", 0)]
+    # the owner account migration 0006 creates and the one above both start on the original
+    assert {r[0] for r in _rows(engine, "select default_language from user_settings")} == {"en"}
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text(insert), {"m": meeting, "l": "fr"})  # one per meeting and language
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text(insert), {"m": meeting, "l": "yo"})  # only the designed languages
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("update user_settings set default_language = 'de'"))
+    with engine.begin() as conn:
+        conn.execute(text("delete from meetings where id = :m"), {"m": meeting})
+    assert _rows(engine, "select count(*) from meeting_translations") == [(0,)]  # cascade
+    command.downgrade(cfg, "0013")
+    assert "meeting_translations" not in inspect(engine).get_table_names()
+    assert "default_language" not in {
+        c["name"] for c in inspect(engine).get_columns("user_settings")
+    }
+    command.upgrade(cfg, "head")  # and back up again
+    assert "meeting_translations" in inspect(engine).get_table_names()
+    engine.dispose()

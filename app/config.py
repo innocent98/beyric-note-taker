@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # items (app/extraction.py). Kept apart from `notes_model` so a stronger model can take over
     # this call alone if the eval gate (docs/spike/ai-extraction-eval.md) says luna is not enough.
     extract_model: str = "gpt-6-luna"
+    # The call that translates notes and transcripts (app/translation.py). Its own setting so the
+    # quality eval (tests/eval/translation_eval.py) can move it without touching the others.
+    translate_model: str = "gpt-6-luna"
 
     audio_retention_days: int = 7
     audio_dir: str = "data/audio"

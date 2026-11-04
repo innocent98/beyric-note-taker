@@ -577,6 +577,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "notification_id": note.id,
         "decision_id": decision.id,
         "item_id": review.id,
+        "language": "fr",  # with the owner's meeting id: a translation is reached through it
     }
     anon.log_in(email=OTHER_EMAIL)
     checked = 0
@@ -589,6 +590,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         bodies = {  # a valid body for each route that takes one, so only the id can be wrong
             "/regenerate": {"template_id": strangers_data["template"].id},
             "/vocabulary": {"term": "Metrika"},
+            "/translations": {"language": "fr"},
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
         }
         body = next((b for key, b in bodies.items() if path.endswith(key)), None)
