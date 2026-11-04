@@ -31,6 +31,7 @@ templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 templates.env.filters["markdown"] = render_markdown
 templates.env.filters["local_time"] = lambda dt: dt.astimezone(UTC).strftime("%d %b %Y, %H:%M UTC")
+templates.env.globals["meeting_title"] = services.meeting_title
 templates.env.globals["status_text"] = status_text
 templates.env.globals["status_tone"] = status_tone
 

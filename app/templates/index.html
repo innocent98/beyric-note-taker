@@ -26,7 +26,7 @@
     {% for m in meetings %}
     {% set end %}{{ ui.badge(status_text(m), status_tone(m)) }}{% endset %}
     {% call ui.list_row(href="/meetings/" ~ m.id, end=end) %}
-      <span class="list-title">{{ "Zoom" if m.platform == "zoom" else "Google Meet" }} {{ m.native_id }}</span>
+      <span class="list-title">{{ meeting_title(m) }}</span>
       <span class="meta">{{ m.created_at|local_time }}</span>
     {% endcall %}
     {% endfor %}

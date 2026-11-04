@@ -25,6 +25,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import titles
 from app.config import Settings
 from app.mail_layout import (
     Block,
@@ -235,9 +236,10 @@ def _platform_label(meeting: Meeting) -> str:
 
 
 def meeting_name(meeting: Meeting) -> str:
-    """ "Zoom 88205679674": the same name `services.meeting_title` gives, without importing it
+    """The calendar title, else "Zoom 88205679674": the name `services.meeting_title` gives,
+    cleaned for a mail (short, no web address in it, one line), without importing services
     (services imports the pipeline, which queues this mail)."""
-    return clean_line(f"{_platform_label(meeting)} {meeting.native_id}", 80)
+    return clean_line(titles.mail_title(meeting), 80)
 
 
 def when_line(meeting: Meeting) -> str:

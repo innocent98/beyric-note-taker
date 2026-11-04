@@ -21,7 +21,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
-from app import auth, edge, passwords, placement, usage, workspace
+from app import auth, edge, passwords, placement, titles, usage, workspace
 from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
@@ -368,7 +368,9 @@ def list_meetings(
 
 
 def meeting_title(meeting: Meeting) -> str:
-    return f"{'Zoom' if meeting.platform == 'zoom' else 'Google Meet'} {meeting.native_id}"
+    """The calendar event's title (cleaned: it is text from an invite), else "Google Meet <code>"
+    or "Zoom <code>"."""
+    return titles.meeting_name(meeting)
 
 
 def meeting_or_404(session: Session, user: User, meeting_id: int) -> Meeting:

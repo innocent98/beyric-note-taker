@@ -26,7 +26,6 @@ web address in an admin alert (and the known meeting hosts without a scheme) is 
 """
 
 import logging
-import re
 from datetime import datetime
 
 from sqlalchemy import select
@@ -34,7 +33,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import mail
+from app import mail, titles
 from app.config import get_settings
 from app.mail_message import valid_address
 from app.models import SEVERITIES, Notification, User, UserSettings
@@ -45,16 +44,9 @@ ALERT_TEMPLATE = "alert"  # the mail template for an alert: payload {"title": ..
 TITLE_LIMIT = 200  # notifications.title
 KEY_LIMIT = 200  # notifications.dedupe_key
 ADMIN_KIND_PREFIX = "admin."
-LINK_REMOVED = "[link removed]"
+LINK_REMOVED = titles.LINK_REMOVED
 
-# A web address with a scheme or `www.`, or a link to a meeting host written without one.
-_URL = re.compile(
-    r"""(?ix)
-    (?:\b(?:https?://|www\.)|
-       \b(?:[\w-]+\.)*(?:zoom\.us|zoom\.com|meet\.google\.com|teams\.microsoft\.com|teams\.live\.com)/)
-    \S*
-    """
-)
+_URL = titles.URL  # one pattern for "a web address" wherever text is mailed
 
 
 def bucket_key(kind: str, now: datetime, minutes: int = 30) -> str:
