@@ -90,7 +90,7 @@ No migration, no API shape change (`docs/openapi.json` identical), no nginx chan
 
 ## Follow-ups
 - **C13** replaces `join_runner.connection_state` (and `revive_on_reconnect` must re-run rows the runner skipped as `needs_reconnect`, as its plan says); C14's mails use the same `alert` template.
-- **FE guide `fe-integration-guide-calendar-settings.md`:** its "Will join is a promise about the rules, not about the bot" paragraph says nothing sends a bot from the calendar yet; this PR makes that untrue. Not edited here because the C15a sessions (#68, #69) own that file: whoever merges second should update it.
+- **FE guide `fe-integration-guide-calendar-settings.md`:** its "Will join is a promise" paragraph is updated here (it said nothing sent a bot yet).
 - **C15a** should show the join states and reasons with server-written words (`calendar_text`), including "Not recorded", "Waiting for room" and "A note taker is already there"; the runner's `skip_reason`/`last_error` vocabulary is in this SOP and `join_runner.py`.
 - **Capacity counting:** `processing` still holds the slot (C11 follow-up, unchanged): a calendar join can hear `no_capacity` while a long transcription runs. Decide with D9a.
 - **Circuit breaker for refusals per egress address** (checklist): unblocked by `notify_admins` but not built.
