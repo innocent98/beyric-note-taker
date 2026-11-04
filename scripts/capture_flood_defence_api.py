@@ -71,6 +71,13 @@ class Recorder:
         self.csrf: str | None = None
         self.who = who
 
+    @staticmethod
+    def hide(body):
+        """The reset token in a request body is masked like the pilot captures do (`<token-N>`)."""
+        if isinstance(body, dict) and "token" in body:
+            return {**body, "token": "<token-A>"}
+        return body
+
     @classmethod
     def mask(cls, token: str) -> str:
         return cls.masks.setdefault(token, f"<csrf-{chr(ord('A') + len(cls.masks))}>")
@@ -98,7 +105,7 @@ class Recorder:
         record = {
             "note": note,
             "client": self.who,
-            "request": {"method": method, "path": path, "headers": sent, "body": body},
+            "request": {"method": method, "path": path, "headers": sent, "body": self.hide(body)},
             "response": {"status": response.status_code, "headers": kept, "body": shown},
         }
         (OUT / f"{Recorder.count:02d}-{name}.json").write_text(
