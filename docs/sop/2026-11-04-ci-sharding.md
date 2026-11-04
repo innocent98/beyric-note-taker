@@ -36,8 +36,8 @@ Every fix took 12 to 13 minutes to show green, and every push to a PR restarted 
 | Before: `main` at `641baa0` (the commit this branch is built on), serial | `test` job 12 min 20 s, whole run about 12 min 35 s |
 | Durations capture (serial, one job) | 9 min 16 s, 2,876 tests passed |
 | After, first sharded run (cold caches, slow apt mirror) | green, 11 min 34 s; shards' pytest 1 min 53 s to 2 min 39 s; one shard waited 7 min 53 s on apt |
-| After, warm apt cache | see the PR for the final run; shards' pytest 2 min 0 s to 2 min 35 s, job about 3 min 30 s |
-| A failing test in one shard | see below |
+| After, warm apt cache, final head `4904cce` ([run 41866393662](https://github.com/innocent98/beyric-note-taker/actions/runs/41866393662)) | green, **3 min 58 s** from the run's creation to `ci` finishing; apt step 8 to 13 s; shards' pytest 2 min 22 s, 2 min 27 s, 2 min 45 s, 2 min 50 s |
+| A failing test in one shard ([run 41868171227](https://github.com/innocent98/beyric-note-taker/actions/runs/41868171227)): a temporary `assert False` test added on top, then dropped | shard 2 failed (`1 failed, 758 passed`); shards 1, 3, 4 and `web` still ran to green; `ci` printed `changes=success lint=failure test=failure web=success` and failed. `lint` also failed on the same file (ruff B011), which shows lint gates too |
 
 Not measured: a local sharded run (the machine was too loaded to give honest timings); coverage (the project has no coverage gate, so nothing needed a combine step).
 
