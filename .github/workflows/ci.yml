@@ -43,7 +43,7 @@ jobs:
           echo "$files"
           # Python: the app, its tests, migrations and packaging. The Dockerfile and compose file
           # shape how it runs, so they count too.
-          if echo "$files" | grep -Eq '^(app/|tests/|alembic/|alembic\.ini$|pyproject\.toml$|Dockerfile$|compose\.yaml$|\.github/workflows/ci\.yml$)'; then
+          if echo "$files" | grep -Eq '^(app/|tests/|alembic/|alembic\.ini$|pyproject\.toml$|\.test_durations$|Dockerfile$|compose\.yaml$|\.github/workflows/ci\.yml$|\.github/actions/)'; then
             echo "python=true" >> "$GITHUB_OUTPUT"
           else
             echo "python=false" >> "$GITHUB_OUTPUT"
@@ -56,10 +56,42 @@ jobs:
             echo "web=false" >> "$GITHUB_OUTPUT"
           fi
 
-  test:
+  # Lint and format run once here, not in every test shard. They need only ruff (pinned in
+  # pyproject.toml's dev extra), not the app's dependencies, so this job installs one package.
+  lint:
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      # Install the exact ruff version the project pins, read from pyproject.toml so the pin
+      # lives in one place.
+      - run: pip install "$(grep -oE 'ruff==[0-9.]+' pyproject.toml | head -n 1)"
+      - run: ruff check .
+      - run: ruff format --check .
+
+  # The Python suite, split into 4 shards that run at the same time. Each shard is its own job
+  # with its own Postgres service container, so the tests that drop and create tables, create a
+  # scratch database (test_migrations) or take advisory locks never meet another shard's.
+  # pytest-split divides the tests by the timings in `.test_durations` (committed); the split is
+  # the same on every run for the same durations file and the same tests. See
+  # docs/sop/2026-11-04-ci-sharding.md for how to regenerate that file.
+  test:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    name: test (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # One shard's failure must not hide another's: let all four finish and report.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: postgres:17
@@ -81,11 +113,10 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg libpango-1.0-0 libpangoft2-1.0-0
+          cache-dependency-path: pyproject.toml
+      - uses: ./.github/actions/system-deps
       - run: pip install -e '.[dev]'
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: pytest -v
+      - run: pytest -v --splits 4 --group ${{ matrix.shard }} --splitting-algorithm least_duration --durations-path .test_durations --durations=10
 
   # The Next.js front door: lint, types, unit tests (design guards, CSP, the legal text equal to
   # the Jinja templates) and the production build. One job, so dependencies install once.
@@ -109,14 +140,16 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # Always runs and always reports. Skipped jobs count as passing; failed or cancelled ones fail it.
+  # Always runs and always reports; it is the one check to require. Skipped jobs count as
+  # passing; a failed or cancelled job (any of the four test shards included: the matrix result
+  # is "failure" if one failed, "cancelled" if one was) fails it.
   ci:
-    needs: [changes, test, web]
+    needs: [changes, lint, test, web]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - run: |
-          echo "changes=${{ needs.changes.result }} test=${{ needs.test.result }} web=${{ needs.web.result }}"
-          case "${{ needs.changes.result }}${{ needs.test.result }}${{ needs.web.result }}" in
+          echo "changes=${{ needs.changes.result }} lint=${{ needs.lint.result }} test=${{ needs.test.result }} web=${{ needs.web.result }}"
+          case "${{ needs.changes.result }}${{ needs.lint.result }}${{ needs.test.result }}${{ needs.web.result }}" in
             *failure*|*cancelled*) exit 1 ;;
           esac
