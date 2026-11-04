@@ -56,6 +56,7 @@ Rejected: removing the mail send and the hourly housekeeping from the worker in 
 - Roll back: revert the PR; no migration, nothing to undo. The worker keeps doing the work either way.
 
 ## Follow-ups
+- **`alert` is a link-style template, so the sender treats it as account mail:** it is stopped at send time only by a bounce or complaint (not an unsubscribe) and is not held for `MAIL_DAILY_CAP`. The helper compensates by refusing any suppression reason (unsubscribe included) when it queues the mail, so only an unsubscribe landing between queueing and the next 10 s tick slips through. Alerts come only from internal events and are deduped by key, so there is no outside route to flood them; but a caller that makes a new key per event can spend the day's Resend quota. Callers (C12 to C14) must use `bucket_key`. If a separate category (send-time strict suppression, counted against the caps) is wanted, it is a change in `app/mail.py`, which this PR did not touch.
 - **Remove the worker's copies** (`worker.send_mail` in `background_jobs`, `maintenance.run_hourly` in `hourly_jobs`) once the scheduler is seen sending mail and sweeping in production; adapt `test_admin`, `test_mail`, `test_mail_upgrade`, `test_workspace`, `test_maintenance`.
 - **Mail on the dispatch loop can stall a join.** With C12 on that loop, a hung provider could hold a tick for minutes (`BATCH` 25 mails, 15 s timeout each). Decide before C12 whether the mail job moves to a third loop or a thread, or the batch shrinks on the scheduler.
 - `pubsub_inbox` (7 days) registers in I2.
