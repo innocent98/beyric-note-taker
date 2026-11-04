@@ -8,7 +8,9 @@ Google connection is made through the real connect flow, and the events in the a
 the REAL sync job (`gcal_sync.sync_connection` over `GoogleSource`) reading `FakeGoogleCalendar`,
 so the stored rows are exactly what production would store from those Google bodies.
 
-Files go to `docs/fe-captures/calendar-state/NN-name.json`.
+Files go to `docs/fe-captures/calendar-state/NN-name.json`. The rule is set through the real
+`PUT /api/calendar/settings`; the write routes' own captures are made by
+`scripts/capture_calendar_settings.py` (`docs/fe-captures/calendar-settings/`).
 
 What is NOT real: Google's servers (consent screen, token endpoint and Calendar API are
 `tests/fakes/google.py`; the event bodies are synthetic, built from Google's documented shapes), so
@@ -34,7 +36,7 @@ from app.config import Settings  # noqa: E402
 from app.gcal_client import AccessTokenCache, GoogleSource  # noqa: E402
 from app.gcal_sync import sync_connection  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import CalendarConnection, User, UserSettings  # noqa: E402
+from app.models import CalendarConnection, User  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
 from app.services import get_vexa  # noqa: E402
 from tests.fakes.google import FakeGoogle, FakeGoogleCalendar  # noqa: E402
@@ -181,24 +183,22 @@ def run(app, server_base, engine, settings, google) -> None:
         "answer.",
     )
 
-    # The person's auto-join rule. There is no route to change it yet (C15a part 2), so the stored
-    # setting is changed directly and the answer is captured as it comes back.
-    for rule in ("organizer", "none", "all"):
-        with Session(engine) as session:
-            prefs = session.get(UserSettings, 1)
-            if prefs is None:
-                prefs = UserSettings(user_id=1)
-                session.add(prefs)
-            prefs.auto_join_rule = rule
-            session.commit()
-        if rule != "all":
-            user.call(
-                f"state-rule-{rule}",
-                "GET",
-                "/api/calendar",
-                note=f"NOT settable through the API yet (C15a part 2): the stored rule was set to "
-                f"`{rule}` directly. `rule`, `rule_text` and each meeting's answer follow it.",
-            )
+    # The person's auto-join rule, set through the real settings route (C15a part 2). The answer
+    # to each PUT is the whole state, so it is captured as the state under that rule.
+    for rule in ("organizer", "none"):
+        user.call(
+            f"state-rule-{rule}",
+            "PUT",
+            "/api/calendar/settings",
+            body={"rule": rule},
+            note=f"`PUT /api/calendar/settings` with the rule `{rule}`; the answer is the whole "
+            f"state, as GET gives it. `rule`, `rule_text` and each meeting's answer follow it.",
+        )
+    # Back to the default, not captured (a plain call keeps the numbering of the files after it).
+    back = user.http.put(
+        "/api/calendar/settings", json={"rule": "all"}, headers={"X-CSRF-Token": user.csrf}
+    )
+    assert back.status_code == 200, back.text
 
     # A revoked grant: Google refuses the refresh token on the next sync.
     calendar.valid_refresh_tokens.clear()

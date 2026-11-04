@@ -1,0 +1,32 @@
+{
+  "note": "Nothing to change: 422.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/settings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "body",
+            "message": "Value error, send a rule, a calendar_template_id, or both"
+          }
+        ]
+      }
+    }
+  }
+}

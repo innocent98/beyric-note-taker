@@ -45,6 +45,7 @@ const captures = join(captureDir, "owner-app");
 const body = (name) => JSON.parse(readFileSync(join(captures, `${name}.json`), "utf8")).response.body;
 const prelaunchBody = (name) => JSON.parse(readFileSync(join(captureDir, "prelaunch-mail-prefs", `${name}.json`), "utf8")).response.body;
 const calendarCapture = (name) => JSON.parse(readFileSync(join(captureDir, "calendar-state", `${name}.json`), "utf8")).response.body;
+const settingsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "calendar-settings", `${name}.json`), "utf8")).response.body;
 const accountBody = (name) => JSON.parse(readFileSync(join(captureDir, "pilot-accounts", `${name}.json`), "utf8")).response.body;
 
 // One meeting per state, from the captures. Titles vary so the list reads like a real one.
@@ -203,6 +204,31 @@ const server = http.createServer(async (req, res) => {
   if (path === "/api/calendar" && method === "GET") {
     if (values.calendar === "off") return json(res, 404, calendarCapture("04-state-feature-off"));
     return json(res, 200, calendarCapture(values.calendar === "connected" ? "09-state-connected-with-upcoming" : "05-state-not-connected"));
+  }
+  // The write routes answer with bodies captured from the running app (docs/fe-captures/
+  // calendar-settings/): the rule's state as it was captured, the template's, and one row for a
+  // switch with the words the server gave it. Nothing here decides anything; it only replays.
+  if (path === "/api/calendar/settings" && method === "PUT") {
+    const data = await readJson(req);
+    const file = data?.rule
+      ? { organizer: "32-settings-rule-organizer", none: "18-settings-rule-none", all: "24-settings-rule-all" }[data.rule]
+      : data?.calendar_template_id === null
+        ? "10-settings-template-null"
+        : "08-settings-template";
+    return json(res, 200, settingsCapture(file));
+  }
+  const override = /^\/api\/calendar\/events\/(\d+)\/override$/.exec(path);
+  if (override && method === "PUT") {
+    const data = await readJson(req);
+    const row = calendarCapture("09-state-connected-with-upcoming").upcoming.find((e) => e.id === Number(override[1]));
+    if (!row) return json(res, 404, { error: { code: "not_found", message: "No such event" } });
+    return json(
+      res,
+      200,
+      data?.override
+        ? { ...row, will_join: true, will_join_text: "Will join", reason_text: null }
+        : { ...row, will_join: false, will_join_text: "Off", reason_text: "You switched this meeting off" },
+    );
   }
   if (path === "/api/calendar/google/connect" && method === "POST") {
     return json(res, 200, { authorize_url: "https://accounts.example.test/consent", show_unverified_notice: false });
