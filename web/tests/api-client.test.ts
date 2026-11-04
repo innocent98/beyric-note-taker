@@ -213,3 +213,56 @@ describe("api client", () => {
     expect(header(calls[0].init, "cookie")).toBe("session=abc");
   });
 });
+
+describe("calendar calls", () => {
+  const sessionBody = () => respond(capture("01-session-anonymous.json"));
+
+  it("reads the calendar state with a plain GET", async () => {
+    const { api, calls } = setup(() => new Response(JSON.stringify({ state: "not_connected" }), { status: 200, headers: { "content-type": "application/json" } }));
+    await api.calendar.get();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe("/api/calendar");
+    expect(calls[0].init.method).toBe("GET");
+    expect(header(calls[0].init, "X-CSRF-Token")).toBeUndefined();
+  });
+
+  it("starts the connect with the CSRF token and a return to the settings page", async () => {
+    const { api, calls } = setup((url) =>
+      url === "/api/session"
+        ? sessionBody()
+        : new Response(JSON.stringify({ authorize_url: "https://accounts.example.test/x", show_unverified_notice: false }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+    );
+    const out = await api.calendar.connect();
+    expect(out.authorize_url).toBe("https://accounts.example.test/x");
+    const post = calls.find((c) => c.url === "/api/calendar/google/connect")!;
+    expect(post.init.method).toBe("POST");
+    expect(header(post.init, "X-CSRF-Token")).toBe("<csrf-A>");
+    expect(JSON.parse(post.init.body as string)).toEqual({ features: ["calendar"], return_to: "/settings/calendar" });
+  });
+
+  it("disconnects with the CSRF token and no body", async () => {
+    const { api, calls } = setup((url) =>
+      url === "/api/session"
+        ? sessionBody()
+        : new Response(JSON.stringify({ status: "disconnected", revoked: true }), { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    expect(await api.calendar.disconnect()).toEqual({ status: "disconnected", revoked: true });
+    const post = calls.find((c) => c.url === "/api/calendar/google/disconnect")!;
+    expect(post.init.method).toBe("POST");
+    expect(post.init.body).toBeUndefined();
+    expect(header(post.init, "X-CSRF-Token")).toBe("<csrf-A>");
+  });
+
+  it("throws the server's error for the calendar being off", async () => {
+    const { api } = setup(() =>
+      new Response(JSON.stringify({ error: { code: "calendar_unavailable", message: "Google Calendar is not available." } }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await expect(api.calendar.get()).rejects.toMatchObject({ status: 404, code: "calendar_unavailable" });
+  });
+});

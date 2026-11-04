@@ -1,0 +1,28 @@
+{
+  "note": "Back to not connected: no address, no events.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": false,
+      "state": "not_connected",
+      "state_text": "Google Calendar is not connected.",
+      "google_email": null,
+      "last_sync_at": null,
+      "last_error": null,
+      "upcoming": []
+    }
+  }
+}

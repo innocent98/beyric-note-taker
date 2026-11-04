@@ -1,5 +1,8 @@
 import type {
+  CalendarState,
+  ConnectStart,
   DecisionList,
+  DisconnectResult,
   ExportFormat,
   FieldError,
   Meeting,
@@ -245,6 +248,18 @@ export function createApi(options: ApiOptions = {}) {
       uncheck: (id: number) => request<ReviewItem>("POST", `/api/review/${id}/uncheck`, { write: true }),
       addToVocabulary: (id: number, term: string) =>
         request<ReviewTermResult>("POST", `/api/review/${id}/vocabulary`, { body: { term }, write: true }),
+    },
+    // Google Calendar (docs/fe-integration-guide-calendar-settings.md). `get` answers 404
+    // `calendar_unavailable` while the feature is off. `connect` returns the Google consent URL to
+    // navigate to; the browser comes back to /settings/calendar with the result in the query string.
+    calendar: {
+      get: () => request<CalendarState>("GET", "/api/calendar"),
+      connect: () =>
+        request<ConnectStart>("POST", "/api/calendar/google/connect", {
+          body: { features: ["calendar"], return_to: "/settings/calendar" },
+          write: true,
+        }),
+      disconnect: () => request<DisconnectResult>("POST", "/api/calendar/google/disconnect", { write: true }),
     },
     vocabulary: {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,

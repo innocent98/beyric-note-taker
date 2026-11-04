@@ -14,7 +14,7 @@ Adebayo's Gmail test account and is listed in the last section.
 
 Read this with `docs/fe-integration-guide-owner-app.md` (session cookie, CSRF, error shape) and
 `docs/fe-integration-guide-pilot-accounts.md`. Only the connect step is covered here; the calendar
-state, settings and upcoming meetings are later tasks (C15a). Disconnect (C4) is section 6.
+state and upcoming meetings (`GET /api/calendar`) are in `docs/fe-integration-guide-calendar-settings.md`, the settings and the per-meeting switch are later tasks (C15a part 2). Disconnect (C4) is section 6.
 
 ## 1. What this is, in the frontend's terms
 
@@ -94,7 +94,7 @@ cookie. The `Location` values below are exact (#09, #12, #14, #15, #19, #23, #25
 | `...?calendar_error=scope_missing` | The user **unticked the calendar box** on Google's screen. Nothing was stored | "To join your meetings automatically we need permission to read your calendar events. Try again and leave the calendar box ticked." (The old connection, if there was one, is untouched) |
 | `...?calendar_error=no_refresh_token` | Google gave no long-lived key (it sometimes does not), and the old one cannot stand in (first connect, a different Google account, a dead connection, or a new permission). Nothing stored | "Google didn't finish connecting. Remove Beyric at myaccount.google.com/permissions and try again." **Not reproduced live** (the fake can omit the key; a real Google that omits it was not seen) |
 | `...?calendar_error=google_failed` | Anything else: an unknown, used or expired state; a different browser; Google or the exchange failed | "Something went wrong connecting Google. Try again." |
-| `...?calendar_error=different_account` | A Google account is **already connected and working**, and the person picked a **different** Google account in Google's chooser (#34). Nothing was changed: the first connection, its events and its permissions stay as they were (#35) | "A different Google account is already connected ({email}). To use another one, disconnect first." Needs the connected email from `GET /api/calendar` (C15a); the disconnect call is section 6 |
+| `...?calendar_error=different_account` | A Google account is **already connected and working**, and the person picked a **different** Google account in Google's chooser (#34). Nothing was changed: the first connection, its events and its permissions stay as they were (#35) | "A different Google account is already connected ({email}). To use another one, disconnect first." Needs the connected email: `google_email` of `GET /api/calendar` (`docs/fe-integration-guide-calendar-settings.md`); the disconnect call is section 6 |
 | `...?calendar_error=wrong_account` | The signed-in user is not the one who started the connect (a link forwarded or planted) | "This connection was started from a different account. Sign in with the right account and start again." |
 | `/login?error=google_failed` | Nobody was signed in when Google came back (#25) | The login page already handles `google_failed` |
 

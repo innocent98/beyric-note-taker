@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { IconButton, Logo, NavLink } from "@/components/ui";
 
-export type NavSection = "meetings" | "decisions" | "review" | "templates" | "vocabulary";
+export type NavSection = "meetings" | "decisions" | "review" | "templates" | "vocabulary" | "settings";
 
 // The owner app's frame: a sidebar on desktop, a top bar on phones (components.css). Log out is a
 // plain form post to /logout (app/logout/route.ts), so it works without JavaScript. `reviewOpen` is
@@ -33,6 +33,7 @@ export function AppShell({
         <nav className="nav" aria-label="Configure">
           <NavLink href="/templates" label="Templates" current={current === "templates"} />
           <NavLink href="/vocabulary" label="Vocabulary" current={current === "vocabulary"} />
+          <NavLink href="/settings/calendar" label="Settings" current={current === "settings"} />
         </nav>
         <div className="sidebar-user">
           <div className="avatar" aria-hidden="true">

@@ -1,0 +1,99 @@
+{
+  "note": "NOT reached live (C13): `needs_reconnect` with reason `revoked` set directly.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": false,
+      "state": "needs_reconnect",
+      "state_text": "Google access was removed. Connect again to carry on.",
+      "google_email": "grace@example.test",
+      "last_sync_at": "2026-11-04T12:49:53.819611Z",
+      "last_error": "The last check of your calendar did not work. Beyric will try again soon.",
+      "upcoming": [
+        {
+          "id": 1,
+          "title": "Weekly planning",
+          "starts_at": "2026-11-04T14:49:00Z",
+          "ends_at": "2026-11-04T15:19:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "will_join": true,
+          "will_join_text": "Will join"
+        },
+        {
+          "id": 2,
+          "title": "Customer call",
+          "starts_at": "2026-11-04T17:49:00Z",
+          "ends_at": "2026-11-04T18:19:00Z",
+          "platform": "zoom",
+          "platform_label": "Zoom",
+          "will_join": true,
+          "will_join_text": "Will join"
+        },
+        {
+          "id": 3,
+          "title": "Lunch with Sam",
+          "starts_at": "2026-11-04T20:49:00Z",
+          "ends_at": "2026-11-04T21:19:00Z",
+          "platform": null,
+          "platform_label": null,
+          "will_join": false,
+          "will_join_text": "No video link"
+        },
+        {
+          "id": 4,
+          "title": "Vendor sync",
+          "starts_at": "2026-11-05T14:49:00Z",
+          "ends_at": "2026-11-05T15:19:00Z",
+          "platform": "teams",
+          "platform_label": "Microsoft Teams",
+          "will_join": false,
+          "will_join_text": "Microsoft Teams meetings cannot be joined yet"
+        },
+        {
+          "id": 5,
+          "title": "Budget review",
+          "starts_at": "2026-11-05T18:49:00Z",
+          "ends_at": "2026-11-05T19:19:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "will_join": false,
+          "will_join_text": "You declined this invite"
+        },
+        {
+          "id": 6,
+          "title": "Sprint 🚀 planning · 週次",
+          "starts_at": "2026-11-06T14:49:00Z",
+          "ends_at": "2026-11-06T15:19:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "will_join": true,
+          "will_join_text": "Will join"
+        },
+        {
+          "id": 7,
+          "title": "Partnership idea",
+          "starts_at": "2026-11-06T19:49:00Z",
+          "ends_at": "2026-11-06T20:19:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "will_join": false,
+          "will_join_text": "Waiting: accept the invite to join"
+        }
+      ]
+    }
+  }
+}

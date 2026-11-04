@@ -18,6 +18,32 @@ export function formatDay(iso: string): string {
   return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 }
 
+const SHORT_DAYS = DAYS;
+
+// "Wed 4 Nov": the day of an upcoming calendar event (UTC, like formatTime).
+export function formatShortDay(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${SHORT_DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
+}
+
+// "14:49 UTC": the start of an upcoming calendar event.
+export function formatClock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${two(d.getUTCHours())}:${two(d.getUTCMinutes())} UTC`;
+}
+
+// "30 min", "1 h", "1 h 30 min": how long an event lasts.
+export function formatDuration(startIso: string, endIso: string): string {
+  const minutes = Math.round((new Date(endIso).getTime() - new Date(startIso).getTime()) / 60000);
+  if (!Number.isFinite(minutes) || minutes <= 0) return "";
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  if (hours === 0) return `${rest} min`;
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+}
+
 export function platformLabel(platform: "google_meet" | "zoom"): string {
   return platform === "zoom" ? "Zoom" : "Google Meet";
 }

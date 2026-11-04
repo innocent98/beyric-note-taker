@@ -1,0 +1,25 @@
+{
+  "note": "`CALENDAR_ENABLED` is false: 404, like every other calendar route.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "calendar_unavailable",
+        "message": "Google Calendar is not available."
+      }
+    }
+  }
+}
