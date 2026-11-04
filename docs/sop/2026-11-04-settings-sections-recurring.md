@@ -1,7 +1,7 @@
 # SOP: Settings sections below Calendar (drawn, off) and the Recurring cards on Meetings
 
 ## What shipped
-Adebayo compared the live pages with the designer's file and asked for the missing designed parts to be drawn now, before their features exist. Two things, branch `feature/settings-sections-recurring`, PR: see the PR list (opened against `main`, not merged):
+Adebayo compared the live pages with the designer's file and asked for the missing designed parts to be drawn now, before their features exist. Two things, branch `feature/settings-sections-recurring`, PR #69 (against `main`, not merged):
 
 - **(A) Settings:** the sections the designer drew below Calendar: **Sprints and reminders**, **Tasks**, **Default notes language**. Exact layout, words, tokens and order. **Every control is off**: a real `disabled` on each button and select, the switches `disabled` and `aria-disabled` and showing off. Nothing is stored and nothing is called (plain server markup, no state, no network). Each section carries one plain line saying it is not available yet.
 - **(B) Meetings:** the **Recurring** cards, from real data, through a new read-only `GET /api/calendar/recurring`. Name, cadence (worked out from the stored event times, or just "Recurring"), and the "Next:" chip. Not clickable. Nothing is drawn when no calendar is connected or nothing recurs.
