@@ -88,7 +88,9 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
                     <span className="list-title">{m.title}</span>
                     <span className="meta-line">
                       <span>{formatTime(m.created_at)}</span>
-                      {names.get(m.template_id) ? <span>{names.get(m.template_id)}</span> : null}
+                      {names.get(m.template_id) ?? m.template_name ? (
+                        <span>{names.get(m.template_id) ?? m.template_name}</span>
+                      ) : null}
                     </span>
                   </span>
                 </span>

@@ -1,0 +1,52 @@
+{
+  "note": "The meeting can still be rewritten with a live template; it then names that one.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/regenerate",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "template_id": 1
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "title": "Google Meet abc-defg-hij",
+      "platform": "google_meet",
+      "native_id": "abc-defg-hij",
+      "status": "ready",
+      "step": "done",
+      "status_text": "Ready",
+      "status_tone": "success",
+      "template_id": 1,
+      "template_name": "General",
+      "created_at": "2026-11-04T17:35:44.533210Z",
+      "failure_reason": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": false,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": true,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "extraction_status": "pending",
+      "notes": "## Summary\nAda Example and Ben Sample agreed to ship the **REWRITTEN beta** on Friday.\n\n## Key points\n- The beta covers meetings and templates\n- Support rota starts Monday\n\n## Decisions\n- Ship the beta on Friday\n\n## Action items\n- Ada Example: write the release note by Thursday\n\n## Open questions\nNone noted\n\n## Please check\nNone noted\n",
+      "notes_html": "<h2>Summary</h2>\n<p>Ada Example and Ben Sample agreed to ship the <strong>REWRITTEN beta</strong> on Friday.</p>\n<h2>Key points</h2>\n<ul>\n<li>The beta covers meetings and templates</li>\n<li>Support rota starts Monday</li>\n</ul>\n<h2>Decisions</h2>\n<ul>\n<li>Ship the beta on Friday</li>\n</ul>\n<h2>Action items</h2>\n<ul>\n<li>Ada Example: write the release note by Thursday</li>\n</ul>\n<h2>Open questions</h2>\n<p>None noted</p>\n<h2>Please check</h2>\n<p>None noted</p>\n",
+      "transcript": "[Ada Example]: Hello everyone, thanks for joining. I can ship the beta on Friday.\n[Ben Sample]: Good. I will take the support rota from Monday."
+    }
+  }
+}
