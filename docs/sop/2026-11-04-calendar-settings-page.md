@@ -89,12 +89,13 @@ Seen while comparing, **not caused here:** in the mock the New meeting card is 5
 | Not-connected card: what Google is asked for | One paragraph under the button (read-only access to the events, nothing is written, what is kept and not kept) |
 | Connecting, errors and what comes back from Google | The designer drew only "Connecting..." and the connected card. Built from the existing components: the unverified-app explainer with "Continue to Google", a message for every redirect error, the "connect again" state with its button, the last failure line, "Waiting for the first update. This usually takes a minute." and the "Last updated" line |
 | Disconnect | An inline ask in a red-tinted box (what is deleted, what stays) with Disconnect and Keep connected; the designed text button opens it |
+| **Addition the design does not have: the sync line** | At the bottom of the connected Calendar card, under the three rule cards, one small grey line (13 px, `meta`): `Last updated 04 Nov 2026, 10:05 UTC` (the last full sync, in UTC), or before the first sync `Waiting for the first update. This usually takes a minute.` Kept for the live test (it shows whether the sync ran). **Designer: accept, move or drop** |
 | Upcoming: empty states | "Nothing in the next 7 days." and "Your meetings appear here after the first update." |
 | The calendar needing a reconnect | The Meetings screen shows the "Connect calendar" band (the design has no banner: listed as "Calendar disconnected banner" in the checklist) |
 | Row without a link | "No meeting link" as the platform (the design's words), "Cannot join" with the design's hint "Add a meeting link to this event to record it" on hover |
 | Guest count | "N people" from a number only; left out when the calendar gives none |
 | Times | The viewer's own zone on Meetings; "Last updated" on Settings is UTC and says so |
-| Recurring cards, Tasks, Sprints, language on Settings | Not part of this slice |
+| The other Settings sections: Sprints and reminders, Tasks, Default notes language (and the Recurring cards on Meetings) | Not part of this slice; they belong to later work (W2, W7 to W10, series) |
 
 ## Follow-ups
 - **The rest of C15a:** `PUT /api/calendar/settings` (rule, template, instant-Meet switch with the 409 `consent_required`), the override route (409 `not_joinable`) and the switch on each row, `GET /api/calendar/upcoming`, the full `state_text` for scheduled-join states, and `_reconcile` on a rule or template change (from the sync SOP). The plan's `test_will_join_text_carries_the_tell_participants_reminder` belongs there: here the reminder is the New meeting card's own line.
