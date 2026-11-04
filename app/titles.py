@@ -13,7 +13,8 @@ notes-ready mail, notifications and alerts):
   bidirectional override or isolate characters (a title that reorders the text around it);
 * a length cap, cut at a character, with an ellipsis;
 * in mail and alert text a web address inside a title is replaced by "[link removed]"
-  (`mail_title`), because a mail client would turn it into a link.
+  (`mail_title`), and a bare domain or address has its dots written "[.]", because a mail
+  client would turn either into a link.
 
 Zero-width joiners and variation selectors are kept: an emoji sequence or a Persian word needs them.
 A meeting without a title (a pasted link) is "Google Meet <code>" or "Zoom <code>".
@@ -36,6 +37,10 @@ _BIDI_AND_INVISIBLE = frozenset(
     + [chr(c) for c in range(0x2066, 0x206A)]
 )
 _SPACE_RUN = re.compile(r"\s+")
+# A bare domain or address ("evil.example.test", "a@b.test"): a mail client links these even with
+# no scheme, so in mail text each dot of such a token is written "[.]". A last part that is not
+# letters ("v2.1", "3.5") is not a domain and is left alone.
+_DOMAINISH = re.compile(r"[\w-]+(?:\.[\w-]+)*\.[^\W\d_]{2,}\b")
 
 # A web address with a scheme or `www.`, or a link to a meeting host written without one. The same
 # pattern `app.alerts` uses for admin text.
@@ -88,6 +93,7 @@ def mail_title(meeting: Meeting) -> str:
     """The name for a mail subject or body, an alert or a notification: cleaned, short, and with
     any web address in it removed (a mail client would link it)."""
     plain = URL.sub(LINK_REMOVED, clean_title(meeting.title, TITLE_LIMIT))
+    plain = _DOMAINISH.sub(lambda found: found.group().replace(".", "[.]"), plain)
     title = clean_title(plain, MAIL_TITLE_LIMIT)
     return title or clean_title(fallback_name(meeting), MAIL_TITLE_LIMIT)
 

@@ -46,13 +46,14 @@ and rules out a deadlock.
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import usage
+from app import titles, usage
 from app.config import Settings, get_settings
 from app.models import MEETING_SOURCES, Meeting, Template, User, UserSettings
 from app.vexa import VexaClient, VexaDuplicateBot, VexaError, VexaSendUncertain
@@ -85,6 +86,9 @@ class PlacementRequest:
     meeting_url: str  # may carry a Zoom passcode: never logged, never echoed
     template_id: int | None  # None = the user's calendar template
     source: str  # one of `MEETING_SOURCES`: manual, calendar, instant_meet
+    # The calendar event's title, stored on the meeting (cleaned: it is text from an invite).
+    # None for a pasted link, which is then named by platform and code.
+    title: str | None = None
 
 
 class PlacementRefused(Exception):
@@ -135,12 +139,14 @@ def reserve_slot(
     now: datetime,
     settings: Settings | None = None,
     wait_seconds: float | None = None,
+    exclude_meeting_id: int | None = None,
 ) -> None:
     """Take the placement lock and run the pre-flight checks. `wait_seconds` is how long to poll for
     the lock (default `LOCK_WAIT_SECONDS`; 0 for a caller holding a row lock, which a wait would
-    drop). Returns holding the lock, which
-    lasts until the caller commits or rolls back; the caller must do that, and must send the bot
-    before it commits. Raises `PlacementRefused` (the caller rolls back)."""
+    drop). `exclude_meeting_id` is a meeting that is itself being sent again (its row is still
+    `bot_sent` and would count against its own slot, user limit and code). Returns holding the
+    lock, which lasts until the caller commits or rolls back; the caller must do that, and must
+    send the bot before it commits. Raises `PlacementRefused` (the caller rolls back)."""
     settings = settings or get_settings()
     _take_lock(session, LOCK_WAIT_SECONDS if wait_seconds is None else wait_seconds)
 
@@ -151,9 +157,10 @@ def reserve_slot(
     ):
         raise PlacementRefused("hours_cap_reached", cap_seconds=cap)
 
+    not_this = [] if exclude_meeting_id is None else [Meeting.id != exclude_meeting_id]
     own = session.scalar(
         select(func.count(Meeting.id)).where(
-            Meeting.owner_user_id == user.id, Meeting.status.in_(HOLDS_A_SLOT)
+            Meeting.owner_user_id == user.id, Meeting.status.in_(HOLDS_A_SLOT), *not_this
         )
     )
     if own >= settings.user_bot_limit:
@@ -166,6 +173,7 @@ def reserve_slot(
             Meeting.platform == platform,
             Meeting.native_id == native_id,
             Meeting.status == IN_THE_CALL,
+            *not_this,
         )
         .limit(1)
     )
@@ -178,12 +186,15 @@ def reserve_slot(
             Meeting.platform == platform,
             Meeting.native_id == native_id,
             Meeting.status == IN_THE_CALL,
+            *not_this,
         )
         .limit(1)
     ):
         raise PlacementRefused("meeting_has_note_taker")  # someone else's: the own check ran first
 
-    busy = session.scalar(select(func.count(Meeting.id)).where(Meeting.status.in_(HOLDS_A_SLOT)))
+    busy = session.scalar(
+        select(func.count(Meeting.id)).where(Meeting.status.in_(HOLDS_A_SLOT), *not_this)
+    )
     if busy >= settings.bot_max_local:
         raise PlacementRefused("bot_busy")
 
@@ -220,8 +231,16 @@ def place_bot(
     *,
     now: datetime,
     settings: Settings | None = None,
+    wait_seconds: float | None = None,
+    on_placed: Callable[[Session, Meeting], None] | None = None,
 ) -> Meeting:
     """Send a bot to `req.meeting_url` and record the meeting, or raise `PlacementRefused`.
+
+    `wait_seconds` is passed to `reserve_slot` (0 for a caller that holds a row lock). `on_placed`
+    runs once the meeting row exists (flushed, with its id) and before the commit, in the same
+    transaction: the join runner marks its join `joined` there, so a crash can never leave a
+    meeting with a join row that does not know it. If it raises, the bot is stopped and nothing
+    is recorded, as for a failed flush.
 
     Commits (the meeting row and the lock leave together). A `VexaError` from the send is raised
     after a rollback: no meeting exists and the slot is free again. If the send may have reached
@@ -237,6 +256,7 @@ def place_bot(
             native_id=req.native_id,
             now=now,
             settings=settings,
+            wait_seconds=wait_seconds,
         )
     except PlacementRefused:
         session.rollback()  # also releases the lock
@@ -261,6 +281,7 @@ def place_bot(
         vexa_meeting_id=None if vexa_id is None else str(vexa_id),
         started_polling_at=now,
         source=req.source,
+        title=titles.event_title(req.title),
     )
     if vexa_id is None:
         # The grace counts from after the send, not from the caller's `now`, which was taken
@@ -271,6 +292,9 @@ def place_bot(
     try:
         session.add(meeting)
         session.flush()
+        if on_placed is not None:
+            on_placed(session, meeting)
+            session.flush()
     except BaseException:
         stop_unrecorded_bot(vexa, req.platform, req.native_id)  # before the lock is let go
         session.rollback()

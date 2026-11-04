@@ -89,6 +89,15 @@ def test_event_title_stores_nothing_for_nothing_printable():
     assert titles.event_title("‮\x00") is None and titles.event_title("  Plan  ") == "Plan"
 
 
+def test_mail_titles_defang_bare_domains_and_addresses_but_not_versions():
+    meeting = Meeting(
+        platform="zoom", native_id="1", title="Call evil.example.test or a@b.test v2.1"
+    )
+    shown = titles.mail_title(meeting)
+    assert "evil[.]example[.]test" in shown and "a@b[.]test" in shown
+    assert "evil.example.test" not in shown and "v2.1" in shown
+
+
 def test_mail_titles_lose_web_addresses_and_are_short():
     meeting = Meeting(platform="zoom", native_id="1", title="Join https://evil.example.test/x now")
     assert titles.mail_title(meeting) == "Join [link removed] now"
