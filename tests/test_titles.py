@@ -36,7 +36,7 @@ from tests.test_mail_upgrade import deliver, notes_row
 from tests.test_mail_upgrade import ready as mail_ready  # noqa: F401  (fixture used by name)
 
 HOSTILE = (
-    "Q3 ‮gnirts‬ review\r\nBcc: attacker@example.test\x07⁦x⁩"
+    "Q3 \u202egnirts\u202c review\r\nBcc: attacker@example.test\x07\u2066x\u2069"
     " <script>alert(1)</script> https://evil.example.test/login?next=1"
 )
 
@@ -47,7 +47,7 @@ HOSTILE = (
 def test_control_and_bidi_characters_are_removed_and_newlines_become_one_space():
     cleaned = titles.clean_title(HOSTILE)
     assert "\r" not in cleaned and "\n" not in cleaned and "\x00" not in cleaned
-    for bad in "‮‬⁦⁩\x07":
+    for bad in "\u202e\u202c\u2066\u2069\x07":
         assert bad not in cleaned
     assert cleaned.startswith("Q3 gnirts review Bcc: attacker@example.test")
 
@@ -55,7 +55,7 @@ def test_control_and_bidi_characters_are_removed_and_newlines_become_one_space()
 def test_a_title_is_one_line_with_runs_of_space_collapsed_and_the_ends_trimmed():
     assert titles.clean_title("  a \t\t b c  d  ") == "a b c d"
     assert titles.clean_title("") == "" and titles.clean_title(None) == ""
-    assert titles.clean_title("‮‬ \x00 ") == ""
+    assert titles.clean_title("\u202e\u202c \x00 ") == ""
 
 
 def test_emoji_and_non_latin_titles_round_trip_with_their_joiners():
@@ -80,13 +80,13 @@ def test_a_meeting_without_a_title_is_named_by_platform_and_code():
     zoom = Meeting(platform="zoom", native_id="88205679674", title="")
     assert titles.meeting_name(meet) == "Google Meet abc-defg-hij"
     assert titles.meeting_name(zoom) == "Zoom 88205679674"
-    junk = Meeting(platform="zoom", native_id="1", title="‮ \x00")
+    junk = Meeting(platform="zoom", native_id="1", title="\u202e \x00")
     assert titles.meeting_name(junk) == "Zoom 1"
     assert services.meeting_title(meet) == "Google Meet abc-defg-hij"
 
 
 def test_event_title_stores_nothing_for_nothing_printable():
-    assert titles.event_title("‮\x00") is None and titles.event_title("  Plan  ") == "Plan"
+    assert titles.event_title("\u202e\x00") is None and titles.event_title("  Plan  ") == "Plan"
 
 
 def test_mail_titles_defang_bare_domains_and_addresses_but_not_versions():
@@ -121,7 +121,7 @@ def test_the_list_and_the_detail_show_the_cleaned_calendar_title(api, session, t
     assert listed["title"] == shown
     assert api.get(f"/api/meetings/{meeting.id}").json()["title"] == shown
     for response in (api.get("/api/meetings"), api.get(f"/api/meetings/{meeting.id}")):
-        assert "‮" not in response.text and "\\u202e" not in response.text
+        assert "\u202e" not in response.text and "\\u202e" not in response.text
 
 
 def test_a_pasted_link_keeps_its_platform_and_code_name(api, session, template):
@@ -130,7 +130,7 @@ def test_a_pasted_link_keeps_its_platform_and_code_name(api, session, template):
 
 
 def test_the_decisions_and_review_groups_use_the_title(api, session, template):
-    meeting = extracted(session, template, title="Budget review ‮")
+    meeting = extracted(session, template, title="Budget review \u202e")
     body = api.get("/api/decisions").json()
     assert body["groups"][0]["meeting"]["title"] == "Budget review"
     assert body["groups"][0]["meeting"]["id"] == meeting.id
@@ -152,7 +152,7 @@ def test_the_word_export_has_the_title_as_heading_and_a_safe_file_name(api, sess
     response = api.get(f"/api/meetings/{meeting.id}/export?format=docx")
     assert response.status_code == 200
     disposition = response.headers["content-disposition"]
-    assert "\r" not in disposition and "\n" not in disposition and "‮" not in disposition
+    assert "\r" not in disposition and "\n" not in disposition and "\u202e" not in disposition
     assert "/" not in disposition.split("filename=")[1].split(";")[0].strip('"')
     word = Document(io.BytesIO(response.content))
     heading = titles.clean_title(HOSTILE)
@@ -161,7 +161,7 @@ def test_the_word_export_has_the_title_as_heading_and_a_safe_file_name(api, sess
 
 
 def test_the_pdf_export_escapes_the_title_and_is_named_after_it(api, session, template):
-    meeting = make(session, template, title="Plan <b>& more</b> ‮")
+    meeting = make(session, template, title="Plan <b>& more</b> \u202e")
     response = api.get(f"/api/meetings/{meeting.id}/export?format=pdf")
     assert response.status_code == 200 and response.content.startswith(b"%PDF")
     assert b"filename*=" in response.headers["content-disposition"].encode() or (
@@ -200,7 +200,7 @@ def test_the_notes_ready_mail_carries_the_title_in_subject_and_body_without_inje
     [(message, _)] = mailer.sent
     assert "\r" not in message.subject and "\n" not in message.subject
     assert message.subject.startswith("Your notes are ready: Q3 gnirts review Bcc:")
-    assert "‮" not in message.subject + message.text + message.html
+    assert "\u202e" not in message.subject + message.text + message.html
     assert "evil.example.test" not in message.subject + message.text + message.html
     assert "[link removed]" in message.text or "…" in message.text
     assert "<script>alert(1)</script>" not in message.html

@@ -59,7 +59,7 @@ START = datetime(2026, 11, 5, 10, 0, tzinfo=UTC)
 # A hostile title, as an invite could carry it: a bidi override, a line break and a header, markup,
 # and a link. The placeholders in it are obviously fake.
 HOSTILE_TITLE = (
-    "Q3 ‮gnirts‬ review\r\nBcc: attacker@example.test "
+    "Q3 \u202egnirts\u202c review\r\nBcc: attacker@example.test "
     "<script>alert(1)</script> https://evil.example.test/login"
 )
 
