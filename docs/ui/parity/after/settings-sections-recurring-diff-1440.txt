@@ -1,0 +1,31 @@
+DIFF Settings / Sprints and reminders / [box]: h 303 -> 326
+DIFF Settings / Sprints and reminders / Sprint length: w 261 -> 86; y 89 -> 122
+DIFF Settings / Sprints and reminders / Open and close sprints at recurring meetings: w 402 -> 297; y 157 -> 180
+DIFF Settings / Sprints and reminders / Remind attendees before recurring meetings: y 225 -> 248
+DIFF Settings / Sprints and reminders / The email covers what the last meeting focused on, decisions made, open questions and unfinished tasks.: y 246 -> 269
+DIFF Settings / Sprints and reminders / [select 1]: y 91 -> 115; opacity 1 -> 0.55
+DIFF Settings / Sprints and reminders / [select 2]: y 225 -> 248; opacity 1 -> 0.55
+DIFF Settings / Sprints and reminders / [switch 1]: y 159 -> 182; fontSize 14px -> 13.3333px; color rgb(20, 25, 23) -> rgba(16, 16, 16, 0.3); backgroundColor rgb(14, 107, 94) -> rgb(213, 219, 216); borderTopColor rgb(20, 25, 23) -> rgba(16, 16, 16, 0.3); opacity 1 -> 0.55
+DIFF Settings / Sprints and reminders / [switch 2]: y 233 -> 256; fontSize 14px -> 13.3333px; color rgb(20, 25, 23) -> rgba(16, 16, 16, 0.3); backgroundColor rgb(14, 107, 94) -> rgb(213, 219, 216); borderTopColor rgb(20, 25, 23) -> rgba(16, 16, 16, 0.3); opacity 1 -> 0.55
+DIFF Settings / Tasks / [box]: h 353 -> 379
+DIFF Settings / Tasks / Create tasks from action items: y 89 -> 115
+DIFF Settings / Tasks / Each action item becomes a task assigned to the teammate named as its owner.: y 110 -> 136
+DIFF Settings / Tasks / Email assignees: y 157 -> 183
+DIFF Settings / Tasks / Send each person a list of their new tasks after the meeting.: y 178 -> 204
+DIFF Settings / Tasks / Sync with your project tool: y 225 -> 251
+DIFF Settings / Tasks / Send tasks, projects and sprints to a tool your team already uses.: y 246 -> 272
+DIFF Settings / Tasks / Post tasks to Slack: y 293 -> 319
+DIFF Settings / Tasks / Share new tasks in a channel so the team can track them there.: y 314 -> 340
+DIFF Settings / Tasks / [select 1]: y 228 -> 253; opacity 1 -> 0.55
+DIFF Settings / Tasks / [button 1: Connect]: y 228 -> 253; opacity 1 -> 0.55
+DIFF Settings / Tasks / [button 2: Connect Slack]: y 296 -> 321; opacity 1 -> 0.55
+DIFF Settings / Tasks / [switch 1]: y 91 -> 117; fontSize 14px -> 13.3333px; color rgb(20, 25, 23) -> rgba(16, 16, 16, 0.3); backgroundColor rgb(14, 107, 94) -> rgb(213, 219, 216); borderTopColor rgb(20, 25, 23) -> rgba(16, 16, 16, 0.3); opacity 1 -> 0.55
+DIFF Settings / Tasks / [switch 2]: y 159 -> 185; fontSize 14px -> 13.3333px; color rgb(20, 25, 23) -> rgba(16, 16, 16, 0.3); backgroundColor rgb(14, 107, 94) -> rgb(213, 219, 216); borderTopColor rgb(20, 25, 23) -> rgba(16, 16, 16, 0.3); opacity 1 -> 0.55
+DIFF Settings / Default notes language / [box]: h 113 -> 138
+DIFF Settings / Default notes language / [select 1]: opacity 1 -> 0.55
+DIFF Recurring / Beyric Monday planning / Beyric Monday planning: h 18 -> 21
+DIFF Recurring / Beyric Monday planning / Weekly on Mondays, 14:00: w 146 -> 160; h 16 -> 18
+DIFF Recurring / Beyric Friday review / Beyric Friday review: h 18 -> 21
+DIFF Recurring / Beyric Friday review / Weekly on Fridays, 15:00: h 16 -> 18
+
+40 boxes and labels compared, 29 with a difference (positions inside each section; y within 1 px counts as equal).

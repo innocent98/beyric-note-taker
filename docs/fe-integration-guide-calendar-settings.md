@@ -447,3 +447,76 @@ a minute; an automatic refresh is a later improvement.
 | Rule change clears switches on meetings that have not started and keeps those in progress; choosing the same rule changes nothing; template reaches planned joins but not `joined` ones; another user's rows untouched; every 409 reason (declined, over, cancelled, all-day, too long, no link, Teams) | verified by the pytest suite against a real Postgres (63 tests, mutation-checked); the captures show declined, Teams, no link, the rule change and the same-rule call over HTTP |
 | What the runner (C12) does with the changed rows | **not verified**: C12 is not built |
 | A real Google calendar, a real consent screen (including the wording of Google's own unverified-app warning, which the page describes but has not seen), real `hd` and scope names | **not verified**: needs Adebayo's Gmail test account (checklist C3 and C5 live steps) |
+
+## 7. `GET /api/calendar/recurring` (the Recurring cards on Meetings)
+
+Captured by `scripts/capture_calendar_recurring.py` into `docs/fe-captures/calendar-recurring/NN-name.json`
+(cited as **R#NN**; the same setup as above: real app, real Postgres, real HTTP, events through the
+real sync job over a fake Google, so **no real Google recurring event has been read**). The times in
+the files are those of the run day (2026-11-04). Signed in; no CSRF header (a read).
+
+**What it is.** One card per recurring meeting on the connected calendar: the name, a cadence, the
+next occurrence. It groups the stored events by Google's own recurring-event id. It reads what the
+sync stored (events from an hour back to two weeks ahead, kept two days after they end) and fetches
+nothing from Google.
+
+**Query:** `?tz=<IANA zone>`, the browser's own (`Intl.DateTimeFormat().resolvedOptions().timeZone`).
+The server writes the cadence and the next date in that zone; without it the texts are in UTC and
+`timezone` says so (R#09). The weekday and clock time depend on the zone, so always send it.
+
+Africa/Lagos (R#10, trimmed to two of the five series):
+
+```json
+{
+  "timezone": "Africa/Lagos",
+  "series": [
+    {"name": "Beyric Friday review", "cadence": "Weekly on Fridays, 15:00", "next_starts_at": "2026-11-06T14:00:00Z", "next_text": "Fri 6 Nov, 15:00"},
+    {"name": "Beyric Monday planning", "cadence": "Weekly on Mondays, 14:00", "next_starts_at": "2026-11-09T13:00:00Z", "next_text": "Mon 9 Nov, 14:00"}
+  ]
+}
+```
+
+The same rows in Pacific/Auckland (R#11) read `"cadence": "Weekly on Saturdays, 03:00"` and
+`"next_text": "Sat 7 Nov, 03:00"` for the Friday review, with the same `next_starts_at`. Draw the texts as
+they are.
+
+**Cadence values** (R#09 to R#11): `Daily, 09:30`, `Weekly on Mondays, 14:00` (two days: `Mondays and
+Wednesdays`), or just `Recurring` (R#10: a series with one occurrence in the data, and one whose time
+of day changes). The server says a cadence only when the stored times prove it; never derive one in
+the browser.
+
+**Nothing to draw:** not connected, connected before the first sync, after a disconnect and for a
+second account without a calendar all answer 200 with `{"timezone": "UTC", "series": []}` (R#05, R#08,
+R#16, R#18). Draw nothing then (no heading either).
+
+**Errors:**
+
+| Status | Body | Meaning |
+|---|---|---|
+| 401 | `{"error": {"code": "not_authenticated", ...}}` (R#01) | no session |
+| 404 | `{"error": {"code": "calendar_unavailable", "message": "Google Calendar is not available."}}` (R#04) | the feature is off: draw nothing |
+| 422 | `{"error": {"code": "invalid_timezone", "message": "That time zone is not known. Use a name like Africa/Lagos."}}` (R#12) | unknown zone |
+| 422 | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "tz", "message": "String should have at most 64 characters"}]}}` (R#13) | zone name longer than 64 characters |
+
+**Field traps and what is deliberately absent**
+
+- Only four fields per card: `name`, `cadence`, `next_starts_at` (UTC, `Z`), `next_text`. No id, no
+  link, no attendees; the card has no key, use the index.
+- **No "unfinished tasks" and no "open questions" chip.** The designer drew both; tasks do not exist
+  yet (W2), and a past meeting's link to its series is lost when the event row is deleted two days
+  after it ends, so a count would shrink silently. The page draws the "Next:" chip only.
+- **The card is not a link** (the Series page is W8): no chevron, no hover state, nothing to press.
+- Only meetings: cancelled events, all-day events and out-of-office or focus-time events are left out,
+  and so is a series whose title is blank. A series appears only while it has an occurrence that has
+  not started yet (a meeting in progress is not "next"). Soonest next occurrence first, at most 50.
+- Because the data window is two weeks, a series that meets less often than every two weeks may not
+  appear, or appears as `Recurring`.
+
+**Not captured live:** a real Google recurring event (the series ids and instances are synthetic), and
+a clock change inside the window (covered by a pytest case, not by a capture).
+
+| Behaviour | Status |
+|---|---|
+| 401, 404 feature off, empty list (never connected, before first sync, after disconnect, other user), series in UTC, Lagos and Auckland, 422 unknown zone, 422 too long (R#01, R#04 to R#18) | verified live against the running app (Google faked, real sync job) |
+| Grouping, cadence rules (daily, weekly one or several days, every unprovable case), zone and clock-change boundaries, cancelled and in-progress rules, isolation between users, no address, link, passcode or source id, emoji titles | verified by `tests/test_calendar_recurring.py` (55 tests, real Postgres) |
+| The cards on the page | verified in a built app next to the designer's file at 1440, 768 and 390 px against a mock replaying these captures; **not** the live site, not Safari or Firefox, not a real Google calendar |

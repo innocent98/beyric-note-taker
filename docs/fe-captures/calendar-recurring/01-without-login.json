@@ -1,0 +1,24 @@
+{
+  "note": "No session cookie.",
+  "client": "visitor",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar/recurring",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}
