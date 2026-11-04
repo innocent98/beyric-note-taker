@@ -233,7 +233,7 @@ def test_second_active_meeting_is_refused(client, fake_vexa, template, session):
     add_meeting(session, template, status="processing", step="notes")
     response = post(client, "/meetings", {"url": MEET, "template_id": template.id})
     assert response.status_code == 409
-    assert "already" in response.text
+    assert "busy right now" in response.text
     assert fake_vexa.sent == []
     assert len(session.scalars(select(Meeting)).all()) == 1
 

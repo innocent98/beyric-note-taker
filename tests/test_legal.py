@@ -101,3 +101,15 @@ def test_administrator_access_is_stated_plainly(anon_client):
         "and the action is logged. The administrator's account screens do not show your "
         "meetings or notes." in page
     )
+
+
+def test_the_pages_do_not_promise_to_tell_anyone_about_a_change(anon_client):
+    """The policy and terms may change without notice: they say only that they may be updated and
+    that the date at the top shows when. A promise of notice would be false (nothing sends one)."""
+    for path in (PRIVACY, TERMS):
+        page = text(anon_client, path)
+        assert "from time to time" in page
+        assert "shows when" in page
+        for promise in ("material change", "we will tell you by email", "before they take effect"):
+            assert promise not in page, (path, promise)
+        assert "30 days before it takes effect" not in page

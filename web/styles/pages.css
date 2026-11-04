@@ -178,6 +178,9 @@
   .rv-done-row { flex-wrap: wrap; }
   .rv-done-body { flex-basis: 100%; }
 }
+.notice-row { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border-softer); }
+.notice-row:last-child { border-bottom: 0; }
+.notice-row p { margin: 6px 0; max-width: 62ch; }
 
 /* ---- Settings: calendar, and the calendar on the Meetings page (Beyric Note Taker.dc.html) ---- */
 .set-head { padding: 22px 22px 18px; }

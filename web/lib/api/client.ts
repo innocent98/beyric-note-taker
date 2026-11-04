@@ -4,12 +4,14 @@ import type {
   CalendarState,
   ConnectStart,
   DecisionList,
+  EmailPreferences,
   DisconnectResult,
   ExportFormat,
   FieldError,
   Meeting,
   MeetingList,
   NewMeeting,
+  NoticeList,
   Pilot,
   ReviewItem,
   ReviewList,
@@ -250,6 +252,20 @@ export function createApi(options: ApiOptions = {}) {
       uncheck: (id: number) => request<ReviewItem>("POST", `/api/review/${id}/uncheck`, { write: true }),
       addToVocabulary: (id: number, term: string) =>
         request<ReviewTermResult>("POST", `/api/review/${id}/vocabulary`, { body: { term }, write: true }),
+    },
+    // Whether the notes-ready email is on (GET and PUT /api/settings/email).
+    settings: {
+      email: {
+        get: () => request<EmailPreferences>("GET", "/api/settings/email"),
+        set: (notify_email: boolean) =>
+          request<EmailPreferences>("PUT", "/api/settings/email", { body: { notify_email }, write: true }),
+      },
+    },
+    // The bell: what the app has told the user, newest first. `readAll` answers the new unread count.
+    notifications: {
+      list: (query: { limit?: number; before_id?: number } = {}) =>
+        request<NoticeList>("GET", "/api/notifications", { query }),
+      readAll: () => request<{ unread_notifications: number }>("POST", "/api/notifications/read-all", { write: true }),
     },
     // Google Calendar (docs/fe-integration-guide-calendar-settings.md). `get` answers 404
     // `calendar_unavailable` while the feature is off. `connect` returns the Google consent URL to

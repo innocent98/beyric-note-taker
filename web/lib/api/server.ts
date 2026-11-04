@@ -61,6 +61,12 @@ export async function getReviewOpen(): Promise<number | null> {
   return (await getSession())?.badges?.review_open ?? null;
 }
 
+// The unread count of the session this request already read (`unread_notifications`): the number
+// beside Notifications in the sidebar. null when it is not known; the shell then draws no badge.
+export async function getUnreadNotifications(): Promise<number | null> {
+  return (await getSession())?.unread_notifications ?? null;
+}
+
 // For pages that are only for the owner. Anyone else goes to /login.
 export async function requireOwner() {
   const session = await getSession();

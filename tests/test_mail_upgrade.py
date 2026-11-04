@@ -368,7 +368,10 @@ def test_hostile_meeting_text_is_inert_in_the_html(session, ready):
     )
     assert "&lt;script&gt;" in message.html
     hrefs = [h.split('"')[0] for h in message.html.split('href="')[1:]]
-    assert hrefs == [f"https://notes.example.test/meetings/{ready.id}"]  # the one button, no more
+    assert hrefs == [  # the button, and the footer's link to the email preferences: no more
+        f"https://notes.example.test/meetings/{ready.id}",
+        "https://notes.example.test/settings#email-preferences",
+    ]
     assert "\n" not in message.subject
 
 

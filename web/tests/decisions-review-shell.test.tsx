@@ -39,6 +39,7 @@ vi.mock("@/lib/api/server", () => ({
     };
   },
   getReviewOpen: async () => state.reviewOpen,
+  getUnreadNotifications: async () => null,
   load: <T,>(call: Promise<T>) => call,
 }));
 

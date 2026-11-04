@@ -50,6 +50,12 @@ export function workspaceBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/ai-workspace-w1", file))).response.body as T;
 }
 
+// A capture from the running API for email preferences and the two notices
+// (docs/fe-captures/prelaunch-mail-prefs/<file>).
+export function prelaunchCapture(file: string): { request: { body: unknown }; response: { status: number; body: unknown } } {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/prelaunch-mail-prefs", file)));
+}
+
 // The error a captured failing response carries (the `ApiError` arguments).
 export function workspaceError(file: string): { status: number; code: string; message: string } {
   const { response } = JSON.parse(read(join(REPO, "docs/fe-captures/ai-workspace-w1", file)));
