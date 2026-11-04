@@ -1207,7 +1207,7 @@ export interface components {
          *     `last_error` is the last failure in plain words, null when the last attempt worked.
          *     `rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)
          *     and `rule_text` its label ("Joining all meetings"). `calendar_template_id` is the person's own
-         *     template chosen for calendar meetings, null for the default (their first template by name).
+         *     template chosen for calendar meetings, null for the default (their first, oldest, template).
          *     `upcoming` is empty unless connected.
          */
         CalendarOut: {
