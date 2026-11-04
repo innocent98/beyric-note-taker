@@ -256,6 +256,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar/events/{event_id}/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Calendar Event Override
+         * @description The person's switch for one meeting on the Upcoming list (CSRF header needed): `true` joins
+         *     it, `false` does not, `null` clears the switch so the rule decides again. The switch beats the
+         *     rule in both directions; the stored join is made, revived or cancelled to match, which is what
+         *     the runner reads. Answers with the event's new row. 404 `not_found` for an event that is not
+         *     the caller's (also after disconnecting); 409 `not_joinable` for an event nothing the person
+         *     switches can change (declined, over, cancelled, all day, no meeting link, or Microsoft Teams
+         *     before Teams can be joined): `message` is the reason in plain words, and nothing is stored.
+         *     404 `calendar_unavailable` while the calendar features are off.
+         */
+        put: operations["calendar_event_override"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar/google/callback": {
         parameters: {
             query?: never;
@@ -327,6 +354,33 @@ export interface paths {
          *     Afterwards `connect` works again, for the same or another Google account.
          */
         post: operations["calendar_google_disconnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/calendar/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Calendar Settings
+         * @description Change the auto-join rule and/or the template for calendar meetings (CSRF header needed);
+         *     a field left out stays as it is. Answers with the whole state, as `GET /api/calendar` does, so
+         *     the page can redraw from it. A changed `rule` clears the person's per-meeting switches on events
+         *     that have not started, then decides every stored event again from the new rule: joins it now
+         *     forbids are cancelled and joins it now allows are made or revived (the same rules the sync
+         *     applies; nothing is fetched from Google and no bot is sent here). Choosing the rule that is
+         *     already set changes nothing. 404 `not_found` for a template that is not the caller's own,
+         *     404 `calendar_unavailable` while the calendar features are off.
+         */
+        put: operations["calendar_settings"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1152,9 +1206,13 @@ export interface components {
          *     `last_sync_at` is the last time the calendar was read in full, null before the first sync.
          *     `last_error` is the last failure in plain words, null when the last attempt worked.
          *     `rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)
-         *     and `rule_text` its label ("Joining all meetings"). `upcoming` is empty unless connected.
+         *     and `rule_text` its label ("Joining all meetings"). `calendar_template_id` is the person's own
+         *     template chosen for calendar meetings, null for the default (their first template by name).
+         *     `upcoming` is empty unless connected.
          */
         CalendarOut: {
+            /** Calendar Template Id */
+            calendar_template_id: number | null;
             /** Connected */
             connected: boolean;
             /** Google Email */
@@ -1470,6 +1528,15 @@ export interface components {
             /** Title */
             title: string;
         };
+        /**
+         * OverrideIn
+         * @description The person's switch for one meeting: true joins it, false does not, null clears the switch
+         *     so the rule decides again. The field is required (null must be sent on purpose).
+         */
+        OverrideIn: {
+            /** Override */
+            override: boolean | null;
+        };
         /** PasswordChanged */
         PasswordChanged: {
             /**
@@ -1544,6 +1611,21 @@ export interface components {
             unread_notifications: number | null;
             usage: components["schemas"]["UsageOut"] | null;
             user: components["schemas"]["UserOut"] | null;
+        };
+        /**
+         * SettingsIn
+         * @description What to change; a field that is left out stays as it is. `rule` is `all` (every event with
+         *     a video link), `organizer` (only meetings the person organises) or `none` (only the meetings
+         *     they switch on). Changing it also clears their per-meeting switches on events that have not
+         *     started, and re-decides every event from the new rule. `calendar_template_id` is one of the
+         *     person's own templates, or null for the default; it also reaches the meetings already planned
+         *     that have not sent a bot. At least one field is needed.
+         */
+        SettingsIn: {
+            /** Calendar Template Id */
+            calendar_template_id?: number | null;
+            /** Rule */
+            rule?: ("all" | "organizer" | "none") | null;
         };
         /** SignUp */
         SignUp: {
@@ -2439,6 +2521,77 @@ export interface operations {
             };
         };
     };
+    calendar_event_override: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                event_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverrideIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpcomingEvent"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     calendar_google_callback: {
         parameters: {
             query?: {
@@ -2605,6 +2758,66 @@ export interface operations {
                 };
             };
             /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    calendar_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;

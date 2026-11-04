@@ -1,0 +1,31 @@
+{
+  "note": "The joins the sync made under the rule `all`.",
+  "content": {
+    "joins": [
+      {
+        "event": "Weekly planning",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Customer call",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Sprint 🚀 planning · 週次",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      },
+      {
+        "event": "Quarterly offsite",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": 1
+      }
+    ]
+  }
+}

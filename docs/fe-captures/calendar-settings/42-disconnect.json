@@ -1,0 +1,24 @@
+{
+  "note": "Disconnect.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/google/disconnect",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "disconnected",
+      "revoked": true
+    }
+  }
+}

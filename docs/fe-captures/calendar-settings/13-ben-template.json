@@ -1,0 +1,29 @@
+{
+  "note": "Another person's template.",
+  "client": "a different user",
+  "request": {
+    "method": "POST",
+    "path": "/api/templates",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "name": "Ben private",
+      "instructions": "Ben's own instructions."
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "location": "/api/templates/5"
+    },
+    "body": {
+      "id": 5,
+      "name": "Ben private",
+      "instructions": "Ben's own instructions."
+    }
+  }
+}

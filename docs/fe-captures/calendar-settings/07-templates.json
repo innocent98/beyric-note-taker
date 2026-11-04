@@ -1,0 +1,43 @@
+{
+  "note": "What the select lists: the person's own templates, sorted by name.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/templates",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "templates": [
+        {
+          "id": 2,
+          "name": "Client call",
+          "instructions": "Focus on what the client asked for, commitments made, deadlines, concerns raised, and next steps. Group action items by who owns them."
+        },
+        {
+          "id": 1,
+          "name": "General",
+          "instructions": "Write a summary, key points, decisions, action items with owners, and open questions."
+        },
+        {
+          "id": 4,
+          "name": "Interview",
+          "instructions": "Summarise the candidate's background, strengths, concerns, notable answers, and any follow-up questions. Do not give a hire or no-hire verdict."
+        },
+        {
+          "id": 3,
+          "name": "Team update",
+          "instructions": "Group by person or workstream: progress, blockers, and what is planned next. List decisions and action items at the end."
+        }
+      ]
+    }
+  }
+}
