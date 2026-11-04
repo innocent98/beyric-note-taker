@@ -20,12 +20,25 @@ export function useToast(ms = 2200): [string, (message: string) => void] {
   return [message, flash];
 }
 
+function Tick() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" className="toast-tick">
+      <path d="m5 12 5 5 9-10" />
+    </svg>
+  );
+}
+
 // `inline` draws it where it is placed (the style guide), not fixed to the window.
 export function Toast({ message, inline = false }: { message: string; inline?: boolean }) {
-  if (inline) return message ? <div className="toast toast-inline">{message}</div> : null;
+  if (inline) return message ? <div className="toast toast-inline"><Tick />{message}</div> : null;
   return (
     <div className="toast-region" role="status" aria-live="polite">
-      {message ? <div className="toast">{message}</div> : null}
+      {message ? (
+        <div className="toast">
+          <Tick />
+          {message}
+        </div>
+      ) : null}
     </div>
   );
 }

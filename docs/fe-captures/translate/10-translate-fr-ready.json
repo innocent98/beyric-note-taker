@@ -1,5 +1,5 @@
 {
-  "note": "`notes` has the dictionary's headings; `transcript` has the original's lines and labels.",
+  "note": "`notes` has the dictionary's headings; `transcript` has the original's lines.",
   "request": {
     "method": "GET",
     "path": "/api/meetings/1/translations/fr",
@@ -23,7 +23,7 @@
       "transcript": "[Adebayo]: Alors, je vais juste vous présenter l'application.\n[Adebayo]: C'est une application de prise de notes, développée par nous, Beyric. Je l'ai donc appelée Beyric Note Taker, d'accord ?\n[Adebayo]: Maintenant, le problème d'hier. J'ai eu une réunion le 12 septembre avec un de mes collègues, une réunion très longue, et j'avais cet autre outil de prise de notes qui l'a enregistrée pour moi.\n[Adebayo]: J'espérais donc, en revenant à la transcription hier, retrouver ce qui avait été enregistré.\n[Adebayo]: Mais en y arrivant, j'ai trouvé beaucoup d'inexactitudes dans les transcriptions. Ça n'avait même aucun rapport avec ce dont on parlait.\n[Adebayo]: On avait parlé de mises à jour de fonctionnalités, de corrections et de tout ça, dont je ne me souviens pas entièrement pour l'instant.\n[Adebayo]: Est-ce que tu as déjà utilisé ces applications ?\n[Adebayo]: Oui, j'ai déjà utilisé l'outil de prise de notes, mais pas vraiment beaucoup. Je l'ai juste installé sur mon système.\n[Adebayo]: Quand j'ai commencé à l'utiliser, ça marchait un peu. J'obtenais un résumé des réunions et tout ça. Mais celle que je voulais hier, c'était un échec total. Il n'y avait pas de vrai résumé.\n[Adebayo]: Et ils facturaient cher. Celle que je construis maintenant va aussi nous coûter de l'argent. Mais je veux d'abord voir comment ça va se passer.\n[Adebayo]: Ce sera pour un usage interne.\n[Ojebola Grace]: J'ai dit l'efficacité.\n[Adebayo]: Oui, oui, ce sera pour l'interne.\n[Ojebola Grace]: D'accord.\n[Adebayo]: Mais je cherche encore comment l'automatiser, tu comprends ? C'était ça l'objectif, en fait.\n[Adebayo]: Et l'outil est présent dans cette réunion, donc il écoute notre conversation. Je veux voir jusqu'où il peut nous mener.\n[Ojebola Grace]: Oui.\n[Adebayo]: Au moins pour cette réunion, je vais dépenser quelques dollars. Alors voyons.\n[Ojebola Grace]: D'accord. Je crois que le réseau...\n[Ojebola Grace]: Le réseau gêne ta voix. Tu m'entends ?",
       "failure_code": null,
       "failure_message": null,
-      "updated_at": "2026-11-04T15:53:45.880147Z"
+      "updated_at": "2026-11-04T16:08:52.688638Z"
     }
   }
 }

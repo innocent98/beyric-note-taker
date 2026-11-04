@@ -76,7 +76,8 @@
 /* The designer's toast (components/ui/toast.tsx) */
 .toast-region { position: fixed; left: 50%; bottom: 28px; z-index: 60; transform: translateX(-50%); pointer-events: none; }
 .toast-inline { width: fit-content; }
-.toast { display: flex; align-items: center; padding: 10px 16px; border-radius: 9px; background: var(--text); color: var(--on-night); font-size: var(--text-sm); font-weight: 500; box-shadow: var(--shadow-snackbar); }
+.toast-tick { flex: none; stroke: var(--teal-mint); }
+.toast { display: flex; align-items: center; gap: var(--space-2); padding: 10px 16px; border-radius: 9px; background: var(--text); color: var(--on-night); font-size: var(--text-sm); font-weight: 500; box-shadow: var(--shadow-snackbar); }
 .notes-body { max-width: 760px; padding: 24px 28px 28px; color: var(--ink-2); line-height: 1.65; }
 .notes-body h2 { margin: 0 0 var(--space-2); font-size: var(--text-md); font-weight: 600; color: var(--text); }
 .notes-body p { margin: 0; color: var(--ink-2); }

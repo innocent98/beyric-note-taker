@@ -177,6 +177,13 @@ const server = http.createServer(async (req, res) => {
   const method = req.method ?? "GET";
   const data = ["POST", "PUT", "PATCH"].includes(method) ? await readJson(req) : (req.resume(), null);
 
+  // Not part of the API: lets parity-shots.mjs start each translation screen from nothing.
+  if (path === "/__mock/reset") {
+    for (const language of Object.keys(translating)) delete translating[language];
+    defaultLanguage = values.language;
+    return json(res, 200, { reset: true });
+  }
+
   // The real API refuses a write without the token from GET /api/session, public routes included.
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && path.startsWith("/api/") && req.headers["x-csrf-token"] !== "mock-csrf") {
     return json(res, 403, accountBody("17-signup-without-csrf"));

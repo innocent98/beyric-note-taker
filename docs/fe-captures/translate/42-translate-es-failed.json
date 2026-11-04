@@ -1,5 +1,5 @@
 {
-  "note": "Provoked inside the capture: the fake model dropped a line, so the structure check failed.",
+  "note": "Provoked inside the capture: the fake model dropped a line, so the check failed.",
   "request": {
     "method": "GET",
     "path": "/api/meetings/1/translations/es",
@@ -23,7 +23,7 @@
       "transcript": null,
       "failure_code": "structure",
       "failure_message": "The translation did not come out right, so it was not kept. You can try again.",
-      "updated_at": "2026-11-04T15:53:47.948726Z"
+      "updated_at": "2026-11-04T16:08:53.377378Z"
     }
   }
 }

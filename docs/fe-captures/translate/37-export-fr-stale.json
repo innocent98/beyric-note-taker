@@ -17,7 +17,7 @@
     "body": {
       "error": {
         "code": "translation_missing",
-        "message": "Translate the notes to French first."
+        "message": "The French translation is out of date. Translate again first."
       }
     }
   }
