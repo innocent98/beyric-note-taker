@@ -5,6 +5,7 @@ import io
 import re
 from datetime import UTC, datetime
 from html.parser import HTMLParser
+from types import SimpleNamespace
 
 import httpx
 import openai
@@ -346,7 +347,7 @@ def test_an_unexpected_error_is_reduced_to_its_class_name(session, user):
 
 def test_an_unfinished_reply_is_a_failed_call_that_keeps_its_tokens(session, user):
     meeting = make_meeting(session, user)
-    code, html, _ = review(["--meeting", str(meeting.id)], FakeChat([("{}", "length")]))
+    code, html, _ = review(["--meeting", str(meeting.id)], FakeChat([("{}", "content_filter")]))
     assert code == 1
     assert "did not finish normally" in html
     assert "1,200" in html  # the call cost something
@@ -514,3 +515,148 @@ def test_a_failed_write_inside_the_tool_would_leave_the_data_untouched(session, 
             guarded.commit()
     with Session(engine) as fresh:
         assert fresh.get(Meeting, meeting.id).notes == NOTES
+
+
+# ---- listing, so a meeting pasted by link (no title) can be found ----
+
+
+def test_list_prints_the_newest_meetings_including_ones_with_no_title(session, user):
+    for n in range(1, 4):
+        make_meeting(session, user, title=None, native_id=f"55{n}", url=f"https://zoom.us/j/55{n}")
+    code, out, _ = review(["--list"])
+    assert code == 0
+    ids = [line.split()[0] for line in out.splitlines() if line[:1].isdigit()]
+    assert ids == ["3", "2", "1"]  # newest first
+    assert "Zoom 553" in out and "2026-11-03" in out and str(len(TRANSCRIPT)) in out
+    _, out, _ = review(["--list", "2"])
+    assert [line.split()[0] for line in out.splitlines() if line[:1].isdigit()] == ["3", "2"]
+
+
+def test_list_with_no_meetings_says_so(session):
+    code, out, _ = review(["--list"])
+    assert code == 0 and "No meetings" in out
+
+
+def test_a_search_that_finds_nothing_points_to_list(session, user):
+    make_meeting(session, user, title=None)
+    _, out, _ = review(["--search", "myway"])
+    assert "No meeting matches" in out and "--list" in out
+
+
+# ---- the output cap, what happened, and the one retry ----
+
+
+class ReasoningChat(FakeChat):
+    """The usage block of a reasoning model: part of the completion is hidden reasoning."""
+
+    def _create(self, **kwargs):
+        response = super()._create(**kwargs)
+        response.usage.prompt_tokens = 14000
+        response.usage.completion_tokens = kwargs["max_completion_tokens"]
+        response.usage.completion_tokens_details = SimpleNamespace(reasoning_tokens=1850)
+        return response
+
+
+def test_the_first_call_uses_the_apps_own_cap_and_a_flag_can_change_it(session, user):
+    from app import extraction
+
+    meeting = make_meeting(session, user)
+    client = FakeChat([REPLY])
+    review(["--meeting", str(meeting.id)], client)
+    assert client.calls[0]["max_completion_tokens"] == extraction.MAX_OUTPUT_TOKENS
+    client = FakeChat([REPLY])
+    review(["--meeting", str(meeting.id), "--max-output-tokens", "5000"], client)
+    assert client.calls[0]["max_completion_tokens"] == 5000
+
+
+def test_a_reply_cut_off_by_the_cap_is_retried_once_with_a_larger_one(session, user):
+    meeting = make_meeting(session, user)
+    client = ReasoningChat([("{}", "length"), REPLY])
+    code, html, _ = review(["--meeting", str(meeting.id)], client)
+    assert code == 0
+    assert [c["max_completion_tokens"] for c in client.calls] == [2000, 8000]
+    assert "Finish payment checkout" in html  # the second attempt's answer is on the page
+    assert "length" in html  # and the first attempt's finish reason is still reported
+    assert "retried" in html.lower()
+
+
+def test_the_retry_cap_is_four_times_the_first_up_to_a_ceiling(session, user):
+    meeting = make_meeting(session, user)
+    client = FakeChat([("{}", "length"), REPLY])
+    review(["--meeting", str(meeting.id), "--max-output-tokens", "3000"], client)
+    assert [c["max_completion_tokens"] for c in client.calls] == [3000, 12000]
+    client = FakeChat([("{}", "length"), REPLY])
+    review(["--meeting", str(meeting.id), "--max-output-tokens", "20000"], client)
+    assert [c["max_completion_tokens"] for c in client.calls] == [20000, 32000]
+
+
+def test_only_a_length_cut_off_is_retried(session, user):
+    meeting = make_meeting(session, user)
+    client = FakeChat([("{}", "content_filter")])
+    code, _, _ = review(["--meeting", str(meeting.id)], client)
+    assert code == 1 and len(client.calls) == 1
+    client = FakeChat([_api_error()])
+    review(["--meeting", str(meeting.id)], client)
+    assert len(client.calls) == 1
+
+
+def test_a_failure_after_the_retry_says_what_happened_and_keeps_the_transcript(session, user):
+    meeting = make_meeting(session, user)
+    client = ReasoningChat([("{}", "length"), ("{}", "length")])
+    code, html, err = review(["--meeting", str(meeting.id)], client)
+    assert code == 1 and len(client.calls) == 2
+    assert "did not finish normally (length)" in html
+    for fact in ("2,000", "8,000", "14,000", "1,850"):  # caps, prompt tokens, reasoning tokens
+        assert fact in html
+    assert f"{len(TRANSCRIPT)} characters" in html  # the transcript's length
+    assert "hidden reasoning" in html.lower()
+    assert "--max-output-tokens" in html  # what to run next
+    assert "payment checkout" in html  # still readable
+    assert "sk-secret" not in html + err and "Traceback" not in html + err
+
+
+def test_a_success_reports_the_cap_and_the_reasoning_tokens(session, user):
+    meeting = make_meeting(session, user)
+    _, html, _ = review(["--meeting", str(meeting.id)], ReasoningChat([REPLY]))
+    assert "output cap 2,000" in html
+    assert "1,850 reasoning" in html
+
+
+def test_a_one_hour_meeting_cut_off_at_the_apps_cap_is_recovered_by_the_retry(session, user):
+    """The shape of the live failure: a long transcript and many action bullets, so the answer
+    (visible JSON plus hidden reasoning) does not fit 2,000 tokens."""
+    turns = [
+        f"[{'Tunde' if n % 2 else 'Grace'}]: Item {n}: we should follow up on supplier {n} and "
+        "confirm the figures with finance before the review next week, then update the plan."
+        for n in range(400)
+    ]
+    transcript = "\n".join([*turns, "[Tunde]: I'll take payment checkout before Friday."])
+    bullets = "\n".join(f"- Tunde: follow up on supplier {n} (by Friday)" for n in range(25))
+    notes = f"## Decisions\n- Go.\n\n## Action items\n{bullets}\n"
+    meeting = make_meeting(session, user, speaker_transcript=transcript, notes=notes)
+    client = ReasoningChat([("{}", "length"), {"action_items": [], "review": [], "milestones": []}])
+    code, html, _ = review(["--meeting", str(meeting.id)], client)
+    assert code == 0 and len(client.calls) == 2
+    sent = client.calls[0]["messages"][1]["content"]
+    assert sent.count("<action_items>") == 1 and "24: Tunde: follow up on supplier 24" in sent
+    assert "supplier 399" in sent  # the whole transcript, not a cut one
+    assert "retried" in html.lower()
+
+
+def test_the_tool_builds_a_client_with_its_own_timeout_when_given_none(session, user, monkeypatch):
+    made = {}
+
+    class Recorder(FakeChat):
+        def __init__(self, **kwargs):
+            made.update(kwargs)
+            super().__init__([REPLY])
+
+    monkeypatch.setattr(extraction_review, "OpenAI", Recorder)
+    meeting = make_meeting(session, user)
+    code, _, _ = review(["--meeting", str(meeting.id)])
+    assert code == 0
+    assert made["max_retries"] == 0 and made["timeout"] == 180.0
+    made.clear()
+    monkeypatch.setattr(extraction_review, "OpenAI", Recorder)
+    review(["--meeting", str(meeting.id), "--timeout", "300"])
+    assert made["timeout"] == 300.0
