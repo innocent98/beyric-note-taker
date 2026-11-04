@@ -108,6 +108,7 @@ def test_a_person_who_never_connected_gets_the_not_connected_answer(web):
         "last_error": None,
         "rule": "all",
         "rule_text": "Joining all meetings",
+        "calendar_template_id": None,
         "upcoming": [],
     }
 

@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from app.calendar_source import CalendarSource, CalendarSourceError, SyncBatch, SyncTokenExpired
@@ -209,6 +209,62 @@ def apply_batch(
     session.commit()
     _stop_cancelled_bots(run, vexa)
     return run.result
+
+
+def rerun_rules(
+    session: Session,
+    conn: CalendarConnection,
+    user_settings,
+    events: list[CalendarEvent],
+    *,
+    now: datetime,
+    settings: Settings | None = None,
+) -> ApplyResult:
+    """Bring the joins of these stored events in line with the rule, the person's switches and
+    the template as they are now, without reading the source, and commit. This is what a rule
+    change or a per-meeting switch from the API calls (spec 7.7): the same `_reconcile` the sync
+    uses, so the rule logic is in one place. `events` must be this connection's own rows; they are
+    reconciled as they stand, so the caller sets `override` first."""
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    settings = settings or get_settings()
+    run = _Run(
+        session=session,
+        conn=conn,
+        now=now,
+        lead=timedelta(seconds=settings.autojoin_lead_seconds),
+        join_settings=JoinSettings(
+            rule=user_settings.auto_join_rule, teams_join_enabled=settings.teams_join_enabled
+        ),
+        template_id=_own_template(session, conn.user_id, user_settings.calendar_template_id),
+    )
+    owned = [e for e in events if e.user_id == conn.user_id and e.connection_id == conn.id]
+    joins = _joins_by_event_id(session, conn.user_id, [e.id for e in owned])
+    for row in owned:
+        _reconcile(run, row, joins.get(row.id))
+    session.commit()
+    return run.result
+
+
+def set_join_template(
+    session: Session, user_id: int, template_id: int | None, *, commit: bool = True
+) -> int:
+    """Record `template_id` (the person's own, else none) on their calendar joins that have not
+    sent a bot yet, so a change of the template for calendar meetings reaches meetings already
+    planned. A join whose bot is in keeps the template it was sent with. Returns how many."""
+    own = _own_template(session, user_id, template_id)
+    result = session.execute(
+        update(ScheduledJoin)
+        .where(
+            ScheduledJoin.user_id == user_id,
+            ScheduledJoin.source == "calendar",
+            ScheduledJoin.state.in_(MOVABLE),
+        )
+        .values(template_id=own)
+    )
+    if commit:
+        session.commit()
+    return result.rowcount
 
 
 # ---- events ----
