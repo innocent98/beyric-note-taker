@@ -31,7 +31,7 @@ const NEXT = values.next.replace(/\/$/, "");
 const APP = `${DESIGN}/Beyric%20Note%20Taker.dc.html`;
 const WIDTHS = [1440, 768, 390];
 
-// name: [design url, design clicks, next path, signed in]
+// name: [design url, design clicks, next path, signed in, clicks on the Next page (optional)]
 const SCREENS = {
   landing: [`${DESIGN}/Landing.dc.html`, [], "/", false],
   signin: [`${DESIGN}/Auth.dc.html#sign-in`, [], "/login", false],
@@ -41,6 +41,8 @@ const SCREENS = {
   "app-detail": [APP, [["Beyric Monday planning", "last"]], "/meetings/1", true],
   "app-templates": [APP, [["Templates", "first"]], "/templates", true],
   "app-vocabulary": [APP, [["Vocabulary", "first"]], "/vocabulary", true],
+  // The two-step ask the design does not have (it deletes at once): Next alone, after pressing the button.
+  "app-templates-ask": [null, [], "/templates", true, [["Delete template", "first"]]],
   // The calendar: the design's cal state is set by pressing "Connect Google Calendar" (it answers
   // after 1 s), so those clicks wait. The Next side shows what the mock's --calendar flag says.
   "app-settings": [APP, [["Settings", "first"]], "/settings", true],
@@ -76,10 +78,10 @@ async function shoot(url, width, clicks, signedIn) {
   return png;
 }
 
-for (const [name, [designUrl, clicks, path, signedIn]] of Object.entries(SCREENS)) {
+for (const [name, [designUrl, clicks, path, signedIn, nextClicks = []]] of Object.entries(SCREENS)) {
   if (only && !only.includes(name)) continue;
   for (const width of WIDTHS) {
-    const next = await shoot(NEXT + path, width, [], signedIn);
+    const next = await shoot(NEXT + path, width, nextClicks, signedIn);
     const design = designUrl ? await shoot(designUrl, width, clicks, false) : null;
     const images = [design, next].filter(Boolean).map((png) => `data:image/png;base64,${png.toString("base64")}`);
     const total = images.length * width + (images.length - 1) * 30;

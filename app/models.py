@@ -219,13 +219,26 @@ class MailSuppression(Base):
 
 
 class Template(Base):
+    """A person's notes template. Deleting one only marks it (`deleted_at`): meetings keep the id
+    of the template their notes were written with, so the row must stay. A marked row is never
+    listed, chosen or counted; its name may be used again (the unique index is over live rows)."""
+
     __tablename__ = "templates"
-    __table_args__ = (UniqueConstraint("owner_user_id", "name", name="uq_templates_owner_name"),)
+    __table_args__ = (
+        Index(
+            "uq_templates_owner_name",
+            "owner_user_id",
+            "name",
+            unique=True,
+            postgresql_where=sa.text("deleted_at is null"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"))
     name: Mapped[str] = mapped_column(String(100))
     instructions: Mapped[str] = mapped_column(Text)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class VocabularyTerm(Base):

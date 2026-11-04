@@ -32,6 +32,11 @@ export function captured<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/owner-app", file))).response.body as T;
 }
 
+// A capture of the template delete (docs/fe-captures/template-delete/<file>): the whole exchange.
+export function capturedDelete(file: string): { request: { method: string; path: string }; response: { status: number; headers: Record<string, string>; body: unknown } } {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/template-delete", file)));
+}
+
 type AccountCapture = { request: { body: unknown }; response: { status: number; body: unknown } };
 
 // A capture from the running API for the accounts routes (docs/fe-captures/pilot-accounts/<file>).

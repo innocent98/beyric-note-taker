@@ -23,7 +23,7 @@ from starlette.convertors import Convertor, register_url_convertor
 
 from app import auth, edge, passwords, placement, usage, workspace
 from app.config import Settings, get_settings
-from app.models import AppState, Meeting, Template, User, VocabularyTerm
+from app.models import AppState, Meeting, Template, User, UserSettings, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
     BOT_END_REQUESTED,
@@ -386,7 +386,11 @@ def _own_template(session: Session, user_id: int, template_id: int | None) -> Te
     if not _in_range(template_id):
         return None
     return session.scalars(
-        select(Template).where(Template.id == template_id, Template.owner_user_id == user_id)
+        select(Template).where(
+            Template.id == template_id,
+            Template.owner_user_id == user_id,
+            Template.deleted_at.is_(None),  # a deleted template can no longer be chosen
+        )
     ).first()
 
 
@@ -726,9 +730,21 @@ def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Mee
 def list_templates(session: Session, user: User) -> list[Template]:
     return list(
         session.scalars(
-            select(Template).where(Template.owner_user_id == user.id).order_by(Template.name)
+            select(Template)
+            .where(Template.owner_user_id == user.id, Template.deleted_at.is_(None))
+            .order_by(Template.name)
         )
     )
+
+
+def template_names(session: Session, meetings: list[Meeting]) -> dict[int, str]:
+    """The name of the template each meeting's notes were written with, by template id. Includes
+    deleted templates: a meeting keeps showing the name it was written with."""
+    ids = {meeting.template_id for meeting in meetings}
+    if not ids:
+        return {}
+    rows = session.execute(select(Template.id, Template.name).where(Template.id.in_(ids)))
+    return {template_id: name for template_id, name in rows}
 
 
 def template_or_404(session: Session, user: User, template_id: int) -> Template:
@@ -775,7 +791,11 @@ def _save_template(
 ) -> Template:
     _check_template(name, instructions)
     taken = session.scalars(
-        select(Template.id).where(Template.owner_user_id == user.id, Template.name == name)
+        select(Template.id).where(
+            Template.owner_user_id == user.id,
+            Template.name == name,
+            Template.deleted_at.is_(None),
+        )
     ).first()
     if taken is not None and (template is None or taken != template.id):
         raise _duplicate_template()
@@ -789,6 +809,52 @@ def _save_template(
     except IntegrityError:  # lost a race with another request
         raise _duplicate_template() from None
     return template
+
+
+def delete_template(session: Session, user: User, template_id: int) -> None:
+    """Delete one of `user`'s templates: 404 when it is not theirs, is gone already or never was
+    (the second of two deletes is a 404, never a 500), 409 `last_template` for their only one
+    (notes need a template).
+
+    The row is marked, not erased (see `Template`): meetings written with it keep their notes and
+    the name they show, a meeting still being written and a rewrite in flight finish with it, and
+    nothing can choose it again. The calendar setting that points at it moves to the person's
+    oldest remaining template (the same one the Settings select shows for "no choice"), and so do
+    the calendar joins that have not sent a bot yet; a join whose bot is in keeps its template.
+
+    The person's live templates are locked first (`FOR NO KEY UPDATE`, which does not stop a
+    meeting from being created with one of them), so two deletes at once are decided one after the
+    other: the second looks again after the first committed."""
+    from app import gcal_sync  # gcal_sync imports this module
+
+    if not _in_range(template_id):
+        raise HTTPException(404, "No such template")
+    live = list(
+        session.scalars(
+            select(Template)
+            .where(Template.owner_user_id == user.id, Template.deleted_at.is_(None))
+            .order_by(Template.id)
+            .with_for_update(key_share=True)
+        )
+    )
+    target = next((t for t in live if t.id == template_id), None)
+    if target is None:
+        session.rollback()
+        raise HTTPException(404, "No such template")
+    if len(live) == 1:
+        session.rollback()
+        raise Refused(
+            409,
+            "last_template",
+            "Keep at least one template. Add another one first, then delete this.",
+        )
+    target.deleted_at = datetime.now(UTC)
+    fallback = next(t for t in live if t.id != target.id)  # the oldest left (ordered by id)
+    settings = session.get(UserSettings, user.id)
+    if settings is not None and settings.calendar_template_id == target.id:
+        settings.calendar_template_id = fallback.id
+        gcal_sync.set_join_template(session, user.id, fallback.id, commit=False)
+    session.commit()
 
 
 # ---- vocabulary ----

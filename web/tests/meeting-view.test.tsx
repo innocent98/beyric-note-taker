@@ -47,6 +47,15 @@ describe("ready meeting", () => {
     expect(screen.queryByText(/updates every 30 seconds/)).toBeNull();
   });
 
+  it("names the template a meeting was written with after that template was deleted", () => {
+    // template 9 is not in the list any more: the name comes from the meeting
+    show({ ...meeting("47-meeting-detail-ready.json"), template_id: 9, template_name: "Interview" } as Meeting);
+    expect(document.querySelector(".details")?.textContent).toContain("Interview");
+    // the rewrite select starts on a template that exists, not on a blank
+    const select = screen.getByLabelText("Rewrite the notes with a template") as HTMLSelectElement;
+    expect(select.value).toBe("1");
+  });
+
   it("switches to the transcript tab, with the speakers and the incomplete-speakers notice", async () => {
     show(meeting("47-meeting-detail-ready.json"));
     await userEvent.click(screen.getByRole("tab", { name: "Transcript" }));

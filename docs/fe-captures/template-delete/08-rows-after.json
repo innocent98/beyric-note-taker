@@ -1,0 +1,41 @@
+{
+  "note": "The template row is marked deleted (kept); the calendar setting and the planned join moved to the oldest template left (General); the meeting still points at Interview.",
+  "content": {
+    "templates": [
+      {
+        "id": 1,
+        "name": "General",
+        "deleted": false
+      },
+      {
+        "id": 2,
+        "name": "Client call",
+        "deleted": false
+      },
+      {
+        "id": 3,
+        "name": "Team update",
+        "deleted": false
+      },
+      {
+        "id": 4,
+        "name": "Interview",
+        "deleted": true
+      }
+    ],
+    "calendar_template_id": 1,
+    "scheduled_joins": [
+      {
+        "state": "scheduled",
+        "template_id": 1
+      }
+    ],
+    "meetings": [
+      {
+        "id": 1,
+        "status": "ready",
+        "template_id": 4
+      }
+    ]
+  }
+}

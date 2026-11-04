@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Alert, Button, Card, Field, Icon, PageHead, TextareaField } from "@/components/ui";
 import { api } from "@/lib/api/browser";
-import { errorMessage } from "@/lib/api/client";
+import { ApiError, errorMessage } from "@/lib/api/client";
 import type { Template } from "@/lib/api/types";
 
 const NAME_MAX = 100;
@@ -13,7 +13,9 @@ type Selected = number | "new";
 
 // Templates as the designer draws them: the list on the left, the editor for the chosen template
 // on the right, "Add template" at the top. Limits are the server's (name 100, instructions 4000), so
-// a 422 should not happen. There is no delete: the API has none yet.
+// a 422 should not happen. "Delete template" is the designer's red text button on the left of the
+// foot. The design deletes at once; here a saved template asks first (inline, like the Decisions
+// log), because a delete cannot be undone. An unsaved new template is only discarded.
 export function TemplatesEditor({ initial }: { initial: Template[] }) {
   const [templates, setTemplates] = useState(initial);
   const [selected, setSelected] = useState<Selected>(initial[0]?.id ?? "new");
@@ -22,6 +24,8 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -32,6 +36,47 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
     setInstructions(template?.instructions ?? "");
     setError(null);
     setSaved(false);
+    setConfirming(false);
+  }
+
+  // After a delete the designer selects the first template of the list.
+  function chooseFirstOf(rest: Template[]) {
+    setTemplates(rest);
+    setSelected(rest[0]?.id ?? "new");
+    setName(rest[0]?.name ?? "");
+    setInstructions(rest[0]?.instructions ?? "");
+    setSaved(false);
+    setConfirming(false);
+  }
+
+  function askToDelete() {
+    if (selected === "new") {
+      setError(null);
+      chooseFirstOf(templates); // nothing was saved: drop the draft
+    } else {
+      setConfirming(true);
+    }
+  }
+
+  async function remove() {
+    if (deleting || selected === "new") return;
+    const id = selected;
+    setDeleting(true);
+    setError(null);
+    try {
+      await api.templates.remove(id);
+      chooseFirstOf(templates.filter((t) => t.id !== id));
+    } catch (caught) {
+      setConfirming(false);
+      if (caught instanceof ApiError && caught.status === 404) {
+        // Gone already (another tab, a double press): the list should not show it any more.
+        chooseFirstOf(templates.filter((t) => t.id !== id));
+        setError("That template was already deleted.");
+      } else {
+        setError(errorMessage(caught)); // 409 `last_template` has its own message for the person
+      }
+    }
+    setDeleting(false);
   }
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -110,13 +155,32 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
             />
-            <div className="form-foot">
-              <span className="saved" role="status">
-                {saved ? "Saved" : ""}
-              </span>
-              <Button size="md" wide disabled={pending}>
-                {pending ? "Saving..." : selected === "new" ? "Add template" : "Save"}
-              </Button>
+            <div className="form-foot tpl-foot">
+              <div className="tpl-foot-left">
+                {confirming ? (
+                  <div className="tpl-confirm" role="group" aria-label="Delete this template?">
+                    <span>Delete this template? Meetings already written with it keep their notes.</span>
+                    <Button kind="secondary" size="sm" type="button" disabled={deleting} onClick={() => void remove()}>
+                      {deleting ? "Deleting..." : "Delete"}
+                    </Button>
+                    <Button kind="quiet" type="button" disabled={deleting} onClick={() => setConfirming(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <button type="button" className="tpl-delete" disabled={pending} onClick={askToDelete}>
+                    Delete template
+                  </button>
+                )}
+              </div>
+              <div className="tpl-foot-right">
+                <span className="saved" role="status">
+                  {saved ? "Saved" : ""}
+                </span>
+                <Button size="md" wide disabled={pending || deleting}>
+                  {pending ? "Saving..." : selected === "new" ? "Add template" : "Save"}
+                </Button>
+              </div>
             </div>
           </form>
         </Card>

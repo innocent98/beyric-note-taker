@@ -1,0 +1,27 @@
+{
+  "note": "Nor chosen for a rewrite (400 template_required, the message the meeting page already shows) ...",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/regenerate",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "template_id": 4
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "template_required",
+        "message": "Choose a template."
+      }
+    }
+  }
+}

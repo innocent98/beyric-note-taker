@@ -168,6 +168,9 @@ class MeetingSummary(BaseModel):
     status_text: str
     status_tone: Tone
     template_id: int
+    # The name of the template the notes were written with: its name now, or the name it had when
+    # it was deleted (a deleted template is no longer in GET /api/templates).
+    template_name: str
     created_at: UtcDatetime
 
 

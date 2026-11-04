@@ -59,7 +59,10 @@ export function MeetingView({
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [rewriteId, setRewriteId] = useState(String(initial.template_id));
+  // The template the notes were written with, or the first one when it was deleted since.
+  const [rewriteId, setRewriteId] = useState(
+    String(templates.some((t) => t.id === initial.template_id) ? initial.template_id : (templates[0]?.id ?? "")),
+  );
   const busyRef = useRef<Busy>(null);
 
   const refetch = useCallback(async () => {
@@ -132,7 +135,8 @@ export function MeetingView({
   }
 
   const m = meeting;
-  const templateName = templates.find((t) => t.id === m.template_id)?.name;
+  // The name now, or the name it had when it was deleted (the API keeps it on the meeting).
+  const templateName = templates.find((t) => t.id === m.template_id)?.name ?? m.template_name;
   const working = m.status === "bot_sent" || m.status === "processing";
   const tabs = [{ id: "notes", label: "Notes" }, ...(m.transcript ? [{ id: "transcript", label: "Transcript" }] : [])];
   const retryText = m.retry_block !== null ? (m.retry_block_message ?? RETRY_BLOCKED[m.retry_block]) : null;

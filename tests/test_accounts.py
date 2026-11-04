@@ -625,13 +625,18 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
         }
         body = next((b for key, b in bodies.items() if path.endswith(key)), None)
+        if method == "DELETE":
+            body = None  # a delete takes no body: the template delete shares the PUT's path
         error_of(anon.call(method, url, body), 404, "not_found")
         checked += 1
     assert checked >= 7
+    assert ("DELETE", "/api/templates/{template_id}") in set(api_routes(app))
     # The 404 above is the owner filter, not a dead route: the owner's own call works, and the
     # stranger's attempt changed nothing.
     session.expire_all()
     assert session.get(CalendarEvent, event.id).override is None
+    # the stranger's DELETE of the owner's template was refused, not carried out
+    assert session.get(Template, template.id).deleted_at is None
     anon.log_in(email=OWNER_EMAIL)
     assert (
         anon.put(f"/api/calendar/events/{event.id}/override", {"override": False}).status_code

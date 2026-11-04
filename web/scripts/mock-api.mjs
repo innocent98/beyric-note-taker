@@ -68,11 +68,16 @@ const details = [
   const age = new Date(Date.UTC(2026, 10, 2, 9 + index, 30)).toISOString();
   return { ...meeting, id: index + 1, title, created_at: age };
 });
-const summary = ({ id, title, platform, native_id, status, step, status_text, status_tone, template_id, created_at }) => ({
-  id, title, platform, native_id, status, step, status_text, status_tone, template_id, created_at,
+// The owner-app captures predate `template_name`; the running API sends it on every meeting.
+for (const meeting of details) meeting.template_name = body("11-templates-seeded").templates.find((t) => t.id === meeting.template_id)?.name ?? "General";
+const summary = ({ id, title, platform, native_id, status, step, status_text, status_tone, template_id, template_name, created_at }) => ({
+  id, title, platform, native_id, status, step, status_text, status_tone, template_id, template_name, created_at,
 });
 
+// The templates are in memory so that "Delete template" can be tried by hand (a delete is replayed from
+// docs/fe-captures/template-delete/: 204, the 409 for the last one, the 404 for one that is gone).
 const templates = body("11-templates-seeded").templates;
+const deleteCapture = (name) => JSON.parse(readFileSync(join(captureDir, "template-delete", `${name}.json`), "utf8")).response.body;
 const terms = body("19-vocabulary-list").terms;
 
 function json(res, status, payload, headers = {}) {
@@ -207,6 +212,15 @@ const server = http.createServer(async (req, res) => {
   if (path === "/api/notifications" && method === "GET") return json(res, 200, prelaunchBody("19-notifications-cap-notice"));
   if (path === "/api/notifications/read-all") return json(res, 200, prelaunchBody("21-notifications-read-all"));
   if (path === "/api/templates" && method === "GET") return json(res, 200, { templates });
+  const removal = /^\/api\/templates\/(\d+)$/.exec(path);
+  if (removal && method === "DELETE") {
+    const at = templates.findIndex((t) => t.id === Number(removal[1]));
+    if (at === -1) return json(res, 404, deleteCapture("12-delete-again"));
+    if (templates.length === 1) return json(res, 409, deleteCapture("25-delete-last"));
+    templates.splice(at, 1);
+    res.writeHead(204, { "cache-control": "no-store" });
+    return res.end();
+  }
   if (path === "/api/calendar" && method === "GET") {
     if (values.calendar === "off") return json(res, 404, calendarCapture("04-state-feature-off"));
     return json(res, 200, calendarCapture(values.calendar === "connected" ? "09-state-connected-with-upcoming" : "05-state-not-connected"));
