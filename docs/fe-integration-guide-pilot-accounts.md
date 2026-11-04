@@ -435,6 +435,46 @@ The text of the mail that went (P#18) ends with the footer and one link:
 `Email preferences: https://notes.example.test/settings#email-preferences` (the address is the
 deployment's `PUBLIC_BASE_URL`). The mail carries ids only, never the preference in the link.
 
+## 14b. Limits that survive a restart, and the new sign-up cap (added 2026-11-04)
+
+Captured by `scripts/capture_flood_defence_api.py` into `docs/fe-captures/prelaunch-flood-defence/`,
+cited as **F#NN**. No route and no response shape changed; what changed is **when** two existing
+429s are answered and that they no longer reset.
+
+**Sign-up, `429 too_many_requests` (a new reason).** One client address may hold at most **3
+unconfirmed accounts at once** (and still 5 sign-ups an hour). The fourth, from the same address,
+answers (F#05):
+
+```json
+{ "error": { "code": "too_many_requests", "message": "Too many attempts. Try again later." } }
+```
+
+An email this address already holds gets **exactly the same answer** (F#06), so the cap says nothing
+about who has an account. Nothing is created and no mail is queued for a refused sign-up. Confirming
+an account, or its being cleared after 48 hours, frees a place under the cap. The earlier 429 reasons
+(100 unconfirmed accounts in all, 5 an hour per address) have the same code and message.
+
+**UX consequences the frontend must surface.**
+- A person on a shared address (an office, a phone network) can be refused although they did nothing:
+  show the API's message as it comes ("Too many attempts. Try again later.") and offer the waiting
+  list and "check your email for the link we already sent" as the way forward; never suggest that the
+  address is wrong.
+- A flood by others can make the whole form answer 429 for a while. The pilot is small and the form is
+  closed until the admin opens it; do not retry automatically.
+
+**Login, `429 too_many_attempts` now survives a restart.** After five wrong passwords (F#07 to F#11)
+from one address the sixth is refused even with the right password (F#12, body
+`{"error":{"code":"too_many_attempts","message":"Too many failed attempts. Try again later."}}`). The
+counters live in the database, so the lockout lasts its time however often the server is replaced:
+the same call to a **new process** is still 429 (F#14). Nothing changed in the 401
+`invalid_credentials` answer. A second `web` replica would share the same counters.
+
+**Not exercised live:** the many-address flood (every call in the capture comes from one address, so
+they share one counter) and the "busiest address goes first" clearing at 100 unconfirmed accounts are
+in `tests/test_signup_flood.py` only; the mail budget is described in the SOP and is not visible to
+the frontend (a held mail simply arrives later; a sign-in link held for over an hour is dropped, and
+the person asks again with "resend").
+
 ## 15. Verification table
 
 | Behaviour | Status |
@@ -461,6 +501,8 @@ deployment's `PUBLIC_BASE_URL`). The mail carries ids only, never the preference
 | Email preferences: read, turn off, turn on, 401, 403, string / extra field / empty refused, unchanged after a refusal | **verified live** (P#02 to P#15) |
 | Skipped-mail notice with `meeting_id`; unread count; read-all | **verified live** (P#16 to P#21; the send loop is called as the worker calls it, not by the worker process) |
 | The notes-ready mail's footer link | **verified in the mail text** the send loop built (P#18); not opened in a mail client, no mail was sent |
+| Sign-up per-address cap of 3 unconfirmed accounts (429, same answer for a held email), login lockout and sign-up counters surviving a restart | **verified live** (F#02 to F#15, one address only) |
+| Many-address flood, clearing the busiest address's rows at the global cap, the hourly mail budget | **not exercised live** (tests only) |
 | Mail delivery by Resend | **not exercised** (nothing is sent in the capture; the mail text is not captured, only the queued payload) |
 | The worker: sending mail, purging deleted accounts, the 48-hour sweep, hourly sweeps | **not exercised live** (tested in `tests/test_mail.py`, `test_admin.py`, `test_maintenance.py`) |
 | nginx limits (shared zone, waitlist zone, callback not counted) | **verified with a throwaway nginx** (`deploy/nginx-limit-check.sh`, status codes only), not through the app; the body of nginx's 429 is not JSON and was not captured |

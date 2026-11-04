@@ -1,0 +1,30 @@
+{
+  "note": "429 `too_many_requests` again: by now this address has also used its 5 sign-ups for the hour, and that count survived the restart too (it is in the database).",
+  "client": "visitor-after-restart",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ada Example",
+      "email": "ada4@example.test",
+      "password": "capture-password-4-ok",
+      "accept_terms": true
+    }
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "too_many_requests",
+        "message": "Too many attempts. Try again later."
+      }
+    }
+  }
+}

@@ -85,6 +85,14 @@ class Settings(BaseSettings):
     # `mail_recipient_daily_cap`: notes mails one address may get in 24 hours; more are skipped.
     mail_daily_cap: int = 80
     mail_recipient_daily_cap: int = 5
+    # The global budget for ALL outgoing mail, a rolling hour (spike ML1; it is what a sign-up flood
+    # would otherwise spend, and Resend's daily quota with it). `mail_hourly_budget`: mails sent
+    # in the last hour, of any kind; over it mail waits (pending, reason `over_budget`) and the
+    # admins are told. Sign-in and account mail may use all of it, notes mail (and later share and
+    # reminder mail) may not use the last `mail_hourly_reserve`, admin alerts are never held.
+    # 0 = no budget. Optional.
+    mail_hourly_budget: int = 30
+    mail_hourly_reserve: int = 10
     # Where admin alerts (no bot slot free, a join that was not recorded) are mailed. Empty: each
     # admin's own address, unless their `notify_email` is off. Optional (`app/alerts.py`).
     admin_alert_email: str = ""

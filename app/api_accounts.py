@@ -14,7 +14,17 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app import auth, edge, google_oauth, google_signin, limits, notifications, services, signup
+from app import (
+    auth,
+    edge,
+    google_oauth,
+    google_signin,
+    limits,
+    notifications,
+    ratelimit,
+    services,
+    signup,
+)
 from app.api_schemas import (
     Accepted,
     EmailIn,
@@ -100,6 +110,9 @@ def sign_up(body: SignUp, request: Request, session: Session = Depends(get_sessi
         invite_token=body.invite_token,
         now=_now(),
         mail_allowed=lambda address: _limits(request).signup_email.hit(limits.email_key(address)),
+        origin=ratelimit.origin_key(
+            ratelimit.store_secret(request.app.state.settings), _address(request)
+        ),
     )
     return CHECK_YOUR_EMAIL
 

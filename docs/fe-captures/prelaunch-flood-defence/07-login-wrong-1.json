@@ -1,0 +1,28 @@
+{
+  "note": "A wrong password: 401, counted in the database.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "admin@example.test",
+      "password": "wrong-guess-0"
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_credentials",
+        "message": "That email or password is not right."
+      }
+    }
+  }
+}

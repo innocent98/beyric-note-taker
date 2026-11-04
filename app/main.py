@@ -1,5 +1,7 @@
 """Application factory. Run with `uvicorn app.main:create_app --factory`."""
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Request
@@ -9,15 +11,28 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app import api, auth, edge, limits, mail, web
+from app import api, auth, edge, limits, mail, ratelimit, web
 from app.config import Settings, get_settings
-from app.db import get_session
+from app.db import get_rate_session, get_session
 
 STATIC = Path(__file__).parent / "static"
 CSP = (
     "default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self'; font-src 'self'; "
     "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
 )
+
+
+@contextmanager
+def _own_session(app: FastAPI) -> Iterator[Session]:
+    """A session of its own for the rate limiter (it commits at once, apart from the request's
+    transaction). In the app it comes from the limiter's own small pool (`get_rate_session`); when
+    `get_session` is overridden (the tests') the override is used, so tests and the app share one
+    database."""
+    generator = (app.dependency_overrides.get(get_session) or get_rate_session)()
+    try:
+        yield next(generator)
+    finally:
+        generator.close()
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -33,9 +48,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None,
     )
     app.state.settings = settings
-    app.state.limiter = auth.LoginLimiter()
-    app.state.public_limits = limits.PublicLimits()
     key = app.state.session_key = auth.signing_key(settings)
+    # The login and sign-up counters live in the database (`rate_hits`), so a restart does not
+    # reset a lockout and a second process shares it. The session is looked up when it is used, so
+    # a dependency override (the tests') is honoured exactly as it is for a request.
+    rate_store = ratelimit.DbStore(lambda: _own_session(app), ratelimit.store_secret(settings))
+    app.state.rate_store = rate_store
+    app.state.limiter = auth.LoginLimiter(store=rate_store)
+    app.state.public_limits = limits.PublicLimits(rate_store)
     app.state.device_key = auth.device_key(settings)
 
     @app.middleware("http")

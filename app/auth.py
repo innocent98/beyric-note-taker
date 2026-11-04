@@ -14,9 +14,7 @@ import hashlib
 import hmac
 import json
 import secrets
-import threading
 import time
-from collections import deque
 
 from fastapi import Depends, Request
 from sqlalchemy import select, update
@@ -26,17 +24,17 @@ from app import vault
 from app.config import Settings
 from app.db import get_session
 from app.models import AppState, User
+from app.ratelimit import MAX_LIMITER_KEYS, Gate, MemoryStore, Store
 
 COOKIE_NAME = "session"
 SESSION_SECONDS = 30 * 24 * 3600
 # Failed logins: per client address, and per account so that guessing spread over many addresses
-# is capped too. Both are in-memory sliding windows.
+# is capped too. Sliding windows kept in the database (`app/ratelimit.py`).
 MAX_FAILURES = 5
 FAILURE_WINDOW_SECONDS = 5 * 60
 ACCOUNT_MAX_FAILURES = 10
 ACCOUNT_FAILURE_WINDOW_SECONDS = 60 * 60
 MAX_ACCOUNT_KEY = 254
-MAX_LIMITER_KEYS = 50_000  # per window; see _Window
 DEVICE_COOKIE_NAME = "device"
 HOST_DEVICE_COOKIE_NAME = "__Host-device"
 DEVICE_SECONDS = 90 * 24 * 3600
@@ -148,61 +146,11 @@ def account_key(account: str) -> str:
     return account.strip().lower()[:MAX_ACCOUNT_KEY]
 
 
-class _Window:
-    """Timestamps of recent attempts per key; entries older than `window` seconds expire.
-
-    Memory is bounded: expired keys are dropped as they are touched and by a sweep every
-    `SWEEP_SECONDS`, and past `max_keys` the key created longest ago is forgotten (a flood of
-    distinct keys can then weaken the limit for the forgotten ones, but cannot grow memory or
-    lock anyone out)."""
-
-    SWEEP_SECONDS = 30.0
-
-    def __init__(self, limit: int, window: float, max_keys: int = MAX_LIMITER_KEYS) -> None:
-        self.limit = limit
-        self.window = window
-        self.max_keys = max_keys
-        self.attempts: dict[str, deque[float]] = {}
-        self._swept = float("-inf")
-
-    def _trim(self, key: str, now: float) -> deque[float] | None:
-        attempts = self.attempts.get(key)
-        if attempts is None:
-            return None
-        while attempts and now - attempts[0] > self.window:
-            attempts.popleft()
-        if not attempts:
-            del self.attempts[key]
-            return None
-        return attempts
-
-    def sweep(self, now: float) -> None:
-        if now - self._swept < self.SWEEP_SECONDS:
-            return
-        self._swept = now
-        for key in list(self.attempts):
-            self._trim(key, now)
-
-    def full(self, key: str, now: float) -> bool:
-        attempts = self._trim(key, now)
-        return attempts is not None and len(attempts) >= self.limit
-
-    def add(self, key: str, now: float) -> None:
-        if key not in self.attempts and len(self.attempts) >= self.max_keys:
-            del self.attempts[next(iter(self.attempts))]  # insertion order: the oldest key
-        self.attempts.setdefault(key, deque()).append(now)
-
-    def refund(self, key: str) -> None:
-        attempts = self.attempts.get(key)
-        if attempts:
-            attempts.pop()
-            if not attempts:
-                del self.attempts[key]
-
-
 class LoginLimiter:
     """Login attempts in sliding windows: `limit` per client address in `window` seconds, and
-    `account_limit` per account in `account_window` seconds. In memory: a restart resets it.
+    `account_limit` per account in `account_window` seconds. The counters live in a `Store`
+    (`app/ratelimit.py`): in the database for the app, so a restart or a second process does not
+    reset them.
 
     An attempt is counted *before* the password is checked (under a lock, so parallel requests
     cannot all slip through) and is only counted when no limit is already full: a locked client
@@ -231,39 +179,35 @@ class LoginLimiter:
         max_keys: int = MAX_LIMITER_KEYS,
         device_limit: int = DEVICE_MAX_FAILURES,
         device_window: float = DEVICE_FAILURE_WINDOW_SECONDS,
+        store: Store | None = None,
     ) -> None:
-        self._clients = _Window(limit, window, max_keys)
-        self._accounts = _Window(account_limit, account_window, max_keys)
-        self._devices = _Window(device_limit, device_window, max_keys)
-        self._lock = threading.Lock()
+        # The app passes a `DbStore`; with none (unit tests) the counters are in this process.
+        self._store: Store = store if store is not None else MemoryStore(max_keys)
+        self._limit, self._window = limit, window
+        self._account_limit, self._account_window = account_limit, account_window
+        self._device_limit, self._device_window = device_limit, device_window
 
     @staticmethod
     def _account_key(account: str) -> str:
         return account_key(account)
+
+    def _client(self, client: str) -> Gate:
+        return Gate("address", "login_client", client, self._limit, self._window)
+
+    def _account(self, account: str) -> Gate:
+        key = self._account_key(account)
+        return Gate("account", "login_account", key, self._account_limit, self._account_window)
+
+    def _device(self, device: str) -> Gate:
+        return Gate("device", "login_device", device, self._device_limit, self._device_window)
 
     def check(
         self, client: str, account: str, now: float | None = None, device: str | None = None
     ) -> str | None:
         """Count an attempt. None means go ahead; otherwise "address", "device" or "account":
         the limit that refused it (nothing is counted then)."""
-        now = time.monotonic() if now is None else now
-        account = self._account_key(account)
-        with self._lock:
-            for window in (self._clients, self._accounts, self._devices):
-                window.sweep(now)
-            if self._clients.full(client, now):
-                return "address"
-            if device is not None:
-                if self._devices.full(device, now):
-                    return "device"
-            elif self._accounts.full(account, now):
-                return "account"
-            self._clients.add(client, now)
-            if device is not None:
-                self._devices.add(device, now)
-            else:
-                self._accounts.add(account, now)
-            return None
+        second = self._device(device) if device is not None else self._account(account)
+        return self._store.acquire([self._client(client), second], now)
 
     def try_acquire(
         self, client: str, account: str, now: float | None = None, device: str | None = None
@@ -271,27 +215,23 @@ class LoginLimiter:
         return self.check(client, account, now, device) is None
 
     def succeeded(self, client: str, account: str, device: str | None = None) -> None:
-        with self._lock:
-            self._clients.refund(client)
-            if device is not None:
-                self._devices.refund(device)
-            else:
-                self._accounts.attempts.pop(self._account_key(account), None)
+        self._store.refund("login_client", client)
+        if device is not None:
+            self._store.refund("login_device", device)
+        else:
+            self._store.clear("login_account", self._account_key(account))
 
     def refund(self, client: str, account: str, device: str | None = None) -> None:
         """Give back only this attempt (a login that never got to check the password, because
         the server was busy). Unlike `succeeded` it leaves the account's other failures alone."""
-        with self._lock:
-            self._clients.refund(client)
-            if device is not None:
-                self._devices.refund(device)
-            else:
-                self._accounts.refund(self._account_key(account))
+        self._store.refund("login_client", client)
+        if device is not None:
+            self._store.refund("login_device", device)
+        else:
+            self._store.refund("login_account", self._account_key(account))
 
     def __len__(self) -> int:
-        return (
-            len(self._clients.attempts) + len(self._accounts.attempts) + len(self._devices.attempts)
-        )
+        return self._store.size()
 
 
 # ---- known-device cookie ----

@@ -1,0 +1,30 @@
+{
+  "note": "An email this address already holds gets the SAME answer: the cap says nothing about who has an account.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ada Example",
+      "email": "ada0@example.test",
+      "password": "capture-password-0-ok",
+      "accept_terms": true
+    }
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "too_many_requests",
+        "message": "Too many attempts. Try again later."
+      }
+    }
+  }
+}

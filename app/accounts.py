@@ -88,7 +88,14 @@ def purge_unverified(
     rows = list(session.execute(query.with_for_update(skip_locked=True, of=User)))
     if not rows:
         return 0
-    ids, emails = [r[0] for r in rows], [r[1] for r in rows]
+    return delete_unverified(session, [r[0] for r in rows], [r[1] for r in rows])
+
+
+def delete_unverified(session: Session, ids: list[int], emails: list[str]) -> int:
+    """Delete these unconfirmed accounts (ids and their emails) with their templates, vocabulary
+    and settings; someone who came in with an invitation goes back on the waiting list. Does not
+    commit. The callers (the sweep, the sign-up flood defence) have chosen rows that are unconfirmed
+    and not admins."""
     session.execute(
         update(WaitlistEntry)
         .where(WaitlistEntry.email.in_(emails), WaitlistEntry.status == "joined")

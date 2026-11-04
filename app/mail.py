@@ -36,13 +36,14 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 import httpx
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import mail_templates
 from app.config import Settings
+from app.edge import Throttle
 from app.mail_message import Attachment, MailError, Message, valid_address
 from app.mail_templates import LINK_TEMPLATES, NOTES_TEMPLATES, SIGNATURE, Skip
 from app.models import MailOutbox, MailSuppression, Meeting, Notification, User
@@ -65,6 +66,11 @@ SCRUB_AFTER = timedelta(hours=1)
 HOLD_NOTES_MAIL_FOR = timedelta(hours=24)
 KEEP_SENT_FOR = timedelta(days=30)
 BATCH = 25  # rows one pass sends, so a backlog cannot hold the worker for long
+HOUR = timedelta(hours=1)
+BUDGET_LOCK = (7002, 1)  # advisory lock (two-int form): the hourly budget's count and the send
+ALERT_TEMPLATE = "alert"  # an admin alert (`app/alerts.py`): never held by the budget
+OVER_BUDGET = "over_budget"  # the reason a held mail carries (`last_error`)
+budget_log_throttle = Throttle(600.0)  # the held-mail log line, once in ten minutes
 
 # The link templates (sign-up, reset, waitlist invite) under their names, for callers that ask
 # which templates exist.
@@ -338,7 +344,7 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
             session.scalars(
                 select(MailOutbox.id)
                 .where(MailOutbox.status == "pending", *conditions)
-                .order_by(MailOutbox.id)
+                .order_by(case((MailOutbox.template == ALERT_TEMPLATE, 0), else_=1), MailOutbox.id)
                 .limit(BATCH * 4)
             )
         )
@@ -351,6 +357,8 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
         ids += pending_ids(MailOutbox.template.in_(notes))
     session.rollback()
     sent = 0
+    held = {"account": 0, "bulk": 0}
+    in_hour = 0
     for mail_id in ids:
         row = session.scalars(
             select(MailOutbox)
@@ -376,6 +384,23 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
         if notes_mail and 0 < settings.mail_daily_cap <= sent_today:
             session.rollback()  # still pending, no attempt used: tomorrow's quota will send it
             continue
+        if settings.mail_hourly_budget > 0 and row.template != ALERT_TEMPLATE:
+            # One count and one send at a time across every worker (the lock lasts to the commit),
+            # so two workers cannot each see room and both send past the budget.
+            session.execute(
+                text("select pg_advisory_xact_lock(:c, :k)"),
+                {"c": BUDGET_LOCK[0], "k": BUDGET_LOCK[1]},
+            )
+            in_hour = _sent_since(session, now - HOUR)
+            room = settings.mail_hourly_budget - (settings.mail_hourly_reserve if notes_mail else 0)
+            if in_hour >= max(room, 0):
+                held["bulk" if notes_mail else "account"] += 1
+                if row.last_error != OVER_BUDGET:
+                    row.last_error = OVER_BUDGET  # no attempt used: it goes when the hour rolls on
+                    session.commit()
+                else:
+                    session.rollback()
+                continue
         try:
             message = mail_templates.prepare(
                 session, row.template, row.payload, row.to_email, settings, now
@@ -426,7 +451,46 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
             _finish(row, "failed", error)
         logger.warning("mail %s: send failed (%s), attempt %s", row.id, error, row.attempts)
         session.commit()
+    if held["account"] or held["bulk"]:
+        _report_budget(session, settings, now, held, in_hour)
     return sent
+
+
+def _report_budget(
+    session: Session, settings: Settings, now: datetime, held: dict[str, int], in_hour: int
+) -> None:
+    """Mail is waiting for the hourly budget: log it (by counts only, never an address) and tell
+    the admins, who get one notice per clock hour (`alerts.notify_admins` dedupes by key). Never
+    raises: it must not stop the queue."""
+    if budget_log_throttle.ready():
+        logger.warning(
+            "hourly mail budget used (%s sent in the last hour, limit %s): %s sign-in or account "
+            "mails and %s other mails are waiting",
+            in_hour,
+            settings.mail_hourly_budget,
+            held["account"],
+            held["bulk"],
+        )
+    try:
+        from app import alerts  # alerts imports this module
+
+        alerts.notify_admins(
+            session,
+            kind="admin.mail_budget",
+            title="Outgoing mail is waiting: the hourly budget is used",
+            body=(
+                f"{held['account']} sign-in or account emails and {held['bulk']} other emails are "
+                f"waiting because {in_hour} emails went out in the last hour (the limit, "
+                f"MAIL_HOURLY_BUDGET, is {settings.mail_hourly_budget}). They go as the hour rolls "
+                "on, and a sign-in link that waits more than an hour is dropped. If this is not "
+                "expected, someone may be flooding the sign-up form."
+            ),
+            dedupe_key=alerts.bucket_key("admin.mail_budget", now, 60),
+        )
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.warning("could not tell the admins about the mail budget (%s)", type(exc).__name__)
 
 
 def sweep_outbox(session: Session, now: datetime) -> None:
@@ -440,7 +504,11 @@ def sweep_outbox(session: Session, now: datetime) -> None:
             MailOutbox.template.not_in(notes),
             MailOutbox.created_at < now - SCRUB_AFTER,
         )
-        .values(status="failed", last_error="expired", payload={})
+        .values(
+            status="failed",
+            last_error=case((MailOutbox.last_error == OVER_BUDGET, OVER_BUDGET), else_="expired"),
+            payload={},
+        )
     )
     session.execute(
         update(MailOutbox)
@@ -449,7 +517,10 @@ def sweep_outbox(session: Session, now: datetime) -> None:
             MailOutbox.template.in_(notes),
             MailOutbox.created_at < now - HOLD_NOTES_MAIL_FOR,
         )
-        .values(status="failed", last_error="expired")
+        .values(
+            status="failed",
+            last_error=case((MailOutbox.last_error == OVER_BUDGET, OVER_BUDGET), else_="expired"),
+        )
     )
     session.execute(
         update(MailOutbox)
