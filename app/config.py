@@ -88,8 +88,9 @@ class Settings(BaseSettings):
     # The global budget for ALL outgoing mail, a rolling hour (spike ML1; it is what a sign-up flood
     # would otherwise spend, and Resend's daily quota with it). `mail_hourly_budget`: mails sent
     # in the last hour, of any kind; over it mail waits (pending, reason `over_budget`) and the
-    # admins are told. Sign-in and account mail may use all of it, notes mail (and later share and
-    # reminder mail) may not use the last `mail_hourly_reserve`, admin alerts are never held.
+    # admins are told. Password-reset and invitation mail may use all of it; verification mail (the
+    # form can make the site send it to anyone), notes mail (and later share and reminder mail)
+    # may not use the last `mail_hourly_reserve`; admin alerts are never held.
     # 0 = no budget. Optional.
     mail_hourly_budget: int = 30
     mail_hourly_reserve: int = 10

@@ -278,9 +278,9 @@ class DbStore:
             )
             session.commit()
 
-    def sweep(self, now: float | None = None, keep: float = 7200.0) -> None:
-        """Delete every hit older than `keep` seconds (longer than any window): the hourly sweep
-        for keys nobody touched again."""
+    def sweep(self, now: float | None = None, keep: float = 49 * 3600.0) -> None:
+        """Delete every hit older than `keep` seconds (longer than any window: the longest is 48
+        hours): the hourly sweep for keys nobody touched again."""
         now = time.time() if now is None else now
         with self._open() as session:
             session.execute(text("delete from rate_hits where at <= :cut"), {"cut": now - keep})

@@ -11,6 +11,12 @@ from app.auth import account_key
 from app.ratelimit import Gate, MemoryStore, Store
 
 HOUR = 3600.0
+# Sign-ups one client address may make while its rows could still be unconfirmed (48 hours, the
+# life of an unconfirmed account): counted for EVERY submission that gets as far as the pilot
+# checks, whether the email is new or already has an account, so the cap is never a way to tell
+# which. Confirming an account gives its hit back.
+SIGNUP_ORIGIN_CAP = 3
+SIGNUP_ORIGIN_WINDOW = 48 * HOUR
 
 
 class Limit:
@@ -36,6 +42,10 @@ class Limit:
         """Count one hit unconditionally (for events counted after the fact, like a wrong guess)."""
         self._store.add(self._gate(key), now)
 
+    def refund(self, key: str) -> None:
+        """Give back the newest hit for `key`."""
+        self._store.refund(self._bucket, key)
+
 
 class PublicLimits:
     def __init__(self, store: Store | None = None) -> None:
@@ -44,6 +54,7 @@ class PublicLimits:
         s = self.store
         self.signup_address = Limit(s, "signup_address", 5, HOUR)
         self.signup_email = Limit(s, "signup_email", 1, 60.0)
+        self.signup_origin = Limit(s, "signup_origin", SIGNUP_ORIGIN_CAP, SIGNUP_ORIGIN_WINDOW)
         # Wrong passwords per verification link: after 5 the link is dead, so its password
         # cannot be guessed (the link itself is a 256-bit secret, so this is a second lock).
         self.verify_wrong = Limit(s, "verify_wrong", 5, HOUR)

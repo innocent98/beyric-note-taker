@@ -30,7 +30,7 @@ from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import accounts, mail, passwords, tokens
+from app import accounts, limits, mail, passwords, tokens
 from app.config import Settings
 from app.limits import Limit
 from app.models import AppState, AuthToken, User, WaitlistEntry
@@ -46,9 +46,11 @@ MAX_NAME_CHARS = 200
 # Unconfirmed password accounts that may exist at once, so the form cannot be used to fill the
 # database; each is swept 48 hours after its last submission (`accounts.sweep_unverified`).
 MAX_UNVERIFIED = 100
-# And per client address: how many unconfirmed accounts one address may hold at once. An address
-# is limited to 5 sign-ups an hour; this keeps 20 of them from filling the table above.
-MAX_UNVERIFIED_PER_ORIGIN = 3
+# And per client address: how many sign-ups one address may make while their rows could still be
+# unconfirmed (`limits.SIGNUP_ORIGIN_CAP` in 48 hours, counted for every submission, new email or
+# not, so it tells nobody which emails have an account). An address is also limited to 5 sign-ups
+# an hour; this keeps 20 of them from filling the table above.
+MAX_UNVERIFIED_PER_ORIGIN = limits.SIGNUP_ORIGIN_CAP
 MAX_EMAIL_CHARS = 254
 
 _LOCAL = r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+"
@@ -225,6 +227,7 @@ def sign_up(
     now: datetime,
     mail_allowed: Callable[[str], bool] = lambda address: True,
     origin: str | None = None,
+    origin_allowed: Callable[[str], bool] = lambda origin: True,
 ) -> None:
     """Create an unverified account and queue its verification mail, or do the quiet equivalent
     for an address that already has one. Commits. Raises `Refused` for what the person can fix
@@ -249,7 +252,16 @@ def sign_up(
     try:
         session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": SIGNUP_LOCK})
         _sign_up_locked(
-            session, settings, name, address, password_hash, invite_token, now, mail_allowed, origin
+            session,
+            settings,
+            name,
+            address,
+            password_hash,
+            invite_token,
+            now,
+            mail_allowed,
+            origin,
+            origin_allowed,
         )
         session.commit()
     except IntegrityError:  # lost a race on the unique email: the address has an account now
@@ -270,18 +282,22 @@ def _unconfirmed_plain():
     )
 
 
-def _check_unconfirmed_caps(session: Session, origin: str | None, now: datetime) -> None:
-    """Refuse (429, the same answer for every address) when this client address already holds
-    `MAX_UNVERIFIED_PER_ORIGIN` unconfirmed accounts, or when the table is full and no room can be
-    made. Under the sign-up lock."""
-    if origin is not None:
-        held = session.scalar(
-            select(func.count())
-            .select_from(User)
-            .where(*_unconfirmed_plain(), User.signup_origin == origin)
-        )
-        if held >= MAX_UNVERIFIED_PER_ORIGIN:
-            raise Refused(429, "too_many_requests", "Too many attempts. Try again later.")
+def _check_unconfirmed_caps(
+    session: Session,
+    origin: str | None,
+    now: datetime,
+    origin_allowed: Callable[[str], bool],
+) -> None:
+    """Refuse (429, the same answer for every email) when this client address has used its
+    `MAX_UNVERIFIED_PER_ORIGIN` sign-ups, or when the table is full and no room can be made. Under
+    the sign-up lock.
+
+    The per-address count is a hit counted for EVERY submission that gets here, whatever the
+    lookup later finds. Counting the rows the address holds instead would differ between a new
+    email (a row appears) and one that already has an account (none does): after two sign-ups an
+    attacker could submit a third email and see from the next refusal whether it was new."""
+    if origin is not None and not origin_allowed(origin):
+        raise Refused(429, "too_many_requests", "Too many attempts. Try again later.")
     while unverified_count(session) >= MAX_UNVERIFIED:
         if not _make_room(session, now):
             raise Refused(429, "too_many_requests", "Too many attempts. Try again later.")
@@ -336,6 +352,7 @@ def _sign_up_locked(
     now: datetime,
     mail_allowed: Callable[[str], bool],
     origin: str | None,
+    origin_allowed: Callable[[str], bool],
 ) -> None:
     invite = None
     if invite_token:
@@ -357,7 +374,7 @@ def _sign_up_locked(
         )
     if invite is None:
         # Before the lookup, so a new address and an existing one get the same answer.
-        _check_unconfirmed_caps(session, origin, now)
+        _check_unconfirmed_caps(session, origin, now, origin_allowed)
     if not mail_allowed(address):
         return
     # The row is locked from here to the commit: `verify_email` takes the same lock before it
@@ -408,6 +425,7 @@ def verify_email(
     password: str,
     now: datetime,
     wrong_guesses: Limit | None = None,
+    origin_hits: Limit | None = None,
 ) -> None:
     """Confirm the email the token was sent to, given the password chosen with that sign-up.
     Commits. The token is used up only when the password is right, so a typo can be fixed, but
@@ -459,7 +477,10 @@ def verify_email(
     user.email_verified_at = user.email_verified_at or now
     user.password_hash = token.pending_password_hash
     tokens.revoke(session, "verify_email", user.id, now)
+    origin = user.signup_origin
     session.commit()
+    if origin_hits is not None and origin is not None:
+        origin_hits.refund(origin)  # a confirmed account no longer counts against its address
 
 
 def _can_mail(settings: Settings) -> bool:

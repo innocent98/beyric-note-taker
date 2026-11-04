@@ -14,7 +14,7 @@ from app import accounts, passwords, ratelimit, signup
 from app.models import MailOutbox, User
 from tests.test_accounts import visitor
 from tests.test_api import anon, error_of  # noqa: F401  (fixtures used by name)
-from tests.test_signup import joined_unconfirmed, open_pilot, queued, sign_up, user_of
+from tests.test_signup import joined_unconfirmed, open_pilot, queued, sign_up, token_of, user_of
 from tests.test_web import (  # noqa: F401
     anon_client,
     app,
@@ -29,6 +29,7 @@ from tests.test_web import (  # noqa: F401
 def cheap_hashes(monkeypatch):
     """Hundreds of sign-ups: the password hash is slow on purpose and is not under test here."""
     monkeypatch.setattr(passwords, "hash_password", lambda password: "x" * 20)
+    monkeypatch.setattr(passwords, "verify_password", lambda stored, password: True)
 
 
 def pending(session) -> list[User]:
@@ -87,14 +88,34 @@ def test_other_addresses_are_not_held_back_by_one_address_at_its_cap(app, sessio
     assert user_of(session, "real@example.test") is not None
 
 
-def test_confirming_frees_a_place_under_the_per_address_cap(app, session):
+def test_confirming_an_account_gives_its_place_back_to_the_address(app, session):
     open_pilot(session, max_accounts=None)
     api = visitor(app, "192.0.2.10")
     for n in range(signup.MAX_UNVERIFIED_PER_ORIGIN):
         sign_up(api, email=f"a{n}@example.test")
-    user_of(session, "a0@example.test").email_verified_at = datetime.now(UTC)
-    session.commit()
+    error_of(sign_up(api, email="b@example.test"), 429, "too_many_requests")
+    link = queued(session, "verify_email", to="a0@example.test")[0]
+    assert (
+        api.post("/api/verify-email", {"token": token_of(link), "password": "x"}).status_code == 200
+    )
     assert sign_up(api, email="b@example.test").status_code == 202
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_a_submission_for_an_email_that_already_has_an_account_counts_like_any_other(
+    app, session, existing
+):
+    """The per-address cap is no oracle: after two sign-ups a third submission leaves the address
+    at its cap whether the email was new or already registered, so the next refusal says nothing
+    about which. Both worlds give the same answers (the same list is asserted for each)."""
+    open_pilot(session, max_accounts=None)
+    if existing:
+        make_user(session, "target@example.test")  # a confirmed account
+    api = visitor(app, "192.0.2.10")
+    answers = [sign_up(api, email=f"a{n}@example.test").status_code for n in range(2)]
+    answers.append(sign_up(api, email="target@example.test").status_code)
+    answers.append(sign_up(api, email="probe@example.test").status_code)
+    assert answers == [202, 202, 202, 429]
 
 
 def test_the_origin_is_a_hash_of_the_address_and_never_the_address(app, session):

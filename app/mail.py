@@ -69,6 +69,10 @@ BATCH = 25  # rows one pass sends, so a backlog cannot hold the worker for long
 HOUR = timedelta(hours=1)
 BUDGET_LOCK = (7002, 1)  # advisory lock (two-int form): the hourly budget's count and the send
 ALERT_TEMPLATE = "alert"  # an admin alert (`app/alerts.py`): never held by the budget
+# Mail the budget's reserve is for. Everything else (the verification and "already registered"
+# mail anyone can make the site send by filling in the sign-up form, and notes mail) may not use
+# it, so a flood of sign-ups cannot keep a real person from a reset link or an invitation.
+PROTECTED_TEMPLATES = frozenset({"reset_password", "waitlist_invite"})
 OVER_BUDGET = "over_budget"  # the reason a held mail carries (`last_error`)
 budget_log_throttle = Throttle(600.0)  # the held-mail log line, once in ten minutes
 
@@ -392,7 +396,8 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
                 {"c": BUDGET_LOCK[0], "k": BUDGET_LOCK[1]},
             )
             in_hour = _sent_since(session, now - HOUR)
-            room = settings.mail_hourly_budget - (settings.mail_hourly_reserve if notes_mail else 0)
+            reserve = 0 if row.template in PROTECTED_TEMPLATES else settings.mail_hourly_reserve
+            room = settings.mail_hourly_budget - reserve
             if in_hour >= max(room, 0):
                 held["bulk" if notes_mail else "account"] += 1
                 if row.last_error != OVER_BUDGET:

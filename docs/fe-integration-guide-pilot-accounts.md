@@ -441,21 +441,23 @@ Captured by `scripts/capture_flood_defence_api.py` into `docs/fe-captures/prelau
 cited as **F#NN**. No route and no response shape changed; what changed is **when** two existing
 429s are answered and that they no longer reset.
 
-**Sign-up, `429 too_many_requests` (a new reason).** One client address may hold at most **3
-unconfirmed accounts at once** (and still 5 sign-ups an hour). The fourth, from the same address,
-answers (F#05):
+**Sign-up, `429 too_many_requests` (a new reason).** One client address may make at most **3
+sign-ups in 48 hours** (the life of an unconfirmed account), whether each email is new or already has
+an account, and still 5 an hour. Confirming an account gives its sign-up back. The fourth, from the
+same address, answers (F#05):
 
 ```json
 { "error": { "code": "too_many_requests", "message": "Too many attempts. Try again later." } }
 ```
 
 An email this address already holds gets **exactly the same answer** (F#06), so the cap says nothing
-about who has an account. Nothing is created and no mail is queued for a refused sign-up. Confirming
-an account, or its being cleared after 48 hours, frees a place under the cap. The earlier 429 reasons
-(100 unconfirmed accounts in all, 5 an hour per address) have the same code and message.
+about who has an account. Nothing is created and no mail is queued for a refused sign-up. The
+earlier 429 reasons (100 unconfirmed accounts in all, 5 an hour per address) have the same code and
+message.
 
 **UX consequences the frontend must surface.**
-- A person on a shared address (an office, a phone network) can be refused although they did nothing:
+- A person on a shared address (an office, a phone network) can be refused although they did nothing,
+  and a person who re-submits the form to fix a typo uses one of the three:
   show the API's message as it comes ("Too many attempts. Try again later.") and offer the waiting
   list and "check your email for the link we already sent" as the way forward; never suggest that the
   address is wrong.
@@ -501,7 +503,7 @@ the person asks again with "resend").
 | Email preferences: read, turn off, turn on, 401, 403, string / extra field / empty refused, unchanged after a refusal | **verified live** (P#02 to P#15) |
 | Skipped-mail notice with `meeting_id`; unread count; read-all | **verified live** (P#16 to P#21; the send loop is called as the worker calls it, not by the worker process) |
 | The notes-ready mail's footer link | **verified in the mail text** the send loop built (P#18); not opened in a mail client, no mail was sent |
-| Sign-up per-address cap of 3 unconfirmed accounts (429, same answer for a held email), login lockout and sign-up counters surviving a restart | **verified live** (F#02 to F#15, one address only) |
+| Sign-up per-address cap of 3 sign-ups in 48 hours (429, same answer for a held email), login lockout and sign-up counters surviving a restart | **verified live** (F#02 to F#15, one address only) |
 | Many-address flood, clearing the busiest address's rows at the global cap, the hourly mail budget | **not exercised live** (tests only) |
 | Mail delivery by Resend | **not exercised** (nothing is sent in the capture; the mail text is not captured, only the queued payload) |
 | The worker: sending mail, purging deleted accounts, the 48-hour sweep, hourly sweeps | **not exercised live** (tested in `tests/test_mail.py`, `test_admin.py`, `test_maintenance.py`) |

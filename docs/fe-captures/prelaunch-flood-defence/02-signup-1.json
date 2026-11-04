@@ -1,5 +1,5 @@
 {
-  "note": "One of three unconfirmed accounts this address may hold at once: 202.",
+  "note": "One of the three sign-ups this address may make in 48 hours: 202.",
   "client": "visitor",
   "request": {
     "method": "POST",

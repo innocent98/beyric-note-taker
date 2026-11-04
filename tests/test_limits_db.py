@@ -69,8 +69,8 @@ def test_the_lockout_survives_a_restart_of_the_whole_app(app, owner):
 def test_the_sign_up_limits_survive_a_restart_too(app, session):
     open_pilot(session)
     api = visitor(app, "192.0.2.50")
-    for n in range(5):
-        assert sign_up(api, email=f"p{n}@example.test").status_code != 429
+    for n in range(3):
+        assert sign_up(api, email=f"p{n}@example.test").status_code == 202
     error_of(sign_up(api, email="p9@example.test"), 429, "too_many_requests")
     again = visitor(restart(app), "192.0.2.50")
     error_of(sign_up(again, email="p10@example.test"), 429, "too_many_requests")

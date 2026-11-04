@@ -113,6 +113,7 @@ def sign_up(body: SignUp, request: Request, session: Session = Depends(get_sessi
         origin=ratelimit.origin_key(
             ratelimit.store_secret(request.app.state.settings), _address(request)
         ),
+        origin_allowed=_limits(request).signup_origin.hit,
     )
     return CHECK_YOUR_EMAIL
 
@@ -146,7 +147,14 @@ def verify_email(
     400 `token_invalid_or_expired`: wrong, used or older than 24 hours. 400 `password_mismatch`:
     not the password submitted with this link's sign-up; the link stays usable until 5 wrong
     passwords, after which it answers `token_invalid_or_expired`."""
-    signup.verify_email(session, body.token, body.password, _now(), _limits(request).verify_wrong)
+    signup.verify_email(
+        session,
+        body.token,
+        body.password,
+        _now(),
+        _limits(request).verify_wrong,
+        _limits(request).signup_origin,
+    )
     return Verified(status="verified")
 
 

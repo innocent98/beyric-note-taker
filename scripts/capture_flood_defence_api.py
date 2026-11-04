@@ -151,7 +151,7 @@ def run(base: str, engine, settings: Settings) -> None:
         anon.call(
             f"signup-{n + 1}", "POST", "/api/signup",
             body=form(f"ada{n}@example.test", n),
-            note="One of three unconfirmed accounts this address may hold at once: 202.",
+            note="One of the three sign-ups this address may make in 48 hours: 202.",
         )  # fmt: skip
     anon.call(
         "signup-fourth-from-the-same-address", "POST", "/api/signup",

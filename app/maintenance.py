@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 TOKEN_KEEP = timedelta(days=7)  # a spent or expired token is only kept this long, for debugging
 NOTIFICATION_KEEP = timedelta(days=90)
-RATE_HIT_KEEP = timedelta(hours=2)  # longer than any limit's window (the longest is an hour)
+RATE_HIT_KEEP = timedelta(hours=49)  # longer than any limit's window (the longest is 48 hours)
 CALENDAR_EVENT_KEEP = timedelta(days=2)  # after the event ENDS (spec 12.2)
 
 
