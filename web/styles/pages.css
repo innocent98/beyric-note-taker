@@ -226,7 +226,12 @@
 .cal-confirm p { margin: 0; font-size: var(--text-sm); color: var(--danger-text); line-height: 1.55; }
 .cal-field-label { font-size: var(--text-sm); font-weight: 550; color: var(--ink-2); }
 .cal-rules { display: flex; flex-direction: column; gap: 10px; }
-.cal-rule { display: flex; align-items: flex-start; gap: var(--space-3); padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.cal-rule { position: relative; display: flex; align-items: flex-start; gap: var(--space-3); padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); cursor: pointer; }
+/* A real radio, drawn as the design's ring and dot (`.cal-radio`); the input itself is hidden. */
+.cal-rule-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.cal-rule:has(.cal-rule-input:focus-visible) { box-shadow: 0 0 0 3px var(--teal-ring); }
+.cal-rule:has(.cal-rule-input:disabled) { cursor: default; }
+.cal-template { max-width: 320px; }
 .cal-rule-on { border-color: var(--teal); background: var(--teal-wash); }
 .cal-radio { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; margin-top: 1px; border: 1.5px solid var(--separator); border-radius: 50%; }
 .cal-rule-on .cal-radio { border-color: var(--teal); }
@@ -253,6 +258,16 @@
 .cal-up-name { overflow: hidden; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 .cal-up-state { font-size: var(--text-xs); color: var(--text-2); white-space: nowrap; }
 .cal-up-state-off { opacity: 0.55; }
+/* The designer's per-meeting switch: the state words, then a 36x20 track with a 16px knob. A
+   button so it can be pressed from the keyboard; its own look is reset to the design's plain row. */
+.cal-up-switch { display: flex; align-items: center; gap: 10px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; line-height: normal; text-align: left; cursor: pointer; }
+.cal-up-switch[aria-disabled="true"] { cursor: default; }
+.cal-up-switch:focus-visible { outline: none; border-radius: var(--radius-pill); box-shadow: 0 0 0 3px var(--teal-ring); }
+.cal-switch { position: relative; flex: none; width: 36px; height: 20px; border-radius: var(--radius-pill); background: var(--border-strong); }
+.cal-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-knob); }
+.cal-switch-on { background: var(--teal); }
+.cal-switch-on::after { left: 18px; }
+.cal-up-error { padding: var(--space-3) var(--space-5) 0; }
 .cal-up-empty { margin: 0; padding: 14px var(--space-5); }
 @media (max-width: 560px) {
   .set-head, .set-body { padding-left: 16px; padding-right: 16px; }

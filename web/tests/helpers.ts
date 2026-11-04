@@ -87,3 +87,14 @@ export function calendarBody<T>(file: string): T {
 export function connectBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/calendar-connect", file))).response.body as T;
 }
+
+// A capture from the calendar write routes (docs/fe-captures/calendar-settings/<file>): the body of
+// the response, or the error it carried.
+export function settingsBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/calendar-settings", file))).response.body as T;
+}
+
+export function settingsError(file: string): { status: number; code: string; message: string } {
+  const { response } = JSON.parse(read(join(REPO, "docs/fe-captures/calendar-settings", file)));
+  return { status: response.status, ...response.body.error };
+}

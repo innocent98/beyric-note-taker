@@ -1,0 +1,34 @@
+{
+  "note": "The rule can be chosen with nothing connected; the answer is not-connected.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/settings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "rule": "all"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": false,
+      "state": "not_connected",
+      "state_text": "Google Calendar is not connected.",
+      "google_email": null,
+      "last_sync_at": null,
+      "last_error": null,
+      "rule": "all",
+      "rule_text": "Joining all meetings",
+      "calendar_template_id": null,
+      "upcoming": []
+    }
+  }
+}

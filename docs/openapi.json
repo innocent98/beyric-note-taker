@@ -523,8 +523,19 @@
         "type": "object"
       },
       "CalendarOut": {
-        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`google_email` is the Google account that was connected, and is null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `upcoming` is empty unless connected.",
+        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`google_email` is the Google account that was connected, and is null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`upcoming` is empty unless connected.",
         "properties": {
+          "calendar_template_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Template Id"
+          },
           "connected": {
             "title": "Connected",
             "type": "boolean"
@@ -607,6 +618,7 @@
           "last_error",
           "rule",
           "rule_text",
+          "calendar_template_id",
           "upcoming"
         ],
         "title": "CalendarOut",
@@ -1476,6 +1488,28 @@
         "title": "NotificationOut",
         "type": "object"
       },
+      "OverrideIn": {
+        "additionalProperties": false,
+        "description": "The person's switch for one meeting: true joins it, false does not, null clears the switch\nso the rule decides again. The field is required (null must be sent on purpose).",
+        "properties": {
+          "override": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Override"
+          }
+        },
+        "required": [
+          "override"
+        ],
+        "title": "OverrideIn",
+        "type": "object"
+      },
       "PasswordChanged": {
         "properties": {
           "status": {
@@ -1776,6 +1810,41 @@
           "badges"
         ],
         "title": "SessionState",
+        "type": "object"
+      },
+      "SettingsIn": {
+        "additionalProperties": false,
+        "description": "What to change; a field that is left out stays as it is. `rule` is `all` (every event with\na video link), `organizer` (only meetings the person organises) or `none` (only the meetings\nthey switch on). Changing it also clears their per-meeting switches on events that have not\nstarted, and re-decides every event from the new rule. `calendar_template_id` is one of the\nperson's own templates, or null for the default; it also reaches the meetings already planned\nthat have not sent a bot. At least one field is needed.",
+        "properties": {
+          "calendar_template_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calendar Template Id"
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "enum": [
+                  "all",
+                  "organizer",
+                  "none"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule"
+          }
+        },
+        "title": "SettingsIn",
         "type": "object"
       },
       "SignUp": {
@@ -3306,6 +3375,99 @@
         ]
       }
     },
+    "/api/calendar/events/{event_id}/override": {
+      "put": {
+        "description": "The person's switch for one meeting on the Upcoming list (CSRF header needed): `true` joins\nit, `false` does not, `null` clears the switch so the rule decides again. The switch beats the\nrule in both directions; the stored join is made, revived or cancelled to match, which is what\nthe runner reads. Answers with the event's new row. 404 `not_found` for an event that is not\nthe caller's (also after disconnecting); 409 `not_joinable` for an event nothing the person\nswitches can change (declined, over, cancelled, all day, no meeting link, or Microsoft Teams\nbefore Teams can be joined): `message` is the reason in plain words, and nothing is stored.\n404 `calendar_unavailable` while the calendar features are off.",
+        "operationId": "calendar_event_override",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "event_id",
+            "required": true,
+            "schema": {
+              "title": "Event Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverrideIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpcomingEvent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Calendar Event Override",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
     "/api/calendar/google/callback": {
       "get": {
         "description": "Where Google sends the browser back after the consent screen. Public in the guard (it\nanswers a signed-out visitor itself) but checked by the single-use `state`, the signed-in\nuser the flow was started for, and the `calendar_flow` cookie. Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with `?calendar=connected`; a failure goes there with\n`?calendar_error=` `google_denied`, `google_failed`, `scope_missing` (the calendar box was\nunticked), `no_refresh_token` or `wrong_account`; nobody signed in goes to\n`/login?error=google_failed`. 404 `calendar_unavailable` while the feature is off.",
@@ -3631,6 +3793,78 @@
           }
         },
         "summary": "Calendar Recurring",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
+    "/api/calendar/settings": {
+      "put": {
+        "description": "Change the auto-join rule and/or the template for calendar meetings (CSRF header needed);\na field left out stays as it is. Answers with the whole state, as `GET /api/calendar` does, so\nthe page can redraw from it. A changed `rule` clears the person's per-meeting switches on events\nthat have not started, then decides every stored event again from the new rule: joins it now\nforbids are cancelled and joins it now allows are made or revived (the same rules the sync\napplies; nothing is fetched from Google and no bot is sent here). Choosing the rule that is\nalready set changes nothing. 404 `not_found` for a template that is not the caller's own,\n404 `calendar_unavailable` while the calendar features are off.",
+        "operationId": "calendar_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Calendar Settings",
         "tags": [
           "calendar"
         ]

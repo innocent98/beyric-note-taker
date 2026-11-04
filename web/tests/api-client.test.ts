@@ -314,6 +314,54 @@ describe("calendar calls", () => {
     expect(header(post.init, "X-CSRF-Token")).toBe("<csrf-A>");
   });
 
+  it("writes the rule and the template to /api/calendar/settings with the CSRF token", async () => {
+    const { api, calls } = setup((url) =>
+      url === "/api/session"
+        ? sessionBody()
+        : new Response(JSON.stringify({ rule: "organizer" }), { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    expect(await api.calendar.settings({ rule: "organizer" })).toEqual({ rule: "organizer" });
+    await api.calendar.settings({ calendar_template_id: null });
+    const puts = calls.filter((c) => c.url === "/api/calendar/settings");
+    expect(puts).toHaveLength(2);
+    expect(puts[0].init.method).toBe("PUT");
+    expect(header(puts[0].init, "X-CSRF-Token")).toBe("<csrf-A>");
+    expect(JSON.parse(puts[0].init.body as string)).toEqual({ rule: "organizer" });
+    expect(JSON.parse(puts[1].init.body as string)).toEqual({ calendar_template_id: null });
+  });
+
+  it("switches one meeting with PUT /api/calendar/events/{id}/override, null clearing the switch", async () => {
+    const { api, calls } = setup((url) =>
+      url === "/api/session"
+        ? sessionBody()
+        : new Response(JSON.stringify({ id: 7 }), { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    await api.calendar.override(7, true);
+    await api.calendar.override(7, null);
+    const puts = calls.filter((c) => c.url === "/api/calendar/events/7/override");
+    expect(puts).toHaveLength(2);
+    expect(puts[0].init.method).toBe("PUT");
+    expect(header(puts[0].init, "X-CSRF-Token")).toBe("<csrf-A>");
+    expect(JSON.parse(puts[0].init.body as string)).toEqual({ override: true });
+    expect(JSON.parse(puts[1].init.body as string)).toEqual({ override: null });
+  });
+
+  it("throws the 409 not_joinable of the override route with its words", async () => {
+    const { api } = setup((url) =>
+      url === "/api/session"
+        ? sessionBody()
+        : new Response(JSON.stringify({ error: { code: "not_joinable", message: "You declined this invite" } }), {
+            status: 409,
+            headers: { "content-type": "application/json" },
+          }),
+    );
+    await expect(api.calendar.override(5, true)).rejects.toMatchObject({
+      status: 409,
+      code: "not_joinable",
+      message: "You declined this invite",
+    });
+  });
+
   it("throws the server's error for the calendar being off", async () => {
     const { api } = setup(() =>
       new Response(JSON.stringify({ error: { code: "calendar_unavailable", message: "Google Calendar is not available." } }), {

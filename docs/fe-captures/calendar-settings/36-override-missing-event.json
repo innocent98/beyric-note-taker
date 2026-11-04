@@ -1,0 +1,28 @@
+{
+  "note": "An event that does not exist: the same 404.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/events/987654/override",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "override": true
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such event"
+      }
+    }
+  }
+}

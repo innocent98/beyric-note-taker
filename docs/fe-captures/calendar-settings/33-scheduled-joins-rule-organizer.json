@@ -1,0 +1,37 @@
+{
+  "note": "The joins follow the new rule and no switch is left.",
+  "content": {
+    "joins": [
+      {
+        "event": "Weekly planning",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": null
+      },
+      {
+        "event": "Customer call",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": null
+      },
+      {
+        "event": "Sprint 🚀 planning · 週次",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": null
+      },
+      {
+        "event": "Partnership idea",
+        "state": "cancelled",
+        "skip_reason": "not_organizer",
+        "template_id": null
+      },
+      {
+        "event": "Quarterly offsite",
+        "state": "scheduled",
+        "skip_reason": null,
+        "template_id": null
+      }
+    ]
+  }
+}

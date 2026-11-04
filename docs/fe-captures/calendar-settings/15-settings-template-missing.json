@@ -1,0 +1,28 @@
+{
+  "note": "A template that does not exist: the same 404.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/calendar/settings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "calendar_template_id": 987654
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such template"
+      }
+    }
+  }
+}
