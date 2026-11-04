@@ -91,7 +91,8 @@ class Settings(BaseSettings):
     # admins are told. Password-reset and invitation mail may use all of it; verification mail (the
     # form can make the site send it to anyone), notes mail (and later share and reminder mail)
     # may not use the last `mail_hourly_reserve`; admin alerts are never held.
-    # 0 = no budget. Optional.
+    # 0 or less = NO budget (unlimited; it does not stop mail, and a warning is logged at start).
+    # Optional.
     mail_hourly_budget: int = 30
     mail_hourly_reserve: int = 10
     # Where admin alerts (no bot slot free, a join that was not recorded) are mailed. Empty: each

@@ -39,6 +39,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     auth.check_start(settings)
     mail.check_settings(settings)
+    mail.warn_if_unlimited(settings)
     edge.warn_if_unsafe(settings)
     app = FastAPI(
         title="Beyric Note Taker",

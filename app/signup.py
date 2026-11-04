@@ -573,7 +573,10 @@ def reset_password(
     email = user.email
     session.commit()
     if unlock is not None:
-        unlock(email)
+        try:
+            unlock(email)
+        except Exception as exc:  # the password did change: say so, and only log the failure
+            logger.warning("could not end a login lockout after a reset (%s)", type(exc).__name__)
 
 
 # ---- the waitlist ----

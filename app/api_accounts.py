@@ -65,17 +65,19 @@ _origin_warned = edge.Throttle(86400.0)
 
 def _origin(request: Request) -> str | None:
     """The keyed hash of the client address to remember on a new account, or None where the
-    address cannot be told apart from everyone else's: in production, a request without nginx's
-    secret carries the proxy's address, shared by every visitor, and a cap per address would then
-    be a cap for the whole site (three sign-ups would close the form for two days). The cap is
-    skipped, and the log says so, once a day."""
+    address cannot be told apart from everyone else's: in production with no EDGE_SHARED_SECRET
+    configured at all, every visitor carries the proxy's address, and a cap per address would be a
+    cap for the whole site (three sign-ups would close the form for two days). The cap is skipped,
+    and the log says so, once a day. When a secret IS configured, a request without it did not
+    come through nginx (anything on the host can reach the app on localhost): it keeps the cap,
+    on the address it really has."""
     settings = request.app.state.settings
-    if settings.app_env == "production" and not edge.has_edge_secret(request, settings):
+    if settings.app_env == "production" and not settings.edge_shared_secret:
         if _origin_warned.ready():
             logger.warning(
-                "no per-address sign-up cap: this request carries no valid edge secret, so the "
-                "client address is the proxy's. Check EDGE_SHARED_SECRET in .env and nginx "
-                "(deploy/README.md, 'Edge secret')."
+                "no per-address sign-up cap: EDGE_SHARED_SECRET is not set, so every client "
+                "carries the proxy's address. Set it in .env and in nginx (deploy/README.md, "
+                "'Edge secret')."
             )
         return None
     return ratelimit.origin_key(ratelimit.store_secret(settings), _address(request))

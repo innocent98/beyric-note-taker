@@ -7,8 +7,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app import accounts, limits, maintenance, ratelimit, signup
+from app import accounts, limits, mail, maintenance, ratelimit, signup
 from app.main import create_app
 from app.models import MailOutbox, RateHit, User
 from tests.test_accounts import visitor
@@ -51,7 +52,7 @@ def test_a_protected_mail_behind_a_backlog_of_held_mail_still_goes(session, temp
     assert sent == 1 and mailer.sent[0][0].to == "real@example.test"
 
 
-def test_an_admin_alert_behind_a_backlog_of_held_mail_still_goes(session):
+def test_an_admin_alert_is_loaded_ahead_of_other_held_mail(session):
     make_user(session, "boss@example.test", admin=True)
     backlog(session)
     queue(session, "alert", {"title": "T", "body": "B"}, to="boss@example.test")
@@ -68,6 +69,52 @@ def test_new_verification_mail_is_not_stuck_behind_the_held_backlog(session):
     )
     sent, mailer = go(session, now=NOW + timedelta(minutes=61), budget=10, reserve=4)
     assert sent == 6 and mailer.sent[0][0].to == "fresh@example.test"
+
+
+def test_an_admin_alert_behind_over_a_hundred_held_alerts_to_others_still_goes(session):
+    """Alerts to anyone but an admin are held like other mail and stay pending: more than a batch of
+    them must not hide a newer admin alert (the privileged load orders never-held rows first)."""
+    make_user(session, "boss@example.test", admin=True)
+    for n in range(130):
+        queue(session, "alert", {"title": "T", "body": "B"}, to=f"x{n}@example.test")
+    assert go(session, budget=2)[0] == 2
+    go(session, now=NOW + timedelta(minutes=1), budget=2)  # every row has been held
+    queue(session, "alert", {"title": "T", "body": "B"}, to="boss@example.test")
+    sent, mailer = go(session, budget=2)
+    assert sent == 1 and mailer.sent[0][0].to == "boss@example.test"
+
+
+# ---- L-R4: a full budget is not re-checked row by row ----
+
+
+def test_once_the_budget_is_full_the_rest_of_the_pass_asks_the_database_nothing_more(
+    session, monkeypatch
+):
+    links(session, 60)
+    assert go(session, budget=5)[0] == 5
+    counted = []
+    real = mail._sent_since
+
+    def watch(*args, **kwargs):
+        counted.append(1)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(mail, "_sent_since", watch)
+    assert go(session, now=NOW + timedelta(minutes=1), budget=5)[0] == 0
+    assert len(counted) <= 3  # the day's quota, the first held row, and no more per row
+    held = rows(session, "pending")
+    assert len(held) == 55 and {r.last_error for r in held} == {"over_budget"}
+
+
+def test_the_rows_skipped_in_a_full_pass_are_still_marked_held_for_the_next_one(session):
+    links(session, 140)
+    go(session, budget=5)
+    go(session, now=NOW + timedelta(minutes=1), budget=5)
+    queue(
+        session, "verify_email", {"link": "https://x.test/v", "name": "R"}, to="fresh@example.test"
+    )
+    sent, mailer = go(session, now=NOW + timedelta(minutes=61), budget=5)
+    assert sent == 5 and mailer.sent[0][0].to == "fresh@example.test"
 
 
 # ---- M1: reset requests are capped per email, so a flood cannot spend the budget or the inbox ----
@@ -174,9 +221,12 @@ def _settings(**kw):
     return make_settings(**kw)
 
 
-def test_without_the_edge_secret_in_production_the_48_hour_cap_is_skipped(app, session, caplog):
-    """Every visitor would share one address (the proxy's): three sign-ups would close the form to
-    everyone for two days. The cap is skipped and the log says why, once."""
+def test_with_no_edge_secret_configured_in_production_the_48_hour_cap_is_skipped(
+    app, session, caplog
+):
+    """With no secret configured every visitor would share one address (the proxy's): three
+    sign-ups would close the form to everyone for two days. The cap is skipped and the log says
+    why, once."""
     open_pilot(session, max_accounts=None)
     shop = production_app(app)
     api = visitor(shop, "172.28.1.10")
@@ -191,12 +241,18 @@ def test_without_the_edge_secret_in_production_the_48_hour_cap_is_skipped(app, s
     }
 
 
-def test_a_request_without_the_right_edge_secret_has_no_origin_either(app, session):
+def test_a_request_that_skips_nginx_is_still_capped_by_its_own_address(app, session):
+    """When a secret IS configured and a request lacks it, it did not come through nginx (anything
+    on the host can reach the app on localhost): it keeps the cap, on the address it really has."""
     open_pilot(session, max_accounts=None)
     shop = production_app(app, secret="s" * 40)
     api = visitor(shop, "172.28.1.10")
     api.client.headers.update({"X-Edge-Secret": "wrong" * 8, "X-Forwarded-For": "203.0.113.5"})
-    assert [sign_up(api, email=f"w{n}@example.test").status_code for n in range(4)] == [202] * 4
+    codes = [sign_up(api, email=f"w{n}@example.test").status_code for n in range(4)]
+    assert codes == [202, 202, 202, 429]
+    session.expire_all()
+    origins = {u.signup_origin for u in session.scalars(select(User)) if u.email.startswith("w")}
+    assert None not in origins  # the rows carry an origin, so eviction by address sees them
 
 
 def test_with_the_edge_secret_the_cap_applies_to_the_real_client_address(app, session):
@@ -290,3 +346,63 @@ def test_the_mail_of_an_evicted_account_never_goes_out(app, session, monkeypatch
     assert [
         r.to_email for r in session.scalars(select(MailOutbox)) if r.to_email == "a0@example.test"
     ] == []
+
+
+# ---- L-R6: a failing unlock never turns a changed password into a 500 ----
+
+
+def test_a_failing_unlock_after_the_password_changed_still_answers_success(
+    app, session, owner, monkeypatch, caplog
+):
+    forgot(visitor(app, "198.51.100.77"), OWNER_EMAIL)
+    token = token_of(queued(session, "reset_password")[-1])
+
+    def broken(account):
+        raise RuntimeError("limiter trouble for " + account)
+
+    monkeypatch.setattr(app.state.limiter, "unlock", broken)
+    with caplog.at_level(logging.WARNING):
+        response = visitor(app, "198.51.100.77").post(
+            "/api/password/reset", {"token": token, "password": NEW_PASSWORD}
+        )
+    assert (response.status_code, response.json()) == (200, {"status": "password_changed"})
+    assert visitor(app, "198.51.100.78").log_in(NEW_PASSWORD).status_code == 200  # it did change
+    logged = " ".join(r.getMessage() for r in caplog.records)
+    assert "RuntimeError" in logged and OWNER_EMAIL not in logged
+
+
+# ---- the unlock script's real path ----
+
+
+def test_the_unlock_script_runs_against_the_database_with_the_apps_own_key(
+    app, session, owner, engine, monkeypatch, capsys
+):
+    from scripts import unlock_login
+
+    lock_out(app)
+    monkeypatch.setattr(unlock_login, "get_settings", lambda: app.state.settings)
+    monkeypatch.setattr(unlock_login, "SessionLocal", lambda: Session(engine))
+    assert unlock_login.run([OWNER_EMAIL]) == 0
+    assert "Cleared" in capsys.readouterr().out
+    assert visitor(app, "198.51.100.90").log_in().status_code == 200
+    assert unlock_login.run([OWNER_EMAIL]) == 0
+    assert "Nothing was recorded" in capsys.readouterr().out
+
+
+# ---- L9: an unlimited budget is said out loud ----
+
+
+def test_a_budget_of_zero_or_less_is_warned_about_once_at_start(caplog):
+    mail.unlimited_warned.reset()
+    with caplog.at_level(logging.WARNING):
+        create_app(_settings(mail_hourly_budget=0))
+        create_app(_settings(mail_hourly_budget=-1))
+    warnings = [r for r in caplog.records if "MAIL_HOURLY_BUDGET" in r.getMessage()]
+    assert len(warnings) == 1 and "unlimited" in warnings[0].getMessage()
+
+
+def test_the_default_budget_says_nothing_at_start(caplog):
+    mail.unlimited_warned.reset()
+    with caplog.at_level(logging.WARNING):
+        create_app(_settings())
+    assert not [r for r in caplog.records if "MAIL_HOURLY_BUDGET" in r.getMessage()]

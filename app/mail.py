@@ -343,15 +343,16 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
     capped = 0 < settings.mail_daily_cap <= sent_today
     notes = list(NOTES_TEMPLATES)
 
-    def pending_ids(*conditions, first=()) -> list[int]:
-        return list(
-            session.scalars(
-                select(MailOutbox.id)
+    def pending_ids(*conditions, first=()) -> list[tuple[int, str]]:
+        return [
+            (row[0], row[1])
+            for row in session.execute(
+                select(MailOutbox.id, MailOutbox.template)
                 .where(MailOutbox.status == "pending", *conditions)
                 .order_by(*first, MailOutbox.id)
                 .limit(BATCH * 4)
             )
-        )
+        ]
 
     # Sign-in mail first and on its own, so notes mail held for the day's quota (pending for up to
     # a day) can never fill the batch and starve a verification or reset mail. Once the quota is
@@ -364,7 +365,10 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
     privileged = [ALERT_TEMPLATE, *PROTECTED_TEMPLATES]
     ids = pending_ids(
         MailOutbox.template.in_(privileged),
-        first=(case((MailOutbox.template == ALERT_TEMPLATE, 0), else_=1),),
+        first=(
+            case((MailOutbox.template == ALERT_TEMPLATE, 0), else_=1),
+            case((MailOutbox.last_error == OVER_BUDGET, 1), else_=0),
+        ),
     )
     ids += pending_ids(
         MailOutbox.template.not_in(notes), MailOutbox.template.not_in(privileged),
@@ -376,7 +380,18 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
     sent = 0
     held = {"account": 0, "bulk": 0}
     in_hour = 0
-    for mail_id in ids:
+    # Once a mail has been held, the count of the hour cannot fall within this pass, and a later
+    # verification or notes mail has no more room than it had, so each is held without asking the
+    # database (and
+    # marked in one statement at the end): a flood's backlog costs a pass a few queries, not a
+    # lock and a count per row.
+    budget_full = False
+    skipped: list[int] = []
+    for mail_id, template in ids:
+        if budget_full and template not in privileged:
+            held["bulk" if template in NOTES_TEMPLATES else "account"] += 1
+            skipped.append(mail_id)
+            continue
         row = session.scalars(
             select(MailOutbox)
             .where(MailOutbox.id == mail_id, MailOutbox.status == "pending")
@@ -413,6 +428,7 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
             room = settings.mail_hourly_budget - reserve
             if in_hour >= max(room, 0):
                 held["bulk" if notes_mail else "account"] += 1
+                budget_full = True  # every later non-privileged mail has the same room or less
                 if row.last_error != OVER_BUDGET:
                     row.last_error = OVER_BUDGET  # no attempt used: it goes when the hour rolls on
                     session.commit()
@@ -469,9 +485,35 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
             _finish(row, "failed", error)
         logger.warning("mail %s: send failed (%s), attempt %s", row.id, error, row.attempts)
         session.commit()
+    if skipped:
+        session.execute(
+            update(MailOutbox)
+            .where(
+                MailOutbox.id.in_(skipped),
+                MailOutbox.status == "pending",
+                MailOutbox.last_error.is_distinct_from(OVER_BUDGET),
+            )
+            .values(last_error=OVER_BUDGET)
+        )
+        session.commit()
     if held["account"] or held["bulk"]:
         _report_budget(session, settings, now, held, in_hour)
     return sent
+
+
+unlimited_warned = Throttle(86400.0)
+
+
+def warn_if_unlimited(settings: Settings) -> None:
+    """Say so at start when there is no hourly mail budget: 0 (or less) is unlimited, it does not
+    stop mail, and a flood of sign-ups could then spend all of Resend's quota. At most once a
+    day."""
+    if settings.mail_hourly_budget <= 0 and unlimited_warned.ready():
+        logger.warning(
+            "MAIL_HOURLY_BUDGET is %s: the hourly mail budget is OFF (unlimited). 0 or less does "
+            "not stop mail; to stop mail unset RESEND_API_KEY.",
+            settings.mail_hourly_budget,
+        )
 
 
 def _is_admin_alert(session: Session, row: MailOutbox, settings: Settings) -> bool:

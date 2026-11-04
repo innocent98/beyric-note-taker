@@ -480,7 +480,7 @@ account and link to "Forgot password?"** The operator can also clear it
 
 **Forgot password, new cap.** Three reset requests an hour per email (and the existing one a minute,
 5 an hour per address): the rest are answered 202 with the same body and send nothing, so the screen
-needs no new state. Not captured live (the answer is the same 202 as F#25); tested in
+needs no new state. If a person says no email arrived, the answer is: use the newest one we sent (links last 30 minutes), then try again in an hour. Not captured live (the answer is the same 202 as F#25); tested in
 `tests/test_flood_review.py`.
 
 **Not exercised live:** the many-address flood (the capture uses four addresses, not twenty) and the "busiest address goes first" clearing at 100 unconfirmed accounts are
