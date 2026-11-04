@@ -95,7 +95,13 @@ class FakeVexaHost:
     def get_meeting(self, platform: str, native_id: str) -> VexaMeeting:
         """What the worker asks by meeting code: a joining bot if one is live, else nothing."""
         if (platform, native_id) in self.live:
-            return VexaMeeting(status="joining")
+            return VexaMeeting(status="joining", vexa_id=self.live[(platform, native_id)])
+        raise VexaNotFound("get_meeting failed: 404")
+
+    def get_meeting_by_id(self, vexa_meeting_id) -> VexaMeeting:
+        """What the worker asks once it knows the id: the bot with that id, if it is still live."""
+        if int(vexa_meeting_id) in self.live.values():
+            return VexaMeeting(status="joining", vexa_id=int(vexa_meeting_id))
         raise VexaNotFound("get_meeting failed: 404")
 
     def stop_bot(self, platform: str, native_id: str) -> None:

@@ -54,6 +54,8 @@ class VexaMeeting:
     completion_reason: str | None = None
     # Vexa's own words for why the bot failed, e.g. "[Zoom Web] zoom_requires_rtms: ...".
     failure_reason: str | None = None
+    # Vexa's id for this meeting (the one `send_bot` returns), when the body carries one.
+    vexa_id: int | None = None
 
 
 MAX_FAILURE_REASON_CHARS = 300
@@ -260,6 +262,9 @@ class VexaClient:
             recording_status=recording_status,
             completion_reason=completion_reason,
             failure_reason=_failure_reason(data),
+            vexa_id=body["id"]
+            if isinstance(body.get("id"), int) and not isinstance(body.get("id"), bool)
+            else None,
         )
 
     def delete_recording(self, recording_id: int) -> None:

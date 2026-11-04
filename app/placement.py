@@ -281,14 +281,47 @@ def commit_or_stop(
     """Commit a meeting row that points at the bot `vexa_id` (None: an unconfirmed start). If the
     commit fails, roll back FIRST (the lock is gone from then on), then stop that bot, unless the
     row did land after all (a lost answer to a commit that succeeded): that bot is a recorded one
-    and stopping it would throw a meeting away. With no id there is nothing to check: it stops."""
+    and stopping it would throw a meeting away. With no id there is nothing to check: it stops.
+    The stop is by meeting code, so it runs only under the placement lock again and only if no
+    live meeting holds the code by then (`_stop_if_the_code_is_free`)."""
     try:
         session.commit()
     except BaseException:
         session.rollback()
         if vexa_id is None or not _is_recorded(session, platform, native_id, vexa_id):
-            stop_unrecorded_bot(vexa, platform, native_id)
+            _stop_if_the_code_is_free(session, vexa, platform, native_id)
         raise
+
+
+def _stop_if_the_code_is_free(
+    session: Session, vexa: VexaClient, platform: str, native_id: str
+) -> None:
+    """Stop an unrecorded bot by code while holding the placement lock, so nobody else can place on
+    the code meanwhile, and skip the stop when a live meeting of anyone holds the code: the bot
+    there may be theirs. If the lock or the check cannot be had (the database is failing, so nobody
+    else is placing either) the stop goes ahead: an unrecorded bot is the worse outcome."""
+    try:
+        _take_lock(session, LOCK_WAIT_SECONDS)
+        holder = session.scalar(
+            select(Meeting.id)
+            .where(
+                Meeting.platform == platform,
+                Meeting.native_id == native_id,
+                Meeting.status == IN_THE_CALL,
+            )
+            .limit(1)
+        )
+        if holder is not None:
+            logger.warning("an unrecorded bot was left alone: a live meeting holds its code")
+            return
+    except PlacementRefused:
+        pass  # another placement is under way: the host refuses it, ours is the bot there
+    except Exception:  # cannot check: see above
+        session.rollback()
+    try:
+        stop_unrecorded_bot(vexa, platform, native_id)
+    finally:
+        session.rollback()  # releases the lock
 
 
 def _is_recorded(session: Session, platform: str, native_id: str, vexa_id: int) -> bool:

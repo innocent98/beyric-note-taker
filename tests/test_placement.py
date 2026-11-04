@@ -551,6 +551,53 @@ def test_a_late_bot_is_adopted_by_the_worker_not_stopped(session, host, ada, ada
     assert meeting.status == "bot_sent" and meeting.completion_reason == "joining"
 
 
+def test_adopting_a_late_bot_pins_its_vexa_id_so_the_code_is_never_used_to_find_it_again(
+    session, host, ada, ada_template
+):
+    """From then on the worker looks the meeting up by id, so a reused code can never hand it
+    someone else's (or an older) recording."""
+    host.late_accept = True
+    meeting = place(session, host, request_for(ada, ada_template))
+    host.land_late_bots()
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=20))
+    session.refresh(meeting)
+    assert meeting.vexa_meeting_id == str(host.live[("google_meet", CODE)])
+
+
+def test_a_live_bot_whose_id_Vexa_did_not_give_is_not_adopted(session, host, ada, ada_template):
+    host.late_accept = True
+    meeting = place(session, host, request_for(ada, ada_template))
+    host.land_late_bots()
+    host.get_meeting = lambda platform, code: vexa_meeting(status="joining")  # no id in the body
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=20))
+    session.refresh(meeting)
+    assert (
+        meeting.vexa_meeting_id is None and meeting.completion_reason == pipeline.SEND_UNCONFIRMED
+    )
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=61))
+    session.refresh(meeting)
+    assert meeting.status == "failed"
+
+
+def test_the_grace_counts_from_the_uncertain_send_not_from_the_meetings_first_send(
+    session, host, ada, ada_template
+):
+    """A refused meeting sent again hours later must get the full grace, not be reaped at once."""
+    old = add_live(session, ada, ada_template, CODE, status="failed")
+    old.started_polling_at = NOW - timedelta(hours=3)
+    session.commit()
+    host.late_accept = True
+    assert pipeline.send_again(old, host) is True
+    session.commit()
+    assert old.started_polling_at is not None
+    assert datetime.now(UTC) - old.started_polling_at < timedelta(seconds=30)
+    pipeline.advance_meeting(
+        session, old.id, vexa=host, now=datetime.now(UTC) + timedelta(seconds=10)
+    )
+    session.refresh(old)
+    assert old.status == "bot_sent"  # still inside its grace
+
+
 def test_a_bot_that_never_landed_is_stopped_and_the_meeting_fails_in_plain_words(
     session, host, ada, ada_template
 ):
@@ -633,6 +680,55 @@ def test_a_commit_that_failed_after_it_landed_does_not_stop_the_recorded_bot(
     monkeypatch.undo()
     assert host.stopped == []  # the meeting is in the database: its bot is a recorded one
     assert session.scalars(select(Meeting)).one().vexa_meeting_id == "1001"
+
+
+def test_a_failed_commit_does_not_stop_a_bot_when_another_meeting_holds_the_code_by_then(
+    engine, session, host, ada, ada_template, ben, ben_template, monkeypatch
+):
+    """After a failed commit the lock is gone: before a stop by code, the lock is taken again and a
+    live meeting of anyone on the code means the bot there may not be ours to stop."""
+    real_commit = session.commit
+
+    def lose_the_commit_after_someone_else_took_the_code(*args, **kwargs):
+        with Session(engine) as other:
+            other.add(
+                Meeting(
+                    owner_user_id=ben.id,
+                    url=url_of(CODE),
+                    platform="google_meet",
+                    native_id=CODE,
+                    template_id=ben_template.id,
+                    status="bot_sent",
+                )
+            )
+            other.commit()
+        raise OperationalError("commit", {}, Exception("connection lost"))
+
+    monkeypatch.setattr(session, "commit", lose_the_commit_after_someone_else_took_the_code)
+    with pytest.raises(OperationalError):
+        place(session, host, request_for(ada, ada_template), bot_max_local=3)
+    monkeypatch.undo()
+    assert host.stopped == []
+    assert real_commit  # (the patched commit never wrote ada's meeting)
+
+
+def test_a_failed_commit_stops_the_bot_while_it_holds_the_lock_again(
+    engine, session, host, ada, ada_template, monkeypatch
+):
+    seen = []
+    real_stop = host.stop_bot
+    host.stop_bot = lambda platform, code: (
+        seen.append(lock_is_free(engine)),
+        real_stop(platform, code),
+    )
+    monkeypatch.setattr(
+        session,
+        "commit",
+        lambda *a, **k: (_ for _ in ()).throw(OperationalError("c", {}, Exception("x"))),
+    )
+    with pytest.raises(OperationalError):
+        place(session, host, request_for(ada, ada_template))
+    assert seen == [False] and host.stopped == [("google_meet", CODE)]
 
 
 # ---- stopping only a bot that is ours ----

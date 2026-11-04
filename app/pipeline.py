@@ -300,6 +300,8 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     meeting.completion_reason = SEND_UNCONFIRMED if unconfirmed else None
     meeting.terminal_seen_at = None
     meeting.bot_state_seen_at = datetime.now(UTC) if unconfirmed else None
+    if unconfirmed:
+        meeting.started_polling_at = datetime.now(UTC)  # the grace counts from this send
     _no_audio_polls.pop(meeting.id, None)
     _needs_help_since.pop(meeting.id, None)
     _stop_tries.pop(meeting.id, None)
@@ -440,15 +442,18 @@ def _on_join_problem(session: Session, meeting: Meeting, vexa, mark: str, now: d
 def _settle_unconfirmed(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
     """A meeting whose send got no clear answer. True once a live bot for its code has shown up
     (the meeting then carries on as any other); False while it is still waiting or has been given
-    up on. Only a bot in a LIVE state counts: the code of a recurring meeting can match an older,
-    finished Vexa meeting, and that is not ours. The code is the meeting's alone meanwhile (the
-    placeholder is `bot_sent`, so no other placement can use it)."""
+    up on. Only a bot in a LIVE state that comes with its Vexa id counts: the code of a recurring
+    meeting can match an older, finished Vexa meeting, and that is not ours. The code is the
+    meeting's alone meanwhile (the placeholder is `bot_sent`, so no other placement can use it)."""
     try:
         info = vexa.get_meeting(meeting.platform, meeting.native_id)
     except VexaError:
         info = None
-    if info is not None and info.status in BOT_LIVE_STATES:
-        meeting.completion_reason, meeting.bot_state_seen_at = None, None  # adopted
+    if info is not None and info.status in BOT_LIVE_STATES and info.vexa_id is not None:
+        # Adopted, and pinned to Vexa's id from here on: a reused code can then never hand this
+        # meeting someone else's (or an older) recording.
+        meeting.vexa_meeting_id = str(info.vexa_id)
+        meeting.completion_reason, meeting.bot_state_seen_at = None, None
         _lookup_misses.pop(meeting.id, None)
         logger.info("meeting %s: the bot of an unconfirmed send showed up", meeting.id)
         return True
