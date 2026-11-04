@@ -100,6 +100,7 @@ def test_final_fix_columns_are_added_and_dropped(scratch_url):
     assert "worker_heartbeat_at" not in {
         c["name"] for c in inspect(engine).get_columns("app_state")
     }
+    command.upgrade(cfg, "head")
     engine.dispose()
 
 
@@ -112,6 +113,7 @@ def test_recording_id_widens_to_bigint_and_back(scratch_url):
     command.downgrade(cfg, "0003")
     col = {c["name"]: c for c in inspect(engine).get_columns("meetings")}["vexa_recording_id"]
     assert not isinstance(col["type"], sa.BigInteger)
+    command.upgrade(cfg, "head")
     engine.dispose()
 
 
@@ -122,6 +124,7 @@ def test_join_attempts_column_is_added_and_dropped(scratch_url):
     assert "join_attempts" in {c["name"] for c in inspect(engine).get_columns("meetings")}
     command.downgrade(cfg, "0004")
     assert "join_attempts" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    command.upgrade(cfg, "head")
     engine.dispose()
 
 
@@ -136,6 +139,7 @@ def test_0008_adds_the_pending_password_to_auth_tokens_and_drops_it(scratch_url)
     assert "pending_password_hash" not in {
         c["name"] for c in inspect(engine).get_columns("auth_tokens")
     }
+    command.upgrade(cfg, "head")
     engine.dispose()
 
 
@@ -146,6 +150,7 @@ def test_0008_adds_deleted_at_to_users_and_drops_it(scratch_url):
     assert "deleted_at" in {c["name"] for c in inspect(engine).get_columns("users")}
     command.downgrade(cfg, "0007")
     assert "deleted_at" not in {c["name"] for c in inspect(engine).get_columns("users")}
+    command.upgrade(cfg, "head")
     engine.dispose()
 
 
@@ -236,6 +241,7 @@ def test_0006_downgrade_drops_the_account_tables_and_columns(scratch_url):
     assert not tables & {"users", "auth_tokens", "oauth_flows", "waitlist_entries"}
     assert not tables & {"notifications", "mail_outbox", "user_settings"}
     assert "signups_open" not in {c["name"] for c in inspect(engine).get_columns("app_state")}
+    command.upgrade(cfg, "head")
     engine.dispose()
 
 
@@ -432,6 +438,7 @@ def test_last_full_sync_column_round_trip_keeps_connections(scratch_url):
 
     command.downgrade(cfg, "0011")
     assert _rows(engine, "select sync_token from calendar_connections") == [("tok",)]
+    command.upgrade(cfg, "head")
     engine.dispose()
 
 
@@ -650,33 +657,6 @@ def test_0014_adds_translations_and_the_default_language_and_downgrades_cleanly(
     command.upgrade(cfg, "head")  # and back up again
     assert "meeting_translations" in inspect(engine).get_table_names()
     assert "user_id" in {c["name"] for c in inspect(engine).get_columns("ai_runs")}
-    # `inspect(engine)` can leave a connection open, and the scratch database cannot be dropped
-    # while one is (this test began to fail at teardown once a later migration existed).
-    engine.dispose()
-
-
-# ---- 0016 auto-join markers ----
-
-
-def _app_state_columns(engine) -> set[str]:
-    rows = _rows(
-        engine, "select column_name from information_schema.columns where table_name = 'app_state'"
-    )
-    return {row[0] for row in rows}
-
-
-def test_autojoin_marker_columns_round_trip_and_start_unset(scratch_url):
-    cfg = alembic_config(scratch_url)
-    command.upgrade(cfg, "0015")
-    engine = create_engine(scratch_url)
-    assert "autojoin_started_at" not in _app_state_columns(engine)
-    command.upgrade(cfg, "head")
-    assert {"autojoin_started_at", "autojoin_paused_since"} <= _app_state_columns(engine)
-    assert _rows(engine, "select autojoin_started_at, autojoin_paused_since from app_state") == [
-        (None, None)
-    ]
-    command.downgrade(cfg, "0015")
-    assert "autojoin_started_at" not in _app_state_columns(engine)
     engine.dispose()
 
 
@@ -710,4 +690,29 @@ def test_0016_adds_rate_hits_and_the_signup_origin_and_downgrades_cleanly(scratc
     assert "signup_origin" not in {c["name"] for c in inspect(engine).get_columns("users")}
     assert _rows(engine, "select email from users where email = 'old@example.test'") != []
     command.upgrade(cfg, "head")  # and up again
+    engine.dispose()
+
+
+# ---- 0017 auto-join markers ----
+
+
+def _app_state_columns(engine) -> set[str]:
+    rows = _rows(
+        engine, "select column_name from information_schema.columns where table_name = 'app_state'"
+    )
+    return {row[0] for row in rows}
+
+
+def test_autojoin_marker_columns_round_trip_and_start_unset(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0016")
+    engine = create_engine(scratch_url)
+    assert "autojoin_started_at" not in _app_state_columns(engine)
+    command.upgrade(cfg, "head")
+    assert {"autojoin_started_at", "autojoin_paused_since"} <= _app_state_columns(engine)
+    assert _rows(engine, "select autojoin_started_at, autojoin_paused_since from app_state") == [
+        (None, None)
+    ]
+    command.downgrade(cfg, "0016")
+    assert "autojoin_started_at" not in _app_state_columns(engine)
     engine.dispose()

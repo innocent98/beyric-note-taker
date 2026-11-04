@@ -6,16 +6,16 @@ switch (`AUTOJOIN_ENABLED`) is turned back on, the joins whose 15 minutes passed
 Two nullable timestamps on the single `app_state` row hold those two facts. Additive: an existing
 row has both unset, which is exactly "the runner has never led".
 
-Revision ID: 0016
-Revises: 0015
+Revision ID: 0017
+Revises: 0016
 Create Date: 2026-11-04
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0016"
-down_revision = "0015"
+revision = "0017"
+down_revision = "0016"
 branch_labels = None
 depends_on = None
 
