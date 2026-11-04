@@ -27,7 +27,9 @@ main() {
     exec 9>"$project_dir/.deploy.lock"
     flock -n 9 || { echo "another deploy is running" >&2; return 1; }
 
-    git fetch --quiet origin main
+    # Nothing has changed yet, so a refused fetch can be tried again without harm. Exit 128 is what
+    # a failed `git fetch` always gave, so a caller that retries on 128 keeps working.
+    fetch_main || { echo "could not fetch origin main; nothing was changed" >&2; return 128; }
     if ! git merge-base --is-ancestor "$sha" origin/main; then
         echo "refusing: $sha is not on origin/main" >&2
         return 1
@@ -73,6 +75,19 @@ main() {
     docker compose up -d --remove-orphans || echo "docker compose up failed for $previous" >&2
     start_stuck_containers
     wait_healthy || echo "previous version is not healthy either; check the server" >&2
+    return 1
+}
+
+# GitHub sometimes refuses the deploy key for a stretch (2026-11-04: an hour of failed deploys at this
+# very line, during a Git Operations incident, while the key itself was fine). Tries and delay can
+# be set with DEPLOY_FETCH_TRIES and DEPLOY_FETCH_DELAY.
+fetch_main() {
+    local tries="${DEPLOY_FETCH_TRIES:-6}" delay="${DEPLOY_FETCH_DELAY:-20}" i
+    for i in $(seq 1 "$tries"); do
+        git fetch --quiet origin main && return 0
+        echo "git fetch failed (try $i of $tries)" >&2
+        if [ "$i" -lt "$tries" ]; then sleep "$delay"; fi
+    done
     return 1
 }
 

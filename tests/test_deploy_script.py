@@ -64,6 +64,10 @@ case "$1" in
   rev-parse) echo "$STUB_OLD" ;;
   checkout) echo "${@: -1}" > "$state/head"; echo "git checkout ${@: -1}" >> "$state/log" ;;
   merge-base) [ "$STUB_ON_MAIN" = "1" ] ;;
+  fetch)
+    n="$(cat "$state/fetches" 2>/dev/null || echo 0)"
+    echo $((n + 1)) > "$state/fetches"
+    [ "$n" -ge "${STUB_FETCH_FAILS:-0}" ] ;;
 esac
 """
 CURL = '#!/usr/bin/env bash\n[ -f "$STUB_STATE/healthy" ]\n'
@@ -103,6 +107,7 @@ def server(tmp_path):
             sha=NEW,
             scheduler=False,
             beat=True,
+            fetch_fails=0,
         ):
             env = {
                 **os.environ,
@@ -114,6 +119,7 @@ def server(tmp_path):
                 "STUB_OLD_UP": old_up,
                 "STUB_BAD_BUILD_SHA": bad_build or "",
                 "STUB_ON_MAIN": "1" if on_main else "0",
+                "STUB_FETCH_FAILS": str(fetch_fails),
                 "STUB_SCHED": "1" if scheduler else "0",
                 "STUB_BEAT": "yes" if beat else "no",
             }
@@ -232,3 +238,17 @@ def test_a_commit_without_a_scheduler_is_not_asked_for_a_beat(server):
     result = server.deploy(scheduler=False)
     assert result.returncode == 0
     assert not [line for line in server.log if line.startswith("scheduler-beat-query")]
+
+
+def test_a_refused_fetch_is_tried_again_and_the_deploy_goes_through(server):
+    result = server.deploy(fetch_fails=2)
+    assert result.returncode == 0 and f"deployed {NEW}" in result.stdout
+    assert result.stderr.count("git fetch failed") == 2
+    assert server.head == NEW
+
+
+def test_a_fetch_that_never_works_changes_nothing_and_exits_128(server):
+    result = server.deploy(fetch_fails=99)
+    assert result.returncode == 128 and "nothing was changed" in result.stderr
+    assert result.stderr.count("git fetch failed") == 6
+    assert server.log == [] and server.head == OLD  # no checkout, no build, no `up`
