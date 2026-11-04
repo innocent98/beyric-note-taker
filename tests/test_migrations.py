@@ -655,7 +655,7 @@ def test_0014_adds_translations_and_the_default_language_and_downgrades_cleanly(
     engine.dispose()
 
 
-# ---- 0015 auto-join markers ----
+# ---- 0016 auto-join markers ----
 
 
 def _app_state_columns(engine) -> set[str]:
@@ -667,7 +667,7 @@ def _app_state_columns(engine) -> set[str]:
 
 def test_autojoin_marker_columns_round_trip_and_start_unset(scratch_url):
     cfg = alembic_config(scratch_url)
-    command.upgrade(cfg, "0014")
+    command.upgrade(cfg, "0015")
     engine = create_engine(scratch_url)
     assert "autojoin_started_at" not in _app_state_columns(engine)
     command.upgrade(cfg, "head")
@@ -675,6 +675,6 @@ def test_autojoin_marker_columns_round_trip_and_start_unset(scratch_url):
     assert _rows(engine, "select autojoin_started_at, autojoin_paused_since from app_state") == [
         (None, None)
     ]
-    command.downgrade(cfg, "0014")
+    command.downgrade(cfg, "0015")
     assert "autojoin_started_at" not in _app_state_columns(engine)
     engine.dispose()
