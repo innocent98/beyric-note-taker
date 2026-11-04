@@ -408,6 +408,40 @@ def test_calendar_migration_is_the_revision_after_0009():
     assert script.get_revision("0010").down_revision == "0009"
 
 
+# ---- 0012 last full sync ----
+
+
+def test_last_full_sync_column_round_trip_keeps_connections(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0011")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (id, email) values (9, 'c@example.test')"))
+        conn.execute(
+            text(
+                "insert into calendar_connections (user_id, provider, sync_token)"
+                " values (9, 'google', 'tok')"
+            )
+        )
+    assert "last_full_sync_at" not in {
+        c["name"] for c in inspect(engine).get_columns("calendar_connections")
+    }
+
+    command.upgrade(cfg, "head")
+    assert "last_full_sync_at" in {
+        c["name"] for c in inspect(engine).get_columns("calendar_connections")
+    }
+    # An existing connection has never been marked fully synced: its next sync is a full one.
+    assert _rows(engine, "select sync_token, last_full_sync_at from calendar_connections") == [
+        ("tok", None)
+    ]
+
+    command.downgrade(cfg, "0011")
+    assert _rows(engine, "select sync_token from calendar_connections") == [("tok",)]
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
 # ---- 0011 AI workspace W1 ----
 
 

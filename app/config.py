@@ -99,6 +99,10 @@ class Settings(BaseSettings):
     scheduler_dispatch_seconds: int = 10
     scheduler_sync_seconds: int = 60
 
+    # How long before a calendar meeting starts the bot is sent (spec 0a Q2: a bot needs about a
+    # minute to open the browser and ask to join). Not required; P0.8 measures the real number.
+    autojoin_lead_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

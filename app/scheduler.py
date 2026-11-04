@@ -238,6 +238,15 @@ def _close_quietly(conn: Connection) -> None:
         logger.warning("closing the leader connection failed (%s)", type(exc).__name__)
 
 
+def register_jobs(scheduler: Scheduler, settings) -> None:
+    """The jobs this process runs. Calendar jobs exist only while `CALENDAR_ENABLED` is true, and
+    their modules are not even imported before that."""
+    if settings.calendar_enabled:
+        from app.gcal_sync import register_calendar_sync
+
+        register_calendar_sync(scheduler, settings)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     settings = get_settings()
@@ -248,6 +257,7 @@ def main() -> None:
         dispatch_every=settings.scheduler_dispatch_seconds,
         sync_every=settings.scheduler_sync_seconds,
     )
+    register_jobs(scheduler, settings)
     signal.signal(signal.SIGTERM, lambda *_: scheduler.stop())
     signal.signal(signal.SIGINT, lambda *_: scheduler.stop())
     logger.info("scheduler started")

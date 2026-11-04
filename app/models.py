@@ -304,6 +304,9 @@ class CalendarConnection(Base):
     )
     # Null asks the sync loop for a first sync.
     last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When the whole window was last listed (not just the changes since the sync token); a full
+    # listing is due every 6 hours. Null = never: the next sync is a full one.
+    last_full_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sync_token: Mapped[str | None] = mapped_column(Text)
