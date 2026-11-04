@@ -820,7 +820,7 @@ def test_the_first_weeks_join_row_still_holding_the_code_cannot_block_the_next(
 
 def test_an_override_on_lets_a_stranger_invite_join(session, host, cal, ada):
     """Under rule `all` an unanswered invite from outside waits; the owner's switch is the way in
-    (the join row exists once they switch it on). The runner honours the switch, not only the rule."""
+    (the join row exists once they switch it on). The runner honours the switch, not the rule."""
     join = materialise(session, ada, cal)
     event = session.get(CalendarEvent, join.calendar_event_id)
     event.organizer_self, event.self_response, event.organizer_same_org = (
