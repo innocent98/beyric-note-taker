@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app import audio, usage, workspace
+from app import audio, mail, usage, workspace
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
@@ -580,8 +580,22 @@ def _step_notes(session: Session, meeting: Meeting, openai_client) -> bool:
     # Queued in the same commit as the notes, and worked by its own job (app/workspace.py): it can
     # fail and retry without touching the meeting, whose notes are the deliverable.
     workspace.mark_pending(meeting)
+    _queue_notes_mail(session, meeting)
     session.commit()
     return True
+
+
+def _queue_notes_mail(session: Session, meeting: Meeting) -> None:
+    """Queue the "notes ready" mail with the notes, in the same commit. Best effort: a failure here
+    is logged by type and rolls back only the mail (a savepoint), never the notes. The sender
+    decides at send time whether the mail still goes (`app/mail.py`)."""
+    try:
+        if not mail.is_configured(get_settings()):
+            return
+        with session.begin_nested():
+            mail.queue_notes_ready(session, meeting)
+    except Exception as exc:
+        logger.warning("meeting %s: notes mail not queued (%s)", meeting.id, type(exc).__name__)
 
 
 def _owner_deleted(session: Session, meeting: Meeting) -> bool:

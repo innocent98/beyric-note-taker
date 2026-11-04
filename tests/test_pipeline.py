@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
 from app import audio, pipeline
@@ -781,3 +782,52 @@ def test_an_owner_deleted_between_two_steps_stops_the_run_before_openai(session,
     from app.models import UsageEntry
 
     assert session.scalars(select(UsageEntry)).all() == []
+
+
+# ---- the notes-ready mail is queued with the notes ----
+
+
+@pytest.fixture
+def mail_on(monkeypatch, env):
+    monkeypatch.setattr(
+        pipeline, "get_settings", lambda: Settings(audio_dir=str(env / "a"), app_env="development")
+    )
+
+
+def _queued_mail(session):
+    from app.models import MailOutbox
+
+    return session.scalars(select(MailOutbox)).all()
+
+
+def test_a_ready_meeting_queues_one_notes_ready_mail_with_ids_only(session, meeting, mail_on):
+    run(session, meeting, FakeVexa(DONE))
+    [row] = _queued_mail(session)
+    assert (row.template, row.to_email, row.payload) == (
+        "notes_ready",
+        "owner@example.test",
+        {"meeting_id": meeting.id},
+    )
+
+
+def test_no_mail_is_queued_when_no_provider_is_configured(session, meeting, env):
+    run(session, meeting, FakeVexa(DONE))  # production settings, no key
+    assert meeting.status == "ready" and _queued_mail(session) == []
+
+
+def test_a_failed_meeting_queues_no_notes_mail(session, meeting, mail_on):
+    run(session, meeting, FakeVexa(VexaMeeting(status="failed")))
+    assert _queued_mail(session) == []
+
+
+def test_a_failure_while_queueing_never_fails_the_meeting(session, meeting, mail_on, monkeypatch):
+    from app import mail
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("ada@example.test leaked")
+
+    monkeypatch.setattr(mail, "queue_notes_ready", boom)
+    run(session, meeting, FakeVexa(DONE))
+    assert (meeting.status, meeting.step) == ("ready", "done")
+    assert meeting.notes and meeting.extraction_status == "pending"
+    assert _queued_mail(session) == []

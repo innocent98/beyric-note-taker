@@ -187,7 +187,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] D11, Translate (needs W7): language select, "Translating ..." and "Translated from ..." banners, Show original, default language in Settings, failed state (designer gap)
   - [ ] D12, Settings (needs W2, W7, W8, W9, W10): Tasks card, default language, sprints and reminders card, Slack and tracker cards
   - [ ] D13, meeting page details (needs W0.4 and W8): duration (`recorded_seconds`), participants (names from speaker labels), series, milestone
-  - [ ] D14, Emails in the designer's layout (needs W0.3): replace the plain mails (`Emails.dc.html` applies to all eight)
+  - [ ] D14, Emails in the designer's layout (W0.3 done 2026-11-04 for verify, reset, already registered, invite and Notes ready; open: Notes shared (W6), New tasks (W2), Team invite (W3), reminders (W8), Could not join (C14))
   - [ ] D15, template delete (needs `DELETE /api/templates/{id}`, not yet built, and a `template_in_use` refusal for a template still used by a meeting or the calendar setting; both are planned in the accounts spec, neither exists in code yet)
   - [ ] D16, shell leftovers: toast component, PWA basics
 - [x] W5, Download and export (AI workspace spec section 9; branch `feature/notes-export-w5`, 2026-11-03; SOP `docs/sop/2026-11-03-notes-export-w5.md`; FE guide `docs/fe-integration-guide-export.md` with 18 live captures; PR #48 open, not merged)
@@ -316,7 +316,16 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] ML1 Resend attachments and limits (W6)
   - [ ] TR1 French and Spanish with names (W7)
 - [x] W0.2 AI ledger and settings: `ai_runs`, `EXTRACT_MODEL`, prompt versions (2026-11-03, SOP `2026-11-03-ai-workspace-w1-extraction.md`)
-- [ ] W0.3 Mail upgrade
+- [x] W0.3 Mail upgrade (branch `feature/w03-mail-upgrade`, 2026-11-04; migration `0012`; SOP `2026-11-04-w03-mail-upgrade.md`; spike `docs/spike/resend-limits-2026-11-04.md`; PR open, not merged; no mail was sent live)
+  - [x] Designer layout for every mail, escaped blocks, http(s)-only buttons
+  - [x] `Message`: attachments (10 MB, PDF/Word/text), reply-to, headers, injection-proof fields
+  - [x] Ids-only payloads for notes templates, notes read at send time, nothing copied into `mail_outbox`
+  - [x] `mail_suppressions` (hash only) honoured at send time; `scripts/suppress_email.py`
+  - [x] Send-time checks (meeting, owner, setting), `skipped` status; per-recipient and daily caps
+  - [x] "Notes ready" mail queued with the notes, owner setting checked
+  - [ ] Real send with a PDF and Word attachment from the production domain; read the Resend plan (spike ML1 follow-up)
+  - [ ] Resend webhook (bounce, complaint) into `mail_suppressions`
+  - [ ] A setting that turns `notify_email` off (Settings screen) and an "Email preferences" link in the mails
 - [ ] W0.4 Team foundation (`visible_meetings()` replaces the owner filter in `app/workspace.py`)
 - [ ] W0.5 Meeting delete
 - [x] W1 Extraction, Decisions, Review (2026-11-03; migration `0011`; SOP `2026-11-03-ai-workspace-w1-extraction.md`; FE guide `docs/fe-integration-guide-ai-workspace.md`)
