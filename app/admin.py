@@ -108,15 +108,15 @@ def update_user(session: Session, user: User, changes: dict) -> User:
         )
     reactivating = changes.get("status") == "active" and user.status == "suspended"
     if reactivating:
-        # Joins ended by the suspension come back for meetings still inside their 15 minutes or
-        # ahead (the runner then judges each one afresh); ones already over stay ended.
+        # Joins ended by the suspension come back for meetings that have not started yet (the
+        # runner then judges each one afresh); one already under way or over stays ended.
         session.execute(
             update(ScheduledJoin)
             .where(
                 ScheduledJoin.user_id == user.id,
                 ScheduledJoin.state == "skipped",
                 ScheduledJoin.skip_reason == "account_suspended",
-                ScheduledJoin.deadline_at > datetime.now(UTC),
+                ScheduledJoin.starts_at > datetime.now(UTC),
             )
             .values(state="scheduled", skip_reason=None, attempts=0, rechecked_at=None)
         )

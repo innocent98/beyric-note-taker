@@ -80,8 +80,10 @@ RECHECK_BEFORE_START = timedelta(seconds=120)
 # scheduler was down for hours) is closed without telling anyone again: the news is old.
 STALE_AFTER = timedelta(hours=1)
 # One run starts no new row after this long (real time), so a host that hangs on every send cannot
-# hold the dispatch loop for minutes; the rest are due on the next tick.
-RUN_BUDGET_SECONDS = 45.0
+# hold the dispatch loop for minutes; the rest are due on the next tick. A row started just inside
+# the budget can still do a calendar re-check (about 20 s), a send (30 s) and a stop (30 s): the
+# scheduler's stop grace in compose.yaml (120 s) covers all of it.
+RUN_BUDGET_SECONDS = 20.0
 BATCH = 25
 
 DUE_STATES = ("scheduled", "dispatching", "no_capacity", "skipped")
@@ -99,9 +101,11 @@ RETRYABLE_SKIPS = ("hours_cap", "user_limit", "code_in_use")
 # Of those, these still end "not recorded" at the deadline; `hours_cap` ends `skipped` (the person
 # was told why).
 NOT_RECORDED_SKIPS = ("user_limit", "code_in_use")
-# A meeting of the owner's on the same code counts as started for this event when it was created at
-# or after the run time minus this (a paste a minute or two early, the lead, clock slack).
-STARTED_FOR_MARGIN = timedelta(minutes=2)
+# A meeting the owner PASTED (or started from instant-Meet: any meeting no join row points at) on
+# the same code counts as made for this event when it was created from this long before the start
+# until the event's end. It is told apart from an EARLIER calendar meeting in the same room by where
+# it came from (a join row points at the calendar ones), never by the clock alone.
+PASTE_WINDOW_BEFORE = timedelta(minutes=30)
 CRASH_TEXT = "The note taker hit a problem starting for this meeting. Trying again."
 CRASH_FINAL_TEXT = "Not recorded: something went wrong starting the note taker."
 
@@ -448,6 +452,13 @@ def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) ->
         _touch(join, now)  # an ended event: look again after the retry gap, not on every tick
         session.commit()
         return None
+    if _owner_bot_live_on_the_code(session, join):
+        # The owner's own bot is in that room right now (an earlier session that never left, or a
+        # paste): the room is being recorded, so no "not recorded" mail and no admin alert.
+        join.state, join.skip_reason = "skipped", "duplicate_meeting"
+        _touch(join, now)
+        session.commit()
+        return JoinOutcome(join.id, "skipped", "duplicate_meeting")
     join.state, join.skip_reason, join.last_error = "failed", "not_recorded", NOT_RECORDED_TEXT
     _touch(join, now)
     if now - join.deadline_at <= STALE_AFTER:
@@ -562,12 +573,16 @@ def _place(
     was taken before the
     placement lock (the order every code path uses), and `wait_seconds=0` keeps it: a wait would
     roll the lock away."""
-    if _started_for_this_event(session, join):
-        # The owner already has a meeting on this code made for this event (a pasted link a minute
-        # early, which they may have ended since). Final: never a bot into a meeting they chose or
-        # ended. Checked BEFORE the placement pre-flight, so the hours and limit checks cannot
-        # turn it into a retry.
+    if _pasted_meeting_for_this_event(session, join):
+        # The owner already made a meeting on this code for this event (a pasted link, in any
+        # status: they may have ended it since). Final: never a bot into a meeting they chose or
+        # ended. Checked BEFORE the placement pre-flight, so the hours and limit checks cannot turn
+        # it into a retry.
         return _end(session, join, "skipped", "duplicate_meeting", now)
+    if _another_live_join_on_the_code(session, join):
+        # Another of the owner's rows on this code is live (back-to-back slots in one room): this
+        # one waits; marking it `joined` or `no_capacity` too would break the one-live-join index.
+        return _wait_for_the_code(session, join, now)
     event = session.get(CalendarEvent, join.calendar_event_id) if join.calendar_event_id else None
     request = PlacementRequest(
         user_id=join.user_id,
@@ -616,10 +631,12 @@ def _place(
     return JoinOutcome(join_id, "joined", f"meeting {meeting.id}")
 
 
-def _started_for_this_event(session: Session, join: ScheduledJoin) -> bool:
-    """Whether the owner has a meeting, in ANY status, on this code, created at or after this
-    join's run time minus `STARTED_FOR_MARGIN`. One made earlier (the previous session in the same
-    room) does not count."""
+def _pasted_meeting_for_this_event(session: Session, join: ScheduledJoin) -> bool:
+    """Whether the owner has a meeting, in ANY status, on this code that no join row points at (a
+    pasted link or an instant-Meet one) created between `PASTE_WINDOW_BEFORE` before the start and
+    the event's end. A meeting a join row points at belongs to a calendar event, an earlier one in
+    the same room, and does not count."""
+    linked = select(ScheduledJoin.id).where(ScheduledJoin.meeting_id == Meeting.id).exists()
     return (
         session.scalar(
             select(Meeting.id)
@@ -627,12 +644,39 @@ def _started_for_this_event(session: Session, join: ScheduledJoin) -> bool:
                 Meeting.owner_user_id == join.user_id,
                 Meeting.platform == join.platform,
                 Meeting.native_id == join.native_id,
-                Meeting.created_at >= join.run_at - STARTED_FOR_MARGIN,
+                ~linked,
+                Meeting.created_at >= join.starts_at - PASTE_WINDOW_BEFORE,
+                Meeting.created_at <= join.ends_at,
             )
             .limit(1)
         )
         is not None
     )
+
+
+def _owner_bot_live_on_the_code(session: Session, join: ScheduledJoin) -> bool:
+    return (
+        session.scalar(
+            select(Meeting.id)
+            .where(
+                Meeting.owner_user_id == join.user_id,
+                Meeting.platform == join.platform,
+                Meeting.native_id == join.native_id,
+                Meeting.status == "bot_sent",
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _wait_for_the_code(session: Session, join: ScheduledJoin, now: datetime) -> JoinOutcome:
+    """`skipped/code_in_use`: retried after the gap until the deadline."""
+    join.attempts += 1
+    join.state, join.skip_reason = "skipped", "code_in_use"
+    _touch(join, now)
+    session.commit()
+    return JoinOutcome(join.id, "skipped", "code_in_use")
 
 
 def _relock(session: Session, join_id: int, now: datetime) -> ScheduledJoin | None:
@@ -713,6 +757,7 @@ def _refused(
 _SKIP_REASONS = {
     "hours_cap_reached": "hours_cap",
     "already_in_meeting": "code_in_use",
+    "code_busy": "code_in_use",
     "meeting_has_note_taker": "meeting_has_note_taker",
     "user_limit": "user_limit",
     "account_suspended": "account_suspended",

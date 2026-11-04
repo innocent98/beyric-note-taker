@@ -538,6 +538,7 @@ def test_the_owners_own_bot_already_in_the_meeting_skips_quietly(session, host, 
         platform="google_meet",
         native_id="abc-defg-hij",
         template_id=template.id,
+        created_at=at(-5),
     )
     session.add(pasted)
     session.commit()
@@ -1128,6 +1129,7 @@ def test_a_pasted_meeting_ended_before_the_retry_gets_no_second_bot(session, hos
         platform="google_meet",
         native_id="abc-defg-hij",
         template_id=ada.template.id,
+        created_at=at(-5),
     )
     session.add(pasted)
     session.commit()
@@ -1405,10 +1407,13 @@ def test_back_to_back_meetings_on_one_code_wait_for_the_first_and_then_join(
     assert state_of(session, join) == ("joined", None) and host.bots_sent == 1
 
 
-def test_a_back_to_back_meeting_whose_room_never_frees_ends_not_recorded_with_a_notice(
+def test_a_back_to_back_meeting_whose_earlier_bot_left_but_blocks_the_host_ends_not_recorded(
     session, host, cal, ada
 ):
-    earlier_meeting(session, ada.user, ada.template, created=at(-60))
+    """The earlier session ended (its notes are being written, which still holds the host's one
+    slot) and never freed it: the row waits as `no_capacity` and ends "not recorded" with the
+    notices. (A room still held by the owner's LIVE bot ends silently: see below.)"""
+    earlier_meeting(session, ada.user, ada.template, created=at(-60), status="processing")
     join = materialise(session, ada, cal)
     now = at(-1)
     while now <= at(15):
@@ -1498,10 +1503,13 @@ def test_the_scheduler_stop_grace_is_longer_than_a_tick_can_run():
     block = text[text.index("\n  scheduler:") :]
     block = block[: block.index("\n  web:")]
     grace = int(re.search(r"stop_grace_period:\s*(\d+)s", block).group(1))
-    assert grace > join_runner.RUN_BUDGET_SECONDS + SEND_DEADLINE_SECONDS
+    # a row started just inside the budget can still re-check the calendar (connect 5 s plus read
+    # 15 s), send (30 s) and stop an unrecorded bot (30 s)
+    worst = join_runner.RUN_BUDGET_SECONDS + 20 + SEND_DEADLINE_SECONDS + 30
+    assert grace > worst
 
 
-def test_a_bot_already_in_the_meeting_with_no_row_is_adopted_not_called_someone_elses(
+def test_a_live_bot_in_the_meeting_with_no_row_is_adopted_not_called_someone_elses(
     session, host, cal, ada
 ):
     """M3: a send killed after Vexa took the bot leaves a live bot and no row. The retry used to
@@ -1514,11 +1522,9 @@ def test_a_bot_already_in_the_meeting_with_no_row_is_adopted_not_called_someone_
     assert state_of(session, join) == ("joined", None)
     assert notes(session, "calendar.meeting_has_note_taker") == [] and host.stopped == []
     [meeting] = meetings(session)
-    assert (
-        meeting.vexa_meeting_id is None and meeting.completion_reason == placement.SEND_UNCONFIRMED
-    )
-    assert pipeline._settle_unconfirmed(session, meeting, host, at(0)) is True
-    assert meeting.vexa_meeting_id == "1"  # the worker pinned the orphan to its row
+    # adopted at once and pinned to Vexa's id: not a placeholder waiting for a grace period
+    assert meeting.vexa_meeting_id == "1" and meeting.completion_reason is None
+    assert pipeline.is_join_failure(meeting) is False
 
 
 def test_reactivating_a_suspended_account_brings_its_planned_joins_back(session, host, cal, ada):
@@ -1577,3 +1583,159 @@ def test_a_short_event_that_ended_is_not_picked_up_on_every_tick(session, host, 
     run(session, host, cal, at(6))  # the event is over now
     assert join_runner._due_ids(session, at(6, 10)) == []
     assert join_runner._due_ids(session, at(7, 5)) == [join.id]  # looked at again after the gap
+
+
+# ---- the third Opus review of #72 ----
+
+
+def paste(session, ada, *, created, status="bot_sent", code="abc-defg-hij"):
+    return earlier_meeting(
+        session, ada.user, ada.template, created=created, status=status, code=code
+    )
+
+
+def test_a_paste_ten_minutes_early_that_is_then_ended_never_gets_a_calendar_bot(
+    session, host, cal, ada
+):
+    """N1: the owner pastes the link at 09:50 for a 10:00 event and later presses End or Cancel.
+    A clock margin called that an earlier session and retried; the paste is for this event."""
+    pasted = paste(session, ada, created=at(-10))
+    join = materialise(session, ada, cal)
+    run(session, host, cal, at(-1))
+    assert state_of(session, join) == ("skipped", "duplicate_meeting")
+    pasted.status = "failed"  # Cancel: the meeting is failed at once
+    session.commit()
+    for minute in (0, 1, 5, 10):
+        run(session, host, cal, at(minute))
+    assert host.bots_sent == 0 and state_of(session, join) == ("skipped", "duplicate_meeting")
+
+
+def test_a_paste_ten_minutes_early_left_running_to_the_deadline_sends_no_mail_or_alert(
+    session, host, cal, ada
+):
+    make_user(session, "admin@example.test", admin=True)
+    paste(session, ada, created=at(-10))
+    join = materialise(session, ada, cal)
+    now = at(-1)
+    while now <= at(16):
+        run(session, host, cal, now)
+        now += timedelta(seconds=30)
+    assert state_of(session, join) == ("skipped", "duplicate_meeting")
+    assert notes(session) == [] and outbox(session) == [] and host.bots_sent == 0
+
+
+def test_back_to_back_calendar_events_on_one_code_never_look_like_a_paste(session, host, cal, ada):
+    """N1: the first event's bot is a calendar meeting (a join row points at it), however close its
+    start is to the second event's run time: the second waits, then joins."""
+    first = materialise(session, ada, cal, "first", start=at(-1, 40))
+    run(session, host, cal, at(-2, 40))  # the first event's bot goes in, a little late
+    assert state_of(session, first) == ("joined", None)
+    second = materialise(session, ada, cal, "second", start=T0 + timedelta(minutes=2))
+    run(session, host, cal, at(1))
+    assert state_of(session, second) == ("skipped", "code_in_use")
+    [live] = meetings(session)
+    live.status = "ready"
+    session.commit()
+    host.live.clear()
+    run(session, host, cal, at(2))
+    assert state_of(session, second) == ("joined", None) and host.bots_sent == 2
+
+
+def test_a_room_held_by_the_owners_live_bot_at_the_deadline_is_not_a_missed_meeting(
+    session, host, cal, ada
+):
+    """N1: an earlier session never left the room. The room is being recorded, so no "not
+    recorded" mail and no admin alert; the row just ends as a duplicate."""
+    make_user(session, "admin@example.test", admin=True)
+    earlier_meeting(session, ada.user, ada.template, created=at(-90))
+    join = materialise(session, ada, cal)
+    now = at(-1)
+    while now <= at(16):
+        run(session, host, cal, now)
+        now += timedelta(seconds=30)
+    assert state_of(session, join) == ("skipped", "duplicate_meeting")
+    assert notes(session) == [] and outbox(session) == []
+
+
+def test_a_leftover_bot_still_leaving_is_a_retry_not_an_adoption(session, host, cal, ada):
+    """N2: a cancelled meeting's bot is `stopping` for a few seconds. The calendar row used to
+    become a placeholder that failed after 60 s with the join completed and 14 minutes left."""
+    host.live[("google_meet", "abc-defg-hij")] = 7
+    host.statuses[("google_meet", "abc-defg-hij")] = "stopping"
+    join = materialise(session, ada, cal)
+    run(session, host, cal, at(-1))
+    assert state_of(session, join) == ("skipped", "code_in_use")
+    assert meetings(session) == [] and host.bots_sent == 0 and host.stopped == []
+    host.live.clear()  # the bot has left
+    run(session, host, cal, at(0))
+    assert state_of(session, join) == ("joined", None) and host.bots_sent == 1
+
+
+def test_a_live_bot_another_row_already_holds_is_never_adopted(session, host, cal, ada):
+    other = make_world(session, "ben@example.test")
+    held = Meeting(
+        owner_user_id=other.user.id,
+        url="https://meet.google.com/abc-defg-hij",
+        platform="google_meet",
+        native_id="abc-defg-hij",
+        template_id=other.template.id,
+        status="ready",
+        vexa_meeting_id="1",
+    )
+    session.add(held)
+    session.commit()
+    host.seed_live_bot("google_meet", "abc-defg-hij")  # Vexa's id 1: another row's recording
+    join = materialise(session, ada, cal)
+    run(session, host, cal, at(-1))
+    assert state_of(session, join) == ("skipped", "code_in_use")
+    assert [m.id for m in meetings(session)] == [held.id]
+
+
+def test_a_row_waiting_out_its_gap_on_the_same_code_stops_a_later_row_from_crashing(
+    session, host, cal, ada
+):
+    """N3: row A (no capacity, inside its gap) is a live join on the code; row B on the same code
+    must not be marked joined or `no_capacity` too (the one-live-join index): it waits."""
+    first = materialise(session, ada, cal, "first", start=T0, code="aaa-bbbb-ccc")
+    second = materialise(session, ada, cal, "second", start=at(10), code="aaa-bbbb-ccc")
+    first.state, first.attempts, first.updated_at = "no_capacity", 1, at(9, 50)
+    session.commit()
+    run(session, host, cal, at(9, 55))
+    assert state_of(session, second) == ("skipped", "code_in_use")
+    assert state_of(session, first) == ("no_capacity", None)
+    assert host.bots_sent == 0 and notes(session, "calendar.error") == []
+
+
+def test_a_row_waiting_for_the_room_follows_its_event_when_it_moves_later(session, host, cal, ada):
+    """A row retried as `code_in_use` used to stay put when its event moved later and ended
+    "not recorded" at the old deadline, the new time never joined."""
+    from app.gcal_sync import apply_batch
+
+    earlier = earlier_meeting(session, ada.user, ada.template, created=at(-90))
+    join = materialise(session, ada, cal)
+    run(session, host, cal, at(-1))
+    assert state_of(session, join) == ("skipped", "code_in_use")
+    moved = raw_event("evt-1", start=at(30))
+    cal.serve(moved)
+    apply_batch(session, ada.conn, batch(moved), ada.user_settings, now=at(1), settings=SETTINGS)
+    assert state_of(session, join) == ("scheduled", None)
+    earlier.status = "ready"
+    session.commit()
+    run(session, host, cal, at(16))  # past the old deadline: nothing is mailed
+    assert notes(session) == [] and outbox(session) == []
+    run(session, host, cal, at(29))
+    assert state_of(session, join) == ("joined", None)
+
+
+def test_a_meeting_that_has_already_started_is_not_revived_by_a_reactivation(
+    session, host, cal, ada
+):
+    """Review L-b: only meetings that have not started come back."""
+    from app import admin
+
+    make_user(session, "root@example.test", admin=True)
+    now = datetime.now(UTC)
+    under_way = materialise(session, ada, cal, "going", start=now - timedelta(minutes=5))
+    admin.update_user(session, ada.user, {"status": "suspended"})
+    admin.update_user(session, ada.user, {"status": "active"})
+    assert state_of(session, under_way) == ("skipped", "account_suspended")

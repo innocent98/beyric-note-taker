@@ -71,9 +71,10 @@ services:
       VEXA_BASE_URL: http://vexa:8056
     mem_limit: 256m
     restart: unless-stopped
-    # A dispatch tick can run up to RUN_BUDGET_SECONDS (45) plus one send (30) before it stops: the
-    # grace must be longer, or a kill between Vexa taking a bot and the commit leaves an orphan.
-    stop_grace_period: 90s
+    # A dispatch tick starts no row after RUN_BUDGET_SECONDS (20), and a row started just inside
+    # that can still do a calendar re-check (about 20), a send (30) and a stop (30): the grace
+    # must be longer, or a kill between Vexa taking a bot and the commit leaves an orphan.
+    stop_grace_period: 120s
     depends_on:
       db:
         condition: service_healthy

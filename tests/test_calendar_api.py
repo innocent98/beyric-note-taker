@@ -96,24 +96,36 @@ def test_it_is_dark_without_a_google_client(engine, google, fake_vexa, fake_open
 # ---- the operator's emergency stop shows ----
 
 
-def test_the_answer_says_when_auto_join_is_paused_by_the_operator(
-    engine, google, fake_vexa, fake_openai, owner, session
-):
-    paused = make_settings(
-        google_client_id="id.apps.example.test",
-        google_client_secret="s3cret",
-        calendar_enabled=True,
-        autojoin_enabled=False,
-        token_enc_key="K" * 43 + "=",
-    )
-    web = browser(build_app(engine, paused, google, fake_vexa, fake_openai))
-    connect_google(web, google)
+def test_the_answer_says_when_the_scheduler_recorded_that_auto_join_is_off(web, session, linked):
+    from app.models import AppState
+
+    state = session.get(AppState, 1) or AppState(id=1)
+    state.autojoin_paused_since = NOW
+    session.add(state)
+    session.commit()
     body = web.get(URL).json()
     assert body["auto_join_paused"] is True
     assert body["auto_join_paused_text"] == (
         "Auto-join is paused for now. The note taker is not joining meetings from your calendar."
     )
     assert web.put(URL + "/settings", json={"rule": "organizer"}).json()["auto_join_paused"] is True
+
+
+def test_the_web_processs_own_environment_does_not_decide_the_notice(
+    engine, google, fake_vexa, fake_openai, owner, session
+):
+    """`web` keeps the environment it started with: the scheduler's record is the only source, so
+    switching auto-join back on needs no restart of `web`."""
+    stale = make_settings(
+        google_client_id="id.apps.example.test",
+        google_client_secret="s3cret",
+        calendar_enabled=True,
+        autojoin_enabled=False,
+        token_enc_key="K" * 43 + "=",
+    )
+    web = browser(build_app(engine, stale, google, fake_vexa, fake_openai))
+    connect_google(web, google)
+    assert web.get(URL).json()["auto_join_paused"] is False
 
 
 def test_the_answer_is_not_paused_by_default(web, linked):

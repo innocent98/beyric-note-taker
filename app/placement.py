@@ -98,7 +98,8 @@ class PlacementRequest:
 
 class PlacementRefused(Exception):
     """No bot may be sent now. `code` is one of `hours_cap_reached`, `already_in_meeting`,
-    `meeting_has_note_taker`, `user_limit`, `bot_busy`, `account_suspended`; the caller words it
+    `meeting_has_note_taker`, `user_limit`, `bot_busy`, `account_suspended`, `code_busy` (a calendar
+    join found a bot still leaving the code); the caller words it
     for its own reader."""
 
     def __init__(
@@ -271,11 +272,11 @@ def place_bot(
         if not req.adopt_orphan:
             session.rollback()
             raise PlacementRefused("meeting_has_note_taker") from None
-        # ...or, for a calendar join (the pre-flight found no meeting of anyone on the code), our
-        # own orphan: keep it as an unconfirmed start; the worker adopts it or stops it after the
-        # grace.
-        logger.warning("a bot is in the meeting with no row for it: kept as an unconfirmed start")
-        vexa_id = None
+        # ...or, for a calendar join, our own orphan (a send killed between Vexa accepting the bot
+        # and the commit; the pre-flight found no meeting of anyone on the code). Look the bot up
+        # and adopt it only if it is arriving or live and no row holds its Vexa id; a leftover that
+        # is still leaving (a cancelled meeting's bot) is a retry, not an adoption.
+        vexa_id = _orphan_to_adopt(session, vexa, req)
     except VexaSendUncertain:  # it may be joining in a moment: keep the code, let the worker settle
         logger.warning("send_bot gave no clear answer: the meeting is kept as an unconfirmed start")
         vexa_id = None
@@ -311,6 +312,30 @@ def place_bot(
         raise
     commit_or_stop(session, vexa, platform=req.platform, native_id=req.native_id, vexa_id=vexa_id)
     return meeting
+
+
+def _orphan_to_adopt(session: Session, vexa: VexaClient, req: PlacementRequest) -> int:
+    """The Vexa id of the live bot on the code, or `PlacementRefused("code_busy")` (after a
+    rollback) when there is none to adopt: it is leaving, finished, unknown, or some row's."""
+    from app.pipeline import ADOPTABLE_STATES  # imports this module, so not at the top
+
+    try:
+        info = vexa.get_meeting(req.platform, req.native_id)
+    except VexaError:
+        info = None
+    if (
+        info is None
+        or info.status not in ADOPTABLE_STATES
+        or info.vexa_id is None
+        or session.scalar(
+            select(Meeting.id).where(Meeting.vexa_meeting_id == str(info.vexa_id)).limit(1)
+        )
+        is not None
+    ):
+        session.rollback()
+        raise PlacementRefused("code_busy")
+    logger.warning("a live bot with no row for it was adopted for a calendar join")
+    return info.vexa_id
 
 
 def commit_or_stop(

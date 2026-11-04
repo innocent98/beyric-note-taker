@@ -317,13 +317,10 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
     prefs = session.get(UserSettings, user.id)
     rule = prefs.auto_join_rule if prefs else "all"
     template_id = prefs.calendar_template_id if prefs else None
-    # Paused when this process's own setting says so, or when the scheduler (the process that
-    # sends the bots) has recorded that auto-join is off: restarting only the scheduler, as the
-    # runbook says, must show on the page too.
-    paused = (
-        not request.app.state.settings.autojoin_enabled
-        or session.scalar(select(AppState.autojoin_paused_since)) is not None
-    )
+    # Paused when the scheduler (the process that sends the bots) has recorded that auto-join is
+    # off. Read from the database only: `web` keeps the environment it was started with, and a
+    # restart of `scheduler` alone, as the runbook says, must be enough in both directions.
+    paused = session.scalar(select(AppState.autojoin_paused_since)) is not None
     paused_text = calendar_text.AUTO_JOIN_PAUSED_TEXT if paused else None
     if conn is None:
         return CalendarOut(
