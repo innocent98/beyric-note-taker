@@ -1,4 +1,4 @@
-"""Drive the email-preferences API and the two new in-app notices over real HTTP and save every
+"""Drive the email-preferences API and the skipped-mail notice over real HTTP and save every
 exchange for `docs/fe-integration-guide-pilot-accounts.md` (section 12).
 
     python scripts/capture_prelaunch_mail_api.py postgresql+psycopg://USER:PASS@HOST:PORT/postgres
@@ -8,8 +8,8 @@ migrations there, starts the real app under uvicorn, and signs in as a placehold
 exchange is written to `docs/fe-captures/prelaunch-mail-prefs/NN-name.json`.
 
 What is real: the app, auth, CSRF, validation, the database, migrations, serialisation, every
-error, the hourly sweep (`maintenance.run_hourly`, which makes the privacy notice) and the mail
-send loop (`mail.deliver_pending`, which skips a mail over the cap and tells the owner). What is
+error and the mail send loop (`mail.deliver_pending`, which skips a mail over the cap and tells
+the owner). What is
 not: the mailer (a recorder, no mail provider is called), and the meetings (inserted as the
 pipeline leaves them). Everyone in the files is a placeholder. Secrets are masked: CSRF tokens
 become `<csrf-A>`, cookies `<cookie>`.
@@ -48,7 +48,7 @@ from alembic.config import Config  # noqa: E402
 from sqlalchemy import create_engine, select, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app import accounts, mail, maintenance  # noqa: E402
+from app import accounts, mail  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import Meeting, User  # noqa: E402
@@ -159,8 +159,8 @@ def prepare_database() -> None:
 
 def run(base: str, engine, settings: Settings) -> None:
     with Session(engine) as session:
-        # An account made before the privacy update (no terms version recorded), with the
-        # settings row and templates every real account gets at sign-up.
+        # A placeholder account with the settings row and templates every real account gets at
+        # sign-up.
         user = User(
             email=ADA,
             name="Ada Example",
@@ -228,21 +228,7 @@ def run(base: str, engine, settings: Settings) -> None:
         "settings-read-still-on", "GET", "/api/settings/email", note="Unchanged by the refusals."
     )
 
-    # --- the privacy notice, made by the hourly sweep ---
     ada.call("notifications-before", "GET", "/api/notifications", note="Nothing yet.")
-    with Session(engine) as session:
-        maintenance.run_hourly(session, datetime.now(UTC))
-    ada.call(
-        "notifications-privacy-notice", "GET", "/api/notifications",
-        note="After the worker's hourly sweep: one notice, `kind` `legal.updated`.",
-    )  # fmt: skip
-    ada.call("session-unread-one", "GET", "/api/session", note="`unread_notifications` is 1.")
-    with Session(engine) as session:
-        maintenance.run_hourly(session, datetime.now(UTC) + timedelta(hours=1))
-    ada.call(
-        "notifications-after-second-sweep", "GET", "/api/notifications",
-        note="The next sweep adds nothing: still one.",
-    )  # fmt: skip
 
     # --- a notes mail over the per-recipient cap ---
     mailer = RecordingMailer()
@@ -271,7 +257,7 @@ def run(base: str, engine, settings: Settings) -> None:
         "notifications-cap-notice", "GET", "/api/notifications",
         note="The skipped mail is shown: `kind` `mail.recipient_cap`, `meeting_id` set.",
     )  # fmt: skip
-    ada.call("session-unread-two", "GET", "/api/session", note="`unread_notifications` is 2.")
+    ada.call("session-unread-one", "GET", "/api/session", note="`unread_notifications` is 1.")
     ada.call("notifications-read-all", "POST", "/api/notifications/read-all")
 
 

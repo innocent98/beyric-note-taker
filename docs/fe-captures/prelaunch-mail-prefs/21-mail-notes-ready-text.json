@@ -1,7 +1,0 @@
-{
-  "note": "The plain-text part of the mail that went. The footer ends with the Email preferences link: the same address for everyone, with no id or token in it.",
-  "content": {
-    "to": "ada@example.test",
-    "text": "Zoom 81234567890 · 04 Nov 2026, 10:53 UTC\n\nYour meeting notes are ready\n\nSummary\n\nThe team agreed to ship on Friday.\n\nDecisions\n\n- Ship on Friday.\n\nAction items\n\n- Ada to send the release note.\n\nOpen questions\n\n- Who pays for the pilot?\n\nView full notes:\nhttps://notes.example.test/meetings/1\n\nYou received this because you sent the note taker to this meeting.\nEmail preferences: https://notes.example.test/settings#email-preferences"
-  }
-}

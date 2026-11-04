@@ -21,7 +21,7 @@ vi.mock("@/lib/api/browser", () => ({
 const body = <T,>(file: string) => prelaunchCapture(file).response.body as T;
 const on = body<EmailPreferences>("06-settings-read-default.json");
 const off = body<EmailPreferences>("07-settings-turn-off.json");
-const notices = body<NoticeList>("22-notifications-cap-notice.json").notifications;
+const notices = body<NoticeList>("19-notifications-cap-notice.json").notifications;
 
 beforeEach(() => Object.values(mocks).forEach((fn) => fn.mockReset()));
 
@@ -71,19 +71,17 @@ describe("settings: email section", () => {
 });
 
 describe("notifications", () => {
-  it("lists the captured notices, newest first, with a link where there is somewhere to go", () => {
+  it("lists the captured notice with a link to its meeting", () => {
     render(<NotificationsView initial={notices} />);
     const rows = screen.getAllByRole("listitem");
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText("A notes email was not sent")).toBeTruthy();
     expect(within(rows[0]).getByRole("link", { name: "Open the meeting" }).getAttribute("href")).toBe("/meetings/2");
-    expect(within(rows[1]).getByText("We updated our Privacy Policy")).toBeTruthy();
-    expect(within(rows[1]).getByRole("link", { name: "Read the Privacy Policy" }).getAttribute("href")).toBe("/privacy");
-    expect(within(rows[1]).getAllByText("New")).toHaveLength(1);
+    expect(within(rows[0]).getAllByText("New")).toHaveLength(1);
   });
 
   it("marks everything read once the server says so", async () => {
-    mocks.readAll.mockResolvedValue(body("24-notifications-read-all.json"));
+    mocks.readAll.mockResolvedValue(body("21-notifications-read-all.json"));
     render(<NotificationsView initial={notices} />);
     await userEvent.click(screen.getByRole("button", { name: "Mark all as read" }));
     expect(mocks.readAll).toHaveBeenCalledTimes(1);
@@ -97,7 +95,7 @@ describe("notifications", () => {
     render(<NotificationsView initial={notices} />);
     await userEvent.click(screen.getByRole("button", { name: "Mark all as read" }));
     expect((await screen.findByRole("alert")).textContent).toBeTruthy();
-    expect(screen.getAllByText("New")).toHaveLength(2);
+    expect(screen.getAllByText("New")).toHaveLength(1);
   });
 
   it("says so when there are none", () => {

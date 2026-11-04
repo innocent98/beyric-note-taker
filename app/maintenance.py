@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, or_
 from sqlalchemy.orm import Session
 
-from app import accounts, legal_notice, mail
+from app import accounts, mail
 from app.models import AuthToken, CalendarEvent, Notification, OAuthFlow
 
 logger = logging.getLogger(__name__)
@@ -38,13 +38,7 @@ def sweep_auth_tokens(session: Session, now: datetime) -> None:
 
 def sweep_notifications(session: Session, now: datetime) -> None:
     """Notifications older than `NOTIFICATION_KEEP`, read or not. Commits."""
-    # The privacy notice is the record that an account was told (`legal_notice`): it stays.
-    session.execute(
-        delete(Notification).where(
-            Notification.created_at < now - NOTIFICATION_KEEP,
-            Notification.kind != legal_notice.KIND,
-        )
-    )
+    session.execute(delete(Notification).where(Notification.created_at < now - NOTIFICATION_KEEP))
     session.commit()
 
 
@@ -71,7 +65,6 @@ def run_hourly(session: Session, now: datetime) -> None:
         ("stale rows", lambda: _delete_stale_rows(session, now)),
         ("unverified accounts", lambda: accounts.sweep_unverified(session, now)),
         ("mail outbox", lambda: mail.sweep_outbox(session, now)),
-        ("privacy notice", lambda: legal_notice.announce(session, now)),
     ):
         try:
             part()

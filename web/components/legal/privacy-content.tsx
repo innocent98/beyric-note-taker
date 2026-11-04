@@ -118,7 +118,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <p>We use one strictly necessary cookie to keep you signed in and to protect forms against forgery. We do not use analytics or advertising cookies.</p>
 
       <h2 id="changes">Changes to this policy</h2>
-      <p>We may update this policy. If we make material changes, we will tell you by email or in the app before they take effect. The date at the top shows when it last changed.</p>
+      <p>We may update this policy from time to time. The date at the top shows when it last changed.</p>
 
       <h2 id="contact">Contact us</h2>
       <p>Beyrichq LTD, Lagos, Nigeria. Email: <a href="mailto:privacy@beyrictech.com">privacy@beyrictech.com</a>.</p>

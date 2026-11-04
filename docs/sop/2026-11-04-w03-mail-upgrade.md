@@ -42,7 +42,7 @@ The mail layer W2 (Tasks), W6 (Share) and W8 (reminders) will use: the designer'
 ## Follow-ups
 - Resend webhook for `email.bounced` and `email.complained` writing `mail_suppressions` (needs a signing secret and an unauthenticated route; Opus review); until then the script.
 - **Before sign-up opens for anyone but the owner (decided 2026-11-04, Adebayo: "go with your recommendations"): done in `docs/sop/2026-11-04-prelaunch-mail-legal-prefs.md`:**
-  - **Bump the privacy "Last updated" date and `TERMS_VERSION` and tell users:** done (2026-11-04; existing accounts get an in-app notification from the hourly sweep, re-acceptance rejected, reasons in that SOP).
+  - **Bump the privacy "Last updated" date and `TERMS_VERSION`:** done (2026-11-04). The policy's promise of notice was removed instead of kept: nobody is told when the policy changes (Adebayo's decision), and the old and new sentences are in that SOP.
   - **A way to turn notes-ready mail off and an "Email preferences" link in the mails:** done (`GET` and `PUT /api/settings/email`, a card on `/settings`, footer link).
   - **Show skipped mail:** `recipient_cap` is done (a warning notification to the meeting's owner). `opted_out` and `suppressed` are still silent.
 - W6 builds the "Notes shared with you" template on these pieces (guards for a revoked share, attachments from `export.build_file`, an opt-out that calls `mail.suppress(..., "unsubscribed")`), plus the per-account daily count.

@@ -7,10 +7,8 @@ import { errorMessage } from "@/lib/api/client";
 import type { Notice } from "@/lib/api/types";
 import { formatDay, formatTime } from "@/lib/format";
 
-// Where a notice points. The API has no link field: the page knows two kinds of target, the
-// meeting a notice is about and the privacy policy for the one that announces it.
+// Where a notice points. The API has no link field: the only target is the meeting a notice is about.
 export function noticeLink(notice: Notice): { href: string; label: string } | null {
-  if (notice.kind === "legal.updated") return { href: "/privacy", label: "Read the Privacy Policy" };
   if (notice.meeting_id !== null) return { href: `/meetings/${notice.meeting_id}`, label: "Open the meeting" };
   return null;
 }

@@ -173,7 +173,7 @@ const server = http.createServer(async (req, res) => {
     if (method === "DELETE") {
       return json(res, 200, { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null }, { "set-cookie": "session=; Path=/; Max-Age=0" });
     }
-    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: MOCK_USER, usage: { used_seconds: 0, cap_seconds: 18000 }, unread_notifications: 2 } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
+    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: MOCK_USER, usage: { used_seconds: 0, cap_seconds: 18000 }, unread_notifications: 1 } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
   }
   if (path.startsWith("/api/") && !loggedIn) {
     return json(res, 401, { error: { code: "not_authenticated", message: "Log in to continue." } });
@@ -193,8 +193,8 @@ const server = http.createServer(async (req, res) => {
     if (method === "PUT") notifyEmail = data?.notify_email === true;
     return json(res, 200, { notify_email: notifyEmail });
   }
-  if (path === "/api/notifications" && method === "GET") return json(res, 200, prelaunchBody("22-notifications-cap-notice"));
-  if (path === "/api/notifications/read-all") return json(res, 200, prelaunchBody("24-notifications-read-all"));
+  if (path === "/api/notifications" && method === "GET") return json(res, 200, prelaunchBody("19-notifications-cap-notice"));
+  if (path === "/api/notifications/read-all") return json(res, 200, prelaunchBody("21-notifications-read-all"));
   if (path === "/api/templates" && method === "GET") return json(res, 200, { templates });
   if (path === "/api/vocabulary" && method === "GET") return json(res, 200, { terms });
   if (path.startsWith("/api/")) return json(res, 200, {});
