@@ -350,7 +350,9 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] Regenerate `web/lib/api/schema.d.ts` (`npm run gen:api`) with the first screen
 - [ ] W2 gate: real-transcript review of the full extraction (`extract-v1`) by Adebayo, before W2 starts
   - [x] Review tool `scripts/extraction_review.py` (2026-11-04, `docs/sop/2026-11-04-extraction-review-tool.md`): one HTML page per run, transcript left, extracted items right, Right / Wrong / Partly per item
-  - [ ] Adebayo reviews "the myway meeting" and pastes his verdicts back (owner, due date and quote right?)
+  - [x] First real run (meeting 5, 2026-11-04) failed: `extract-v1` hit its 2,000 output token cap (`finish_reason=length`); tool updated to explain, retry once, `--max-output-tokens`, `--timeout`, `--list` (`docs/sop/2026-11-04-extraction-review-tool.md`)
+  - [ ] **Gate item, before W2 ships:** the product's full extraction must not use the 2,000 cap: size the budget to the bullets (about 1,500 + 200 per bullet, 4,000 to 16,000), drop `title` and shorten quotes, try lower reasoning effort, raise the 60 second limit, re-run the eval on an hour-long transcript with the real reasoning-token split
+  - [ ] Adebayo re-runs meeting 5 with `--max-output-tokens 8000` and judges the items and pastes his verdicts back (owner, due date and quote right?)
   - [ ] Go or no-go on `gpt-6-luna` for W2 decided from those verdicts (spec asks for five real meetings; one is the first step)
 - [ ] W2 Tasks (needs W1 and the gate above; Opus)
 - [ ] W5 Export, W3 Team, W4 Projects, W6 Share, W7 Translate, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
