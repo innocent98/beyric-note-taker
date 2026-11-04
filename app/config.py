@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     # the frontend to explain it first.
     google_app_verified: bool = False
     mail_from: str = "Beyric Note Taker <no-reply@beyrictech.com>"
+    # Caps on mail that is not sign-in mail (notes ready now; shares, tasks and reminders later).
+    # `mail_daily_cap`: once this many mails have gone since 00:00 UTC (the day Resend counts,
+    # account mail included) notes mail waits for the next day. 80 leaves room under the Free
+    # plan's 100 a day (spike ML1); raise it on a paid plan, 0 = no cap.
+    # `mail_recipient_daily_cap`: notes mails one address may get in 24 hours; more are skipped.
+    mail_daily_cap: int = 80
+    mail_recipient_daily_cap: int = 5
 
     # Hosts a pasted calendar link may point at, comma separated: an exact name, or `.suffix`
     # (every subdomain of it). Only an admin edits this, through the environment, never a user.

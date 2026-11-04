@@ -26,7 +26,8 @@ TOKEN_PURPOSES = ("verify_email", "reset_password", "waitlist_invite")
 OAUTH_PURPOSES = ("signin", "calendar", "meet_scope")
 WAITLIST_STATUSES = ("waiting", "invited", "joined", "removed")
 SEVERITIES = ("info", "warning", "error")
-MAIL_STATUSES = ("pending", "sent", "failed")
+MAIL_STATUSES = ("pending", "sent", "failed", "skipped")
+SUPPRESSION_REASONS = ("bounce", "complaint", "unsubscribed")
 AUTO_JOIN_RULES = ("all", "organizer", "none")
 INSTANT_MEET_MODES = ("events", "poll", "off")
 CONNECTION_PROVIDERS = ("google", "ics")
@@ -177,18 +178,44 @@ class Notification(Base):
 
 class MailOutbox(Base):
     __tablename__ = "mail_outbox"
-    __table_args__ = (CheckConstraint(_in("status", MAIL_STATUSES), name="ck_mail_outbox_status"),)
+    __table_args__ = (
+        CheckConstraint(_in("status", MAIL_STATUSES), name="ck_mail_outbox_status"),
+        # One notes-ready mail per meeting, however many workers or retries (the payload of a
+        # notes row keeps its ids when the row is done).
+        Index(
+            "uq_mail_outbox_notes_ready_meeting",
+            sa.text("(payload->>'meeting_id')"),
+            unique=True,
+            postgresql_where=sa.text("template = 'notes_ready'"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     to_email: Mapped[str] = mapped_column(String(254))
     template: Mapped[str] = mapped_column(String(64))
-    # Holds the link while pending; replaced by {} once sent.
+    # A link template holds its link here while pending; a notes template holds ids only (the
+    # notes are read at send time). Replaced by {} once the row is done.
     payload: Mapped[dict] = mapped_column(JSONB, default=dict, server_default="{}")
     status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
     attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MailSuppression(Base):
+    """An address no mail goes to (a bounce, a complaint, an unsubscribe), kept as the sha256 of
+    the lower-cased address only (`usage.email_hash`). Not removed when an account is deleted:
+    forgetting a complaint would let the next sign-up mail the address again."""
+
+    __tablename__ = "mail_suppressions"
+    __table_args__ = (
+        CheckConstraint(_in("reason", SUPPRESSION_REASONS), name="ck_mail_suppressions_reason"),
+    )
+
+    email_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    reason: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Template(Base):

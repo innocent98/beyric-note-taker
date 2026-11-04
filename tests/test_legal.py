@@ -48,7 +48,8 @@ def test_the_email_use_names_only_the_mail_that_is_sent(anon_client):
     page = text(anon_client, PRIVACY)
     assert (
         "To send service emails, such as account verification, password resets, waiting-list "
-        "invitations and notices that an address already has an account." in page
+        "invitations and notices that an address already has an account, and an email when the "
+        "notes of a meeting you sent the note taker to are ready." in page
     )
     assert "notices about meetings" not in page  # not sent yet: calendar auto-join is later
 
@@ -60,6 +61,8 @@ def test_the_retention_covers_unconfirmed_accounts_the_waiting_list_and_the_hour
     assert "An account whose email address is not confirmed within 48 hours is deleted." in page
     assert "Waiting list: your email address is kept until" in page
     assert "we keep only the number of recorded hours counted for it" in page
+    assert "Mail log: the address, kind and time of each email we send, without its content" in page
+    assert "we keep a one-way fingerprint of the address, and not the address itself" in page
 
 
 def test_the_terms_say_the_pilot_has_a_limited_number_of_accounts(anon_client):
@@ -81,9 +84,10 @@ def test_resend_is_named_as_a_recipient_with_what_it_receives(anon_client):
     page = text(anon_client, PRIVACY)
     assert (
         "Resend sends our service emails (account verification, password resets, waiting-list "
-        "invitations and notices that an address already has an account). It receives the email "
-        "address and, if given, the name on each of those emails, and their content, which "
-        "includes one-time links." in page
+        "invitations, notices that an address already has an account, and notes-ready emails). "
+        "It receives the email address and, if given, the name on each of those emails, and "
+        "their content, which includes one-time links and, in a notes-ready email, a short "
+        "extract of your notes (the summary, decisions, action items and open questions)." in page
     )
     assert "and Resend the email addresses and names it sends mail to" in page
 

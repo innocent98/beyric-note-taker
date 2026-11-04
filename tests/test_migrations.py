@@ -503,3 +503,47 @@ def test_ai_workspace_migration_round_trip(scratch_url):
 def test_ai_workspace_migration_follows_0010():
     script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
     assert script.get_revision("0011").down_revision == "0010"
+
+
+def test_0013_adds_suppressions_and_the_skipped_status_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    columns = {c["name"] for c in inspect(engine).get_columns("mail_suppressions")}
+    assert columns == {"email_hash", "reason", "created_at"}
+    with engine.begin() as conn:
+        conn.execute(
+            text("insert into mail_suppressions (email_hash, reason) values (:h, 'bounce')"),
+            {"h": "a" * 64},
+        )
+        conn.execute(
+            text(
+                "insert into mail_outbox (to_email, template, status) "
+                "values ('a@example.test', 'notes_ready', 'skipped')"
+            )
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text("insert into mail_suppressions (email_hash, reason) values ('b', 'spam')")
+        )
+    notes_ready = (
+        "insert into mail_outbox (to_email, template, payload) "
+        "values ('a@example.test', 'notes_ready', '{\"meeting_id\": 5}')"
+    )
+    with engine.begin() as conn:
+        conn.execute(text(notes_ready))
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text(notes_ready))  # one notes_ready mail per meeting
+    command.downgrade(cfg, "0012")
+    assert "mail_suppressions" not in inspect(engine).get_table_names()
+    statuses = _rows(engine, "select status from mail_outbox")
+    assert sorted(statuses) == [("failed",), ("pending",)]  # the skipped row became failed
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into mail_outbox (to_email, template, status) "
+                "values ('b@example.test', 'x', 'skipped')"
+            )
+        )
+    command.upgrade(cfg, "head")  # and up again
+    engine.dispose()

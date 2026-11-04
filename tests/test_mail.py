@@ -281,7 +281,7 @@ def test_the_worker_sends_due_mail_and_does_nothing_without_a_mailer(session, mo
 @pytest.mark.parametrize("name", ["Ada Lovelace", "O'Neil", "Zoë-Marie", "李雷"])
 def test_a_plain_name_is_used_in_the_greeting(name):
     message = mail.render("verify_email", {"link": LINK, "name": name}, "a@b.test", make_settings())
-    assert message.text.startswith(f"Hello {name},")
+    assert f"Hi {name}, " in message.text
 
 
 @pytest.mark.parametrize(
@@ -301,7 +301,7 @@ def test_a_name_that_is_not_just_a_name_is_dropped_from_the_greeting(name):
     message = mail.render(
         "waitlist_invite", {"link": LINK, "name": name}, "a@b.test", make_settings()
     )
-    assert message.text.startswith("Hello,\n\n")
+    assert "Hi " not in message.text
     assert "evil" not in message.text and "evil" not in message.html
 
 

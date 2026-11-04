@@ -187,7 +187,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] D11, Translate (needs W7): language select, "Translating ..." and "Translated from ..." banners, Show original, default language in Settings, failed state (designer gap)
   - [ ] D12, Settings (needs W2, W7, W8, W9, W10): Tasks card, default language, sprints and reminders card, Slack and tracker cards
   - [ ] D13, meeting page details (needs W0.4 and W8): duration (`recorded_seconds`), participants (names from speaker labels), series, milestone
-  - [ ] D14, Emails in the designer's layout (needs W0.3): replace the plain mails (`Emails.dc.html` applies to all eight)
+  - [ ] D14, Emails in the designer's layout (W0.3 done 2026-11-04 for verify, reset, already registered, invite and Notes ready; open: Notes shared (W6), New tasks (W2), Team invite (W3), reminders (W8), Could not join (C14))
   - [ ] D15, template delete (needs `DELETE /api/templates/{id}`, not yet built, and a `template_in_use` refusal for a template still used by a meeting or the calendar setting; both are planned in the accounts spec, neither exists in code yet)
   - [ ] D16, shell leftovers: toast component, PWA basics
 - [x] W5, Download and export (AI workspace spec section 9; branch `feature/notes-export-w5`, 2026-11-03; SOP `docs/sop/2026-11-03-notes-export-w5.md`; FE guide `docs/fe-integration-guide-export.md` with 18 live captures; PR #48 open, not merged)
@@ -254,6 +254,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
     - [x] Changes after the Opus review of the sign-up PR (2026-11-03; SOP table): deletion finds Vexa's recording by meeting id and cannot stall the worker, row lock between sign-up and confirmation, sign-in answers an unconfirmed account like a wrong password (no `email_not_verified`), unconfirmed accounts hold no place (confirmation re-checks room, cap of 100 unconfirmed, sweep from the last submission), no token or mail row without a mail provider and unsent mail scrubbed after an hour, Resend and administrator access in the privacy policy
     - [x] Changes after the second Opus review of the sign-up PR (2026-11-03; SOP table): the pipeline leaves a deleted owner's meetings alone, the purge defines "settled" for Vexa and gives up after 24 h with an admin alert (`users.deleted_at`), an invitation helps someone who already has an unconfirmed account, lock order in confirmation fixed, hourly jobs isolated, `delete_user.py` takes the admin lock, Resend's mails listed in the privacy policy
     - [ ] **Before sign-up is switched on for anyone:** a sign-up flood can become an outage (about 20 addresses x 5 an hour keep the 100-unconfirmed cap full and everyone gets 429; the at-cap clearing can evict a real person's pending account after an hour; no global cap on outgoing mail): add a global mail budget and a better flood defence
+    - [ ] **Before sign-up opens for anyone but the owner (W0.3, decided 2026-11-04):** bump the privacy "Last updated" date and `TERMS_VERSION` and tell users (the privacy text changed for notes-ready mail, the mail log and the do-not-mail list; the policy promises notice); add a Settings way to turn notes-ready mail off (`user_settings.notify_email`, on by default, owner only) and an "Email preferences" link in the mails; show mail skipped for the per-recipient cap (`recipient_cap`, a meeting's mail is lost silently today)
     - [ ] **Before sign-up opens:** the frontend pages the mail links open (`/verify-email`, `/reset-password`, `/signup?invite=`, `/pilot-full`, `/login?error=`) now exist on `feature/stream-d-auth-pages` (merge and deploy them first); Adebayo confirms a real verification mail is delivered, then turns `password_signup_enabled` on; a real Google round trip with a test account
 - [ ] Phase C, Google Calendar auto-join plus the ICS source (needs A6, A9, A13, A18 for most tasks)
   - [x] C1 migration for connections, events, scheduled joins (2026-11-03, `feature/phase-c-foundations`; migration `0010`, SOP `docs/sop/2026-11-03-phase-c-foundations.md`; open, not merged)
@@ -323,7 +324,16 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] ML1 Resend attachments and limits (W6)
   - [ ] TR1 French and Spanish with names (W7)
 - [x] W0.2 AI ledger and settings: `ai_runs`, `EXTRACT_MODEL`, prompt versions (2026-11-03, SOP `2026-11-03-ai-workspace-w1-extraction.md`)
-- [ ] W0.3 Mail upgrade
+- [x] W0.3 Mail upgrade (branch `feature/w03-mail-upgrade`, 2026-11-04; migration `0013`; SOP `2026-11-04-w03-mail-upgrade.md`; spike `docs/spike/resend-limits-2026-11-04.md`; PR open, not merged; no mail was sent live)
+  - [x] Designer layout for every mail, escaped blocks, http(s)-only buttons
+  - [x] `Message`: attachments (10 MB, PDF/Word/text), reply-to, headers, injection-proof fields
+  - [x] Ids-only payloads for notes templates, notes read at send time, nothing copied into `mail_outbox`
+  - [x] `mail_suppressions` (hash only) honoured at send time; `scripts/suppress_email.py`
+  - [x] Send-time checks (meeting, owner, setting), `skipped` status; per-recipient and daily caps
+  - [x] "Notes ready" mail queued with the notes, owner setting checked
+  - [ ] Real send with a PDF and Word attachment from the production domain; read the Resend plan (spike ML1 follow-up)
+  - [ ] Resend webhook (bounce, complaint) into `mail_suppressions`
+  - [ ] A setting that turns `notify_email` off (Settings screen) and an "Email preferences" link in the mails
 - [ ] W0.4 Team foundation (`visible_meetings()` replaces the owner filter in `app/workspace.py`)
 - [ ] W0.5 Meeting delete
 - [x] W1 Extraction, Decisions, Review (2026-11-03; migration `0011`; SOP `2026-11-03-ai-workspace-w1-extraction.md`; FE guide `docs/fe-integration-guide-ai-workspace.md`)
