@@ -165,6 +165,11 @@ def test_the_notes_mail_links_to_email_preferences_and_carries_only_ids(session,
     hrefs = [h.split('"')[0] for h in message.html.split('href="')[1:]]
     assert hrefs == [f"https://notes.example.test/meetings/{meeting.id}", prefs]
     assert ">Email preferences</a>" in message.html
+    # as in Emails.dc.html: the link ends the footer's own sentence, in the designer's slate
+    assert (
+        'You received this because you sent the note taker to this meeting. <a href="'
+        f'{prefs}" style="color:#5B6460">Email preferences</a>' in message.html
+    )
     # the link names no person, token or meeting: it is the same for every recipient
     assert str(meeting.id) not in prefs and owner.email not in message.html.split(prefs)[1]
 

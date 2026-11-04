@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 from app.mail_message import has_control
 
 INK, MUTED, FAINT = "#141917", "#6E7772", "#8A928E"
+SLATE = "#5B6460"  # the footer link, as in Emails.dc.html
 BRAND, PAGE, CARD_LINE = "#0E6B5E", "#F6F7F6", "#E3E7E5"
 FONT = "system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 
@@ -136,14 +137,12 @@ def render_html(
     footer_link: tuple[str, str] | None = None,
 ) -> str:
     """A whole HTML document for `blocks`, with `footer` under the card and, when given,
-    `footer_link` (a label and an absolute http(s) URL) under it."""
+    `footer_link` (a label and an absolute http(s) URL) at the end of the footer line."""
     link = ""
     if footer_link is not None:
         label, url = footer_link
-        link = (
-            f'<br><a href="{esc(check_url(url))}" style="color:{FAINT};text-decoration:underline">'
-            f"{esc(label)}</a>"
-        )
+        # On the footer's own line, after a space, in the designer's slate (Emails.dc.html).
+        link = f' <a href="{esc(check_url(url))}" style="color:{SLATE}">{esc(label)}</a>'
     body = "".join(_block_html(b) for b in blocks)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'

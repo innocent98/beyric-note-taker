@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "@/components/app/shell";
 import { NotificationsView, noticeLink } from "@/components/app/notifications-view";
-import { SettingsView } from "@/components/app/settings-view";
+import { EmailSettingsSection } from "@/components/app/email-settings-section";
 import { ApiError, createApi } from "@/lib/api/client";
 import type { EmailPreferences, NoticeList } from "@/lib/api/types";
 import { prelaunchCapture } from "./helpers";
@@ -25,40 +25,47 @@ const notices = body<NoticeList>("22-notifications-cap-notice.json").notificatio
 
 beforeEach(() => Object.values(mocks).forEach((fn) => fn.mockReset()));
 
-describe("settings: email preferences", () => {
-  it("shows the switch as the server has it, under the id the mail's link points at", () => {
-    const { container } = render(<SettingsView email={on} />);
-    expect(container.querySelector("#email-preferences")).not.toBeNull();
-    expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
-    const box = screen.getByLabelText(/Email me when my meeting notes are ready/) as HTMLInputElement;
-    expect(box.checked).toBe(true);
+describe("settings: email section", () => {
+  const SWITCH = { name: "Email me when my notes are ready" };
+
+  it("shows the switch as the server has it, in a section the mail's link points at", () => {
+    const { container } = render(<EmailSettingsSection email={on} />);
+    expect(container.querySelector("section#email-preferences")).not.toBeNull();
+    expect(screen.getByText("Email")).toBeTruthy();
+    expect(screen.getByRole("switch", SWITCH).getAttribute("aria-checked")).toBe("true");
     expect(screen.getByText(/Emails about signing in and your password are always sent/)).toBeTruthy();
   });
 
   it("turns it off and says it was saved, using the value the server answered", async () => {
     mocks.setEmail.mockResolvedValue(off);
-    render(<SettingsView email={on} />);
-    const box = screen.getByLabelText(/Email me when my meeting notes are ready/) as HTMLInputElement;
-    await userEvent.click(box);
+    render(<EmailSettingsSection email={on} />);
+    await userEvent.click(screen.getByRole("switch", SWITCH));
     expect(mocks.setEmail).toHaveBeenCalledWith(false);
     expect(await screen.findByText("Saved.")).toBeTruthy();
-    expect(box.checked).toBe(false);
+    expect(screen.getByRole("switch", SWITCH).getAttribute("aria-checked")).toBe("false");
   });
 
-  it("puts the switch back and shows the error when the save fails", async () => {
+  it("turns it back on with the opposite value", async () => {
+    mocks.setEmail.mockResolvedValue(on);
+    render(<EmailSettingsSection email={off} />);
+    await userEvent.click(screen.getByRole("switch", SWITCH));
+    expect(mocks.setEmail).toHaveBeenCalledWith(true);
+    await vi.waitFor(() => expect(screen.getByRole("switch", SWITCH).getAttribute("aria-checked")).toBe("true"));
+  });
+
+  it("leaves the switch where it was and shows the error when the save fails", async () => {
     mocks.setEmail.mockRejectedValue(new ApiError(0, "network_error", "Could not reach the server. Check your connection and try again."));
-    render(<SettingsView email={on} />);
-    const box = screen.getByLabelText(/Email me when my meeting notes are ready/) as HTMLInputElement;
-    await userEvent.click(box);
+    render(<EmailSettingsSection email={on} />);
+    await userEvent.click(screen.getByRole("switch", SWITCH));
     expect((await screen.findByRole("alert")).textContent).toContain("Could not reach the server");
-    expect(box.checked).toBe(true);
+    expect(screen.getByRole("switch", SWITCH).getAttribute("aria-checked")).toBe("true");
     expect(screen.queryByText("Saved.")).toBeNull();
   });
 
   it("does not show a stale CSRF failure as a raw code", async () => {
     mocks.setEmail.mockRejectedValue(new ApiError(403, "csrf_rejected", "Missing or wrong X-CSRF-Token header."));
-    render(<SettingsView email={on} />);
-    await userEvent.click(screen.getByLabelText(/Email me when my meeting notes are ready/));
+    render(<EmailSettingsSection email={on} />);
+    await userEvent.click(screen.getByRole("switch", SWITCH));
     expect((await screen.findByRole("alert")).textContent).toBe("Your session changed. Reload the page and try again.");
   });
 });
