@@ -924,7 +924,7 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/39-meeting-create-vexa-down.json`_
 
-> **Out of date, rewrite queued for C17:** since C11 (`docs/sop/2026-11-04-phase-c-place-bot.md`) `bot_already_active` no longer exists and the limit setting is `BOT_MAX_LOCAL`. Create can now also answer 409 `user_limit` and 409 `already_in_meeting`; a user's own running meeting is a plain `bot_busy` while the limit is 1. The wording below is the old behaviour and is not re-captured yet.
+> **Out of date, rewrite queued for C17:** since C11 (`docs/sop/2026-11-04-phase-c-place-bot.md`) `bot_already_active` no longer exists and the limit setting is `BOT_MAX_LOCAL`. Create can now also answer 409 `user_limit`, 409 `already_in_meeting` and 409 `meeting_has_note_taker` ("A note taker is already in this meeting.", another user's bot is in that meeting); a user's own running meeting is a plain `bot_busy` while the limit is 1. The wording below is the old behaviour and is not re-captured yet.
 
 **One bot at a time per user, and a limit across users.** While one of the caller's own meetings is `bot_sent` or `processing` the server refuses with 409 `bot_already_active` (it names the caller's own meeting only). When the note taker is full with someone else's meeting it refuses with 409 `bot_busy` ("The note taker is busy right now. Try again in a few minutes."), which says nothing about whose; the limit is `MAX_ACTIVE_BOTS`, default 1 (captured in `docs/fe-captures/pilot-accounts/93-wendy-create-meeting-busy.json`). Show either `message` as it comes.
 

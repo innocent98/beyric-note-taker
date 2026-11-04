@@ -749,7 +749,46 @@ def test_create_refuses_a_third_bot_for_one_user(api, app, template, session, fa
     add_meeting(session, template, status="bot_sent", native_id="aaa-aaaa-aaa")
     add_meeting(session, template, status="bot_sent", native_id="bbb-bbbb-bbb")
     error = error_of(create(api, template), 409, "user_limit")
-    assert error["message"] == "You already have 2 bots in meetings. Wait for one to finish first."
+    assert error["message"] == (
+        "You have reached the most bots allowed at once (2). Wait for one to finish first."
+    )
+    assert fake_vexa.sent == []
+
+
+def test_user_limit_zero_does_not_claim_the_user_has_bots(api, app, template, fake_vexa):
+    app.state.settings.user_bot_limit = 0
+    response = create(api, template)
+    error = error_of(response, 409, "user_limit")
+    assert "0 bots" not in error["message"] and "already have" not in error["message"]
+    assert fake_vexa.sent == []
+
+
+def test_user_limit_met_by_a_meeting_being_written_up_does_not_say_it_is_in_a_meeting(
+    api, app, template, session, fake_vexa
+):
+    """`processing` meetings count toward the limit, but the bot has left them: the words must not
+    call them bots in meetings."""
+    app.state.settings.bot_max_local = 3
+    add_meeting(session, template, status="processing", step="notes", native_id="aaa-aaaa-aaa")
+    add_meeting(session, template, status="processing", step="audio", native_id="bbb-bbbb-bbb")
+    error = error_of(create(api, template), 409, "user_limit")
+    assert "in meetings" not in error["message"]
+    assert "2" in error["message"]  # it still says what the limit is
+
+
+def test_create_into_a_meeting_another_user_has_a_note_taker_in_is_the_neutral_refusal(
+    api, app, template, session, fake_vexa, stranger
+):
+    app.state.settings.bot_max_local = 3
+    theirs = Template(owner_user_id=stranger.id, name="Their template", instructions="x")
+    session.add(theirs)
+    session.commit()
+    add_meeting(session, theirs, status="bot_sent", title="Board call")  # the same code as MEET
+    response = create(api, template)
+    error = error_of(response, 409, "meeting_has_note_taker")
+    assert error["message"] == "A note taker is already in this meeting."
+    for leak in (stranger.email, "Board", "Their template"):
+        assert leak not in response.text
     assert fake_vexa.sent == []
 
 
@@ -780,7 +819,7 @@ def test_a_bot_busy_with_someone_elses_meeting_is_a_neutral_busy(
     theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
     session.add(theirs)
     session.commit()
-    add_meeting(session, theirs, status="bot_sent")
+    add_meeting(session, theirs, status="bot_sent", native_id="zzz-zzzz-zzz")
     error = error_of(create(api, template), 409, "bot_busy")
     assert error["message"] == "The note taker is busy right now. Try again in a few minutes."
     assert fake_vexa.sent == []
@@ -793,7 +832,7 @@ def test_someone_elses_meeting_does_not_block_when_there_is_room(
     theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
     session.add(theirs)
     session.commit()
-    add_meeting(session, theirs, status="bot_sent")
+    add_meeting(session, theirs, status="bot_sent", native_id="zzz-zzzz-zzz")
     assert create(api, template).status_code == 201
 
 

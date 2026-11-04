@@ -16,15 +16,15 @@ from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
-from app import audio, mail, usage, workspace
+from app import audio, mail, placement, usage, workspace
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
 from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
-from app.vexa import VexaClient, VexaError, VexaMeeting
+from app.vexa import VexaClient, VexaError, VexaMeeting, VexaSendUncertain
 
 logger = logging.getLogger(__name__)
 
@@ -269,6 +269,8 @@ def send_again(meeting: Meeting, vexa) -> bool:
         vexa_id = vexa.send_bot(meeting.url)
     except VexaError as exc:
         logger.warning("meeting %s: resending the bot failed (%s)", meeting.id, type(exc).__name__)
+        if isinstance(exc, VexaSendUncertain):  # Vexa may have taken it: do not leave it running
+            placement.stop_unrecorded_bot(vexa, meeting.platform, meeting.native_id)
         return False
     meeting.join_attempts += 1
     meeting.status, meeting.step, meeting.failure_reason = "bot_sent", "waiting", None
@@ -358,6 +360,9 @@ def _join_problem(meeting: Meeting, info: VexaMeeting, now: datetime) -> str | N
 def _stop_bot(meeting: Meeting, vexa) -> bool:
     """Ask Vexa to take the bot out. False when it could not, until it has been tried
     `STOP_TRIES` times: then it is given up on, so Vexa being down cannot hold the meeting."""
+    session = object_session(meeting)
+    if session is not None and not placement.may_stop_bot(session, meeting):
+        return True  # the bot at this code is a newer meeting's, not this one's: nothing to stop
     try:
         vexa.stop_bot(meeting.platform, meeting.native_id)  # keyed by platform and meeting code
         return True

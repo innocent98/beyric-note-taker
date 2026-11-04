@@ -509,6 +509,61 @@ def test_a_manual_send_that_cannot_reach_vexa_keeps_the_meeting_failed(session, 
     assert meeting.status == "failed" and meeting.failure_reason == pipeline.REASON_JOIN_REFUSED
 
 
+def test_a_manual_send_whose_commit_fails_stops_the_bot_it_just_sent(session, meeting, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    refused_meeting(session, meeting, ago=10 * MINUTE)
+    vexa = FakeVexa()
+
+    def boom(*args, **kwargs):
+        raise OperationalError("commit", {}, Exception("connection lost"))
+
+    monkeypatch.setattr(session, "commit", boom)
+    with pytest.raises(OperationalError):
+        retry_meeting(session, meeting, vexa)
+    monkeypatch.undo()
+    assert vexa.stopped == [CODE]  # the new bot has no row that knows it: it is taken out
+    session.refresh(meeting)
+    assert meeting.status == "failed"
+
+
+def test_a_manual_send_that_times_out_after_vexa_took_the_bot_stops_it(session, meeting):
+    from app.vexa import VexaSendUncertain
+
+    refused_meeting(session, meeting, ago=10 * MINUTE)
+    vexa = FakeVexa()
+    vexa.send_error = VexaSendUncertain("read timed out")
+    with pytest.raises(Refused) as caught:
+        retry_meeting(session, meeting, vexa)
+    assert caught.value.status == 502
+    assert vexa.stopped == [CODE]
+    assert meeting.status == "failed"
+
+
+def test_the_worker_does_not_stop_a_bot_that_belongs_to_another_users_newer_meeting(
+    session, meeting
+):
+    from tests.test_web import make_user
+
+    stranger = make_user(session, "stranger@example.test")
+    theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
+    session.add(theirs)
+    session.flush()
+    session.add(
+        Meeting(
+            owner_user_id=stranger.id,
+            url=meeting.url,
+            platform=meeting.platform,
+            native_id=meeting.native_id,
+            template_id=theirs.id,
+        )  # a newer meeting on the same code: the bot there is theirs
+    )
+    session.commit()
+    vexa = FakeVexa()
+    assert pipeline._stop_bot(meeting, vexa) is True
+    assert getattr(vexa, "stopped", []) == []
+
+
 def test_a_manual_send_respects_the_hours_cap(session, meeting, owner):
     from app.models import UsageEntry, User
     from app.usage import email_hash

@@ -1,6 +1,7 @@
 """Client for the self-hosted Vexa meeting-bot API."""
 
 import re
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,17 @@ MEET_PATH = re.compile(r"^/([a-z]{3}-[a-z]{4}-[a-z]{3})/?$")
 
 class VexaError(Exception):
     """HTTP failure or connection problem talking to Vexa. Treat as retryable."""
+
+
+class VexaDuplicateBot(VexaError):
+    """Vexa refused a bot because the meeting already has one (HTTP 409; assumed, not yet captured
+    from a live host). There is no bot of ours to stop: the one there belongs to someone else."""
+
+
+class VexaSendUncertain(VexaError):
+    """`send_bot` did not get a clear answer: the request timed out, the connection broke, the
+    deadline ran out, or Vexa said yes in a body we could not read. The bot MAY be in the meeting,
+    so the caller must stop it (by meeting code) rather than assume nothing was sent."""
 
 
 class VexaNotFound(VexaError):
@@ -118,20 +130,50 @@ def _optional_int(container: dict, key: str) -> int | None:
     return value
 
 
+def _within(seconds: float, call):
+    """Run `call()` and give its result, or raise `TimeoutError` once `seconds` have gone by. The
+    call runs in a worker thread the caller stops waiting for at the limit (as `ics_fetch` does):
+    httpx has no limit on the whole call, only per phase."""
+    box: dict[str, Any] = {}
+
+    def run() -> None:
+        try:
+            box["value"] = call()
+        except BaseException as exc:  # handed to the caller, which re-raises it
+            box["error"] = exc
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(seconds)
+    if worker.is_alive():
+        raise TimeoutError("took longer than the deadline")
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
+# `send_bot` is held across by the placement lock, and httpx's timeout is per phase (connect,
+# write, each read), so a host that trickles bytes could keep one send going for minutes. This is
+# the whole-call limit; the lock, and the database connection under it, are never held longer.
+SEND_DEADLINE_SECONDS = 30.0
+SEND_CONNECT_SECONDS = 5.0
+
+
 class VexaClient:
-    def __init__(self, timeout: float = 30.0) -> None:
+    def __init__(self, timeout: float = 30.0, send_deadline: float = SEND_DEADLINE_SECONDS) -> None:
         settings = get_settings()
         self._base_url = settings.vexa_base_url.rstrip("/")
         self._headers = {"X-API-Key": settings.vexa_api_key}
         self._bot_name = settings.bot_name
         self._left_alone_seconds = settings.bot_left_alone_seconds
         self._timeout = timeout
+        self._send_deadline = send_deadline
 
-    def _client(self) -> httpx.Client:
+    def _client(self, connect_timeout: float | None = None) -> httpx.Client:
         return httpx.Client(
             base_url=self._base_url,
             headers=self._headers,
-            timeout=self._timeout,
+            timeout=httpx.Timeout(self._timeout, connect=connect_timeout or self._timeout),
             follow_redirects=True,
         )
 
@@ -142,12 +184,21 @@ class VexaClient:
             # Milliseconds, a positive integer: Vexa answers 422 to anything else.
             payload["automatic_leave"] = {"max_time_left_alone": self._left_alone_seconds * 1000}
         try:
-            with self._client() as client:
-                response = client.post("/bots", json=payload)
-                response.raise_for_status()
-                return int(response.json()["id"])
-        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            return _within(self._send_deadline, lambda: self._post_bot(payload))
+        except httpx.HTTPStatusError as exc:  # Vexa answered, and said no: nothing was started
+            if exc.response.status_code == 409:
+                raise VexaDuplicateBot(
+                    "send_bot refused: a bot is already in that meeting"
+                ) from exc
             raise VexaError(f"send_bot failed: {exc}") from exc
+        except (httpx.HTTPError, KeyError, TypeError, ValueError, TimeoutError) as exc:
+            raise VexaSendUncertain(f"send_bot failed: {exc}") from exc
+
+    def _post_bot(self, payload: dict[str, Any]) -> int:
+        with self._client(connect_timeout=SEND_CONNECT_SECONDS) as client:
+            response = client.post("/bots", json=payload)
+            response.raise_for_status()
+            return int(response.json()["id"])
 
     def get_meeting(self, platform: str, native_id: str) -> VexaMeeting:
         """Look a meeting up by platform and meeting code. A reused link can match an older

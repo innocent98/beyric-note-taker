@@ -3298,7 +3298,7 @@
         ]
       },
       "post": {
-        "description": "Send the bot to a Google Meet or Zoom link, through the same placement as every other way a\nbot is sent. 403 `hours_cap_reached` once the account has used its recorded hours. 409 for the\nrest: `user_limit` (the account already has its most bots on meetings), `already_in_meeting`\n(a bot of the account's is already in that meeting) and `bot_busy` (the note taker is full;\nthe text never says whose meeting holds it). 502 `bot_send_failed` when the bot host did not\ntake the bot.",
+        "description": "Send the bot to a Google Meet or Zoom link, through the same placement as every other way a\nbot is sent. 403 `hours_cap_reached` once the account has used its recorded hours. 409 for the\nrest: `user_limit` (the account is at the most bots allowed at once), `already_in_meeting` (a\nbot of the account's is already in that meeting), `meeting_has_note_taker` (another account's\nbot is in that meeting; the text names nobody) and `bot_busy` (the note taker is full, or a\nplacement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`\nwhen the bot host did not take the bot.",
         "operationId": "create_meeting",
         "requestBody": {
           "content": {

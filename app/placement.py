@@ -10,20 +10,27 @@ Pre-flight, in this order, each refusing with a `PlacementRefused` code:
 1. `hours_cap_reached`: the user has used their recorded hours (`app/usage.py`'s gate).
 2. `user_limit`: the user already has `user_bot_limit` bots on meetings.
 3. `already_in_meeting`: the user already has a bot in this meeting (same platform and code).
-   Per user on purpose: a second account in the same meeting gets its own bot until C12 decides
-   how sharing works, and one user can never block another's join by registering a link first.
-4. `bot_busy`: the host is full. Says nothing about whose meeting holds it, and there is no queue:
+4. `meeting_has_note_taker`: another user's bot is in this meeting. Vexa (one API key) keeps one
+   bot per meeting code, so a second account cannot get its own; sharing waits for C12 or
+   per-user keys. Neutral on purpose: no user, no meeting id, no hint of who.
+5. `bot_busy`: the host is full. Says nothing about whose meeting holds it, and there is no queue:
    a queued meeting is an unrecorded meeting. The caller (a person, or the C12 runner) decides
    what to do with the refusal.
 
 Whether the user's calendar connection is still good is the caller's check: a pasted link has no
 connection.
 
-Locking. The checks and the send run under `pg_advisory_xact_lock(PLACEMENT_LOCK, host)`, taken
-first and held until the meeting row is committed (or the transaction is rolled back), so two
-requests can never both read the one free slot. The lock is held across `send_bot` on purpose (a
-send is bounded by the client's 30 s timeout), which also means a waiter waits at most that long
-plus a margin (`LOCK_WAIT_SECONDS`) and then answers `bot_busy` instead of hanging.
+Locking. The checks and the send run under `pg_try_advisory_xact_lock(PLACEMENT_LOCK, host)`,
+taken first and held until the meeting row is committed (or the transaction is rolled back), so two
+requests can never both read the one free slot. A request that finds the lock taken answers
+`bot_busy` AT ONCE instead of waiting: a waiter would hold a pooled database connection and an open
+transaction for as long as the holder's send, and a handful of them would starve every other
+endpoint. The holder is bounded too: `VexaClient.send_bot` has a total deadline
+(`app.vexa.SEND_DEADLINE_SECONDS`).
+
+When a send may have reached the host (a timeout, a lost answer), the bot is stopped by meeting code
+BEFORE the lock is let go. Stopping by code is only safe while no other placement can use the code,
+and the pre-flight check made sure no live meeting of any user has it.
 
 A caller that holds a row lock must take it before calling in, never after: nothing here ever
 waits for a row while holding the placement lock, which keeps the order row -> placement everywhere
@@ -35,13 +42,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import func, select, text
-from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app import usage
 from app.config import Settings, get_settings
 from app.models import MEETING_SOURCES, Meeting, Template, User, UserSettings
-from app.vexa import VexaClient, VexaError
+from app.vexa import VexaClient, VexaDuplicateBot, VexaError, VexaSendUncertain
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +55,6 @@ logger = logging.getLogger(__name__)
 # two-int form; the second is the host id.
 PLACEMENT_LOCK = 6004
 LOCAL_HOST_ID = 1
-# `VexaClient` gives a send 30 s. A request waits for the lock a little longer than that, so it
-# gets through behind one slow send, and no longer: a stuck holder cannot hang the waiters.
-LOCK_WAIT_SECONDS = 35.0
-LOCK_NOT_AVAILABLE = "55P03"
 # A bot counts against the user limit and the host's capacity from the moment it is sent until the
 # meeting is over for the pipeline too, as before placement existed (`processing` still counts).
 # The duplicate check is narrower: once the bot has left (`processing`), the same code is free.
@@ -72,7 +74,7 @@ class PlacementRequest:
 
 class PlacementRefused(Exception):
     """No bot may be sent now. `code` is one of `hours_cap_reached`, `already_in_meeting`,
-    `user_limit`, `bot_busy`; the caller words it for its own reader."""
+    `meeting_has_note_taker`, `user_limit`, `bot_busy`; the caller words it for its own reader."""
 
     def __init__(
         self, code: str, *, cap_seconds: int | None = None, limit: int | None = None
@@ -84,19 +86,13 @@ class PlacementRefused(Exception):
 
 
 def _take_lock(session: Session) -> None:
-    """Wait for the placement lock, at most `LOCK_WAIT_SECONDS`, else `bot_busy`."""
-    try:
-        session.execute(text(f"set local lock_timeout = '{int(LOCK_WAIT_SECONDS * 1000)}ms'"))
-        session.execute(
-            text("select pg_advisory_xact_lock(cast(:key as int), cast(:host as int))"),
-            {"key": PLACEMENT_LOCK, "host": LOCAL_HOST_ID},
-        )
-    except OperationalError as exc:
-        session.rollback()
-        if getattr(exc.orig, "sqlstate", None) != LOCK_NOT_AVAILABLE:
-            raise
-        logger.warning("placement lock not free after %s s", LOCK_WAIT_SECONDS)
-        raise PlacementRefused("bot_busy") from None
+    """Take the placement lock or answer `bot_busy` at once (never wait for it)."""
+    got = session.scalar(
+        text("select pg_try_advisory_xact_lock(cast(:key as int), cast(:host as int))"),
+        {"key": PLACEMENT_LOCK, "host": LOCAL_HOST_ID},
+    )
+    if not got:
+        raise PlacementRefused("bot_busy")
 
 
 def reserve_slot(
@@ -142,6 +138,17 @@ def reserve_slot(
     if already is not None:
         raise PlacementRefused("already_in_meeting")
 
+    if session.scalar(
+        select(Meeting.id)
+        .where(
+            Meeting.platform == platform,
+            Meeting.native_id == native_id,
+            Meeting.status == IN_THE_CALL,
+        )
+        .limit(1)
+    ):
+        raise PlacementRefused("meeting_has_note_taker")  # someone else's: the own check ran first
+
     busy = session.scalar(select(func.count(Meeting.id)).where(Meeting.status.in_(HOLDS_A_SLOT)))
     if busy >= settings.bot_max_local:
         raise PlacementRefused("bot_busy")
@@ -183,8 +190,9 @@ def place_bot(
     """Send a bot to `req.meeting_url` and record the meeting, or raise `PlacementRefused`.
 
     Commits (the meeting row and the lock leave together). A `VexaError` from the send is raised
-    after a rollback: no meeting exists and the slot is free again. If recording the meeting fails
-    after the bot was sent, the bot is stopped, best effort, and the failure is raised."""
+    after a rollback: no meeting exists and the slot is free again. If the send may have reached
+    the host without an answer (`VexaSendUncertain`), or recording the meeting fails after a
+    send, the bot is stopped, best effort, before the failure is raised."""
     user, template_id = _resolve(session, req)
     try:
         reserve_slot(
@@ -200,7 +208,14 @@ def place_bot(
         raise
     try:
         vexa_id = vexa.send_bot(req.meeting_url)
-    except BaseException:  # a VexaError, or anything else: no meeting exists, free the slot
+    except VexaDuplicateBot:  # a bot that is not ours is there (another host, a race)
+        session.rollback()
+        raise PlacementRefused("meeting_has_note_taker") from None
+    except VexaSendUncertain:  # it may have been taken: stop it while the lock is still ours
+        stop_unrecorded_bot(vexa, req.platform, req.native_id)
+        session.rollback()
+        raise
+    except BaseException:  # the host said no, or anything else: no meeting, free the slot
         session.rollback()
         raise
     meeting = Meeting(
@@ -216,21 +231,74 @@ def place_bot(
     try:
         session.add(meeting)
         session.flush()
-        session.commit()
     except BaseException:
+        stop_unrecorded_bot(vexa, req.platform, req.native_id)  # before the lock is let go
         session.rollback()
-        _stop_unrecorded_bot(vexa, req)
         raise
+    commit_or_stop(session, vexa, platform=req.platform, native_id=req.native_id, vexa_id=vexa_id)
     return meeting
 
 
-def _stop_unrecorded_bot(vexa: VexaClient, req: PlacementRequest) -> None:
+def commit_or_stop(
+    session: Session, vexa: VexaClient, *, platform: str, native_id: str, vexa_id: int
+) -> None:
+    """Commit a meeting row that points at the bot `vexa_id`. If the commit fails, roll back and
+    stop that bot unless the row did land after all (a lost answer to a commit that succeeded):
+    that bot is a recorded one and stopping it would throw a meeting away."""
+    try:
+        session.commit()
+    except BaseException:
+        session.rollback()
+        if not _is_recorded(session, platform, native_id, vexa_id):
+            stop_unrecorded_bot(vexa, platform, native_id)
+        raise
+
+
+def _is_recorded(session: Session, platform: str, native_id: str, vexa_id: int) -> bool:
+    try:
+        return (
+            session.scalar(
+                select(Meeting.id)
+                .where(
+                    Meeting.platform == platform,
+                    Meeting.native_id == native_id,
+                    Meeting.vexa_meeting_id == str(vexa_id),
+                )
+                .limit(1)
+            )
+            is not None
+        )
+    except Exception:  # cannot tell: an unrecorded bot is worse than a stopped recorded one
+        session.rollback()
+        return False
+
+
+def stop_unrecorded_bot(vexa: VexaClient, platform: str, native_id: str) -> None:
     """The bot is in a meeting the database has no row for. Take it out; if that fails too the
     bot stays until Vexa's own limits end it, which is logged for an operator."""
     try:
-        vexa.stop_bot(req.platform, req.native_id)
+        vexa.stop_bot(platform, native_id)
     except (VexaError, ValueError) as exc:
         logger.error(
             "a bot was sent but its meeting could not be saved, and it could not be stopped (%s)",
             type(exc).__name__,
         )
+
+
+def may_stop_bot(session: Session, meeting: Meeting) -> bool:
+    """Whether stopping the bot at this meeting's code takes out THIS meeting's bot.
+
+    `stop_bot` is keyed by platform and meeting code alone, and Vexa keeps one bot per code, so
+    whichever bot is there goes. If another meeting row also has a live bot on the code, the bot
+    there is that row's (Vexa let it in only after ours was gone, or it was sent later): a stop for
+    this meeting must not run. This meeting owns the bot only if no other live row on the code is
+    newer (or, when this one is not live itself, if there is no other live row at all)."""
+    other = select(Meeting.id).where(
+        Meeting.platform == meeting.platform,
+        Meeting.native_id == meeting.native_id,
+        Meeting.status == IN_THE_CALL,
+        Meeting.id != meeting.id,
+    )
+    if meeting.status == IN_THE_CALL:
+        other = other.where(Meeting.id > meeting.id)
+    return session.scalar(other.limit(1)) is None

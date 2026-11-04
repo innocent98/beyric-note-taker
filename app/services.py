@@ -402,11 +402,20 @@ def placement_refusal(exc: PlacementRefused) -> Refused:
             "already_in_meeting",
             "A note taker is already in that meeting for you. Wait for it to finish first.",
         )
+    if exc.code == "meeting_has_note_taker":
+        return Refused(409, "meeting_has_note_taker", "A note taker is already in this meeting.")
     if exc.code == "user_limit":
+        # Meetings being written up count toward the limit too, so this never says how many bots
+        # are "in meetings"; with the limit at 0 the account is simply not taking new ones.
+        if not exc.limit:
+            return Refused(
+                409, "user_limit", "New bots are not available for your account right now."
+            )
         return Refused(
             409,
             "user_limit",
-            f"You already have {exc.limit} bots in meetings. Wait for one to finish first.",
+            f"You have reached the most bots allowed at once ({exc.limit}). "
+            "Wait for one to finish first.",
         )
     return Refused(409, "bot_busy", "The note taker is busy right now. Try again in a few minutes.")
 
@@ -526,6 +535,9 @@ def _lock_meeting(session: Session, meeting: Meeting) -> Meeting:
 def _stop_bot_or_refuse(session: Session, vexa, meeting: Meeting) -> None:
     """Ask Vexa to take the bot out, or roll back and refuse with a plain 502 (the message never
     carries Vexa's own text; a meeting code the client will not send is the same failure)."""
+    if not placement.may_stop_bot(session, meeting):
+        logger.info("meeting %s: the bot at its code is a newer meeting's, left alone", meeting.id)
+        return  # this meeting's own bot is already gone; its owner carries on
     try:
         vexa.stop_bot(meeting.platform, meeting.native_id)
     except (VexaError, ValueError) as exc:
@@ -666,7 +678,14 @@ def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Mee
         session.rollback()
         raise _send_failed()
     locked.started_polling_at = now
-    session.commit()
+    # If the commit fails the new bot has no row that knows it: it is stopped (`commit_or_stop`).
+    placement.commit_or_stop(
+        session,
+        vexa,
+        platform=locked.platform,
+        native_id=locked.native_id,
+        vexa_id=int(locked.vexa_meeting_id),
+    )
     return locked
 
 

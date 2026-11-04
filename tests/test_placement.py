@@ -10,22 +10,22 @@ meeting gets its own bot until C12 decides sharing. That test is therefore split
 `..._same_user_...` (refused) and `..._other_user_...` (not refused). Every other plan name is kept.
 """
 
-import inspect
 import threading
 import time
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from app import placement
+from app import placement, services, vexa
 from app.models import Meeting, Template, UsageEntry
 from app.placement import PlacementRefused, PlacementRequest, place_bot
 from app.usage import email_hash
-from app.vexa import VexaClient, VexaError
+from app.vexa import VexaError, VexaSendUncertain
 from tests.fakes.vexa_host import FakeVexaHost, unreachable
+from tests.test_pipeline import FakeVexa
 from tests.test_web import make_settings, make_user
 
 NOW = datetime(2026, 11, 4, 10, 0, tzinfo=UTC)
@@ -228,13 +228,45 @@ def test_same_code_by_same_user_is_already_in_meeting(session, host, ada, ada_te
     assert host.bots_sent == 0
 
 
-def test_same_code_by_other_user_gets_its_own_bot_until_sharing_is_decided(
+def test_same_code_by_other_user_is_meeting_has_note_taker(
+    session, host, ada, ada_template, ben, ben_template
+):
+    """With one shared Vexa key there is one bot per meeting code, so a second account in a meeting
+    that already has a note taker cannot get its own (it is the plan's
+    `..._other_user_is_already_in_meeting`, with a neutral code that names nobody). Sharing waits
+    for C12 or per-user keys."""
+    add_live(session, ada, ada_template, CODE)
+    assert refusal_code(session, host, request_for(ben, ben_template), bot_max_local=3) == (
+        "meeting_has_note_taker"
+    )
+    assert host.bots_sent == 0  # the host was never asked
+
+
+def test_the_neutral_refusal_carries_nothing_about_the_other_user(
     session, host, ada, ada_template, ben, ben_template
 ):
     add_live(session, ada, ada_template, CODE)
-    meeting = place(session, host, request_for(ben, ben_template), bot_max_local=3)
-    assert meeting.owner_user_id == ben.id
-    assert host.bots_sent == 1  # one bot each; C12 decides whether the second should share
+    with pytest.raises(PlacementRefused) as caught:
+        place(session, host, request_for(ben, ben_template), bot_max_local=3)
+    shown = repr(vars(caught.value)) + str(caught.value)
+    for leak in ("ada", str(ada.id), url_of(CODE)):
+        assert leak not in shown
+
+
+def test_vexa_refusing_a_second_bot_for_the_code_is_meeting_has_note_taker_and_stops_nothing(
+    engine, session, host, ben, ben_template
+):
+    """A bot is in the meeting that our database does not know about (another host, a race). The
+    host says no: that is the neutral refusal, the slot is free, and the stop that follows a
+    failed save must NOT run, because the bot there is not ours."""
+    host.seed_live_bot("google_meet", CODE)
+    assert refusal_code(session, host, request_for(ben, ben_template), bot_max_local=3) == (
+        "meeting_has_note_taker"
+    )
+    assert host.stopped == [] and host.bots_sent == 0
+    assert host.live == {("google_meet", CODE): 1}  # the other bot is still there
+    assert session.scalars(select(Meeting)).first() is None
+    assert lock_is_free(engine)
 
 
 def test_recurring_code_is_free_again_once_previous_meeting_left_bot_sent(
@@ -305,16 +337,12 @@ def test_a_full_note_taker_is_bot_busy_whoever_holds_it(
     )
 
 
-def test_lock_wait_is_bounded_by_the_send_timeout(
-    engine, session, host, ada, ada_template, monkeypatch
-):
-    # The longest a request waits for the lock is the longest a send can take, plus a margin.
-    send_timeout = inspect.signature(VexaClient).parameters["timeout"].default
-    assert placement.LOCK_WAIT_SECONDS > send_timeout
-    assert placement.LOCK_WAIT_SECONDS <= send_timeout + 15
-
-    monkeypatch.setattr(placement, "LOCK_WAIT_SECONDS", 0.5)
-    with engine.connect() as holder:  # a request that is stuck inside its send
+def test_lock_wait_is_bounded_by_the_send_timeout(engine, session, host, ada, ada_template):
+    """There is no wait to bound any more: a request that finds the lock taken answers `bot_busy`
+    at once (a waiter would hold a database connection for as long as the holder's send). What is
+    bounded is the holder: its send has a total deadline."""
+    assert vexa.SEND_DEADLINE_SECONDS <= 30
+    with engine.connect() as holder:  # a request that is inside its send
         holder.execute(
             text("select pg_advisory_xact_lock(cast(:a as int), cast(:b as int))"),
             {"a": placement.PLACEMENT_LOCK, "b": placement.LOCAL_HOST_ID},
@@ -324,9 +352,53 @@ def test_lock_wait_is_bounded_by_the_send_timeout(
         waited = time.monotonic() - began
         holder.rollback()
     assert code == "bot_busy"  # never hangs, never names the other request
-    assert 0.4 <= waited < 5
+    assert waited < 1
     assert host.bots_sent == 0
     assert session.scalars(select(Meeting)).first() is None
+
+
+def test_many_concurrent_requests_do_not_exhaust_the_pool_and_are_answered_at_once(
+    engine, session, host, ada, ada_template
+):
+    """Twelve requests at once against a pool of two connections. One places (its send takes 1.5
+    s); the other eleven must be told `bot_busy` straight away, not queue for the lock holding a
+    connection each, which would starve every other endpoint."""
+    host.send_delay = 1.5
+    small = create_engine(engine.url, pool_size=2, max_overflow=0, pool_timeout=5)
+    settings = make_settings(bot_max_local=1)
+    start = threading.Barrier(12)
+    outcomes: list = []  # (what happened, seconds it took)
+
+    def request(n):
+        with Session(small, expire_on_commit=False) as own:
+            start.wait()
+            began = time.monotonic()
+            try:
+                result = place_bot(
+                    own,
+                    host,
+                    request_for(ada, ada_template, f"aaa-aaaa-aa{chr(97 + n)}"),
+                    now=NOW,
+                    settings=settings,
+                )
+            except Exception as error:  # a pool timeout shows up here too
+                result = error
+            outcomes.append((result, time.monotonic() - began))
+
+    threads = [threading.Thread(target=request, args=(n,)) for n in range(12)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    small.dispose()
+
+    refused = [(r, took) for r, took in outcomes if isinstance(r, PlacementRefused)]
+    placed = [r for r, _ in outcomes if isinstance(r, Meeting)]
+    other = [r for r, _ in outcomes if not isinstance(r, Meeting | PlacementRefused)]
+    assert other == [], other  # no pool timeout, no surprise
+    assert len(placed) == 1 and len(refused) == 11
+    assert all(r.code == "bot_busy" for r, _ in refused)
+    assert max(took for _, took in refused) < 1.2  # answered while the one send was still going
 
 
 # ---- what a placed meeting carries ----
@@ -384,6 +456,110 @@ def test_an_unknown_user_is_an_error_before_anything_is_sent(session, host, ada_
     with pytest.raises(ValueError):
         place(session, host, ghost)
     assert host.bots_sent == 0
+
+
+# ---- when the send is uncertain, or saving fails ----
+
+
+def test_a_send_that_times_out_after_the_host_took_the_bot_stops_it_and_frees_the_slot(
+    engine, session, host, ada, ada_template
+):
+    host.timeout_after_accept = True
+    with pytest.raises(VexaSendUncertain):
+        place(session, host, request_for(ada, ada_template))
+    assert host.stopped == [("google_meet", CODE)]  # the bot the host may be running is taken out
+    assert host.live == {}
+    assert session.scalars(select(Meeting)).first() is None
+    assert lock_is_free(engine)
+    host.timeout_after_accept = False  # and the next request is not over the limit
+    assert place(session, host, request_for(ada, ada_template)).status == "bot_sent"
+
+
+def test_a_send_the_host_refused_is_not_followed_by_a_stop(session, host, ada, ada_template):
+    host.error = unreachable()  # a plain VexaError: the host said no, there is no bot to stop
+    with pytest.raises(VexaError):
+        place(session, host, request_for(ada, ada_template))
+    assert host.stopped == []
+
+
+def test_the_stop_runs_while_the_lock_is_still_held(engine, session, host, ada, ada_template):
+    """Stopping by meeting code is only safe while no other placement can use the code, so the stop
+    comes before the lock is let go."""
+    host.timeout_after_accept = True
+    seen = []
+    real_stop = host.stop_bot
+    host.stop_bot = lambda platform, code: (
+        seen.append(lock_is_free(engine)),
+        real_stop(platform, code),
+    )
+    with pytest.raises(VexaSendUncertain):
+        place(session, host, request_for(ada, ada_template))
+    assert seen == [False]
+
+
+def test_a_commit_that_failed_after_it_landed_does_not_stop_the_recorded_bot(
+    session, host, ada, ada_template, monkeypatch
+):
+    real_commit = session.commit
+
+    def commit_then_lose_the_answer(*args, **kwargs):
+        real_commit()
+        raise OperationalError("commit", {}, Exception("connection reset"))
+
+    monkeypatch.setattr(session, "commit", commit_then_lose_the_answer)
+    with pytest.raises(OperationalError):
+        place(session, host, request_for(ada, ada_template))
+    monkeypatch.undo()
+    assert host.stopped == []  # the meeting is in the database: its bot is a recorded one
+    assert session.scalars(select(Meeting)).one().vexa_meeting_id == "1001"
+
+
+# ---- stopping only a bot that is ours ----
+
+
+def add_row(session, user, template, code, *, status):
+    return add_live(session, user, template, code, status=status)
+
+
+def test_cancel_does_not_stop_a_bot_that_belongs_to_a_newer_meeting_of_another_user(
+    session, ada, ada_template, ben, ben_template
+):
+    older = add_row(session, ada, ada_template, CODE, status="bot_sent")  # its bot already left
+    add_row(session, ben, ben_template, CODE, status="bot_sent")  # the bot there is Ben's
+    vexa_host = FakeVexa()
+    services.cancel_meeting(session, vexa_host, older)
+    assert getattr(vexa_host, "stopped", []) == []
+    assert older.status == "failed"
+
+
+def test_end_does_not_stop_a_bot_that_belongs_to_a_newer_meeting_of_another_user(
+    session, ada, ada_template, ben, ben_template
+):
+    older = add_row(session, ada, ada_template, CODE, status="bot_sent")
+    older.completion_reason = "active"
+    session.commit()
+    add_row(session, ben, ben_template, CODE, status="bot_sent")
+    vexa_host = FakeVexa()
+    services.end_meeting(session, vexa_host, older)
+    assert getattr(vexa_host, "stopped", []) == []
+
+
+def test_cancel_and_end_still_stop_the_users_own_newest_bot(session, ada, ada_template):
+    mine = add_row(session, ada, ada_template, CODE, status="bot_sent")
+    vexa_host = FakeVexa()
+    services.cancel_meeting(session, vexa_host, mine)
+    assert vexa_host.stopped == [("google_meet", CODE)]
+
+
+def test_a_meeting_that_is_not_live_cannot_stop_the_bot_of_a_live_one(
+    session, ada, ada_template, ben, ben_template
+):
+    done = add_row(session, ada, ada_template, CODE, status="failed")
+    add_row(session, ben, ben_template, CODE, status="bot_sent")
+    assert not placement.may_stop_bot(session, done)
+    assert placement.may_stop_bot(
+        session, add_row(session, ada, ada_template, "zzz-zzzz-zzz", status="failed")
+    )
 
 
 # ---- settings ----

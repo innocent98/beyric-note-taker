@@ -1,11 +1,19 @@
 import json
+import time
 from pathlib import Path
 
 import httpx
 import pytest
 
 from app.config import get_settings
-from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError, parse_meeting_url
+from app.vexa import (
+    UnsupportedMeetingUrl,
+    VexaClient,
+    VexaDuplicateBot,
+    VexaError,
+    VexaSendUncertain,
+    parse_meeting_url,
+)
 
 FIXTURE = Path(__file__).parent / "fixtures" / "vexa_transcript.json"
 
@@ -157,6 +165,60 @@ def test_send_bot_http_error(httpx_mock, client):
     httpx_mock.add_response(method="POST", url="http://vexa.test/bots", status_code=500)
     with pytest.raises(VexaError):
         client.send_bot("https://meet.google.com/abc-defg-hij")
+
+
+def test_send_bot_refused_by_the_host_is_a_plain_error_not_an_uncertain_one(httpx_mock, client):
+    httpx_mock.add_response(method="POST", url="http://vexa.test/bots", status_code=422)
+    with pytest.raises(VexaError) as caught:
+        client.send_bot("https://meet.google.com/abc-defg-hij")
+    assert not isinstance(caught.value, VexaSendUncertain | VexaDuplicateBot)
+
+
+def test_send_bot_conflict_is_a_duplicate_bot(httpx_mock, client):
+    """Assumed, not captured: Vexa answers 409 when the meeting already has a bot."""
+    httpx_mock.add_response(method="POST", url="http://vexa.test/bots", status_code=409)
+    with pytest.raises(VexaDuplicateBot):
+        client.send_bot("https://meet.google.com/abc-defg-hij")
+
+
+@pytest.mark.parametrize(
+    "error", [httpx.ReadTimeout("slow"), httpx.ConnectError("down"), httpx.WriteError("cut")]
+)
+def test_send_bot_timeout_or_transport_error_is_uncertain(httpx_mock, client, error):
+    """The host may have taken the bot before the answer was lost."""
+    httpx_mock.add_exception(error, method="POST", url="http://vexa.test/bots")
+    with pytest.raises(VexaSendUncertain):
+        client.send_bot("https://meet.google.com/abc-defg-hij")
+
+
+def test_send_bot_unreadable_success_is_uncertain(httpx_mock, client):
+    httpx_mock.add_response(method="POST", url="http://vexa.test/bots", json={"no": "id"})
+    with pytest.raises(VexaSendUncertain):  # a 2xx we could not read: the bot is probably there
+        client.send_bot("https://meet.google.com/abc-defg-hij")
+
+
+def test_send_bot_has_a_total_deadline_however_slowly_the_host_answers(httpx_mock, monkeypatch):
+    monkeypatch.setenv("VEXA_BASE_URL", "http://vexa.test")
+    get_settings.cache_clear()
+    slow = VexaClient(send_deadline=0.2)
+
+    def trickle(request):
+        time.sleep(0.8)  # httpx's own timeout is per phase, so a trickling host never trips it
+        return httpx.Response(200, json={"id": 1})
+
+    httpx_mock.add_callback(trickle, method="POST", url="http://vexa.test/bots")
+    began = time.monotonic()
+    with pytest.raises(VexaSendUncertain):
+        slow.send_bot("https://meet.google.com/abc-defg-hij")
+    assert time.monotonic() - began < 0.7
+    time.sleep(0.8)  # let the abandoned request finish before the mock is torn down
+    get_settings.cache_clear()
+
+
+def test_the_default_send_deadline_is_at_most_thirty_seconds():
+    from app import vexa
+
+    assert vexa.SEND_DEADLINE_SECONDS <= 30
 
 
 def test_get_meeting_parses_fixture(httpx_mock, client):
