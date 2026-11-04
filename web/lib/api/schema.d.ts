@@ -393,8 +393,13 @@ export interface paths {
         put?: never;
         /**
          * Create Meeting
-         * @description Send the bot to a Google Meet or Zoom link. One bot at a time: 409 while one is active.
-         *     403 `hours_cap_reached` once the account has used its recorded hours.
+         * @description Send the bot to a Google Meet or Zoom link, through the same placement as every other way a
+         *     bot is sent. 403 `hours_cap_reached` once the account has used its recorded hours. 409 for the
+         *     rest: `user_limit` (the account is at the most bots allowed at once), `already_in_meeting` (a
+         *     bot of the account's is already in that meeting), `meeting_has_note_taker` (another account's
+         *     bot is in that meeting; the text names nobody) and `bot_busy` (the note taker is full, or a
+         *     placement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`
+         *     when the bot host did not take the bot.
          */
         post: operations["create_meeting"];
         delete?: never;
@@ -433,7 +438,9 @@ export interface paths {
          * Cancel Meeting
          * @description Take the bot out of a meeting that is still `bot_sent` and discard it. Only when `can_cancel`
          *     is true: once the bot has been ended with `POST /end` (the notes are being written) it is 409
-         *     `already_ending`; 409 `meeting_busy` when the worker holds the meeting, try again.
+         *     `already_ending`, and while the bot is still starting (its send got no clear answer; the page
+         *     reads "Starting the bot") it is 409 `bot_starting`: try again in a minute; 409 `meeting_busy`
+         *     when the worker holds the meeting, try again.
          */
         post: operations["cancel_meeting"];
         delete?: never;

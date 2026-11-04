@@ -3538,7 +3538,7 @@
         ]
       },
       "post": {
-        "description": "Send the bot to a Google Meet or Zoom link. One bot at a time: 409 while one is active.\n403 `hours_cap_reached` once the account has used its recorded hours.",
+        "description": "Send the bot to a Google Meet or Zoom link, through the same placement as every other way a\nbot is sent. 403 `hours_cap_reached` once the account has used its recorded hours. 409 for the\nrest: `user_limit` (the account is at the most bots allowed at once), `already_in_meeting` (a\nbot of the account's is already in that meeting), `meeting_has_note_taker` (another account's\nbot is in that meeting; the text names nobody) and `bot_busy` (the note taker is full, or a\nplacement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`\nwhen the bot host did not take the bot.",
         "operationId": "create_meeting",
         "requestBody": {
           "content": {
@@ -3692,7 +3692,7 @@
     },
     "/api/meetings/{meeting_id}/cancel": {
       "post": {
-        "description": "Take the bot out of a meeting that is still `bot_sent` and discard it. Only when `can_cancel`\nis true: once the bot has been ended with `POST /end` (the notes are being written) it is 409\n`already_ending`; 409 `meeting_busy` when the worker holds the meeting, try again.",
+        "description": "Take the bot out of a meeting that is still `bot_sent` and discard it. Only when `can_cancel`\nis true: once the bot has been ended with `POST /end` (the notes are being written) it is 409\n`already_ending`, and while the bot is still starting (its send got no clear answer; the page\nreads \"Starting the bot\") it is 409 `bot_starting`: try again in a minute; 409 `meeting_busy`\nwhen the worker holds the meeting, try again.",
         "operationId": "cancel_meeting",
         "parameters": [
           {
