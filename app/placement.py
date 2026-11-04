@@ -47,7 +47,7 @@ and rules out a deadlock.
 import logging
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -263,7 +263,11 @@ def place_bot(
         source=req.source,
     )
     if vexa_id is None:
-        meeting.completion_reason, meeting.bot_state_seen_at = SEND_UNCONFIRMED, now
+        # The grace counts from after the send, not from the caller's `now`, which was taken
+        # before the lock wait and the send (up to 30 s of the 60 would be gone).
+        sent_at = datetime.now(UTC)
+        meeting.completion_reason, meeting.bot_state_seen_at = SEND_UNCONFIRMED, sent_at
+        meeting.started_polling_at = sent_at
     try:
         session.add(meeting)
         session.flush()
@@ -299,7 +303,8 @@ def _stop_if_the_code_is_free(
     """Stop an unrecorded bot by code while holding the placement lock, so nobody else can place on
     the code meanwhile, and skip the stop when a live meeting of anyone holds the code: the bot
     there may be theirs. If the lock or the check cannot be had (the database is failing, so nobody
-    else is placing either) the stop goes ahead: an unrecorded bot is the worse outcome."""
+    else is placing either) the stop goes ahead: an unrecorded bot is the worse outcome. If the lock
+    is simply not free another placement is under way and the stop is skipped."""
     try:
         _take_lock(session, LOCK_WAIT_SECONDS)
         holder = session.scalar(
@@ -315,7 +320,10 @@ def _stop_if_the_code_is_free(
             logger.warning("an unrecorded bot was left alone: a live meeting holds its code")
             return
     except PlacementRefused:
-        pass  # another placement is under way: the host refuses it, ours is the bot there
+        # Another placement holds the lock: a stop by code could take out ITS bot, so skip it. The
+        # bot's own `automatic_leave` is the backstop.
+        logger.warning("an unrecorded bot was left alone: the placement lock was not free")
+        return
     except Exception:  # cannot check: see above
         session.rollback()
     try:

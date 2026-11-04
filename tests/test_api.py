@@ -777,6 +777,25 @@ def test_a_slot_that_is_only_locked_says_a_note_taker_is_being_set_up(
     assert fake_vexa.sent == []
 
 
+def test_a_meeting_whose_bot_is_still_starting_cannot_be_cancelled(
+    api, template, session, fake_vexa
+):
+    """Its send got no clear answer: a stop now would find nothing and the late bot would be
+    orphaned. The page does not offer Cancel; the call says to try again in a minute."""
+    from app import pipeline
+
+    meeting = add_meeting(
+        session, template, completion_reason=pipeline.SEND_UNCONFIRMED, vexa_meeting_id=None
+    )
+    meeting.bot_state_seen_at = datetime.now(UTC)
+    session.commit()
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["can_cancel"] is False and body["status_text"] == "Starting the bot"
+    error = error_of(api.post(f"/api/meetings/{meeting.id}/cancel"), 409, "bot_starting")
+    assert "still starting" in error["message"]
+    assert not hasattr(fake_vexa, "stopped")
+
+
 def test_user_limit_zero_does_not_claim_the_user_has_bots(api, app, template, fake_vexa):
     app.state.settings.user_bot_limit = 0
     response = create(api, template)

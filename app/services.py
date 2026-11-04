@@ -572,6 +572,14 @@ def cancel_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meet
             "not_waiting_for_bot",
             "Only a meeting that is still waiting for its bot can be cancelled.",
         )
+    if locked.completion_reason == SEND_UNCONFIRMED:
+        session.rollback()
+        raise Refused(
+            409,
+            "bot_starting",
+            "The bot is still starting, so it can't be cancelled yet. "
+            "Try again in a minute, once it has joined.",
+        )
     if locked.completion_reason == BOT_END_REQUESTED:
         session.rollback()
         raise Refused(
@@ -601,7 +609,10 @@ def can_cancel(meeting: Meeting) -> bool:
     """Cancel discards the meeting, so it is not offered once the owner has asked the bot to leave
     to have the notes written (Vexa answers a second stop with 404, which would pass for success
     and quietly throw the recording away)."""
-    return meeting.status == "bot_sent" and meeting.completion_reason != BOT_END_REQUESTED
+    return meeting.status == "bot_sent" and meeting.completion_reason not in (
+        BOT_END_REQUESTED,
+        SEND_UNCONFIRMED,  # a stop now would find nothing and the late bot would be orphaned
+    )
 
 
 def _not_endable() -> Refused:

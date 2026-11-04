@@ -414,7 +414,9 @@ export interface paths {
          * Cancel Meeting
          * @description Take the bot out of a meeting that is still `bot_sent` and discard it. Only when `can_cancel`
          *     is true: once the bot has been ended with `POST /end` (the notes are being written) it is 409
-         *     `already_ending`; 409 `meeting_busy` when the worker holds the meeting, try again.
+         *     `already_ending`, and while the bot is still starting (its send got no clear answer; the page
+         *     reads "Starting the bot") it is 409 `bot_starting`: try again in a minute; 409 `meeting_busy`
+         *     when the worker holds the meeting, try again.
          */
         post: operations["cancel_meeting"];
         delete?: never;

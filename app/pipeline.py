@@ -113,6 +113,9 @@ BOT_END_REQUESTED = "end_requested"
 # "Starting the bot", until `_settle_unconfirmed` adopts a bot that shows up for the code or gives
 # up.
 SEND_UNCONFIRMED = placement.SEND_UNCONFIRMED
+# The Vexa states in which a bot is taken as the one a placeholder was waiting for: not `stopping`,
+# which is a leftover leaving (a cancelled meeting's bot), never one that is arriving.
+ADOPTABLE_STATES = tuple(state for state in BOT_LIVE_STATES if state != "stopping")
 # How long the worker waits for a bot to show up before it stops the code and fails the meeting.
 UNCONFIRMED_GRACE = timedelta(seconds=60)
 REASON_SEND_UNCONFIRMED = (
@@ -439,17 +442,36 @@ def _on_join_problem(session: Session, meeting: Meeting, vexa, mark: str, now: d
     return True
 
 
+def _held_by_another_meeting(session: Session, meeting: Meeting, vexa_id: int) -> bool:
+    """Whether a different meeting row already points at this Vexa bot: then it is that meeting's
+    (for instance a cancelled one still stopping), never this placeholder's."""
+    return (
+        session.scalar(
+            select(Meeting.id)
+            .where(Meeting.vexa_meeting_id == str(vexa_id), Meeting.id != meeting.id)
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def _settle_unconfirmed(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
-    """A meeting whose send got no clear answer. True once a live bot for its code has shown up
-    (the meeting then carries on as any other); False while it is still waiting or has been given
-    up on. Only a bot in a LIVE state that comes with its Vexa id counts: the code of a recurring
-    meeting can match an older, finished Vexa meeting, and that is not ours. The code is the
-    meeting's alone meanwhile (the placeholder is `bot_sent`, so no other placement can use it)."""
+    """A meeting whose send got no clear answer. True once a bot for its code has shown up (the
+    meeting then carries on as any other); False while it is still waiting or has been given up on.
+    Only a bot that is arriving (not `stopping`), comes with its Vexa id, and whose id no other
+    meeting holds counts: the code of a recurring meeting can match an older, finished Vexa
+    meeting, or a cancelled one's leftover, and that is not ours. The code is the meeting's alone
+    meanwhile (the placeholder is `bot_sent`, so no other placement can use it)."""
     try:
         info = vexa.get_meeting(meeting.platform, meeting.native_id)
     except VexaError:
         info = None
-    if info is not None and info.status in BOT_LIVE_STATES and info.vexa_id is not None:
+    if (
+        info is not None
+        and info.status in ADOPTABLE_STATES
+        and info.vexa_id is not None
+        and not _held_by_another_meeting(session, meeting, info.vexa_id)
+    ):
         # Adopted, and pinned to Vexa's id from here on: a reused code can then never hand this
         # meeting someone else's (or an older) recording.
         meeting.vexa_meeting_id = str(info.vexa_id)

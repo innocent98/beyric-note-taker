@@ -23,7 +23,7 @@ from app import pipeline, placement, services, vexa
 from app.models import Meeting, Template, UsageEntry
 from app.placement import PlacementRefused, PlacementRequest, place_bot
 from app.usage import email_hash
-from app.vexa import VexaError
+from app.vexa import VexaError, VexaSendUncertain
 from tests.fakes.vexa_host import FakeVexaHost, unreachable
 from tests.test_pipeline import FakeVexa
 from tests.test_web import make_settings, make_user
@@ -83,6 +83,11 @@ def refusal_code(session, host, req, **kwargs) -> str:
     with pytest.raises(PlacementRefused) as caught:
         place(session, host, req, **kwargs)
     return caught.value.code
+
+
+def after(meeting, seconds):
+    """A moment `seconds` after the uncertain send started the meeting's grace."""
+    return meeting.started_polling_at + timedelta(seconds=seconds)
 
 
 def vexa_meeting(**fields):
@@ -540,13 +545,13 @@ def test_a_late_bot_is_adopted_by_the_worker_not_stopped(session, host, ada, ada
     host.late_accept = True
     meeting = place(session, host, request_for(ada, ada_template))
     host.land_late_bots()  # Vexa finished the request: the bot is joining
-    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=20))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 20))
     session.refresh(meeting)
     assert (meeting.status, meeting.step) == ("bot_sent", "waiting")
     assert meeting.completion_reason == "joining"  # an ordinary live state now, marker gone
     assert host.stopped == []
     # and it stays adopted on the polls that follow
-    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=200))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 200))
     session.refresh(meeting)
     assert meeting.status == "bot_sent" and meeting.completion_reason == "joining"
 
@@ -559,7 +564,7 @@ def test_adopting_a_late_bot_pins_its_vexa_id_so_the_code_is_never_used_to_find_
     host.late_accept = True
     meeting = place(session, host, request_for(ada, ada_template))
     host.land_late_bots()
-    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=20))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 20))
     session.refresh(meeting)
     assert meeting.vexa_meeting_id == str(host.live[("google_meet", CODE)])
 
@@ -569,12 +574,12 @@ def test_a_live_bot_whose_id_Vexa_did_not_give_is_not_adopted(session, host, ada
     meeting = place(session, host, request_for(ada, ada_template))
     host.land_late_bots()
     host.get_meeting = lambda platform, code: vexa_meeting(status="joining")  # no id in the body
-    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=20))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 20))
     session.refresh(meeting)
     assert (
         meeting.vexa_meeting_id is None and meeting.completion_reason == pipeline.SEND_UNCONFIRMED
     )
-    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=61))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 61))
     session.refresh(meeting)
     assert meeting.status == "failed"
 
@@ -598,15 +603,64 @@ def test_the_grace_counts_from_the_uncertain_send_not_from_the_meetings_first_se
     assert old.status == "bot_sent"  # still inside its grace
 
 
+def test_the_grace_counts_from_after_the_send_not_from_before_the_lock_wait(
+    session, host, ada, ada_template
+):
+    """`place_bot` is given `now` before it waits for the lock and sends; a slow send must not eat
+    the grace."""
+    host.late_accept = True
+    host.send_delay = 0.4
+    meeting = place(session, host, request_for(ada, ada_template), now=NOW)
+    assert meeting.started_polling_at != NOW  # not the caller's earlier `now`
+    assert datetime.now(UTC) - meeting.started_polling_at < timedelta(seconds=5)
+
+
+def test_a_certain_send_keeps_the_callers_now(session, host, ada, ada_template):
+    assert place(session, host, request_for(ada, ada_template), now=NOW).started_polling_at == NOW
+
+
+def test_a_bot_in_the_middle_of_stopping_is_not_adopted(session, host, ada, ada_template):
+    """A cancelled meeting's bot reads `stopping` for a moment: it is the leftover of an earlier
+    meeting on the code, never the bot of a placeholder."""
+    host.late_accept = True
+    meeting = place(session, host, request_for(ada, ada_template))
+    host.land_late_bots()
+    host.statuses[("google_meet", CODE)] = "stopping"
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 20))
+    session.refresh(meeting)
+    assert (
+        meeting.vexa_meeting_id is None and meeting.completion_reason == pipeline.SEND_UNCONFIRMED
+    )
+
+
+def test_a_vexa_id_that_another_meeting_holds_is_never_adopted(
+    session, host, ada, ada_template, ben, ben_template
+):
+    host.late_accept = True
+    meeting = place(session, host, request_for(ada, ada_template))
+    host.land_late_bots()
+    foreign = add_live(session, ben, ben_template, CODE, status="failed")  # a cancelled earlier one
+    foreign.vexa_meeting_id = str(host.live[("google_meet", CODE)])
+    session.commit()
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 20))
+    session.refresh(meeting)
+    assert (
+        meeting.vexa_meeting_id is None and meeting.completion_reason == pipeline.SEND_UNCONFIRMED
+    )
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 61))
+    session.refresh(meeting)
+    assert meeting.status == "failed"  # reaped, never handed the other meeting's recording
+
+
 def test_a_bot_that_never_landed_is_stopped_and_the_meeting_fails_in_plain_words(
     session, host, ada, ada_template
 ):
     host.late_accept = True
     meeting = place(session, host, request_for(ada, ada_template))
-    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=30))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 30))
     session.refresh(meeting)
     assert meeting.status == "bot_sent" and host.stopped == []  # still inside the grace
-    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=61))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 61))
     session.refresh(meeting)
     assert meeting.status == "failed"
     assert meeting.failure_reason == pipeline.REASON_SEND_UNCONFIRMED
@@ -624,7 +678,7 @@ def test_a_finished_vexa_meeting_on_the_reused_code_is_not_adopted(
     host.late_accept = True
     meeting = place(session, host, request_for(ada, ada_template))
     host.get_meeting = lambda platform, code: vexa_meeting(status="completed")
-    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=61))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 61))
     session.refresh(meeting)
     assert meeting.status == "failed" and meeting.failure_reason == pipeline.REASON_SEND_UNCONFIRMED
 
@@ -635,7 +689,7 @@ def test_an_uncertain_send_that_was_accepted_is_adopted_on_the_first_poll(
     host.timeout_after_accept = True  # accepted, answer lost: the bot is live straight away
     meeting = place(session, host, request_for(ada, ada_template))
     assert meeting.vexa_meeting_id is None
-    pipeline.advance_meeting(session, meeting.id, vexa=host, now=NOW + timedelta(seconds=5))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 5))
     session.refresh(meeting)
     assert meeting.status == "bot_sent" and meeting.completion_reason == "joining"
     assert host.stopped == []
@@ -687,7 +741,6 @@ def test_a_failed_commit_does_not_stop_a_bot_when_another_meeting_holds_the_code
 ):
     """After a failed commit the lock is gone: before a stop by code, the lock is taken again and a
     live meeting of anyone on the code means the bot there may not be ours to stop."""
-    real_commit = session.commit
 
     def lose_the_commit_after_someone_else_took_the_code(*args, **kwargs):
         with Session(engine) as other:
@@ -709,7 +762,8 @@ def test_a_failed_commit_does_not_stop_a_bot_when_another_meeting_holds_the_code
         place(session, host, request_for(ada, ada_template), bot_max_local=3)
     monkeypatch.undo()
     assert host.stopped == []
-    assert real_commit  # (the patched commit never wrote ada's meeting)
+    mine = select(Meeting).where(Meeting.owner_user_id == ada.id)
+    assert session.scalars(mine).first() is None  # the commit never wrote ada's meeting
 
 
 def test_a_failed_commit_stops_the_bot_while_it_holds_the_lock_again(
@@ -729,6 +783,149 @@ def test_a_failed_commit_stops_the_bot_while_it_holds_the_lock_again(
     with pytest.raises(OperationalError):
         place(session, host, request_for(ada, ada_template))
     assert seen == [False] and host.stopped == [("google_meet", CODE)]
+
+
+def test_a_failed_commit_does_not_stop_the_bot_when_the_lock_cannot_be_had(
+    engine, session, host, ada, ada_template, monkeypatch
+):
+    """Without the lock a stop by code could take out a bot placed meanwhile: it is skipped and
+    logged instead (the bot's own `automatic_leave` is the backstop)."""
+    monkeypatch.setattr(placement, "LOCK_WAIT_SECONDS", 0.3)
+    monkeypatch.setattr(
+        session,
+        "commit",
+        lambda *a, **k: (_ for _ in ()).throw(OperationalError("c", {}, Exception("x"))),
+    )
+    with engine.connect() as other:
+        real = placement._is_recorded
+
+        def another_placement_takes_the_lock_first(*args, **kwargs):
+            other.execute(
+                text("select pg_advisory_xact_lock(cast(:a as int), cast(:b as int))"),
+                {"a": placement.PLACEMENT_LOCK, "b": placement.LOCAL_HOST_ID},
+            )
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(placement, "_is_recorded", another_placement_takes_the_lock_first)
+        with pytest.raises(OperationalError):
+            place(session, host, request_for(ada, ada_template))
+        other.rollback()
+    assert host.stopped == []
+
+
+# ---- sequences: Cancel, retry, End, the worker's reap and a second user on the same code ----
+
+
+def test_cancel_during_the_uncertain_window_is_refused_so_a_late_bot_is_not_orphaned(
+    session, host, ada, ada_template
+):
+    """A stop sent now finds nothing (Vexa still handling the POST: a 404 counts as stopped), the
+    row would fail, the code would be freed and the late bot would join with no row at all."""
+    host.late_accept = True
+    meeting = place(session, host, request_for(ada, ada_template))
+    assert services.can_cancel(meeting) is False  # the page does not offer it
+    with pytest.raises(services.Refused) as caught:
+        services.cancel_meeting(session, host, meeting)
+    assert (caught.value.status, caught.value.code) == (409, "bot_starting")
+    assert "still starting" in caught.value.message
+    session.refresh(meeting)
+    assert meeting.status == "bot_sent" and meeting.completion_reason == pipeline.SEND_UNCONFIRMED
+    assert host.stopped == []
+    host.land_late_bots()  # the bot joins after the refused cancel
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 20))
+    session.refresh(meeting)
+    assert meeting.vexa_meeting_id is not None and services.can_cancel(meeting) is True
+    services.cancel_meeting(session, host, meeting)  # now it is a normal meeting: Cancel works
+    assert host.stopped == [("google_meet", CODE)] and host.live == {}
+    assert meeting.status == "failed"
+
+
+def test_end_during_the_uncertain_window_is_refused(session, host, ada, ada_template):
+    host.late_accept = True
+    meeting = place(session, host, request_for(ada, ada_template))
+    with pytest.raises(services.Refused) as caught:
+        services.end_meeting(session, host, meeting)
+    assert caught.value.code == "not_endable"
+    assert host.stopped == []
+
+
+def test_the_owners_second_paste_during_the_uncertain_window_is_already_in_meeting(
+    session, host, ada, ada_template
+):
+    host.late_accept = True
+    place(session, host, request_for(ada, ada_template))
+    host.late_accept = False
+    assert refusal_code(session, host, request_for(ada, ada_template), bot_max_local=3) == (
+        "already_in_meeting"
+    )
+    assert host.bots_sent == 0
+
+
+def test_after_the_reap_the_owner_can_paste_again_and_gets_a_fresh_bot(
+    session, host, ada, ada_template
+):
+    host.late_accept = True
+    meeting = place(session, host, request_for(ada, ada_template))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 61))
+    session.refresh(meeting)
+    assert meeting.status == "failed"
+    host.late_accept = False
+    again = place(session, host, request_for(ada, ada_template))
+    assert again.id != meeting.id and again.vexa_meeting_id is not None
+
+
+def test_a_bot_that_lands_after_the_reap_makes_the_next_user_get_the_neutral_refusal_not_a_stop(
+    session, host, ada, ada_template, ben, ben_template
+):
+    """The late arrival is an orphan (no row). Ben's paste is refused by the host as a duplicate:
+    neutral, and Ben's placement stops nothing, so nobody's bot is touched by it."""
+    host.late_accept = True
+    meeting = place(session, host, request_for(ada, ada_template))
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 61))
+    stops_so_far = list(host.stopped)
+    host.land_late_bots()  # the orphan
+    host.late_accept = False
+    assert refusal_code(session, host, request_for(ben, ben_template)) == "meeting_has_note_taker"
+    assert host.stopped == stops_so_far
+    assert session.scalars(select(Meeting).where(Meeting.owner_user_id == ben.id)).first() is None
+
+
+def test_a_cancelled_meetings_leftover_bot_is_not_adopted_by_the_next_users_placeholder(
+    session, host, ada, ada_template, ben, ben_template
+):
+    """Ada cancels (her row fails, Vexa shows her bot `stopping`), Ben pastes the same code and his
+    send gets a 5xx: his placeholder must not adopt Ada's bot or her recording."""
+    host.late_accept = False
+    first = place(session, host, request_for(ada, ada_template), bot_max_local=3)
+    services.cancel_meeting(session, FakeVexa(), first)  # Vexa has not finished stopping it:
+    host.live[("google_meet", CODE)] = int(first.vexa_meeting_id)
+    host.statuses[("google_meet", CODE)] = "stopping"
+    host.error = VexaSendUncertain("502")
+    mine = place(session, host, request_for(ben, ben_template), bot_max_local=3)
+    assert mine.completion_reason == pipeline.SEND_UNCONFIRMED
+    pipeline.advance_meeting(session, mine.id, vexa=host, now=after(mine, 10))
+    session.refresh(mine)
+    assert mine.vexa_meeting_id is None  # stopping: not adoptable
+    host.statuses[("google_meet", CODE)] = "joining"  # even if it looked live again...
+    pipeline.advance_meeting(session, mine.id, vexa=host, now=after(mine, 20))
+    session.refresh(mine)
+    assert mine.vexa_meeting_id is None  # ...its id is Ada's row's
+    pipeline.advance_meeting(session, mine.id, vexa=host, now=after(mine, 61))
+    session.refresh(mine)
+    assert mine.status == "failed" and mine.failure_reason == pipeline.REASON_SEND_UNCONFIRMED
+
+
+def test_an_adopted_placeholder_blocks_a_second_user_like_any_other_meeting(
+    session, host, ada, ada_template, ben, ben_template
+):
+    host.late_accept = True
+    meeting = place(session, host, request_for(ada, ada_template))
+    host.land_late_bots()
+    pipeline.advance_meeting(session, meeting.id, vexa=host, now=after(meeting, 10))
+    host.late_accept = False
+    assert refusal_code(session, host, request_for(ben, ben_template), bot_max_local=3) == (
+        "meeting_has_note_taker"
+    )
 
 
 # ---- stopping only a bot that is ours ----

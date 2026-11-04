@@ -41,6 +41,7 @@ class FakeVexaHost:
         self.sent: list[str] = []  # the URLs, in the order the host took them
         self.stopped: list[tuple[str, str]] = []
         self.live: dict[tuple[str, str], int] = {}  # (platform, code) -> the bot there
+        self.statuses: dict[tuple[str, str], str] = {}  # what Vexa reports; default `joining`
         self._next_id = first_id
         self._in_flight = 0
         self.peak_in_flight = 0  # most sends under way at once; 1 means they were serialised
@@ -95,13 +96,16 @@ class FakeVexaHost:
     def get_meeting(self, platform: str, native_id: str) -> VexaMeeting:
         """What the worker asks by meeting code: a joining bot if one is live, else nothing."""
         if (platform, native_id) in self.live:
-            return VexaMeeting(status="joining", vexa_id=self.live[(platform, native_id)])
+            return VexaMeeting(
+                status=self.statuses.get((platform, native_id), "joining"),
+                vexa_id=self.live[(platform, native_id)],
+            )
         raise VexaNotFound("get_meeting failed: 404")
 
     def get_meeting_by_id(self, vexa_meeting_id) -> VexaMeeting:
         """What the worker asks once it knows the id: the bot with that id, if it is still live."""
         if int(vexa_meeting_id) in self.live.values():
-            return VexaMeeting(status="joining", vexa_id=int(vexa_meeting_id))
+            return VexaMeeting(status="joining", vexa_id=int(vexa_meeting_id))  # by id: ours
         raise VexaNotFound("get_meeting failed: 404")
 
     def stop_bot(self, platform: str, native_id: str) -> None:
