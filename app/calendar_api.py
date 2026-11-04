@@ -1,33 +1,40 @@
 """The calendar routes of the JSON API. Included into `app.api.router`, so they share its `/api`
 prefix, its error shape and its OpenAPI file.
 
-This file holds the OAuth routes and disconnect (the work is in `app/calendar_connect.py`). The
-calendar state, settings and upcoming meetings are added here by later tasks.
+This file holds the OAuth routes and disconnect (the work is in `app/calendar_connect.py`) and the
+read the settings page is built on, `GET /api/calendar`. The settings, per-meeting override and the
+rest of C15a are added here by later tasks; they extend `CalendarOut`.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import auth, calendar_connect, google_oauth, services
+from app import auth, calendar_connect, calendar_text, google_oauth, services
 from app.api_schemas import ErrorResponse
 from app.db import get_session
-from app.models import User
+from app.gcal_rules import JoinSettings, will_join
+from app.models import CalendarConnection, CalendarEvent, User, UserSettings
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
 CONNECT_RESPONSES = {code: {"model": ErrorResponse} for code in (404, 503)}
 CALLBACK_RESPONSES = {302: {"description": "Redirect"}, 404: {"model": ErrorResponse}}
+STATE_RESPONSES = {404: {"model": ErrorResponse}}
+
+UPCOMING_DAYS = 7
+UPCOMING_LIMIT = 100
 
 
 class ConnectIn(BaseModel):
     """`features` are what to ask Google for: `calendar` (read events, to decide which meetings
     to join) and/or `meet` (learn that a Meet call you host began). `return_to` is a relative
-    path to land on afterwards; anything else becomes `/settings/calendar`."""
+    path to land on afterwards; anything else becomes `/settings`."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -56,6 +63,50 @@ class DisconnectOut(BaseModel):
 
     status: Literal["disconnected"] = "disconnected"
     revoked: bool
+
+
+class UpcomingEvent(BaseModel):
+    """One synced event in the next seven days. Only what a person needs to recognise it: no
+    attendees, description, location or meeting link (a Zoom link can carry a passcode).
+    `will_join_text` is the short answer in words and `reason_text` the sentence behind a no: show
+    both as they are."""
+
+    id: int
+    title: str
+    starts_at: datetime
+    ends_at: datetime
+    # `google_meet`, `zoom`, `teams`, or null when the event has no video link.
+    platform: Literal["google_meet", "zoom", "teams"] | None
+    platform_label: str | None = Field(description="Google Meet, Zoom or Microsoft Teams; or null")
+    # How many people are invited: a number, never their addresses.
+    attendee_count: int
+    will_join: bool
+    # `Will join`, `Off` (the rule or the person's switch says no, and they could change it) or
+    # `Cannot join` (no link, over, declined, ...). `reason_text` says why, or is null.
+    will_join_text: str
+    reason_text: str | None
+
+
+class CalendarOut(BaseModel):
+    """The calendar settings page's whole state. `state` is for choosing what to draw
+    (`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;
+    `needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.
+    `connected` is true while the calendar can still be read (`connected` or `degraded`).
+    `google_email` is the Google account that was connected, and is null when none is.
+    `last_sync_at` is the last time the calendar was read in full, null before the first sync.
+    `last_error` is the last failure in plain words, null when the last attempt worked.
+    `rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)
+    and `rule_text` its label ("Joining all meetings"). `upcoming` is empty unless connected."""
+
+    connected: bool
+    state: Literal["not_connected", "connected", "degraded", "needs_reconnect"]
+    state_text: str
+    google_email: str | None
+    last_sync_at: datetime | None
+    last_error: str | None
+    rule: Literal["all", "organizer", "none"]
+    rule_text: str
+    upcoming: list[UpcomingEvent]
 
 
 def _now() -> datetime:
@@ -156,3 +207,112 @@ def calendar_google_disconnect(
     Afterwards `connect` works again, for the same or another Google account."""
     revoked = calendar_connect.disconnect(session, user, google)
     return DisconnectOut(revoked=revoked)
+
+
+def _calendar_connection(session: Session, user: User) -> CalendarConnection | None:
+    """The user's Google connection if it gives the calendar feature (a connection made only for
+    Meet is not a connected calendar), else None."""
+    conn = session.scalars(
+        select(CalendarConnection).where(
+            CalendarConnection.user_id == user.id, CalendarConnection.provider == "google"
+        )
+    ).first()
+    if conn is None or conn.status == "disconnected":
+        return None
+    if "calendar" not in calendar_connect.granted_features(conn):
+        return None
+    return conn
+
+
+def _upcoming(
+    session: Session,
+    conn: CalendarConnection,
+    prefs: UserSettings | None,
+    now: datetime,
+    *,
+    teams_join_enabled: bool,
+) -> list[UpcomingEvent]:
+    """Events not over yet that start within seven days, soonest first, each with the join rules'
+    answer for this user. Cancelled events are left out."""
+    join_settings = JoinSettings(
+        rule=prefs.auto_join_rule if prefs else "all",
+        teams_join_enabled=teams_join_enabled,
+    )
+    rows = session.scalars(
+        select(CalendarEvent)
+        .where(
+            CalendarEvent.connection_id == conn.id,
+            CalendarEvent.user_id == conn.user_id,
+            CalendarEvent.status != "cancelled",
+            CalendarEvent.ends_at > now,
+            CalendarEvent.starts_at < now + timedelta(days=UPCOMING_DAYS),
+        )
+        .order_by(CalendarEvent.starts_at, CalendarEvent.id)
+        .limit(UPCOMING_LIMIT)
+    ).all()
+    out = []
+    for row in rows:
+        decision = will_join(row, row.override, join_settings, now=now)
+        out.append(
+            UpcomingEvent(
+                id=row.id,
+                title=row.title,
+                starts_at=row.starts_at,
+                ends_at=row.ends_at,
+                platform=row.platform,
+                platform_label=calendar_text.platform_label(row.platform),
+                attendee_count=row.attendee_count,
+                will_join=decision.join,
+                will_join_text=calendar_text.join_label(decision),
+                reason_text=calendar_text.join_reason(decision),
+            )
+        )
+    return out
+
+
+@router.get("", responses=STATE_RESPONSES)
+def calendar_state(
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+    google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
+) -> CalendarOut:
+    """Everything the calendar settings page shows, in one read (no CSRF header needed): whether
+    Google Calendar is connected, which Google address, the last time it was read, the last
+    failure in plain words, and the next seven days of synced events, each with whether the bot
+    will join it and why not when it will not. Nothing is fetched from Google here: this reads what
+    the sync job last stored. 404 `calendar_unavailable` while the calendar features are off."""
+    _enabled(request, google)
+    conn = _calendar_connection(session, user)
+    prefs = session.get(UserSettings, user.id)
+    rule = prefs.auto_join_rule if prefs else "all"
+    if conn is None:
+        return CalendarOut(
+            connected=False,
+            state="not_connected",
+            state_text=calendar_text.state_text(None, "not_connected"),
+            google_email=None,
+            last_sync_at=None,
+            last_error=None,
+            rule=rule,
+            rule_text=calendar_text.rule_text(rule),
+            upcoming=[],
+        )
+    state = conn.status if conn.status in ("connected", "degraded") else "needs_reconnect"
+    return CalendarOut(
+        connected=state != "needs_reconnect",
+        state=state,
+        state_text=calendar_text.state_text(conn, state),
+        google_email=conn.google_account_email,
+        last_sync_at=conn.last_sync_at,
+        last_error=calendar_text.error_text(conn.last_error),
+        rule=rule,
+        rule_text=calendar_text.rule_text(rule),
+        upcoming=_upcoming(
+            session,
+            conn,
+            prefs,
+            _now(),
+            teams_join_enabled=request.app.state.settings.teams_join_enabled,
+        ),
+    )

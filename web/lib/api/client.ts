@@ -1,6 +1,9 @@
 import type {
+  CalendarState,
+  ConnectStart,
   DecisionList,
   EmailPreferences,
+  DisconnectResult,
   ExportFormat,
   FieldError,
   Meeting,
@@ -261,6 +264,18 @@ export function createApi(options: ApiOptions = {}) {
       list: (query: { limit?: number; before_id?: number } = {}) =>
         request<NoticeList>("GET", "/api/notifications", { query }),
       readAll: () => request<{ unread_notifications: number }>("POST", "/api/notifications/read-all", { write: true }),
+    },
+    // Google Calendar (docs/fe-integration-guide-calendar-settings.md). `get` answers 404
+    // `calendar_unavailable` while the feature is off. `connect` returns the Google consent URL to
+    // navigate to; the browser comes back to /settings/calendar with the result in the query string.
+    calendar: {
+      get: () => request<CalendarState>("GET", "/api/calendar"),
+      connect: () =>
+        request<ConnectStart>("POST", "/api/calendar/google/connect", {
+          body: { features: ["calendar"], return_to: "/settings" },
+          write: true,
+        }),
+      disconnect: () => request<DisconnectResult>("POST", "/api/calendar/google/disconnect", { write: true }),
     },
     vocabulary: {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,

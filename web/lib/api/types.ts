@@ -37,3 +37,8 @@ export type ExportFormat = NonNullable<NonNullable<operations["export_meeting"][
 export type Pilot = Schemas["PilotOut"];
 export type PilotState = Pilot["state"];
 export type SignUpBody = Schemas["SignUp"];
+
+export type CalendarState = Schemas["CalendarOut"];
+export type CalendarEvent = Schemas["UpcomingEvent"];
+export type ConnectStart = Schemas["ConnectOut"];
+export type DisconnectResult = Schemas["DisconnectOut"];

@@ -41,6 +41,11 @@ const SCREENS = {
   "app-detail": [APP, [["Beyric Monday planning", "last"]], "/meetings/1", true],
   "app-templates": [APP, [["Templates", "first"]], "/templates", true],
   "app-vocabulary": [APP, [["Vocabulary", "first"]], "/vocabulary", true],
+  // The calendar: the design's cal state is set by pressing "Connect Google Calendar" (it answers
+  // after 1 s), so those clicks wait. The Next side shows what the mock's --calendar flag says.
+  "app-settings": [APP, [["Settings", "first"]], "/settings", true],
+  "app-settings-connected": [APP, [["Settings", "first"], ["Connect Google Calendar", "first", 1500]], "/settings", true],
+  "app-meetings-calendar": [APP, [["Settings", "first"], ["Connect Google Calendar", "first", 1500], ["Meetings", "first"]], "/", true],
   "app-detail-processing": [null, [], "/meetings/2", true],
   "app-detail-waiting": [null, [], "/meetings/3", true],
   "app-detail-failed": [null, [], "/meetings/4", true],
@@ -56,13 +61,15 @@ async function shoot(url, width, clicks, signedIn) {
   const context = await browser.newContext({ viewport: { width, height: 900 } });
   if (signedIn) await context.addCookies([{ name: "session", value: "owner", url: NEXT }]);
   const page = await context.newPage();
-  await page.goto(url, { waitUntil: "networkidle" });
+  // The Meetings list polls while a meeting is being worked on, so the network may never go idle.
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
   await page.waitForTimeout(1200);
-  for (const [text, which] of clicks) {
+  for (const [text, which, wait] of clicks) {
     const match = page.getByText(text, { exact: true });
     // A click from script, because on a phone the desktop-only prototype clips its own controls.
     await (which === "last" ? match.last() : match.first()).evaluate((el) => el.click());
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(wait ?? 400);
   }
   const png = await page.screenshot({ fullPage: true });
   await context.close();

@@ -114,9 +114,9 @@ for (const width of WIDTHS) {
   const zoom = Math.min(1, 1500 / total);
   const sheet = await browser.newPage({ viewport: { width: Math.round(total * zoom), height: 900 } });
   await sheet.setContent(`<body style="margin:0;background:#888;zoom:${zoom};display:flex;gap:30px">${images.map((src) => `<img style="display:block;width:${width}px" src="${src}">`).join("")}</body>`);
-  await sheet.screenshot({ path: `${values.out}/app-settings-${width}.jpg`, fullPage: true, type: "jpeg", quality: 62 });
+  await sheet.screenshot({ path: `${values.out}/app-settings-email-${width}.jpg`, fullPage: true, type: "jpeg", quality: 62 });
   await sheet.close();
-  console.log(`app-settings ${width}`);
+  console.log(`app-settings-email ${width}`);
 }
 await browser.close();
 process.exit(failures ? 1 : 0);

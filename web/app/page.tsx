@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app/shell";
+import { CalendarBand } from "@/components/app/calendar-upcoming";
 import { MeetingList } from "@/components/app/meeting-list";
 import { NewMeetingForm } from "@/components/app/new-meeting-form";
 import { Landing, LandingFooter, LandingHeader } from "@/components/landing/landing";
 import { JsonLd, organizationJsonLd, softwareJsonLd } from "@/components/site/json-ld";
 import { Alert, PageHead } from "@/components/ui";
 import { getReviewOpen, getUnreadNotifications, getSession, load, serverApi } from "@/lib/api/server";
+import type { CalendarState } from "@/lib/api/types";
 
 // `/` is two pages: the landing page for a visitor who is not logged in (indexed, in the sitemap),
 // and the owner's Meetings page for the owner (never indexed). GET /api/session says which.
@@ -38,9 +40,22 @@ function LandingPage() {
   );
 }
 
+// The calendar is optional on this page: while the server has it off (404 `calendar_unavailable`)
+// or cannot answer, the page is drawn without it.
+async function getCalendar(api: Awaited<ReturnType<typeof serverApi>>): Promise<CalendarState | null> {
+  try {
+    return await api.calendar.get();
+  } catch {
+    return null;
+  }
+}
+
 async function MeetingsPage() {
   const api = await serverApi();
-  const [list, templates] = await load(Promise.all([api.meetings.list(), api.templates.list()]));
+  const [[list, templates], calendar] = await Promise.all([
+    load(Promise.all([api.meetings.list(), api.templates.list()])),
+    getCalendar(api),
+  ]);
   const busy = list.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
   return (
     <AppShell current="meetings" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()}>
@@ -53,6 +68,7 @@ async function MeetingsPage() {
       <div className="stack">
         <PageHead title="Meetings" subtitle="Send the note taker to a call and find your notes here afterwards." />
         <NewMeetingForm templates={templates} busy={busy} />
+        <CalendarBand state={calendar} />
         <MeetingList initial={list} templates={templates} />
       </div>
     </AppShell>

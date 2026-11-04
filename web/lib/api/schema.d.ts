@@ -232,6 +232,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calendar State
+         * @description Everything the calendar settings page shows, in one read (no CSRF header needed): whether
+         *     Google Calendar is connected, which Google address, the last time it was read, the last
+         *     failure in plain words, and the next seven days of synced events, each with whether the bot
+         *     will join it and why not when it will not. Nothing is fetched from Google here: this reads what
+         *     the sync job last stored. 404 `calendar_unavailable` while the calendar features are off.
+         */
+        get: operations["calendar_state"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar/google/callback": {
         parameters: {
             query?: never;
@@ -1145,10 +1169,48 @@ export interface components {
             review_open: number;
         };
         /**
+         * CalendarOut
+         * @description The calendar settings page's whole state. `state` is for choosing what to draw
+         *     (`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;
+         *     `needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.
+         *     `connected` is true while the calendar can still be read (`connected` or `degraded`).
+         *     `google_email` is the Google account that was connected, and is null when none is.
+         *     `last_sync_at` is the last time the calendar was read in full, null before the first sync.
+         *     `last_error` is the last failure in plain words, null when the last attempt worked.
+         *     `rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)
+         *     and `rule_text` its label ("Joining all meetings"). `upcoming` is empty unless connected.
+         */
+        CalendarOut: {
+            /** Connected */
+            connected: boolean;
+            /** Google Email */
+            google_email: string | null;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Sync At */
+            last_sync_at: string | null;
+            /**
+             * Rule
+             * @enum {string}
+             */
+            rule: "all" | "organizer" | "none";
+            /** Rule Text */
+            rule_text: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "not_connected" | "connected" | "degraded" | "needs_reconnect";
+            /** State Text */
+            state_text: string;
+            /** Upcoming */
+            upcoming: components["schemas"]["UpcomingEvent"][];
+        };
+        /**
          * ConnectIn
          * @description `features` are what to ask Google for: `calendar` (read events, to decide which meetings
          *     to join) and/or `meet` (learn that a Meet call you host began). `return_to` is a relative
-         *     path to land on afterwards; anything else becomes `/settings/calendar`.
+         *     path to land on afterwards; anything else becomes `/settings`.
          */
         ConnectIn: {
             /**
@@ -1577,6 +1639,44 @@ export interface components {
         UnreadCount: {
             /** Unread Notifications */
             unread_notifications: number;
+        };
+        /**
+         * UpcomingEvent
+         * @description One synced event in the next seven days. Only what a person needs to recognise it: no
+         *     attendees, description, location or meeting link (a Zoom link can carry a passcode).
+         *     `will_join_text` is the short answer in words and `reason_text` the sentence behind a no: show
+         *     both as they are.
+         */
+        UpcomingEvent: {
+            /** Attendee Count */
+            attendee_count: number;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Id */
+            id: number;
+            /** Platform */
+            platform: ("google_meet" | "zoom" | "teams") | null;
+            /**
+             * Platform Label
+             * @description Google Meet, Zoom or Microsoft Teams; or null
+             */
+            platform_label: string | null;
+            /** Reason Text */
+            reason_text: string | null;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /** Title */
+            title: string;
+            /** Will Join */
+            will_join: boolean;
+            /** Will Join Text */
+            will_join_text: string;
         };
         /** UsageOut */
         UsageOut: {
@@ -2287,6 +2387,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    calendar_state: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CalendarOut"];
                 };
             };
             /** @description Not logged in */

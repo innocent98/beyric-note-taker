@@ -61,3 +61,13 @@ export function workspaceError(file: string): { status: number; code: string; me
   const { response } = JSON.parse(read(join(REPO, "docs/fe-captures/ai-workspace-w1", file)));
   return { status: response.status, ...response.body.error };
 }
+
+// A capture from the running API for the calendar state route (docs/fe-captures/calendar-state/<file>).
+export function calendarBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/calendar-state", file))).response.body as T;
+}
+
+// A capture from the calendar connect routes (docs/fe-captures/calendar-connect/<file>).
+export function connectBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/calendar-connect", file))).response.body as T;
+}

@@ -67,7 +67,7 @@ logger = logging.getLogger(__name__)
 FLOW_TTL = timedelta(minutes=10)
 FLOW_COOKIE = "calendar_flow"
 FLOW_COOKIE_PATH = "/api/calendar/google"
-DEFAULT_RETURN_TO = "/settings/calendar"
+DEFAULT_RETURN_TO = "/settings"
 LOGIN_ERROR = "/login?error=google_failed"
 TESTING_EXPIRY = timedelta(days=7)
 LIVE_STATUSES = ("connected", "degraded")  # a connection that still works
@@ -141,7 +141,7 @@ def _result(path: str, **query: str) -> str:
 
 
 def _safe_return_to(value: str | None) -> str:
-    """The calendar settings page unless `value` is a relative path with one leading slash (the
+    """The Settings page unless `value` is a relative path with one leading slash (the
     pattern sign-in uses: never `//host`, a scheme or a backslash)."""
     ok = value and google_signin.RETURN_TO_PATTERN.match(value)
     return value if ok else DEFAULT_RETURN_TO

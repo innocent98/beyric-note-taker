@@ -352,7 +352,7 @@ def run(app, base, engine, settings, google) -> None:
         user,
         google,
         "first-connect",
-        return_to="/settings/calendar",
+        return_to="/settings",
         note="Allow on the consent screen; the app stores the connection and redirects.",
     )
     note_file(
@@ -365,7 +365,7 @@ def run(app, base, engine, settings, google) -> None:
         "cancel-connect",
         "POST",
         "/api/calendar/google/connect",
-        body={"return_to": "/settings/calendar"},
+        body={"return_to": "/settings"},
     )
     cancel_state = parse_qs(urlparse(started.json()["authorize_url"]).query)["state"][0]
     user.call(
@@ -380,7 +380,7 @@ def run(app, base, engine, settings, google) -> None:
         google,
         "unticked",
         grant={"email"},
-        return_to="/settings/calendar",
+        return_to="/settings",
         note="The person unticked the calendar permission: refused, nothing is stored.",
     )
     # Reused state.
@@ -442,7 +442,7 @@ def run(app, base, engine, settings, google) -> None:
         user,
         google,
         "reconnect",
-        return_to="/settings/calendar",
+        return_to="/settings",
         note="A second connect for the same user: one row, updated.",
     )
     note_file(
@@ -475,7 +475,7 @@ def run(app, base, engine, settings, google) -> None:
         user,
         google,
         "different-account",
-        return_to="/settings/calendar",
+        return_to="/settings",
         email="other.person@example.test",
         sub="g-other-2",
         note="The person picked another Google account in Google's chooser: refused, the first "
@@ -539,7 +539,7 @@ def disconnect_journeys(base, engine, google, user) -> None:
         user,
         google,
         "connect-after-disconnect",
-        return_to="/settings/calendar",
+        return_to="/settings",
         email="other.person@example.test",
         sub="g-other-2",
         note="After a disconnect any Google account can be connected, here the other one that "

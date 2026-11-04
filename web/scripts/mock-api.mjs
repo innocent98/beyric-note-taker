@@ -34,13 +34,17 @@ const { values } = parseArgs({
     "no-google": { type: "boolean", default: false },
     prefill: { type: "string" },
     "google-outcome": { type: "string", default: "google_denied" },
+    calendar: { type: "string", default: "not_connected" },
   },
 });
 
+// `--calendar not_connected|connected|off`: what GET /api/calendar answers (the captures in
+// docs/fe-captures/calendar-state/; `off` is the feature being dark: 404 calendar_unavailable).
 const captureDir = join(dirname(fileURLToPath(import.meta.url)), "../../docs/fe-captures");
 const captures = join(captureDir, "owner-app");
 const body = (name) => JSON.parse(readFileSync(join(captures, `${name}.json`), "utf8")).response.body;
 const prelaunchBody = (name) => JSON.parse(readFileSync(join(captureDir, "prelaunch-mail-prefs", `${name}.json`), "utf8")).response.body;
+const calendarCapture = (name) => JSON.parse(readFileSync(join(captureDir, "calendar-state", `${name}.json`), "utf8")).response.body;
 const accountBody = (name) => JSON.parse(readFileSync(join(captureDir, "pilot-accounts", `${name}.json`), "utf8")).response.body;
 
 // One meeting per state, from the captures. Titles vary so the list reads like a real one.
@@ -196,6 +200,14 @@ const server = http.createServer(async (req, res) => {
   if (path === "/api/notifications" && method === "GET") return json(res, 200, prelaunchBody("19-notifications-cap-notice"));
   if (path === "/api/notifications/read-all") return json(res, 200, prelaunchBody("21-notifications-read-all"));
   if (path === "/api/templates" && method === "GET") return json(res, 200, { templates });
+  if (path === "/api/calendar" && method === "GET") {
+    if (values.calendar === "off") return json(res, 404, calendarCapture("04-state-feature-off"));
+    return json(res, 200, calendarCapture(values.calendar === "connected" ? "09-state-connected-with-upcoming" : "05-state-not-connected"));
+  }
+  if (path === "/api/calendar/google/connect" && method === "POST") {
+    return json(res, 200, { authorize_url: "https://accounts.example.test/consent", show_unverified_notice: false });
+  }
+  if (path === "/api/calendar/google/disconnect" && method === "POST") return json(res, 200, { status: "disconnected", revoked: true });
   if (path === "/api/vocabulary" && method === "GET") return json(res, 200, { terms });
   if (path.startsWith("/api/")) return json(res, 200, {});
   res.writeHead(404, { "content-type": "text/plain" });
