@@ -16,12 +16,12 @@ from datetime import UTC, datetime, timedelta
 from fastapi import HTTPException, Request
 from markdown_it import MarkdownIt
 from markupsafe import Markup
-from sqlalchemy import func, select, text
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
-from app import auth, edge, passwords, usage, workspace
+from app import auth, edge, passwords, placement, usage, workspace
 from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Template, User, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
@@ -37,6 +37,7 @@ from app.pipeline import (
     manual_retry_wait,
     send_again,
 )
+from app.placement import PlacementRefused, PlacementRequest
 from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError, parse_meeting_url
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,6 @@ WORKER_STALE_AFTER = timedelta(minutes=20)
 # that has gone on to transcribe holds it for minutes) before answering 409 instead of hanging.
 LOCK_WAIT = "10s"
 LOCK_NOT_AVAILABLE = "55P03"
-NEW_MEETING_LOCK = 6001  # serialises "is a bot active?" + "send a bot" across requests
 
 STEP_TEXT = {
     "waiting": "Getting started",
@@ -390,23 +390,31 @@ def hours_cap_message(cap_seconds: int) -> str:
     )
 
 
-def _require_bot_room(session: Session, user: User, settings: Settings) -> None:
-    """Refuse when no bot may be sent for `user` now. Two different refusals, so one user's
-    activity is never visible to another: your own running meeting is named as yours
-    (`bot_already_active`); a full note taker is only "busy" (`bot_busy`) and says nothing about
-    whose meeting holds it. Call under `NEW_MEETING_LOCK`."""
-    own = session.scalars(
-        select(Meeting.id).where(Meeting.owner_user_id == user.id, Meeting.status.in_(ACTIVE))
-    ).first()
-    if own is not None:
-        raise Refused(
-            409, "bot_already_active", "A bot is already on a meeting. Wait for it to finish first."
+def placement_refusal(exc: PlacementRefused) -> Refused:
+    """The words and status for a refused placement. Two refusals name the user's own situation
+    (their hours, their own bots); a full note taker is only "busy" and says nothing about whose
+    meeting holds it, so one user's activity is never visible to another."""
+    if exc.code == "hours_cap_reached":
+        return Refused(403, "hours_cap_reached", hours_cap_message(exc.cap_seconds or 0))
+    if exc.code == "already_in_meeting":
+        return Refused(
+            409,
+            "already_in_meeting",
+            "A note taker is already in that meeting for you. Wait for it to finish first.",
         )
-    busy = session.scalar(select(func.count()).where(Meeting.status.in_(ACTIVE)))
-    if busy >= settings.max_active_bots:
-        raise Refused(
-            409, "bot_busy", "The note taker is busy right now. Try again in a few minutes."
+    if exc.code == "user_limit":
+        return Refused(
+            409,
+            "user_limit",
+            f"You already have {exc.limit} bots in meetings. Wait for one to finish first.",
         )
+    return Refused(409, "bot_busy", "The note taker is busy right now. Try again in a few minutes.")
+
+
+def _send_failed() -> Refused:
+    return Refused(
+        502, "bot_send_failed", "The bot could not be sent. Please try again in a moment."
+    )
 
 
 def create_meeting(
@@ -447,35 +455,21 @@ def _create_meeting(
     if template is None:  # also a template that is someone else's: it looks like a missing one
         raise Refused(400, "template_required", "Choose a template for the notes.")
 
-    session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": NEW_MEETING_LOCK})
-    # Checked under the lock, before the bot is sent, and before the "bot is busy" rule.
-    cap = usage.effective_cap(session, user)
-    if (
-        cap is not None
-        and usage.hours_used(session, user, datetime.now(UTC), settings.max_poll_hours * 3600)
-        >= cap
-    ):
-        raise Refused(403, "hours_cap_reached", hours_cap_message(cap))
-    _require_bot_room(session, user, settings)
-    try:
-        vexa_id = vexa.send_bot(url)
-    except VexaError as exc:
-        logger.warning("send_bot failed (%s)", type(exc).__name__)
-        raise Refused(
-            502, "bot_send_failed", "The bot could not be sent. Please try again in a moment."
-        ) from None
-    meeting = Meeting(
-        owner_user_id=user.id,
-        url=url,
+    request = PlacementRequest(
+        user_id=user.id,
         platform=platform,
         native_id=native_id,
+        meeting_url=url,
         template_id=template.id,
-        vexa_meeting_id=str(vexa_id),
-        started_polling_at=datetime.now(UTC),
+        source="manual",
     )
-    session.add(meeting)
-    session.commit()
-    return meeting
+    try:
+        return placement.place_bot(session, vexa, request, now=datetime.now(UTC), settings=settings)
+    except PlacementRefused as exc:
+        raise placement_refusal(exc) from None
+    except VexaError as exc:
+        logger.warning("send_bot failed (%s)", type(exc).__name__)
+        raise _send_failed() from None
 
 
 def regenerate_notes(
@@ -646,34 +640,34 @@ def retry_meeting(session: Session, meeting: Meeting, vexa: VexaClient | None = 
 
 
 def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Meeting) -> Meeting:
-    """Send a new bot to a meeting Google refused: one bot at a time, like a new meeting."""
-    session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": NEW_MEETING_LOCK})
-    session.refresh(meeting, with_for_update=True)  # a double click must not send two bots
+    """Send a new bot to a meeting Google refused. It goes through the same pre-flight as a new
+    meeting (hours, the user's bots, a bot already in that meeting, room on the host) under the
+    same placement lock, so a retry can never take a slot a new meeting was promised."""
+    # The row first, the placement lock second: nothing waits for a row while holding the lock.
+    locked = _lock_meeting(session, meeting)  # a double click must not send two bots
     now = datetime.now(UTC)
-    if retry_block(meeting, now) is not None:
+    if retry_block(locked, now) is not None:
         session.rollback()
         raise Refused(409, "not_retryable", "This meeting cannot be retried.")
-    owner = session.get(User, meeting.owner_user_id)
-    cap = usage.effective_cap(session, owner)
-    if (
-        cap is not None
-        and usage.hours_used(session, owner, now, get_settings().max_poll_hours * 3600) >= cap
-    ):
-        session.rollback()
-        raise Refused(403, "hours_cap_reached", hours_cap_message(cap))
+    owner = session.get(User, locked.owner_user_id)
     try:
-        _require_bot_room(session, owner, get_settings())
-    except Refused:
-        session.rollback()
-        raise
-    if not send_again(meeting, vexa):
-        session.rollback()
-        raise Refused(
-            502, "bot_send_failed", "The bot could not be sent. Please try again in a moment."
+        placement.reserve_slot(
+            session,
+            owner,
+            platform=locked.platform,
+            native_id=locked.native_id,
+            now=now,
+            settings=get_settings(),
         )
-    meeting.started_polling_at = now
+    except PlacementRefused as exc:
+        session.rollback()
+        raise placement_refusal(exc) from None
+    if not send_again(locked, vexa):
+        session.rollback()
+        raise _send_failed()
+    locked.started_polling_at = now
     session.commit()
-    return meeting
+    return locked
 
 
 # ---- templates ----

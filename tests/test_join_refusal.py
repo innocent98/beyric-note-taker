@@ -445,7 +445,28 @@ def test_a_manual_send_cannot_start_a_second_bot(session, meeting, owner):
     vexa = FakeVexa()
     with pytest.raises(Refused) as caught:
         services.retry_meeting(session, meeting, vexa)
-    assert caught.value.code == "bot_already_active"
+    assert caught.value.code == "bot_busy"  # one slot, and the user's own meeting fills it
+    assert not getattr(vexa, "sent", [])
+
+
+def test_a_manual_send_into_a_meeting_the_user_already_has_a_bot_in_is_refused(
+    session, meeting, owner
+):
+    refused_meeting(session, meeting, ago=10 * MINUTE)
+    session.add(
+        Meeting(
+            owner_user_id=owner.id,
+            url=meeting.url,
+            platform=meeting.platform,
+            native_id=meeting.native_id,  # the same code: a second bot would join the same call
+            template_id=meeting.template_id,
+        )
+    )
+    session.commit()
+    vexa = FakeVexa()
+    with pytest.raises(Refused) as caught:
+        services.retry_meeting(session, meeting, vexa)
+    assert (caught.value.status, caught.value.code) == (409, "already_in_meeting")
     assert not getattr(vexa, "sent", [])
 
 

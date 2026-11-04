@@ -391,8 +391,12 @@ def create_meeting(
     user: User = Depends(auth.current_user),
     vexa=Depends(get_vexa),
 ) -> MeetingDetail:
-    """Send the bot to a Google Meet or Zoom link. One bot at a time: 409 while one is active.
-    403 `hours_cap_reached` once the account has used its recorded hours."""
+    """Send the bot to a Google Meet or Zoom link, through the same placement as every other way a
+    bot is sent. 403 `hours_cap_reached` once the account has used its recorded hours. 409 for the
+    rest: `user_limit` (the account already has its most bots on meetings), `already_in_meeting`
+    (a bot of the account's is already in that meeting) and `bot_busy` (the note taker is full;
+    the text never says whose meeting holds it). 502 `bot_send_failed` when the bot host did not
+    take the bot."""
     meeting = services.create_meeting(
         session, vexa, user, body.url, body.template_id, request.app.state.settings
     )

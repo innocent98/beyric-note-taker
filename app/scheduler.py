@@ -45,7 +45,7 @@ from app.models import AppState
 
 logger = logging.getLogger("app.scheduler")
 
-# Next to NEW_MEETING_LOCK (6001), SIGNUP_LOCK (6002) and ADMIN_LOCK (6003). Those are held for one
+# Next to PLACEMENT_LOCK (6004), SIGNUP_LOCK (6002) and ADMIN_LOCK (6003). Those are held for one
 # transaction; this one is session-level and held for the life of the process.
 SCHEDULER_LOCK = 6010
 
