@@ -1,0 +1,115 @@
+{
+  "note": "NOT settable through the API yet (C15a part 2): the stored rule was set to `organizer` directly. `rule`, `rule_text` and each meeting's answer follow it.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": true,
+      "state": "connected",
+      "state_text": "Connected",
+      "google_email": "grace@example.test",
+      "last_sync_at": "2026-11-04T13:08:09.196424Z",
+      "last_error": null,
+      "rule": "organizer",
+      "rule_text": "Joining meetings you organise",
+      "upcoming": [
+        {
+          "id": 1,
+          "title": "Weekly planning",
+          "starts_at": "2026-11-04T15:08:00Z",
+          "ends_at": "2026-11-04T15:38:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null
+        },
+        {
+          "id": 2,
+          "title": "Customer call",
+          "starts_at": "2026-11-04T18:08:00Z",
+          "ends_at": "2026-11-04T18:38:00Z",
+          "platform": "zoom",
+          "platform_label": "Zoom",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null
+        },
+        {
+          "id": 3,
+          "title": "Lunch with Sam",
+          "starts_at": "2026-11-04T21:08:00Z",
+          "ends_at": "2026-11-04T21:38:00Z",
+          "platform": null,
+          "platform_label": null,
+          "attendee_count": 2,
+          "will_join": false,
+          "will_join_text": "Cannot join",
+          "reason_text": "Add a meeting link to this event to record it"
+        },
+        {
+          "id": 4,
+          "title": "Vendor sync",
+          "starts_at": "2026-11-05T15:08:00Z",
+          "ends_at": "2026-11-05T15:38:00Z",
+          "platform": "teams",
+          "platform_label": "Microsoft Teams",
+          "attendee_count": 2,
+          "will_join": false,
+          "will_join_text": "Cannot join",
+          "reason_text": "Microsoft Teams meetings cannot be joined yet"
+        },
+        {
+          "id": 5,
+          "title": "Budget review",
+          "starts_at": "2026-11-05T19:08:00Z",
+          "ends_at": "2026-11-05T19:38:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": false,
+          "will_join_text": "Cannot join",
+          "reason_text": "You declined this invite"
+        },
+        {
+          "id": 6,
+          "title": "Sprint 🚀 planning · 週次",
+          "starts_at": "2026-11-06T15:08:00Z",
+          "ends_at": "2026-11-06T15:38:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null
+        },
+        {
+          "id": 7,
+          "title": "Partnership idea",
+          "starts_at": "2026-11-06T20:08:00Z",
+          "ends_at": "2026-11-06T20:38:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": false,
+          "will_join_text": "Off",
+          "reason_text": "Skipped because you are not the organiser"
+        }
+      ]
+    }
+  }
+}

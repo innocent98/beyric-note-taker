@@ -19,6 +19,7 @@ const PATHS = {
   download: ["M12 3v12M7 10l5 5 5-5M5 21h14"],
   down: ["m6 9 6 6 6-6"],
   plus2: ["M12 5v14M5 12h14"],
+  calendar: ["M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z", "M3 10h18M8 3v4M16 3v4"],
   search: ["M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14z", "m20 20-3.5-3.5"],
 } as const;
 

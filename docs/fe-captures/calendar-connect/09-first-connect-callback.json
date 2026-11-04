@@ -13,8 +13,8 @@
     "status": 302,
     "headers": {
       "cache-control": "no-store",
-      "location": "/settings/calendar?calendar=connected",
-      "set-cookie": "calendar_flow=<cookie>; expires=Wed, 04 Nov 2026 08:45:54 GMT; Max-Age=0; Path=/api/calendar/google; SameSite=lax"
+      "location": "/settings?calendar=connected",
+      "set-cookie": "calendar_flow=<cookie>; expires=Wed, 04 Nov 2026 13:08:13 GMT; Max-Age=0; Path=/api/calendar/google; SameSite=lax"
     },
     "body": ""
   }

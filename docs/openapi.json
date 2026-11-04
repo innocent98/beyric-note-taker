@@ -522,9 +522,99 @@
         "title": "BadgesOut",
         "type": "object"
       },
+      "CalendarOut": {
+        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`google_email` is the Google account that was connected, and is null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `upcoming` is empty unless connected.",
+        "properties": {
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "google_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Email"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_sync_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync At"
+          },
+          "rule": {
+            "enum": [
+              "all",
+              "organizer",
+              "none"
+            ],
+            "title": "Rule",
+            "type": "string"
+          },
+          "rule_text": {
+            "title": "Rule Text",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "not_connected",
+              "connected",
+              "degraded",
+              "needs_reconnect"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "state_text": {
+            "title": "State Text",
+            "type": "string"
+          },
+          "upcoming": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingEvent"
+            },
+            "title": "Upcoming",
+            "type": "array"
+          }
+        },
+        "required": [
+          "connected",
+          "state",
+          "state_text",
+          "google_email",
+          "last_sync_at",
+          "last_error",
+          "rule",
+          "rule_text",
+          "upcoming"
+        ],
+        "title": "CalendarOut",
+        "type": "object"
+      },
       "ConnectIn": {
         "additionalProperties": false,
-        "description": "`features` are what to ask Google for: `calendar` (read events, to decide which meetings\nto join) and/or `meet` (learn that a Meet call you host began). `return_to` is a relative\npath to land on afterwards; anything else becomes `/settings/calendar`.",
+        "description": "`features` are what to ask Google for: `calendar` (read events, to decide which meetings\nto join) and/or `meet` (learn that a Meet call you host began). `return_to` is a relative\npath to land on afterwards; anything else becomes `/settings`.",
         "properties": {
           "features": {
             "default": [
@@ -1716,6 +1806,94 @@
         "title": "UnreadCount",
         "type": "object"
       },
+      "UpcomingEvent": {
+        "description": "One synced event in the next seven days. Only what a person needs to recognise it: no\nattendees, description, location or meeting link (a Zoom link can carry a passcode).\n`will_join_text` is the short answer in words and `reason_text` the sentence behind a no: show\nboth as they are.",
+        "properties": {
+          "attendee_count": {
+            "title": "Attendee Count",
+            "type": "integer"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "enum": [
+                  "google_meet",
+                  "zoom",
+                  "teams"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "platform_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Google Meet, Zoom or Microsoft Teams; or null",
+            "title": "Platform Label"
+          },
+          "reason_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Text"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "will_join": {
+            "title": "Will Join",
+            "type": "boolean"
+          },
+          "will_join_text": {
+            "title": "Will Join Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "starts_at",
+          "ends_at",
+          "platform",
+          "platform_label",
+          "attendee_count",
+          "will_join",
+          "will_join_text",
+          "reason_text"
+        ],
+        "title": "UpcomingEvent",
+        "type": "object"
+      },
       "UsageOut": {
         "properties": {
           "cap_seconds": {
@@ -2797,6 +2975,68 @@
         "summary": "Google Start",
         "tags": [
           "google"
+        ]
+      }
+    },
+    "/api/calendar": {
+      "get": {
+        "description": "Everything the calendar settings page shows, in one read (no CSRF header needed): whether\nGoogle Calendar is connected, which Google address, the last time it was read, the last\nfailure in plain words, and the next seven days of synced events, each with whether the bot\nwill join it and why not when it will not. Nothing is fetched from Google here: this reads what\nthe sync job last stored. 404 `calendar_unavailable` while the calendar features are off.",
+        "operationId": "calendar_state",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Calendar State",
+        "tags": [
+          "calendar"
         ]
       }
     },

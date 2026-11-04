@@ -17,6 +17,7 @@ export const NEXT_PAGES = [
   "/share",
   "/templates",
   "/vocabulary",
+  "/settings",
   "/privacy",
   "/terms",
   "/styleguide",
@@ -51,6 +52,7 @@ export const APP_PATHS = [
   "/share",
   "/templates",
   "/vocabulary",
+  "/settings",
   "/styleguide",
   "/api/",
 ] as const;

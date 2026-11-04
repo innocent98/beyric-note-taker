@@ -2,7 +2,7 @@ import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from "reac
 import { AppLink } from "./link";
 
 export type ButtonKind = "primary" | "secondary" | "danger" | "ghost" | "link" | "quiet" | "outline-light";
-export type ButtonSize = "sm" | "md" | "lg" | "xl" | "field" | "";
+export type ButtonSize = "sm" | "md" | "tight" | "lg" | "xl" | "field" | "";
 
 type Common = { kind?: ButtonKind; size?: ButtonSize; block?: boolean; wide?: boolean; children: ReactNode };
 type AsButton = Common & { href?: undefined } & ButtonHTMLAttributes<HTMLButtonElement>;
