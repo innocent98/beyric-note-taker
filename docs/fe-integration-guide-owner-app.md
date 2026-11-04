@@ -1673,6 +1673,41 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/71-not-an-object.json`_
 
+### 5.6a `DELETE /api/templates/{id}` (write): delete a template
+
+Login and the CSRF header like every write. The captures are in `docs/fe-captures/template-delete/` (made by `scripts/capture_template_delete.py` against the running app: real migrations, real HTTP; Vexa and OpenAI are fakes). **`template_name` on a meeting is new** and appears on every meeting body, list item and detail (section 6).
+
+```http
+DELETE /api/templates/4
+X-CSRF-Token: <csrf-B>
+Cookie: session=<cookie>
+```
+```http
+HTTP 204
+cache-control: no-store
+```
+No body. _Capture: `docs/fe-captures/template-delete/07-delete.json`._
+
+**What the FE does after a 204:** drop the template from its list. `GET /api/templates` no longer lists it (`09-templates-after.json`). Nothing else needs a refetch.
+
+**Errors**
+
+| Case | Status and code | `message` (verbatim) | Capture | FE |
+|---|---|---|---|---|
+| Not the caller's, or never existed, or **already deleted** (a double press, another tab) | 404 `not_found` | `No such template` (developer text: do not show it) | `12`, `13`, `21` | Treat as gone: remove it from the list. The app shows "That template was already deleted." |
+| The caller's **only** template | 409 `last_template` | `Keep at least one template. Add another one first, then delete this.` (written for the person: show it) | `25` | Keep the list, show the message |
+| No or wrong CSRF token | 403 `csrf_rejected` | see section 3 | `06` | usual retry |
+| Not logged in | 401 `not_authenticated` | | | usual |
+
+**What happens to everything that pointed at the template** (checked live: `04-rows-before.json` and `08-rows-after.json` are the table rows before and after):
+
+- **The row is kept, marked deleted.** A meeting keeps its `template_id`, so `template_id` on a meeting can be the id of a template that is **no longer in `GET /api/templates`**. Never look the name up in the list alone: use **`template_name`** (`10-meeting-after.json`: `"template_id": 4, "template_name": "Interview"`, notes unchanged). `template_name` is the template's current name while it exists, and the name it had when it was deleted after that.
+- **The "Rewrite notes" select** must not start on a deleted template: start on one from the list (the app uses the first). Sending a deleted id to `POST /api/meetings/{id}/regenerate` or `POST /api/meetings` is **400 `template_required`** (`15`, `16`); `PUT /api/templates/{id}` on it is 404 (`14`).
+- **The calendar setting** `calendar_template_id` that pointed at it moves, in the same call, to the person's **oldest remaining template**, and so do the calendar joins that have not sent a bot yet (`08`: setting and join are now `1`). A setting that pointed elsewhere, or is `null`, is untouched. `PUT /api/calendar/settings` with a deleted id is 404.
+- **A meeting still being written, and a rewrite in flight,** finish with the template they started with (tests; not capturable by hand).
+- **The name can be used again** (`18-name-reused.json`, 201).
+- **Nothing is special about the four starting templates**: each person has their own copies and can delete any of them, as long as one stays.
+
 ### 5.7 Vocabulary
 
 Sorted alphabetically. Terms are trimmed; at most 100 characters; no `<`, `>` or line breaks; unique.
@@ -1863,7 +1898,7 @@ What `/share` does with it (verified in headless Chrome against a stand-in for t
 - **`failure_reason` is a string whenever `status` is `failed`** (a fallback text is used if the database has none) and `null` otherwise.
 - **`retry_block` is `null` in two different situations**: the meeting is not failed, or it is failed and *can* be retried. Use `can_retry` to decide whether to show the button; use `retry_block_message` (shown verbatim in the Jinja page too) when `retry_block` is set.
 - **`transcript` is the speaker-labelled version when there is one**, otherwise the plain one. There is no way to ask for the other.
-- **`template_id` on a meeting is the template last used for its notes**; it changes after a successful regenerate.
+- **`template_id` on a meeting is the template last used for its notes**; it changes after a successful regenerate. It can be the id of a **deleted** template, which is not in `GET /api/templates`: show **`template_name`** (always present, a string) and never look the name up in the templates list alone. `template_name` is on list items and details alike.
 - **`title` is composed by the server** (`Google Meet abc-defg-hij`, `Zoom 12345678901`). The meeting link itself is never returned.
 - **`created_at` is ISO 8601 in UTC with a trailing `Z`** (`2026-11-03T14:02:53.816443Z`). Format it in the viewer's timezone yourself.
 - **`speakers_incomplete` and `bot_left_early` are independent notices**; see section 7.
@@ -2048,6 +2083,10 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | The pipeline writes the ledger when it prepares the audio (idempotent); the cap also counts running meetings | Test only (needs the worker) | `tests/test_usage.py` |
 | Logout signs out only that user | Test | `test_logging_out_signs_out_only_that_user` |
 | Login without or with wrong CSRF token is 403 | Verified live | `03`, `04` |
+| `DELETE /api/templates/{id}`: 204 no body; 404 for a second delete, an unknown id, another person's template and a deleted one; 409 `last_template`; 403 without the token (**captures in `docs/fe-captures/template-delete/`**, not `owner-app/`) | Verified live | `07`, `12`, `13`, `21`, `25`, `06` |
+| After a delete: the meeting keeps notes and `template_id`, `template_name` is the old name; the list drops the template; the calendar setting and planned join move to the oldest left; choosing it again is 400 `template_required`; its name is free again | Verified live | `08`, `09`, `10`, `11`, `15`, `16`, `18` |
+| A rewrite in flight and a meeting still being written finish after their template is deleted; two deletes at once (last two templates, same template) | Test only (needs a model call in flight and two simultaneous requests) | `tests/test_template_delete.py` |
+| `template_name` on the older captures in `owner-app/` | **Not present**: they were captured before the field existed. Every body from the running app has it; the new captures show it | `docs/fe-captures/template-delete/05`, `10`, `11` |
 | CSRF token changes at login and at logout | Verified live | `01`, `08`, `72` |
 | Login limit: 429 on the sixth attempt from one address, also for the right password | Verified live (2026-11-03, through nginx and Next) | `79`–`81` |
 | Email limit: 10 failures in an hour from any addresses lock that email, same 429 body | Verified live before accounts (`docs/spike/edge-secret/e2e-output.txt`, with the owner constant as the key; **not rerun with emails**) and test: `test_failures_on_one_email_from_many_addresses_lock_that_email`, `test_ten_failures_in_an_hour_lock_the_account_even_for_a_new_address` | `test_ten_failures_in_an_hour_lock_the_account_even_for_a_new_address` |

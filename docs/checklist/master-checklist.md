@@ -141,7 +141,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] App shell (sidebar, phone top bar), Meetings (new meeting, list, paging, stale-worker alert, empty state), meeting page (notes, transcript, copy, rewrite, cancel with confirm, retry, notices, 30 s polling), Templates, Vocabulary, login; light and dark
   - [x] 89 vitest tests, 41-check end-to-end through Next on a compose stack, real-browser pass at 375 and 1280 px in both themes
   - [x] CI green (PR merged and deployed 2026-11-03)
-  - [ ] Not built, waiting on the API (stream D): Download menu (shipped with W5, 2026-11-03), translation (shipped with W7, 2026-11-04), Share dialog, template delete, participants and duration
+  - [ ] Not built, waiting on the API (stream D): Download menu (shipped with W5, 2026-11-03), translation (shipped with W7, 2026-11-04), Share dialog, ~~template delete~~ (built 2026-11-04), participants and duration
   - [ ] Not verified: real Vexa bot and real OpenAI rewrite through the screens, Safari and Firefox, the live server
 - [ ] Stream P, UI parity with the designer's files (`feature/nextjs-ui-parity`, PR #26, merged and deployed 2026-11-03; SOP `docs/sop/2026-11-03-ui-parity.md`; report `docs/ui/parity-report.md`)
   - [x] Gap check of every designer file against the Next pages at 1440, 768 and 390 px; report with before and after screenshots
@@ -152,7 +152,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] CI green (PR merged and deployed 2026-11-03)
   - [x] Decided 2026-11-03 (Adebayo): keep the designer's landing and sign-in words even though some run ahead of the product (Teams, tasks, integrations, sharing); revisit before the Google verification submission
   - [x] Run `owner-e2e.mjs` and `owner-browser-check.mjs` on the compose stack (2026-11-03: 41/41 and all pass, also with `--poll-check` and `--send-check`; SOP `2026-11-03-ui-parity.md`, "Live check"). Live public pages read in a browser; favicon link fixed. Still open: a live authenticated pass by Adebayo, and the designed 404 for unknown URLs (FastAPI JSON shows)
-  - [ ] Needs backend, not built (listed in the report): sign-up, forgot password, SSO, accounts and sidebar identity, calendar and auto-join card, series, tasks, projects, team, settings, download, share, translation, agenda, template delete, Emails
+  - [ ] Needs backend, not built (listed in the report): sign-up, forgot password, SSO, accounts and sidebar identity, calendar and auto-join card, series, tasks, projects, team, settings, download, share, translation, agenda, ~~template delete~~ (built 2026-11-04), Emails
 - [ ] Stream D, new designed screens, one line per screen. **Decided 2026-11-03 (Adebayo): every designed screen is pilot work, and the AI workspace spec is approved ("all recommended" for D1 to D19).** The AI workspace screens follow `docs/superpowers/specs/2026-11-03-ai-workspace-design.md` (phases W0 to W10; "Needs" names the backend phase that must merge first; "Designer gap" is a control the prototype does not draw). Each screen is built after its API merges, against live captures in the FE guide, and ticked only when verified in a real browser.
   - [ ] D1, accounts and pilot (needs Module 2 phase A, shipped on the backend): sign up, confirm your email (`/verify-email`), forgot password, check your email, new password (`/reset-password`), waitlist form and "pilot full" (`/pilot-full`, designer gap), accept invite (`/signup?invite=`), Google sign-in buttons and the `/login?error=` messages, sidebar identity (name and email from `GET /api/session`), usage bar and "hours used up" (designer gap), notification bell (designer gap), admin screens: users, waitlist, pilot settings (designer gap)
     - Shipped on the frontend so far (from main, PR #44); the rest of D1 is still open:
@@ -197,7 +197,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] D12, Settings (needs W2, W7, W8, W9, W10): Tasks card, default language, sprints and reminders card, Slack and tracker cards
   - [ ] D13, meeting page details (needs W0.4 and W8): duration (`recorded_seconds`), participants (names from speaker labels), series, milestone
   - [ ] D14, Emails in the designer's layout (W0.3 done 2026-11-04 for verify, reset, already registered, invite and Notes ready; open: Notes shared (W6), New tasks (W2), Team invite (W3), reminders (W8), Could not join (C14))
-  - [ ] D15, template delete (needs `DELETE /api/templates/{id}`, not yet built, and a `template_in_use` refusal for a template still used by a meeting or the calendar setting; both are planned in the accounts spec, neither exists in code yet)
+  - [x] D15, template delete (2026-11-04, PR #73, SOP `2026-11-04-template-delete.md`): built as a soft delete, **not** the accounts spec's `template_in_use` refusal: a template used by meetings or the calendar setting can be deleted (meetings keep notes and the name; the setting moves to the oldest left); only the last template is refused (409 `last_template`)
   - [ ] D16, shell leftovers: toast component, PWA basics
 - [x] W5, Download and export (AI workspace spec section 9; branch `feature/notes-export-w5`, 2026-11-03; SOP `docs/sop/2026-11-03-notes-export-w5.md`; FE guide `docs/fe-integration-guide-export.md` with 18 live captures; PR #48 open, not merged)
   - [x] Spike EX1: WeasyPrint fits the image (Pango already comes with ffmpeg; one 103 MB pip layer) and the memory (renderer peak 91 MiB for a 1-hour transcript, 120 MiB for 40,000 words; 1.9 s and 9.0 s on a loaded arm64 VM): `docs/spike/export-pdf-memory.md`
@@ -435,7 +435,7 @@ Code and product
 - [ ] Real Vexa bot plus real OpenAI rewrite through the new screens; Safari and Firefox; long titles and many rows (stream C and P "not verified")
 - [ ] Speaker names appear under two name orders ("Godstime America" / "America Godstime"): merge variants in speaker labels
 - [ ] Measure real OpenAI spend per meeting hour (spike and Task 8 both open)
-- [ ] Stream D "needs backend, not built" list in `docs/ui/parity-report.md` (sign-up, forgot password, SSO, calendar card, team, tasks, share, download, translation, agenda, template delete, Emails) is the screen build order; also pending: toast component, PWA basics, retiring Jinja and `app/static/tokens.css`
+- [ ] Stream D "needs backend, not built" list in `docs/ui/parity-report.md` (sign-up, forgot password, SSO, calendar card, team, tasks, share, download, translation, agenda, ~~template delete~~, Emails) is the screen build order; also pending: toast component, PWA basics, retiring Jinja and `app/static/tokens.css`
 - [ ] Login lockout alert to the owner (log line only today); optionally log the resolved client address on failed logins
 - [ ] In-memory login counters reset on restart and are per process: move to the database or Redis with the accounts work
 
@@ -452,3 +452,13 @@ Legal and business
 - [ ] Hour-long meeting rated against Fireflies; a French plus English call; rate the Zoom #3 notes; merge Novex-News#10
 - [ ] Launch capacity: bot-machine budget, or a per-hour vendor instead
 - [ ] Revisit the designer's landing and sign-in copy before the Google verification submission (decided 2026-11-03)
+
+## Template delete (2026-11-04, `feature/template-delete`, PR open)
+
+- [x] `DELETE /api/templates/{id}`: soft delete (`templates.deleted_at`, migration 0015, name unique among live rows); 404 for foreign, unknown, already deleted; 409 `last_template`; row locked so two deletes at once are decided in turn
+- [x] What points at a template: meetings keep notes and id, new `template_name` on every meeting body; calendar setting and planned joins move to the oldest left; in-flight meeting and rewrite finish; deleted ids refused for new choices
+- [x] Frontend: the designer's red "Delete template" text button (position, size, colour, words identical at 1440), inline ask (designer gap), neighbour selection as drawn, plain error lines; parity shots `docs/ui/parity/after/app-templates-{,ask-}{1440,768,390}.jpg`
+- [x] Tests: `tests/test_template_delete.py` (34), enumeration test requests the DELETE as another user, migration round trip, `web/tests/screens.test.tsx`, `api-client`, `meeting-view`
+- [x] FE guide section 5.6a with real captures (`docs/fe-captures/template-delete/`); SOP `docs/sop/2026-11-04-template-delete.md`
+- [ ] Follow-up: the Review page's "Rewrite with the corrected spelling" offer fails with "Choose a template." for a meeting whose template was deleted
+- [ ] Follow-up: designer to rule on the confirmation ask and on deleting the last template

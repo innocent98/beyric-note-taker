@@ -542,6 +542,49 @@ def test_0013_adds_suppressions_and_the_skipped_status_and_downgrades_cleanly(sc
     engine.dispose()
 
 
+def test_template_soft_delete_frees_the_name_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        owner = conn.execute(text("select id from users order by id limit 1")).scalar_one()
+        # "General" is seeded live for the owner: a deleted row may share its name, a live may not
+        conn.execute(
+            text(
+                "insert into templates (owner_user_id, name, instructions, deleted_at)"
+                " values (:o, 'General', 'old', now())"
+            ),
+            {"o": owner},
+        )
+    with pytest.raises(sa.exc.IntegrityError):
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "insert into templates (owner_user_id, name, instructions)"
+                    " values (:o, 'General', 'again')"
+                ),
+                {"o": owner},
+            )
+    with engine.connect() as conn:
+        live = conn.execute(
+            text("select count(*) from templates where deleted_at is null and name = 'General'")
+        ).scalar_one()
+    assert live == 1
+
+    command.downgrade(cfg, "0014")
+    with engine.connect() as conn:
+        names = [r[0] for r in conn.execute(text("select name from templates order by id"))]
+        constraint = conn.execute(
+            text("select count(*) from pg_constraint where conname = 'uq_templates_owner_name'")
+        ).scalar_one()
+    assert "General" in names and any(n.startswith("General (deleted ") for n in names)
+    assert constraint == 1
+    assert "deleted_at" not in {c["name"] for c in inspect(engine).get_columns("templates")}
+    command.upgrade(cfg, "head")  # and back up again
+    assert "deleted_at" in {c["name"] for c in inspect(engine).get_columns("templates")}
+    engine.dispose()
+
+
 def test_0014_adds_translations_and_the_default_language_and_downgrades_cleanly(scratch_url):
     cfg = alembic_config(scratch_url)
     command.upgrade(cfg, "head")

@@ -227,7 +227,7 @@ def _platform_label(meeting: Meeting) -> str:
     return "Zoom" if meeting.platform == "zoom" else "Google Meet"
 
 
-def _summary(meeting: Meeting) -> MeetingSummary:
+def _summary(meeting: Meeting, template_name: str) -> MeetingSummary:
     return MeetingSummary(
         id=meeting.id,
         title=_title(meeting),
@@ -238,6 +238,7 @@ def _summary(meeting: Meeting) -> MeetingSummary:
         status_text=services.status_text(meeting),
         status_tone=services.status_tone(meeting),
         template_id=meeting.template_id,
+        template_name=template_name,
         created_at=meeting.created_at,
     )
 
@@ -249,7 +250,9 @@ def _detail(meeting: Meeting, session: Session) -> MeetingDetail:
     block = services.retry_block(meeting) if failed else None
     active = meeting.status in services.ACTIVE
     return MeetingDetail(
-        **_summary(meeting).model_dump(),
+        **_summary(
+            meeting, services.template_names(session, [meeting])[meeting.template_id]
+        ).model_dump(),
         failure_reason=(meeting.failure_reason or REASON_UNEXPECTED) if failed else None,
         retry_block=block,
         retry_block_message=services.retry_block_message(meeting, block),
@@ -294,8 +297,9 @@ def list_meetings(
     `next_before_id`."""
     rows = services.list_meetings(session, user, limit + 1, before_id)
     page = rows[:limit]
+    names = services.template_names(session, page)
     return MeetingList(
-        meetings=[_summary(meeting) for meeting in page],
+        meetings=[_summary(meeting, names[meeting.template_id]) for meeting in page],
         has_more=len(rows) > limit,
         next_before_id=page[-1].id if len(rows) > limit else None,
         worker_stale=services.worker_is_stale(session),
@@ -568,6 +572,24 @@ def update_template(
     template = services.template_or_404(session, user, template_id)
     services.save_template(session, user, template, body.name, body.instructions)
     return TemplateOut.model_validate(template)
+
+
+@router.delete(
+    "/templates/{template_id:id}",
+    status_code=204,
+    tags=["templates"],
+    responses={code: {"model": ErrorResponse} for code in (404, 409)},
+)
+def delete_template(
+    template_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> Response:
+    """Delete a template. Meetings written with it keep their notes and the template name they
+    show; the calendar setting that pointed at it moves to the oldest template left. 409
+    `last_template` for the only one."""
+    services.delete_template(session, user, template_id)
+    return Response(status_code=204)
 
 
 # ---- vocabulary ----

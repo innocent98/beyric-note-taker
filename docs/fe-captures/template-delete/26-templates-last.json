@@ -1,0 +1,27 @@
+{
+  "note": "General is still there.",
+  "request": {
+    "method": "GET",
+    "path": "/api/templates",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "templates": [
+        {
+          "id": 1,
+          "name": "General",
+          "instructions": "Write a summary, key points, decisions, action items with owners, and open questions."
+        }
+      ]
+    }
+  }
+}

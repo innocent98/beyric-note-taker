@@ -1,0 +1,28 @@
+{
+  "note": "The deleted name is free again (201).",
+  "request": {
+    "method": "POST",
+    "path": "/api/templates",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Interview",
+      "instructions": "A new one."
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "location": "/api/templates/5"
+    },
+    "body": {
+      "id": 5,
+      "name": "Interview",
+      "instructions": "A new one."
+    }
+  }
+}

@@ -255,6 +255,9 @@ export function createApi(options: ApiOptions = {}) {
       create: (body: TemplateInput) => request<Template>("POST", "/api/templates", { body, write: true }),
       update: (id: number, body: TemplateInput) =>
         request<Template>("PUT", `/api/templates/${id}`, { body, write: true }),
+      // 204 and no body. 409 `last_template` for the only one (its message is for the person); a
+      // second delete of the same template is a 404.
+      remove: (id: number) => request<void>("DELETE", `/api/templates/${id}`, { write: true }),
     },
     // GET /api/decisions groups by meeting; `limit` counts meetings. Hiding never edits the notes.
     decisions: {

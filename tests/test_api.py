@@ -451,6 +451,7 @@ def test_list_items_are_summaries_newest_first(api, session, template):
         "status_text": "Downloading the audio",
         "status_tone": "info",
         "template_id": template.id,
+        "template_name": "General",
         "created_at": item["created_at"],
     }
     assert item["created_at"].endswith("Z")

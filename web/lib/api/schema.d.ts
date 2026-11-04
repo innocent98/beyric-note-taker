@@ -1062,7 +1062,13 @@ export interface paths {
          */
         put: operations["update_template"];
         post?: never;
-        delete?: never;
+        /**
+         * Delete Template
+         * @description Delete a template. Meetings written with it keep their notes and the template name they
+         *     show; the calendar setting that pointed at it moves to the oldest template left. 409
+         *     `last_template` for the only one.
+         */
+        delete: operations["delete_template"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1584,6 +1590,8 @@ export interface components {
             step: "waiting" | "audio" | "transcribing" | "speakers" | "notes" | "done";
             /** Template Id */
             template_id: number;
+            /** Template Name */
+            template_name: string;
             /** Title */
             title: string;
             /** Transcript */
@@ -1658,6 +1666,8 @@ export interface components {
             step: "waiting" | "audio" | "transcribing" | "speakers" | "notes" | "done";
             /** Template Id */
             template_id: number;
+            /** Template Name */
+            template_name: string;
             /** Title */
             title: string;
         };
@@ -5260,6 +5270,71 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
