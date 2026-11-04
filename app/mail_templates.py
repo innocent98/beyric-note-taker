@@ -145,7 +145,31 @@ def _invite(payload: dict, to: str, settings: Settings) -> Message:
     )
 
 
+def _alert(payload: dict, to: str, settings: Settings) -> Message:
+    """An alert from `app/alerts.py`: the words the app wrote, no link. The text is in the payload,
+    so it is account-style mail (scrubbed once sent, failed and scrubbed after an hour unsent: an
+    alert that old is no use). Every string is escaped by the layout and the subject is one line."""
+    title = payload["title"]
+    body = payload["body"]
+    if not isinstance(title, str) or not isinstance(body, str):
+        raise ValueError("an alert's title and body are text")
+    subject = clean_line(title, 150) or "Beyric Note Taker alert"
+    lines = [clean_line(line, 600) for line in body.splitlines()][:20]
+    blocks: list[Block] = [
+        Heading(subject),
+        *(Para(line) for line in lines if line),
+        Para("This is an automatic message from Beyric Note Taker.", muted=True),
+    ]
+    return Message(
+        to=to,
+        subject=subject,
+        text=render_text(blocks, SIGNATURE),
+        html=render_html(subject, blocks, SIGNATURE),
+    )
+
+
 LINK_TEMPLATES: dict[str, Callable[[dict, str, Settings], Message]] = {
+    "alert": _alert,
     "verify_email": _verify,
     "reset_password": _reset,
     "already_registered": _already,

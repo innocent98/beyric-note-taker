@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     # `mail_recipient_daily_cap`: notes mails one address may get in 24 hours; more are skipped.
     mail_daily_cap: int = 80
     mail_recipient_daily_cap: int = 5
+    # Where admin alerts (no bot slot free, a join that was not recorded) are mailed. Empty: each
+    # admin's own address, unless their `notify_email` is off. Optional (`app/alerts.py`).
+    admin_alert_email: str = ""
 
     # Hosts a pasted calendar link may point at, comma separated: an exact name, or `.suffix`
     # (every subdomain of it). Only an admin edits this, through the environment, never a user.
