@@ -375,24 +375,26 @@ def scheduler(engine):
 
 
 def sync_jobs(scheduler) -> list[str]:
-    return [job.name for job in scheduler._jobs["sync"]]
+    """The calendar jobs only: the sweeps and the mail sender (C10b) are registered either way."""
+    return [job.name for job in scheduler._jobs["sync"] if job.name.startswith("calendar")]
 
 
 def test_calendar_is_off_by_default():
     assert make_settings().calendar_enabled is False
 
 
-def test_nothing_is_registered_while_calendar_enabled_is_false(scheduler):
+def test_no_calendar_job_is_registered_while_calendar_enabled_is_false(scheduler):
     register_jobs(scheduler, make_settings(calendar_enabled=False))
 
-    assert sync_jobs(scheduler) == [] and scheduler._jobs["dispatch"] == []
+    assert sync_jobs(scheduler) == []
+    assert not [j for j in scheduler._jobs["dispatch"] if j.name.startswith("calendar")]
 
 
 def test_the_sync_job_is_registered_on_the_sync_loop_when_enabled(scheduler):
     register_jobs(scheduler, make_settings(calendar_enabled=True))
 
     assert sync_jobs(scheduler) == ["calendar_sync"]
-    assert scheduler._jobs["dispatch"] == []
+    assert not [j for j in scheduler._jobs["dispatch"] if j.name.startswith("calendar")]
 
 
 def test_the_registered_job_syncs_due_connections_when_the_scheduler_ticks(
