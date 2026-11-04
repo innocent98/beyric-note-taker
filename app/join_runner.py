@@ -653,13 +653,14 @@ def _refused(
     if join is None:
         session.rollback()
         return None
-    # Every column the row changes is set BEFORE anything queries (a query autoflushes, and a
-    # second UPDATE without `updated_at` would let the database overwrite it: the retry gap
-    # reads it).
+    # Anything that queries (and so autoflushes) comes BEFORE the row is changed, and every column
+    # it changes is then set together: a second UPDATE without `updated_at` would let the database
+    # overwrite it, and the retry gap reads it.
+    crowded = code == "bot_busy" and _another_live_join_on_the_code(session, join)
     join.attempts += 1
     _touch(join, now)
     reason = _SKIP_REASONS.get(code, "refused")
-    if code == "bot_busy" and _another_live_join_on_the_code(session, join):
+    if crowded:
         # Two of the owner's rows on one code inside their windows (back-to-back slots in one
         # room): `no_capacity` is a live state and the code may be live only once per user.
         code, reason = "already_in_meeting", "code_in_use"

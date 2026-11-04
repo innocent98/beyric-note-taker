@@ -60,6 +60,10 @@ TABLE = [
     # is the user) or comes from their own organisation; a stranger's invite waits for a switch.
     ("all", False, "needsAction", ANY, None, (False, "not_accepted")),
     ("all", None, "needsAction", ANY, None, (False, "not_accepted")),
+    # The same for an invite with no entry for the user at all (sent to a group address): somebody
+    # else organises it and nothing says the user accepted. No organiser information means a solo
+    # event.
+    ("all", False, None, ANY, None, (False, "not_accepted")),
     ("all", ANY, ANY, ANY, None, (True, "ok")),
 ]
 
@@ -129,7 +133,7 @@ def test_an_unanswered_invite_from_the_users_own_organisation_is_joined():
     )
 
 
-@pytest.mark.parametrize("response", ["accepted", "tentative", None])
+@pytest.mark.parametrize("response", ["accepted", "tentative"])
 def test_only_an_unanswered_invite_waits_for_the_user(response):
     event = make(self_response=response, organizer_self=False, organizer_same_org=False)
     assert will_join(event, None, settings("all"), now=NOW) == JoinDecision(True, "ok")
