@@ -1,0 +1,24 @@
+{
+  "note": "The answer is the new value.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/email",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "notify_email": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "notify_email": false
+    }
+  }
+}

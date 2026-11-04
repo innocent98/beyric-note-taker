@@ -1,10 +1,12 @@
 import type {
   DecisionList,
+  EmailPreferences,
   ExportFormat,
   FieldError,
   Meeting,
   MeetingList,
   NewMeeting,
+  NoticeList,
   Pilot,
   ReviewItem,
   ReviewList,
@@ -245,6 +247,20 @@ export function createApi(options: ApiOptions = {}) {
       uncheck: (id: number) => request<ReviewItem>("POST", `/api/review/${id}/uncheck`, { write: true }),
       addToVocabulary: (id: number, term: string) =>
         request<ReviewTermResult>("POST", `/api/review/${id}/vocabulary`, { body: { term }, write: true }),
+    },
+    // Whether the notes-ready email is on (GET and PUT /api/settings/email).
+    settings: {
+      email: {
+        get: () => request<EmailPreferences>("GET", "/api/settings/email"),
+        set: (notify_email: boolean) =>
+          request<EmailPreferences>("PUT", "/api/settings/email", { body: { notify_email }, write: true }),
+      },
+    },
+    // The bell: what the app has told the user, newest first. `readAll` answers the new unread count.
+    notifications: {
+      list: (query: { limit?: number; before_id?: number } = {}) =>
+        request<NoticeList>("GET", "/api/notifications", { query }),
+      readAll: () => request<{ unread_notifications: number }>("POST", "/api/notifications/read-all", { write: true }),
     },
     vocabulary: {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,

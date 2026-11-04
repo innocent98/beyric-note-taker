@@ -683,6 +683,35 @@
         "title": "EmailIn",
         "type": "object"
       },
+      "EmailPreferencesIn": {
+        "additionalProperties": false,
+        "description": "`notify_email` must be a JSON boolean (the string \"false\" is refused) and nothing else may\nbe sent: this body cannot change any other setting.",
+        "properties": {
+          "notify_email": {
+            "title": "Notify Email",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "notify_email"
+        ],
+        "title": "EmailPreferencesIn",
+        "type": "object"
+      },
+      "EmailPreferencesOut": {
+        "description": "`notify_email`: whether the owner of a meeting is emailed when its notes are ready. On\nunless it was turned off. Sign-in mail (verification, password reset) is not affected.",
+        "properties": {
+          "notify_email": {
+            "title": "Notify Email",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "notify_email"
+        ],
+        "title": "EmailPreferencesOut",
+        "type": "object"
+      },
       "ErrorBody": {
         "properties": {
           "code": {
@@ -4877,6 +4906,118 @@
         "summary": "Log In",
         "tags": [
           "session"
+        ]
+      }
+    },
+    "/api/settings/email": {
+      "get": {
+        "description": "Whether the caller is emailed when the notes of their meeting are ready (on by default,\nalso for an account that has no settings row yet).",
+        "operationId": "read_email_preferences",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailPreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Email Preferences",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Turn the notes-ready email on or off for the caller. The mail is checked against this\nsetting when it is sent, so turning it off also stops one already queued.",
+        "operationId": "write_email_preferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailPreferencesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailPreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Write Email Preferences",
+        "tags": [
+          "settings"
         ]
       }
     },

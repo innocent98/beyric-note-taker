@@ -71,7 +71,8 @@ def test_notifications_are_kept_90_days(session, owner):
         )
     session.commit()
     maintenance.run_hourly(session, NOW)
-    assert [n.title for n in session.scalars(select(Notification))] == ["t1"]
+    kept = select(Notification).where(Notification.kind == "k")  # not the privacy notice
+    assert [n.title for n in session.scalars(kept)] == ["t1"]
 
 
 def test_unverified_accounts_and_the_outbox_are_swept_too(session):

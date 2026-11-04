@@ -29,6 +29,9 @@ export type StatusTone = Meeting["status_tone"];
 export type RetryBlock = NonNullable<Meeting["retry_block"]>;
 
 export type FieldError = Schemas["FieldError"];
+export type EmailPreferences = Schemas["EmailPreferencesOut"];
+export type Notice = Schemas["NotificationOut"];
+export type NoticeList = Schemas["NotificationList"];
 
 export type ExportFormat = NonNullable<NonNullable<operations["export_meeting"]["parameters"]["query"]>["format"]>;
 export type Pilot = Schemas["PilotOut"];

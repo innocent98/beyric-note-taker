@@ -339,10 +339,15 @@ def _notes_ready(
             Para("The note taker left early, so these notes may be incomplete.", muted=True)
         )
     footer = "You received this because you sent the note taker to this meeting."
+    # The same link in every mail: no person, token or meeting in it (the page needs sign-in).
+    prefs = (
+        "Email preferences",
+        f"{settings.public_base_url.rstrip('/')}/settings#email-preferences",
+    )
     subject = clean_line(f"Your notes are ready: {name}", 120)
     return Message(
         to=to,
         subject=subject,
-        text=render_text(blocks, footer),
-        html=render_html(subject, blocks, footer),
+        text=render_text(blocks, footer, prefs),
+        html=render_html(subject, blocks, footer, prefs),
     )

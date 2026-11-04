@@ -1,0 +1,51 @@
+# SOP: before sign-up opens, part 1: privacy update, email preferences, skipped-mail notice
+
+## What shipped
+Three of the follow-ups the W0.3 mail upgrade left "before sign-up opens for anyone but the owner": (a) the privacy and terms "Last updated" date and `TERMS_VERSION` moved to 4 November 2026 and the existing accounts are told in the app; (b) an Email preferences switch (API, Settings screen, link in the notes-ready mail); (c) a notes mail skipped for the per-recipient cap now shows up as a warning notification to the meeting's owner. Branch `feature/prelaunch-mail-legal-prefs`, one PR (number in the PR list). No migration, no new environment variable. Part 2 (flood defence, mail budget, database-backed counters) and part 3 (token links as `#fragment`) are separate PRs.
+
+## Why
+W0.3 changed what the privacy text says (notes-ready mail, what Resend receives, the 30-day mail log, the do-not-mail list) and the policy promises notice of material changes "by email or in the app". The mail is on for everyone with no off switch, and a mail over the cap vanished silently. All three must be fixed before anyone but the owner has an account.
+
+## How
+| Piece | Decision |
+|---|---|
+| Version bump | `signup.TERMS_VERSION` and the "Last updated" line of the four legal pages (two Jinja, two Next) are `2026-11-04` / 4 November 2026. The terms text itself is unchanged: one version covers both pages and `tests/test_legal.py` ties it to the date, so the terms date moves with it. The privacy email sentence gained "You can turn the notes-ready email off in Settings, under Email preferences." (both copies; `web/tests/legal.test.tsx` keeps them equal) |
+| Telling existing accounts | **A notification, written by the hourly sweep** (`app/legal_notice.py`, called from `maintenance.run_hourly`): one row per confirmed, active account whose `terms_version` is not the current one (the owner has none recorded, so the owner is told). `dedupe_key = legal.updated:<version>` makes it once per account and version; a read notice is never made again. It is only made for 30 days after the version's date, because the sweep deletes notifications after 90 days and must not tell the account a second time. A test (`test_the_notice_is_for_the_version_the_pages_show`) fails if `TERMS_VERSION` is bumped without writing a new notice. Accounts made after the bump accepted the new pages at sign-up and are not told |
+| Why not force re-acceptance | The policy promises notice, not consent. The change describes service email the person can now switch off, not a new purpose that needs their agreement. A blocking acceptance screen would need a new API, a stored acceptance per version, and a way to lock a signed-in person out of their own meetings until they click, which is more surface (auth path) for no legal need. The notification is enough for "notify you ... in the app" and can be revisited if a lawyer reads the policy differently. Rejected: an email to existing accounts (a new mail kind and send path for one user today; the owner will see the notice) |
+| Email preferences API | `GET` and `PUT /api/settings/email` (`app/api_settings.py`): login, CSRF on the write, body `{notify_email: bool}` (`Body`: strict, extra fields forbidden, so a string or `null` or another setting is a 422), the caller's own row only (no id in the path or body), written with `INSERT ... ON CONFLICT DO UPDATE` so two first writes cannot collide and an account with no settings row works. Read answers `true` when there is no row. The enumeration tests in `tests/test_api.py` pick the routes up on their own (login needed, CSRF needed, reads work) |
+| Settings screen | `/settings` (Next): a card "Email preferences" with one switch, saved on change, put back with the error shown if the save fails. The designer's Settings screen (`docs/ui/Beyric Note Taker redesign/Beyric Note Taker.dc.html`, "Settings") has Calendar, Sprints and reminders, Tasks and Default notes language but **no email section**, so this is a plain card in the same frame under the designer's page title and subtitle. **Missing designer state:** the email section (switch, copy, saved and error states) |
+| Footer link | `render_text` and `render_html` take an optional `footer_link` (label, absolute http(s) URL, checked by `check_url`, label escaped). The notes-ready mail passes `{PUBLIC_BASE_URL}/settings#email-preferences`: the same link in every mail, no id or token in it (the page needs sign-in), so mails still carry ids only |
+| Skipped for the cap | `mail._tell_owner_of_cap_skip` runs where the loop skips a notes mail for `recipient_cap`: a `warning` notification `mail.recipient_cap` to the **meeting's owner** (`payload.meeting_id`), `meeting_id` set, one per meeting (`dedupe_key`), saying the notes are in the app. It names no address (a later template may mail someone other than the owner), runs in a savepoint and catches everything, so telling someone can never stop the queue. A row with no meeting id or an unknown one tells nobody |
+| Showing notifications | Nothing in the Jinja or Next UI showed notifications, so both notices would have been invisible. `/notifications` (Next) lists them newest first, links `legal.updated` to `/privacy` and a notice with a `meeting_id` to the meeting, marks all read; the sidebar has a Notifications link with the unread count (from `unread_notifications` on the session) and a Settings link. Not designed (no designer screen): plain list in the usual frame |
+
+## What's involved
+- `app/legal_notice.py` (new), `app/maintenance.py` (one more isolated hourly part), `app/signup.py`, `app/templates/privacy.html`, `terms.html`, `web/components/legal/*`.
+- `app/api_settings.py` (new), `app/api_schemas.py` (`EmailPreferencesIn`, `EmailPreferencesOut`), `app/api.py`, `docs/openapi.json`, `web/lib/api/schema.d.ts`.
+- `app/mail.py` (`_tell_owner_of_cap_skip`), `app/mail_layout.py` (`footer_link`), `app/mail_templates.py` (the link).
+- Web: `web/app/settings`, `web/app/notifications`, `web/components/app/settings-view.tsx`, `notifications-view.tsx`, `shell.tsx` (Notifications and Settings links), `ui/nav-link.tsx` (`badgeLabel`), `lib/api/client.ts`, `types.ts`, `server.ts`, `lib/routes.ts`, `proxy.ts` (matcher), pages passing `unread`.
+- Tests: `tests/test_legal_notice.py`, `tests/test_email_prefs.py`, `tests/test_legal.py` (version equals the shown date), `tests/test_mail_upgrade.py` (the one-href test now expects the footer link too), `tests/test_maintenance.py`; `web/tests/prelaunch-mail.test.tsx`.
+- `scripts/capture_prelaunch_mail_api.py`, `docs/fe-captures/prelaunch-mail-prefs/` (24 files), `docs/fe-integration-guide-pilot-accounts.md` section 14a.
+
+## Verification
+| Claim | How | Result |
+|---|---|---|
+| Attack and edge cases for the preference API: anonymous 401, no or wrong CSRF 403, string / `0` / `null` / list / empty body / extra setting or `user_id` all 422 and nothing stored, another user's row never read or written (two logins), six concurrent first writes all 200, turning it off stops an already queued mail (`opted_out`) | `tests/test_email_prefs.py` | pass |
+| Notice: once per eligible account, none for unconfirmed, suspended, deleted or current-version accounts, idempotent, a read stays read, not remade after the 90-day clean-up, appears in the notifications API with the unread count | `tests/test_legal_notice.py` | pass |
+| Cap notice: owner told once per meeting, not when the mail went, not for sign-in mail, to the meeting's owner and never naming the address, none for an unknown meeting, and a failure while writing it does not stop the queue | `tests/test_email_prefs.py` | pass |
+| Footer link: both parts, one extra `href`, `javascript:` and `data:` refused, label escaped | `tests/test_email_prefs.py` | pass |
+| Live API shapes | `scripts/capture_prelaunch_mail_api.py` against a real app and database; the guide's section 14a is written from it | recorded |
+| Python: ruff check and format, OpenAPI file, whole suite | see the PR | see the PR |
+| Web: `npm run lint`, `typecheck`, `npx vitest run` | local | pass |
+| **Not done** | no real mail sent (needs Adebayo's `MAIL_FROM` check), the footer link not opened in a mail client, the new pages not looked at in a browser (no live logged-in pass) | open |
+
+## Operate / roll back
+- **Server steps before merge: none.** No environment variable, no migration, no nginx change. After deploy the worker's next hourly sweep (up to an hour later) writes the notice for the owner.
+- The notice shows in the app at `/notifications` (sidebar: Notifications). To make it appear sooner, restart `worker`; do not do that while a meeting is `bot_sent` or `processing`.
+- Roll back: revert the PR. Notifications already written stay (harmless rows; delete with `delete from notifications where kind in ('legal.updated','mail.recipient_cap')`). `TERMS_VERSION` goes back with the revert; accounts made in between keep the newer value.
+
+## Follow-ups
+- A designer state for the email section of Settings and a bell or notifications screen (both built plain here).
+- Other silent mail skips (`suppressed` after a bounce, `opted_out`) are not shown; only `recipient_cap` was in scope.
+- Resend webhook for bounces (W0.3 follow-up) is unchanged.
+- Adebayo: a real verification mail with `MAIL_FROM` set and a real Google round trip, before `password_signup_enabled` is turned on.
+- Mails have no `List-Unsubscribe` header; the footer link is the only way out. A one-click unsubscribe (token route) would be its own change.

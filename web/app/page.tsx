@@ -5,7 +5,7 @@ import { NewMeetingForm } from "@/components/app/new-meeting-form";
 import { Landing, LandingFooter, LandingHeader } from "@/components/landing/landing";
 import { JsonLd, organizationJsonLd, softwareJsonLd } from "@/components/site/json-ld";
 import { Alert, PageHead } from "@/components/ui";
-import { getReviewOpen, getSession, load, serverApi } from "@/lib/api/server";
+import { getReviewOpen, getUnreadNotifications, getSession, load, serverApi } from "@/lib/api/server";
 
 // `/` is two pages: the landing page for a visitor who is not logged in (indexed, in the sitemap),
 // and the owner's Meetings page for the owner (never indexed). GET /api/session says which.
@@ -43,7 +43,7 @@ async function MeetingsPage() {
   const [list, templates] = await load(Promise.all([api.meetings.list(), api.templates.list()]));
   const busy = list.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
   return (
-    <AppShell current="meetings" reviewOpen={await getReviewOpen()}>
+    <AppShell current="meetings" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()}>
       {list.worker_stale ? (
         <Alert kind="notice" role="alert">
           The background worker has not checked in for over 20 minutes. New meetings will not be processed until it

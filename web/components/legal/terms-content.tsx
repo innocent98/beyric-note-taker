@@ -6,7 +6,7 @@ export function TermsContent() {
   return (
     <>
       <h1>Terms of Service</h1>
-      <p className="meta">Effective 2 November 2026 &middot; Last updated 3 November 2026</p>
+      <p className="meta">Effective 2 November 2026 &middot; Last updated 4 November 2026</p>
       <p>These terms set out the rules for using Beyric Note Taker, including your responsibilities when recording meetings. Please read them carefully.</p>
 
       <h2 id="accept">Agreement to these terms</h2>

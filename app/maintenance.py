@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, or_
 from sqlalchemy.orm import Session
 
-from app import accounts, mail
+from app import accounts, legal_notice, mail
 from app.models import AuthToken, Notification, OAuthFlow
 
 logger = logging.getLogger(__name__)
@@ -35,6 +35,7 @@ def run_hourly(session: Session, now: datetime) -> None:
         ("stale rows", lambda: _delete_stale_rows(session, now)),
         ("unverified accounts", lambda: accounts.sweep_unverified(session, now)),
         ("mail outbox", lambda: mail.sweep_outbox(session, now)),
+        ("privacy notice", lambda: legal_notice.announce(session, now)),
     ):
         try:
             part()

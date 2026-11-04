@@ -25,7 +25,7 @@ The mail layer W2 (Tasks), W6 (Share) and W8 (reminders) will use: the designer'
 - `alembic/versions/0013_mail_upgrade.py`: `mail_suppressions`; `ck_mail_outbox_status` gains `skipped` (downgrade turns `skipped` rows into `failed` first). Head is `0013` on top of `0012` (calendar last full sync).
 - `app/mail_message.py`, `app/mail_layout.py`, `app/mail_templates.py` (new); `app/mail.py` (`suppress`, `suppression_reason`, `lift_suppression`, `queue_notes_ready`, the send loop, `sweep_outbox` holds and deletes `skipped` after 30 days); `app/models.py` (`MailSuppression`, `MAIL_STATUSES`); `app/config.py` (`mail_daily_cap`, `mail_recipient_daily_cap`); `app/pipeline.py` (`_queue_notes_mail`); `.env.example`.
 - `scripts/suppress_email.py`: `add <email> bounce|complaint|unsubscribed`, `check`, `remove`.
-- Privacy policy (Jinja and Next, same text): notes-ready emails, what Resend receives in them, the 30-day mail log, the do-not-mail fingerprint list. The "Last updated" date and `TERMS_VERSION` are **not** changed (see Follow-ups).
+- Privacy policy (Jinja and Next, same text): notes-ready emails, what Resend receives in them, the 30-day mail log, the do-not-mail fingerprint list. The "Last updated" date and `TERMS_VERSION` were **not** changed here; they moved to 2026-11-04 with the follow-ups below (`docs/sop/2026-11-04-prelaunch-mail-legal-prefs.md`).
 - Tests: `tests/test_mail_upgrade.py`, `tests/test_mail.py` (greeting text), `tests/test_pipeline.py` (4, notes mail queued with the notes and never failing the meeting), `tests/test_migrations.py` (0013 round trip with data).
 
 ## Verification
@@ -41,10 +41,10 @@ The mail layer W2 (Tasks), W6 (Share) and W8 (reminders) will use: the designer'
 
 ## Follow-ups
 - Resend webhook for `email.bounced` and `email.complained` writing `mail_suppressions` (needs a signing secret and an unauthenticated route; Opus review); until then the script.
-- **Before sign-up opens for anyone but the owner (decided 2026-11-04, Adebayo: "go with your recommendations"):**
-  - **Bump the privacy "Last updated" date and `TERMS_VERSION`** (`app/signup.py`, the Terms and Privacy pages in Jinja and Next, `tests/test_legal.py`) and **tell users**, because the privacy text changed in this PR (notes-ready emails, what Resend receives in them, the 30-day mail log, the do-not-mail list) and the policy promises notice of material changes. Not done now: sign-up is closed and the owner is the only user.
-  - **Add a way to turn notes-ready mail off and an "Email preferences" link in the mails.** The mail is on by default for the owner (`user_settings.notify_email` defaults on, the owner only), but no API or screen sets the column yet, so the footer has no preferences link. The Settings screen (an API to read and write `notify_email`, the link to it in the footer) must exist before anyone else has an account.
-  - **Show skipped mail:** a notes mail over the per-recipient cap is skipped for good (`recipient_cap`), so the owner silently loses that meeting's mail. The same screen should show skipped mail and why (`recipient_cap`, `opted_out`, `suppressed`).
+- **Before sign-up opens for anyone but the owner (decided 2026-11-04, Adebayo: "go with your recommendations"): done in `docs/sop/2026-11-04-prelaunch-mail-legal-prefs.md`:**
+  - **Bump the privacy "Last updated" date and `TERMS_VERSION` and tell users:** done (2026-11-04; existing accounts get an in-app notification from the hourly sweep, re-acceptance rejected, reasons in that SOP).
+  - **A way to turn notes-ready mail off and an "Email preferences" link in the mails:** done (`GET` and `PUT /api/settings/email`, a card on `/settings`, footer link).
+  - **Show skipped mail:** `recipient_cap` is done (a warning notification to the meeting's owner). `opted_out` and `suppressed` are still silent.
 - W6 builds the "Notes shared with you" template on these pieces (guards for a revoked share, attachments from `export.build_file`, an opt-out that calls `mail.suppress(..., "unsubscribed")`), plus the per-account daily count.
 - Send one real PDF and Word attachment from the production domain and read Resend's daily-quota header once (spike ML1).
 - Link templates still use one outbox column set for tokens; moving the raw token out of `payload` (token in the link only, hash looked up) is the sign-up SOP's open item and not part of this change.

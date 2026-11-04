@@ -129,8 +129,21 @@ def _block_html(block: Block) -> str:
     raise TypeError(type(block).__name__)
 
 
-def render_html(title: str, blocks: list[Block], footer: str) -> str:
-    """A whole HTML document for `blocks`, with `footer` under the card."""
+def render_html(
+    title: str,
+    blocks: list[Block],
+    footer: str,
+    footer_link: tuple[str, str] | None = None,
+) -> str:
+    """A whole HTML document for `blocks`, with `footer` under the card and, when given,
+    `footer_link` (a label and an absolute http(s) URL) under it."""
+    link = ""
+    if footer_link is not None:
+        label, url = footer_link
+        link = (
+            f'<br><a href="{esc(check_url(url))}" style="color:{FAINT};text-decoration:underline">'
+            f"{esc(label)}</a>"
+        )
     body = "".join(_block_html(b) for b in blocks)
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
@@ -150,11 +163,13 @@ def render_html(title: str, blocks: list[Block], footer: str) -> str:
         f'<tr><td style="background:#FFFFFF;border:1px solid {CARD_LINE};border-radius:12px;'
         f'padding:32px">{body}</td></tr>'
         f'<tr><td style="padding:18px 4px 0;font-size:12px;color:{FAINT};line-height:1.6">'
-        f"{esc(footer)}</td></tr></table></td></tr></table></body></html>"
+        f"{esc(footer)}{link}</td></tr></table></td></tr></table></body></html>"
     )
 
 
-def render_text(blocks: list[Block], footer: str) -> str:
+def render_text(
+    blocks: list[Block], footer: str, footer_link: tuple[str, str] | None = None
+) -> str:
     """The plain-text part: the same blocks, one paragraph each."""
     parts: list[str] = []
     for block in blocks:
@@ -168,4 +183,7 @@ def render_text(blocks: list[Block], footer: str) -> str:
             case Button(label, url):
                 parts.append(f"{label}:\n{check_url(url)}")
     parts.append(footer)
+    if footer_link is not None:
+        label, url = footer_link
+        parts[-1] = f"{footer}\n{label}: {check_url(url)}"
     return "\n\n".join(p for p in parts if p)

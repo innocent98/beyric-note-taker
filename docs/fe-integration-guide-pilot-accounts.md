@@ -257,8 +257,8 @@ Google test account before relying on it.**
   the first time (#104). Someone else's id: **404** `not_found` — "No such notification" (#105).
 - `POST /api/notifications/read-all` → `{"unread_notifications": 0}` (#106).
 
-Kinds that exist today: `usage.hours_low` (written by the app at 80 % of the hours) and
-`account.reset_link_issued` (the admin made a reset link for this user: show it prominently). In
+Kinds that exist today: `usage.hours_low` (written by the app at 80 % of the hours),
+`legal.updated` and `mail.recipient_cap` (section 14a) and `account.reset_link_issued` (the admin made a reset link for this user: show it prominently). In
 #100 ids 2 and 3 were **inserted by SQL** in the shape `usage.hours_low` takes; id 1 is the real notice.
 
 ## 11. Changes to routes you already use
@@ -377,6 +377,68 @@ created_at}`, never a link. **Item shape not captured live** (tested).
 10. **Google sign-up needs the terms checkbox ticked first**, and the button must pass `accept_terms=true`.
 11. **Admin screens must treat `emailed: false` as "copy this link and send it yourself"** and show the link once.
 
+## 14a. Email preferences and two new notices (added 2026-11-04)
+
+These captures are in `docs/fe-captures/prelaunch-mail-prefs/NN-name.json`, made by
+`scripts/capture_prelaunch_mail_api.py` (real app, real migrations, real database, real HTTP). They
+are cited as **P#NN** so they are not confused with the pilot captures above. The user is a
+placeholder (`ada@example.test`).
+
+**What it is.** One setting, whether the owner of a meeting gets the "your notes are ready" email.
+It is on for everyone until turned off. It never touches sign-in mail (verification, password
+reset), which is always sent. The Settings screen shows it as one switch; the footer of the
+notes-ready mail links to it (`/settings#email-preferences`, the same link in every mail).
+
+`GET /api/settings/email` (login needed, no CSRF) answers **200** (P#06, P#08):
+
+```json
+{ "notify_email": true }
+```
+
+`PUT /api/settings/email` (login and `X-CSRF-Token`), body `{"notify_email": false}`, answers **200**
+with the stored value (P#07, P#09):
+
+```json
+{ "notify_email": false }
+```
+
+Errors, exactly as returned:
+
+| Case | Status and body | Capture |
+|---|---|---|
+| Not signed in (GET or PUT) | **401** `{"error":{"code":"not_authenticated","message":"Log in first."}}` | P#02, P#03 |
+| No or wrong CSRF header | **403** `{"error":{"code":"csrf_rejected","message":"Missing or wrong X-CSRF-Token header. Read it from GET /api/session."}}` | P#14 |
+| `{"notify_email": "false"}` (a string) | **422** `validation_error`, `fields: [{"field":"notify_email","message":"Input should be a valid boolean"}]` | P#11 |
+| An extra field, for example `auto_join_rule` | **422** `validation_error`, `fields: [{"field":"auto_join_rule","message":"Extra inputs are not permitted"}]` | P#12 |
+| `{}` | **422** `validation_error`, `fields: [{"field":"notify_email","message":"Field required"}]` | P#13 |
+
+**Traps.** The value must be a JSON boolean: `"false"`, `0` and `null` are refused, never read as
+off. Nothing but `notify_email` may be sent. A refused write changes nothing (P#15 still reads
+`true`). There is no user id anywhere: the call always acts on the signed-in user.
+**Turning it off also stops a mail already queued**: the setting is checked when the mail is sent.
+
+**Two new notifications** (both appear in `GET /api/notifications`, section 10, and count in
+`unread_notifications`, P#18, P#23). They are listed in the shape the API returns; there is no link
+field, so the screen decides where a kind points (the Next page links `legal.updated` to `/privacy`
+and any notice with a `meeting_id` to that meeting).
+
+- `legal.updated`, severity `info` (P#17). Made once per account by the worker's hourly sweep, for
+  accounts that did not accept the current privacy and terms version at sign-up (today the owner).
+  The next sweep adds nothing (P#19). The text is in the capture; it names the Resend email, the
+  30-day mail log, the do-not-mail fingerprint, and says where to turn the email off.
+  **Show it as an ordinary notice; it does not ask for acceptance and blocks nothing.**
+- `mail.recipient_cap`, severity `warning`, `meeting_id` set (P#22). Made when a notes-ready mail was
+  **not sent** because its address already got the daily number of notes emails (default 5 in 24
+  hours). One per meeting. The body says the notes are in the app. **Show it as a warning and link
+  to the meeting.** The text names no address.
+
+`unread_notifications` after the first notice is `1` (P#18) and `2` after the second (P#23);
+`POST /api/notifications/read-all` answers `{"unread_notifications": 0}` (P#24).
+
+The text of the mail that went (P#21) ends with the footer and one link:
+`Email preferences: https://notes.example.test/settings#email-preferences` (the address is the
+deployment's `PUBLIC_BASE_URL`). The mail carries ids only, never the preference in the link.
+
 ## 15. Verification table
 
 | Behaviour | Status |
@@ -400,6 +462,9 @@ created_at}`, never a link. **Item shape not captured live** (tested).
 | Notifications: list, page, bad limit, read, repeat, foreign 404, read-all, unread count | **verified live** (#99 to #106) |
 | Google routes: start redirect and cookie, callback success, denied, unknown state, no cookie, terms, closed, full, off | **verified live with Google's side stood in** (#3, #108 to #122) |
 | Google: the real consent screen, token exchange and ID token; `account_suspended`, `email_unsupported` redirects | **not exercised live** |
+| Email preferences: read, turn off, turn on, 401, 403, string / extra field / empty refused, unchanged after a refusal | **verified live** (P#02 to P#15) |
+| Privacy notice made by the hourly sweep, once; skipped-mail notice with `meeting_id`; unread counts; read-all | **verified live** (P#16 to P#24; the sweep and the send loop are called as the worker calls them, not by the worker process) |
+| The notes-ready mail's footer link | **verified in the mail text** the send loop built (P#21); not opened in a mail client, no mail was sent |
 | Mail delivery by Resend | **not exercised** (nothing is sent in the capture; the mail text is not captured, only the queued payload) |
 | The worker: sending mail, purging deleted accounts, the 48-hour sweep, hourly sweeps | **not exercised live** (tested in `tests/test_mail.py`, `test_admin.py`, `test_maintenance.py`) |
 | nginx limits (shared zone, waitlist zone, callback not counted) | **verified with a throwaway nginx** (`deploy/nginx-limit-check.sh`, status codes only), not through the app; the body of nginx's 429 is not JSON and was not captured |
