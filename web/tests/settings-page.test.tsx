@@ -93,6 +93,24 @@ describe("page", () => {
     expect(html).toContain(", 2 open");
   });
 
+  it("draws the designer's other sections below Calendar, then Email (not in the design), whatever the calendar's state", async () => {
+    const off = async () => {
+      throw new ApiError(404, "calendar_unavailable", "Google Calendar is not available.");
+    };
+    for (const answer of [async () => connected, off]) {
+      state.answer = answer;
+      const html = await render();
+      const order = [
+        ...["Calendar", "Sprints and reminders", "Tasks", "Default notes language"].map((title) =>
+          html.indexOf(`>${title}</h2>`),
+        ),
+        html.indexOf('id="email-preferences"'),
+      ];
+      expect(order.every((at) => at > -1)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+    }
+  });
+
   it("gives the section the person's own templates for the select, sorted as the API gives them", async () => {
     state.answer = async () => connected;
     state.templates = async () => [

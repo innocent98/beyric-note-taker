@@ -17,7 +17,7 @@ export const metadata: Metadata = { title: "Settings", robots: { index: false, f
 // section is where Google's callback sends the browser back (`?calendar=connected` or
 // `?calendar_error=<code>`). While the server has the calendar off, GET /api/calendar answers 404
 // `calendar_unavailable` and the section says so, so that call is not wrapped in `load` (which
-// turns every 404 into the not-found page). The Email section is below it.
+// turns every 404 into the not-found page). The designer's sections follow it, and the Email section (not in the design) comes last.
 export default async function SettingsPage({
   searchParams,
 }: {

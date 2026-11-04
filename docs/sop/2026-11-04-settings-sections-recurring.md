@@ -1,7 +1,7 @@
 # SOP: Settings sections below Calendar (drawn, off) and the Recurring cards on Meetings
 
 ## What shipped
-Adebayo compared the live pages with the designer's file and asked for the missing designed parts to be drawn now, before their features exist. Two things, branch `feature/settings-sections-recurring`, PR: see the PR list (opened against `main`, not merged):
+Adebayo compared the live pages with the designer's file and asked for the missing designed parts to be drawn now, before their features exist. Two things, branch `feature/settings-sections-recurring`, PR #69 (against `main`, not merged):
 
 - **(A) Settings:** the sections the designer drew below Calendar: **Sprints and reminders**, **Tasks**, **Default notes language**. Exact layout, words, tokens and order. **Every control is off**: a real `disabled` on each button and select, the switches `disabled` and `aria-disabled` and showing off. Nothing is stored and nothing is called (plain server markup, no state, no network). Each section carries one plain line saying it is not available yet.
 - **(B) Meetings:** the **Recurring** cards, from real data, through a new read-only `GET /api/calendar/recurring`. Name, cadence (worked out from the stored event times, or just "Recurring"), and the "Next:" chip. Not clickable. Nothing is drawn when no calendar is connected or nothing recurs.
@@ -43,6 +43,9 @@ The designer's Settings screen and Meetings screen had parts the live pages lack
 | `scripts/capture_calendar_recurring.py`, `docs/fe-captures/calendar-recurring/` (18 files), `docs/fe-integration-guide-calendar-settings.md` section 7 | live captures and the guide |
 | `web/scripts/{mock-api,parity-shots}.mjs`, `web/scripts/parity-diff.mjs` (new) | the mock replays the Recurring captures (`--recurring series|two|none`); the diff script measures positions and computed styles |
 | `docs/ui/parity/after/app-{settings,settings-connected,meetings-calendar}-{1440,768,390}.jpg`, `settings-sections-recurring-diff-1440.txt` | design left, built page right |
+
+## Section order on the Settings page
+Calendar, Sprints and reminders, Tasks, Default notes language (the designer's order), then **Email** (added by PR #64; the design has no Email section, so it stays where #64 put it, after the designer's sections). `web/app/settings/page.tsx` renders them in that order and `settings-page.test.tsx` checks it. Parity was re-checked after merging `main` (the Settings and Meetings pages at 1440, 768 and 390 px, also after merging #68 (rule radios, template select, per-meeting switches), `parity-diff.mjs` unchanged: 40 compared, the same differences).
 
 ## Parity with the designer's file
 Method as `docs/ui/parity-report.md`: the built app (`next build`, standalone) against the mock API (connected, `--recurring two`, the two weekly series the designer drew), the designer's file served beside it, Chromium at 1440, 768 and 390 px (`parity-shots.mjs`), then `parity-diff.mjs` measured 40 labels and boxes (positions inside each section's own box, sizes, 14 computed styles). The full output is `docs/ui/parity/after/settings-sections-recurring-diff-1440.txt`. Every remaining difference is listed; there are no others.
@@ -101,3 +104,6 @@ Seen while comparing, not caused here: in the mock the New meeting card is talle
 - Recurring: the unfinished-tasks chip (W2), the open-questions chip and the card as a link to the Series page (W8, when carry-over can be tied to a series).
 - A per-user time zone setting would let the server render cadence without the browser's zone (mail reminders in W8 need one anyway).
 - Expect a rebase on the calendar session's PR (`settings-calendar.tsx`, `calendar-upcoming.tsx`, `calendar_api.py`, and CSS next to mine at the end of `pages.css`): keep both sides.
+
+## Update 2026-11-04 (W7)
+The **Default notes language** section is no longer drawn off: W7 (`docs/sop/2026-11-04-w7-translate.md`) made it live (`web/components/app/settings-language.tsx`) and removed it, its "not available yet" line and the Globe from `settings-planned-sections.tsx`. Sprints and reminders and Tasks are unchanged.

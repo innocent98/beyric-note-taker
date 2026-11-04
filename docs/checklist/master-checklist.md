@@ -169,6 +169,9 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
         - [ ] Not checked: CI on the pushed head, a real mail, a real Google round trip, Safari and Firefox, the live site. Sign-up stays closed (`signups_open` is false)
   - [ ] D2, calendar and auto-join (needs Module 2 phase C; the Meetings card, Upcoming list with per-meeting switches and the Settings rules and template select are built, see below): "Not recorded" rows with Send now (designer gap), "Calendar disconnected" banner and Reconnect (designer gap), Settings, Calendar (rules, template), the instant-Meet switch (designer gap)
     - [x] **Settings, Calendar and the Meetings calendar band and Upcoming list (partial, 2026-11-04, PR #66, merged)**: `/settings` with the sidebar Settings entry (Calendar section in its own component: Connect Google Calendar, connected row with Disconnect and an inline ask, the stored rule (made editable by the slice below), messages for every callback redirect, "not available yet" while the flag is off); on Meetings the "Join meetings automatically" band and the read-only Upcoming list (local day and time, platform, duration, guest count, state text). Checked against the designer's file at 1440, 768 and 390 px (`docs/ui/parity/after/`) and in a browser against a real local FastAPI with Google faked; **not** the live site or a real Google. Designer gaps listed in the SOP
+    - [x] **Settings sections and Recurring cards, drawn (2026-11-04, branch `feature/settings-sections-recurring`, SOP `docs/sop/2026-11-04-settings-sections-recurring.md`)**: Sprints and reminders, Tasks and Default notes language drawn exactly as the designer's file, **every control off** (real `disabled`, nothing stored, nothing called) with one "not available yet" line each; the Recurring cards on Meetings from a new read-only `GET /api/calendar/recurring` (name, cadence worked out from the stored times or just "Recurring", next occurrence in the viewer's zone; no tasks or questions chips; not a link). Parity table and gaps in the SOP; FE guide section 7 with live captures
+      - [ ] **Drawn, off until their features exist (nobody should think these work):** Tasks card toggles (W2), Email assignees (W2 mail), tool sync select and Connect (W9/W10), Post tasks to Slack (W10), Sprint length and the sprint toggle (W9), Remind attendees and its timing (W8), Default notes language (W7). Each becomes a real control in the PR that builds its feature
+      - [ ] Recurring cards: add the unfinished-tasks chip (W2), the open-questions chip and the click-through to the Series page (W8)
     - [x] Rule radios, template select and per-meeting switch (2026-11-04, `feature/c15a-settings-override`, full parity checked at 1440/768/390: `docs/ui/parity/after/`)
     - [x] **Settings sections and Recurring cards, drawn (2026-11-04, branch `feature/settings-sections-recurring`, SOP `docs/sop/2026-11-04-settings-sections-recurring.md`)**: Sprints and reminders, Tasks and Default notes language drawn exactly as the designer's file, **every control off** (real `disabled`, nothing stored, nothing called) with one "not available yet" line each; the Recurring cards on Meetings from a new read-only `GET /api/calendar/recurring` (name, cadence worked out from the stored times or just "Recurring", next occurrence in the viewer's zone; no tasks or questions chips; not a link). Parity table and gaps in the SOP; FE guide section 7 with live captures
       - [ ] **Drawn, off until their features exist (nobody should think these work):** Tasks card toggles (W2), Email assignees (W2 mail), tool sync select and Connect (W9/W10), Post tasks to Slack (W10), Sprint length and the sprint toggle (W9), Remind attendees and its timing (W8), Default notes language (W7). Each becomes a real control in the PR that builds its feature
@@ -383,6 +386,14 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Eval harness `tests/eval/translation_eval.py` written (TR1)
   - [ ] TR1 run with a real model (no `OPENAI_API_KEY` where this was built): French and Spanish quality, real cost per hour
   - [ ] Privacy and terms rows for translation (sentences in the SOP; the legal pages are another session's)
+
+## CI speed (2026-11-04, PR #70, SOP `docs/sop/2026-11-04-ci-sharding.md`)
+
+- [x] Python suite in 4 parallel shards (`pytest-split`, committed `.test_durations`, one Postgres container each, `fail-fast: false`)
+- [x] `ruff check` and `ruff format --check` once in a `lint` job; the summary job `ci` waits for it and fails on any failed or cancelled shard
+- [x] pip cache keyed on `pyproject.toml`; apt `.deb` cache keyed on the runner image
+- [x] `test-durations` workflow (manual) to regenerate the timings
+- [ ] Merged (on Adebayo's word), and the first run on `main` timed (the apt cache is only shared with later PRs once a run on `main` has saved it)
 
 ## Backlog
 
