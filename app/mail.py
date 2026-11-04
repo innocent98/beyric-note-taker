@@ -33,6 +33,7 @@ an exception message can hold the address, the link or the API key.
 
 import base64
 import logging
+import time
 from datetime import UTC, datetime, timedelta
 
 import httpx
@@ -285,10 +286,20 @@ def _record_build_failure(session: Session, mail_id: int, error: str) -> None:
     session.commit()
 
 
-def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: datetime) -> int:
+def deliver_pending(
+    session: Session,
+    mailer: Mailer,
+    settings: Settings,
+    now: datetime,
+    *,
+    budget_seconds: float | None = None,
+) -> int:
     """Send every pending mail that is due; returns how many went. Each row is handled and
     committed on its own, under a row lock another worker skips, so one failure never holds up
-    or undoes the rest."""
+    or undoes the rest. `budget_seconds` bounds the pass: once that long (real time) has gone, no
+    further mail is started (the rest wait for the next pass), so a provider that hangs on every
+    call costs one pass a bounded time."""
+    started = time.monotonic()
     # Resend counts the day in UTC and counts every mail, account mail included.
     day_start = now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     sent_today = _sent_since(session, day_start) if settings.mail_daily_cap > 0 else 0
@@ -323,7 +334,9 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
         if row is None or not _due(row, now):
             session.rollback()
             continue
-        if sent >= BATCH:
+        if sent >= BATCH or (
+            budget_seconds is not None and time.monotonic() - started > budget_seconds
+        ):
             session.rollback()
             break
         notes_mail = row.template in NOTES_TEMPLATES

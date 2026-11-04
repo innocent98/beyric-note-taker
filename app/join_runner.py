@@ -1,0 +1,645 @@
+"""The join runner: sends the bot to calendar meetings (spec 7.6 to 7.8, plan task C12).
+
+`run_due_joins` is a scheduler job on the dispatch loop (every 10 s). It takes each due
+`scheduled_joins` row and either sends the bot through `placement.place_bot()` (the one place a bot
+is sent: this module never repeats its pre-flight) or ends the row with a plain reason.
+
+**When a row is due.** At `run_at` (the start minus `AUTOJOIN_LEAD_SECONDS`); a row whose time has
+passed is due at once, so a scheduler that was down from 09:55 to 10:05 sends the 10:00 meeting's
+bot at 10:05 (a late join) and never skips a meeting before its deadline (start plus 15 minutes).
+Two minutes before the start the event is read again once (`rechecked_at`) through the calendar
+source, so a move or a cancel made after the last sync is picked up before the bot goes.
+
+**Nothing is sent that the owner no longer wants.** Under the row's lock, immediately before the
+send, the runner re-reads the account (suspended), the calendar connection (disconnected, needs
+reconnecting) and the join rule for the event (rule switched off, this meeting switched off,
+declined, cancelled). Any of those ends the row (`skipped` or `cancelled`, with the reason) and no
+bot is sent. The row lock is held from that check until the meeting row is committed, and the
+sync, the settings and a disconnect all take the same row lock, so one of them landing "while
+dispatching" waits for the send to finish rather than slipping between the check and the send.
+
+**Exactly one bot.** The row is taken with `FOR UPDATE SKIP LOCKED` and its state is checked again
+under the lock, so two runners (a restart, a second scheduler for a moment) cannot both send for one
+row; `place_bot()`'s placement lock and one-bot-per-code rule cover two rows for one meeting. The
+row is marked `joined` by `place_bot()`'s `on_placed` hook, in the same transaction as the meeting
+row, so a crash never leaves a meeting its join does not know.
+
+**There is no queue.** A full host (`bot_busy`) tells the owner at once (a notification and an
+email) and the admins (an alert), the row becomes `no_capacity`, and the runner tries again every
+15 s until the deadline. At the deadline the row ends `failed` as "not recorded" and the owner is
+told again. A queued meeting is an unrecorded meeting, so nothing waits for a slot silently.
+
+**Another account in the same meeting.** One bot per meeting code (Vexa has one API key): the first
+placement wins. The other user's row ends `skipped` with the neutral reason, and a plain notice
+that a note taker is already in that meeting. Nobody's bot is stopped or adopted.
+
+Notifications go through `app/alerts.py` (once per row, or once per 30-minute bucket for the ones
+that repeat), with kinds that start `calendar.` so a disconnect deletes them. Admin text names the
+user and the time, never the meeting or its link. Event titles are cleaned (`app/titles.py`).
+
+Connection state is `connection_state()`: C13 replaces its body with the full state machine.
+"""
+
+import logging
+import time
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
+
+from app import alerts, titles
+from app.calendar_source import CalendarSource, CalendarSourceError, SyncBatch
+from app.config import Settings, get_settings
+from app.gcal_rules import JoinSettings, will_join
+from app.gcal_sync import DEFAULT_USER_SETTINGS, apply_batch
+from app.models import (
+    CalendarConnection,
+    CalendarEvent,
+    Meeting,
+    ScheduledJoin,
+    User,
+    UserSettings,
+)
+from app.placement import PlacementRefused, PlacementRequest, place_bot
+from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError
+
+logger = logging.getLogger("app.join_runner")
+
+# A refused or failed send is tried again this often, until the deadline (spec 7.6).
+RETRY_EVERY = timedelta(seconds=15)
+# A row skipped for a reason that can clear (hours, own limit, a note taker already there) is
+# looked at again this often: nothing is lost by waiting, and nobody needs the database every 10 s.
+SKIP_RETRY_EVERY = timedelta(seconds=60)
+# The event is read once more this long before it starts (spec 7.6).
+RECHECK_BEFORE_START = timedelta(seconds=120)
+# A row that missed its deadline longer ago than this (the runner was switched off, or the
+# scheduler was down for hours) is closed without telling anyone again: the news is old.
+STALE_AFTER = timedelta(hours=1)
+# One run starts no new row after this long (real time), so a host that hangs on every send cannot
+# hold the dispatch loop for minutes; the rest are due on the next tick.
+RUN_BUDGET_SECONDS = 45.0
+BATCH = 25
+
+DUE_STATES = ("scheduled", "dispatching", "no_capacity", "skipped")
+# A `skipped` row the runner looks at again: the reason can clear. (`account_suspended` and
+# `needs_reconnect` are not here: a person or C13's revive acts first.)
+RETRYABLE_SKIPS = ("hours_cap", "user_limit", "duplicate_meeting", "meeting_has_note_taker")
+# Out of the retryable ones, these still end "not recorded" at the deadline. The other three end
+# `skipped`: the person was told why, or someone is recording the meeting already.
+NOT_RECORDED_SKIPS = ("user_limit",)
+
+# What a person reads. No codes, no links, no passcode.
+NOT_RECORDED_TEXT = "Not recorded: the note taker could not join before the 15 minutes were up."
+NO_TEMPLATE_TEXT = "Not recorded: choose a notes template for calendar meetings, then try again."
+UNSUPPORTED_TEXT = "Not recorded: the note taker cannot join this kind of meeting link yet."
+SEND_FAILED_TEXT = "The meeting service did not take the note taker. Trying again."
+
+CONNECTED, NEEDS_RECONNECT, DISCONNECTED = "connected", "needs_reconnect", "disconnected"
+AGAIN, WAIT = "again", "wait"  # what a re-check tells the runner to do next
+
+
+@dataclass(frozen=True)
+class JoinOutcome:
+    join_id: int
+    result: str  # joined, no_capacity, skipped, cancelled, failed, rescheduled
+    reason: str | None = None
+
+
+def connection_state(session: Session, join: ScheduledJoin) -> str:
+    """Whether the calendar connection behind a join is good: `connected`, `needs_reconnect` or
+    `disconnected`. One function so C13 can swap in its state machine; today it reads the status
+    column (`connected` and `degraded` both mean the calendar can be joined from, as the sync
+    treats them)."""
+    if join.source != "calendar":
+        return CONNECTED  # an instant-Meet join has no calendar connection
+    conn = _connection_of(session, join)
+    if conn is None or conn.status == "disconnected":
+        return DISCONNECTED
+    if conn.status == "needs_reconnect":
+        return NEEDS_RECONNECT
+    return CONNECTED
+
+
+def _connection_of(session: Session, join: ScheduledJoin) -> CalendarConnection | None:
+    event = session.get(CalendarEvent, join.calendar_event_id) if join.calendar_event_id else None
+    if event is not None:
+        return session.get(CalendarConnection, event.connection_id)
+    return session.scalars(
+        select(CalendarConnection)
+        .where(CalendarConnection.user_id == join.user_id)
+        .order_by(CalendarConnection.id)
+    ).first()
+
+
+# ---- the run ----
+
+
+def run_due_joins(
+    session: Session,
+    vexa: VexaClient,
+    calendar: CalendarSource | None,
+    *,
+    now: datetime,
+    settings: Settings | None = None,
+) -> list[JoinOutcome]:
+    """Handle every join that is due at `now`; returns what happened to each row it acted on.
+    Each row is its own transaction. A failure on one row is logged by type and never stops the
+    others. `calendar` may be None (no source: the two-minute re-check is skipped)."""
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    settings = settings or get_settings()
+    outcomes: list[JoinOutcome] = []
+    started = time.monotonic()
+    for join_id in _due_ids(session, now):
+        if time.monotonic() - started > RUN_BUDGET_SECONDS:
+            break
+        try:
+            outcome = _process(session, vexa, calendar, join_id, now, settings)
+        except Exception as exc:  # one row must not stop the rest; its text may hold a link
+            session.rollback()
+            logger.error("join %s could not be handled (%s)", join_id, type(exc).__name__)
+            continue
+        if outcome is not None:
+            outcomes.append(outcome)
+    return outcomes
+
+
+def _due_conditions(now: datetime):
+    """The rows that need the runner at `now`, as a where clause (used to find them and again,
+    under the row lock, to be sure they still do)."""
+    recheck_due = and_(
+        ScheduledJoin.state == "scheduled",
+        ScheduledJoin.rechecked_at.is_(None),
+        ScheduledJoin.starts_at <= now + RECHECK_BEFORE_START,
+    )
+    skipped_alive = and_(
+        ScheduledJoin.skip_reason.in_(RETRYABLE_SKIPS),
+        or_(
+            ScheduledJoin.deadline_at >= now,
+            ScheduledJoin.skip_reason.in_(NOT_RECORDED_SKIPS),
+        ),
+    )
+    return and_(
+        ScheduledJoin.state.in_(DUE_STATES),
+        or_(ScheduledJoin.run_at <= now, recheck_due),
+        or_(ScheduledJoin.state != "skipped", skipped_alive),
+    )
+
+
+def _due_ids(session: Session, now: datetime) -> list[int]:
+    ids = list(
+        session.scalars(
+            select(ScheduledJoin.id)
+            .where(_due_conditions(now))
+            .order_by(ScheduledJoin.run_at, ScheduledJoin.id)
+            .limit(BATCH)
+        )
+    )
+    session.rollback()  # the read must not hold a snapshot while the rows are worked one by one
+    return ids
+
+
+def _lock(session: Session, join_id: int, now: datetime) -> ScheduledJoin | None:
+    """The row, under a lock another runner skips, and only if it is still due: another process
+    may have moved, cancelled or sent it since the ids were read."""
+    return session.scalars(
+        select(ScheduledJoin)
+        .where(ScheduledJoin.id == join_id, _due_conditions(now))
+        .with_for_update(skip_locked=True)
+        .execution_options(populate_existing=True)
+    ).first()
+
+
+def _process(
+    session: Session,
+    vexa: VexaClient,
+    calendar: CalendarSource | None,
+    join_id: int,
+    now: datetime,
+    settings: Settings,
+) -> JoinOutcome | None:
+    for attempt in range(2):  # a re-check rewrites the row; the second pass judges the new row
+        join = _lock(session, join_id, now)
+        if join is None:
+            session.rollback()
+            return _what_the_recheck_did(session, join_id) if attempt else None
+        stop = _gate(session, join, now, settings)
+        if stop is not None:
+            return stop
+        if _recheck_due(join, now):
+            answer = _recheck(session, vexa, calendar, join, now, settings)
+            if answer == WAIT:  # the calendar could not be asked and the run time is not here yet
+                return None
+            continue  # the row may have been moved or cancelled: look at it again
+        if join.run_at > now:  # only a re-check made it due, and it has been done
+            session.rollback()
+            return None
+        return _place(session, vexa, join, now, settings)
+    session.rollback()  # pragma: no cover - the second pass never re-checks
+    return None
+
+
+def _what_the_recheck_did(session: Session, join_id: int) -> JoinOutcome | None:
+    """The re-check moved or ended the row, so it is no longer due: say how."""
+    row = session.get(ScheduledJoin, join_id)
+    session.rollback()
+    if row is None or row.state in ("joined", "completed"):
+        return None
+    if row.state == "scheduled":
+        return JoinOutcome(join_id, "rescheduled")
+    return JoinOutcome(join_id, row.state, row.skip_reason)
+
+
+# ---- what must still be true before a bot goes ----
+
+
+def _gate(session: Session, join: ScheduledJoin, now: datetime, settings: Settings):
+    """The checks that end a row instead of sending a bot. None when the row may go on."""
+    user = session.get(User, join.user_id)
+    if user is None or user.status == "deleted":
+        return _end(session, join, "cancelled", "account_deleted", now)
+    if user.status != "active":
+        return _end(session, join, "skipped", "account_suspended", now)
+    state = connection_state(session, join)
+    if state == DISCONNECTED:
+        return _end(session, join, "cancelled", "disconnected", now)
+    if state == NEEDS_RECONNECT:
+        return _end(session, join, "skipped", "needs_reconnect", now)
+    event = session.get(CalendarEvent, join.calendar_event_id) if join.calendar_event_id else None
+    ended = False
+    if event is not None:
+        rule = (session.get(UserSettings, join.user_id) or DEFAULT_USER_SETTINGS).auto_join_rule
+        decision = will_join(
+            event,
+            event.override,
+            JoinSettings(rule=rule, teams_join_enabled=settings.teams_join_enabled),
+            now=now,
+        )
+        if decision.reason == "ended":
+            ended = True
+        elif not decision.join:
+            return _end(session, join, "cancelled", decision.reason, now)
+    if now > join.deadline_at or ended:
+        return _expire(session, join, user, now)
+    return None
+
+
+def _touch(row: ScheduledJoin, now: datetime) -> None:
+    """Stamp `updated_at` with the runner's clock (the retry gap reads it). Flagged as modified so
+    the stamp is written even when it equals the value already there: an unchanged attribute
+    would be left out of the UPDATE and the column's `onupdate=now()` would put the database's
+    real time in its place."""
+    row.updated_at = now
+    flag_modified(row, "updated_at")
+
+
+def _end(
+    session: Session, join: ScheduledJoin, state: str, reason: str, now: datetime
+) -> JoinOutcome:
+    join.state, join.skip_reason = state, reason
+    _touch(join, now)
+    session.commit()
+    return JoinOutcome(join.id, state, reason)
+
+
+def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) -> JoinOutcome | None:
+    """The deadline has passed. A skip whose cause was already told stays `skipped`; anything else
+    ends `failed` as not recorded, and the owner is told (unless the news is old)."""
+    if join.state == "skipped" and join.skip_reason not in NOT_RECORDED_SKIPS:
+        session.rollback()
+        return None
+    join.state, join.skip_reason, join.last_error = "failed", "not_recorded", NOT_RECORDED_TEXT
+    _touch(join, now)
+    if now - join.deadline_at <= STALE_AFTER:
+        name = _name(session, join)
+        alerts.notify_user(
+            session,
+            join.user_id,
+            kind="calendar.not_recorded",
+            severity="error",
+            title="Meeting not recorded",
+            body=f'The note taker could not join "{name}" before the 15 minutes were up, '
+            "so this meeting was not recorded.",
+            dedupe_key=f"calendar.not_recorded:{join.id}",
+            email_template=alerts.ALERT_TEMPLATE,
+        )
+        alerts.notify_admins(
+            session,
+            kind="admin.not_recorded",
+            title="A meeting could not be recorded",
+            body=f"A meeting for {user.email} was not recorded: the note taker could not join "
+            f"by {join.deadline_at:%H:%M} UTC.",
+            dedupe_key=alerts.bucket_key("admin.not_recorded", now),
+        )
+    session.commit()
+    return JoinOutcome(join.id, "failed", "not_recorded")
+
+
+def _name(session: Session, join: ScheduledJoin) -> str:
+    event = session.get(CalendarEvent, join.calendar_event_id) if join.calendar_event_id else None
+    return titles.alert_name(event.title if event else None, join.platform, join.native_id)
+
+
+# ---- the two-minute re-check ----
+
+
+def _recheck_due(join: ScheduledJoin, now: datetime) -> bool:
+    return (
+        join.state == "scheduled"
+        and join.rechecked_at is None
+        and join.calendar_event_id is not None
+        and join.starts_at <= now + RECHECK_BEFORE_START
+    )
+
+
+def _recheck(
+    session: Session,
+    vexa: VexaClient,
+    calendar: CalendarSource | None,
+    join: ScheduledJoin,
+    now: datetime,
+    settings: Settings,
+) -> str:
+    """Ask the calendar for the event once, just before it starts, and apply what comes back (a
+    move, a cancel, a decline) through the same code the sync uses. Always ends the transaction
+    (which drops the row lock), so the caller takes the row again (`AGAIN`), except `WAIT`: the
+    calendar could not be asked and the run time is not here yet, so the next tick asks again. A
+    calendar that cannot be asked never holds a join back: once the run time comes the bot goes on
+    what is stored."""
+    event = session.get(CalendarEvent, join.calendar_event_id)
+    conn = session.get(CalendarConnection, event.connection_id) if event else None
+    if calendar is None or event is None or conn is None or conn.provider != calendar.provider:
+        join.rechecked_at = now  # nothing to ask: do not look again
+        _touch(join, now)
+        session.commit()
+        return AGAIN
+    try:
+        raw = calendar.get_event(conn, event.source_event_id)
+    except CalendarSourceError as exc:
+        logger.warning("re-check of join %s failed (%s)", join.id, type(exc).__name__)
+        if now >= join.run_at:
+            join.rechecked_at = now  # time is up: go on what is stored
+            _touch(join, now)
+            session.commit()
+            return AGAIN
+        session.rollback()
+        return WAIT
+    if raw is None:  # the source no longer has it: cancelled or deleted
+        raw = {"id": event.source_event_id, "status": "cancelled"}
+    join.rechecked_at = now  # committed by apply_batch with the rest
+    _touch(join, now)
+    user_settings = session.get(UserSettings, join.user_id) or DEFAULT_USER_SETTINGS
+    try:
+        apply_batch(
+            session,
+            conn,
+            SyncBatch(raw_events=[raw], next_sync_token=None, complete=True, full=False),
+            user_settings,
+            now=now,
+            settings=settings,
+            vexa=vexa,
+        )
+    except Exception as exc:
+        session.rollback()
+        logger.warning("re-check of join %s could not be applied (%s)", join.id, type(exc).__name__)
+        return AGAIN
+    return AGAIN
+
+
+# ---- sending ----
+
+
+def _place(
+    session: Session, vexa: VexaClient, join: ScheduledJoin, now: datetime, settings: Settings
+) -> JoinOutcome | None:
+    """Retry cadence, then `place_bot()` under the row lock. The row lock was taken before the
+    placement lock (the order every code path uses), and `wait_seconds=0` keeps it: a wait would
+    roll the lock away."""
+    if join.attempts > 0:
+        gap = SKIP_RETRY_EVERY if join.state == "skipped" else RETRY_EVERY
+        if now - join.updated_at < gap:
+            session.rollback()
+            return None
+    event = session.get(CalendarEvent, join.calendar_event_id) if join.calendar_event_id else None
+    request = PlacementRequest(
+        user_id=join.user_id,
+        platform=join.platform,
+        native_id=join.native_id,
+        meeting_url=join.meeting_url,
+        template_id=join.template_id,
+        source="calendar",
+        title=event.title if event else None,
+    )
+    join_id, user_id = join.id, join.user_id
+
+    def mark_joined(inner: Session, meeting: Meeting) -> None:
+        # Inside place_bot's transaction: the meeting row and this update commit together.
+        row = inner.get(ScheduledJoin, join_id)
+        row.state, row.meeting_id, row.skip_reason, row.last_error = (
+            "joined",
+            meeting.id,
+            None,
+            None,
+        )
+        row.attempts = row.attempts + 1
+        _touch(row, now)
+
+    try:
+        meeting = place_bot(
+            session,
+            vexa,
+            request,
+            now=now,
+            settings=settings,
+            wait_seconds=0,
+            on_placed=mark_joined,
+        )
+    except PlacementRefused as refused:
+        return _refused(session, join_id, user_id, refused, now)
+    except VexaError as exc:
+        logger.warning("sending the bot for join %s failed (%s)", join_id, type(exc).__name__)
+        return _send_failed(session, join_id, now)
+    except UnsupportedMeetingUrl:  # a link the host cannot join (Teams until T1): retrying is vain
+        return _fail(session, join_id, now, "unsupported_link", UNSUPPORTED_TEXT)
+    except ValueError as exc:  # a caller-level problem (no template): retrying cannot fix it
+        logger.error("join %s cannot be placed (%s)", join_id, type(exc).__name__)
+        return _fail(session, join_id, now, "no_template", NO_TEMPLATE_TEXT)
+    return JoinOutcome(join_id, "joined", f"meeting {meeting.id}")
+
+
+def _relock(session: Session, join_id: int, now: datetime) -> ScheduledJoin | None:
+    """`place_bot` rolled back (and with it the row lock): take the row again before writing what
+    happened, and only if it is still one the runner should touch. If somebody cancelled or moved it
+    meanwhile, their change stands and nothing is written."""
+    return _lock(session, join_id, now)
+
+
+def _refused(
+    session: Session, join_id: int, user_id: int, refused: PlacementRefused, now: datetime
+) -> JoinOutcome | None:
+    code = refused.code
+    if code == "bot_busy" and refused.slot_locked:
+        session.rollback()  # another send is in flight: the next tick looks again, no alarm
+        return None
+    join = _relock(session, join_id, now)
+    if join is None:
+        session.rollback()
+        return None
+    # Every column the row changes is set BEFORE anything queries (a query autoflushes, and a
+    # second UPDATE without `updated_at` would let the database overwrite it: the retry gap
+    # reads it).
+    join.attempts += 1
+    _touch(join, now)
+    reason = _SKIP_REASONS.get(code, "refused")
+    if code == "bot_busy":
+        join.state, join.skip_reason = "no_capacity", None
+    else:
+        join.state, join.skip_reason = "skipped", reason
+    name = _name(session, join)
+    user = session.get(User, user_id)
+    who = user.email if user else "a user"
+    if code == "bot_busy":
+        alerts.notify_user(
+            session,
+            user_id,
+            kind="calendar.no_capacity",
+            severity="warning",
+            title="The note taker is busy",
+            body=f'The note taker is in another meeting and could not join "{name}" yet. It will '
+            f"keep trying until {join.deadline_at:%H:%M} UTC. If it cannot get in by then, this "
+            "meeting will not be recorded.",
+            dedupe_key=alerts.bucket_key(f"calendar.no_capacity.{join.id}", now),
+            email_template=alerts.ALERT_TEMPLATE,
+        )
+        alerts.notify_admins(
+            session,
+            kind="admin.no_capacity",
+            title="No room for the note taker",
+            body=f"A meeting for {who} could not get a bot at {now:%H:%M} UTC: the host is full.",
+            dedupe_key=alerts.bucket_key("admin.no_capacity", now),
+        )
+        result, reason = "no_capacity", None
+    else:
+        notice = _NOTICES.get(reason)
+        if notice is not None:
+            title, body = notice
+            alerts.notify_user(
+                session,
+                user_id,
+                kind=f"calendar.{reason}",
+                severity="warning",
+                title=title,
+                body=body.format(name=name),
+                dedupe_key=f"calendar.{reason}:{join.id}",
+            )
+        result = "skipped"
+    session.commit()
+    return JoinOutcome(join_id, result, reason)
+
+
+_SKIP_REASONS = {
+    "hours_cap_reached": "hours_cap",
+    "already_in_meeting": "duplicate_meeting",
+    "meeting_has_note_taker": "meeting_has_note_taker",
+    "user_limit": "user_limit",
+}
+
+# A plain notice for each reason that tells the owner something. `duplicate_meeting` has none:
+# the owner's own bot is already in that meeting (they pasted its link), nothing is lost.
+_NOTICES = {
+    "hours_cap": (
+        "Recording hours used up",
+        'Your recording hours are used up, so the note taker did not join "{name}".',
+    ),
+    "user_limit": (
+        "Too many note takers at once",
+        "You already have the most note takers allowed at once, so the note taker did not "
+        'join "{name}".',
+    ),
+    "meeting_has_note_taker": (
+        "A note taker is already there",
+        'A note taker is already in "{name}", so yours did not join. Sharing notes between '
+        "accounts is not available yet.",
+    ),
+}
+
+
+def _send_failed(session: Session, join_id: int, now: datetime) -> JoinOutcome | None:
+    join = _relock(session, join_id, now)
+    if join is None:
+        session.rollback()
+        return None
+    join.attempts, join.last_error = join.attempts + 1, SEND_FAILED_TEXT
+    _touch(join, now)
+    user = session.get(User, join.user_id)
+    name = _name(session, join)
+    alerts.notify_user(
+        session,
+        join.user_id,
+        kind="calendar.join_failed",
+        severity="warning",
+        title="The note taker could not start",
+        body=f'The note taker could not start for "{name}". It will try again until '
+        f"{join.deadline_at:%H:%M} UTC.",
+        dedupe_key=alerts.bucket_key(f"calendar.join_failed.{join.id}", now),
+    )
+    alerts.notify_admins(
+        session,
+        kind="admin.join_failed",
+        title="The bot host refused a bot",
+        body=f"Sending a bot for {user.email if user else 'a user'} failed at {now:%H:%M} UTC.",
+        dedupe_key=alerts.bucket_key("admin.join_failed", now),
+    )
+    session.commit()
+    return JoinOutcome(join_id, "scheduled", "send_failed")
+
+
+def _fail(
+    session: Session, join_id: int, now: datetime, reason: str, text: str
+) -> JoinOutcome | None:
+    """End the row `failed` for a reason retrying cannot clear, and tell the owner."""
+    join = _relock(session, join_id, now)
+    if join is None:
+        session.rollback()
+        return None
+    join.state, join.skip_reason, join.last_error = "failed", reason, text
+    _touch(join, now)
+    alerts.notify_user(
+        session,
+        join.user_id,
+        kind=f"calendar.{reason}",
+        severity="error",
+        title="Meeting not recorded",
+        body=f'"{_name(session, join)}" was not recorded. {text.removeprefix("Not recorded: ")}',
+        dedupe_key=f"calendar.{reason}:{join.id}",
+    )
+    session.commit()
+    return JoinOutcome(join_id, "failed", reason)
+
+
+# ---- registration ----
+
+
+def register_join_runner(
+    scheduler,
+    settings: Settings | None = None,
+    *,
+    source: CalendarSource | None = None,
+    vexa: VexaClient | None = None,
+) -> bool:
+    """Put the runner on the scheduler's dispatch loop (every tick, 10 s). Not registered while
+    `AUTOJOIN_ENABLED` is false (the operator's emergency stop). The scheduler process shares its
+    calendar source with the sync job, so the two share one access-token cache."""
+    settings = settings or get_settings()
+    if not settings.autojoin_enabled:
+        return False
+    vexa = vexa or VexaClient()
+    scheduler.register(
+        "join_runner",
+        1,
+        lambda session, now: run_due_joins(session, vexa, source, now=now, settings=settings),
+        loop="dispatch",
+    )
+    return True

@@ -80,8 +80,12 @@ def clean_title(text: str | None, limit: int = TITLE_LIMIT) -> str:
 
 def fallback_name(meeting: Meeting) -> str:
     """ "Zoom 88205679674" or "Google Meet abc-defg-hij": the name of a meeting without a title."""
-    label = "Zoom" if meeting.platform == "zoom" else "Google Meet"
-    return f"{label} {meeting.native_id}"
+    return _fallback(meeting.platform, meeting.native_id)
+
+
+def _fallback(platform: str | None, native_id: str | None) -> str:
+    label = "Zoom" if platform == "zoom" else "Google Meet"
+    return f"{label} {native_id}"
 
 
 def meeting_name(meeting: Meeting) -> str:
@@ -89,13 +93,19 @@ def meeting_name(meeting: Meeting) -> str:
     return clean_title(meeting.title) or fallback_name(meeting)
 
 
-def mail_title(meeting: Meeting) -> str:
-    """The name for a mail subject or body, an alert or a notification: cleaned, short, and with
-    any web address in it removed (a mail client would link it)."""
-    plain = URL.sub(LINK_REMOVED, clean_title(meeting.title, TITLE_LIMIT))
+def alert_name(title: str | None, platform: str | None, native_id: str | None) -> str:
+    """The name of an event or meeting for a mail, a notification or an alert: cleaned, short,
+    with any web address removed and any bare domain defanged (a mail client would link them)."""
+    plain = URL.sub(LINK_REMOVED, clean_title(title, TITLE_LIMIT))
     plain = _DOMAINISH.sub(lambda found: found.group().replace(".", "[.]"), plain)
-    title = clean_title(plain, MAIL_TITLE_LIMIT)
-    return title or clean_title(fallback_name(meeting), MAIL_TITLE_LIMIT)
+    return clean_title(plain, MAIL_TITLE_LIMIT) or clean_title(
+        _fallback(platform, native_id), MAIL_TITLE_LIMIT
+    )
+
+
+def mail_title(meeting: Meeting) -> str:
+    """`alert_name` for a stored meeting."""
+    return alert_name(meeting.title, meeting.platform, meeting.native_id)
 
 
 def event_title(text: str | None) -> str | None:

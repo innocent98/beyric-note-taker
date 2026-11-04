@@ -10,9 +10,12 @@ job so that one that fails (logged by type only, by the scheduler) never stops t
   policy's mail log), unverified accounts 48 hours after their last sign-up submission. The first
   run after a start is immediate, then every hour. Each is idempotent: a leader that loses its lock
   mid-job and a new one starting the same job cannot disagree.
-* **Every dispatch tick:** the outbox sender, `mail.deliver_pending`. The tick is 10 s, so a
-  verification mail waits 10 s at most. Registered only when a mail provider is configured, as the
-  worker does: without one mail waits in the outbox until the sweep fails it.
+* **Every mail tick (10 s, its own loop and thread):** the outbox sender, `mail.deliver_pending`,
+  so a verification mail waits 10 s at most. It is NOT on the dispatch loop: a provider that hangs
+  (up to `BATCH` mails at 15 s each) would hold a dispatch tick for minutes, and a join due now
+  must not wait for it (plan C12). Each pass is also bounded by `MAIL_BUDGET_SECONDS`. Registered
+  only when a mail provider is configured, as the worker does: without one mail waits in the
+  outbox until the sweep fails it.
 
 Not calendar-gated: these tables exist whether or not `CALENDAR_ENABLED` is on, and an empty
 `calendar_events` table costs one cheap delete an hour.
@@ -32,7 +35,8 @@ from app.scheduler import Scheduler
 logger = logging.getLogger(__name__)
 
 HOURLY = 3600
-EVERY_TICK = 1  # the shortest interval the scheduler allows: due on every dispatch tick
+EVERY_TICK = 1  # the shortest interval the scheduler allows: due on every tick of its loop
+MAIL_BUDGET_SECONDS = 60.0  # one send pass stops starting new mails after this long
 
 
 def register_default_sweeps(
@@ -58,6 +62,8 @@ def register_default_sweeps(
     scheduler.register(
         "mail_outbox_send",
         EVERY_TICK,
-        lambda session, now: mail.deliver_pending(session, mailer, settings, now),
-        loop="dispatch",
+        lambda session, now: mail.deliver_pending(
+            session, mailer, settings, now, budget_seconds=MAIL_BUDGET_SECONDS
+        ),
+        loop="mail",
     )

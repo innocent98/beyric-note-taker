@@ -624,13 +624,15 @@ def _complete_the_join_with_its_meeting(session: Session, flush_context, instanc
     change passes, so no path can forget it and no crash can leave the two disagreeing. It frees
     the meeting code: a recurring meeting's next event may then join (`uq_scheduled_joins_live_code`
     holds a code while its join is live)."""
+    # No look at the old value: an attribute that was never loaded has no history, and the update
+    # below only touches a `joined` join, so it is a harmless no-op when the meeting was not live.
     leaving = [
         obj.id
         for obj in session.dirty
         if isinstance(obj, Meeting)
         and obj.id is not None
         and obj.status != "bot_sent"
-        and "bot_sent" in sa.inspect(obj).attrs.status.history.deleted
+        and sa.inspect(obj).attrs.status.history.has_changes()
     ]
     if leaving:
         session.execute(

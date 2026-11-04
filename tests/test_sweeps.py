@@ -355,18 +355,20 @@ def test_every_sweep_is_registered_hourly_on_the_sync_loop(registered):
     assert {j.every for j in registered._jobs["sync"]} == {timedelta(hours=1)}
 
 
-def test_the_mail_sender_is_registered_on_the_dispatch_loop(registered):
-    assert [j.name for j in registered._jobs["dispatch"]] == ["mail_outbox_send"]
+def test_the_mail_sender_is_registered_on_the_mail_loop_not_the_dispatch_loop(registered):
+    assert [j.name for j in registered._jobs["mail"]] == ["mail_outbox_send"]
+    assert registered._jobs["dispatch"] == []  # a hung provider must never hold a dispatch tick
 
 
-def test_the_mail_sender_runs_on_every_dispatch_tick(registered, session):
+def test_the_mail_sender_runs_on_every_mail_tick(registered, session):
     for n in range(3):
         row = mail.enqueue(
             session, f"u{n}@example.test", "verify_email", {"link": "https://x.test/?t=1"}
         )
         row.created_at = registered.clock.now()  # the fake clock, not the database's
         session.commit()
-        registered.tick_dispatch()
+        registered.tick_dispatch()  # takes (and keeps) the leader lock
+        registered.tick_mail()
         registered.clock.advance(10)
         assert len(registered.mailer.sent) == n + 1
     assert [m.to for m, _ in registered.mailer.sent] == [
