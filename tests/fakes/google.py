@@ -54,6 +54,9 @@ class FakeGoogle:
         # What the revoke endpoint answers instead of the normal 200/400 (a status, or an
         # exception to raise as if the network failed); None means behave normally.
         self.revoke_override: int | Exception | None = None
+        # Called with no arguments as each revoke request arrives, so a test can look at the
+        # database while Google "is thinking" (nothing may be locked or uncommitted then).
+        self.on_revoke = None
         self.refresh_tokens: list[str] = []
         self._counter = 0
         self.oauth = GoogleOAuth(settings, transport=httpx.MockTransport(self._handle))
@@ -102,6 +105,8 @@ class FakeGoogle:
         """The revoke endpoint. SYNTHETIC from Google's documented behaviour (200 for a live
         token, 400 `invalid_token` for one already revoked or expired), not a live capture."""
         self.revoke_requests.append(request)
+        if self.on_revoke is not None:
+            self.on_revoke()
         if isinstance(self.revoke_override, Exception):
             raise self.revoke_override
         if self.revoke_override is not None:

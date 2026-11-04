@@ -263,7 +263,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
     - [x] privacy "Security" row (Jinja and Next copies)
     - [ ] live check with a real Google account: consent screen, stored row (token is bytes), real scope names and `hd`, unticked box
   - [x] C4 disconnect flow (2026-11-04, PR `feature/c4-calendar-disconnect`, open, not merged; Opus review wanted; SOP `docs/sop/2026-11-04-phase-c-disconnect.md`, FE guide section in `docs/fe-integration-guide-calendar-connect.md`). Built against a fake Google and captured over real HTTP; **after it merges `CALENDAR_ENABLED` may be switched on** (key set, callback URL authorised)
-    - [x] `POST /api/calendar/google/disconnect`: revoke (best effort), delete events, every join in every state and `calendar.` notifications, empty the row to `disconnected`; meetings, usage and settings stay; idempotent; own rows only; works with the flag off (25 tests, mutation-checked)
+    - [x] `POST /api/calendar/google/disconnect`: revoke (best effort), delete events, every join in every state and `calendar.` notifications, empty the row to `disconnected`; meetings, usage and settings stay; idempotent; own rows only; works with the flag off (29 tests, mutation-checked; Opus review fixes applied: revoke after the commit, rolled-back hooks, token-cache hook, `revoked` flag)
     - [x] `GoogleOAuth.revoke`, `ON_DISCONNECT` hook list, old token revoked when a dead connection is replaced by another account, `meet_subscription_*` reset
     - [ ] live check with a real Google account: the token is revoked at Google and the app leaves myaccount.google.com/permissions
     - [ ] privacy sentence "in the app" goes back in with the PR that ships the Settings → Calendar button (no screen has it yet)

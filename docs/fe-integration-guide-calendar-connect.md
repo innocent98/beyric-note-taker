@@ -180,17 +180,23 @@ Request and response, captured (#39):
 
 ```
 POST /api/calendar/google/disconnect        (X-CSRF-Token: <csrf-B>, no body)
-200 {"status": "disconnected"}
+200 {"status": "disconnected", "revoked": true}
 ```
 
-- **Always 200 with that exact body**, including a second click (#41), a second tab, and a user who
-  has no connection at all. There is no "not connected" error to handle. After it, re-read the
+`revoked` is `true` when Google confirmed the access is gone (#39) and `false` when Google could not
+be asked (#45: Google's revoke endpoint answered 503, or the server could not read its stored key).
+**When it is `false`, show it** (see 6.1): the data is deleted here either way, but Google may still
+list Beyric as having access.
+
+- **Always 200 with `status` `disconnected`**, including a second click (#41, `revoked: true`: a repeat
+  has nothing left to revoke and cannot re-check an earlier failure, so **act on the first answer**),
+  a second tab, and a user who has no connection at all (`revoked: true`, tested only). There is no "not connected" error to handle. After it, re-read the
   calendar state and show the not-connected card.
 - **It works while the calendar feature is switched off** (`CALENDAR_ENABLED=false`): unlike connect it
   never answers 404 `calendar_unavailable`. Tested only (`tests/test_calendar_connect.py`), not captured.
-- **A Google outage is not an error** (#45): if Google cannot be asked to revoke, the call is still
-  200 and the data is still deleted here. The person can also remove Beyric themselves at
-  myaccount.google.com/permissions. Do not show a failure for it.
+- **A Google outage is not an HTTP error** (#45): if Google cannot be asked to revoke, the call is
+  still 200 and the data is still deleted here, with `"revoked": false`. Do not show a failure, but do
+  show the notice in 6.1.
 - Errors, exactly as returned: signed out `401` `{"error": {"code": "not_authenticated", "message":
   "Log in first."}}` (#36); missing or wrong CSRF `403` `{"error": {"code": "csrf_rejected",
   "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."}}` (#37).
@@ -220,6 +226,11 @@ connect the other account".
 
 ### 6.1 UX consequences the frontend must surface for disconnect
 
+- **When `revoked` is `false`, tell the person**: "Your calendar data is deleted from Beyric, but we
+  could not reach Google to remove our access. Remove Beyric at
+  https://myaccount.google.com/permissions to finish." Show it once, on the response to the click
+  (a repeat answers `true`). Not captured with a real Google outage, only with Google's endpoint
+  scripted to answer 503 (#45).
 - **Confirm first, and say what goes**: "This stops Beyric joining your calendar meetings and deletes
   your upcoming calendar meetings and join schedule from Beyric. Meetings already recorded stay."
   Disconnecting cannot be undone; a reconnect starts a fresh first sync.
@@ -241,7 +252,7 @@ connect the other account".
 | `different_account` while a working connection exists | **live** against the running app, Google faked (#33–#35) |
 | Replacing a dead connection with another account (events dropped), merge of scopes without a new key | tested only (`tests/test_calendar_connect.py`), not captured |
 | `show_unverified_notice` after Google verifies the app | the flag flips in #32; Google's side not seen |
-| `POST disconnect`: 200 `{"status": "disconnected"}`, a repeat, the 401 and 403 errors, the row emptied, events, joins and calendar notifications deleted, the unrelated notification kept, connect again with another account | **live** against the running app, Google faked (#36–#44) |
-| Disconnect while Google's revoke endpoint answers 503: still 200, deleted locally | **live**, Google faked (#45, #46). Google's real answer to a revoke was not seen |
+| `POST disconnect`: 200 `{"status": "disconnected", "revoked": true}`, a repeat, the 401 and 403 errors, the row emptied, events, joins and calendar notifications deleted, the unrelated notification kept, connect again with another account | **live** against the running app, Google faked (#36–#44) |
+| Disconnect while Google's revoke endpoint answers 503: still 200 with `"revoked": false`, deleted locally | **live**, Google faked (#45, #46). Google's real answer to a revoke was not seen |
 | Disconnect with the feature flag off; a running meeting carries on; meetings, usage and settings kept; only the caller's rows touched | tested only (`tests/test_calendar_connect.py`), not captured |
 | A real Google revoke (token stops working, Beyric leaves myaccount.google.com/permissions) | **not verified**: needs Adebayo's Gmail test account |

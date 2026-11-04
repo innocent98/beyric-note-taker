@@ -17,7 +17,8 @@
       "cache-control": "no-store"
     },
     "body": {
-      "status": "disconnected"
+      "status": "disconnected",
+      "revoked": false
     }
   }
 }

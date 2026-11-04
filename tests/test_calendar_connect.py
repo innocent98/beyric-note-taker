@@ -995,7 +995,7 @@ def test_disconnect_revokes_at_google_and_deletes_everything_listed_in_spec_12_2
     response = web.post(DISCONNECT)
 
     assert response.status_code == 200, response.text
-    assert response.json() == {"status": "disconnected"}
+    assert response.json() == {"status": "disconnected", "revoked": True}
     assert google.revoked == [token]  # the refresh token, revoked at Google
     assert count(session, CalendarEvent) == 0
     assert count(session, ScheduledJoin) == 0  # every state, including live ones
@@ -1101,6 +1101,8 @@ def test_revoke_failure_still_deletes_locally_and_logs_warning(
     response = web.post(DISCONNECT)
 
     assert response.status_code == 200
+    # The person is told Google may still hold the access, so they can remove it themselves.
+    assert response.json() == {"status": "disconnected", "revoked": False}
     assert count(session, CalendarEvent) == 0 and count(session, ScheduledJoin) == 0
     after = connection_of(session, owner)
     assert after.status == "disconnected" and after.refresh_token_enc is None
@@ -1113,7 +1115,8 @@ def test_a_token_google_already_dropped_is_not_a_failure(web, session, owner, go
     connect_google(web, google)
     google.revoked.append(google.refresh_tokens[-1])  # revoked at myaccount.google.com already
     caplog.set_level(logging.WARNING)
-    assert web.post(DISCONNECT).status_code == 200
+    response = web.post(DISCONNECT)
+    assert response.status_code == 200 and response.json()["revoked"] is True
     assert "revoke" not in caplog.text
     assert connection_of(session, owner).refresh_token_enc is None
 
@@ -1125,7 +1128,9 @@ def test_a_token_that_cannot_be_decrypted_is_still_deleted(
     caplog.set_level(logging.WARNING)
     other_key = make_settings(token_enc_key=base64.b64encode(b"Z" * 32).decode())
     monkeypatch.setattr(vault, "get_settings", lambda: other_key)  # the key was lost or rotated
-    assert web.post(DISCONNECT).status_code == 200
+    response = web.post(DISCONNECT)
+    assert response.status_code == 200
+    assert response.json()["revoked"] is False  # a token existed and could not be revoked
     assert google.revoke_requests == []  # nothing readable to revoke
     assert connection_of(session, owner).refresh_token_enc is None
     assert any("revoke" in r.getMessage() for r in caplog.records)
@@ -1160,13 +1165,13 @@ def test_disconnect_is_idempotent_and_safe_to_double_submit(web, session, owner,
     first = web.post(DISCONNECT)
     second = web.post(DISCONNECT)
     assert first.status_code == second.status_code == 200
-    assert first.json() == second.json() == {"status": "disconnected"}
+    assert first.json() == second.json() == {"status": "disconnected", "revoked": True}
     assert len(google.revoke_requests) == 1  # the second one has no token left to revoke
     assert connection_of(session, owner).status == "disconnected"
 
 
 def test_disconnect_with_no_connection_is_a_no_op(web, session, owner, google):
-    assert web.post(DISCONNECT).json() == {"status": "disconnected"}
+    assert web.post(DISCONNECT).json() == {"status": "disconnected", "revoked": True}
     assert google.revoke_requests == []
     assert count(session, CalendarConnection) == 0  # nothing is created by disconnecting
 
@@ -1228,28 +1233,107 @@ def test_disconnect_deletes_locally_even_with_no_google_client_configured(
     add_join(session, connection_of(session, owner), owner, "scheduled", 1)
     app = build_app(engine, settings, google, fake_vexa, fake_openai)
     app.dependency_overrides[google_oauth.get_google] = lambda: None
-    assert browser(app).post(DISCONNECT).status_code == 200
+    response = browser(app).post(DISCONNECT)
+    assert response.status_code == 200 and response.json()["revoked"] is False
     assert count(session, ScheduledJoin) == 0
     assert connection_of(session, owner).refresh_token_enc is None
     assert google.revoke_requests == []
 
 
-def test_on_disconnect_hooks_run_with_the_connection_before_it_is_cleared(
+def test_on_disconnect_hooks_run_after_the_commit_with_a_snapshot_of_the_old_connection(
     monkeypatch, web, session, owner, google
 ):
     connect_google(web, google)
     conn = connection_of(session, owner)
     conn.meet_subscription_name = "subscriptions/s1"
     session.commit()
+    old_token = google.refresh_tokens[-1]
     seen = []
 
-    def hook(hook_session, hook_conn, hook_google):
-        seen.append((hook_conn.user_id, hook_conn.meet_subscription_name, hook_google))
+    def hook(hook_session, released, hook_google):
+        seen.append(
+            (
+                released.id,
+                released.user_id,
+                released.meet_subscription_name,
+                released.token.reveal(),
+                hook_google,
+                locked_or_stale(session.get_bind()),
+            )
+        )
 
     monkeypatch.setattr(calendar_connect, "ON_DISCONNECT", [hook])
     web.post(DISCONNECT)
-    assert seen == [(owner.id, "subscriptions/s1", google.oauth)]
+    # The hook still gets what it needs to undo things at Google (the subscription name and the
+    # token), although the database no longer holds them, and it runs with the wipe committed.
+    assert seen == [(conn.id, owner.id, "subscriptions/s1", old_token, google.oauth, None)]
     assert connection_of(session, owner).meet_subscription_name is None
+
+
+def locked_or_stale(engine, *, expect_sub=None) -> str | None:
+    """Looks at the connection from a second database connection: None when the row is committed
+    in its wiped (or `expect_sub`) state and can be locked at once, else what is wrong. Run from
+    inside a Google call or a hook, it proves no transaction is open around them."""
+    with Session(engine) as other:
+        try:
+            row = other.scalars(select(CalendarConnection).with_for_update(nowait=True)).first()
+        except Exception as exc:  # the row is locked by the request
+            return f"locked ({type(exc).__name__})"
+        if expect_sub is None:
+            ok = row.status == "disconnected" and row.refresh_token_enc is None
+        else:
+            ok = row.google_sub == expect_sub and row.status == "connected"
+        return None if ok else "not committed yet"
+
+
+def test_the_revoke_call_runs_after_the_local_deletion_is_committed_with_no_lock_held(
+    web, session, owner, google, engine
+):
+    connect_google(web, google)
+    add_join(session, connection_of(session, owner), owner, "scheduled", 1)
+    probes = []
+    google.on_revoke = lambda: probes.append(
+        (locked_or_stale(engine), count(session, ScheduledJoin))
+    )
+    assert web.post(DISCONNECT).status_code == 200
+    # While Google was being asked, the wipe was already committed and the row lock was free.
+    assert probes == [(None, 0)]
+
+
+def test_replacing_a_dead_connection_revokes_the_old_token_after_the_new_one_is_committed(
+    web, session, owner, google, engine
+):
+    connect_google(web, google)
+    kill(session, owner)
+    probes = []
+    google.on_revoke = lambda: probes.append(locked_or_stale(engine, expect_sub="g-other-2"))
+    response, _, _ = connect_google(web, google, email="other@example.test", sub="g-other-2")
+    assert landing(response)[1] == {"calendar": "connected"}
+    assert probes == [None]
+
+
+def test_a_hook_that_breaks_the_database_transaction_cannot_undo_the_deletion(
+    monkeypatch, web, session, owner, google, caplog
+):
+    connect_google(web, google)
+    add_join(session, connection_of(session, owner), owner, "scheduled", 1)
+
+    def bad_sql(hook_session, released, hook_google):
+        hook_session.execute(text("select * from no_such_table_c4"))
+
+    ran_after = []
+    monkeypatch.setattr(
+        calendar_connect,
+        "ON_DISCONNECT",
+        [bad_sql, lambda s, r, g: ran_after.append(s.scalar(text("select 1")))],
+    )
+    caplog.set_level(logging.DEBUG)
+    response = web.post(DISCONNECT)
+    assert response.status_code == 200
+    assert count(session, ScheduledJoin) == 0
+    assert connection_of(session, owner).status == "disconnected"
+    assert ran_after == [1]  # the next hook still gets a working session
+    assert "ProgrammingError" in caplog.text and "no_such_table_c4" not in caplog.text
 
 
 def test_a_failing_hook_does_not_stop_the_deletion_and_logs_no_detail(
@@ -1258,7 +1342,7 @@ def test_a_failing_hook_does_not_stop_the_deletion_and_logs_no_detail(
     connect_google(web, google)
     add_join(session, connection_of(session, owner), owner, "scheduled", 1)
 
-    def broken(hook_session, hook_conn, hook_google):
+    def broken(hook_session, released, hook_google):
         raise RuntimeError("secret detail 1//fake-refresh-token")
 
     monkeypatch.setattr(calendar_connect, "ON_DISCONNECT", [broken])
@@ -1269,6 +1353,38 @@ def test_a_failing_hook_does_not_stop_the_deletion_and_logs_no_detail(
     assert "RuntimeError" in caplog.text and "secret detail" not in caplog.text
 
 
+def test_the_cached_access_token_is_forgotten_on_disconnect(
+    monkeypatch, web, session, owner, google
+):
+    from app.gcal_client import AccessTokenCache
+    from tests.fakes.google import FakeGoogleCalendar
+
+    calendar = FakeGoogleCalendar()
+    cache = AccessTokenCache(
+        settings=make_settings(
+            google_client_id=FakeGoogleCalendar.CLIENT_ID,
+            google_client_secret=FakeGoogleCalendar.CLIENT_SECRET,
+        ),
+        transport=calendar.transport,
+    )
+    connect_google(web, google)
+    stored = connection_of(session, owner)
+    blob, version = vault.encrypt(
+        FakeGoogleCalendar.REFRESH_TOKEN, purpose="refresh_token", owner=owner.id
+    )
+    twin = CalendarConnection(
+        id=stored.id, user_id=owner.id, refresh_token_enc=blob, key_version=version
+    )  # what the sync loop would hold: same id, a token the fake accepts
+    cache.get(twin)
+    cache.get(twin)
+    assert calendar.token_calls == 1  # cached
+    monkeypatch.setattr(calendar_connect, "ON_DISCONNECT", [])
+    calendar_connect.register_token_cache(cache)
+    web.post(DISCONNECT)
+    cache.get(twin)
+    assert calendar.token_calls == 2  # disconnect dropped it, so it had to mint again
+
+
 def test_replacing_a_dead_connection_with_another_account_revokes_the_old_token(
     monkeypatch, web, session, owner, google
 ):
@@ -1276,7 +1392,9 @@ def test_replacing_a_dead_connection_with_another_account_revokes_the_old_token(
     old_token = google.refresh_tokens[-1]
     kill(session, owner)
     hooked = []
-    monkeypatch.setattr(calendar_connect, "ON_DISCONNECT", [lambda s, c, g: hooked.append(c.id)])
+    monkeypatch.setattr(
+        calendar_connect, "ON_DISCONNECT", [lambda s, released, g: hooked.append(released.id)]
+    )
     response, _, _ = connect_google(web, google, email="other@example.test", sub="g-other-2")
     assert landing(response)[1] == {"calendar": "connected"}
     assert google.revoked == [old_token]

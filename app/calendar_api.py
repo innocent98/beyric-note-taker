@@ -47,10 +47,15 @@ class ConnectOut(BaseModel):
 
 
 class DisconnectOut(BaseModel):
-    """Always `disconnected`: the call is safe to repeat, and also answers 200 when nothing was
-    connected."""
+    """`status` is always `disconnected`: the call is safe to repeat, and also answers 200 when
+    nothing was connected. `revoked` is false when Google could not be asked to remove the access
+    (it was unreachable, or the stored key could not be read): the data is deleted here
+    regardless, but tell the person to also remove Beyric at myaccount.google.com/permissions.
+    It is true when Google confirmed, and also when there was nothing left to revoke (a repeat
+    cannot re-check an earlier failure: act on the first answer)."""
 
     status: Literal["disconnected"] = "disconnected"
+    revoked: bool
 
 
 def _now() -> datetime:
@@ -146,7 +151,8 @@ def calendar_google_disconnect(
     calendar notifications, and the stored token. Meetings already recorded, the hours used and
     the settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),
     and it works while the calendar features are switched off. If Google cannot be reached the
-    local deletion still happens (the person can also revoke at myaccount.google.com/permissions).
+    local deletion still happens and `revoked` is false: tell the person to remove Beyric at
+    myaccount.google.com/permissions.
     Afterwards `connect` works again, for the same or another Google account."""
-    calendar_connect.disconnect(session, user, google)
-    return DisconnectOut()
+    revoked = calendar_connect.disconnect(session, user, google)
+    return DisconnectOut(revoked=revoked)
