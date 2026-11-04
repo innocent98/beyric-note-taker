@@ -1,7 +1,7 @@
 # SOP: mail upgrade (AI workspace phase W0.3)
 
 ## What shipped
-The mail layer W2 (Tasks), W6 (Share) and W8 (reminders) will use: the designer's layout for every mail, attachments and reply-to on `Message`, **ids-only payloads** read at send time, a **suppression table** the sender honours, **send-time checks** (meeting still there, owner active, setting still on), per-recipient and per-day **caps**, and the first mail built on it, **"Notes ready"**. Branch `feature/w03-mail-upgrade`, PR to `main` (number in the PR list). Migration `0012`. Spike ML1: `docs/spike/resend-limits-2026-11-04.md`. No API route, no screen; the FE guides are unchanged (nothing a screen reads changed).
+The mail layer W2 (Tasks), W6 (Share) and W8 (reminders) will use: the designer's layout for every mail, attachments and reply-to on `Message`, **ids-only payloads** read at send time, a **suppression table** the sender honours, **send-time checks** (meeting still there, owner active, setting still on), per-recipient and per-day **caps**, and the first mail built on it, **"Notes ready"**. Branch `feature/w03-mail-upgrade`, PR to `main` (number in the PR list). Migration `0013`. Spike ML1: `docs/spike/resend-limits-2026-11-04.md`. No API route, no screen; the FE guides are unchanged (nothing a screen reads changed).
 
 ## Why
 `app/mail.py` rendered a paragraph list and one button, held whatever a feature put in the payload, and had no way to stop mail to an address. The spec (section 10) needs shares that carry notes to people outside the app, which makes the mail layer an abuse and privacy surface: a title or name written by someone else must not change the page, notes must not sit in the outbox, a meeting deleted a minute ago must not be mailed, and a bounce or an opt-out must be remembered.
@@ -22,14 +22,14 @@ The mail layer W2 (Tasks), W6 (Share) and W8 (reminders) will use: the designer'
 | Rejected | A `payload` copy of the notes that the sender then scrubs (the notes would exist in backups for the hour); a sender-side allow list of hosts for links (no link is built from user text at all); one mail to many `to` addresses (each recipient must be checked, and none may see another's address); a Resend webhook now (new unauthenticated route and a signing secret: its own phase) |
 
 ## What's involved
-- `alembic/versions/0012_mail_upgrade.py`: `mail_suppressions`; `ck_mail_outbox_status` gains `skipped` (downgrade turns `skipped` rows into `failed` first). Head is `0012` on top of `0011`.
+- `alembic/versions/0013_mail_upgrade.py`: `mail_suppressions`; `ck_mail_outbox_status` gains `skipped` (downgrade turns `skipped` rows into `failed` first). Head is `0013` on top of `0012` (calendar last full sync).
 - `app/mail_message.py`, `app/mail_layout.py`, `app/mail_templates.py` (new); `app/mail.py` (`suppress`, `suppression_reason`, `lift_suppression`, `queue_notes_ready`, the send loop, `sweep_outbox` holds and deletes `skipped` after 30 days); `app/models.py` (`MailSuppression`, `MAIL_STATUSES`); `app/config.py` (`mail_daily_cap`, `mail_recipient_daily_cap`); `app/pipeline.py` (`_queue_notes_mail`); `.env.example`.
 - `scripts/suppress_email.py`: `add <email> bounce|complaint|unsubscribed`, `check`, `remove`.
 - Privacy policy (Jinja and Next, same text): notes-ready emails, what Resend receives in them, the 30-day mail log, the do-not-mail fingerprint list. The "Last updated" date and `TERMS_VERSION` are **not** changed (see Follow-ups).
-- Tests: `tests/test_mail_upgrade.py`, `tests/test_mail.py` (greeting text), `tests/test_pipeline.py` (4, notes mail queued with the notes and never failing the meeting), `tests/test_migrations.py` (0012 round trip with data).
+- Tests: `tests/test_mail_upgrade.py`, `tests/test_mail.py` (greeting text), `tests/test_pipeline.py` (4, notes mail queued with the notes and never failing the meeting), `tests/test_migrations.py` (0013 round trip with data).
 
 ## Verification
-- Unit and integration tests above against Postgres 17; the whole suite (2,525 tests: 2,523 passed, then the two privacy-text tests that pinned the old wording were updated and re-run green), `ruff check .` and `ruff format --check .` run locally. The Next test `web/tests/legal.test.tsx` (Jinja and Next privacy text must be equal) was **not run locally** (no `node_modules`); the two files were edited with identical sentences and CI runs it. Migration `0012` upgraded, downgraded to `0011` and upgraded again on a scratch database with the Alembic CLI, and again inside the test with a `skipped` row.
+- Unit and integration tests above against Postgres 17; the whole suite (2,625 tests passed on the branch merged with `main` at `2d7f960`), `ruff check .` and `ruff format --check .` run locally. The Next test `web/tests/legal.test.tsx` (Jinja and Next privacy text must be equal) was **not run locally** (no `node_modules`); the two files were edited with identical sentences and CI runs it. Migration `0013` upgraded, downgraded to `0012` and upgraded again on a scratch database with the Alembic CLI, and again inside the test with a `skipped` row.
 - **Not done:** no real mail was sent (no Resend call from this session); the HTML was not opened in Gmail, Outlook or Apple Mail, only inspected as text and in tests; the Resend limits are from documentation (see the spike's "could not verify live").
 
 ## Operate / roll back
@@ -37,7 +37,7 @@ The mail layer W2 (Tasks), W6 (Share) and W8 (reminders) will use: the designer'
 - On Resend's **Pro** plan set `MAIL_DAILY_CAP=0` (no daily limit there).
 - Stop an address now: `docker compose exec web python scripts/suppress_email.py add someone@example.com complaint`. Allow it again: `... remove ...`. Look at one: `... check ...`.
 - A mail that never arrived: its `mail_outbox` row says why (`skipped` with a reason, `failed` with `HTTP n`); `last_error` is a code, never text from the meeting.
-- Roll back: revert the PR; `alembic downgrade 0011` is safe (skipped rows become failed, the suppression table is dropped, so suppressions are lost: export the hashes first if any matter).
+- Roll back: revert the PR; `alembic downgrade 0012` is safe (skipped rows become failed, the suppression table is dropped, so suppressions are lost: export the hashes first if any matter).
 
 ## Follow-ups
 - Resend webhook for `email.bounced` and `email.complained` writing `mail_suppressions` (needs a signing secret and an unauthenticated route; Opus review); until then the script.

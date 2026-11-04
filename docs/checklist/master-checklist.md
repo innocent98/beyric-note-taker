@@ -319,7 +319,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] ML1 Resend attachments and limits (W6)
   - [ ] TR1 French and Spanish with names (W7)
 - [x] W0.2 AI ledger and settings: `ai_runs`, `EXTRACT_MODEL`, prompt versions (2026-11-03, SOP `2026-11-03-ai-workspace-w1-extraction.md`)
-- [x] W0.3 Mail upgrade (branch `feature/w03-mail-upgrade`, 2026-11-04; migration `0012`; SOP `2026-11-04-w03-mail-upgrade.md`; spike `docs/spike/resend-limits-2026-11-04.md`; PR open, not merged; no mail was sent live)
+- [x] W0.3 Mail upgrade (branch `feature/w03-mail-upgrade`, 2026-11-04; migration `0013`; SOP `2026-11-04-w03-mail-upgrade.md`; spike `docs/spike/resend-limits-2026-11-04.md`; PR open, not merged; no mail was sent live)
   - [x] Designer layout for every mail, escaped blocks, http(s)-only buttons
   - [x] `Message`: attachments (10 MB, PDF/Word/text), reply-to, headers, injection-proof fields
   - [x] Ids-only payloads for notes templates, notes read at send time, nothing copied into `mail_outbox`

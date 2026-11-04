@@ -6,16 +6,16 @@ a person could be contacted at. A mail the sender decides not to send (suppresse
 gone, the owner leaving) is `skipped`, which is not a failure and is not an alert. A unique index
 allows one `notes_ready` mail per meeting (a done notes row keeps its ids-only payload).
 
-Revision ID: 0012
-Revises: 0011
+Revision ID: 0013
+Revises: 0012
 Create Date: 2026-11-04
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0012"
-down_revision = "0011"
+revision = "0013"
+down_revision = "0012"
 branch_labels = None
 depends_on = None
 
