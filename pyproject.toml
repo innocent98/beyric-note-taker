@@ -48,6 +48,8 @@ select = ["E", "F", "I", "UP", "B"]
 # test_api.py reuses test_web.py's fixtures by importing them, so its tests "redefine" them.
 "tests/test_api.py" = ["F811"]
 "tests/test_accounts.py" = ["F811"]
+"tests/test_titles.py" = ["F811"]
+"tests/test_join_runner.py" = ["F811"]
 "tests/test_usage.py" = ["F811"]
 "tests/test_edge.py" = ["F811"]
 "tests/test_pipeline.py" = ["F811"]
