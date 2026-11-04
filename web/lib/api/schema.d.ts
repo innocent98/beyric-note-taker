@@ -790,6 +790,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Email Preferences
+         * @description Whether the caller is emailed when the notes of their meeting are ready (on by default,
+         *     also for an account that has no settings row yet).
+         */
+        get: operations["read_email_preferences"];
+        /**
+         * Write Email Preferences
+         * @description Turn the notes-ready email on or off for the caller. The mail is checked against this
+         *     setting when it is sent, so turning it off also stops one already queued.
+         */
+        put: operations["write_email_preferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/signup": {
         parameters: {
             query?: never;
@@ -1261,6 +1287,24 @@ export interface components {
         EmailIn: {
             /** Email */
             email: string;
+        };
+        /**
+         * EmailPreferencesIn
+         * @description `notify_email` must be a JSON boolean (the string "false" is refused) and nothing else may
+         *     be sent: this body cannot change any other setting.
+         */
+        EmailPreferencesIn: {
+            /** Notify Email */
+            notify_email: boolean;
+        };
+        /**
+         * EmailPreferencesOut
+         * @description `notify_email`: whether the owner of a meeting is emailed when its notes are ready. On
+         *     unless it was turned off. Sign-in mail (verification, password reset) is not affected.
+         */
+        EmailPreferencesOut: {
+            /** Notify Email */
+            notify_email: boolean;
         };
         /** ErrorBody */
         ErrorBody: {
@@ -4011,6 +4055,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionState"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_email_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailPreferencesOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_email_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailPreferencesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailPreferencesOut"];
                 };
             };
             /** @description Not logged in */

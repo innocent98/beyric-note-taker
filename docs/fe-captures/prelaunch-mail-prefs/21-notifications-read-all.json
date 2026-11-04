@@ -1,0 +1,22 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/notifications/read-all",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "unread_notifications": 0
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "note": "A string is not a boolean: 422, nothing changes.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/email",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "notify_email": "false"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "notify_email",
+            "message": "Input should be a valid boolean"
+          }
+        ]
+      }
+    }
+  }
+}

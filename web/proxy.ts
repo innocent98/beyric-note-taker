@@ -37,6 +37,7 @@ export const config = {
     "/templates",
     "/vocabulary",
     "/settings",
+    "/notifications",
     "/privacy",
     "/terms",
     "/styleguide",

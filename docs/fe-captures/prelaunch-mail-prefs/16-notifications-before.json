@@ -1,0 +1,23 @@
+{
+  "note": "Nothing yet.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/notifications",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "notifications": [],
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

@@ -259,6 +259,23 @@ class TermList(BaseModel):
     terms: list[TermOut]
 
 
+# ---- email preferences ----
+
+
+class EmailPreferencesIn(Body):
+    """`notify_email` must be a JSON boolean (the string "false" is refused) and nothing else may
+    be sent: this body cannot change any other setting."""
+
+    notify_email: bool
+
+
+class EmailPreferencesOut(BaseModel):
+    """`notify_email`: whether the owner of a meeting is emailed when its notes are ready. On
+    unless it was turned off. Sign-in mail (verification, password reset) is not affected."""
+
+    notify_email: bool
+
+
 # ---- notifications ----
 
 Severity = Literal["info", "warning", "error"]

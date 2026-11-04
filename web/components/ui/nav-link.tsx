@@ -7,11 +7,13 @@ export function NavLink({
   label,
   current = false,
   badge = 0,
+  badgeLabel = "open",
 }: {
   href: string;
   label: string;
   current?: boolean;
   badge?: number;
+  badgeLabel?: string;
 }) {
   return (
     <AppLink className="nav-link" href={href} aria-current={current ? "page" : undefined}>
@@ -21,7 +23,7 @@ export function NavLink({
           <span className="nav-badge" aria-hidden="true">
             {badge > 99 ? "99+" : badge}
           </span>
-          <span className="visually-hidden">, {badge} open</span>
+          <span className="visually-hidden">, {badge} {badgeLabel}</span>
         </>
       ) : null}
     </AppLink>

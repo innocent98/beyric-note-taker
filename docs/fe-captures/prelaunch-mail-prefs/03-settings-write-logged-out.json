@@ -1,0 +1,27 @@
+{
+  "note": "No login: 401, before anything is read.",
+  "client": "visitor",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/email",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "notify_email": false
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

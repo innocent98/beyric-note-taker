@@ -34,9 +34,12 @@ vi.mock("@/lib/api/server", () => ({
           return state.answer!();
         },
       },
+      settings: { email: { get: async () => ({ notify_email: true }) } },
     };
   },
   getReviewOpen: async () => 2,
+  getUnreadNotifications: async () => null,
+  load: <T,>(call: Promise<T>) => call,
 }));
 
 const connected = calendarBody<CalendarState>("09-state-connected-with-upcoming.json");
@@ -67,6 +70,14 @@ describe("sidebar", () => {
 });
 
 describe("page", () => {
+  it("draws the Email section below the Calendar section, with the notes-ready switch on", async () => {
+    state.answer = async () => connected;
+    const html = await render();
+    expect(html).toContain('id="email-preferences"');
+    expect(html.indexOf("Join automatically")).toBeLessThan(html.indexOf('id="email-preferences"'));
+    expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/);
+  });
+
   it("draws the connected state from GET /api/calendar inside the app shell", async () => {
     state.answer = async () => connected;
     const html = await render();

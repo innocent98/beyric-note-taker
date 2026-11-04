@@ -23,6 +23,7 @@ import {
   SelectField,
   TabButtons,
   Tabs,
+  Toggle,
   TextareaField,
 } from "@/components/ui";
 
@@ -188,6 +189,10 @@ export default async function StyleGuidePage() {
               <Checkbox id="sg-check-bad" error="Tick this box to continue.">
                 A box with an error
               </Checkbox>
+              <div className="set-row">
+                <span id="sg-switch-label">A switch, on</span>
+                <Toggle checked aria-labelledby="sg-switch-label" />
+              </div>
               <TextareaField id="sg-area" label="Text area" hint="Several lines." />
               <Segmented
                 name="sg-seg"

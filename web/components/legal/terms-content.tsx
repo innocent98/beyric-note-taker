@@ -6,7 +6,7 @@ export function TermsContent() {
   return (
     <>
       <h1>Terms of Service</h1>
-      <p className="meta">Effective 2 November 2026 &middot; Last updated 3 November 2026</p>
+      <p className="meta">Effective 2 November 2026 &middot; Last updated 4 November 2026</p>
       <p>These terms set out the rules for using Beyric Note Taker, including your responsibilities when recording meetings. Please read them carefully.</p>
 
       <h2 id="accept">Agreement to these terms</h2>
@@ -77,7 +77,7 @@ export function TermsContent() {
       <p>These Terms are governed by the laws of the Federal Republic of Nigeria, without regard to conflict of law rules. Any dispute will be decided in the courts of Lagos State, unless the law of your country of residence gives you the right to bring proceedings locally.</p>
 
       <h2 id="changes">Changes to these terms</h2>
-      <p>We may update these Terms. If a change is material, we will tell you by email or in the app at least 30 days before it takes effect. If you keep using the Service after that date, you accept the updated Terms.</p>
+      <p>We may update these Terms from time to time. The date at the top shows when they last changed. If you keep using the Service after a change, you accept the updated Terms.</p>
 
       <h2 id="general">General</h2>
       <p>These Terms and the Privacy Policy are the whole agreement between you and Beyric about the Service. If any part is found unenforceable, the rest stays in effect. Not enforcing a part is not a waiver. You may not transfer these Terms without our consent; we may transfer them as part of a merger or sale of assets.</p>

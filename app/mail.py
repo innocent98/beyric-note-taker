@@ -46,7 +46,7 @@ from app import mail_templates
 from app.config import Settings
 from app.mail_message import Attachment, MailError, Message, valid_address
 from app.mail_templates import LINK_TEMPLATES, NOTES_TEMPLATES, SIGNATURE, Skip
-from app.models import MailOutbox, MailSuppression, Meeting, User
+from app.models import MailOutbox, MailSuppression, Meeting, Notification, User
 from app.usage import email_hash
 
 __all__ = ["Attachment", "MailError", "Message", "SIGNATURE"]
@@ -258,6 +258,44 @@ def _finish(row: MailOutbox, status: str, error: str | None) -> None:
         row.payload = {}
 
 
+def _tell_owner_of_cap_skip(session: Session, row: MailOutbox, cap: int) -> None:
+    """A notes mail over the per-recipient cap is lost for good, so the owner of its meeting is
+    told in the app (a warning notification, one per meeting). Never raises: telling someone must
+    not stop the queue, and a notice that cannot be written is only logged. The text names no
+    address (a later template may mail someone other than the owner)."""
+    meeting_id = (row.payload or {}).get("meeting_id")
+    if type(meeting_id) is not int:
+        return
+    noun = "email" if cap == 1 else "emails"
+    try:
+        with session.begin_nested():
+            meeting = session.get(Meeting, meeting_id)
+            if meeting is None:
+                return
+            session.execute(
+                insert(Notification)
+                .values(
+                    user_id=meeting.owner_user_id,
+                    kind="mail.recipient_cap",
+                    severity="warning",
+                    title="A notes email was not sent",
+                    body=(
+                        f"The notes email for {mail_templates.meeting_name(meeting)} was not sent: "
+                        f"that address has already had {cap} notes {noun} in the last 24 hours, "
+                        "which is the daily limit. Your notes are in the app, at "
+                        f"/meetings/{meeting.id}."
+                    ),
+                    meeting_id=meeting.id,
+                    dedupe_key=f"mail.recipient_cap:{meeting.id}",
+                )
+                .on_conflict_do_nothing(index_elements=["user_id", "dedupe_key"])
+            )
+    except Exception as exc:
+        logger.warning(
+            "mail %s: could not tell the owner about the cap (%s)", row.id, type(exc).__name__
+        )
+
+
 def _sent_since(session: Session, since: datetime, to: str | None = None) -> int:
     query = (
         select(func.count())
@@ -348,12 +386,6 @@ def deliver_pending(
             _finish(row, "skipped", "suppressed")
             session.commit()
             continue
-        if notes_mail and settings.mail_recipient_daily_cap > 0:
-            recent = _sent_since(session, now - timedelta(days=1), row.to_email)
-            if recent >= settings.mail_recipient_daily_cap:
-                _finish(row, "skipped", "recipient_cap")
-                session.commit()
-                continue
         if notes_mail and 0 < settings.mail_daily_cap <= sent_today:
             session.rollback()  # still pending, no attempt used: tomorrow's quota will send it
             continue
@@ -378,6 +410,16 @@ def deliver_pending(
             _finish(row, "skipped", message.reason)
             session.commit()
             continue
+        # After the template's own checks (opted out, owner inactive, meeting gone, ...): their
+        # reason is the true one, and the owner is told about the cap only for a mail that would
+        # otherwise have gone.
+        if notes_mail and settings.mail_recipient_daily_cap > 0:
+            recent = _sent_since(session, now - timedelta(days=1), row.to_email)
+            if recent >= settings.mail_recipient_daily_cap:
+                _tell_owner_of_cap_skip(session, row, settings.mail_recipient_daily_cap)
+                _finish(row, "skipped", "recipient_cap")
+                session.commit()
+                continue
         row.attempts += 1
         try:
             mailer.send(message, f"mail-{row.id}")
