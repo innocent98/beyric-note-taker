@@ -184,7 +184,9 @@ def test_the_meeting_is_named_by_its_cleaned_calendar_title(session, host, cal, 
     materialise(session, ada, cal, summary="Q3 \u202egnirts\u202c review\r\nBcc: x@example.test")
     run(session, host, cal, at(-1))
     [meeting] = meetings(session)
-    assert meeting.title == titles.clean_title("Q3 \u202egnirts\u202c review\r\nBcc: x@example.test")
+    assert meeting.title == titles.clean_title(
+        "Q3 \u202egnirts\u202c review\r\nBcc: x@example.test"
+    )
     assert "\u202e" not in meeting.title and "\n" not in meeting.title
 
 
