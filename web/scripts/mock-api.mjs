@@ -40,6 +40,7 @@ const { values } = parseArgs({
 const captureDir = join(dirname(fileURLToPath(import.meta.url)), "../../docs/fe-captures");
 const captures = join(captureDir, "owner-app");
 const body = (name) => JSON.parse(readFileSync(join(captures, `${name}.json`), "utf8")).response.body;
+const prelaunchBody = (name) => JSON.parse(readFileSync(join(captureDir, "prelaunch-mail-prefs", `${name}.json`), "utf8")).response.body;
 const accountBody = (name) => JSON.parse(readFileSync(join(captureDir, "pilot-accounts", `${name}.json`), "utf8")).response.body;
 
 // One meeting per state, from the captures. Titles vary so the list reads like a real one.
@@ -68,6 +69,7 @@ function json(res, status, payload, headers = {}) {
   res.end(JSON.stringify(payload));
 }
 
+let notifyEmail = true;
 const MOCK_USER = { email: "owner@example.test", name: null, is_admin: false, email_verified: true };
 
 const readJson = (req) =>
@@ -171,7 +173,7 @@ const server = http.createServer(async (req, res) => {
     if (method === "DELETE") {
       return json(res, 200, { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null }, { "set-cookie": "session=; Path=/; Max-Age=0" });
     }
-    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: MOCK_USER, usage: { used_seconds: 0, cap_seconds: 18000 } } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
+    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: MOCK_USER, usage: { used_seconds: 0, cap_seconds: 18000 }, unread_notifications: 2 } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
   }
   if (path.startsWith("/api/") && !loggedIn) {
     return json(res, 401, { error: { code: "not_authenticated", message: "Log in to continue." } });
@@ -185,6 +187,14 @@ const server = http.createServer(async (req, res) => {
     const meeting = details.find((m) => m.id === Number(detail[1]));
     return meeting ? json(res, 200, meeting) : json(res, 404, { error: { code: "not_found", message: "That meeting was not found." } });
   }
+  // Email preferences and the bell: the captures in docs/fe-captures/prelaunch-mail-prefs/. The
+  // switch keeps its state in memory so the screen can be flipped by hand.
+  if (path === "/api/settings/email") {
+    if (method === "PUT") notifyEmail = data?.notify_email === true;
+    return json(res, 200, { notify_email: notifyEmail });
+  }
+  if (path === "/api/notifications" && method === "GET") return json(res, 200, prelaunchBody("22-notifications-cap-notice"));
+  if (path === "/api/notifications/read-all") return json(res, 200, prelaunchBody("24-notifications-read-all"));
   if (path === "/api/templates" && method === "GET") return json(res, 200, { templates });
   if (path === "/api/vocabulary" && method === "GET") return json(res, 200, { terms });
   if (path.startsWith("/api/")) return json(res, 200, {});

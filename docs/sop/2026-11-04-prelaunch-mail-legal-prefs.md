@@ -3,6 +3,9 @@
 ## What shipped
 Three of the follow-ups the W0.3 mail upgrade left "before sign-up opens for anyone but the owner": (a) the privacy and terms "Last updated" date and `TERMS_VERSION` moved to 4 November 2026 and the existing accounts are told in the app; (b) an Email preferences switch (API, Settings screen, link in the notes-ready mail); (c) a notes mail skipped for the per-recipient cap now shows up as a warning notification to the meeting's owner. Branch `feature/prelaunch-mail-legal-prefs`, one PR (number in the PR list). No migration, no new environment variable. Part 2 (flood defence, mail budget, database-backed counters) and part 3 (token links as `#fragment`) are separate PRs.
 
+## Also in this PR: the default sender
+`MAIL_FROM` defaulted to `no-reply@beyrictech.com` (`app/config.py`, `.env.example`); the domain Resend has verified, and the production `.env`, use `Beyric Note Taker <no-reply@notes.beyrictech.com>`. The default and `.env.example` now say that, `deploy/README.md` names it, and `tests/test_mail.py` pins it. The server `.env` is untouched.
+
 ## Why
 W0.3 changed what the privacy text says (notes-ready mail, what Resend receives, the 30-day mail log, the do-not-mail list) and the policy promises notice of material changes "by email or in the app". The mail is on for everyone with no off switch, and a mail over the cap vanished silently. All three must be fixed before anyone but the owner has an account.
 
@@ -24,7 +27,25 @@ W0.3 changed what the privacy text says (notes-ready mail, what Resend receives,
 - `app/mail.py` (`_tell_owner_of_cap_skip`), `app/mail_layout.py` (`footer_link`), `app/mail_templates.py` (the link).
 - Web: `web/app/settings`, `web/app/notifications`, `web/components/app/email-settings-section.tsx`, `notifications-view.tsx`, `shell.tsx` (Notifications and Settings links), `ui/toggle.tsx` (the designer's switch), `ui/nav-link.tsx` (`badgeLabel`), `styles/components.css`, `lib/api/client.ts`, `types.ts`, `server.ts`, `lib/routes.ts`, `proxy.ts` (matcher), pages passing `unread`.
 - Tests: `tests/test_legal_notice.py`, `tests/test_email_prefs.py`, `tests/test_legal.py` (version equals the shown date), `tests/test_mail_upgrade.py` (the one-href test now expects the footer link too), `tests/test_maintenance.py`; `web/tests/prelaunch-mail.test.tsx`.
+- `web/scripts/mock-api.mjs` (replays the new captures), `web/scripts/parity-settings-email.mjs`, `docs/ui/parity/after/app-settings-{1440,768,390}.jpg`, `email-notes-ready.jpg`; `app/config.py`, `.env.example`, `deploy/README.md` (default `MAIL_FROM`).
 - `scripts/capture_prelaunch_mail_api.py`, `docs/fe-captures/prelaunch-mail-prefs/` (24 files), `docs/fe-integration-guide-pilot-accounts.md` section 14a.
+
+## Parity with the designer's files
+Method as in `docs/ui/parity-report.md` ("How it was checked"): the designer's files served read-only, the built Next app (standalone server) on the mock API (`web/scripts/mock-api.mjs`, now also replaying `docs/fe-captures/prelaunch-mail-prefs/`), a real Chromium, positions and computed styles diffed by `web/scripts/parity-settings-email.mjs` (exit 1 on any difference), screenshots at 1440, 768 and 390 px in `docs/ui/parity/after/app-settings-{1440,768,390}.jpg` (design left, Next right) and `docs/ui/parity/after/email-notes-ready.jpg`.
+
+| Part | Compared with | Result |
+|---|---|---|
+| Settings page title, subtitle, first section: position and width | the designer's Settings (x 288, y 36 / 76 / 121, 720 wide, 24 px 650, letter-spacing -0.48) | identical |
+| Email section card (border, radius, background, padding, overflow) | the designer's Tasks section card | identical |
+| Section title "Email" and grey line | "Tasks" title and "What happens to action items..." | identical (size, weight, colour, padding) |
+| Row label and description | "Create tasks from action items" and its grey line | identical (14 px 550 / 12 px, colours); the text block is as wide as its words |
+| Last row padding (14 22 20) | last row of "Sprints and reminders" | identical |
+| Switch (36 x 20 pill, teal on, 16 px white knob with the knob shadow) and its knob | the Tasks switch | identical (size, colours, radius) |
+| Idle section height | the designer draws no status line | the "Saving / Saved / error" line is drawn only when there is something to say, so an idle section has the designer's height |
+| Mail footer, "Email preferences" | `Emails.dc.html`, "Notes ready" (footer 12 px, `#8A928E`, line-height 1.6, padding 18 4 0; link `#5B6460`, underlined, on the same line) | identical computed styles and the same words |
+| Mail body (not changed here) | the same mail | **W0.3's known differences remain**: "B" mark instead of the SVG (documented), and paragraph size and label spacing differ slightly in my render; not changed in this PR, listed in Follow-ups |
+
+**Designer gaps (built as the smallest thing from existing components, for the designer to review):** (1) the Email section of Settings: the designer's Settings has no email section, so the title "Email", its grey line, the row words and the saved and error states are mine, in the designer's section pattern; (2) a Notifications link in the sidebar and a plain `/notifications` list: the design has no bell, notification list or link for it (without it the privacy notice and the skipped-mail notice cannot be seen); remove both if the designer wants a different place for them.
 
 ## Verification
 | Claim | How | Result |
@@ -48,4 +69,5 @@ W0.3 changed what the privacy text says (notes-ready mail, what Resend receives,
 - Other silent mail skips (`suppressed` after a bounce, `opted_out`) are not shown; only `recipient_cap` was in scope.
 - Resend webhook for bounces (W0.3 follow-up) is unchanged.
 - Adebayo: a real verification mail with `MAIL_FROM` set and a real Google round trip, before `password_signup_enabled` is turned on.
+- Mail body parity with `Emails.dc.html` (paragraph size, label spacing) is W0.3's and was only checked for the footer here.
 - Mails have no `List-Unsubscribe` header; the footer link is the only way out. A one-click unsubscribe (token route) would be its own change.

@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     # "Google hasn't verified this app" on the calendar consent screen, so the connect call tells
     # the frontend to explain it first.
     google_app_verified: bool = False
-    mail_from: str = "Beyric Note Taker <no-reply@beyrictech.com>"
+    mail_from: str = "Beyric Note Taker <no-reply@notes.beyrictech.com>"
     # Caps on mail that is not sign-in mail (notes ready now; shares, tasks and reminders later).
     # `mail_daily_cap`: once this many mails have gone since 00:00 UTC (the day Resend counts,
     # account mail included) notes mail waits for the next day. 80 leaves room under the Free

@@ -60,9 +60,14 @@ export function EmailSettingsSection({ email }: { email: EmailPreferences }) {
           onClick={() => void flip()}
         />
       </div>
-      <div className="set-note" role="status" aria-live="polite">
-        {error ? <Alert kind="error">{error}</Alert> : null}
-        {saving ? "Saving..." : saved ? "Saved." : ""}
+      {/* Drawn only when there is something to say, so an idle section is exactly the designer's. */}
+      <div role="status" aria-live="polite">
+        {error || saving || saved ? (
+          <div className="set-note">
+            {error ? <Alert kind="error">{error}</Alert> : null}
+            {saving ? "Saving..." : saved ? "Saved." : ""}
+          </div>
+        ) : null}
       </div>
     </section>
   );
