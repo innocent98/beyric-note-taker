@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
-import type { ExportFormat } from "@/lib/api/types";
+import { languageName } from "@/components/app/translation";
+import type { ExportFormat, NoteLanguage } from "@/lib/api/types";
 
 const FORMATS: { format: ExportFormat; tag: string; label: string; sub: string }[] = [
   { format: "pdf", tag: "PDF", label: "PDF", sub: "Best for reading and printing" },
@@ -44,12 +45,15 @@ export function DownloadMenu({
   title,
   ready,
   hasTranscript,
+  language = "en",
   onNotReady,
 }: {
   meetingId: number;
   title: string;
   ready: boolean;
   hasTranscript: boolean;
+  // The language the page is showing: a translation that is on screen is the one downloaded.
+  language?: NoteLanguage;
   // The server said the notes are not ready (409): the page's own state is stale, so refetch it.
   onNotReady: () => void;
 }) {
@@ -67,7 +71,7 @@ export function DownloadMenu({
     if (menu.current) menu.current.open = false;
     setState({ kind: "working", format });
     try {
-      const file = await api.meetings.export(meetingId, format, transcript && hasTranscript);
+      const file = await api.meetings.export(meetingId, format, transcript && hasTranscript, language);
       const filename = file.filename ?? `${title}.${format}`;
       save(file.blob, filename);
       setState({ kind: "done", filename });
@@ -117,6 +121,7 @@ export function DownloadMenu({
                 </label>
               </>
             ) : null}
+            <p className="dl-lang">In {languageName(language)}, with summary, decisions, action items and owners.</p>
           </div>
         </details>
       ) : (

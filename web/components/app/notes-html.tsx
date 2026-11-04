@@ -16,6 +16,18 @@ const SECTION_CLASS: Record<string, string> = {
   "open questions": "notes-sec-questions",
   "please check": "notes-sec-check",
 };
+// The same six parts under the headings a translation uses (the fixed dictionary in
+// app/translation.py, the designer's own words), so a translated page is drawn the same way.
+for (const [kind, names] of Object.entries({
+  "notes-sec-summary": ["résumé", "resumen"],
+  "notes-sec-key": ["points clés", "puntos clave"],
+  "notes-sec-decisions": ["décisions", "decisiones"],
+  "notes-sec-actions": ["actions à mener", "tareas"],
+  "notes-sec-questions": ["questions ouvertes", "preguntas abiertas"],
+  "notes-sec-check": ["à vérifier", "revisar"],
+})) {
+  for (const name of names) SECTION_CLASS[name] = kind;
+}
 
 export function wrapSections(html: string): string {
   return html

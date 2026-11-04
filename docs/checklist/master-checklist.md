@@ -141,7 +141,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] App shell (sidebar, phone top bar), Meetings (new meeting, list, paging, stale-worker alert, empty state), meeting page (notes, transcript, copy, rewrite, cancel with confirm, retry, notices, 30 s polling), Templates, Vocabulary, login; light and dark
   - [x] 89 vitest tests, 41-check end-to-end through Next on a compose stack, real-browser pass at 375 and 1280 px in both themes
   - [x] CI green (PR merged and deployed 2026-11-03)
-  - [ ] Not built, waiting on the API (stream D): Download menu (shipped with W5, 2026-11-03), Share dialog, translation, template delete, participants and duration
+  - [ ] Not built, waiting on the API (stream D): Download menu (shipped with W5, 2026-11-03), translation (shipped with W7, 2026-11-04), Share dialog, template delete, participants and duration
   - [ ] Not verified: real Vexa bot and real OpenAI rewrite through the screens, Safari and Firefox, the live server
 - [ ] Stream P, UI parity with the designer's files (`feature/nextjs-ui-parity`, PR #26, merged and deployed 2026-11-03; SOP `docs/sop/2026-11-03-ui-parity.md`; report `docs/ui/parity-report.md`)
   - [x] Gap check of every designer file against the Next pages at 1440, 768 and 390 px; report with before and after screenshots
@@ -173,6 +173,9 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
       - [ ] **Drawn, off until their features exist (nobody should think these work):** Tasks card toggles (W2), Email assignees (W2 mail), tool sync select and Connect (W9/W10), Post tasks to Slack (W10), Sprint length and the sprint toggle (W9), Remind attendees and its timing (W8), Default notes language (W7). Each becomes a real control in the PR that builds its feature
       - [ ] Recurring cards: add the unfinished-tasks chip (W2), the open-questions chip and the click-through to the Series page (W8)
     - [x] Rule radios, template select and per-meeting switch (2026-11-04, `feature/c15a-settings-override`, full parity checked at 1440/768/390: `docs/ui/parity/after/`)
+    - [x] **Settings sections and Recurring cards, drawn (2026-11-04, branch `feature/settings-sections-recurring`, SOP `docs/sop/2026-11-04-settings-sections-recurring.md`)**: Sprints and reminders, Tasks and Default notes language drawn exactly as the designer's file, **every control off** (real `disabled`, nothing stored, nothing called) with one "not available yet" line each; the Recurring cards on Meetings from a new read-only `GET /api/calendar/recurring` (name, cadence worked out from the stored times or just "Recurring", next occurrence in the viewer's zone; no tasks or questions chips; not a link). Parity table and gaps in the SOP; FE guide section 7 with live captures
+      - [ ] **Drawn, off until their features exist (nobody should think these work):** Tasks card toggles (W2), Email assignees (W2 mail), tool sync select and Connect (W9/W10), Post tasks to Slack (W10), Sprint length and the sprint toggle (W9), Remind attendees and its timing (W8), Default notes language (W7). Each becomes a real control in the PR that builds its feature
+      - [ ] Recurring cards: add the unfinished-tasks chip (W2), the open-questions chip and the click-through to the Series page (W8)
     - [ ] Still to build: "Not recorded" with Send now, "Calendar disconnected" banner, instant-Meet switch, Outlook button (C19 to C24)
   - [x] D3, Decisions (API shipped in W1; see `docs/fe-integration-guide-ai-workspace.md`): search, groups by meeting, Open notes, Remove from log (designer gap). Built 2026-11-03 on branch `feature/stream-d-decisions-review`, SOP `2026-11-03-stream-d-decisions-review.md`; verified in a real browser against a real local FastAPI and Postgres (search by code and by words, empty search, Remove from log with its ask, phone width), not against the live site
     - [x] `/decisions`: groups by meeting with the day, title and Open notes; search through the API (300 ms pause, stale answers dropped); "Show older meetings"; "No decisions yet."; "No decisions match your search."; Searching..., search failed with Try again; Remove from log asks first and treats a 404 as removed
@@ -188,9 +191,9 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] D6, Projects (needs W4): list, name, colour, recurring meetings, keywords, sprint length, milestone (proposal chip is a designer gap), delete
   - [ ] D7, Team (needs W3; W0.4 first): members, roles, aliases (editing is a designer gap), invite dialog (name field is a designer gap), Resend, remove, "Share with team" switch on the meeting page (designer gap)
   - [ ] D8, Series (needs W8, and Module 2 phase C for recurring ids): cards on Meetings, series page (unfinished, finished since, carried questions, agenda, past meetings, attendees), "On next agenda" toggles, Send agenda, Details row on the meeting page, "Add to recurring meeting" and "Possibly resolved" chips (designer gaps)
-  - [x] D9, Download (W5, 2026-11-03): menu with PDF and Word, transcript tick, the states for preparing, done, failed and not ready; **the language note waits for W7** (translated downloads)
+  - [x] D9, Download (W5, 2026-11-03): menu with PDF and Word, transcript tick, the states for preparing, done, failed and not ready; the language note and the download in French or Spanish shipped with W7 (2026-11-04)
   - [ ] D10, Share (needs W6, and W3 for participants): dialog, recipients, language, attachment, transcript, message, "Shared with ..." note, "Add email" on a participant (designer gap), share-limit message (designer gap)
-  - [ ] D11, Translate (needs W7): language select, "Translating ..." and "Translated from ..." banners, Show original, default language in Settings, failed state (designer gap)
+  - [x] D11, Translate (W7, 2026-11-04, SOP `docs/sop/2026-11-04-w7-translate.md`, FE guide `docs/fe-integration-guide-translate.md`): language select on the notes toolbar, "Translating ..." and "Translated from ..." bars, Show original, the transcript tab, Copy, Download in a language, the live "Default notes language" card in Settings with the designer's toast; failed, stale and "Translate to X" states are the smallest things (designer gaps)
   - [ ] D12, Settings (needs W2, W7, W8, W9, W10): Tasks card, default language, sprints and reminders card, Slack and tracker cards
   - [ ] D13, meeting page details (needs W0.4 and W8): duration (`recorded_seconds`), participants (names from speaker labels), series, milestone
   - [ ] D14, Emails in the designer's layout (W0.3 done 2026-11-04 for verify, reset, already registered, invite and Notes ready; open: Notes shared (W6), New tasks (W2), Team invite (W3), reminders (W8), Could not join (C14))
@@ -371,7 +374,18 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] Adebayo re-runs meeting 5 with `--max-output-tokens 8000` and judges the items and pastes his verdicts back (owner, due date and quote right?)
   - [ ] Go or no-go on `gpt-6-luna` for W2 decided from those verdicts (spec asks for five real meetings; one is the first step)
 - [ ] W2 Tasks (needs W1 and the gate above; Opus)
-- [ ] W5 Export, W3 Team, W4 Projects, W6 Share, W7 Translate, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
+- [ ] W5 Export (merged), W3 Team, W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
+- [x] W7 Translate (PR open 2026-11-04, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
+  - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)
+  - [x] Headings from a fixed dictionary in code; transcript and notes split in code into lines, only the words go to the model; checks for count, structure, links and markup, numbers, names; one retry per chunk
+  - [x] Cache by (meeting, language) with `source_hash`; stale when notes or transcript change
+  - [x] One `ai_runs` row per translation (`kind=translate`, tokens, error class only); 20 translations a day per account
+  - [x] API: `POST` (200 cached, 202 queued), `GET`, `DELETE`, `GET`/`PUT /api/settings/language`, `language` on the export; owner only (404 for a foreign meeting), in the route enumeration test
+  - [x] Worker: translation thread (own loop, claim with `FOR UPDATE SKIP LOCKED`, stale claim recovery, 3 claims at most)
+  - [x] Frontend: select, bars, transcript, copy, Download note and `language`, Settings card live; parity shots at 1440, 768 and 390
+  - [x] Eval harness `tests/eval/translation_eval.py` written (TR1)
+  - [ ] TR1 run with a real model (no `OPENAI_API_KEY` where this was built): French and Spanish quality, real cost per hour
+  - [ ] Privacy and terms rows for translation (sentences in the SOP; the legal pages are another session's)
 
 ## CI speed (2026-11-04, PR #70, SOP `docs/sop/2026-11-04-ci-sharding.md`)
 
@@ -385,7 +399,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
 
 - [ ] Outlook calendar (after Google)
 - [ ] Microsoft Teams links (Vexa supports them; about a day plus a test call)
-- [ ] (Now W7 of the AI workspace spec) Languages: a default notes language, translation as a separate view (original stays the main version), a language for each share, names and vocabulary kept unchanged (designed in docs/ui). First test a French and English call
+- [x] (Built as W7 of the AI workspace spec, 2026-11-04; the real-model TR1 run is open above) Languages: a default notes language, translation as a separate view (original stays the main version), a language for each share, names and vocabulary kept unchanged (designed in docs/ui). First test a French and English call
 - [ ] Mac app for capture without a bot
 - [ ] (Now W6 of the AI workspace spec) Sharing notes by email (designed in docs/ui)
 
