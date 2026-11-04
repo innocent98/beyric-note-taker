@@ -239,8 +239,12 @@ def _close_quietly(conn: Connection) -> None:
 
 
 def register_jobs(scheduler: Scheduler, settings) -> None:
-    """The jobs this process runs. Calendar jobs exist only while `CALENDAR_ENABLED` is true, and
-    their modules are not even imported before that."""
+    """The jobs this process runs. The sweeps and the mail sender always (`app/sweeps.py`);
+    calendar jobs only while `CALENDAR_ENABLED` is true, and their modules are not even imported
+    before that."""
+    from app.sweeps import register_default_sweeps  # imports this module, so not at the top
+
+    register_default_sweeps(scheduler, settings)
     if settings.calendar_enabled:
         from app.gcal_sync import register_calendar_sync
 
