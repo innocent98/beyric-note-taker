@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app/shell";
 import { TemplatesEditor } from "@/components/app/templates-editor";
-import { getReviewOpen, load, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
 
 export const metadata: Metadata = { title: "Templates", robots: { index: false, follow: false } };
 
@@ -9,7 +9,7 @@ export default async function TemplatesPage() {
   const api = await requireOwner();
   const templates = await load(api.templates.list());
   return (
-    <AppShell current="templates" reviewOpen={await getReviewOpen()}>
+    <AppShell current="templates" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()}>
       <TemplatesEditor initial={templates} />
     </AppShell>
   );

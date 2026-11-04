@@ -1,0 +1,9 @@
+{
+  "note": "`mail.deliver_pending` with `MAIL_RECIPIENT_DAILY_CAP=1`: the first notes mail goes, the second is skipped (`recipient_cap`) and the meeting's owner is told.",
+  "content": {
+    "sent": 1,
+    "subjects": [
+      "Your notes are ready: Zoom 81234567890"
+    ]
+  }
+}

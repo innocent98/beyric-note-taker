@@ -1,0 +1,34 @@
+{
+  "note": "No other setting can ride along: 422.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/email",
+    "headers": {
+      "X-CSRF-Token": "<csrf-C>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "notify_email": false,
+      "auto_join_rule": "none"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "auto_join_rule",
+            "message": "Extra inputs are not permitted"
+          }
+        ]
+      }
+    }
+  }
+}

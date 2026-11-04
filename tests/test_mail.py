@@ -321,3 +321,13 @@ def test_asking_whether_mail_is_configured_builds_no_client(monkeypatch):
 
     monkeypatch.setattr(mail.ResendMailer, "__init__", refuse)
     assert mail.is_configured(make_settings(app_env="production", resend_api_key="re_x"))
+
+
+def test_the_default_sender_is_on_the_verified_resend_domain():
+    """Resend only sends from a verified domain: notes.beyrictech.com, not beyrictech.com."""
+    from app.config import Settings
+
+    assert (
+        Settings(_env_file=None, session_secret="x" * 40).mail_from
+        == "Beyric Note Taker <no-reply@notes.beyrictech.com>"
+    )

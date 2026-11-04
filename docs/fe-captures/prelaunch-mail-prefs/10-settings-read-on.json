@@ -1,0 +1,21 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/settings/email",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "notify_email": true
+    }
+  }
+}

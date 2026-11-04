@@ -287,3 +287,20 @@ main > .alert { margin-bottom: var(--space-4); }
 .check-input:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--teal-ring); }
 .check-label { font-size: var(--text-sm); line-height: 1.45; color: var(--ink-2); cursor: pointer; }
 .check-error .check-input { border-color: var(--danger); }
+
+/* ---- Settings sections and the switch (Beyric Note Taker.dc.html, Settings) ---- */
+.set-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; }
+.set-head { padding: 22px 22px 6px; }
+.set-title { font-size: var(--text-md); font-weight: 600; }
+.set-desc { margin-top: 4px; font-size: var(--text-sm); color: var(--text-2); }
+.set-row { display: flex; gap: var(--space-4); justify-content: space-between; padding: 14px 22px 20px; }
+.set-row-label { font-size: var(--text-base); font-weight: 550; }
+.set-row-desc { font-size: var(--text-xs); color: var(--text-3); }
+.set-note { padding: 0 22px 18px; font-size: var(--text-xs); color: var(--text-3); }
+.set-note .alert { margin-bottom: var(--space-2); }
+.switch { position: relative; flex: none; font: inherit; color: inherit; width: 36px; height: 20px; margin-top: 2px; padding: 0; border: 0; border-radius: var(--radius-pill); background: var(--border-strong); cursor: pointer; }
+.switch-on { background: var(--teal); }
+.switch:disabled { opacity: 0.55; cursor: default; }
+.switch:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--teal-ring); }
+.switch-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-knob); }
+.switch-on .switch-knob { left: 18px; }
