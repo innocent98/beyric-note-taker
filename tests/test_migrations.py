@@ -607,6 +607,9 @@ def test_0014_adds_translations_and_the_default_language_and_downgrades_cleanly(
     command.upgrade(cfg, "head")  # and back up again
     assert "meeting_translations" in inspect(engine).get_table_names()
     assert "user_id" in {c["name"] for c in inspect(engine).get_columns("ai_runs")}
+    # `inspect(engine)` can leave a connection open, and the scratch database cannot be dropped
+    # while one is (this test began to fail at teardown once a later migration existed).
+    engine.dispose()
 
 
 # ---- 0015 auto-join markers ----
