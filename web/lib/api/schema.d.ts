@@ -1151,6 +1151,8 @@ export interface components {
          *     `google_email` is the Google account that was connected, and is null when none is.
          *     `last_sync_at` is the last time the calendar was read in full, null before the first sync.
          *     `last_error` is the last failure in plain words, null when the last attempt worked.
+         *     `rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)
+         *     and `rule_text` its label ("Joining all meetings"). `upcoming` is empty unless connected.
          */
         CalendarOut: {
             /** Connected */
@@ -1161,6 +1163,13 @@ export interface components {
             last_error: string | null;
             /** Last Sync At */
             last_sync_at: string | null;
+            /**
+             * Rule
+             * @enum {string}
+             */
+            rule: "all" | "organizer" | "none";
+            /** Rule Text */
+            rule_text: string;
             /**
              * State
              * @enum {string}
@@ -1175,7 +1184,7 @@ export interface components {
          * ConnectIn
          * @description `features` are what to ask Google for: `calendar` (read events, to decide which meetings
          *     to join) and/or `meet` (learn that a Meet call you host began). `return_to` is a relative
-         *     path to land on afterwards; anything else becomes `/settings/calendar`.
+         *     path to land on afterwards; anything else becomes `/settings`.
          */
         ConnectIn: {
             /**
@@ -1591,9 +1600,12 @@ export interface components {
          * UpcomingEvent
          * @description One synced event in the next seven days. Only what a person needs to recognise it: no
          *     attendees, description, location or meeting link (a Zoom link can carry a passcode).
-         *     `will_join_text` is the answer in words ("Will join", "No video link", ...): show it as is.
+         *     `will_join_text` is the short answer in words and `reason_text` the sentence behind a no: show
+         *     both as they are.
          */
         UpcomingEvent: {
+            /** Attendee Count */
+            attendee_count: number;
             /**
              * Ends At
              * Format: date-time
@@ -1608,6 +1620,8 @@ export interface components {
              * @description Google Meet, Zoom or Microsoft Teams; or null
              */
             platform_label: string | null;
+            /** Reason Text */
+            reason_text: string | null;
             /**
              * Starts At
              * Format: date-time

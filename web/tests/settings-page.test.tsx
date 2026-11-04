@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import CalendarSettingsPage, { metadata } from "@/app/settings/calendar/page";
+import SettingsPage, { metadata } from "@/app/settings/page";
 import { AppShell } from "@/components/app/shell";
 import { ApiError } from "@/lib/api/client";
 import { APP_PATHS, NEXT_PAGES, isNextPage } from "@/lib/routes";
@@ -41,25 +41,28 @@ vi.mock("@/lib/api/server", () => ({
 
 const connected = calendarBody<CalendarState>("09-state-connected-with-upcoming.json");
 const render = async (params: Record<string, string | string[]> = {}) =>
-  renderToStaticMarkup(await CalendarSettingsPage({ searchParams: Promise.resolve(params) }));
+  renderToStaticMarkup(await SettingsPage({ searchParams: Promise.resolve(params) }));
 
 describe("route", () => {
   it("is a Next page the crawlers are told to leave alone", () => {
-    expect(NEXT_PAGES).toContain("/settings/calendar");
-    expect(isNextPage("/settings/calendar")).toBe(true);
-    expect(isNextPage("/settings/calendar?calendar=connected")).toBe(true);
+    expect(NEXT_PAGES).toContain("/settings");
+    expect(NEXT_PAGES).not.toContain("/settings/calendar");
+    expect(isNextPage("/settings")).toBe(true);
+    expect(isNextPage("/settings?calendar=connected")).toBe(true);
     expect(APP_PATHS).toContain("/settings");
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });
 });
 
 describe("sidebar", () => {
-  it("links Settings to the calendar page and marks it current there", () => {
+  it("has the designer's Settings entry after Templates and Vocabulary, current on its page", () => {
     const html = renderToStaticMarkup(<AppShell current="settings">x</AppShell>);
-    expect(html).toMatch(/href="\/settings\/calendar"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/settings\/calendar"/);
+    expect(html).toMatch(/href="\/settings"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/settings"/);
+    expect(html.indexOf('href="/templates"')).toBeLessThan(html.indexOf('href="/vocabulary"'));
+    expect(html.indexOf('href="/vocabulary"')).toBeLessThan(html.indexOf('href="/settings"'));
     const elsewhere = renderToStaticMarkup(<AppShell current="meetings">x</AppShell>);
-    expect(elsewhere).toMatch(/href="\/settings\/calendar"/);
-    expect(elsewhere).not.toMatch(/href="\/settings\/calendar"[^>]*aria-current/);
+    expect(elsewhere).toMatch(/href="\/settings"/);
+    expect(elsewhere).not.toMatch(/href="\/settings"[^>]*aria-current/);
   });
 });
 
@@ -67,8 +70,10 @@ describe("page", () => {
   it("draws the connected state from GET /api/calendar inside the app shell", async () => {
     state.answer = async () => connected;
     const html = await render();
+    expect(html).toContain("Preferences for your notes and transcripts.");
     expect(html).toContain("grace@example.test");
-    expect(html).toContain("Weekly planning");
+    expect(html).toContain("Join automatically");
+    expect(html).not.toContain("Weekly planning"); // the list is on the Meetings page
     expect(html).toContain(", 2 open");
   });
 
@@ -85,6 +90,7 @@ describe("page", () => {
     const html = await render();
     expect(html).toContain("Google Calendar is not available yet.");
     expect(html).not.toContain("Connect Google Calendar");
+    expect(html).toContain("Preferences for your notes and transcripts.");
   });
 
   it("sends a visitor whose session ended meanwhile to /login", async () => {
@@ -110,12 +116,12 @@ describe("server and client code stay apart", () => {
   // "use client" file; the first run of this page failed that way. Pages import values only from
   // plain modules, and a client component only as a component.
   it("reads the redirect's query in a plain module, not in the client component", () => {
-    const page = read(join(WEB, "app/settings/calendar/page.tsx"));
-    const component = read(join(WEB, "components/app/calendar-settings.tsx"));
+    const page = read(join(WEB, "app/settings/page.tsx"));
+    const component = read(join(WEB, "components/app/settings-calendar.tsx"));
     const plain = read(join(WEB, "lib/calendar-notice.ts"));
     expect(component.startsWith('"use client"')).toBe(true);
     expect(plain).not.toMatch(/use client/);
-    expect(page).toMatch(/import \{ CalendarSettings \} from "@\/components\/app\/calendar-settings"/);
+    expect(page).toMatch(/import \{ SettingsCalendar \} from "@\/components\/app\/settings-calendar"/);
     expect(page).toMatch(/calendarNotice\b[^;]*from "@\/lib\/calendar-notice"/);
   });
 });

@@ -34,7 +34,7 @@ from app.config import Settings  # noqa: E402
 from app.gcal_client import AccessTokenCache, GoogleSource  # noqa: E402
 from app.gcal_sync import sync_connection  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import CalendarConnection, User  # noqa: E402
+from app.models import CalendarConnection, User, UserSettings  # noqa: E402
 from app.passwords import hash_password  # noqa: E402
 from app.services import get_vexa  # noqa: E402
 from tests.fakes.google import FakeGoogle, FakeGoogleCalendar  # noqa: E402
@@ -150,7 +150,7 @@ def run(app, server_base, engine, settings, google) -> None:
         user,
         google,
         "connect",
-        return_to="/settings/calendar",
+        return_to="/settings",
         note="The real connect flow over the fake consent screen.",
     )
     # The fake consent screen's refresh token is not one the fake Calendar API knows; store one
@@ -180,6 +180,25 @@ def run(app, server_base, engine, settings, google) -> None:
         "every attendee address are in the stored rows or the Google bodies and nowhere in this "
         "answer.",
     )
+
+    # The person's auto-join rule. There is no route to change it yet (C15a part 2), so the stored
+    # setting is changed directly and the answer is captured as it comes back.
+    for rule in ("organizer", "none", "all"):
+        with Session(engine) as session:
+            prefs = session.get(UserSettings, 1)
+            if prefs is None:
+                prefs = UserSettings(user_id=1)
+                session.add(prefs)
+            prefs.auto_join_rule = rule
+            session.commit()
+        if rule != "all":
+            user.call(
+                f"state-rule-{rule}",
+                "GET",
+                "/api/calendar",
+                note=f"NOT settable through the API yet (C15a part 2): the stored rule was set to "
+                f"`{rule}` directly. `rule`, `rule_text` and each meeting's answer follow it.",
+            )
 
     # A revoked grant: Google refuses the refresh token on the next sync.
     calendar.valid_refresh_tokens.clear()

@@ -523,7 +523,7 @@
         "type": "object"
       },
       "CalendarOut": {
-        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`google_email` is the Google account that was connected, and is null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.",
+        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`google_email` is the Google account that was connected, and is null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `upcoming` is empty unless connected.",
         "properties": {
           "connected": {
             "title": "Connected",
@@ -563,6 +563,19 @@
             ],
             "title": "Last Sync At"
           },
+          "rule": {
+            "enum": [
+              "all",
+              "organizer",
+              "none"
+            ],
+            "title": "Rule",
+            "type": "string"
+          },
+          "rule_text": {
+            "title": "Rule Text",
+            "type": "string"
+          },
           "state": {
             "enum": [
               "not_connected",
@@ -592,6 +605,8 @@
           "google_email",
           "last_sync_at",
           "last_error",
+          "rule",
+          "rule_text",
           "upcoming"
         ],
         "title": "CalendarOut",
@@ -599,7 +614,7 @@
       },
       "ConnectIn": {
         "additionalProperties": false,
-        "description": "`features` are what to ask Google for: `calendar` (read events, to decide which meetings\nto join) and/or `meet` (learn that a Meet call you host began). `return_to` is a relative\npath to land on afterwards; anything else becomes `/settings/calendar`.",
+        "description": "`features` are what to ask Google for: `calendar` (read events, to decide which meetings\nto join) and/or `meet` (learn that a Meet call you host began). `return_to` is a relative\npath to land on afterwards; anything else becomes `/settings`.",
         "properties": {
           "features": {
             "default": [
@@ -1792,8 +1807,12 @@
         "type": "object"
       },
       "UpcomingEvent": {
-        "description": "One synced event in the next seven days. Only what a person needs to recognise it: no\nattendees, description, location or meeting link (a Zoom link can carry a passcode).\n`will_join_text` is the answer in words (\"Will join\", \"No video link\", ...): show it as is.",
+        "description": "One synced event in the next seven days. Only what a person needs to recognise it: no\nattendees, description, location or meeting link (a Zoom link can carry a passcode).\n`will_join_text` is the short answer in words and `reason_text` the sentence behind a no: show\nboth as they are.",
         "properties": {
+          "attendee_count": {
+            "title": "Attendee Count",
+            "type": "integer"
+          },
           "ends_at": {
             "format": "date-time",
             "title": "Ends At",
@@ -1831,6 +1850,17 @@
             "description": "Google Meet, Zoom or Microsoft Teams; or null",
             "title": "Platform Label"
           },
+          "reason_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Text"
+          },
           "starts_at": {
             "format": "date-time",
             "title": "Starts At",
@@ -1856,8 +1886,10 @@
           "ends_at",
           "platform",
           "platform_label",
+          "attendee_count",
           "will_join",
-          "will_join_text"
+          "will_join_text",
+          "reason_text"
         ],
         "title": "UpcomingEvent",
         "type": "object"

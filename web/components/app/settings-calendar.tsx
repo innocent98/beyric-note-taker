@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { Alert, Badge, Button, Icon } from "@/components/ui";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { Alert, Button, Icon } from "@/components/ui";
 import type { AlertKind } from "@/components/ui/alert";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
-import type { CalendarEvent, CalendarState } from "@/lib/api/types";
+import type { CalendarState } from "@/lib/api/types";
 import type { CalendarNotice } from "@/lib/calendar-notice";
-import { formatClock, formatDuration, formatShortDay, formatTime } from "@/lib/format";
+import { formatTime } from "@/lib/format";
 
 type Message = { kind: AlertKind; text: string; revokeNote?: boolean };
 
-// The words for what happened. The connect errors are the guide's; `different_account` names the
-// account that is already connected, which only the page's own state knows.
+// The words for what happened. The connect errors are the guide's (docs/fe-integration-guide-
+// calendar-connect.md section 2); `different_account` names the account that is already
+// connected, which only the page's own state knows.
 function messageFor(notice: CalendarNotice, email: string | null): Message {
   if (notice.kind === "connected") return { kind: "info", text: "Google Calendar connected." };
   switch (notice.code) {
@@ -43,16 +44,24 @@ function messageFor(notice: CalendarNotice, email: string | null): Message {
   }
 }
 
+// The designer's three rules (`autoRules` in Beyric Note Taker.dc.html). Read-only here: choosing
+// one needs the settings route (C15a part 2), which does not exist yet.
+const RULES = [
+  ["all", "All meetings with a video link", "Every event on your calendar with a meeting link."],
+  ["organizer", "Only meetings I organise", "Skip meetings other people invited you to."],
+  ["none", "Only when I turn it on", "Pick meetings one by one from the Upcoming list."],
+] as const;
+
 const PERMISSIONS_URL = "https://myaccount.google.com/permissions";
 
 // Opens Google's consent screen. A full navigation, never fetch (the connect call's contract).
 const goTo = (url: string) => window.location.assign(url);
 
-// The Settings screen's Calendar section (the designer's Settings screen, calendar part only) and
-// the Upcoming list. `initial` is `GET /api/calendar`, or null while the server has the feature off
-// (404 `calendar_unavailable`). Everything on the page is the server's words (docs/fe-integration-
-// guide-calendar-settings.md): the state sentence, the last failure and each meeting's answer.
-export function CalendarSettings({
+// The Calendar section of the Settings screen (the designer's, in `Beyric Note Taker.dc.html`):
+// the not-connected buttons, or the connected row with Disconnect and the current rule. `initial`
+// is `GET /api/calendar`, or null while the server has the feature off (404 `calendar_unavailable`).
+// The words that come from the server (the last failure) are shown as they are.
+export function SettingsCalendar({
   initial,
   notice,
   navigate = goTo,
@@ -111,7 +120,7 @@ export function CalendarSettings({
     setError(null);
     try {
       const result = await api.calendar.disconnect();
-      setState(disconnectedState());
+      setState((current) => (current ? disconnectedFrom(current) : current));
       setConfirming(false);
       setMessage({ kind: "info", text: "Google Calendar disconnected.", revokeNote: !result.revoked });
     } catch (caught) {
@@ -126,14 +135,7 @@ export function CalendarSettings({
   const connectLabel = connecting ? "Connecting..." : needsReconnect ? "Connect Google Calendar again" : "Connect Google Calendar";
 
   return (
-    <div className="stack-md measure">
-      <div className="page-head">
-        <div>
-          <h1>Settings</h1>
-          <p>Preferences for your notes and transcripts.</p>
-        </div>
-      </div>
-
+    <>
       {message ? (
         <Alert kind={message.kind}>
           <p className="alert-text">{message.text}</p>
@@ -150,73 +152,69 @@ export function CalendarSettings({
       ) : null}
       {error ? <Alert kind="error">{error}</Alert> : null}
 
-      <section className="card card-flush" aria-labelledby="cal-title">
-        <div className="cal-head">
-          <h2 id="cal-title" className="cal-title">
+      <section className="card card-flush" aria-labelledby="set-calendar">
+        <div className="set-head">
+          <h2 id="set-calendar" className="set-title">
             Calendar
           </h2>
-          <p className="cal-sub">
-            Beyric reads your calendar and joins meetings that have a Google Meet or Zoom link.
+          <p className="set-sub">
+            The note taker reads your calendar and joins meetings that have a Google Meet, Microsoft Teams or Zoom
+            link.
           </p>
         </div>
 
         {state === null ? (
-          <p className="cal-pad meta">Google Calendar is not available yet.</p>
+          <p className="meta set-note">Google Calendar is not available yet.</p>
         ) : !connected ? (
-          <div className="cal-pad stack-sm">
-            <PermissionsNote />
+          <Fragment>
             {pendingUrl ? (
-              <div className="stack-sm">
+              <div className="set-stack">
                 <UnverifiedNotice onContinue={() => navigate(pendingUrl)} />
               </div>
             ) : (
-              <div>
-                <Button kind="secondary" type="button" disabled={connecting} onClick={() => void connect()}>
+              <div className="set-actions">
+                <Button kind="secondary" size="tight" type="button" disabled={connecting} onClick={() => void connect()}>
                   <Icon name="calendar" />
                   {connectLabel}
                 </Button>
               </div>
             )}
-          </div>
+            <p className="meta set-note set-note-after">
+              Beyric asks Google for read-only access to the events on your calendars. It never adds, changes or
+              deletes anything on your calendar, keeps each event&apos;s title, time, video link and number of
+              guests, and does not keep guest email addresses or event descriptions.
+            </p>
+          </Fragment>
         ) : (
-          <div className="cal-pad stack-sm">
+          <div>
             <div className="cal-account">
               <div className="cal-account-main">
                 <span className="cal-tile" aria-hidden="true">
                   <Icon name="calendar" size={18} />
                 </span>
-                <div className="cal-account-text">
+                <div>
                   <div className="cal-provider">Google Calendar</div>
-                  <div className="cal-email">{state.google_email}</div>
+                  <div className="cal-account-sub">
+                    {state.google_email} · {needsReconnect ? "Needs to connect again" : "Connected"}
+                  </div>
                 </div>
-                {state.state === "connected" ? (
-                  <Badge tone="success" dot>
-                    {state.state_text}
-                  </Badge>
-                ) : null}
               </div>
               {confirming ? null : (
-                <Button kind="quiet" type="button" onClick={() => setConfirming(true)}>
+                <button type="button" className="cal-text-danger" onClick={() => setConfirming(true)}>
                   Disconnect
-                </Button>
+                </button>
               )}
             </div>
 
             {confirming ? (
               <div className="cal-confirm" role="group" aria-label="Disconnect Google Calendar?">
-                <p className="cal-confirm-text">
+                <p>
                   Beyric forgets your Google connection, deletes the calendar events it copied and cancels the
                   meetings it planned to join. Meetings already recorded and your notes stay. A meeting being
                   recorded right now carries on.
                 </p>
                 <div className="alert-actions">
-                  <Button
-                    kind="danger"
-                    size="sm"
-                    type="button"
-                    disabled={disconnecting}
-                    onClick={() => void disconnect()}
-                  >
+                  <Button kind="danger" size="sm" type="button" disabled={disconnecting} onClick={() => void disconnect()}>
                     {disconnecting ? "Disconnecting..." : "Disconnect"}
                   </Button>
                   <Button kind="quiet" type="button" disabled={disconnecting} onClick={() => setConfirming(false)}>
@@ -226,39 +224,58 @@ export function CalendarSettings({
               </div>
             ) : null}
 
-            {needsReconnect ? (
-              <Alert kind="notice">
-                <p className="alert-text">{state.state_text}</p>
-                <Button kind="secondary" size="sm" type="button" disabled={connecting} onClick={() => void connect()}>
-                  {connectLabel}
-                </Button>
-              </Alert>
-            ) : (
-              <>
-                {state.state === "degraded" ? <p className="meta">{state.state_text}</p> : null}
-                {state.last_error ? <Alert kind="notice">{state.last_error}</Alert> : null}
-              </>
-            )}
-            {pendingUrl ? (
-              <UnverifiedNotice onContinue={() => navigate(pendingUrl)} />
-            ) : null}
+            <div className="set-body">
+              {needsReconnect ? (
+                <Alert kind="notice">
+                  <p className="alert-text">{state.state_text}</p>
+                  <Button kind="secondary" size="sm" type="button" disabled={connecting} onClick={() => void connect()}>
+                    {connectLabel}
+                  </Button>
+                </Alert>
+              ) : (
+                <>
+                  {state.state === "degraded" ? <p className="meta">{state.state_text}</p> : null}
+                  {state.last_error ? <Alert kind="notice">{state.last_error}</Alert> : null}
+                </>
+              )}
+              {pendingUrl ? <UnverifiedNotice onContinue={() => navigate(pendingUrl)} /> : null}
 
-            <p className="meta">
-              {state.last_sync_at
-                ? `Last updated ${formatTime(state.last_sync_at)}`
-                : "Waiting for the first update. This usually takes a minute."}
-            </p>
+              <div className="cal-rules" role="radiogroup" aria-labelledby="cal-rules-label">
+                <div id="cal-rules-label" className="cal-field-label">
+                  Join automatically
+                </div>
+                {RULES.map(([code, label, description]) => (
+                  <div
+                    key={code}
+                    className={`cal-rule${state.rule === code ? " cal-rule-on" : ""}`}
+                    role="radio"
+                    aria-checked={state.rule === code}
+                    aria-disabled="true"
+                  >
+                    <span className="cal-radio" aria-hidden="true" />
+                    <div>
+                      <div className="cal-rule-label">{label}</div>
+                      <div className="cal-rule-desc">{description}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <p className="meta">
+                {state.last_sync_at
+                  ? `Last updated ${formatTime(state.last_sync_at)}`
+                  : "Waiting for the first update. This usually takes a minute."}
+              </p>
+            </div>
           </div>
         )}
       </section>
-
-      {connected && state ? <Upcoming state={state} /> : null}
-    </div>
+    </>
   );
 }
 
 // The page's state once the server has forgotten the connection (what GET would now answer).
-function disconnectedState(): CalendarState {
+function disconnectedFrom(current: CalendarState): CalendarState {
   return {
     connected: false,
     state: "not_connected",
@@ -266,6 +283,8 @@ function disconnectedState(): CalendarState {
     google_email: null,
     last_sync_at: null,
     last_error: null,
+    rule: current.rule,
+    rule_text: current.rule_text,
     upcoming: [],
   };
 }
@@ -283,72 +302,5 @@ function UnverifiedNotice({ onContinue }: { onContinue: () => void }) {
         Continue to Google
       </Button>
     </Alert>
-  );
-}
-
-function PermissionsNote() {
-  return (
-    <div className="cal-perms">
-      <div className="cal-perms-title">What Google will be asked for</div>
-      <ul className="cal-perms-list">
-        <li>See the events on your calendars. This is read only: Beyric never adds, changes or deletes anything on your calendar.</li>
-      </ul>
-      <p className="meta">
-        Beyric keeps each event&apos;s title, time and video link, and how many people are invited. It does not keep
-        guest email addresses or event descriptions. You can disconnect at any time.
-      </p>
-    </div>
-  );
-}
-
-function Upcoming({ state }: { state: CalendarState }) {
-  const events = state.upcoming;
-  const anyJoin = events.some((e) => e.will_join);
-  return (
-    <section className="card card-flush" aria-labelledby="up-title">
-      <div className="cal-up-head">
-        <h2 id="up-title" className="cal-title">
-          Upcoming
-        </h2>
-        {state.google_email ? <span className="cal-chip">{state.google_email}</span> : null}
-      </div>
-      {events.length === 0 ? (
-        <p className="cal-pad meta">
-          {state.last_sync_at ? "Nothing in the next 7 days." : "Your meetings appear here after the first update."}
-        </p>
-      ) : (
-        <ul className="cal-up-list" aria-label="Upcoming meetings">
-          {events.map((event) => (
-            <UpcomingRow key={event.id} event={event} />
-          ))}
-        </ul>
-      )}
-      {anyJoin ? (
-        <p className="cal-remind">
-          <Icon name="info" />
-          Tell participants that this meeting will be recorded.
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-function UpcomingRow({ event }: { event: CalendarEvent }) {
-  const duration = formatDuration(event.starts_at, event.ends_at);
-  return (
-    <li className="cal-up-row">
-      <div className="cal-up-when">
-        <div className="cal-up-day">{formatShortDay(event.starts_at)}</div>
-        <div className="cal-up-time">{formatClock(event.starts_at)}</div>
-      </div>
-      <div className="cal-up-what">
-        <div className="cal-up-title">{event.title}</div>
-        <p className="meta-line">
-          {event.platform_label ? <span>{event.platform_label}</span> : null}
-          {duration ? <span>{duration}</span> : null}
-        </p>
-      </div>
-      <Badge tone={event.will_join ? "success" : "neutral"}>{event.will_join_text}</Badge>
-    </li>
   );
 }

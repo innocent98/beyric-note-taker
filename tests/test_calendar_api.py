@@ -106,6 +106,8 @@ def test_a_person_who_never_connected_gets_the_not_connected_answer(web):
         "google_email": None,
         "last_sync_at": None,
         "last_error": None,
+        "rule": "all",
+        "rule_text": "Joining all meetings",
         "upcoming": [],
     }
 
@@ -227,8 +229,10 @@ def test_each_item_has_title_times_platform_and_the_join_answer(web, session, li
         "title": "Standup 1",
         "platform": "google_meet",
         "platform_label": "Google Meet",
+        "attendee_count": 0,
         "will_join": True,
         "will_join_text": "Will join",
+        "reason_text": None,
     }
 
 
@@ -239,10 +243,12 @@ def test_platforms_have_plain_labels_and_a_missing_link_says_so(web, session, li
     one, two, three = web.get(URL).json()["upcoming"]
     assert (one["platform_label"], one["will_join"]) == ("Zoom", True)
     assert two["platform"] is None and two["platform_label"] is None
-    assert (two["will_join"], two["will_join_text"]) == (False, "No video link")
+    assert (two["will_join"], two["will_join_text"]) == (False, "Cannot join")
+    assert two["reason_text"] == "Add a meeting link to this event to record it"
     assert three["platform_label"] == "Microsoft Teams"
     assert three["will_join"] is False
-    assert three["will_join_text"] == "Microsoft Teams meetings cannot be joined yet"
+    assert three["will_join_text"] == "Cannot join"
+    assert three["reason_text"] == "Microsoft Teams meetings cannot be joined yet"
 
 
 def test_the_answer_follows_the_users_rule(web, session, owner, linked):
@@ -251,48 +257,81 @@ def test_the_answer_follows_the_users_rule(web, session, owner, linked):
     session.commit()
     [item] = web.get(URL).json()["upcoming"]
     assert item["will_join"] is False
-    assert item["will_join_text"] == "Skipped: you are not the organiser"
+    assert (item["will_join_text"], item["reason_text"]) == (
+        "Off",
+        "Skipped because you are not the organiser",
+    )
     settings_row = session.scalars(select(UserSettings)).one()
     settings_row.auto_join_rule = "none"
     session.commit()
     [item] = web.get(URL).json()["upcoming"]
-    assert item["will_join_text"] == "Off: joining only meetings you switch on"
+    assert (item["will_join_text"], item["reason_text"]) == (
+        "Off",
+        "Auto-join is set to only when you turn it on",
+    )
+    body = web.get(URL).json()
+    assert (body["rule"], body["rule_text"]) == ("none", "Auto-join is off")
 
 
 def test_the_answer_follows_the_stored_override(web, session, linked):
     add_event(session, linked, 1, hours=1, override=False)
     add_event(session, linked, 2, hours=2, override=True, organizer_self=False)
     off, on = web.get(URL).json()["upcoming"]
-    assert (off["will_join"], off["will_join_text"]) == (False, "Off: you switched this one off")
-    assert (on["will_join"], on["will_join_text"]) == (True, "Will join")
+    assert (off["will_join"], off["will_join_text"]) == (False, "Off")
+    assert off["reason_text"] == "You switched this meeting off"
+    assert (on["will_join"], on["will_join_text"], on["reason_text"]) == (True, "Will join", None)
 
 
 def test_a_declined_invite_and_an_all_day_event_say_why_not(web, session, linked):
     add_event(session, linked, 1, hours=1, self_response="declined")
     add_event(session, linked, 2, hours=2, all_day=True)
     declined, all_day = web.get(URL).json()["upcoming"]
-    assert declined["will_join_text"] == "You declined this invite"
-    assert all_day["will_join_text"] == "All-day events are not joined"
+    assert (declined["will_join_text"], declined["reason_text"]) == (
+        "Cannot join",
+        "You declined this invite",
+    )
+    assert (all_day["will_join_text"], all_day["reason_text"]) == (
+        "Cannot join",
+        "All-day events are not joined",
+    )
 
 
 def test_a_stranger_invite_waits_for_the_user(web, session, linked):
     add_event(session, linked, 1, hours=1, organizer_self=False, self_response="needsAction")
     [item] = web.get(URL).json()["upcoming"]
     assert item["will_join"] is False
-    assert item["will_join_text"] == "Waiting: accept the invite to join"
+    assert (item["will_join_text"], item["reason_text"]) == (
+        "Off",
+        "Waiting for you to accept the invite",
+    )
 
 
 def test_every_reason_the_rules_can_give_has_plain_words_and_no_code():
     for reason in REASONS:
-        text = calendar_text.join_text(JoinDecision(reason == "ok", reason))
-        assert text and text.strip() == text
-        assert "_" not in text, (reason, text)  # no snake_case code leaks through
-    assert calendar_text.join_text(JoinDecision(True, "ok")) == "Will join"
+        decision = JoinDecision(reason == "ok", reason)
+        label, why = calendar_text.join_label(decision), calendar_text.join_reason(decision)
+        assert label in ("Will join", "Off", "Cannot join")
+        assert (why is None) == (reason == "ok")
+        for text in (label, why or ""):
+            assert text.strip() == text
+            assert "_" not in text, (reason, text)  # no snake_case code leaks through
+    assert calendar_text.join_label(JoinDecision(True, "ok")) == "Will join"
+
+
+def test_the_labels_are_the_designers_three_and_the_rule_decides_which(web):
+    # Off: the person could switch it on. Cannot join: nothing they switch changes it.
+    off = {"rule_none", "not_organizer", "not_accepted", "override_off"}
+    for reason in REASONS:
+        if reason == "ok":
+            continue
+        label = calendar_text.join_label(JoinDecision(False, reason))
+        assert label == ("Off" if reason in off else "Cannot join"), reason
 
 
 def test_an_unknown_reason_is_never_shown_as_a_code():
-    text = calendar_text.join_text(JoinDecision(False, "something_new"))
-    assert "something_new" not in text and text
+    decision = JoinDecision(False, "something_new")
+    for text in (calendar_text.join_label(decision), calendar_text.join_reason(decision)):
+        assert text and "something_new" not in text
 
 
 # ---- what the answer must never carry ----
@@ -324,8 +363,10 @@ def test_upcoming_never_returns_attendee_addresses_description_or_zoom_passcode(
         "ends_at",
         "platform",
         "platform_label",
+        "attendee_count",
         "will_join",
         "will_join_text",
+        "reason_text",
     }  # no description, location, attendees, link or passcode field exists to fill
 
 
@@ -392,3 +433,24 @@ def test_the_list_is_capped(web, session, linked):
 def test_the_far_future_is_not_returned(web, session, linked):
     add_event(session, linked, 1, hours=24 * 30)
     assert web.get(URL).json()["upcoming"] == []
+
+
+def test_the_guest_count_is_a_number_never_a_list_of_addresses(web, session, linked):
+    add_event(session, linked, 1, hours=1, attendee_count=8)
+    [item] = web.get(URL).json()["upcoming"]
+    assert item["attendee_count"] == 8 and isinstance(item["attendee_count"], int)
+
+
+@pytest.mark.parametrize(
+    ("rule", "words"),
+    [
+        ("all", "Joining all meetings"),
+        ("organizer", "Joining meetings you organise"),
+        ("none", "Auto-join is off"),
+    ],
+)
+def test_the_rule_comes_back_with_its_words(web, session, owner, linked, rule, words):
+    session.add(UserSettings(user_id=owner.id, auto_join_rule=rule))
+    session.commit()
+    body = web.get(URL).json()
+    assert (body["rule"], body["rule_text"]) == (rule, words)

@@ -9,7 +9,7 @@
       "Cookie": "device=<cookie>; session=<cookie>"
     },
     "body": {
-      "return_to": "/settings/calendar"
+      "return_to": "/settings"
     }
   },
   "response": {

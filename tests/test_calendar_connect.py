@@ -56,7 +56,7 @@ KEY = base64.b64encode(b"K" * 32).decode()
 CONNECT = "/api/calendar/google/connect"
 CALLBACK = "/api/calendar/google/callback"
 DISCONNECT = "/api/calendar/google/disconnect"
-DEFAULT_LANDING = "/settings/calendar"
+DEFAULT_LANDING = "/settings"
 NOW = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
 
 
@@ -187,11 +187,11 @@ def test_connect_url_has_offline_consent_pkce_and_login_hint(web, session, owner
 
 def test_the_flow_is_stored_hashed_for_this_user_and_expires_in_ten_minutes(web, session, owner):
     before = datetime.now(UTC)
-    url, state, _ = connect(web, return_to="/settings/calendar?tab=rules")
+    url, state, _ = connect(web, return_to="/settings?tab=rules")
     [flow] = flows(session)
     assert flow.state_hash == tokens.digest(state) and state not in flow.state_hash
     assert flow.purpose == "calendar" and flow.user_id == owner.id
-    assert flow.return_to == "/settings/calendar?tab=rules"
+    assert flow.return_to == "/settings?tab=rules"
     assert 43 <= len(flow.code_verifier) <= 128 and flow.nonce
     assert timedelta(minutes=9) < flow.expires_at - before <= timedelta(minutes=10, seconds=5)
     # The PKCE challenge in the URL is the S256 of the stored verifier.
@@ -323,8 +323,8 @@ def test_the_unverified_app_notice_is_shown_until_google_has_verified_the_app(
 def test_a_good_callback_stores_the_connection_and_goes_back_to_the_page(
     web, session, owner, google
 ):
-    response, state, code = connect_google(web, google, return_to="/settings/calendar")
-    assert landing(response) == ("/settings/calendar", {"calendar": "connected"})
+    response, state, code = connect_google(web, google, return_to="/settings")
+    assert landing(response) == ("/settings", {"calendar": "connected"})
     conn = connection_of(session, owner)
     assert conn.provider == "google" and conn.status == "connected"
     assert conn.google_account_email == "grace@example.test" and conn.google_sub == "g-grace-1"
@@ -543,9 +543,9 @@ def test_callback_is_public_but_state_checked_and_cookie_required(capp):
 
 
 def test_the_person_cancelling_on_the_consent_screen(web, session, google):
-    url, state, _ = connect(web, return_to="/settings/calendar")
+    url, state, _ = connect(web, return_to="/settings")
     response = callback_raw(web, f"error=access_denied&state={state}")
-    assert landing(response) == ("/settings/calendar", {"calendar_error": "google_denied"})
+    assert landing(response) == ("/settings", {"calendar_error": "google_denied"})
     assert connection_of(session) is None and flows(session) == []
 
 
@@ -888,9 +888,9 @@ def test_expected_expiry_set_to_seven_days_only_while_testing_flag_is_on_and_cle
 
 
 def test_the_return_path_keeps_its_own_query_when_the_result_is_added(web, session, google):
-    response, _, _ = connect_google(web, google, return_to="/settings/calendar?tab=rules")
+    response, _, _ = connect_google(web, google, return_to="/settings?tab=rules")
     path, query = landing(response)
-    assert path == "/settings/calendar"
+    assert path == "/settings"
     assert query == {"tab": "rules", "calendar": "connected"}
 
 

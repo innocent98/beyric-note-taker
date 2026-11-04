@@ -34,7 +34,7 @@ UPCOMING_LIMIT = 100
 class ConnectIn(BaseModel):
     """`features` are what to ask Google for: `calendar` (read events, to decide which meetings
     to join) and/or `meet` (learn that a Meet call you host began). `return_to` is a relative
-    path to land on afterwards; anything else becomes `/settings/calendar`."""
+    path to land on afterwards; anything else becomes `/settings`."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -68,7 +68,8 @@ class DisconnectOut(BaseModel):
 class UpcomingEvent(BaseModel):
     """One synced event in the next seven days. Only what a person needs to recognise it: no
     attendees, description, location or meeting link (a Zoom link can carry a passcode).
-    `will_join_text` is the answer in words ("Will join", "No video link", ...): show it as is."""
+    `will_join_text` is the short answer in words and `reason_text` the sentence behind a no: show
+    both as they are."""
 
     id: int
     title: str
@@ -77,8 +78,13 @@ class UpcomingEvent(BaseModel):
     # `google_meet`, `zoom`, `teams`, or null when the event has no video link.
     platform: Literal["google_meet", "zoom", "teams"] | None
     platform_label: str | None = Field(description="Google Meet, Zoom or Microsoft Teams; or null")
+    # How many people are invited: a number, never their addresses.
+    attendee_count: int
     will_join: bool
+    # `Will join`, `Off` (the rule or the person's switch says no, and they could change it) or
+    # `Cannot join` (no link, over, declined, ...). `reason_text` says why, or is null.
     will_join_text: str
+    reason_text: str | None
 
 
 class CalendarOut(BaseModel):
@@ -88,7 +94,9 @@ class CalendarOut(BaseModel):
     `connected` is true while the calendar can still be read (`connected` or `degraded`).
     `google_email` is the Google account that was connected, and is null when none is.
     `last_sync_at` is the last time the calendar was read in full, null before the first sync.
-    `last_error` is the last failure in plain words, null when the last attempt worked."""
+    `last_error` is the last failure in plain words, null when the last attempt worked.
+    `rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)
+    and `rule_text` its label ("Joining all meetings"). `upcoming` is empty unless connected."""
 
     connected: bool
     state: Literal["not_connected", "connected", "degraded", "needs_reconnect"]
@@ -96,6 +104,8 @@ class CalendarOut(BaseModel):
     google_email: str | None
     last_sync_at: datetime | None
     last_error: str | None
+    rule: Literal["all", "organizer", "none"]
+    rule_text: str
     upcoming: list[UpcomingEvent]
 
 
@@ -215,11 +225,15 @@ def _calendar_connection(session: Session, user: User) -> CalendarConnection | N
 
 
 def _upcoming(
-    session: Session, conn: CalendarConnection, now: datetime, *, teams_join_enabled: bool
+    session: Session,
+    conn: CalendarConnection,
+    prefs: UserSettings | None,
+    now: datetime,
+    *,
+    teams_join_enabled: bool,
 ) -> list[UpcomingEvent]:
     """Events not over yet that start within seven days, soonest first, each with the join rules'
     answer for this user. Cancelled events are left out."""
-    prefs = session.get(UserSettings, conn.user_id)
     join_settings = JoinSettings(
         rule=prefs.auto_join_rule if prefs else "all",
         teams_join_enabled=teams_join_enabled,
@@ -247,8 +261,10 @@ def _upcoming(
                 ends_at=row.ends_at,
                 platform=row.platform,
                 platform_label=calendar_text.platform_label(row.platform),
+                attendee_count=row.attendee_count,
                 will_join=decision.join,
-                will_join_text=calendar_text.join_text(decision),
+                will_join_text=calendar_text.join_label(decision),
+                reason_text=calendar_text.join_reason(decision),
             )
         )
     return out
@@ -268,6 +284,8 @@ def calendar_state(
     the sync job last stored. 404 `calendar_unavailable` while the calendar features are off."""
     _enabled(request, google)
     conn = _calendar_connection(session, user)
+    prefs = session.get(UserSettings, user.id)
+    rule = prefs.auto_join_rule if prefs else "all"
     if conn is None:
         return CalendarOut(
             connected=False,
@@ -276,6 +294,8 @@ def calendar_state(
             google_email=None,
             last_sync_at=None,
             last_error=None,
+            rule=rule,
+            rule_text=calendar_text.rule_text(rule),
             upcoming=[],
         )
     state = conn.status if conn.status in ("connected", "degraded") else "needs_reconnect"
@@ -286,9 +306,12 @@ def calendar_state(
         google_email=conn.google_account_email,
         last_sync_at=conn.last_sync_at,
         last_error=calendar_text.error_text(conn.last_error),
+        rule=rule,
+        rule_text=calendar_text.rule_text(rule),
         upcoming=_upcoming(
             session,
             conn,
+            prefs,
             _now(),
             teams_join_enabled=request.app.state.settings.teams_join_enabled,
         ),

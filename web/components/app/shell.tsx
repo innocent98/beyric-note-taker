@@ -33,7 +33,7 @@ export function AppShell({
         <nav className="nav" aria-label="Configure">
           <NavLink href="/templates" label="Templates" current={current === "templates"} />
           <NavLink href="/vocabulary" label="Vocabulary" current={current === "vocabulary"} />
-          <NavLink href="/settings/calendar" label="Settings" current={current === "settings"} />
+          <NavLink href="/settings" label="Settings" current={current === "settings"} />
         </nav>
         <div className="sidebar-user">
           <div className="avatar" aria-hidden="true">

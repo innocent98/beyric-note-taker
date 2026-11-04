@@ -256,7 +256,7 @@ export function createApi(options: ApiOptions = {}) {
       get: () => request<CalendarState>("GET", "/api/calendar"),
       connect: () =>
         request<ConnectStart>("POST", "/api/calendar/google/connect", {
-          body: { features: ["calendar"], return_to: "/settings/calendar" },
+          body: { features: ["calendar"], return_to: "/settings" },
           write: true,
         }),
       disconnect: () => request<DisconnectResult>("POST", "/api/calendar/google/disconnect", { write: true }),

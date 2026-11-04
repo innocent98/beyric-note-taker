@@ -14,10 +14,18 @@ PLATFORM_LABELS = {"google_meet": "Google Meet", "zoom": "Zoom", "teams": "Micro
 
 NOT_CONNECTED = "Google Calendar is not connected."
 
-# One sentence for each reason `will_join` can give. "Will join" is the only yes.
-JOIN_TEXT = {
-    "ok": "Will join",
-    "no_link": "No video link",
+# The designer's three answers (Beyric Note Taker.dc.html, the Upcoming rows): "Will join", "Off"
+# (the person could switch it on: the rule or their own switch says no) and "Cannot join" (nothing
+# they switch changes it: no link, over, declined, ...).
+WILL_JOIN = "Will join"
+OFF = "Off"
+CANNOT_JOIN = "Cannot join"
+OFF_REASONS = frozenset({"rule_none", "not_organizer", "not_accepted", "override_off"})
+
+# The plain reason behind a "no", one sentence for each reason `will_join` can give. The first is
+# the designer's own hint for an event without a link.
+REASON_TEXT = {
+    "no_link": "Add a meeting link to this event to record it",
     "teams_unsupported": "Microsoft Teams meetings cannot be joined yet",
     "declined": "You declined this invite",
     "cancelled": "This event was cancelled",
@@ -25,12 +33,19 @@ JOIN_TEXT = {
     "too_long": "Too long to join (over 6 hours)",
     "all_day": "All-day events are not joined",
     "event_type": "This kind of event is not joined",
-    "not_organizer": "Skipped: you are not the organiser",
-    "not_accepted": "Waiting: accept the invite to join",
-    "rule_none": "Off: joining only meetings you switch on",
-    "override_off": "Off: you switched this one off",
+    "not_organizer": "Skipped because you are not the organiser",
+    "not_accepted": "Waiting for you to accept the invite",
+    "rule_none": "Auto-join is set to only when you turn it on",
+    "override_off": "You switched this meeting off",
 }
-UNKNOWN_JOIN_TEXT = "Will not join"  # a reason added to the rules before it was given words here
+UNKNOWN_REASON_TEXT = "Will not join"  # a reason added to the rules before it was given words
+
+# The designer's label for the rule (the Meetings page's Upcoming header).
+RULE_TEXT = {
+    "all": "Joining all meetings",
+    "organizer": "Joining meetings you organise",
+    "none": "Auto-join is off",
+}
 
 RECONNECT_TEXT = {
     "revoked": "Google access was removed. Connect again to carry on.",
@@ -46,9 +61,22 @@ REVOKED_ERROR_TEXT = "Google no longer lets Beyric read your calendar. Connect a
 GENERIC_ERROR_TEXT = "The last check of your calendar did not work. Beyric will try again soon."
 
 
-def join_text(decision: JoinDecision) -> str:
-    """The answer to "will the bot join this?" for one event, from the rules' decision."""
-    return JOIN_TEXT.get(decision.reason, UNKNOWN_JOIN_TEXT)
+def join_label(decision: JoinDecision) -> str:
+    """The short answer to "will the bot join this?": Will join, Off or Cannot join."""
+    if decision.join:
+        return WILL_JOIN
+    return OFF if decision.reason in OFF_REASONS else CANNOT_JOIN
+
+
+def join_reason(decision: JoinDecision) -> str | None:
+    """Why not, in one sentence; None when it will join."""
+    if decision.join:
+        return None
+    return REASON_TEXT.get(decision.reason, UNKNOWN_REASON_TEXT)
+
+
+def rule_text(rule: str) -> str:
+    return RULE_TEXT.get(rule, RULE_TEXT["all"])
 
 
 def platform_label(platform: str | None) -> str | None:

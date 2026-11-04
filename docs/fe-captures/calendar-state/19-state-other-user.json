@@ -1,6 +1,6 @@
 {
-  "note": "Back to not connected: no address, no events.",
-  "client": "signed-in user",
+  "note": "A second account sees only its own state: not connected, no events, no address.",
+  "client": "a different user",
   "request": {
     "method": "GET",
     "path": "/api/calendar",
@@ -22,6 +22,8 @@
       "google_email": null,
       "last_sync_at": null,
       "last_error": null,
+      "rule": "all",
+      "rule_text": "Joining all meetings",
       "upcoming": []
     }
   }

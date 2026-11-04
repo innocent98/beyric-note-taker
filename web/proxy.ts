@@ -36,7 +36,7 @@ export const config = {
     "/share",
     "/templates",
     "/vocabulary",
-    "/settings/calendar",
+    "/settings",
     "/privacy",
     "/terms",
     "/styleguide",

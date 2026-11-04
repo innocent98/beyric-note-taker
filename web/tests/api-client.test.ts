@@ -240,7 +240,7 @@ describe("calendar calls", () => {
     const post = calls.find((c) => c.url === "/api/calendar/google/connect")!;
     expect(post.init.method).toBe("POST");
     expect(header(post.init, "X-CSRF-Token")).toBe("<csrf-A>");
-    expect(JSON.parse(post.init.body as string)).toEqual({ features: ["calendar"], return_to: "/settings/calendar" });
+    expect(JSON.parse(post.init.body as string)).toEqual({ features: ["calendar"], return_to: "/settings" });
   });
 
   it("disconnects with the CSRF token and no body", async () => {

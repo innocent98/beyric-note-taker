@@ -22,6 +22,8 @@
       "google_email": null,
       "last_sync_at": null,
       "last_error": null,
+      "rule": "all",
+      "rule_text": "Joining all meetings",
       "upcoming": []
     }
   }

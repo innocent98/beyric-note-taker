@@ -17,7 +17,7 @@ export const NEXT_PAGES = [
   "/share",
   "/templates",
   "/vocabulary",
-  "/settings/calendar",
+  "/settings",
   "/privacy",
   "/terms",
   "/styleguide",

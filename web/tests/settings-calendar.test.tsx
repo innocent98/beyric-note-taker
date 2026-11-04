@@ -2,7 +2,7 @@
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CalendarSettings } from "@/components/app/calendar-settings";
+import { SettingsCalendar } from "@/components/app/settings-calendar";
 import { calendarNotice } from "@/lib/calendar-notice";
 import { ApiError } from "@/lib/api/client";
 import type { CalendarState, ConnectStart, DisconnectResult } from "@/lib/api/types";
@@ -20,10 +20,12 @@ vi.mock("@/lib/api/browser", () => ({
 const notConnected = calendarBody<CalendarState>("05-state-not-connected.json");
 const justConnected = calendarBody<CalendarState>("08-state-connected-before-first-sync.json");
 const withEvents = calendarBody<CalendarState>("09-state-connected-with-upcoming.json");
-const revokedError = calendarBody<CalendarState>("10-state-last-sync-failed-revoked.json");
-const degraded = calendarBody<CalendarState>("12-state-degraded.json");
-const needsReconnect = calendarBody<CalendarState>("13-state-needs-reconnect-revoked.json");
-const disconnected = calendarBody<DisconnectResult>("18-disconnect.json");
+const organizerRule = calendarBody<CalendarState>("10-state-rule-organizer.json");
+const noRule = calendarBody<CalendarState>("11-state-rule-none.json");
+const revokedError = calendarBody<CalendarState>("12-state-last-sync-failed-revoked.json");
+const degraded = calendarBody<CalendarState>("14-state-degraded.json");
+const needsReconnect = calendarBody<CalendarState>("15-state-needs-reconnect-revoked.json");
+const disconnected = calendarBody<DisconnectResult>("20-disconnect.json");
 const unverified = connectBody<ConnectStart>("08-first-connect-connect.json");
 const verified = connectBody<ConnectStart>("32-connect-verified-app.json");
 
@@ -32,25 +34,33 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const view = (initial: CalendarState | null, extra: Partial<Parameters<typeof CalendarSettings>[0]> = {}) =>
-  render(<CalendarSettings initial={initial} notice={null} navigate={vi.fn()} {...extra} />);
+const view = (initial: CalendarState | null, extra: Partial<Parameters<typeof SettingsCalendar>[0]> = {}) =>
+  render(<SettingsCalendar initial={initial} notice={null} navigate={vi.fn()} {...extra} />);
 
 describe("not connected", () => {
-  it("offers Connect Google Calendar and says in plain words what Google will be asked for", () => {
+  it("shows the designer's Calendar section with the Connect Google Calendar button", () => {
     view(notConnected);
-    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Calendar" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "The note taker reads your calendar and joins meetings that have a Google Meet, Microsoft Teams or Zoom link.",
+      ),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Connect Google Calendar" })).toBeTruthy();
-    expect(screen.getByText(/See the events on your calendars/)).toBeTruthy();
-    expect(screen.getByText(/read only/i)).toBeTruthy();
-    expect(screen.getByText(/never adds, changes or deletes anything on your calendar/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Disconnect/ })).toBeNull();
-    expect(screen.queryByText("Upcoming")).toBeNull();
+    expect(screen.queryByText("Join automatically")).toBeNull();
   });
 
-  it("says what is kept and what is not", () => {
+  it("says in plain words what Google is asked for and what is kept", () => {
     view(notConnected);
-    expect(screen.getByText(/title, time and video link/)).toBeTruthy();
+    expect(screen.getByText(/read-only access to the events on your calendars/)).toBeTruthy();
+    expect(screen.getByText(/never adds, changes or deletes anything on your calendar/)).toBeTruthy();
     expect(screen.getByText(/does not keep guest email addresses or event descriptions/)).toBeTruthy();
+  });
+
+  it("does not draw an Outlook button (it is not built)", () => {
+    view(notConnected);
+    expect(document.body.textContent).not.toMatch(/Outlook/);
   });
 
   it("goes straight to Google when the app is verified", async () => {
@@ -104,71 +114,55 @@ describe("not available", () => {
 });
 
 describe("connected", () => {
-  it("shows the Google address, that it is connected, and that nothing has synced yet", () => {
+  it("shows the provider row with the Google address and Connected, and Disconnect", () => {
     view(justConnected);
     expect(screen.getByText("Google Calendar")).toBeTruthy();
-    expect(screen.getAllByText(/grace@example\.test/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Connected")).toBeTruthy();
-    expect(screen.getByText(/Waiting for the first update/)).toBeTruthy();
-    expect(screen.getByText(/Your meetings appear here after the first update/)).toBeTruthy();
+    expect(screen.getByText("grace@example.test · Connected")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Disconnect" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Connect Google Calendar" })).toBeNull();
   });
 
-  it("lists the upcoming meetings with the platform and the answer in words", () => {
+  it("says nothing has synced yet, or when the last update was", () => {
+    view(justConnected);
+    expect(screen.getByText(/Waiting for the first update/)).toBeTruthy();
+    cleanup();
     view(withEvents);
-    const list = screen.getByRole("list", { name: "Upcoming meetings" });
-    const rows = within(list).getAllByRole("listitem");
-    expect(rows).toHaveLength(7);
-    expect(within(rows[0]).getByText("Weekly planning")).toBeTruthy();
-    expect(within(rows[0]).getByText("Google Meet")).toBeTruthy();
-    expect(within(rows[0]).getByText("Will join")).toBeTruthy();
-    expect(within(rows[1]).getByText("Zoom")).toBeTruthy();
-    expect(within(rows[2]).getByText("No video link")).toBeTruthy();
-    expect(within(rows[3]).getByText("Microsoft Teams meetings cannot be joined yet")).toBeTruthy();
-    expect(within(rows[4]).getByText("You declined this invite")).toBeTruthy();
-    expect(within(rows[5]).getByText("Sprint 🚀 planning · 週次")).toBeTruthy();
-    expect(within(rows[6]).getByText("Waiting: accept the invite to join")).toBeTruthy();
+    expect(screen.getByText(/Last updated 04 Nov 2026, 13:08 UTC/)).toBeTruthy();
   });
 
-  it("shows when each meeting starts and how long it lasts, in UTC", () => {
+  it("shows the three auto-join rules read only, with the person's current one chosen", () => {
     view(withEvents);
-    const first = within(screen.getByRole("list", { name: "Upcoming meetings" })).getAllByRole("listitem")[0];
-    expect(within(first).getByText("14:49 UTC")).toBeTruthy();
-    expect(within(first).getByText("Wed 4 Nov")).toBeTruthy();
-    expect(within(first).getByText("30 min")).toBeTruthy();
+    const group = screen.getByRole("radiogroup", { name: "Join automatically" });
+    const radios = within(group).getAllByRole("radio");
+    expect(radios.map((r) => r.textContent)).toEqual([
+      "All meetings with a video linkEvery event on your calendar with a meeting link.",
+      "Only meetings I organiseSkip meetings other people invited you to.",
+      "Only when I turn it onPick meetings one by one from the Upcoming list.",
+    ]);
+    expect(radios.map((r) => r.getAttribute("aria-checked"))).toEqual(["true", "false", "false"]);
+    expect(radios.every((r) => r.getAttribute("aria-disabled") === "true")).toBe(true);
   });
 
-  it("reminds the person to tell participants when any meeting will be joined", () => {
+  it("follows the stored rule", () => {
+    view(organizerRule);
+    expect(within(screen.getByRole("radiogroup")).getAllByRole("radio").map((r) => r.getAttribute("aria-checked"))).toEqual(["false", "true", "false"]);
+    cleanup();
+    view(noRule);
+    expect(within(screen.getByRole("radiogroup")).getAllByRole("radio").map((r) => r.getAttribute("aria-checked"))).toEqual(["false", "false", "true"]);
+  });
+
+  it("does not draw the template select or the upcoming list here (they are not part of this section)", () => {
     view(withEvents);
-    expect(screen.getByText("Tell participants that this meeting will be recorded.")).toBeTruthy();
+    expect(screen.queryByText("Template for calendar meetings")).toBeNull();
+    expect(screen.queryByText("Weekly planning")).toBeNull();
+    expect(screen.queryByText("Upcoming")).toBeNull();
   });
 
-  it("shows no reminder when nothing will be joined", () => {
-    const none: CalendarState = {
-      ...withEvents,
-      upcoming: withEvents.upcoming.filter((e) => !e.will_join),
-    };
-    view(none);
-    expect(screen.queryByText(/Tell participants/)).toBeNull();
-  });
-
-  it("says nothing is coming up when the calendar was read and has nothing in seven days", () => {
-    view({ ...withEvents, upcoming: [] });
-    expect(screen.getByText("Nothing in the next 7 days.")).toBeTruthy();
-    expect(screen.getByText(/Last updated 04 Nov 2026, 12:49 UTC/)).toBeTruthy();
-  });
-
-  it("shows the last sync time", () => {
-    view(withEvents);
-    expect(screen.getByText(/Last updated 04 Nov 2026, 12:49 UTC/)).toBeTruthy();
-  });
-
-  it("shows the last failure in the server's plain words and keeps the list", () => {
+  it("shows the last failure in the server's plain words", () => {
     view(revokedError);
     expect(
       screen.getByText("Google no longer lets Beyric read your calendar. Connect again to fix this."),
     ).toBeTruthy();
-    expect(within(screen.getByRole("list", { name: "Upcoming meetings" })).getAllByRole("listitem")).toHaveLength(7);
   });
 
   it("shows the server's sentence for a calendar that has not been read lately", () => {
