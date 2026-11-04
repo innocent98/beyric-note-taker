@@ -1505,7 +1505,13 @@ def test_the_scheduler_stop_grace_is_longer_than_a_tick_can_run():
     grace = int(re.search(r"stop_grace_period:\s*(\d+)s", block).group(1))
     # a row started just inside the budget can still re-check the calendar (connect 5 s plus read
     # 15 s), send (30 s) and stop an unrecorded bot (30 s)
-    worst = join_runner.RUN_BUDGET_SECONDS + 20 + SEND_DEADLINE_SECONDS + 30
+    worst = (
+        join_runner.RUN_BUDGET_SECONDS
+        + 20
+        + SEND_DEADLINE_SECONDS
+        + placement.ADOPT_LOOKUP_SECONDS
+        + 30
+    )
     assert grace > worst
 
 
@@ -1630,6 +1636,9 @@ def test_back_to_back_calendar_events_on_one_code_never_look_like_a_paste(sessio
     first = materialise(session, ada, cal, "first", start=at(-1, 40))
     run(session, host, cal, at(-2, 40))  # the first event's bot goes in, a little late
     assert state_of(session, first) == ("joined", None)
+    [made] = meetings(session)
+    made.created_at = at(-1, 20)  # the database stamps the real clock: put it inside the window
+    session.commit()
     second = materialise(session, ada, cal, "second", start=T0 + timedelta(minutes=2))
     run(session, host, cal, at(1))
     assert state_of(session, second) == ("skipped", "code_in_use")
@@ -1654,7 +1663,11 @@ def test_a_room_held_by_the_owners_live_bot_at_the_deadline_is_not_a_missed_meet
         run(session, host, cal, now)
         now += timedelta(seconds=30)
     assert state_of(session, join) == ("skipped", "duplicate_meeting")
-    assert notes(session) == [] and outbox(session) == []
+    # one closing word in the bell, nothing by mail and nothing to the admins
+    [closing] = notes(session)
+    assert closing.kind == "calendar.in_earlier_notes" and closing.user_id == ada.user.id
+    assert "part of that meeting's notes" in closing.body
+    assert outbox(session) == []
 
 
 def test_a_leftover_bot_still_leaving_is_a_retry_not_an_adoption(session, host, cal, ada):
@@ -1739,3 +1752,75 @@ def test_a_meeting_that_has_already_started_is_not_revived_by_a_reactivation(
     admin.update_user(session, ada.user, {"status": "suspended"})
     admin.update_user(session, ada.user, {"status": "active"})
     assert state_of(session, under_way) == ("skipped", "account_suspended")
+
+
+# ---- the fourth Opus review of #72 ----
+
+
+def test_a_paste_for_the_previous_event_is_not_claimed_by_the_next_one(session, host, cal, ada):
+    """M1: events 09:30-10:00 and 10:00-10:30 on one code; the owner pastes at 09:31 for the first
+    and ends it at 10:00. The second event must still get its bot (it used to find that paste
+    inside its own 30-minute window and end silently, unrecorded)."""
+    first = materialise(session, ada, cal, "first", start=at(-30))
+    pasted = paste(session, ada, created=at(-29))
+    run(session, host, cal, at(-29, 30))
+    assert state_of(session, first) == ("skipped", "duplicate_meeting")
+    pasted.status = "ready"  # the owner pressed End at 10:00 and the notes are done
+    session.commit()
+    second = materialise(session, ada, cal, "second", start=T0)
+    run(session, host, cal, at(-1))
+    assert state_of(session, second) == ("joined", None) and host.bots_sent == 1
+
+
+def test_a_paste_a_row_ended_on_is_linked_so_a_later_overlapping_event_cannot_claim_it(
+    session, host, cal, ada
+):
+    """M1: the row that ends as a duplicate remembers which meeting it was (`meeting_id`). The
+    first event here runs past the second one's start, so no window bound separates them: only the
+    link does."""
+    first = materialise(session, ada, cal, "first", start=at(-30), length=timedelta(minutes=60))
+    pasted = paste(session, ada, created=at(-29))
+    run(session, host, cal, at(-29, 30))
+    session.expire_all()
+    assert session.get(ScheduledJoin, first.id).meeting_id == pasted.id
+    second = materialise(session, ada, cal, "second", start=T0)
+    run(session, host, cal, at(-1))
+    assert state_of(session, second) == ("skipped", "code_in_use")  # not a duplicate of the paste
+
+
+def test_two_runners_racing_on_the_code_index_is_a_retry_not_an_error_mail(
+    session, host, cal, ada, monkeypatch
+):
+    """N3: the unique-index violation place_bot raises when another runner got there first."""
+    from sqlalchemy.exc import IntegrityError
+
+    make_user(session, "admin@example.test", admin=True)
+    join = materialise(session, ada, cal)
+
+    def collide(*args, **kwargs):
+        raise IntegrityError("insert", {}, Exception("uq_scheduled_joins_live_code"))
+
+    monkeypatch.setattr(join_runner, "place_bot", collide)
+    run(session, host, cal, at(-1))
+    assert state_of(session, join) == ("skipped", "code_in_use")
+    assert notes(session) == [] and outbox(session) == []
+
+
+def test_a_hung_lookup_of_the_orphan_bot_ends_quickly_as_a_retry(
+    session, host, cal, ada, monkeypatch
+):
+    """L2: the lookup under the locks has a short whole-call deadline."""
+    host.seed_live_bot("google_meet", "abc-defg-hij")
+    real = host.get_meeting
+
+    def slow(platform, native_id):
+        time.sleep(2)
+        return real(platform, native_id)
+
+    host.get_meeting = slow
+    monkeypatch.setattr(placement, "ADOPT_LOOKUP_SECONDS", 0.2)
+    join = materialise(session, ada, cal)
+    started = time.monotonic()
+    run(session, host, cal, at(-1))
+    assert time.monotonic() - started < 1.5
+    assert state_of(session, join) == ("skipped", "code_in_use") and meetings(session) == []

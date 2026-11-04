@@ -56,7 +56,7 @@ from sqlalchemy.orm import Session
 from app import titles, usage
 from app.config import Settings, get_settings
 from app.models import MEETING_SOURCES, Meeting, Template, User, UserSettings
-from app.vexa import VexaClient, VexaDuplicateBot, VexaError, VexaSendUncertain
+from app.vexa import VexaClient, VexaDuplicateBot, VexaError, VexaSendUncertain, _within
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,8 @@ LOCAL_HOST_ID = 1
 # looks. A send itself is bounded by `app.vexa.SEND_DEADLINE_SECONDS`.
 LOCK_WAIT_SECONDS = 3.0
 LOCK_POLL_SECONDS = 0.2
+# The most a calendar join waits for Vexa to say what bot is on a code (see `_orphan_to_adopt`).
+ADOPT_LOOKUP_SECONDS = 5.0
 # Stored in `completion_reason` of a meeting whose send got no clear answer (see the module doc).
 SEND_UNCONFIRMED = "send_unconfirmed"
 # A bot counts against the user limit and the host's capacity from the moment it is sent until the
@@ -90,9 +92,10 @@ class PlacementRequest:
     # None for a pasted link, which is then named by platform and code.
     title: str | None = None
     # A calendar join at the start of a meeting: if Vexa says a bot is already in that meeting but
-    # no meeting of ours holds the code, that bot is our own orphan (a send killed between Vexa
-    # accepting it and the commit; there is one API key), so keep it as an unconfirmed start for the
-    # worker to adopt instead of telling the owner someone else's note taker is there.
+    # no meeting of ours holds the code, it may be our own orphan (a send killed between Vexa
+    # accepting it and the commit), so a LIVE bot no row holds is adopted instead of telling the
+    # owner someone else's note taker is there. The identity is only the meeting code under the one
+    # shared API key (no per-row dispatch marker exists): see the SOP's known gaps.
     adopt_orphan: bool = False
 
 
@@ -320,8 +323,10 @@ def _orphan_to_adopt(session: Session, vexa: VexaClient, req: PlacementRequest) 
     from app.pipeline import ADOPTABLE_STATES  # imports this module, so not at the top
 
     try:
-        info = vexa.get_meeting(req.platform, req.native_id)
-    except VexaError:
+        # A short whole-call deadline: this runs under the placement, row and event locks, and the
+        # client's own timeouts are per phase (30 s each).
+        info = _within(ADOPT_LOOKUP_SECONDS, lambda: vexa.get_meeting(req.platform, req.native_id))
+    except (VexaError, TimeoutError):
         info = None
     if (
         info is None

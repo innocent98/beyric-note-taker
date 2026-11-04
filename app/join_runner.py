@@ -45,7 +45,8 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -457,6 +458,18 @@ def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) ->
         # paste): the room is being recorded, so no "not recorded" mail and no admin alert.
         join.state, join.skip_reason = "skipped", "duplicate_meeting"
         _touch(join, now)
+        # One closing word in the bell (no mail, no admin alert), so a row that said "busy" or
+        # "Will join" is not left hanging: this meeting's audio is in the earlier meeting's notes.
+        alerts.notify_user(
+            session,
+            join.user_id,
+            kind="calendar.in_earlier_notes",
+            severity="info",
+            title="Recorded in the earlier meeting",
+            body=f'"{_name(session, join)}" shares a meeting link with a meeting your note taker '
+            "was still in, so it is part of that meeting's notes, not a separate one.",
+            dedupe_key=f"calendar.in_earlier_notes:{join.id}",
+        )
         session.commit()
         return JoinOutcome(join.id, "skipped", "duplicate_meeting")
     join.state, join.skip_reason, join.last_error = "failed", "not_recorded", NOT_RECORDED_TEXT
@@ -573,11 +586,14 @@ def _place(
     was taken before the
     placement lock (the order every code path uses), and `wait_seconds=0` keeps it: a wait would
     roll the lock away."""
-    if _pasted_meeting_for_this_event(session, join):
+    paste_id = _paste_for_this_event(session, join)
+    if paste_id is not None:
         # The owner already made a meeting on this code for this event (a pasted link, in any
         # status: they may have ended it since). Final: never a bot into a meeting they chose or
         # ended. Checked BEFORE the placement pre-flight, so the hours and limit checks cannot turn
-        # it into a retry.
+        # it into a retry. The row remembers WHICH meeting (`meeting_id`), so a later event on the
+        # same code sees that paste as taken and cannot claim it.
+        join.meeting_id = paste_id
         return _end(session, join, "skipped", "duplicate_meeting", now)
     if _another_live_join_on_the_code(session, join):
         # Another of the owner's rows on this code is live (back-to-back slots in one room): this
@@ -620,6 +636,11 @@ def _place(
         )
     except PlacementRefused as refused:
         return _refused(session, join_id, user_id, refused, now)
+    except IntegrityError:
+        # Two runners racing on the one-live-join-per-code index: place_bot stopped the bot and
+        # rolled back. A retry after the gap, never the error path and its mail.
+        session.rollback()
+        return _wait_after_a_conflict(session, join_id, now)
     except VexaError as exc:
         logger.warning("sending the bot for join %s failed (%s)", join_id, type(exc).__name__)
         return _send_failed(session, join_id, now)
@@ -631,26 +652,36 @@ def _place(
     return JoinOutcome(join_id, "joined", f"meeting {meeting.id}")
 
 
-def _pasted_meeting_for_this_event(session: Session, join: ScheduledJoin) -> bool:
-    """Whether the owner has a meeting, in ANY status, on this code that no join row points at (a
+def _paste_for_this_event(session: Session, join: ScheduledJoin) -> int | None:
+    """The id of the owner's meeting, in ANY status, on this code that no join row points at (a
     pasted link or an instant-Meet one) created between `PASTE_WINDOW_BEFORE` before the start and
-    the event's end. A meeting a join row points at belongs to a calendar event, an earlier one in
-    the same room, and does not count."""
-    linked = select(ScheduledJoin.id).where(ScheduledJoin.meeting_id == Meeting.id).exists()
-    return (
-        session.scalar(
-            select(Meeting.id)
-            .where(
-                Meeting.owner_user_id == join.user_id,
-                Meeting.platform == join.platform,
-                Meeting.native_id == join.native_id,
-                ~linked,
-                Meeting.created_at >= join.starts_at - PASTE_WINDOW_BEFORE,
-                Meeting.created_at <= join.ends_at,
-            )
-            .limit(1)
+    the event's end, and not before the end of the owner's previous event on the same code; or
+    None. A meeting a join row points at belongs to a calendar event (an earlier one in the same
+    room, or an earlier event the owner pasted for: see `_place`) and does not count."""
+    since = join.starts_at - PASTE_WINDOW_BEFORE
+    previous_end = session.scalar(
+        select(func.max(CalendarEvent.ends_at)).where(
+            CalendarEvent.user_id == join.user_id,
+            CalendarEvent.platform == join.platform,
+            CalendarEvent.native_id == join.native_id,
+            CalendarEvent.ends_at <= join.starts_at,
         )
-        is not None
+    )
+    if previous_end is not None and previous_end > since:
+        since = previous_end
+    linked = select(ScheduledJoin.id).where(ScheduledJoin.meeting_id == Meeting.id).exists()
+    return session.scalar(
+        select(Meeting.id)
+        .where(
+            Meeting.owner_user_id == join.user_id,
+            Meeting.platform == join.platform,
+            Meeting.native_id == join.native_id,
+            ~linked,
+            Meeting.created_at >= since,
+            Meeting.created_at <= join.ends_at,
+        )
+        .order_by(Meeting.id)
+        .limit(1)
     )
 
 
@@ -668,6 +699,14 @@ def _owner_bot_live_on_the_code(session: Session, join: ScheduledJoin) -> bool:
         )
         is not None
     )
+
+
+def _wait_after_a_conflict(session: Session, join_id: int, now: datetime) -> JoinOutcome | None:
+    join = _relock(session, join_id, now)
+    if join is None:
+        session.rollback()
+        return None
+    return _wait_for_the_code(session, join, now)
 
 
 def _wait_for_the_code(session: Session, join: ScheduledJoin, now: datetime) -> JoinOutcome:

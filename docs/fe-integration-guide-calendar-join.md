@@ -84,6 +84,7 @@ matter). These are the `kind`s and the exact English; show `title` and `body` as
 | `calendar.not_recorded` | the 15 minutes after the start passed with no bot in | yes | title `Meeting not recorded`; body `The note taker could not join "<name>" before the 15 minutes were up, so this meeting was not recorded.` |
 | `calendar.join_failed` | the bot host refused the send; retried every 15 s until the deadline | no | title `The note taker could not start`; body `The note taker could not start for "<name>". It will try again until HH:MM UTC.` |
 | `calendar.hours_cap` | the user's recording hours are used up | no | title `Recording hours used up` |
+| `calendar.in_earlier_notes` | the owner's earlier meeting's bot was still in the room (same meeting link) when this event's 15 minutes ended | no | title `Recorded in the earlier meeting`; body names the event and says it is part of that meeting's notes |
 | `calendar.not_recorded` also covers | a back-to-back meeting whose room (same meeting code) was still taken by the owner's earlier meeting at the end of the 15 minutes | yes | same words as above |
 | `calendar.user_limit` | the user already has the most bots allowed | no | title `Too many note takers at once` |
 | `calendar.meeting_has_note_taker` | another account's bot is already in that meeting (one bot per meeting code; sharing waits for W3/W6) | no | title `A note taker is already there`; body names no one |
@@ -112,3 +113,4 @@ matter). These are the `kind`s and the exact English; show `title` and `body` as
 | A real Google event title, a real Vexa host | **not verified**: the event and the host are synthetic |
 | The `GET /api/calendar` Upcoming `title` is now cleaned like every other title | covered by tests only (`tests/test_calendar_api.py`); not re-captured (the captures in `calendar-state/` use plain titles) |
 | The back-to-back-room case ending as `calendar.not_recorded` | covered by tests only |
+| `calendar.in_earlier_notes` | covered by tests only |
