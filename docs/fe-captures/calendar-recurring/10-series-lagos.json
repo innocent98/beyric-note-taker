@@ -1,0 +1,54 @@
+{
+  "note": "The same rows, written in Africa/Lagos (the viewer's own zone). Weekly Monday 14:00 and Friday 15:00 are provable; the stand-up is daily; the board call has one occurrence and the vendor sync changes its time of day, so both are only `Recurring`.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar/recurring?tz=Africa%2FLagos",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "timezone": "Africa/Lagos",
+      "series": [
+        {
+          "name": "Stand-up",
+          "cadence": "Daily, 09:30",
+          "next_starts_at": "2026-11-05T08:30:00Z",
+          "next_text": "Thu 5 Nov, 09:30"
+        },
+        {
+          "name": "Beyric Friday review",
+          "cadence": "Weekly on Fridays, 15:00",
+          "next_starts_at": "2026-11-06T14:00:00Z",
+          "next_text": "Fri 6 Nov, 15:00"
+        },
+        {
+          "name": "Beyric Monday planning",
+          "cadence": "Weekly on Mondays, 14:00",
+          "next_starts_at": "2026-11-09T13:00:00Z",
+          "next_text": "Mon 9 Nov, 14:00"
+        },
+        {
+          "name": "Vendor sync",
+          "cadence": "Recurring",
+          "next_starts_at": "2026-11-10T09:00:00Z",
+          "next_text": "Tue 10 Nov, 10:00"
+        },
+        {
+          "name": "Board call 🚀 週次",
+          "cadence": "Recurring",
+          "next_starts_at": "2026-11-11T10:00:00Z",
+          "next_text": "Wed 11 Nov, 11:00"
+        }
+      ]
+    }
+  }
+}

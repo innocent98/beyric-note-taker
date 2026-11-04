@@ -1,0 +1,23 @@
+{
+  "note": "Back to nothing: the events were deleted with the connection.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar/recurring",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "timezone": "UTC",
+      "series": []
+    }
+  }
+}

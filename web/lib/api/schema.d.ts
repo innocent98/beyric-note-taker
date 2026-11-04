@@ -360,6 +360,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/calendar/recurring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Calendar Recurring
+         * @description The Recurring cards of the Meetings screen (no CSRF header needed): each recurring meeting
+         *     on the connected calendar with a cadence worked out from its stored times, and its next
+         *     occurrence. `tz` is the viewer's zone (the browser's `Intl.DateTimeFormat().resolvedOptions().
+         *     timeZone`); without it the texts are in UTC, and the answer says which zone it used. Empty
+         *     when no calendar is connected or nothing recurs. Nothing is fetched from Google. 404
+         *     `calendar_unavailable` while the calendar features are off, 422 `invalid_timezone` for a zone
+         *     name that is not known.
+         */
+        get: operations["calendar_recurring"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/calendar/settings": {
         parameters: {
             query?: never;
@@ -1608,6 +1634,38 @@ export interface components {
              */
             state: "open" | "full" | "closed";
         };
+        /**
+         * RecurringOut
+         * @description The cards, soonest next occurrence first; empty when no calendar is connected or it holds no
+         *     recurring meeting (draw nothing then). `timezone` is the zone the texts are written in.
+         */
+        RecurringOut: {
+            /** Series */
+            series: components["schemas"]["RecurringSeries"][];
+            /** Timezone */
+            timezone: string;
+        };
+        /**
+         * RecurringSeries
+         * @description One recurring meeting. `name` is the event's title; `cadence` is `Daily, 14:00`,
+         *     `Weekly on Mondays, 14:00` (several days: `Mondays and Wednesdays`) or just `Recurring` when
+         *     the stored times do not prove more. `next_starts_at` is the next occurrence that has not
+         *     started, and `next_text` the same moment in the asked-for zone as `Mon 9 Nov, 14:00`. Show the
+         *     texts as they are. No attendees, link, passcode or source id is carried.
+         */
+        RecurringSeries: {
+            /** Cadence */
+            cadence: string;
+            /** Name */
+            name: string;
+            /**
+             * Next Starts At
+             * Format: date-time
+             */
+            next_starts_at: string;
+            /** Next Text */
+            next_text: string;
+        };
         /** Regenerate */
         Regenerate: {
             /** Template Id */
@@ -2809,6 +2867,65 @@ export interface operations {
                 };
             };
             /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    calendar_recurring: {
+        parameters: {
+            query?: {
+                /** @description IANA zone name, e.g. Africa/Lagos */
+                tz?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecurringOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;

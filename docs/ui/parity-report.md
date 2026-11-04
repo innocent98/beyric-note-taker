@@ -4,6 +4,8 @@
 
 **Update, stream D (accounts pages, branch `feature/stream-d-auth-pages`, SOP `docs/sop/2026-11-03-accounts-auth-pages.md`):** the account screens that have a backend now exist and follow `Auth.dc.html`: sign-up, confirm email, forgot and reset password, "pilot full", and the sign-in form with email, Forgot password? and Google. The tables below are updated; the section "Account screens (stream D)" has the screen-by-screen account. The screens without a backend stay unbuilt (workspace setup, team invite, Microsoft, keep me signed in, the 6-digit code).
 
+**Update (2026-11-04, branch `feature/settings-sections-recurring`, SOP `docs/sop/2026-11-04-settings-sections-recurring.md`):** the Settings sections below Calendar (Sprints and reminders, Tasks, Default notes language) and the Recurring cards on Meetings are now drawn as designed. The three Settings sections are drawn with every control off (their features are not built); the Recurring cards come from the calendar's recurring events and have no tasks or questions chips and no link. In the "Out of scope" table below, the rows for the Settings screens and the Recurring cards are therefore partly built: see that SOP for the parity table and the gaps.
+
 Adebayo looked at https://notes.beyrictech.com after the Next.js front door and the owner screens went live and said it was not in parity. This report lists what differed (screen by screen), what was changed, what was left out on purpose, and what cannot be built until the backend exists.
 
 ## How it was checked

@@ -25,6 +25,7 @@ from app import (
     api_workspace,
     auth,
     calendar_api,
+    calendar_recurring,
     export,
     notifications,
     services,
@@ -577,4 +578,5 @@ router.include_router(api_accounts.router)
 router.include_router(api_admin.router)
 router.include_router(api_settings.router)
 router.include_router(calendar_api.router)
+router.include_router(calendar_recurring.router)
 router.include_router(api_workspace.router)
