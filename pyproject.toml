@@ -29,7 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # ruff is pinned exactly so local runs and CI lint and format identically.
-dev = ["pytest>=8", "pytest-httpx>=0.35", "ruff==0.17.3"]
+dev = ["pytest>=8", "pytest-httpx>=0.35", "pytest-split>=0.10", "ruff==0.17.3"]
 
 [tool.setuptools]
 packages = ["app"]

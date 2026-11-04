@@ -1,0 +1,34 @@
+name: system-deps
+description: >-
+  Install ffmpeg and the Pango libraries the tests need (audio preparation, PDF export), from a
+  cache of the .deb files when there is one, so four parallel jobs do not all wait on the Ubuntu
+  mirror (which took 1 to 8 minutes when they did, against 19 seconds for one job alone).
+
+runs:
+  using: composite
+  steps:
+    # The key holds the runner image version: a new image may already ship some of these
+    # libraries at other versions, so it must get a fresh set of .debs. Bump the trailing number
+    # to force a refresh by hand.
+    - id: cache
+      uses: actions/cache@v4
+      with:
+        path: ~/apt-debs
+        key: apt-debs-${{ runner.os }}-${{ env.ImageVersion }}-ffmpeg-pango-v1
+    - shell: bash
+      env:
+        CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
+      run: |
+        pkgs="ffmpeg libpango-1.0-0 libpangoft2-1.0-0"
+        # Cache hit: install the saved .debs, no network. If that fails for any reason, fall
+        # through to the normal apt route below, which always works.
+        if [ "$CACHE_HIT" = "true" ] && sudo dpkg -i "$HOME"/apt-debs/*.deb; then
+          ffmpeg -version | head -n 1
+          exit 0
+        fi
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends --download-only $pkgs
+        rm -rf "$HOME/apt-debs" && mkdir -p "$HOME/apt-debs"
+        cp /var/cache/apt/archives/*.deb "$HOME/apt-debs/"
+        sudo apt-get install -y --no-install-recommends $pkgs
+        ffmpeg -version | head -n 1
