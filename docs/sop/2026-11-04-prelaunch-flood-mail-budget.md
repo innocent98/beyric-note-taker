@@ -1,7 +1,7 @@
 # SOP: before sign-up opens, part 2: flood defence, mail budget, counters in the database
 
 ## What shipped
-Three items from the sign-up SOP's "fix before sign-up is switched on" list: (1) the login and sign-up counters moved from memory to the database (migration `0015`), so a restart does not end a lockout and a second replica shares them; (2) a better sign-up flood defence (a per-address cap on unconfirmed accounts, clearing the busiest address's rows first, never a quiet one's); (3) a global per-hour budget for all outgoing mail with a reserve for sign-in mail, held mail waiting with a reason and the admins told. Branch `feature/prelaunch-flood-mail-budget`, one PR (number in the PR list). No new route and no response shape changed.
+Three items from the sign-up SOP's "fix before sign-up is switched on" list: (1) the login and sign-up counters moved from memory to the database (migration `0016`), so a restart does not end a lockout and a second replica shares them; (2) a better sign-up flood defence (a per-address cap on unconfirmed accounts, clearing the busiest address's rows first, never a quiet one's); (3) a global per-hour budget for all outgoing mail with a reserve for sign-in mail, held mail waiting with a reason and the admins told. Branch `feature/prelaunch-flood-mail-budget`, one PR (number in the PR list). No new route and no response shape changed.
 
 ## Why
 The sign-up SOP recorded that "about 20 addresses x 5 an hour keep the 100-unconfirmed cap full and everyone gets 429; the at-cap clearing can evict a real person's pending account after an hour; no global cap on outgoing mail", and that "limits are in memory and per process". With password sign-up about to open, each of those could turn a nuisance into an outage (nobody can sign up, nobody gets a verification or reset mail, Resend's daily quota is gone).
@@ -21,8 +21,8 @@ The sign-up SOP recorded that "about 20 addresses x 5 an hour keep the 100-uncon
 
 ## What's involved
 - `app/ratelimit.py` (new), `app/limits.py`, `app/auth.py` (`LoginLimiter`), `app/main.py` (`_own_session`, the wiring), `app/signup.py` (caps, `_make_room`, `origin`), `app/api_accounts.py` (passes the origin), `app/accounts.py` (`delete_unverified`), `app/mail.py` (budget, report, sweep keeps the reason), `app/maintenance.py` (`sweep_rate_hits`), `app/config.py`, `.env.example`, `deploy/README.md`.
-- `alembic/versions/0015_rate_limits_and_signup_origin.py`: table `rate_hits` with `ix_rate_hits_bucket_key_at`, column `users.signup_origin`, partial index `ix_users_signup_origin_unconfirmed`. Additive; downgrade drops them. (`main` was at `0014`; if #72 merges first and takes `0015`, this one is renumbered `0016`.)
-- Tests: `tests/test_ratelimit.py`, `tests/test_limits_db.py`, `tests/test_signup_flood.py`, `tests/test_mail_budget.py`, `tests/test_migrations.py` (0015 round trip), `tests/test_edge.py` (one internal name).
+- `alembic/versions/0016_rate_limits_and_signup_origin.py`: table `rate_hits` with `ix_rate_hits_bucket_key_at`, column `users.signup_origin`, partial index `ix_users_signup_origin_unconfirmed`. Additive; downgrade drops them. (`main` was at `0015`, the template soft delete, when this was merged up; if another migration lands first, renumber this one and re-point `down_revision`.)
+- Tests: `tests/test_ratelimit.py`, `tests/test_limits_db.py`, `tests/test_signup_flood.py`, `tests/test_mail_budget.py`, `tests/test_migrations.py` (0016 round trip), `tests/test_edge.py` (one internal name).
 - `scripts/capture_flood_defence_api.py`, `docs/fe-captures/prelaunch-flood-defence/` (15 files), `docs/fe-integration-guide-pilot-accounts.md` section 14b.
 
 ## Verification
@@ -35,16 +35,16 @@ The sign-up SOP recorded that "about 20 addresses x 5 an hour keep the 100-uncon
 | Re-submitting a victim's pending address from another address does not move the row to it; the stored origin and rate keys are hashes, never an address or an email | `tests/test_signup_flood.py`, `test_ratelimit.py`, `test_limits_db.py` | pass |
 | New email and held email get the same answer at the per-address cap (no enumeration oracle) | `test_the_per_address_cap_does_not_say_whether_an_email_has_an_account` | pass |
 | Mail budget: waits with the reason and no attempt used, rolling hour, account mail first and a reserve for it, alerts never held, the admins told once an hour with no address, a failure while telling them does not stop the queue, held mail that expires keeps `over_budget` | `tests/test_mail_budget.py` | pass |
-| Migration `0015`: one head, upgrade, downgrade with data, upgrade again; models match | `tests/test_migrations.py` | pass |
+| Migration `0016`: one head, upgrade, downgrade with data, upgrade again; models match | `tests/test_migrations.py` | pass |
 | Whole suite, ruff check and format, OpenAPI file | see the PR | see the PR |
 | Live shapes | `scripts/capture_flood_defence_api.py`: the cap, the lockout and a real restart (a second app on the same database) | recorded |
 | **Not done** | the many-address attack against a live server (the capture's calls share one address); the budget with a real Resend; two real `web` containers | tests only |
 
 ## Operate / roll back
-- **Server steps before merge: none required.** `MAIL_HOURLY_BUDGET` (30) and `MAIL_HOURLY_RESERVE` (10) are optional with safe defaults (`.env.example`, `deploy/README.md`). On Resend's Pro plan raise the budget or set 0. Migration `0015` runs on deploy (additive).
+- **Server steps before merge: none required.** `MAIL_HOURLY_BUDGET` (30) and `MAIL_HOURLY_RESERVE` (10) are optional with safe defaults (`.env.example`, `deploy/README.md`). On Resend's Pro plan raise the budget or set 0. Migration `0016` runs on deploy (additive).
 - After deploy the first login lockouts and sign-up counts start from zero (nothing is carried over from memory).
 - Mail held by the budget: its `mail_outbox` row says `pending` with `last_error = over_budget`; after it expires, `failed` with the same reason in `GET /api/admin/mail-failures`. Admins get a bell entry (and an alert mail) `admin.mail_budget` at most once an hour.
-- Roll back: revert the PR. `alembic downgrade 0014` drops `rate_hits` and `users.signup_origin` (the counters restart empty; no user data is lost). The old image ignores both.
+- Roll back: revert the PR. `alembic downgrade 0015` drops `rate_hits` and `users.signup_origin` (the counters restart empty; no user data is lost). The old image ignores both.
 
 ## Follow-ups
 - **A flood from about 100 distinct addresses still fills the unconfirmed table** (nothing can tell their rows from real people's); then fresh sign-ups are refused until rows age past an hour or are confirmed. A captcha or proof of work is the next step if that is ever seen; the mail budget bounds what such a flood can cost.

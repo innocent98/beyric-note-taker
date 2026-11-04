@@ -6,16 +6,16 @@ address or an email), so a lockout survives a restart and two processes share it
 flood defence uses it to cap unconfirmed accounts per address and to clear the busiest address's
 rows first. Both additive; the downgrade drops them.
 
-Revision ID: 0015
-Revises: 0014
+Revision ID: 0016
+Revises: 0015
 Create Date: 2026-11-04
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0015"
-down_revision = "0014"
+revision = "0016"
+down_revision = "0015"
 branch_labels = None
 depends_on = None
 

@@ -89,7 +89,7 @@ Deploy order and the nginx edit are in `deploy/README.md` section 10: environmen
 - Notifications are written for `usage.hours_low` and `account.reset_link_issued` only; "could not join" and admin alerts come with Phase C.
 - Mail templates are plain; the designer's `Emails.dc.html` is not applied. A mail's text is not captured in the FE guide (only the queued payload).
 - No admin screen yet (the API is curl-able); `slots_taken` and the waitlist have no UI.
-- ~~Limits are in memory and per process~~: moved to the database (`rate_hits`, migration `0015`) on 2026-11-04, see the SOP above; a second replica shares them.
+- ~~Limits are in memory and per process~~: moved to the database (`rate_hits`, migration `0016`) on 2026-11-04, see the SOP above; a second replica shares them.
 - The common-password list is still the 384-entry file; no breached-password lookup.
 - A non-ASCII email is refused everywhere (`invalid_email`, or the `email_unsupported` redirect for Google) until the email is casefolded consistently.
 - Run `docs/spike/edge-secret/e2e.sh` and the web e2e scripts once against a compose stack (still not run).

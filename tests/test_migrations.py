@@ -660,15 +660,15 @@ def test_0014_adds_translations_and_the_default_language_and_downgrades_cleanly(
     engine.dispose()
 
 
-def test_0015_adds_rate_hits_and_the_signup_origin_and_downgrades_cleanly(scratch_url):
+def test_0016_adds_rate_hits_and_the_signup_origin_and_downgrades_cleanly(scratch_url):
     cfg = alembic_config(scratch_url)
-    command.upgrade(cfg, "0014")
+    command.upgrade(cfg, "0015")
     engine = create_engine(scratch_url)
     with engine.begin() as conn:
         conn.execute(
             text("insert into users (email, status) values ('old@example.test', 'active')")
         )
-    command.upgrade(cfg, "0015")
+    command.upgrade(cfg, "0016")
     assert {c["name"] for c in inspect(engine).get_columns("rate_hits")} == {
         "id",
         "bucket",
@@ -685,7 +685,7 @@ def test_0015_adds_rate_hits_and_the_signup_origin_and_downgrades_cleanly(scratc
     assert _rows(engine, "select email from users where signup_origin is not null") == [
         ("old@example.test",)
     ]
-    command.downgrade(cfg, "0014")
+    command.downgrade(cfg, "0015")
     assert "rate_hits" not in inspect(engine).get_table_names()
     assert "signup_origin" not in {c["name"] for c in inspect(engine).get_columns("users")}
     assert _rows(engine, "select email from users where email = 'old@example.test'") != []
