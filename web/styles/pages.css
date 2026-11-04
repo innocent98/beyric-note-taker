@@ -235,3 +235,46 @@
   .cal-up-when { grid-column: 1 / -1; display: flex; gap: var(--space-2); align-items: baseline; }
   .cal-up-head { padding: 14px var(--space-4); }
 }
+
+/* ---- Settings: the sections drawn before their features exist (Sprints and reminders, Tasks,
+   Default notes language), and the Recurring cards on Meetings. Measures are the designer's. ---- */
+.pl-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-3); padding: 22px 22px 6px; }
+.pl-sub { margin: 4px 0 0; font-size: var(--text-sm); color: var(--text-2); }
+.pl-soon { margin: 6px 0 0; }
+.pl-pill { align-self: flex-start; padding: 3px 8px; border-radius: var(--radius-pill); background: var(--surface-active); color: var(--ink-3); font-size: 11px; font-weight: 600; }
+.pl-row { display: flex; justify-content: space-between; gap: var(--space-4); padding: 14px 22px; border-bottom: 1px solid var(--border-softer); }
+.pl-row-center { align-items: center; flex-wrap: wrap; }
+.pl-row-remind { align-items: flex-start; flex-wrap: wrap; padding-bottom: 20px; border-bottom: 0; }
+.pl-row-last { padding-bottom: 20px; border-bottom: 0; }
+.pl-grow { flex: 1 1 280px; }
+.pl-row-title { font-size: var(--text-base); font-weight: 550; }
+.pl-row-sub { font-size: var(--text-xs); color: var(--text-3); }
+.pl-controls { display: flex; align-items: center; gap: var(--space-2); }
+.pl-controls-wide { gap: 10px; }
+.select.pl-s36, .select.pl-s34 { width: auto; padding: 0 32px 0 10px; font-size: var(--text-sm); background-position: right 10px center; }
+.select.pl-s36 { height: 36px; }
+.select.pl-s34 { height: 34px; padding-right: 30px; }
+.select:disabled, .pl-switch:disabled { opacity: 0.55; cursor: default; }
+.btn.pl-btn { height: 34px; padding: 0 14px; font-size: var(--text-sm); }
+.pl-switch { position: relative; flex: none; width: 36px; height: 20px; margin-top: 2px; padding: 0; border: 0; border-radius: var(--radius-pill); background: var(--border-strong); }
+.pl-controls .pl-switch { margin-top: 2px; }
+.pl-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-knob); }
+.pl-language { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-6); padding: 22px; }
+.pl-language-text { flex: 1 1 260px; }
+.pl-language-control { display: flex; flex: 0 1 260px; flex-direction: column; gap: var(--space-2); }
+.pl-language-select { position: relative; display: flex; align-items: center; }
+.pl-globe { position: absolute; left: 12px; color: var(--ink-3); pointer-events: none; }
+.select.pl-lang { padding-left: 34px; }
+
+.rec { display: flex; flex-direction: column; gap: var(--space-3); }
+.rec-title { margin: 0; font-size: var(--text-md); font-weight: 600; letter-spacing: 0; }
+.rec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin: 0; padding: 0; list-style: none; }
+.rec-card { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.rec-name { font-weight: 600; overflow-wrap: anywhere; }
+.rec-cadence { font-size: var(--text-xs); color: var(--text-3); }
+.rec-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-xs); }
+.rec-chip { padding: 2px 9px; border-radius: var(--radius-pill); background: var(--teal-tint); color: var(--teal-deep); font-weight: 550; }
+@media (max-width: 560px) {
+  .pl-head, .pl-row { padding-left: 16px; padding-right: 16px; }
+  .pl-language { padding: 18px 16px; }
+}

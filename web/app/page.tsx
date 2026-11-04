@@ -3,6 +3,7 @@ import { AppShell } from "@/components/app/shell";
 import { CalendarBand } from "@/components/app/calendar-upcoming";
 import { MeetingList } from "@/components/app/meeting-list";
 import { NewMeetingForm } from "@/components/app/new-meeting-form";
+import { RecurringCards } from "@/components/app/recurring-cards";
 import { Landing, LandingFooter, LandingHeader } from "@/components/landing/landing";
 import { JsonLd, organizationJsonLd, softwareJsonLd } from "@/components/site/json-ld";
 import { Alert, PageHead } from "@/components/ui";
@@ -69,6 +70,7 @@ async function MeetingsPage() {
         <PageHead title="Meetings" subtitle="Send the note taker to a call and find your notes here afterwards." />
         <NewMeetingForm templates={templates} busy={busy} />
         <CalendarBand state={calendar} />
+        <RecurringCards />
         <MeetingList initial={list} templates={templates} />
       </div>
     </AppShell>

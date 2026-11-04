@@ -3,6 +3,7 @@ import type {
   ConnectStart,
   DecisionList,
   DisconnectResult,
+  RecurringState,
   ExportFormat,
   FieldError,
   Meeting,
@@ -260,6 +261,9 @@ export function createApi(options: ApiOptions = {}) {
           write: true,
         }),
       disconnect: () => request<DisconnectResult>("POST", "/api/calendar/google/disconnect", { write: true }),
+      // The Recurring cards. `timeZone` is the browser's own zone: the texts come back written in it.
+      recurring: (timeZone?: string) =>
+        request<RecurringState>("GET", "/api/calendar/recurring", { query: timeZone ? { tz: timeZone } : {} }),
     },
     vocabulary: {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,

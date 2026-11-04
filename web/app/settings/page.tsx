@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/shell";
 import { SettingsCalendar } from "@/components/app/settings-calendar";
+import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 import { PageHead } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { getReviewOpen, requireOwner } from "@/lib/api/server";
@@ -34,6 +35,7 @@ export default async function SettingsPage({
       <div className="stack-md measure">
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
         <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} />
+        <SettingsPlannedSections />
       </div>
     </AppShell>
   );

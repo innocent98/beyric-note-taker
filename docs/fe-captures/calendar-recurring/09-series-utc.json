@@ -1,0 +1,54 @@
+{
+  "note": "After the real sync job read the synthetic events. No `tz`: the texts are in UTC and `timezone` says so.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar/recurring",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "name": "Stand-up",
+          "cadence": "Daily, 08:30",
+          "next_starts_at": "2026-11-05T08:30:00Z",
+          "next_text": "Thu 5 Nov, 08:30"
+        },
+        {
+          "name": "Beyric Friday review",
+          "cadence": "Weekly on Fridays, 14:00",
+          "next_starts_at": "2026-11-06T14:00:00Z",
+          "next_text": "Fri 6 Nov, 14:00"
+        },
+        {
+          "name": "Beyric Monday planning",
+          "cadence": "Weekly on Mondays, 13:00",
+          "next_starts_at": "2026-11-09T13:00:00Z",
+          "next_text": "Mon 9 Nov, 13:00"
+        },
+        {
+          "name": "Vendor sync",
+          "cadence": "Recurring",
+          "next_starts_at": "2026-11-10T09:00:00Z",
+          "next_text": "Tue 10 Nov, 09:00"
+        },
+        {
+          "name": "Board call 🚀 週次",
+          "cadence": "Recurring",
+          "next_starts_at": "2026-11-11T10:00:00Z",
+          "next_text": "Wed 11 Nov, 10:00"
+        }
+      ]
+    }
+  }
+}

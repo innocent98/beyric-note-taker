@@ -77,6 +77,21 @@ describe("page", () => {
     expect(html).toContain(", 2 open");
   });
 
+  it("draws the designer's other sections below Calendar, in order, whatever the calendar's state", async () => {
+    const off = async () => {
+      throw new ApiError(404, "calendar_unavailable", "Google Calendar is not available.");
+    };
+    for (const answer of [async () => connected, off]) {
+      state.answer = answer;
+      const html = await render();
+      const order = ["Calendar", "Sprints and reminders", "Tasks", "Default notes language"].map((title) =>
+        html.indexOf(`>${title}</h2>`),
+      );
+      expect(order.every((at) => at > -1)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+    }
+  });
+
   it("shows the message for the callback's redirect", async () => {
     state.answer = async () => connected;
     expect(await render({ calendar: "connected" })).toContain("Google Calendar connected.");

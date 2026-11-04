@@ -1,0 +1,25 @@
+{
+  "note": "A zone name that is not known: 422, never a guess.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar/recurring?tz=Mars%2FOlympus",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_timezone",
+        "message": "That time zone is not known. Use a name like Africa/Lagos."
+      }
+    }
+  }
+}

@@ -226,6 +226,21 @@ describe("calendar calls", () => {
     expect(header(calls[0].init, "X-CSRF-Token")).toBeUndefined();
   });
 
+  it("reads the Recurring cards with a plain GET and the browser's zone in the query", async () => {
+    const body = JSON.stringify({ timezone: "Africa/Lagos", series: [] });
+    const { api, calls } = setup(() => new Response(body, { status: 200, headers: { "content-type": "application/json" } }));
+    await api.calendar.recurring("Africa/Lagos");
+    await api.calendar.recurring("America/Argentina/Buenos_Aires");
+    await api.calendar.recurring();
+    expect(calls.map((c) => c.url)).toEqual([
+      "/api/calendar/recurring?tz=Africa%2FLagos",
+      "/api/calendar/recurring?tz=America%2FArgentina%2FBuenos_Aires",
+      "/api/calendar/recurring",
+    ]);
+    expect(calls[0].init.method).toBe("GET");
+    expect(header(calls[0].init, "X-CSRF-Token")).toBeUndefined();
+  });
+
   it("starts the connect with the CSRF token and a return to the settings page", async () => {
     const { api, calls } = setup((url) =>
       url === "/api/session"
