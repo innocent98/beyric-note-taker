@@ -370,7 +370,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
 - [x] `ruff check` and `ruff format --check` once in a `lint` job; the summary job `ci` waits for it and fails on any failed or cancelled shard
 - [x] pip cache keyed on `pyproject.toml`; apt `.deb` cache keyed on the runner image
 - [x] `test-durations` workflow (manual) to regenerate the timings
-- [ ] Merged, and the first run on `main` timed (the apt cache is only shared with later PRs once a run on `main` has saved it)
+- [ ] Merged (on Adebayo's word), and the first run on `main` timed (the apt cache is only shared with later PRs once a run on `main` has saved it)
 
 ## Backlog
 
