@@ -364,6 +364,14 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
 - [ ] W2 Tasks (needs W1 and the gate above; Opus)
 - [ ] W5 Export, W3 Team, W4 Projects, W6 Share, W7 Translate, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 
+## CI speed (2026-11-04, PR #70, SOP `docs/sop/2026-11-04-ci-sharding.md`)
+
+- [x] Python suite in 4 parallel shards (`pytest-split`, committed `.test_durations`, one Postgres container each, `fail-fast: false`)
+- [x] `ruff check` and `ruff format --check` once in a `lint` job; the summary job `ci` waits for it and fails on any failed or cancelled shard
+- [x] pip cache keyed on `pyproject.toml`; apt `.deb` cache keyed on the runner image
+- [x] `test-durations` workflow (manual) to regenerate the timings
+- [ ] Merged, and the first run on `main` timed (the apt cache is only shared with later PRs once a run on `main` has saved it)
+
 ## Backlog
 
 - [ ] Outlook calendar (after Google)
