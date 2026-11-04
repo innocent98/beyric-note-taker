@@ -41,6 +41,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
+from app import placement
 from app.models import (
     AuthToken,
     MailOutbox,
@@ -82,7 +83,8 @@ def _recording_to_delete(
         return stored  # Vexa does not know the meeting: nothing there to wait for
     if info.status not in VEXA_FINISHED:
         if meeting.id not in stopped:  # whatever our status: the bot may still be in the call
-            vexa.stop_bot(meeting.platform, meeting.native_id)
+            if placement.may_stop_bot(session, meeting):  # never another meeting's bot
+                vexa.stop_bot(meeting.platform, meeting.native_id)
             stopped.add(meeting.id)
         raise VexaError("the bot is still in the meeting")
     if info.recording_id is not None:
@@ -113,7 +115,8 @@ def purge_user(
         stopped: set[int] = set()
         for meeting in meetings:
             if meeting.status == "bot_sent":
-                vexa.stop_bot(meeting.platform, meeting.native_id)
+                if placement.may_stop_bot(session, meeting):  # never another meeting's bot
+                    vexa.stop_bot(meeting.platform, meeting.native_id)
                 stopped.add(meeting.id)
         for meeting in meetings:
             if meeting.audio_deleted_at is None:

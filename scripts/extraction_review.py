@@ -5,7 +5,9 @@ and writes ONE self-contained HTML page to stdout: the transcript on the left, w
 extracted on the right, and Right / Wrong / Partly buttons on every item. From the repo root of
 the running app (`/srv` in the `web` container):
 
-    python scripts/extraction_review.py --search myway          # find the meeting's id
+    python scripts/extraction_review.py --list                  # the newest 20 meetings
+    python scripts/extraction_review.py --list 50
+    python scripts/extraction_review.py --search myway          # by title, code or link
     python scripts/extraction_review.py --meeting 12 > review.html
     python scripts/extraction_review.py --meeting 12 --meeting 15 > review.html
 
@@ -20,6 +22,11 @@ to the model provider once per meeting, exactly as the product already does for 
 The page makes no requests of its own (a Content-Security-Policy blocks them) and loads nothing
 from anywhere; everything from the transcript and the model is HTML-escaped.
 
+`--max-output-tokens N` sets the output budget of the first attempt (default: the app's own,
+which is what Tasks would have). If the model's answer is cut off by the budget the tool retries
+once with four times as much (at least 8,000, at most 32,000) and says so on the page. `--timeout`
+is the model call's time limit in seconds (default 180; the product's is 60).
+
 `--price-in` and `--price-out` (dollars per million tokens) add a cost estimate; the app keeps no
 price table, so without them only the token counts are shown.
 """
@@ -32,18 +39,21 @@ import html
 import re
 import secrets
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from openai import OpenAI  # noqa: E402
 from sqlalchemy import or_, select  # noqa: E402
 
 from app.ai_versions import EXTRACT_PROMPT_VERSION  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.extraction import (  # noqa: E402
+    MAX_OUTPUT_TOKENS,
     ExtractionCall,
     ExtractionFailed,
     ModelAction,
@@ -61,6 +71,12 @@ from app.services import meeting_title  # noqa: E402
 from app.workspace import DEFAULT_TIMEZONE, _contains  # noqa: E402
 
 SEARCH_LIMIT = 50
+LIST_DEFAULT, LIST_MAX = 20, 200
+# The product's call has a 60 second limit and 2,000 output tokens. The tool keeps the token
+# default (so it shows what Tasks would meet) but waits longer, because a bigger budget lets a
+# reasoning model think for longer, and it retries once, bigger, when the answer was cut off.
+DEFAULT_TIMEOUT = 180.0
+RETRY_FACTOR, RETRY_FLOOR, RETRY_CEILING = 4, 8000, 32000
 VERY_LONG_CHARS = 200_000
 LINE_FUZZY_RATIO = 0.85
 _LABEL = re.compile(r"^\[([^\]\n]{1,80})\]:[ \t]*(.*)$")
@@ -110,6 +126,14 @@ def _load(meeting: Meeting) -> MeetingData:
     )
 
 
+def _row(m: Meeting) -> str:
+    return (
+        f"{m.id:<8}{(m.created_at or datetime.now(UTC)).date().isoformat():<12}"
+        f"{len(_transcript_of(m)):<9}chars  {m.status:<10}{_label_of(m)}  "
+        f"[{m.platform} {m.native_id}]"
+    )
+
+
 def search(text: str) -> tuple[list[str], bool]:
     """Table rows for the meetings whose title, code or link contains `text`, newest first."""
     pattern = _contains(text.strip())
@@ -126,13 +150,16 @@ def search(text: str) -> tuple[list[str], bool]:
             .order_by(Meeting.id.desc())
             .limit(SEARCH_LIMIT + 1)
         ).all()
-        rows = [
-            f"{m.id:<8}{(m.created_at or datetime.now(UTC)).date().isoformat():<12}"
-            f"{len(_transcript_of(m)):<9}chars  {m.status:<10}{_label_of(m)}  "
-            f"[{m.platform} {m.native_id}]"
-            for m in found[:SEARCH_LIMIT]
-        ]
+        rows = [_row(m) for m in found[:SEARCH_LIMIT]]
     return rows, len(found) > SEARCH_LIMIT
+
+
+def latest(count: int) -> list[str]:
+    """Table rows for the newest `count` meetings. A meeting pasted by link has no title, so a
+    title search cannot find it; this can."""
+    with open_readonly() as session:
+        found = session.scalars(select(Meeting).order_by(Meeting.id.desc()).limit(count)).all()
+        return [_row(m) for m in found]
 
 
 # ---- finding the line a quote was said on ----
@@ -174,6 +201,45 @@ def find_line(quote: str, transcript: str) -> int | None:
 
 
 @dataclass
+class Attempt:
+    """One call to the model, as the API reported it."""
+
+    cap: int
+    finish_reason: str | None = None
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    error: str | None = None
+
+
+class _Spy:
+    """Stands in for the OpenAI client: sets the output budget and records what each call used,
+    so the page can say why a call failed. Everything else is the app's own `extract`."""
+
+    def __init__(self, inner, cap: int):
+        self.inner, self.cap, self.attempts = inner, cap, []
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+
+    def _create(self, **kwargs):
+        kwargs["max_completion_tokens"] = self.cap
+        attempt = Attempt(cap=self.cap)
+        self.attempts.append(attempt)
+        try:
+            response = self.inner.chat.completions.create(**kwargs)
+        except Exception as exc:
+            attempt.error = type(exc).__name__
+            raise
+        usage = getattr(response, "usage", None)
+        details = getattr(usage, "completion_tokens_details", None)
+        attempt.prompt_tokens = getattr(usage, "prompt_tokens", None)
+        attempt.completion_tokens = getattr(usage, "completion_tokens", None)
+        attempt.reasoning_tokens = getattr(details, "reasoning_tokens", None)
+        choices = getattr(response, "choices", None) or [None]
+        attempt.finish_reason = getattr(choices[0], "finish_reason", None)
+        return response
+
+
+@dataclass
 class Outcome:
     call: ExtractionCall | None = None
     checked: object = None
@@ -181,29 +247,52 @@ class Outcome:
     failure: str | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
+    attempts: list[Attempt] = field(default_factory=list)
 
 
-def _ask(data: MeetingData, client, model: str | None) -> Outcome:
+def _next_cap(cap: int) -> int:
+    return min(max(cap * RETRY_FACTOR, RETRY_FLOOR), RETRY_CEILING)
+
+
+def _ask(data: MeetingData, client, model: str | None, cap: int, timeout: float) -> Outcome:
     parsed = parse_notes(data.notes)
     outcome = Outcome(parsed=parsed)
-    try:
-        call = extract(
-            parsed,
-            data.transcript,
-            data.day,
-            DEFAULT_TIMEZONE,
-            client=client,
-            model=model,
-            full=True,
-        )
-        outcome.call = call
-        outcome.input_tokens, outcome.output_tokens = call.input_tokens, call.output_tokens
-        outcome.checked = check_extraction(call.result, parsed, data.transcript, data.day)
-    except ExtractionFailed as exc:  # its message is built by the app and carries no request text
-        outcome.failure = str(exc)
-        outcome.input_tokens, outcome.output_tokens = exc.input_tokens, exc.output_tokens
-    except Exception as exc:  # class name only: the text of an error can hold secrets or paths
-        outcome.failure = f"extraction: {type(exc).__name__}"
+    spy = None
+    for attempt_number in (1, 2):
+        outcome.failure = None
+        try:
+            if spy is None:
+                inner = client or OpenAI(
+                    api_key=get_settings().openai_api_key, max_retries=0, timeout=timeout
+                )
+                spy = _Spy(inner, cap)
+            spy.cap = cap
+            call = extract(
+                parsed,
+                data.transcript,
+                data.day,
+                DEFAULT_TIMEZONE,
+                client=spy,
+                model=model,
+                full=True,
+            )
+            outcome.call = call
+            outcome.checked = check_extraction(call.result, parsed, data.transcript, data.day)
+            break
+        except ExtractionFailed as exc:  # its message is built by the app, no request text
+            outcome.failure = str(exc)
+            cut_off = spy.attempts and spy.attempts[-1].finish_reason == "length"
+            if attempt_number == 1 and cut_off and _next_cap(cap) > cap:
+                cap = _next_cap(cap)  # the answer did not fit: try once with more room
+                continue
+            break
+        except Exception as exc:  # class name only: the text of an error can hold secrets or paths
+            outcome.failure = f"extraction: {type(exc).__name__}"
+            break
+    if spy is not None:
+        outcome.attempts = spy.attempts
+        outcome.input_tokens = sum(a.prompt_tokens or 0 for a in spy.attempts) or None
+        outcome.output_tokens = sum(a.completion_tokens or 0 for a in spy.attempts) or None
     return outcome
 
 
@@ -377,6 +466,45 @@ def _tokens(outcome: Outcome) -> str:
     return f"{outcome.input_tokens or 0:,} tokens in, {outcome.output_tokens or 0:,} out"
 
 
+def _count(value: int | None) -> str:
+    return "not reported" if value is None else f"{value:,}"
+
+
+def _attempts_html(outcome: Outcome) -> str:
+    """What each call to the model used: the budget, how it ended and the tokens it cost."""
+    if not outcome.attempts:
+        return ""
+    rows = "".join(
+        f"<tr><td>{n}</td><td>{a.cap:,}</td><td>{e(a.finish_reason or a.error or 'no answer')}</td>"
+        f"<td>{_count(a.prompt_tokens)}</td><td>{_count(a.completion_tokens)}</td>"
+        f"<td>{_count(a.reasoning_tokens)}</td></tr>"
+        for n, a in enumerate(outcome.attempts, 1)
+    )
+    return (
+        '<table class="attempts"><tr><th>Call</th><th>Output budget</th><th>Ended</th>'
+        "<th>Prompt tokens</th><th>Completion tokens</th><th>Of which hidden reasoning</th></tr>"
+        f"{rows}</table>"
+    )
+
+
+def _what_happened(outcome: Outcome) -> str:
+    """Plain words for the main failure: the answer ran out of output budget."""
+    last = outcome.attempts[-1] if outcome.attempts else None
+    if last is None or last.finish_reason != "length":
+        return ""
+    reasoning = (
+        f" (hidden reasoning used {last.reasoning_tokens:,} of them)"
+        if last.reasoning_tokens is not None
+        else ""
+    )
+    return (
+        f"The model used its whole output budget of {last.cap:,} tokens before it finished "
+        f"answering{reasoning}. For a reasoning model that budget also pays for its hidden "
+        f"reasoning, so a long meeting with many action items can run out. Run it again with "
+        f"a bigger budget, for example --max-output-tokens {min(last.cap * 2, RETRY_CEILING):,}."
+    )
+
+
 def _banner(kind: str, message: str) -> str:
     return f'<div class="banner {kind}">{e(message)}</div>'
 
@@ -402,6 +530,12 @@ def _section(data: MeetingData | None, meeting_id: int, outcome: Outcome | None)
     facts = [f"transcript {chars:,} characters, {len(data.transcript.splitlines()):,} lines"]
     if outcome is not None:
         facts.append(_tokens(outcome))
+        if outcome.attempts:
+            last = outcome.attempts[-1]
+            facts.append(f"output cap {last.cap:,}")
+            if last.reasoning_tokens is not None:
+                facts.append(f"{last.reasoning_tokens:,} reasoning tokens")
+
         facts.append(
             "Sent whole to the model, the way the app sends it: the pipeline does not shorten "
             "transcripts."
@@ -428,15 +562,27 @@ def _section(data: MeetingData | None, meeting_id: int, outcome: Outcome | None)
         "instead.</div>"
     )
     items = ""
+    if outcome is not None and len(outcome.attempts) > 1:
+        first = outcome.attempts[0]
+        head.append(
+            _banner(
+                "warn",
+                f"Retried once: the first call (output budget {first.cap:,}) ended with "
+                f"{first.finish_reason or first.error}, so the tool asked again with "
+                f"{outcome.attempts[1].cap:,}.",
+            )
+        )
     if outcome is not None and outcome.failure:
         head.append(
             _banner(
                 "bad",
                 f"The model call failed ({outcome.failure}). Nothing was extracted. "
-                "Run it again; nothing was saved.",
+                "Run it again; nothing was saved. " + _what_happened(outcome),
             )
         )
-    elif outcome is not None:
+    if outcome is not None and (outcome.failure or len(outcome.attempts) > 1):
+        head.append(_attempts_html(outcome))
+    if outcome is not None and not outcome.failure:
         actions, rest = _items(data, outcome)
         items = (
             "<h3>Action items</h3>"
@@ -483,6 +629,10 @@ section.meeting{margin:20px 0 40px}
 section.meeting h2{margin:0 0 6px;font-size:17px}
 h2 small{font-weight:400;color:var(--mute);font-size:13px}
 .facts,.note-line{color:var(--mute);font-size:13px;margin:4px 0}
+table.attempts{border-collapse:collapse;margin:6px 0;font-size:13px}
+table.attempts th,table.attempts td{border:1px solid var(--line);padding:3px 8px;text-align:left}
+table.attempts{border-collapse:collapse;margin:6px 0;font-size:13px}
+table.attempts th,table.attempts td{border:1px solid var(--line);padding:3px 8px;text-align:left}
 .banner{padding:8px 12px;border-radius:6px;margin:8px 0;border:1px solid var(--line)}
 .banner.bad{border-color:var(--bad);color:var(--bad)}
 .banner.warn{border-color:var(--warn);color:var(--warn)}
@@ -651,31 +801,63 @@ def _safe(stream):
     return stream
 
 
+def _print_table(rows: list[str], out) -> None:
+    print(f"{'id':<8}{'date':<12}{'transcript':<15}{'status':<10}label", file=out)
+    for row in rows:
+        print(row, file=out)
+
+
 def run(argv: list[str], *, client=None, out=None, err=None) -> int:
     out, err = _safe(out or sys.stdout), _safe(err or sys.stderr)
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--meeting", type=int, action="append", help="a meeting id (repeatable)")
     parser.add_argument("--search", help="list meetings whose title, code or link contains this")
+    parser.add_argument(
+        "--list",
+        type=int,
+        nargs="?",
+        const=LIST_DEFAULT,
+        metavar="N",
+        help=f"list the newest N meetings (default {LIST_DEFAULT}), titled or not",
+    )
+    parser.add_argument(
+        "--max-output-tokens",
+        type=int,
+        default=MAX_OUTPUT_TOKENS,
+        help=f"output budget of the first call (default {MAX_OUTPUT_TOKENS:,}, the app's own)",
+    )
+    parser.add_argument(
+        "--timeout", type=float, default=DEFAULT_TIMEOUT, help="seconds the model call may take"
+    )
     parser.add_argument("--model", help="model to ask (default: the app's EXTRACT_MODEL)")
     parser.add_argument("--price-in", type=float, help="dollars per million input tokens")
     parser.add_argument("--price-out", type=float, help="dollars per million output tokens")
     args = parser.parse_args(argv)
 
+    if args.list is not None:
+        rows = latest(max(1, min(args.list, LIST_MAX)))
+        if not rows:
+            print("No meetings yet.", file=out)
+            return 0
+        _print_table(rows, out)
+        return 0
     if args.search is not None:
         rows, more = search(args.search)
         if not rows:
-            print(f"No meeting matches {args.search!r}.", file=out)
+            print(
+                f"No meeting matches {args.search!r}. A meeting pasted by link has no title: "
+                "use --list to see the newest meetings.",
+                file=out,
+            )
             return 0
-        print(f"{'id':<8}{'date':<12}{'transcript':<15}{'status':<10}label", file=out)
-        for row in rows:
-            print(row, file=out)
+        _print_table(rows, out)
         if more:
             print(
                 f"(only the newest {SEARCH_LIMIT} are shown: search for something longer)", file=out
             )
         return 0
     if not args.meeting:
-        print("Give --meeting <id> (repeatable) or --search <text>.", file=err)
+        print("Give --meeting <id> (repeatable), --search <text> or --list.", file=err)
         return 2
 
     model = args.model or get_settings().extract_model
@@ -688,7 +870,7 @@ def run(argv: list[str], *, client=None, out=None, err=None) -> int:
         # the session is closed before the model is asked: no connection is held across the call
         outcome = None
         if data is not None and data.transcript.strip():
-            outcome = _ask(data, client, args.model)
+            outcome = _ask(data, client, args.model, args.max_output_tokens, args.timeout)
             outcomes.append(outcome)
         if data is None:
             print(f"meeting {meeting_id}: no such meeting", file=err)

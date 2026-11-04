@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 # The "Last updated" date of the terms and privacy pages the person accepted at sign-up. Bump it
 # with the pages: it is recorded on the account (`users.terms_version`).
 TERMS_VERSION = "2026-11-04"
-SIGNUP_LOCK = 6002  # serialises "count the slots" + "take one" (next to services.NEW_MEETING_LOCK)
+SIGNUP_LOCK = 6002  # serialises "count the slots" + "take one" (next to placement.PLACEMENT_LOCK)
 MAX_NAME_CHARS = 200
 # Unconfirmed password accounts that may exist at once, so the form cannot be used to fill the
 # database; each is swept 48 hours after its last submission (`accounts.sweep_unverified`).

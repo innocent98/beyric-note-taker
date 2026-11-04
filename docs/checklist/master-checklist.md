@@ -287,7 +287,10 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] C9 key re-encryption script
   - [x] C10 scheduler skeleton (2026-11-03, `feature/c10-scheduler`; leader advisory lock on its own connection, dispatch and sync loops, injected clock, heartbeat, compose service, `deploy.sh` heartbeat wait; no migration, no required setting; SOP `docs/sop/2026-11-03-phase-c-scheduler.md`). Verified on a real Postgres and with two real processes (failover, clean stop). Not yet run on the server; four `deploy.sh` stub tests added to `tests/test_deploy_script.py`
   - [x] C10b periodic sweeps and mail tick (2026-11-04, `feature/c10b-c11b-sweeps-alerts`; `app/sweeps.py`: six hourly sweeps on the sync loop, the new `calendar_events` sweep, the mail outbox sender on every dispatch tick; reuses the existing sweep functions; SOP `docs/sop/2026-11-04-phase-c-sweeps-alerts.md`). The worker still runs its copies (follow-up). Open, not merged
-  - [ ] C11 `place_bot()` single host (Opus review)
+  - [x] C11 `place_bot()` single host (2026-11-04, `feature/c11-place-bot`; `app/placement.py`, SOP `docs/sop/2026-11-04-phase-c-place-bot.md`; pre-flight hours, user limit, duplicate, capacity under `pg_advisory_xact_lock(6004, 1)` held across `send_bot`; the pasted link, the PWA share path and the retry of a refused meeting use it; `NEW_MEETING_LOCK` and `bot_already_active` retired, a full note taker is the neutral 409 `bot_busy`; `BOT_MAX_LOCAL` default 1 (old `MAX_ACTIVE_BOTS` still read), `USER_BOT_LIMIT` default 2; 58 new tests on a real Postgres, lock mutation-checked; the lock is polled for 3 s then answers busy (two texts), the send has a total deadline, an uncertain send keeps the code as a placeholder the worker adopts or reaps, only a meeting's own bot is ever stopped). Opus review done (findings 1 to 4 and 7 fixed in the PR; 5 and 6 acknowledged in the SOP). Not verified against a real Vexa host or under real load. Open, not merged
+    - [x] `FakeVexaHost` with a send counter (`tests/fakes/vexa_host.py`)
+    - [ ] FE guide rewrite for `bot_busy`, `user_limit`, `already_in_meeting`, `meeting_has_note_taker` with a captured response, queued for C17 (the owner-app guide still names `bot_already_active` and `MAX_ACTIVE_BOTS`)
+    - [ ] Decide with C12 or D9a whether capacity counts `bot_sent` only (spec 9.4 step 3); today `processing` still holds the slot, as before, because the worker handles one meeting at a time
   - [x] C11b alerts helper (2026-11-04, same PR; `app/alerts.py` `notify_user`, `notify_admins`, `bucket_key`, `alert` mail template, optional `ADMIN_ALERT_EMAIL`; nothing calls it yet, C12 to C14 will). Open, not merged
   - [ ] C12 join runner (dispatch at start minus `AUTOJOIN_LEAD_SECONDS`, no-capacity retry, catch-up)
   - [ ] C13 connection states and refresh failures; C14 disconnected notifications and email
@@ -358,7 +361,9 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] Regenerate `web/lib/api/schema.d.ts` (`npm run gen:api`) with the first screen
 - [ ] W2 gate: real-transcript review of the full extraction (`extract-v1`) by Adebayo, before W2 starts
   - [x] Review tool `scripts/extraction_review.py` (2026-11-04, `docs/sop/2026-11-04-extraction-review-tool.md`): one HTML page per run, transcript left, extracted items right, Right / Wrong / Partly per item
-  - [ ] Adebayo reviews "the myway meeting" and pastes his verdicts back (owner, due date and quote right?)
+  - [x] First real run (meeting 5, 2026-11-04) failed: `extract-v1` hit its 2,000 output token cap (`finish_reason=length`); tool updated to explain, retry once, `--max-output-tokens`, `--timeout`, `--list` (`docs/sop/2026-11-04-extraction-review-tool.md`)
+  - [ ] **Gate item, before W2 ships:** the product's full extraction must not use the 2,000 cap: size the budget to the bullets (about 1,500 + 200 per bullet, 4,000 to 16,000), drop `title` and shorten quotes, try lower reasoning effort, raise the 60 second limit, re-run the eval on an hour-long transcript with the real reasoning-token split
+  - [ ] Adebayo re-runs meeting 5 with `--max-output-tokens 8000` and judges the items and pastes his verdicts back (owner, due date and quote right?)
   - [ ] Go or no-go on `gpt-6-luna` for W2 decided from those verdicts (spec asks for five real meetings; one is the first step)
 - [ ] W2 Tasks (needs W1 and the gate above; Opus)
 - [ ] W5 Export, W3 Team, W4 Projects, W6 Share, W7 Translate, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)

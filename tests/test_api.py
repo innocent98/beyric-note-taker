@@ -726,9 +726,130 @@ def test_create_validates_the_body(api, template, fake_vexa, body):
 
 
 def test_create_refuses_while_a_bot_is_active(api, template, session, fake_vexa):
+    """The user's own running meeting fills the one slot: a plain busy (the old, longer
+    `bot_already_active` wording is retired with the lock it belonged to)."""
     add_meeting(session, template, status="processing", step="audio")
-    error = error_of(create(api, template), 409, "bot_already_active")
-    assert error["message"] == "A bot is already on a meeting. Wait for it to finish first."
+    error = error_of(create(api, template), 409, "bot_busy")
+    assert error["message"] == "The note taker is busy right now. Try again in a few minutes."
+    assert fake_vexa.sent == []
+
+
+def test_create_refuses_a_second_bot_in_the_same_meeting_with_room_to_spare(
+    api, app, template, session, fake_vexa
+):
+    app.state.settings.bot_max_local = 3
+    add_meeting(session, template, status="bot_sent")  # a bot is already in abc-defg-hij
+    error = error_of(create(api, template), 409, "already_in_meeting")
+    assert "already in that meeting" in error["message"]
+    assert fake_vexa.sent == []
+
+
+def test_create_refuses_a_third_bot_for_one_user(api, app, template, session, fake_vexa):
+    app.state.settings.bot_max_local = 3
+    add_meeting(session, template, status="bot_sent", native_id="aaa-aaaa-aaa")
+    add_meeting(session, template, status="bot_sent", native_id="bbb-bbbb-bbb")
+    error = error_of(create(api, template), 409, "user_limit")
+    assert error["message"] == (
+        "You have reached the most bots allowed at once (2). Wait for one to finish first."
+    )
+    assert fake_vexa.sent == []
+
+
+def test_a_slot_that_is_only_locked_says_a_note_taker_is_being_set_up(
+    api, template, session, fake_vexa, engine, monkeypatch
+):
+    """Not full, only locked by a send in flight: different words, same code, no user, no id."""
+    from sqlalchemy import text
+
+    from app import placement
+
+    monkeypatch.setattr(placement, "LOCK_WAIT_SECONDS", 0.2)
+    with engine.connect() as holder:
+        holder.execute(
+            text("select pg_advisory_xact_lock(cast(:a as int), cast(:b as int))"),
+            {"a": placement.PLACEMENT_LOCK, "b": placement.LOCAL_HOST_ID},
+        )
+        error = error_of(create(api, template), 409, "bot_busy")
+        holder.rollback()
+    assert error["message"] == (
+        "A note taker is being set up for another meeting. Try again in a minute."
+    )
+    assert fake_vexa.sent == []
+
+
+def test_a_meeting_whose_bot_is_still_starting_cannot_be_cancelled(
+    api, template, session, fake_vexa
+):
+    """Its send got no clear answer: a stop now would find nothing and the late bot would be
+    orphaned. The page does not offer Cancel; the call says to try again in a minute."""
+    from app import pipeline
+
+    meeting = add_meeting(
+        session, template, completion_reason=pipeline.SEND_UNCONFIRMED, vexa_meeting_id=None
+    )
+    meeting.bot_state_seen_at = datetime.now(UTC)
+    session.commit()
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["can_cancel"] is False and body["status_text"] == "Starting the bot"
+    error = error_of(api.post(f"/api/meetings/{meeting.id}/cancel"), 409, "bot_starting")
+    assert "still starting" in error["message"]
+    assert not hasattr(fake_vexa, "stopped")
+
+
+def test_user_limit_zero_does_not_claim_the_user_has_bots(api, app, template, fake_vexa):
+    app.state.settings.user_bot_limit = 0
+    response = create(api, template)
+    error = error_of(response, 409, "user_limit")
+    assert "0 bots" not in error["message"] and "already have" not in error["message"]
+    assert fake_vexa.sent == []
+
+
+def test_user_limit_met_by_a_meeting_being_written_up_does_not_say_it_is_in_a_meeting(
+    api, app, template, session, fake_vexa
+):
+    """`processing` meetings count toward the limit, but the bot has left them: the words must not
+    call them bots in meetings."""
+    app.state.settings.bot_max_local = 3
+    add_meeting(session, template, status="processing", step="notes", native_id="aaa-aaaa-aaa")
+    add_meeting(session, template, status="processing", step="audio", native_id="bbb-bbbb-bbb")
+    error = error_of(create(api, template), 409, "user_limit")
+    assert "in meetings" not in error["message"]
+    assert "2" in error["message"]  # it still says what the limit is
+
+
+def test_create_into_a_meeting_another_user_has_a_note_taker_in_is_the_neutral_refusal(
+    api, app, template, session, fake_vexa, stranger
+):
+    app.state.settings.bot_max_local = 3
+    theirs = Template(owner_user_id=stranger.id, name="Their template", instructions="x")
+    session.add(theirs)
+    session.commit()
+    add_meeting(session, theirs, status="bot_sent", title="Board call")  # the same code as MEET
+    response = create(api, template)
+    error = error_of(response, 409, "meeting_has_note_taker")
+    assert error["message"] == "A note taker is already in this meeting."
+    for leak in (stranger.email, "Board", "Their template"):
+        assert leak not in response.text
+    assert fake_vexa.sent == []
+
+
+def test_pasted_link_busy_answer_is_neutral_409_bot_busy_and_does_not_name_another_user(
+    api, template, session, fake_vexa, stranger
+):
+    """Whoever holds the note taker, the answer is the same words: no name, no address, no id, no
+    title, no hint that someone is recording (the stranger's meeting has a title to leak)."""
+    theirs = Template(owner_user_id=stranger.id, name="Their template", instructions="x")
+    session.add(theirs)
+    session.commit()
+    add_meeting(
+        session, theirs, status="bot_sent", title="Board call: layoffs", native_id="zzz-zzzz-zzz"
+    )
+    response = create(api, template)
+    error = error_of(response, 409, "bot_busy")
+    assert error["message"] == "The note taker is busy right now. Try again in a few minutes."
+    for leak in (stranger.email, "Board", "layoffs", "zzz-zzzz-zzz", "Their template", "already"):
+        assert leak not in response.text
+    assert str(stranger.id) not in error["message"]
     assert fake_vexa.sent == []
 
 
@@ -739,7 +860,7 @@ def test_a_bot_busy_with_someone_elses_meeting_is_a_neutral_busy(
     theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
     session.add(theirs)
     session.commit()
-    add_meeting(session, theirs, status="bot_sent")
+    add_meeting(session, theirs, status="bot_sent", native_id="zzz-zzzz-zzz")
     error = error_of(create(api, template), 409, "bot_busy")
     assert error["message"] == "The note taker is busy right now. Try again in a few minutes."
     assert fake_vexa.sent == []
@@ -748,11 +869,11 @@ def test_a_bot_busy_with_someone_elses_meeting_is_a_neutral_busy(
 def test_someone_elses_meeting_does_not_block_when_there_is_room(
     api, app, template, session, fake_vexa, stranger
 ):
-    app.state.settings.max_active_bots = 2
+    app.state.settings.bot_max_local = 2
     theirs = Template(owner_user_id=stranger.id, name="General", instructions="x")
     session.add(theirs)
     session.commit()
-    add_meeting(session, theirs, status="bot_sent")
+    add_meeting(session, theirs, status="bot_sent", native_id="zzz-zzzz-zzz")
     assert create(api, template).status_code == 201
 
 
