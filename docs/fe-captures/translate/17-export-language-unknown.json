@@ -1,0 +1,30 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export?format=docx&language=yo",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "language",
+            "message": "Input should be 'en', 'fr' or 'es'"
+          }
+        ]
+      }
+    }
+  }
+}

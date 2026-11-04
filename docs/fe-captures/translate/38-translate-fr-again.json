@@ -1,0 +1,32 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/translations",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "language": "fr"
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "language": "fr",
+      "status": "translating",
+      "stale": false,
+      "notes": null,
+      "notes_html": null,
+      "transcript": null,
+      "failure_code": null,
+      "failure_message": null,
+      "updated_at": "2026-11-04T16:08:53.323634Z"
+    }
+  }
+}

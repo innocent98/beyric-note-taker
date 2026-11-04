@@ -17,4 +17,5 @@ export { PageHead } from "./page-head";
 export { Segmented } from "./segmented";
 export { TabButtons } from "./tab-buttons";
 export { Tabs } from "./tabs";
+export { Toast } from "./toast";
 export { Toggle } from "./toggle";

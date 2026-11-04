@@ -9,9 +9,11 @@ import type {
   RecurringState,
   ExportFormat,
   FieldError,
+  LanguagePreferences,
   Meeting,
   MeetingList,
   NewMeeting,
+  NoteLanguage,
   NoticeList,
   Pilot,
   ReviewItem,
@@ -23,6 +25,8 @@ import type {
   Template,
   TemplateInput,
   Term,
+  Translation,
+  TranslationLanguage,
 } from "./types";
 
 // The one error every API call can end in. FastAPI answers every failure under /api/ as
@@ -231,8 +235,20 @@ export function createApi(options: ApiOptions = {}) {
       regenerate: (id: number, template_id: number) =>
         request<Meeting>("POST", `/api/meetings/${id}/regenerate`, { body: { template_id }, write: true }),
       // The notes as a PDF or Word file, built when asked and not stored (GET .../export).
-      export: (id: number, format: ExportFormat, transcript: boolean) =>
-        download(`/api/meetings/${id}/export`, { format, transcript: String(transcript) }),
+      // `language` fr or es builds it from the finished translation (409 translation_missing
+      // otherwise); `en` is the original.
+      export: (id: number, format: ExportFormat, transcript: boolean, language: NoteLanguage = "en") =>
+        download(`/api/meetings/${id}/export`, { format, transcript: String(transcript), language }),
+      // Translate the notes and transcript (docs/fe-integration-guide-translate.md). `request`
+      // answers the translation: ready (cached) or translating (ask `get` again in 2 seconds).
+      translations: {
+        request: (id: number, language: TranslationLanguage) =>
+          request<Translation>("POST", `/api/meetings/${id}/translations`, { body: { language }, write: true }),
+        get: (id: number, language: TranslationLanguage) =>
+          request<Translation>("GET", `/api/meetings/${id}/translations/${language}`),
+        remove: (id: number, language: TranslationLanguage) =>
+          request<void>("DELETE", `/api/meetings/${id}/translations/${language}`, { write: true }),
+      },
     },
     templates: {
       list: async () => (await request<{ templates: Template[] }>("GET", "/api/templates")).templates,
@@ -259,6 +275,12 @@ export function createApi(options: ApiOptions = {}) {
     },
     // Whether the notes-ready email is on (GET and PUT /api/settings/email).
     settings: {
+      // The language meetings open in when a translation exists (GET and PUT /api/settings/language).
+      language: {
+        get: () => request<LanguagePreferences>("GET", "/api/settings/language"),
+        set: (default_language: NoteLanguage) =>
+          request<LanguagePreferences>("PUT", "/api/settings/language", { body: { default_language }, write: true }),
+      },
       email: {
         get: () => request<EmailPreferences>("GET", "/api/settings/email"),
         set: (notify_email: boolean) =>

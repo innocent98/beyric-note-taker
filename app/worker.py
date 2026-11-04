@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import deletion, mail, maintenance, workspace
+from app import deletion, mail, maintenance, translation, workspace
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import AppState, Meeting, User
@@ -130,6 +130,17 @@ def hourly_jobs(session: Session, now: datetime, vexa=None) -> None:
             logger.warning("hourly %s failed (%s)", name, type(exc).__name__)
 
 
+def start_translation_thread(stop: threading.Event) -> threading.Thread:
+    """Translations run in a thread of their own (`app/translation.py`): one is many model calls
+    and takes minutes on a long meeting, which must not hold up the polling of live meetings. The
+    thread ends when `stop` is set, after its current call."""
+    thread = threading.Thread(
+        target=translation.run_loop, args=(stop,), name="translation", daemon=True
+    )
+    thread.start()
+    return thread
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     mailer = mail.build_mailer(get_settings())
@@ -139,6 +150,7 @@ def main() -> None:
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     interval = get_settings().poll_interval_seconds
+    translator = start_translation_thread(stop)
     last_cleanup = 0.0
     cursor = 0
     logger.info("worker started")
@@ -159,6 +171,7 @@ def main() -> None:
             stop.wait(interval)  # swept every unfinished meeting; rest before the next sweep
         else:
             cursor = found
+    translator.join(timeout=30)
     logger.info("worker stopped")
 
 

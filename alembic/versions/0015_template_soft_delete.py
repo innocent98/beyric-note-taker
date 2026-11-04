@@ -9,16 +9,16 @@ name of the constraint is unaffected). Additive: existing rows are live.
 
 Downgrade renames each deleted template (" (deleted <id>)") so the plain constraint can come back.
 
-Revision ID: 0014
-Revises: 0013
+Revision ID: 0015
+Revises: 0014
 Create Date: 2026-11-04
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0014"
-down_revision = "0013"
+revision = "0015"
+down_revision = "0014"
 branch_labels = None
 depends_on = None
 

@@ -127,7 +127,7 @@ The words are in one file (`web/components/landing/content.ts`) plus the two pre
 | "N tasks" link on a list row | Meetings | Tasks |
 | Download menu (PDF, Word, with or without transcript) | Meeting page | Export endpoints |
 | Share notes dialog | Meeting page | Email sending, share endpoint |
-| Language select, translated banner, "Show original" | Meeting page | Translation endpoint |
+| ~~Language select, translated banner, "Show original"~~ (built with W7, see "Translate (W7)") | Meeting page | built |
 | Duration, Participants, Series, Milestone in Details | Meeting page | Fields on the meeting API |
 | Action items as tasks with owner, due date, "Needs owner", "View board" | Meeting page | Structured notes and tasks |
 | "On next agenda" chips, Mark resolved, agenda items, Send agenda | Meeting page, series | Agenda and carry-over model |
@@ -146,3 +146,7 @@ No page and no control was faked for any of these.
 - Print styles, reduced-motion, and high-contrast modes.
 - The FAQ uses `<details name="faq">` (exclusive group). Browsers older than 2024 open several at once; nothing breaks.
 - Account screens (stream D): not run against real FastAPI, a real mail, or a real Google round trip; the mock replays captures and applies a few magic values (see the header of `web/scripts/mock-api.mjs`). The `prefill_email` cookie (path `/api/pilot`) is not in the mock, so that path was checked with the mock's own value, not with the real cookie. No side-by-side screenshots were committed for these screens (Playwright is not installed here, so `parity-shots.mjs` could not run); they were looked at in the built-in browser at 375 and 1280 px.
+
+## Translate (W7), 2026-11-04
+
+Checked as above (built app, the mock replaying `docs/fe-captures/translate/`, Chromium, **1440, 768 and 390 px**), design left and page right: `docs/ui/parity/after/app-translate-original-*`, `app-translate-working-*`, `app-translate-fr-*`, `app-translate-fr-transcript-*`, `app-translate-es-*`, `app-translate-download-*`, `app-settings-language-*`; the Settings and meeting screens were re-shot (`app-settings*`, `app-detail`). The table of what was designed, what is built and every difference is in `docs/sop/2026-11-04-w7-translate.md` ("Parity table"). In short: the Language select, "Translating to French...", "Translated from English to French · Show original", the translated notes with the dictionary's headings, the translated transcript, Copy, the Download menu's language note and the live "Default notes language" card with the designer's toast all follow the file; the failed, out-of-date, offer and error states are the smallest things (the design is silent) and are listed as gaps. Differences left: the bordered Action items box (Tasks), turn times in the transcript (not stored), the design's 900 ms translation against a real one.

@@ -36,8 +36,15 @@ const { values } = parseArgs({
     "google-outcome": { type: "string", default: "google_denied" },
     calendar: { type: "string", default: "not_connected" },
     recurring: { type: "string", default: "series" },
+    language: { type: "string", default: "en" },
   },
 });
+
+// Translation (W7): `--language fr|es|en` is the account's default notes language to start with.
+// Meeting 8 is the designer's sample meeting ("Zoom 88205679674", the notes and transcript of
+// docs/fe-captures/translate/); it is not in the list. Asking for French or Spanish on it answers
+// the captured 202, then the captured translation 1.5 seconds later. Nothing is translated here:
+// the French and Spanish are the designer's own words, as captured with the model faked.
 
 // `--calendar not_connected|connected|off`: what GET /api/calendar answers (the captures in
 // docs/fe-captures/calendar-state/; `off` is the feature being dark: 404 calendar_unavailable).
@@ -66,7 +73,7 @@ const details = [
 ].map(([file, title], index) => {
   const meeting = body(file);
   const age = new Date(Date.UTC(2026, 10, 2, 9 + index, 30)).toISOString();
-  return { ...meeting, id: index + 1, title, created_at: age };
+  return { ...meeting, id: index + 1, title, created_at: age, translations: [] };
 });
 // The owner-app captures predate `template_name`; the running API sends it on every meeting.
 for (const meeting of details) meeting.template_name = body("11-templates-seeded").templates.find((t) => t.id === meeting.template_id)?.name ?? "General";
@@ -76,6 +83,27 @@ const summary = ({ id, title, platform, native_id, status, step, status_text, st
 
 // The templates are in memory so that "Delete template" can be tried by hand (a delete is replayed from
 // docs/fe-captures/template-delete/: 204, the 409 for the last one, the 404 for one that is gone).
+const translateCapture = (name) => JSON.parse(readFileSync(join(captureDir, "translate", `${name}.json`), "utf8")).response.body;
+const sample = {
+  ...translateCapture("05-meeting-before"),
+  id: 8,
+  title: "Zoom 88205679674",
+  platform: "zoom",
+  native_id: "88205679674",
+  template_name: body("11-templates-seeded").templates.find((t) => t.id === translateCapture("05-meeting-before").template_id)?.name ?? "General",
+  created_at: "2026-11-02T11:48:00Z",
+};
+const translating = {}; // language -> when it was asked for
+const TRANSLATE_AFTER_MS = 1500;
+const translationOf = (language) => {
+  const since = translating[language];
+  if (since === undefined) return null;
+  if (Date.now() - since < TRANSLATE_AFTER_MS) return { ...translateCapture("07-translate-fr-queued"), language };
+  return translateCapture(language === "fr" ? "10-translate-fr-ready" : "14-translate-es-ready");
+};
+let defaultLanguage = values.language;
+const noTranslation = { error: { code: "no_translation", message: "This meeting has no translation yet." } };
+
 const templates = body("11-templates-seeded").templates;
 const deleteCapture = (name) => JSON.parse(readFileSync(join(captureDir, "template-delete", `${name}.json`), "utf8")).response.body;
 const terms = body("19-vocabulary-list").terms;
@@ -156,6 +184,13 @@ const server = http.createServer(async (req, res) => {
   const method = req.method ?? "GET";
   const data = ["POST", "PUT", "PATCH"].includes(method) ? await readJson(req) : (req.resume(), null);
 
+  // Not part of the API: lets parity-shots.mjs start each translation screen from nothing.
+  if (path === "/__mock/reset") {
+    for (const language of Object.keys(translating)) delete translating[language];
+    defaultLanguage = values.language;
+    return json(res, 200, { reset: true });
+  }
+
   // The real API refuses a write without the token from GET /api/session, public routes included.
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && path.startsWith("/api/") && req.headers["x-csrf-token"] !== "mock-csrf") {
     return json(res, 403, accountBody("17-signup-without-csrf"));
@@ -198,13 +233,42 @@ const server = http.createServer(async (req, res) => {
     const meetings = values.empty ? [] : details.map(summary).reverse();
     return json(res, 200, { meetings, has_more: false, next_before_id: null, worker_stale: values.stale || values.empty });
   }
+  const translate = /^\/api\/meetings\/(\d+)\/translations(?:\/(\w+))?$/.exec(path);
+  if (translate) {
+    const language = method === "POST" ? data?.language : translate[2];
+    if (Number(translate[1]) !== sample.id) return json(res, 404, { error: { code: "not_found", message: "No such meeting" } });
+    if (!["fr", "es"].includes(language)) return method === "POST" ? json(res, 422, translateCapture("23-translate-language-unsupported")) : json(res, 404, noTranslation);
+    if (method === "POST") {
+      const known = translationOf(language);
+      if (known?.status === "ready") return json(res, 200, known);
+      translating[language] ??= Date.now();
+      return json(res, 202, translationOf(language));
+    }
+    if (method === "DELETE") {
+      delete translating[language];
+      res.writeHead(204);
+      return res.end();
+    }
+    const found = translationOf(language);
+    return found ? json(res, 200, found) : json(res, 404, noTranslation);
+  }
   const detail = /^\/api\/meetings\/(\d+)$/.exec(path);
   if (detail && method === "GET") {
-    const meeting = details.find((m) => m.id === Number(detail[1]));
+    const meeting =
+      Number(detail[1]) === sample.id
+        ? { ...sample, translations: ["fr", "es"].filter((l) => translationOf(l)).map((language) => ({ language, status: translationOf(language).status, stale: false })) }
+        : details.find((m) => m.id === Number(detail[1]));
     return meeting ? json(res, 200, meeting) : json(res, 404, { error: { code: "not_found", message: "That meeting was not found." } });
   }
   // Email preferences and the bell: the captures in docs/fe-captures/prelaunch-mail-prefs/. The
   // switch keeps its state in memory so the screen can be flipped by hand.
+  if (path === "/api/settings/language") {
+    if (method === "PUT") {
+      if (!["en", "fr", "es"].includes(data?.default_language)) return json(res, 422, translateCapture("20-language-set-unsupported"));
+      defaultLanguage = data.default_language;
+    }
+    return json(res, 200, { default_language: defaultLanguage });
+  }
   if (path === "/api/settings/email") {
     if (method === "PUT") notifyEmail = data?.notify_email === true;
     return json(res, 200, { notify_email: notifyEmail });

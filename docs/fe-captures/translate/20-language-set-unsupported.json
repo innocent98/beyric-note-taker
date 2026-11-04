@@ -1,0 +1,27 @@
+{
+  "note": "",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/language",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "default_language": "yo"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "language_unsupported",
+        "message": "Notes can be translated into French or Spanish. The original is the English version."
+      }
+    }
+  }
+}

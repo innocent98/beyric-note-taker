@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 
-// The Settings sections the designer drew below Calendar (Sprints and reminders, Tasks, Default
-// notes language) before their features exist: drawn exactly, every control off, nothing stored,
+// The Settings sections the designer drew below Calendar (Sprints and reminders, Tasks) before their
+// features exist (the third, Default notes language, is live: settings-language.test.tsx): drawn exactly, every control off, nothing stored,
 // nothing called, and one plain line in each section saying so.
 
 const fetchSpy = vi.fn();
@@ -31,10 +31,10 @@ const everyControl = (root: HTMLElement) =>
   Array.from(root.querySelectorAll<HTMLElement>("button, select, input, textarea, a[href], [role=switch]"));
 
 describe("the sections and their words, as designed", () => {
-  it("draws the three sections in the designer's order", () => {
+  it("draws the two sections in the designer's order", () => {
     const { container } = render(<SettingsPlannedSections />);
     const titles = Array.from(container.querySelectorAll("h2")).map((h) => h.textContent);
-    expect(titles).toEqual(["Sprints and reminders", "Tasks", "Default notes language"]);
+    expect(titles).toEqual(["Sprints and reminders", "Tasks"]);
   });
 
   it("Sprints and reminders: the pill, both toggles, the select and the designer's lines", () => {
@@ -90,19 +90,6 @@ describe("the sections and their words, as designed", () => {
     expect(within(s).getByText("Share new tasks in a channel so the team can track them there.")).toBeTruthy();
     expect(within(s).getByRole("button", { name: "Connect Slack" })).toBeTruthy();
   });
-
-  it("Default notes language: the designer's line and its select", () => {
-    render(<SettingsPlannedSections />);
-    const s = section("Default notes language");
-    expect(
-      within(s).getByText(
-        "Notes and transcripts open in this language. You can switch back to the original on any meeting.",
-      ),
-    ).toBeTruthy();
-    const language = within(s).getByRole("combobox") as HTMLSelectElement;
-    expect(Array.from(language.options).map((o) => o.text)).toEqual(["Original (no translation)", "French", "Spanish"]);
-    expect(language.options[language.selectedIndex].text).toBe("Original (no translation)");
-  });
 });
 
 describe("nothing is on, nothing is connected, nothing is invented", () => {
@@ -128,8 +115,8 @@ describe("nothing is on, nothing is connected, nothing is invented", () => {
 
   it("carries exactly one 'not available yet' line in each section, and no other added words", () => {
     render(<SettingsPlannedSections />);
-    expect(screen.getAllByText(/not available yet/i)).toHaveLength(3);
-    for (const name of ["Sprints and reminders", "Tasks", "Default notes language"]) {
+    expect(screen.getAllByText(/not available yet/i)).toHaveLength(2);
+    for (const name of ["Sprints and reminders", "Tasks"]) {
       expect(within(section(name)).getAllByText(/not available yet/i)).toHaveLength(1);
     }
   });
@@ -139,7 +126,7 @@ describe("every control is off", () => {
   it("has no control a person could use: each is disabled, none is a link", () => {
     const { container } = render(<SettingsPlannedSections />);
     const controls = everyControl(container);
-    expect(controls).toHaveLength(10); // 4 switches, 4 selects, the Connect and Connect Slack buttons
+    expect(controls).toHaveLength(9); // 4 switches, 3 selects, the Connect and Connect Slack buttons
     for (const control of controls) {
       expect(control.tagName).not.toBe("A");
       const off = (control as HTMLButtonElement).disabled || control.getAttribute("aria-disabled") === "true";

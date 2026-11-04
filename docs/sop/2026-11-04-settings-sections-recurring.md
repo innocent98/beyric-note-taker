@@ -104,3 +104,6 @@ Seen while comparing, not caused here: in the mock the New meeting card is talle
 - Recurring: the unfinished-tasks chip (W2), the open-questions chip and the card as a link to the Series page (W8, when carry-over can be tied to a series).
 - A per-user time zone setting would let the server render cadence without the browser's zone (mail reminders in W8 need one anyway).
 - Expect a rebase on the calendar session's PR (`settings-calendar.tsx`, `calendar-upcoming.tsx`, `calendar_api.py`, and CSS next to mine at the end of `pages.css`): keep both sides.
+
+## Update 2026-11-04 (W7)
+The **Default notes language** section is no longer drawn off: W7 (`docs/sop/2026-11-04-w7-translate.md`) made it live (`web/components/app/settings-language.tsx`) and removed it, its "not available yet" line and the Globe from `settings-planned-sections.tsx`. Sprints and reminders and Tasks are unchanged.

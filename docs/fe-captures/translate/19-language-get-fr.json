@@ -1,0 +1,21 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/settings/language",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "default_language": "fr"
+    }
+  }
+}

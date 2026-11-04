@@ -22,7 +22,7 @@ Adebayo noticed the button the designer draws (`Beyric Note Taker.dc.html`, Temp
 ## What's involved
 | Path | Change |
 |---|---|
-| `alembic/versions/0014_template_soft_delete.py` | `deleted_at`; partial unique index; downgrade renames deleted rows (" (deleted <id>)") so the plain constraint can return |
+| `alembic/versions/0015_template_soft_delete.py` | `deleted_at`; partial unique index; downgrade renames deleted rows (" (deleted <id>)") so the plain constraint can return |
 | `app/models.py` | `Template.deleted_at`, index replaces the unique constraint |
 | `app/services.py` | `delete_template`, `template_names`; live filters in `_own_template`, `list_templates`, `_save_template` |
 | `app/api.py`, `app/api_schemas.py` | `DELETE /templates/{template_id:id}` (204), `template_name` on `MeetingSummary`; `_summary` takes the name |
@@ -51,7 +51,7 @@ Method of `docs/ui/parity-report.md`: built app (`next build`, standalone) on th
 |---|---|
 | `tests/test_template_delete.py` | 34 on a real Postgres 17 (`nt-test-pg-td`), written first (28 failed). Covers: 204 and list; 401, CSRF; foreign, unknown, huge ids 404; second delete 404; edit of a deleted one 404; name reuse and duplicate; last template (also with deleted ones, per user); the four seeded templates; meeting keeps notes and name, live rename; rewrite and new meeting with a deleted id 400; meeting in `processing` finishes with it; **rewrite in flight deleted meanwhile finishes (200, no 500)**; calendar setting (oldest left, skips the deleted oldest, left alone elsewhere, `null` stays, other user untouched); planned joins move, sent join keeps; two deletes at once (**real threads** against the row lock) |
 | Enumeration test | `test_every_api_route_with_an_id_returns_404_for_another_users_row` now classifies and **requests `DELETE /api/templates/{id}` as the stranger with the owner's id (404 `not_found`)** and checks the template is still live. Mutation: removing the owner filter from the delete query makes it fail (204) |
-| Migration | upgrade, a deleted row may share a live name, a live duplicate is refused, downgrade to 0013 renames deleted rows and restores the constraint, upgrade again |
+| Migration | upgrade, a deleted row may share a live name, a live duplicate is refused, downgrade to 0014 renames deleted rows and restores the constraint, upgrade again |
 | Mutation checks | owner filter in the delete (enumeration test fails). Not run: the lock, the calendar move (their tests assert the outcomes) |
 | Python | full suite 3067 passed; `ruff check`, `ruff format --check`, `export_openapi.py --check` clean |
 | Web | `npm run lint`, `typecheck`, `npx vitest run` (500 tests) clean; new tests use the captured messages (`capturedDelete`) |
@@ -59,8 +59,8 @@ Method of `docs/ui/parity-report.md`: built app (`next build`, standalone) on th
 | **Not verified** | A real browser session against real FastAPI (the browser run used the mock); Safari and Firefox; the live site; the web mutation checks; the Review page's offer for a meeting whose template was deleted |
 
 ## Operate / roll back
-- **Server steps before merge: none** (no variable, nginx edit). Merging runs migration 0014 (additive; takes a moment on the `templates` table, a few rows). Check there is no meeting `bot_sent` or `processing` before merging, as always.
-- Roll back: revert the PR and run `alembic downgrade 0013` (deleted templates are renamed, not lost). Without the downgrade the extra column is harmless.
+- **Server steps before merge: none** (no variable, nginx edit). Merging runs migration 0015 (additive; takes a moment on the `templates` table, a few rows). Check there is no meeting `bot_sent` or `processing` before merging, as always.
+- Roll back: revert the PR and run `alembic downgrade 0014` (deleted templates are renamed, not lost). Without the downgrade the extra column is harmless.
 - A deleted template's text stays in the database (the row is kept). Account deletion removes all of a person's templates (`app/deletion.py` deletes by owner).
 
 ## Designer gaps (for the designer to review)

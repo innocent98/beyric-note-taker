@@ -32,10 +32,19 @@ export default async function MeetingPage({ params, searchParams }: Props) {
   // The Review screen's "Open transcript" lands on the transcript tab.
   const { tab } = await searchParams;
   const api = await requireOwner();
-  const [meeting, templates] = await Promise.all([fetchMeeting(id), load(api.templates.list())]);
+  const [meeting, templates, language] = await Promise.all([
+    fetchMeeting(id),
+    load(api.templates.list()),
+    load(api.settings.language.get()),
+  ]);
   return (
     <AppShell current="meetings" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()}>
-      <MeetingView initial={meeting} templates={templates} initialTab={tab === "transcript" ? "transcript" : "notes"} />
+      <MeetingView
+        initial={meeting}
+        templates={templates}
+        initialTab={tab === "transcript" ? "transcript" : "notes"}
+        defaultLanguage={language.default_language}
+      />
     </AppShell>
   );
 }
