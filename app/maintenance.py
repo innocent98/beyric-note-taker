@@ -38,7 +38,13 @@ def sweep_auth_tokens(session: Session, now: datetime) -> None:
 
 def sweep_notifications(session: Session, now: datetime) -> None:
     """Notifications older than `NOTIFICATION_KEEP`, read or not. Commits."""
-    session.execute(delete(Notification).where(Notification.created_at < now - NOTIFICATION_KEEP))
+    # The privacy notice is the record that an account was told (`legal_notice`): it stays.
+    session.execute(
+        delete(Notification).where(
+            Notification.created_at < now - NOTIFICATION_KEEP,
+            Notification.kind != legal_notice.KIND,
+        )
+    )
     session.commit()
 
 

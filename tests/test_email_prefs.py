@@ -285,3 +285,106 @@ def test_a_notice_that_cannot_be_written_never_blocks_the_mail_queue(
     session.expire_all()
     assert sent == 2  # the first and the other address's; the failure cost nothing else
     assert session.get(MailOutbox, other.id).status == "sent"
+
+
+# ---- the cap is checked after the send-time checks, so its notice is never misleading ----
+
+
+def at_the_cap(session, owner, plain):
+    """One notes mail already went to the owner's address: with a cap of 1 the next is over it."""
+    plain_row(session, 0, to=owner.email)
+    assert deliver(session, mail_recipient_daily_cap=1)[0] == 1
+
+
+def queue_notes_ready(session, owner, meeting):
+    row = queue_at_noon(session, owner.email, "notes_ready", {"meeting_id": meeting.id})
+    return row
+
+
+def test_an_owner_who_turned_the_mail_off_is_not_told_it_was_over_the_cap(session, owner, plain):
+    meeting = ready_meeting(session, owner)
+    session.add(UserSettings(user_id=owner.id, notify_email=False))
+    session.commit()
+    at_the_cap(session, owner, plain)
+    row = queue_notes_ready(session, owner, meeting)
+    deliver(session, mail_recipient_daily_cap=1)
+    session.refresh(row)
+    assert (row.status, row.last_error) == ("skipped", "opted_out")  # the real reason wins
+    assert skip_notes(session) == []
+
+
+def test_a_suspended_owner_is_not_told_anything_about_the_cap(session, owner, plain):
+    meeting = ready_meeting(session, owner)
+    at_the_cap(session, owner, plain)
+    row = queue_notes_ready(session, owner, meeting)
+    owner.status = "suspended"
+    session.commit()
+    deliver(session, mail_recipient_daily_cap=1)
+    session.refresh(row)
+    assert (row.status, row.last_error) == ("skipped", "owner_inactive")
+    assert skip_notes(session) == []
+
+
+def test_a_meeting_deleted_while_queued_leaves_no_cap_notice(session, owner, plain):
+    meeting = ready_meeting(session, owner)
+    at_the_cap(session, owner, plain)
+    row = queue_notes_ready(session, owner, meeting)
+    session.delete(meeting)
+    session.commit()
+    deliver(session, mail_recipient_daily_cap=1)
+    session.refresh(row)
+    assert (row.status, row.last_error) == ("skipped", "meeting_gone")
+    assert skip_notes(session) == []
+
+
+def test_over_the_cap_with_everything_else_fine_is_still_reported(session, owner, plain):
+    meeting = ready_meeting(session, owner)
+    session.add(UserSettings(user_id=owner.id, notify_email=True))
+    session.commit()
+    at_the_cap(session, owner, plain)
+    row = queue_notes_ready(session, owner, meeting)
+    deliver(session, mail_recipient_daily_cap=1)
+    session.refresh(row)
+    assert (row.status, row.last_error) == ("skipped", "recipient_cap")
+    assert len(skip_notes(session)) == 1
+
+
+# ---- a bounce or complaint wins over the preference that says "send" ----
+
+
+@pytest.mark.parametrize("reason", ["bounce", "complaint"])
+def test_a_bounce_or_complaint_stops_notes_mail_though_the_switch_is_on(session, owner, reason):
+    meeting = ready_meeting(session, owner)
+    session.add(UserSettings(user_id=owner.id, notify_email=True))
+    session.commit()
+    mail.suppress(session, owner.email, reason)
+    row = queue_at_noon(session, owner.email, "notes_ready", {"meeting_id": meeting.id})
+    sent, mailer = deliver(session)
+    session.refresh(row)
+    assert sent == 0 and mailer.sent == []
+    assert (row.status, row.last_error) == ("skipped", "suppressed")
+
+
+@pytest.mark.parametrize("reason", ["bounce", "complaint"])
+def test_a_bounce_or_complaint_stops_sign_in_mail_too_though_the_switch_is_on(
+    session, owner, reason
+):
+    session.add(UserSettings(user_id=owner.id, notify_email=True))
+    session.commit()
+    mail.suppress(session, owner.email, reason)
+    row = queue_at_noon(session, owner.email, "verify_email", {"link": "https://x.test/v"})
+    sent, mailer = deliver(session)
+    session.refresh(row)
+    assert sent == 0 and mailer.sent == []
+    assert (row.status, row.last_error) == ("skipped", "suppressed")
+
+
+def test_an_unsubscribe_stops_notes_mail_but_not_sign_in_mail(session, owner):
+    """Contrast: only a bounce or complaint reaches sign-in mail."""
+    meeting = ready_meeting(session, owner)
+    mail.suppress(session, owner.email, "unsubscribed")
+    notes = queue_at_noon(session, owner.email, "notes_ready", {"meeting_id": meeting.id})
+    link = queue_at_noon(session, owner.email, "verify_email", {"link": "https://x.test/v"})
+    assert deliver(session)[0] == 1
+    session.refresh(notes), session.refresh(link)
+    assert (notes.last_error, link.status) == ("suppressed", "sent")

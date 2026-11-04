@@ -71,11 +71,24 @@ def test_only_active_confirmed_accounts_that_did_not_accept_this_version_are_tol
     assert not told & {current.id, unconfirmed.id, suspended.id, deleted.id}
 
 
-def test_a_notice_is_not_remade_after_the_ninety_day_clean_up(session, owner):
-    """The sweep deletes notifications after 90 days: it must not then tell the account again."""
+def test_the_notice_survives_the_ninety_day_clean_up_and_is_not_made_twice(session, owner):
+    """The sweep deletes notifications after 90 days. This one is kept, because its row is the
+    record that the account was told: deleting it would tell the account again."""
     legal_notice.announce(session, NOW)
+    (note,) = notices(session, owner)
     maintenance.run_hourly(session, NOW + timedelta(days=91))
-    assert notices(session) == []
+    (again,) = notices(session, owner)
+    assert again.id == note.id
+
+
+def test_an_account_still_not_told_is_told_however_late_the_sweep_first_runs(session, owner):
+    """If the deploy slips, or the worker was down, the notice is not lost with the date: there is
+    no window after which it silently stops being written."""
+    for days in (31, 200, 900):
+        legal_notice.announce(session, DAY + timedelta(days=days))
+        assert len(notices(session, owner)) == 1, days
+        session.query(Notification).delete()
+        session.commit()
 
 
 def test_the_hourly_sweep_makes_the_notice(session, owner):

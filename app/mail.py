@@ -373,13 +373,6 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
             _finish(row, "skipped", "suppressed")
             session.commit()
             continue
-        if notes_mail and settings.mail_recipient_daily_cap > 0:
-            recent = _sent_since(session, now - timedelta(days=1), row.to_email)
-            if recent >= settings.mail_recipient_daily_cap:
-                _tell_owner_of_cap_skip(session, row, settings.mail_recipient_daily_cap)
-                _finish(row, "skipped", "recipient_cap")
-                session.commit()
-                continue
         if notes_mail and 0 < settings.mail_daily_cap <= sent_today:
             session.rollback()  # still pending, no attempt used: tomorrow's quota will send it
             continue
@@ -404,6 +397,16 @@ def deliver_pending(session: Session, mailer: Mailer, settings: Settings, now: d
             _finish(row, "skipped", message.reason)
             session.commit()
             continue
+        # After the template's own checks (opted out, owner inactive, meeting gone, ...): their
+        # reason is the true one, and the owner is told about the cap only for a mail that would
+        # otherwise have gone.
+        if notes_mail and settings.mail_recipient_daily_cap > 0:
+            recent = _sent_since(session, now - timedelta(days=1), row.to_email)
+            if recent >= settings.mail_recipient_daily_cap:
+                _tell_owner_of_cap_skip(session, row, settings.mail_recipient_daily_cap)
+                _finish(row, "skipped", "recipient_cap")
+                session.commit()
+                continue
         row.attempts += 1
         try:
             mailer.send(message, f"mail-{row.id}")

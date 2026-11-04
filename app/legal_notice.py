@@ -11,10 +11,13 @@ sign-up (`users.terms_version`) and are not told.
 so bumping the version without writing a new notice fails the tests. When it is bumped, change
 `TITLE` and `BODY` to say what changed this time. The hourly sweep calls `announce`, which writes
 one row per account, once: the row's `dedupe_key` names the version, so repeating it does nothing
-and a read notice is not made again.
+and a read notice is not made again. The notice is kept past the 90-day notification clean-up
+(`maintenance.sweep_notifications` skips its kind): the row is the record that the account was told,
+and deleting it would tell the account again. It is written at the hourly sweep after the pages
+show the new date, that is at the change, not before it.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy import DateTime, literal, select
 from sqlalchemy.dialects.postgresql import insert
@@ -33,17 +36,12 @@ BODY = (
     "not mail again. You can turn the notes email off in Settings, under Email preferences. "
     "Read the policy at /privacy."
 )
-# The sweep deletes notifications after 90 days; it must never make this one again then, so it
-# only makes it for a month after the version's date.
-WINDOW = timedelta(days=30)
 
 
 def announce(session: Session, now: datetime) -> None:
     """Write the notice for every confirmed, active account that did not accept this version at
-    sign-up and has not been told. Safe to repeat."""
-    start = datetime.strptime(VERSION, "%Y-%m-%d").replace(tzinfo=UTC)
-    if now >= start + WINDOW:
-        return
+    sign-up and has not been told. Safe to repeat, and never stops being written: there is no
+    window after which a late first sweep silently tells nobody."""
     session.execute(
         insert(Notification)
         .from_select(
