@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,10 +19,16 @@ class Settings(BaseSettings):
     # nothing and keep Vexa's default.
     bot_left_alone_seconds: int = 300
     max_poll_hours: int = 6
-    # How many bots may be on meetings at once, across all users. The Vexa box fits about one
-    # until measured (spec section 9); raise it only after the load test. Phase C replaces this
-    # with a per-host dispatcher.
-    max_active_bots: int = 1
+    # How many bots may be on meetings at once on the one local Vexa host, across all users
+    # (`app/placement.py`). The box fits about one until measured (spec section 9); raise it only
+    # after the load test. 0 sends no new bots (a drain). `MAX_ACTIVE_BOTS`, the name this setting
+    # had before placement existed, is still read, so an old .env keeps working.
+    bot_max_local: int = Field(
+        default=1, ge=0, validation_alias=AliasChoices("bot_max_local", "max_active_bots")
+    )
+    # How many bots one user may have on meetings at once (spec section 9.4, step 7). It only bites
+    # once `bot_max_local` is above it. 0 stops every user.
+    user_bot_limit: int = Field(default=2, ge=0)
     # Teams links are recognised on calendar events, but the bot joins them only once the Teams
     # spike (P0.7) has passed and this is set: until then a Teams event reads "Can't join yet".
     teams_join_enabled: bool = False
@@ -67,7 +74,7 @@ class Settings(BaseSettings):
     # "Google hasn't verified this app" on the calendar consent screen, so the connect call tells
     # the frontend to explain it first.
     google_app_verified: bool = False
-    mail_from: str = "Beyric Note Taker <no-reply@beyrictech.com>"
+    mail_from: str = "Beyric Note Taker <no-reply@notes.beyrictech.com>"
     # Caps on mail that is not sign-in mail (notes ready now; shares, tasks and reminders later).
     # `mail_daily_cap`: once this many mails have gone since 00:00 UTC (the day Resend counts,
     # account mail included) notes mail waits for the next day. 80 leaves room under the Free

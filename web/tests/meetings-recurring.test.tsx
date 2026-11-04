@@ -24,6 +24,7 @@ vi.mock("@/components/app/recurring-cards", () => ({
 vi.mock("@/lib/api/server", () => ({
   getSession: async () => ({ authenticated: true }),
   getReviewOpen: async () => null,
+  getUnreadNotifications: async () => null,
   load: <T,>(call: Promise<T>) => call,
   serverApi: async () => ({
     meetings: { list: async () => captured<MeetingList>("53-meetings-list.json") },

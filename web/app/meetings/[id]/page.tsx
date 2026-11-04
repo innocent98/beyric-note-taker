@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { AppShell } from "@/components/app/shell";
 import { MeetingView } from "@/components/app/meeting-view";
-import { getReviewOpen, load, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -34,7 +34,7 @@ export default async function MeetingPage({ params, searchParams }: Props) {
   const api = await requireOwner();
   const [meeting, templates] = await Promise.all([fetchMeeting(id), load(api.templates.list())]);
   return (
-    <AppShell current="meetings" reviewOpen={await getReviewOpen()}>
+    <AppShell current="meetings" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()}>
       <MeetingView initial={meeting} templates={templates} initialTab={tab === "transcript" ? "transcript" : "notes"} />
     </AppShell>
   );

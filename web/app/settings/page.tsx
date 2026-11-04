@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/shell";
+import { EmailSettingsSection } from "@/components/app/email-settings-section";
 import { SettingsCalendar } from "@/components/app/settings-calendar";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 import { PageHead } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
-import { getReviewOpen, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
 import { calendarNotice } from "@/lib/calendar-notice";
 import type { CalendarState } from "@/lib/api/types";
 
@@ -15,7 +16,7 @@ export const metadata: Metadata = { title: "Settings", robots: { index: false, f
 // section is where Google's callback sends the browser back (`?calendar=connected` or
 // `?calendar_error=<code>`). While the server has the calendar off, GET /api/calendar answers 404
 // `calendar_unavailable` and the section says so, so that call is not wrapped in `load` (which
-// turns every 404 into the not-found page).
+// turns every 404 into the not-found page). The designer's sections follow it, and the Email section (not in the design) comes last.
 export default async function SettingsPage({
   searchParams,
 }: {
@@ -30,12 +31,14 @@ export default async function SettingsPage({
     if (error instanceof ApiError && error.code === "calendar_unavailable") calendar = null;
     else throw error;
   }
+  const email = await load(api.settings.email.get());
   return (
-    <AppShell current="settings" reviewOpen={await getReviewOpen()}>
+    <AppShell current="settings" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()}>
       <div className="stack-md measure">
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
         <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} />
         <SettingsPlannedSections />
+        <EmailSettingsSection email={email} />
       </div>
     </AppShell>
   );

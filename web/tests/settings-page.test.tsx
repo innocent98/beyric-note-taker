@@ -34,9 +34,12 @@ vi.mock("@/lib/api/server", () => ({
           return state.answer!();
         },
       },
+      settings: { email: { get: async () => ({ notify_email: true }) } },
     };
   },
   getReviewOpen: async () => 2,
+  getUnreadNotifications: async () => null,
+  load: <T,>(call: Promise<T>) => call,
 }));
 
 const connected = calendarBody<CalendarState>("09-state-connected-with-upcoming.json");
@@ -67,6 +70,14 @@ describe("sidebar", () => {
 });
 
 describe("page", () => {
+  it("draws the Email section below the Calendar section, with the notes-ready switch on", async () => {
+    state.answer = async () => connected;
+    const html = await render();
+    expect(html).toContain('id="email-preferences"');
+    expect(html.indexOf("Join automatically")).toBeLessThan(html.indexOf('id="email-preferences"'));
+    expect(html).toMatch(/role="switch"[^>]*aria-checked="true"/);
+  });
+
   it("draws the connected state from GET /api/calendar inside the app shell", async () => {
     state.answer = async () => connected;
     const html = await render();
@@ -77,16 +88,19 @@ describe("page", () => {
     expect(html).toContain(", 2 open");
   });
 
-  it("draws the designer's other sections below Calendar, in order, whatever the calendar's state", async () => {
+  it("draws the designer's other sections below Calendar, then Email (not in the design), whatever the calendar's state", async () => {
     const off = async () => {
       throw new ApiError(404, "calendar_unavailable", "Google Calendar is not available.");
     };
     for (const answer of [async () => connected, off]) {
       state.answer = answer;
       const html = await render();
-      const order = ["Calendar", "Sprints and reminders", "Tasks", "Default notes language"].map((title) =>
-        html.indexOf(`>${title}</h2>`),
-      );
+      const order = [
+        ...["Calendar", "Sprints and reminders", "Tasks", "Default notes language"].map((title) =>
+          html.indexOf(`>${title}</h2>`),
+        ),
+        html.indexOf('id="email-preferences"'),
+      ];
       expect(order.every((at) => at > -1)).toBe(true);
       expect([...order].sort((a, b) => a - b)).toEqual(order);
     }
