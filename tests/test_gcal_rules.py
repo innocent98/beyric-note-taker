@@ -252,3 +252,14 @@ def test_it_accepts_a_stored_event_row_not_only_a_parsed_event():
 
 def test_teams_join_enabled_defaults_to_false_in_config():
     assert Settings(_env_file=None).teams_join_enabled is False
+
+
+def test_an_outside_invite_with_no_entry_for_the_owner_waits_like_an_unanswered_one():
+    """An invite sent to a group address has no `self` attendee: it is not an accepted invite."""
+    group = make(self_response=None, organizer_self=False, organizer_same_org=False)
+    assert will_join(group, None, settings("all"), now=NOW).reason == "not_accepted"
+    assert will_join(group, True, settings("all"), now=NOW).join is True  # the owner's switch wins
+    colleague = make(self_response=None, organizer_self=False, organizer_same_org=True)
+    assert will_join(colleague, None, settings("all"), now=NOW).join is True
+    solo = make(attendee_count=0, organizer_self=None, self_response=None)
+    assert will_join(solo, None, settings("all"), now=NOW).join is True

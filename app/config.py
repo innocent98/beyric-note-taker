@@ -118,7 +118,7 @@ class Settings(BaseSettings):
     # Auto-join is ON by default (decision 2026-11-04: people connect their calendar and leave, so
     # it must work with no switch). This is the operator's emergency stop, not a user setting: set
     # it to false and the scheduler stops sending bots from calendars (rows wait; nothing else
-    # changes). Restart `scheduler` after changing it.
+    # changes) and records since when, which the app shows. Restart `scheduler` after changing it.
     autojoin_enabled: bool = True
 
 

@@ -55,6 +55,7 @@ from app.config import Settings, get_settings
 from app.gcal_rules import JoinSettings, will_join
 from app.gcal_sync import DEFAULT_USER_SETTINGS, apply_batch
 from app.models import (
+    LIVE_JOIN_STATES,
     AppState,
     CalendarConnection,
     CalendarEvent,
@@ -85,14 +86,22 @@ BATCH = 25
 
 DUE_STATES = ("scheduled", "dispatching", "no_capacity", "skipped")
 # A `skipped` row the runner looks at again: the reason can clear. Everything else is FINAL for the
-# row: `account_suspended` and `needs_reconnect` (a person or C13's revive acts first), and the two
-# "someone already has a bot in that meeting" reasons, `duplicate_meeting` (the owner pasted the
-# link) and `meeting_has_note_taker` (another account's bot): the bot there may be ended and gone
-# a minute later, and a retry would then send a new one into a meeting that is over.
-RETRYABLE_SKIPS = ("hours_cap", "user_limit")
-# Of those, `user_limit` still ends "not recorded" at the deadline; `hours_cap` ends `skipped`
-# (the person was told why).
-NOT_RECORDED_SKIPS = ("user_limit",)
+# row: `account_suspended` and `needs_reconnect` (a person or C13's revive acts first),
+# `meeting_has_note_taker` (another account's bot is in that meeting: it may be over a minute
+# later, and a retry would send a bot into it), and `duplicate_meeting`: the owner already started
+# a meeting on that code FOR THIS EVENT (see `_started_for_this_event`).
+#
+# `code_in_use` is the other case of "a bot of the owner's is on that code now": it was started for
+# an EARLIER meeting in the same room (back-to-back sessions on one Zoom personal room or one Meet
+# link). That one is retried until the deadline, because the earlier session ends and this one
+# starts, and it ends "not recorded" if the earlier bot never leaves.
+RETRYABLE_SKIPS = ("hours_cap", "user_limit", "code_in_use")
+# Of those, these still end "not recorded" at the deadline; `hours_cap` ends `skipped` (the person
+# was told why).
+NOT_RECORDED_SKIPS = ("user_limit", "code_in_use")
+# A meeting of the owner's on the same code counts as started for this event when it was created at
+# or after the run time minus this (a paste a minute or two early, the lead, clock slack).
+STARTED_FOR_MARGIN = timedelta(minutes=2)
 CRASH_TEXT = "The note taker hit a problem starting for this meeting. Trying again."
 CRASH_FINAL_TEXT = "Not recorded: something went wrong starting the note taker."
 
@@ -345,6 +354,9 @@ def _process(
     now: datetime,
     settings: Settings,
 ) -> JoinOutcome | None:
+    # `expire_on_commit` is off for the app's sessions, so what an earlier row of this run loaded
+    # (the account, the connection, the rule) could be a minute old: read it again.
+    session.expire_all()
     for attempt in range(2):  # a re-check rewrites the row; the second pass judges the new row
         join = _lock(session, join_id, now)
         if join is None:
@@ -433,7 +445,8 @@ def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) ->
     """The deadline has passed. A skip whose cause was already told stays `skipped`; anything else
     ends `failed` as not recorded, and the owner is told (unless the news is old)."""
     if join.state == "skipped" and join.skip_reason not in NOT_RECORDED_SKIPS:
-        session.rollback()
+        _touch(join, now)  # an ended event: look again after the retry gap, not on every tick
+        session.commit()
         return None
     join.state, join.skip_reason, join.last_error = "failed", "not_recorded", NOT_RECORDED_TEXT
     _touch(join, now)
@@ -549,6 +562,12 @@ def _place(
     was taken before the
     placement lock (the order every code path uses), and `wait_seconds=0` keeps it: a wait would
     roll the lock away."""
+    if _started_for_this_event(session, join):
+        # The owner already has a meeting on this code made for this event (a pasted link a minute
+        # early, which they may have ended since). Final: never a bot into a meeting they chose or
+        # ended. Checked BEFORE the placement pre-flight, so the hours and limit checks cannot
+        # turn it into a retry.
+        return _end(session, join, "skipped", "duplicate_meeting", now)
     event = session.get(CalendarEvent, join.calendar_event_id) if join.calendar_event_id else None
     request = PlacementRequest(
         user_id=join.user_id,
@@ -558,6 +577,7 @@ def _place(
         template_id=join.template_id,
         source="calendar",
         title=event.title if event else None,
+        adopt_orphan=True,
     )
     join_id, user_id = join.id, join.user_id
 
@@ -596,6 +616,25 @@ def _place(
     return JoinOutcome(join_id, "joined", f"meeting {meeting.id}")
 
 
+def _started_for_this_event(session: Session, join: ScheduledJoin) -> bool:
+    """Whether the owner has a meeting, in ANY status, on this code, created at or after this
+    join's run time minus `STARTED_FOR_MARGIN`. One made earlier (the previous session in the same
+    room) does not count."""
+    return (
+        session.scalar(
+            select(Meeting.id)
+            .where(
+                Meeting.owner_user_id == join.user_id,
+                Meeting.platform == join.platform,
+                Meeting.native_id == join.native_id,
+                Meeting.created_at >= join.run_at - STARTED_FOR_MARGIN,
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
 def _relock(session: Session, join_id: int, now: datetime) -> ScheduledJoin | None:
     """`place_bot` rolled back (and with it the row lock): take the row again before writing what
     happened, and only if it is still one the runner should touch. If somebody cancelled or moved it
@@ -620,6 +659,10 @@ def _refused(
     join.attempts += 1
     _touch(join, now)
     reason = _SKIP_REASONS.get(code, "refused")
+    if code == "bot_busy" and _another_live_join_on_the_code(session, join):
+        # Two of the owner's rows on one code inside their windows (back-to-back slots in one
+        # room): `no_capacity` is a live state and the code may be live only once per user.
+        code, reason = "already_in_meeting", "code_in_use"
     if code == "bot_busy":
         join.state, join.skip_reason = "no_capacity", None
     else:
@@ -668,7 +711,7 @@ def _refused(
 
 _SKIP_REASONS = {
     "hours_cap_reached": "hours_cap",
-    "already_in_meeting": "duplicate_meeting",
+    "already_in_meeting": "code_in_use",
     "meeting_has_note_taker": "meeting_has_note_taker",
     "user_limit": "user_limit",
     "account_suspended": "account_suspended",
@@ -692,6 +735,23 @@ _NOTICES = {
         "accounts is not available yet.",
     ),
 }
+
+
+def _another_live_join_on_the_code(session: Session, join: ScheduledJoin) -> bool:
+    return (
+        session.scalar(
+            select(ScheduledJoin.id)
+            .where(
+                ScheduledJoin.user_id == join.user_id,
+                ScheduledJoin.platform == join.platform,
+                ScheduledJoin.native_id == join.native_id,
+                ScheduledJoin.state.in_(LIVE_JOIN_STATES),
+                ScheduledJoin.id != join.id,
+            )
+            .limit(1)
+        )
+        is not None
+    )
 
 
 def _send_failed(session: Session, join_id: int, now: datetime) -> JoinOutcome | None:

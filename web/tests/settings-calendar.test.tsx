@@ -139,6 +139,11 @@ describe("the operator has paused auto-join", () => {
     ).toBeTruthy();
   });
 
+  it("still says so while Google needs the person to connect again", () => {
+    view({ ...needsReconnect, auto_join_paused: true, auto_join_paused_text: paused.auto_join_paused_text });
+    expect(screen.getByText(/Auto-join is paused for now/)).toBeTruthy();
+  });
+
   it("says nothing when it is not paused", () => {
     view(withEvents);
     expect(screen.queryByText(/Auto-join is paused/)).toBeNull();

@@ -39,6 +39,7 @@ from app.gcal_client import WINDOW_AFTER, WINDOW_BEFORE, GoogleSource
 from app.gcal_events import NO_TIME, ParsedEvent, parse_event
 from app.gcal_rules import JoinSettings, will_join
 from app.models import (
+    AppState,
     CalendarConnection,
     CalendarEvent,
     Meeting,
@@ -334,11 +335,22 @@ def _reconcile(run: _Run, row: CalendarEvent, join: ScheduledJoin | None) -> Non
         if run.now <= deadline_at:  # past it and still on is "In progress", not an automatic join
             _create_join(run, row, deadline_at)
     elif join.state == "cancelled":
-        if run.now <= deadline_at:
+        if run.now <= deadline_at and not _closed_before_the_runner(run, join, row):
             _revive_join(run, join, row, deadline_at)
     elif join.state in MOVABLE:
         _move_join(run, join, row, deadline_at)
     # Anything else has a bot sent or is finished: the meeting is the truth now (spec 7.7).
+
+
+def _closed_before_the_runner(run: _Run, join: ScheduledJoin, row: CalendarEvent) -> bool:
+    """A join the runner closed silently because its time came before the runner ever led (or
+    while the operator's switch was off) must not be revived by a later sync, rule change or
+    switch: that would send a bot into a meeting already in progress. It may come back only when
+    the event moved so that its run time is after the moment the runner started."""
+    if join.skip_reason != "before_runner":
+        return False
+    started = run.session.scalar(select(AppState.autojoin_started_at))
+    return started is None or row.starts_at - run.lead < started
 
 
 def _create_join(run: _Run, row: CalendarEvent, deadline_at: datetime) -> None:

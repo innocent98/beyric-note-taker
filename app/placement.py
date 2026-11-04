@@ -89,6 +89,11 @@ class PlacementRequest:
     # The calendar event's title, stored on the meeting (cleaned: it is text from an invite).
     # None for a pasted link, which is then named by platform and code.
     title: str | None = None
+    # A calendar join at the start of a meeting: if Vexa says a bot is already in that meeting but
+    # no meeting of ours holds the code, that bot is our own orphan (a send killed between Vexa
+    # accepting it and the commit; there is one API key), so keep it as an unconfirmed start for the
+    # worker to adopt instead of telling the owner someone else's note taker is there.
+    adopt_orphan: bool = False
 
 
 class PlacementRefused(Exception):
@@ -262,9 +267,15 @@ def place_bot(
         raise
     try:
         vexa_id = vexa.send_bot(req.meeting_url)
-    except VexaDuplicateBot:  # a bot that is not ours is there (another host, a race)
-        session.rollback()
-        raise PlacementRefused("meeting_has_note_taker") from None
+    except VexaDuplicateBot:  # a bot that is not ours is there (another host, a race)...
+        if not req.adopt_orphan:
+            session.rollback()
+            raise PlacementRefused("meeting_has_note_taker") from None
+        # ...or, for a calendar join (the pre-flight found no meeting of anyone on the code), our
+        # own orphan: keep it as an unconfirmed start; the worker adopts it or stops it after the
+        # grace.
+        logger.warning("a bot is in the meeting with no row for it: kept as an unconfirmed start")
+        vexa_id = None
     except VexaSendUncertain:  # it may be joining in a moment: keep the code, let the worker settle
         logger.warning("send_bot gave no clear answer: the meeting is kept as an unconfirmed start")
         vexa_id = None

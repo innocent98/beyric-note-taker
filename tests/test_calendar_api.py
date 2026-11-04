@@ -121,6 +121,32 @@ def test_the_answer_is_not_paused_by_default(web, linked):
     assert body["auto_join_paused"] is False and body["auto_join_paused_text"] is None
 
 
+def test_the_notice_follows_the_schedulers_record_not_only_this_process(web, session, linked):
+    """The runbook restarts only the scheduler: the scheduler's note that auto-join is off is what
+    the page reads, so `web` (still on its old environment) shows it too, and stops showing it
+    once the scheduler has recorded that it is back."""
+    from app.models import AppState
+
+    assert web.get(URL).json()["auto_join_paused"] is False
+    state = session.get(AppState, 1) or AppState(id=1)
+    state.autojoin_paused_since = NOW
+    session.add(state)
+    session.commit()
+    body = web.get(URL).json()
+    assert body["auto_join_paused"] is True and body["auto_join_paused_text"]
+    state.autojoin_paused_since = None
+    session.commit()
+    assert web.get(URL).json()["auto_join_paused"] is False
+
+
+def test_upcoming_titles_are_cleaned_like_every_other_title(web, session, linked):
+    add_event(session, linked, 1, title="Q3 \u202egnirts\u202c review\r\nBcc: x@example.test")
+    add_event(session, linked, 2, hours=2, title="y" * 900)
+    titles_seen = [e["title"] for e in web.get(URL).json()["upcoming"]]
+    assert titles_seen[0] == "Q3 gnirts review Bcc: x@example.test"
+    assert len(titles_seen[1]) == 200 and titles_seen[1].endswith("…")
+
+
 # ---- not connected ----
 
 

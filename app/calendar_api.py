@@ -20,11 +20,11 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, calendar_connect, calendar_text, gcal_sync, google_oauth, services
+from app import auth, calendar_connect, calendar_text, gcal_sync, google_oauth, services, titles
 from app.api_schemas import ErrorResponse
 from app.db import get_session
 from app.gcal_rules import JoinSettings, will_join
-from app.models import CalendarConnection, CalendarEvent, User, UserSettings
+from app.models import AppState, CalendarConnection, CalendarEvent, User, UserSettings
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
@@ -279,7 +279,7 @@ def _upcoming_item(row: CalendarEvent, join_settings: JoinSettings, now: datetim
     decision = will_join(row, row.override, join_settings, now=now)
     return UpcomingEvent(
         id=row.id,
-        title=row.title,
+        title=titles.clean_title(row.title),
         starts_at=row.starts_at,
         ends_at=row.ends_at,
         platform=row.platform,
@@ -317,7 +317,13 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
     prefs = session.get(UserSettings, user.id)
     rule = prefs.auto_join_rule if prefs else "all"
     template_id = prefs.calendar_template_id if prefs else None
-    paused = not request.app.state.settings.autojoin_enabled
+    # Paused when this process's own setting says so, or when the scheduler (the process that
+    # sends the bots) has recorded that auto-join is off: restarting only the scheduler, as the
+    # runbook says, must show on the page too.
+    paused = (
+        not request.app.state.settings.autojoin_enabled
+        or session.scalar(select(AppState.autojoin_paused_since)) is not None
+    )
     paused_text = calendar_text.AUTO_JOIN_PAUSED_TEXT if paused else None
     if conn is None:
         return CalendarOut(

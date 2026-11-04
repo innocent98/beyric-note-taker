@@ -71,7 +71,9 @@ services:
       VEXA_BASE_URL: http://vexa:8056
     mem_limit: 256m
     restart: unless-stopped
-    stop_grace_period: 40s  # lets a tick in progress finish before the lock is given up
+    # A dispatch tick can run up to RUN_BUDGET_SECONDS (45) plus one send (30) before it stops: the
+    # grace must be longer, or a kill between Vexa taking a bot and the commit leaves an orphan.
+    stop_grace_period: 90s
     depends_on:
       db:
         condition: service_healthy

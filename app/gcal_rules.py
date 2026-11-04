@@ -95,11 +95,12 @@ def will_join(
         return JoinDecision(False, "rule_none")
     if settings.rule == "organizer" and event.organizer_self is not True:
         return JoinDecision(False, "not_organizer")
-    if (
-        event.self_response == "needsAction"
-        and event.organizer_self is not True
-        and not event.organizer_same_org
-    ):
+    unanswered = event.self_response == "needsAction" or (
+        # An invite with no entry for the owner at all (sent to a group address, say) is as
+        # unanswered as one they have not answered; no organiser information is a solo event.
+        event.self_response is None and event.organizer_self is False
+    )
+    if unanswered and event.organizer_self is not True and not event.organizer_same_org:
         # An invite nobody answered, from someone outside the user's own organisation: anyone can
         # send one with a meeting link, so it must not send the bot (and take the only slot)
         # until the user accepts it or switches it on.
