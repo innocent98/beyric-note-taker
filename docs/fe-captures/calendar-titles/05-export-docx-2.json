@@ -1,0 +1,17 @@
+{
+  "note": "The Word file is named after the title (cleaned); body not shown.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/2/export?format=docx",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "content-disposition": "attachment; filename=\"Google Meet ddd-eeee-fff.docx\"; filename*=UTF-8''Google%20Meet%20ddd-eeee-fff.docx",
+      "cache-control": "no-store"
+    },
+    "body": "<37407 bytes of the file>"
+  }
+}

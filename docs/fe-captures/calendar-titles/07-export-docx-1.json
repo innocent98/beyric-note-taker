@@ -1,0 +1,17 @@
+{
+  "note": "The Word file is named after the title (cleaned); body not shown.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/export?format=docx",
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "content-disposition": "attachment; filename=\"Q3 gnirts review Bcc attackerexample.test scriptalert(1)script httpsevil.example.testlogin.docx\"; filename*=UTF-8''Q3%20gnirts%20review%20Bcc%20attacker%40example.test%20scriptalert%281%29script%20httpsevil.example.testlogin.docx",
+      "cache-control": "no-store"
+    },
+    "body": "<37514 bytes of the file>"
+  }
+}
