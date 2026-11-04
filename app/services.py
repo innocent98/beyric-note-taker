@@ -412,6 +412,8 @@ def placement_refusal(exc: PlacementRefused) -> Refused:
             "already_in_meeting",
             "A note taker is already in that meeting for you. Wait for it to finish first.",
         )
+    if exc.code == "account_suspended":
+        return Refused(403, "account_suspended", "This account is suspended.")
     if exc.code == "meeting_has_note_taker":
         return Refused(409, "meeting_has_note_taker", "A note taker is already in this meeting.")
     if exc.code == "user_limit":

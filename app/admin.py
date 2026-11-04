@@ -9,12 +9,20 @@ import logging
 from datetime import UTC, datetime
 
 from fastapi import HTTPException
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from app import mail, signup, tokens, usage
 from app.config import Settings
-from app.models import AppState, AuthToken, MailOutbox, Notification, User, WaitlistEntry
+from app.models import (
+    AppState,
+    AuthToken,
+    MailOutbox,
+    Notification,
+    ScheduledJoin,
+    User,
+    WaitlistEntry,
+)
 from app.services import Refused
 
 logger = logging.getLogger(__name__)
@@ -87,6 +95,17 @@ def update_user(session: Session, user: User, changes: dict) -> User:
             session.rollback()
             raise _refuse_last_admin()
         user.session_epoch = User.session_epoch + 1
+        # Open calendar joins end now (the join runner would otherwise stop at its own check);
+        # the update waits for a row the runner is sending for, so a bot is never sent after
+        # the suspend commits. A bot already in a meeting follows the meeting.
+        session.execute(
+            update(ScheduledJoin)
+            .where(
+                ScheduledJoin.user_id == user.id,
+                ScheduledJoin.state.in_(("scheduled", "dispatching", "no_capacity", "skipped")),
+            )
+            .values(state="skipped", skip_reason="account_suspended")
+        )
     if changes.get("status") is not None:
         user.status = changes["status"]
     if "hours_cap_seconds" in changes:

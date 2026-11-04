@@ -23,6 +23,7 @@ from app.join_runner import (
     run_due_joins,
 )
 from app.models import (
+    AppState,
     CalendarConnection,
     CalendarEvent,
     MailOutbox,
@@ -55,6 +56,20 @@ def alert_settings(monkeypatch):
     """Mail can be sent (console provider outside production) and admin alerts go to one address."""
     settings = make_settings(admin_alert_email="ops@example.test")
     monkeypatch.setattr(alerts, "get_settings", lambda: settings)
+
+
+@pytest.fixture(autouse=True)
+def runner_has_led(engine):
+    """The runner's first-start marker is already written, so rows dispatch as in normal running;
+    the tests of the first start (and of the switch coming back on) clear it themselves."""
+    with Session(engine) as setup:
+        setup.add(AppState(id=1, autojoin_started_at=datetime(2026, 1, 1, tzinfo=UTC)))
+        setup.commit()
+
+
+def app_state(session) -> AppState:
+    session.expire_all()
+    return session.get(AppState, 1)
 
 
 class StubCalendar:
@@ -496,7 +511,7 @@ def test_a_second_account_in_the_same_meeting_is_told_and_nobodys_bot_is_touched
     assert notice.user_id == ben.user.id
     assert "already in" in notice.body and "ada" not in notice.body.lower()
     assert host.stopped == [] and len(host.live) == 1  # nobody's bot was stopped or adopted
-    # retried quietly, no second notice, nothing sent
+    # final: no retry, no second notice, nothing sent
     run(session, host, cal, at(5))
     assert host.bots_sent == 1 and len(notes(session, "calendar.meeting_has_note_taker")) == 1
     assert state_of(session, second) == ("skipped", "meeting_has_note_taker")
@@ -615,6 +630,9 @@ def test_suspended_user_join_becomes_skipped_account_suspended(session, host, ca
 
 @pytest.mark.parametrize("state", ["scheduled", "dispatching", "no_capacity"])
 def test_rule_switched_off_while_dispatching_sends_nothing(session, host, cal, ada, state):
+    """A row found in `dispatching` or `no_capacity` (the runner itself never commits
+    `dispatching`: it holds the row lock instead; a crashed process or another writer can leave
+    one) is judged like any other. A switch that lands DURING a send is the next-but-one test."""
     join = materialise(session, ada, cal)
     join.state = state
     ada.user_settings.auto_join_rule = "none"  # the owner switched auto-join off
@@ -1094,3 +1112,258 @@ def test_a_user_row_reaches_the_runner_with_the_users_own_template_not_anothers(
     run(session, host, cal, at(-1))
     assert host.bots_sent == 0 and state_of(session, join) == ("failed", "no_template")
     assert User is not None and Session is not None
+
+
+# ---- the Opus review of #72 ----
+
+
+def test_a_pasted_meeting_ended_before_the_retry_gets_no_second_bot(session, host, cal, ada):
+    """High 1: the owner pastes the link at 9:58, so the calendar row is skipped as a duplicate;
+    at 10:05 the owner ends the pasted meeting. The calendar row must not send a bot into a
+    meeting the owner just ended: `duplicate_meeting` is final for that row."""
+    host.live[("google_meet", "abc-defg-hij")] = 7
+    pasted = Meeting(
+        owner_user_id=ada.user.id,
+        url="https://meet.google.com/abc-defg-hij",
+        platform="google_meet",
+        native_id="abc-defg-hij",
+        template_id=ada.template.id,
+    )
+    session.add(pasted)
+    session.commit()
+    join = materialise(session, ada, cal)
+    run(session, host, cal, at(-1))
+    assert state_of(session, join) == ("skipped", "duplicate_meeting")
+    pasted.status = "processing"  # the owner pressed End
+    session.commit()
+    host.live.clear()
+    for minute in (1, 2, 5, 6, 10):
+        run(session, host, cal, at(minute))
+    assert host.bots_sent == 0 and state_of(session, join) == ("skipped", "duplicate_meeting")
+
+
+def test_another_accounts_meeting_ended_before_the_retry_gets_no_bot_either(session, host, cal):
+    ada = make_world(session, "ada@example.test")
+    ben = make_world(session, "ben@example.test")
+    materialise(session, ada, cal)
+    second = materialise(session, ben, cal)
+    run(session, host, cal, at(-1))
+    [first] = meetings(session)
+    first.status = "ready"
+    session.commit()
+    host.live.clear()
+    run(session, host, cal, at(6))
+    assert host.bots_sent == 1 and state_of(session, second) == (
+        "skipped",
+        "meeting_has_note_taker",
+    )
+
+
+def many_events(session, world, count, cal, *, start=T0):
+    from app.gcal_sync import apply_batch
+
+    codes = [f"{chr(97 + n // 26)}{chr(97 + n % 26)}z-wwww-yyy" for n in range(count)]
+    raws = [raw_event(f"w{n}", start=start, code=codes[n]) for n in range(count)]
+    for raw in raws:
+        cal.serve(raw)
+    apply_batch(
+        session, world.conn, batch(*raws), world.user_settings, now=at(-60), settings=SETTINGS
+    )
+
+
+def test_waiting_rows_do_not_starve_a_later_due_row(session, host, cal, ada):
+    """Medium 2: rows waiting out their 15 s gap must not fill the batch. 30 rows wait (the host
+    is full); a row that becomes due 5 s later is still reached on that tick."""
+    from app.gcal_sync import apply_batch
+
+    many_events(session, ada, 30, cal)
+    run(session, host, cal, at(-1))  # one placed and 24 refused (one batch of 25); 5 not yet tried
+    run(session, host, cal, at(-1, 1))  # the last 5 are tried; now all 29 wait out their gap
+    later = T0 + timedelta(seconds=5)  # run_at 09:59:05
+    later_raw = raw_event("later", start=later, code="zzz-zzzz-zzz")
+    cal.serve(later_raw)
+    apply_batch(
+        session,
+        ada.conn,
+        batch(later_raw),
+        ada.user_settings,
+        now=at(-60),
+        settings=SETTINGS,
+    )
+    run(session, host, cal, at(-1, 5))  # the waiting rows are inside their gap
+    session.expire_all()
+    row = join_of(session, "later")
+    assert row.attempts == 1 and row.state == "no_capacity"  # it was reached and tried
+
+
+def test_the_retry_gap_is_in_the_query_not_after_the_lock(session, host, cal, ada):
+    many_events(session, ada, 3, cal)
+    run(session, host, cal, at(-1))
+    assert join_runner._due_ids(session, at(-1, 5)) == []  # all inside the gap
+    assert len(join_runner._due_ids(session, at(-1, 15))) == 2  # the two waiting rows are back
+    assert join_runner._due_ids(session, at(-1, 14)) == []
+
+
+def test_rows_due_before_the_runner_first_led_are_closed_silently(session, host, cal, ada):
+    """Medium 3: rows synced before the runner existed are closed with no notice and no bot (a
+    meeting live at deploy time is not joined retroactively); rows due later dispatch."""
+    app_state(session).autojoin_started_at = None
+    session.commit()
+    old = materialise(session, ada, cal, "old", start=T0, summary="Started already")
+    ahead = materialise(
+        session, ada, cal, "ahead", start=T0 + timedelta(hours=1), code="aaa-bbbb-ccc"
+    )
+    outcomes = run(session, host, cal, at(1))  # the first run: 10:01
+    assert state_of(session, old) == ("cancelled", "before_runner")
+    assert host.bots_sent == 0 and state_of(session, ahead) == ("scheduled", None)
+    assert notes(session) == [] and outbox(session) == []
+    assert outcomes == [] or all(o.reason == "before_runner" for o in outcomes)
+    assert app_state(session).autojoin_started_at == at(1)
+    # written once: a join made later with an earlier run time still dispatches
+    late = materialise(session, ada, cal, "late", start=at(1, 30), code="ddd-eeee-fff")
+    assert late.run_at < at(1, 30)
+    run(session, host, cal, at(2))
+    assert state_of(session, late) == ("joined", None)
+    run(session, host, cal, at(59))
+    assert state_of(session, ahead)[0] in ("joined", "no_capacity")
+    assert app_state(session).autojoin_started_at == at(1)
+
+
+def test_turning_the_switch_back_on_closes_rows_whose_deadline_passed_while_off(
+    session, host, cal, ada
+):
+    state = app_state(session)
+    state.autojoin_paused_since = at(-40)  # recorded by the scheduler while the switch was off
+    session.commit()
+    missed = materialise(session, ada, cal, "missed", start=at(-30))  # deadline 09:45
+    live = materialise(session, ada, cal, "live", start=T0, code="aaa-bbbb-ccc")  # deadline 10:15
+    run(session, host, cal, at(0))
+    assert state_of(session, missed) == ("cancelled", "before_runner")
+    assert notes(session) == [] and outbox(session) == []
+    assert state_of(session, live) == ("joined", None)  # still inside its 15 minutes
+    assert app_state(session).autojoin_paused_since is None
+
+
+def test_note_switch_records_when_the_switch_is_off_once(session):
+    off = make_settings(autojoin_enabled=False)
+    on = make_settings(autojoin_enabled=True, calendar_enabled=True)
+    join_runner.note_switch(session, on, at(0))
+    assert app_state(session).autojoin_paused_since is None
+    join_runner.note_switch(session, off, at(1))
+    join_runner.note_switch(session, off, at(5))  # a restart while still off keeps the first time
+    assert app_state(session).autojoin_paused_since == at(1)
+
+
+def test_an_event_the_runner_cannot_lock_is_skipped_not_waited_for(session, host, cal, ada, engine):
+    """Low 5: the override and rule routes take the event row, then the join row; the runner
+    takes the event row first as well, and skips (next tick) one that is locked."""
+    join = materialise(session, ada, cal)
+    other = Session(engine)
+    other.execute(
+        select(CalendarEvent).where(CalendarEvent.id == join.calendar_event_id).with_for_update()
+    )
+    started = time.monotonic()
+    outcomes = run(session, host, cal, at(-1))
+    assert time.monotonic() - started < 3 and outcomes == [] and host.bots_sent == 0
+    other.commit()
+    other.close()
+    run(session, host, cal, at(-1, 10))
+    assert state_of(session, join) == ("joined", None)
+
+
+def test_the_two_lock_orders_do_not_deadlock(engine, host, cal):
+    """Low 5: the runner is inside a send holding event then join; a route that takes event then
+    join waits behind it and both finish (no AB/BA)."""
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with factory() as setup:
+        world = make_world(setup, "ada@example.test")
+        materialise(setup, world, cal)
+    errors, done = [], threading.Event()
+
+    def route() -> None:
+        try:
+            with factory() as session:
+                event = session.scalars(select(CalendarEvent).with_for_update()).one()
+                join = session.scalars(select(ScheduledJoin).with_for_update()).one()
+                event.override, join.updated_at = True, at(0)
+                session.commit()
+        except Exception as exc:  # pragma: no cover
+            errors.append(exc)
+        finally:
+            done.set()
+
+    def during_send() -> None:
+        threading.Thread(target=route).start()
+        assert not done.wait(timeout=0.5)  # blocked behind the runner's locks
+
+    host.on_send = during_send
+    with factory() as session:
+        run(session, host, cal, at(-1))
+    assert done.wait(timeout=15) and errors == [] and host.bots_sent == 1
+
+
+def test_a_suspend_that_commits_before_the_send_is_stopped_by_placement(
+    session, host, cal, ada, monkeypatch
+):
+    """Low 6: `reserve_slot` checks the account under the placement lock."""
+    join = materialise(session, ada, cal)
+    monkeypatch.setattr(join_runner, "_gate", lambda *args, **kwargs: None)  # the gap after it
+    ada.user.status = "suspended"
+    session.commit()
+    run(session, host, cal, at(-1))
+    assert host.bots_sent == 0 and state_of(session, join) == ("skipped", "account_suspended")
+
+
+def test_suspending_an_account_ends_its_open_joins(session, host, cal, ada):
+    from app import admin
+
+    admin_user = make_user(session, "root@example.test", admin=True)
+    assert admin_user.is_admin
+    waiting = materialise(session, ada, cal, "a", code="aaa-bbbb-ccc")
+    busy = materialise(session, ada, cal, "b", code="ddd-eeee-fff")
+    run(session, host, cal, at(-1))
+    states = {state_of(session, waiting)[0], state_of(session, busy)[0]}
+    assert states == {"joined", "no_capacity"}
+    admin.update_user(session, ada.user, {"status": "suspended"})
+    kinds = {state_of(session, waiting), state_of(session, busy)}
+    assert ("joined", None) in kinds and ("skipped", "account_suspended") in kinds
+
+
+def test_an_event_id_the_source_rejects_does_not_loop(session, host, cal, ada):
+    """Low 8: `get_event` raising ValueError for an odd event id ends the re-check for good."""
+    join = materialise(session, ada, cal)
+    cal.error = ValueError("bad event id")
+    run(session, host, cal, at(-2))
+    run(session, host, cal, at(seconds=-100))
+    assert len(cal.calls) == 1  # asked once, not every tick
+    run(session, host, cal, at(-1))
+    assert state_of(session, join) == ("joined", None)
+
+
+def test_a_row_that_crashes_gets_a_gap_and_a_second_crash_ends_it(
+    session, host, cal, ada, monkeypatch
+):
+    """Low 9: an unexpected error used to leave the row untouched, so it was tried again on every
+    10 s tick (and a bot sent and stopped each time). Now it counts, waits out the gap, and a
+    second crash ends the row."""
+    make_user(session, "admin@example.test", admin=True)
+    join = materialise(session, ada, cal)
+    calls = []
+
+    def boom(*args, **kwargs):
+        calls.append(1)
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(join_runner, "place_bot", boom)
+    run(session, host, cal, at(-1))
+    session.expire_all()
+    row = session.get(ScheduledJoin, join.id)
+    assert len(calls) == 1 and row.attempts == 1 and row.state == "scheduled"
+    assert row.last_error and "boom" not in row.last_error
+    run(session, host, cal, at(-1, 10))
+    assert len(calls) == 1  # inside the gap
+    run(session, host, cal, at(-1, 20))
+    assert len(calls) == 2 and state_of(session, join) == ("failed", "error")
+    run(session, host, cal, at(-1, 40))
+    assert len(calls) == 2  # ended: no more tries
+    assert len(notes(session, "calendar.error")) == 1

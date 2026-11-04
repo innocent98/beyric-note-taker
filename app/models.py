@@ -614,6 +614,11 @@ class AppState(Base):
         Boolean, default=False, server_default=sa.false()
     )
     scheduler_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The join runner (app/join_runner.py): when it first led (joins due before then are closed
+    # silently, never joined retroactively), and since when the operator's switch has been off
+    # (joins whose deadline passed meanwhile are closed silently when it comes back on).
+    autojoin_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    autojoin_paused_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 @sa.event.listens_for(Session, "before_flush")

@@ -39,7 +39,7 @@ const { values } = parseArgs({
 });
 
 // `--calendar not_connected|connected|off`: what GET /api/calendar answers (the captures in
-// docs/fe-captures/calendar-state/; `off` is the feature being dark: 404 calendar_unavailable).
+// docs/fe-captures/calendar-state/; `paused` is connected with auto-join stopped by the operator; `off` is the feature being dark: 404 calendar_unavailable).
 const captureDir = join(dirname(fileURLToPath(import.meta.url)), "../../docs/fe-captures");
 const captures = join(captureDir, "owner-app");
 const body = (name) => JSON.parse(readFileSync(join(captures, `${name}.json`), "utf8")).response.body;
@@ -203,6 +203,14 @@ const server = http.createServer(async (req, res) => {
   if (path === "/api/templates" && method === "GET") return json(res, 200, { templates });
   if (path === "/api/calendar" && method === "GET") {
     if (values.calendar === "off") return json(res, 404, calendarCapture("04-state-feature-off"));
+    if (values.calendar === "paused") {
+      // Connected with events, and the operator's emergency stop on (the 22 capture's line).
+      return json(res, 200, {
+        ...calendarCapture("09-state-connected-with-upcoming"),
+        auto_join_paused: true,
+        auto_join_paused_text: calendarCapture("22-state-auto-join-paused").auto_join_paused_text,
+      });
+    }
     return json(res, 200, calendarCapture(values.calendar === "connected" ? "09-state-connected-with-upcoming" : "05-state-not-connected"));
   }
   // The write routes answer with bodies captured from the running app (docs/fe-captures/

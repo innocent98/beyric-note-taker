@@ -7,12 +7,22 @@ objects are trimmed to the fields that matter and say so. Nothing here is writte
 
 ## 1. What changed for the front end
 
-**No endpoint, field or status code was added or changed** (`docs/openapi.json` is byte-identical;
-`npm run gen:api` has nothing to do). What changed is the **value** of one existing field:
+**One new pair of fields** on `GET /api/calendar` (and on the answer of `PUT /api/calendar/settings`,
+which is the same body): `auto_join_paused` (boolean, always present) and `auto_join_paused_text`
+(string, or `null` when not paused). They are true while the operator has stopped calendar
+auto-join for everyone (`AUTOJOIN_ENABLED=false`). **UX instruction:** when `auto_join_paused` is
+true, show `auto_join_paused_text` as it comes, once, as a notice (the app does it on the Settings
+Calendar card and above the Upcoming list); the rows still say "Will join" (they follow the rules),
+so without the line the page would promise a join that does not happen. Real capture
+(`docs/fe-captures/calendar-state/22-state-auto-join-paused.json`, `GET /api/calendar`, not connected,
+trimmed to these fields): `"auto_join_paused": true`, `"auto_join_paused_text": "Auto-join is paused for now. The note taker is not joining meetings from your calendar."`.
+Older captures in that folder predate the two fields.
+
+The other change is the **value** of one existing field:
 `title` on `GET /api/meetings`, `GET /api/meetings/{id}`, the Decisions and Review groups
 (`meeting.title`) and the file name of an export. A meeting the bot joined from a calendar event now
 carries **the event's title**; a meeting made from a pasted link still reads `Google Meet <code>` or
-`Zoom <code>`.
+`Zoom <code>`. No other endpoint, field or status code changed.
 
 A meeting joined from the calendar has `source: "calendar"` in the database; the API does not
 expose `source`. Do not try to tell the two apart by the title.
@@ -91,6 +101,7 @@ matter). These are the `kind`s and the exact English; show `title` and `body` as
 
 | Behaviour | Status |
 |---|---|
+| `auto_join_paused` and its line | verified live (`22`): real route, the switch flipped on the running app's settings; the connected-and-paused body is the same route's answer with events (covered by `tests/test_calendar_api.py`, not captured) |
 | `title` in the list and detail is the cleaned event title; empty title falls back to platform and code | verified live (`03`, `04`, `06`): the meeting was made by the real runner, the answers are real |
 | Markup and an address stay in the API title as text | verified live (`03`, `06`) |
 | Control and bidi characters never reach the API or the file name | verified live (`03`, `07`) and by `tests/test_titles.py` |

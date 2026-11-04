@@ -54,6 +54,12 @@ RECONNECT_TEXT = {
 }
 GENERIC_RECONNECT_TEXT = "Google needs you to connect again."
 
+# Shown while the operator's emergency stop (`AUTOJOIN_ENABLED=false`) is on: the rows still say
+# "Will join", and this line says why nothing is being sent.
+AUTO_JOIN_PAUSED_TEXT = (
+    "Auto-join is paused for now. The note taker is not joining meetings from your calendar."
+)
+
 DEGRADED_TEXT = "Connected, but your calendar has not been read lately."
 CONNECTED_TEXT = "Connected"
 

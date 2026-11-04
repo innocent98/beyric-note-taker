@@ -93,7 +93,8 @@ class PlacementRequest:
 
 class PlacementRefused(Exception):
     """No bot may be sent now. `code` is one of `hours_cap_reached`, `already_in_meeting`,
-    `meeting_has_note_taker`, `user_limit`, `bot_busy`; the caller words it for its own reader."""
+    `meeting_has_note_taker`, `user_limit`, `bot_busy`, `account_suspended`; the caller words it
+    for its own reader."""
 
     def __init__(
         self,
@@ -147,6 +148,11 @@ def reserve_slot(
     caller rolls back)."""
     settings = settings or get_settings()
     _take_lock(session, LOCK_WAIT_SECONDS if wait_seconds is None else wait_seconds)
+    # Under the lock, from the database (not the identity map): an account suspended while this
+    # request waited for the lock must not get a bot.
+    status = session.scalar(select(User.status).where(User.id == user.id))
+    if status != "active":
+        raise PlacementRefused("account_suspended")
 
     cap = usage.effective_cap(session, user)
     if (

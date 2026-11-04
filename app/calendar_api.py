@@ -105,6 +105,9 @@ class CalendarOut(BaseModel):
     `rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)
     and `rule_text` its label ("Joining all meetings"). `calendar_template_id` is the person's own
     template chosen for calendar meetings, null for the default (their first, oldest, template).
+    `auto_join_paused` is true while the operator has stopped calendar auto-join for everyone
+    (`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and
+    `auto_join_paused_text` is the line to show (null when it is not paused).
     `upcoming` is empty unless connected."""
 
     connected: bool
@@ -116,6 +119,8 @@ class CalendarOut(BaseModel):
     rule: Literal["all", "organizer", "none"]
     rule_text: str
     calendar_template_id: int | None
+    auto_join_paused: bool
+    auto_join_paused_text: str | None
     upcoming: list[UpcomingEvent]
 
 
@@ -312,6 +317,8 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
     prefs = session.get(UserSettings, user.id)
     rule = prefs.auto_join_rule if prefs else "all"
     template_id = prefs.calendar_template_id if prefs else None
+    paused = not request.app.state.settings.autojoin_enabled
+    paused_text = calendar_text.AUTO_JOIN_PAUSED_TEXT if paused else None
     if conn is None:
         return CalendarOut(
             connected=False,
@@ -323,6 +330,8 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
             rule=rule,
             rule_text=calendar_text.rule_text(rule),
             calendar_template_id=template_id,
+            auto_join_paused=paused,
+            auto_join_paused_text=paused_text,
             upcoming=[],
         )
     state = conn.status if conn.status in ("connected", "degraded") else "needs_reconnect"
@@ -336,6 +345,8 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
         rule=rule,
         rule_text=calendar_text.rule_text(rule),
         calendar_template_id=template_id,
+        auto_join_paused=paused,
+        auto_join_paused_text=paused_text,
         upcoming=_upcoming(session, conn, _join_settings(prefs, request), _now()),
     )
 

@@ -10,6 +10,7 @@ import io
 import json
 from datetime import UTC, datetime
 
+import pytest
 from docx import Document
 from sqlalchemy import select
 
@@ -62,6 +63,34 @@ def test_emoji_and_non_latin_titles_round_trip_with_their_joiners():
     family = "\U0001f468‍\U0001f469‍\U0001f467 sync"  # a ZWJ sequence
     for text in (family, "Réunion d'équipe ☕", "会議の議事録", "اجتماع الفريق‌", "Sprint 🚀"):
         assert titles.clean_title(text) == text
+
+
+@pytest.mark.parametrize(
+    "char",
+    [
+        "\U000e0041",
+        "\u2061",
+        "\u2064",
+        "\u206a",
+        "\u206f",
+        "\u180e",
+        "\u115f",
+        "\u3164",
+        "\uffa0",
+        "\u00ad",
+        "\u200b",
+        "\u2060",
+        "\u0600",
+    ],
+)
+def test_invisible_format_characters_are_removed(char):
+    """Review low 7: every Unicode format character except the joiners an emoji or a Persian word
+    needs, plus the filler characters that draw nothing."""
+    assert titles.clean_title(f"Pay{char}roll") == "Payroll"
+
+
+def test_the_joiners_and_variation_selectors_stay():
+    assert titles.clean_title("a\u200db\u200cc\ufe0fd") == "a\u200db\u200cc\ufe0fd"
 
 
 def test_the_length_cap_cuts_at_a_character_with_an_ellipsis():

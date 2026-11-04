@@ -93,6 +93,34 @@ def test_it_is_dark_without_a_google_client(engine, google, fake_vexa, fake_open
     error_of(browser(app).get(URL), 404, "calendar_unavailable")
 
 
+# ---- the operator's emergency stop shows ----
+
+
+def test_the_answer_says_when_auto_join_is_paused_by_the_operator(
+    engine, google, fake_vexa, fake_openai, owner, session
+):
+    paused = make_settings(
+        google_client_id="id.apps.example.test",
+        google_client_secret="s3cret",
+        calendar_enabled=True,
+        autojoin_enabled=False,
+        token_enc_key="K" * 43 + "=",
+    )
+    web = browser(build_app(engine, paused, google, fake_vexa, fake_openai))
+    connect_google(web, google)
+    body = web.get(URL).json()
+    assert body["auto_join_paused"] is True
+    assert body["auto_join_paused_text"] == (
+        "Auto-join is paused for now. The note taker is not joining meetings from your calendar."
+    )
+    assert web.put(URL + "/settings", json={"rule": "organizer"}).json()["auto_join_paused"] is True
+
+
+def test_the_answer_is_not_paused_by_default(web, linked):
+    body = web.get(URL).json()
+    assert body["auto_join_paused"] is False and body["auto_join_paused_text"] is None
+
+
 # ---- not connected ----
 
 
@@ -109,6 +137,8 @@ def test_a_person_who_never_connected_gets_the_not_connected_answer(web):
         "rule": "all",
         "rule_text": "Joining all meetings",
         "calendar_template_id": None,
+        "auto_join_paused": False,
+        "auto_join_paused_text": None,
         "upcoming": [],
     }
 

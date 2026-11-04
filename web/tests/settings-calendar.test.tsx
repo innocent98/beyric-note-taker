@@ -123,6 +123,28 @@ describe("not available", () => {
   });
 });
 
+describe("the operator has paused auto-join", () => {
+  const paused = calendarBody<CalendarState>("22-state-auto-join-paused.json");
+  const pausedConnected: CalendarState = {
+    ...withEvents,
+    auto_join_paused: true,
+    auto_join_paused_text: paused.auto_join_paused_text,
+  };
+
+  it("says so in one plain line on the connected card (the text is the server's)", () => {
+    expect(paused.auto_join_paused).toBe(true);
+    view(pausedConnected);
+    expect(
+      screen.getByText("Auto-join is paused for now. The note taker is not joining meetings from your calendar."),
+    ).toBeTruthy();
+  });
+
+  it("says nothing when it is not paused", () => {
+    view(withEvents);
+    expect(screen.queryByText(/Auto-join is paused/)).toBeNull();
+  });
+});
+
 describe("connected", () => {
   it("shows the provider row with the Google address and Connected, and Disconnect", () => {
     view(justConnected);

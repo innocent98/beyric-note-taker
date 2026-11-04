@@ -29,13 +29,13 @@ TITLE_LIMIT = 200  # what is stored and shown in a list or heading
 MAIL_TITLE_LIMIT = 80  # what goes into a mail subject, a notification title or an alert line
 LINK_REMOVED = "[link removed]"
 
-# Bidirectional controls (marks, embeddings, overrides, isolates, the Arabic letter mark), the
-# byte-order mark and the word joiner family that is invisible and used to hide text.
-_BIDI_AND_INVISIBLE = frozenset(
-    ["؜", "‎", "‏", "﻿", "⁠"]
-    + [chr(c) for c in range(0x202A, 0x202F)]
-    + [chr(c) for c in range(0x2066, 0x206A)]
-)
+# Format characters (Unicode category Cf: bidirectional controls, the invisible operators and
+# joiners, tag characters, the byte-order mark...) are all removed EXCEPT the zero-width joiner and
+# non-joiner that an emoji sequence or a Persian word needs. Variation selectors are not Cf and
+# stay. A few letters draw nothing at all (Hangul fillers) and the Mongolian vowel separator is
+# invisible: removed by name.
+_KEEP_FORMAT = frozenset(["\u200c", "\u200d"])
+_BLANK_LETTERS = frozenset(["\u115f", "\u1160", "\u3164", "\uffa0", "\u180e"])
 _SPACE_RUN = re.compile(r"\s+")
 # A bare domain or address ("evil.example.test", "a@b.test"): a mail client links these even with
 # no scheme, so in mail text each dot of such a token is written "[.]". A last part that is not
@@ -56,9 +56,9 @@ URL = re.compile(
 def _printable(text: str) -> str:
     out = []
     for char in text:
-        if char in _BIDI_AND_INVISIBLE:
-            continue
         category = unicodedata.category(char)
+        if char in _BLANK_LETTERS or (category == "Cf" and char not in _KEEP_FORMAT):
+            continue
         if category in ("Cc", "Zl", "Zp"):  # control, line separator, paragraph separator
             out.append(" ")
         elif category in ("Cs", "Co", "Cn"):  # lone surrogate, private use, unassigned

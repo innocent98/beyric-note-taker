@@ -1,0 +1,33 @@
+{
+  "note": "`AUTOJOIN_ENABLED` is false (the operator's emergency stop): the same answer plus `auto_join_paused` and the line to show.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": false,
+      "state": "not_connected",
+      "state_text": "Google Calendar is not connected.",
+      "google_email": null,
+      "last_sync_at": null,
+      "last_error": null,
+      "rule": "all",
+      "rule_text": "Joining all meetings",
+      "calendar_template_id": 1,
+      "auto_join_paused": true,
+      "auto_join_paused_text": "Auto-join is paused for now. The note taker is not joining meetings from your calendar.",
+      "upcoming": []
+    }
+  }
+}

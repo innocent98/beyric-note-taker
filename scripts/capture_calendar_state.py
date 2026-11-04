@@ -277,6 +277,16 @@ def run(app, server_base, engine, settings, google) -> None:
         "/api/calendar",
         note="Back to not connected: no address, no events.",
     )
+    live = app.state.settings
+    app.state.settings = live.model_copy(update={"autojoin_enabled": False})
+    user.call(
+        "state-auto-join-paused",
+        "GET",
+        "/api/calendar",
+        note="`AUTOJOIN_ENABLED` is false (the operator's emergency stop): the same answer plus"
+        " `auto_join_paused` and the line to show.",
+    )
+    app.state.settings = live
 
 
 def main() -> None:

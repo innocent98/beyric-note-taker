@@ -257,6 +257,9 @@ export function SettingsCalendar({
                 <>
                   {state.state === "degraded" ? <p className="meta">{state.state_text}</p> : null}
                   {state.last_error ? <Alert kind="notice">{state.last_error}</Alert> : null}
+                  {state.auto_join_paused_text ? (
+                    <Alert kind="notice">{state.auto_join_paused_text}</Alert>
+                  ) : null}
                 </>
               )}
               {pendingUrl ? <UnverifiedNotice onContinue={() => navigate(pendingUrl)} /> : null}
@@ -339,6 +342,8 @@ function disconnectedFrom(current: CalendarState): CalendarState {
     rule: current.rule,
     rule_text: current.rule_text,
     calendar_template_id: current.calendar_template_id,
+    auto_join_paused: current.auto_join_paused,
+    auto_join_paused_text: current.auto_join_paused_text,
     upcoming: [],
   };
 }

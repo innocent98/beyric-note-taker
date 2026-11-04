@@ -52,7 +52,14 @@ from app.calendar_source import SyncBatch  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.gcal_sync import apply_batch  # noqa: E402
 from app.main import create_app  # noqa: E402
-from app.models import CalendarConnection, Meeting, Template, User, UserSettings  # noqa: E402
+from app.models import (  # noqa: E402
+    AppState,
+    CalendarConnection,
+    Meeting,
+    Template,
+    User,
+    UserSettings,
+)
 from tests.fakes.vexa_host import FakeVexaHost  # noqa: E402
 
 START = datetime(2026, 11, 5, 10, 0, tzinfo=UTC)
@@ -165,6 +172,11 @@ def seed(engine, settings) -> None:
             now=START - timedelta(hours=1),
             settings=settings,
         )
+        # The runner has led before (otherwise its first run closes rows due before it started).
+        state = session.get(AppState, 1) or AppState(id=1)
+        state.autojoin_started_at = START - timedelta(days=1)
+        session.add(state)
+        session.commit()
         wanted = Settings(_env_file=None, session_secret="x" * 40, app_env="test", bot_max_local=2)
         outcomes = join_runner.run_due_joins(
             session, host, None, now=START - timedelta(minutes=1), settings=wanted

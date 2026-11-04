@@ -282,6 +282,20 @@ def register_jobs(scheduler: Scheduler, settings) -> None:
             logger.warning("AUTOJOIN_ENABLED is false: no bot will be sent from any calendar")
 
 
+def _remember_if_autojoin_is_off(settings) -> None:
+    """Record since when calendar auto-join has been off, so the runner can close, silently, the
+    joins whose 15 minutes passed meanwhile when it comes back (`join_runner._baseline`)."""
+    if settings.calendar_enabled and settings.autojoin_enabled:
+        return
+    from app.join_runner import note_switch
+
+    try:
+        with SessionLocal() as session:
+            note_switch(session, settings, SystemClock().now())
+    except Exception as exc:  # a missing marker only means a few old notices; never stop starting
+        logger.warning("could not record that auto-join is off (%s)", type(exc).__name__)
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     settings = get_settings()
@@ -294,6 +308,7 @@ def main() -> None:
         mail_every=settings.scheduler_dispatch_seconds,
     )
     register_jobs(scheduler, settings)
+    _remember_if_autojoin_is_off(settings)
     signal.signal(signal.SIGTERM, lambda *_: scheduler.stop())
     signal.signal(signal.SIGINT, lambda *_: scheduler.stop())
     logger.info("scheduler started")
