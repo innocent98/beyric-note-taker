@@ -24,6 +24,16 @@ export type ReviewTermResult = Schemas["ReviewTermOut"];
 export type ReviewState = "open" | "checked";
 export type ExtractionStatus = NonNullable<Meeting["extraction_status"]>;
 
+export type Task = Schemas["TaskOut"];
+export type TaskList = Schemas["TaskList"];
+export type TaskStatus = Task["status"];
+export type TaskPerson = Schemas["PersonOut"];
+export type MeetingTasks = Schemas["MeetingTasks"];
+export type TasksSettings = Schemas["TasksSettingsOut"];
+// A change sends only the fields that change; the schema lists the defaulted ones as required.
+export type TaskChanges = Partial<Schemas["TaskPatch"]>;
+export type NewTask = Schemas["TaskCreate"];
+
 export type MeetingStatus = Meeting["status"];
 export type StatusTone = Meeting["status_tone"];
 export type RetryBlock = NonNullable<Meeting["retry_block"]>;

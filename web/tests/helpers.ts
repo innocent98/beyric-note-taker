@@ -38,6 +38,13 @@ function withDetailDefaults<T>(body: T): T {
     // Captures made before `can_delete`: the API's rule is the owner of a meeting that is not active.
     Object.assign(body, { can_delete: !("status" in body && ["bot_sent", "processing"].includes(String(body.status))) });
   }
+  // Captures made before Tasks lack `tasks` and `tasks_count`, which the API now always sends.
+  if (body && typeof body === "object" && "notes_html" in body && !("tasks" in body)) {
+    Object.assign(body, { tasks: [], tasks_count: 0 });
+  }
+  if (body && typeof body === "object" && Array.isArray((body as { meetings?: unknown }).meetings)) {
+    for (const row of (body as unknown as { meetings: Record<string, unknown>[] }).meetings) row.tasks_count ??= 0;
+  }
   return body;
 }
 
@@ -116,4 +123,10 @@ export function settingsBody<T>(file: string): T {
 export function settingsError(file: string): { status: number; code: string; message: string } {
   const { response } = JSON.parse(read(join(REPO, "docs/fe-captures/calendar-settings", file)));
   return { status: response.status, ...response.body.error };
+}
+
+// The body of a capture from the running API for the Tasks routes
+// (docs/fe-captures/tasks-w2/<file>, `python scripts/capture_tasks_api.py`).
+export function tasksBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/tasks-w2", file))).response.body as T;
 }

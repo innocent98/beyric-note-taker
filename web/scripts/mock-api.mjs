@@ -101,7 +101,50 @@ for (const meeting of details) {
 for (const meeting of details) meeting.template_name = body("11-templates-seeded").templates.find((t) => t.id === meeting.template_id)?.name ?? "General";
 const summary = ({ id, title, platform, native_id, status, step, status_text, status_tone, template_id, template_name, created_at }) => ({
   id, title, platform, native_id, status, step, status_text, status_tone, template_id, template_name, created_at,
+  tasks_count: meetingTasks(id).length,
 });
+
+// Tasks (W2). The shape is the one in docs/fe-captures/tasks-w2/ (`can_*`, `assignee`, `meeting`...);
+// the values are the mock's own: the designer's sample tasks (Beyric Monday planning, 2 Nov), so a
+// screen can be set next to the prototype. Writes change them in memory. Meeting 1 carries the first
+// eight, as in the design; the others point at meetings that are not in the list.
+const me = { user_id: 2, name: "Adebayo Tosin", is_you: true };
+const people = [me, { user_id: 3, name: "Daniel Okoro", is_you: false }, { user_id: 4, name: "Amara Nwosu", is_you: false }];
+const personOf = (id) => people.find((p) => p.user_id === id) ?? null;
+const refOf = (id, title, day) => ({ id, title, platform: "zoom", created_at: `${day}T09:30:00Z` });
+const mondayRef = refOf(1, "Beyric Monday planning", "2026-11-02");
+const fridayRef = refOf(11, "Friday review", "2026-10-30");
+const planningRef = refOf(12, "Monday planning", "2026-10-26");
+const allowed = { can_update: true, can_edit: true, can_assign: true, can_claim: false, can_delete: true };
+let nextTaskId = 100;
+const makeTask = (id, title, who, due, status, ref, extra = {}) => ({
+  id, title, status, assignee: personOf(who), spoken_owner: null, due_date: due, due_phrase: null,
+  quote: null, is_new: !!ref && ref === mondayRef && status !== "done", unverified: false, source: ref ? "ai" : "manual",
+  assigned_on: ref ? ref.created_at.slice(0, 10) : "2026-11-02", done_at: status === "done" ? "2026-11-02T10:00:00Z" : null,
+  created_at: "2026-11-02T10:00:00Z", from_meeting: !!ref, meeting: ref, ...allowed, ...extra,
+});
+const tasks = [
+  makeTask(8, "Continue hiring for the customer success lead role", null, "2026-11-06", "todo", mondayRef, { spoken_owner: "Kemi Adeyemi", quote: "Intended start on or before Friday.", can_claim: true }),
+  makeTask(7, "Share the meeting summary with the wider team", 2, null, "todo", mondayRef, { quote: "No due date was stated." }),
+  makeTask(6, "Support Daniel Okoro with testing during the week", 2, "2026-11-06", "todo", mondayRef),
+  makeTask(5, "Finish payment checkout", 2, "2026-11-06", "todo", mondayRef, { quote: "Aim to have it ready before the end of the week." }),
+  makeTask(4, "Organise the Figma file and move the design system into the team workspace", 4, null, "todo", mondayRef, { quote: "Timing was described as the coming days or weeks." }),
+  makeTask(3, "Specify and log planned design refinements and empty states on the tracker", 4, null, "todo", mondayRef),
+  makeTask(2, "Post this week's specific tasks in Slack after testing", 3, "2026-11-02", "todo", mondayRef, { quote: "By the end of today." }),
+  makeTask(1, "Finish checking web and mobile data sync, and test both apps", 3, "2026-11-02", "todo", mondayRef, { quote: "Said he could finish the test this evening." }),
+  makeTask(9, "Set up Slack channels for the product team", 3, "2026-11-04", "doing", fridayRef),
+  makeTask(10, "Refine phase one onboarding copy", 4, "2026-11-05", "doing", fridayRef),
+  makeTask(11, "Implement role-based permissions", 2, null, "done", planningRef),
+  makeTask(12, "Update onboarding screens", 3, null, "done", planningRef),
+];
+const meetingTasks = (id) => tasks.filter((t) => t.meeting?.id === id).sort((a, b) => b.id - a.id);
+const tasksNew = () => tasks.filter((t) => t.is_new && t.status !== "done").length;
+const attention = () => ({ needs_owner: tasks.filter((t) => !t.assignee && t.status !== "done").length, unverified: 0 });
+let tasksSettings = { auto_create_tasks: true, email_assignees: true };
+for (const meeting of details) {
+  meeting.tasks = [];
+  meeting.tasks_count = 0;
+}
 
 // The templates are in memory so that "Delete template" can be tried by hand (a delete is replayed from
 // docs/fe-captures/template-delete/: 204, the 409 for the last one, the 404 for one that is gone).
@@ -120,6 +163,8 @@ const sample = {
   decisions_count: 2,
   review_open_count: 0,
   extraction_status: "done",
+  tasks: [],
+  tasks_count: 0,
 };
 const translating = {}; // language -> when it was asked for
 const TRANSLATE_AFTER_MS = 1500;
@@ -264,7 +309,7 @@ const server = http.createServer(async (req, res) => {
     if (method === "DELETE") {
       return json(res, 200, { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null }, { "set-cookie": "session=; Path=/; Max-Age=0" });
     }
-    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: mockUser(), usage: { used_seconds: 0, cap_seconds: 18000 }, unread_notifications: 1 } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
+    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: mockUser(), usage: { used_seconds: 0, cap_seconds: 18000 }, unread_notifications: 1, badges: { review_open: 0, tasks_new: tasksNew() } } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
   }
   if (path.startsWith("/api/") && !loggedIn) {
     return json(res, 401, { error: { code: "not_authenticated", message: "Log in to continue." } });
@@ -272,6 +317,44 @@ const server = http.createServer(async (req, res) => {
   if (path === "/api/meetings" && method === "GET") {
     const meetings = values.empty ? [] : details.map(summary).reverse();
     return json(res, 200, { meetings, has_more: false, next_before_id: null, worker_stale: values.stale || values.empty });
+  }
+  // Tasks: the list, one task, the changes and the meeting's own list (in memory).
+  if (path === "/api/tasks" && method === "GET") {
+    const who = url.searchParams.get("assignee");
+    const list = tasks.filter((t) => (who === "me" ? t.assignee?.is_you : who === "none" ? !t.assignee : true));
+    return json(res, 200, { tasks: list, people, attention: attention(), has_more: false, next_before_id: null });
+  }
+  if (path === "/api/tasks" && method === "POST") {
+    const made = makeTask(++nextTaskId, data?.title ?? "", data?.assignee_user_id ?? null, data?.due_date ?? null, data?.status ?? "todo", null, { created_at: new Date().toISOString() });
+    tasks.unshift(made);
+    return json(res, 201, made);
+  }
+  const oneTask = /^\/api\/tasks\/(\d+)$/.exec(path);
+  if (oneTask) {
+    const task = tasks.find((t) => t.id === Number(oneTask[1]));
+    if (!task) return json(res, 404, { error: { code: "not_found", message: "No such task" } });
+    if (method === "DELETE") {
+      tasks.splice(tasks.indexOf(task), 1);
+      res.writeHead(204);
+      return res.end();
+    }
+    if (method === "PATCH") {
+      for (const [key, value] of Object.entries(data ?? {})) {
+        if (key === "assignee_user_id") task.assignee = personOf(value);
+        else task[key] = value;
+      }
+      if (data?.status) task.is_new = false;
+    }
+    return json(res, 200, task);
+  }
+  const ofMeeting = /^\/api\/meetings\/(\d+)\/tasks$/.exec(path);
+  if (ofMeeting && method === "GET") {
+    const list = meetingTasks(Number(ofMeeting[1]));
+    return json(res, 200, { tasks: list, assigned_people: new Set(list.filter((t) => t.assignee).map((t) => t.assignee.user_id)).size, extraction_status: "done" });
+  }
+  if (path === "/api/settings/tasks") {
+    if (method === "PUT") tasksSettings = { auto_create_tasks: !!data?.auto_create_tasks, email_assignees: !!data?.email_assignees };
+    return json(res, 200, tasksSettings);
   }
   const translate = /^\/api\/meetings\/(\d+)\/translations(?:\/(\w+))?$/.exec(path);
   if (translate) {
@@ -307,6 +390,7 @@ const server = http.createServer(async (req, res) => {
       Number(detail[1]) === sample.id
         ? { ...sample, translations: ["fr", "es"].filter((l) => translationOf(l)).map((language) => ({ language, status: translationOf(language).status, stale: false })) }
         : details.find((m) => m.id === Number(detail[1]));
+    if (meeting && meeting !== sample) Object.assign(meeting, { tasks: meetingTasks(meeting.id), tasks_count: meetingTasks(meeting.id).length });
     return meeting ? json(res, 200, meeting) : json(res, 404, { error: { code: "not_found", message: "That meeting was not found." } });
   }
   // Email preferences and the bell: the captures in docs/fe-captures/prelaunch-mail-prefs/. The
