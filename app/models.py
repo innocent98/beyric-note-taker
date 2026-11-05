@@ -52,7 +52,7 @@ JOIN_STATES = (
 )
 # A join in one of these states holds its meeting code: only one bot per code at a time.
 LIVE_JOIN_STATES = ("dispatching", "no_capacity", "joined")
-AI_RUN_KINDS = ("extract", "translate")
+AI_RUN_KINDS = ("extract", "translate", "notes", "label")
 AI_RUN_STATUSES = ("ok", "failed")
 # `pending` waits for the worker (or for a retry), `running` is being worked on, `done` is finished,
 # `failed` gave up after the retries, `skipped` means only the decisions were read from the notes
@@ -187,7 +187,7 @@ class Notification(Base):
     severity: Mapped[str] = mapped_column(String(16), default="info", server_default="info")
     title: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text, default="", server_default="")
-    meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="SET NULL"))
+    meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
     dedupe_key: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -394,6 +394,9 @@ class CalendarConnection(Base):
     last_full_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When the current run of failed syncs began (null while the last sync worked). The calendar
+    # is `degraded` once this is 30 minutes old (app/calendar_states.py).
+    error_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sync_token: Mapped[str | None] = mapped_column(Text)
     # connected_at + 7 days, set only while the OAuth app is in Testing.
     expected_expiry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

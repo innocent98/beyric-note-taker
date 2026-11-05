@@ -9,16 +9,16 @@ or on demand, whose tasks are not New and are never mailed. The partial unique i
 passes run. Nothing is backfilled here: `scripts/backfill_extraction.py --tasks` queues the recent
 meetings.
 
-Revision ID: 0022
-Revises: 0019
+Revision ID: 0024
+Revises: 0023
 Create Date: 2026-11-05
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0022"
-down_revision = "0019"
+revision = "0024"
+down_revision = "0023"
 branch_labels = None
 depends_on = None
 

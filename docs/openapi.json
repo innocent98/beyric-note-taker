@@ -4804,6 +4804,90 @@
       }
     },
     "/api/meetings/{meeting_id}": {
+      "delete": {
+        "description": "Delete a meeting and everything taken from it: transcript, notes, translations, decisions,\nopen questions, review items, notifications, mail still waiting to be sent, the audio and\nVexa's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate\nor anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are\nbeing written, 409 `meeting_busy` when the worker holds it (try again), 502\n`recording_delete_failed` when Vexa would not remove the recording: nothing is deleted.",
+        "operationId": "delete_meeting",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Delete Meeting",
+        "tags": [
+          "meetings"
+        ]
+      },
       "get": {
         "operationId": "get_meeting",
         "parameters": [

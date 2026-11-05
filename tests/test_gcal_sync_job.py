@@ -203,7 +203,7 @@ def test_transient_error_records_last_error_and_does_not_raise_out_of_the_job(
     assert conn.sync_token == "sync-token-1" and conn.last_sync_at == later
 
 
-def test_a_revoked_grant_is_recorded_for_c13_and_does_not_change_the_status(
+def test_a_revoked_grant_is_recorded_and_marks_the_connection_needs_reconnect(
     session, google, source
 ):
     world = connected(session)
@@ -212,7 +212,7 @@ def test_a_revoked_grant_is_recorded_for_c13_and_does_not_change_the_status(
     conn = sync(session, world, source)
 
     assert conn.last_error.startswith("AuthRevoked")
-    assert conn.status == "connected"  # C13 turns this into needs_reconnect and tells the user
+    assert conn.status == "needs_reconnect"  # C13: the connection is marked and the user told
 
 
 def test_an_error_while_applying_is_recorded_by_type_only_and_the_token_is_not_stored(

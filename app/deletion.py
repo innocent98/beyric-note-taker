@@ -64,7 +64,7 @@ GIVE_UP_AFTER = timedelta(hours=24)
 VEXA_FINISHED = ("completed", "failed")
 
 
-def _recording_to_delete(
+def recording_to_delete(
     session: Session, vexa, meeting: Meeting, now: datetime, stopped: set[int]
 ) -> int | None:
     """Settle one meeting's Vexa side (see the module docstring): the id of the recording to
@@ -121,7 +121,7 @@ def purge_user(
                 stopped.add(meeting.id)
         for meeting in meetings:
             if meeting.audio_deleted_at is None:
-                recording_id = _recording_to_delete(session, vexa, meeting, now, stopped)
+                recording_id = recording_to_delete(session, vexa, meeting, now, stopped)
                 if recording_id is not None:
                     vexa.delete_recording(recording_id)
     for meeting in meetings:

@@ -1,0 +1,16 @@
+{
+  "note": "Everything that hangs off the finished meeting.",
+  "content": {
+    "meeting": 1,
+    "translations": 1,
+    "decisions": 1,
+    "open_questions": 1,
+    "review_items": 1,
+    "notifications": 1,
+    "ai_runs_still_linked": 1,
+    "usage_entries_still_linked": 1,
+    "mail_waiting_for_it": 1,
+    "owner_usage_seconds": 1800,
+    "owner_ai_runs": 1
+  }
+}

@@ -26,6 +26,11 @@ class AuthRevoked(CalendarSourceError):
     scope). Only a reconnect helps: the caller marks the connection `needs_reconnect`."""
 
 
+class RefreshTokenUnreadable(AuthRevoked):
+    """The stored refresh token cannot be decrypted (a wrong key or damaged data), not a grant the
+    user withdrew. Needs a reconnect too, and the operator should look."""
+
+
 class TransientError(CalendarSourceError):
     """A timeout, a 5xx, a rate limit or anything else that may pass on its own. The caller keeps
     its state, records the error and retries later."""

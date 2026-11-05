@@ -811,12 +811,12 @@ def test_0019_gives_every_live_account_a_team_of_one_and_shares_nothing(scratch_
     engine.dispose()
 
 
-# ---- 0022 tasks ----
+# ---- 0024 tasks ----
 
 
-def test_0022_adds_tasks_with_the_cascades_and_downgrades_cleanly(scratch_url):
+def test_0024_adds_tasks_with_the_cascades_and_downgrades_cleanly(scratch_url):
     cfg = alembic_config(scratch_url)
-    command.upgrade(cfg, "0019")
+    command.upgrade(cfg, "0023")
     engine = create_engine(scratch_url)
     with engine.begin() as conn:
         conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
@@ -882,7 +882,7 @@ def test_0022_adds_tasks_with_the_cascades_and_downgrades_cleanly(scratch_url):
         conn.execute(text("delete from meetings where id = :m"), {"m": meeting})
     assert _rows(engine, "select title from tasks") == [("by hand",)]
 
-    command.downgrade(cfg, "0019")
+    command.downgrade(cfg, "0023")
     assert "tasks" not in set(inspect(engine).get_table_names())
     assert "extraction_quiet" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
     assert not {"auto_create_tasks", "email_assignees"} & {
@@ -892,6 +892,62 @@ def test_0022_adds_tasks_with_the_cascades_and_downgrades_cleanly(scratch_url):
     engine.dispose()
 
 
-def test_0022_follows_0019():
+def test_0024_follows_0023():
     script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
-    assert script.get_revision("0022").down_revision == "0019"
+    assert script.get_revision("0024").down_revision == "0023"
+
+
+# ---- 0021 notifications cascade with the meeting ----
+
+
+def _notification_fk_rule(engine) -> str:
+    return _rows(
+        engine,
+        "select confdeltype::text from pg_constraint "
+        "where conname = 'notifications_meeting_id_fkey'",
+    )[0][0]
+
+
+def test_0021_makes_a_notification_go_with_its_meeting_and_downgrades(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0019")
+    engine = create_engine(scratch_url)
+    assert _notification_fk_rule(engine) == "n"  # SET NULL
+    command.upgrade(cfg, "0021")
+    assert _notification_fk_rule(engine) == "c"  # CASCADE
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
+                "select u.id, 'u', 'google_meet', 'abc', t.id from users u, templates t limit 1"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into notifications (user_id, kind, title, meeting_id, dedupe_key) "
+                "select owner_user_id, 'k', 't', id, 'd' from meetings"
+            )
+        )
+        conn.execute(text("delete from meetings"))
+    assert _rows(engine, "select count(*) from notifications") == [(0,)]
+    command.downgrade(cfg, "0019")
+    assert _notification_fk_rule(engine) == "n"
+    command.upgrade(cfg, "head")
+    assert _notification_fk_rule(engine) == "c"
+    engine.dispose()
+
+
+def test_0023_lets_the_ledger_hold_notes_and_label_calls_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0023")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        for kind in ("extract", "notes", "label"):
+            conn.execute(
+                text("insert into ai_runs (kind, model) values (:k, 'gpt-6-luna')"), {"k": kind}
+            )
+    command.downgrade(cfg, "0021")
+    assert _rows(engine, "select kind from ai_runs order by id") == [("extract",)]
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('notes', 'm')"))
+    engine.dispose()

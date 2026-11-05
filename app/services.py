@@ -13,19 +13,39 @@ confirm that the row exists).
 
 import logging
 import math
+import shutil
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, Request
 from markdown_it import MarkdownIt
 from markupsafe import Markup
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
-from app import auth, edge, passwords, placement, titles, usage, visibility, workspace
+from app import (
+    ai_runs,
+    auth,
+    deletion,
+    edge,
+    passwords,
+    placement,
+    titles,
+    usage,
+    visibility,
+    workspace,
+)
 from app.config import Settings, get_settings
-from app.models import AppState, Meeting, Template, User, UserSettings, VocabularyTerm
+from app.models import (
+    AppState,
+    MailOutbox,
+    Meeting,
+    Template,
+    User,
+    UserSettings,
+    VocabularyTerm,
+)
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
     BOT_END_REQUESTED,
@@ -36,6 +56,7 @@ from app.pipeline import (
     REASON_CANCELLED,
     REASON_NO_SPEECH,
     SEND_UNCONFIRMED,
+    audio_path,
     is_join_failure,
     manual_retry_wait,
     send_again,
@@ -527,8 +548,9 @@ def regenerate_notes(
             select(VocabularyTerm.term).where(VocabularyTerm.owner_user_id == meeting.owner_user_id)
         )
     )
+    spent: list = []
     try:
-        notes = generate_notes(source, template, terms, client=openai_client)
+        notes = generate_notes(source, template, terms, client=openai_client, usage=spent)
     except NotesFailed as exc:
         logger.error("meeting %s: regenerate failed (%s)", meeting.id, type(exc).__name__)
         raise Refused(
@@ -536,6 +558,14 @@ def regenerate_notes(
         ) from None
     meeting.notes = notes
     meeting.template_id = template.id
+    ai_runs.record_usage(
+        session,
+        meeting.id,
+        "notes",
+        get_settings().notes_model,
+        spent,
+        user_id=meeting.owner_user_id,
+    )
     workspace.mark_pending(meeting)  # the lists read from the notes follow the new ones
     session.commit()
     return meeting
@@ -610,6 +640,74 @@ def cancel_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meet
     locked.status, locked.failure_reason = "failed", REASON_CANCELLED
     session.commit()
     return locked
+
+
+def delete_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> None:
+    """Delete a meeting and everything derived from it (spec 3.3), for good.
+
+    Refused (409 `meeting_active`) while the bot is in the call or the notes are being written:
+    the owner cancels or waits first, so the worker never loses a row under its hands. The rest
+    is the database's cascade (transcript, notes and speaker text live on the row; translations,
+    decisions, open questions, review items and notifications reference it `ON DELETE CASCADE`,
+    and a table added later must do the same: `tests/test_meeting_delete.py` fails until it does),
+    plus what no foreign key can reach: mail still waiting for the meeting (its id sits in a JSON
+    payload), the audio folder, and Vexa's copy of the recording. Rows kept on purpose, with
+    `meeting_id` nulled: `usage_entries` (the hours stay spent), `ai_runs` (cost and the daily
+    translation count) and `scheduled_joins` (the calendar event stays joined, so the scheduler
+    does not send a bot to it again). None of those holds a word of the meeting.
+    """
+    locked = _lock_meeting(session, meeting)
+    if locked.status in ACTIVE:
+        session.rollback()
+        raise Refused(
+            409,
+            "meeting_active",
+            "This meeting is still being recorded or its notes are being written. "
+            "Delete it once it has finished.",
+        )
+    meeting_id = locked.id
+    try:
+        if locked.audio_deleted_at is None:
+            # Settle Vexa's side the way account deletion does: a cancelled meeting never had the
+            # recording id stored, so ask Vexa for it (waiting out its grace) before it is lost.
+            recording_id = deletion.recording_to_delete(
+                session, vexa, locked, datetime.now(UTC), set()
+            )
+            if recording_id is not None:
+                vexa.delete_recording(recording_id)
+    except (VexaError, ValueError) as exc:
+        session.rollback()
+        logger.warning("meeting %s: Vexa cleanup failed (%s)", meeting_id, type(exc).__name__)
+        raise Refused(
+            502,
+            "recording_delete_failed",
+            "The recording could not be removed, so nothing was deleted. "
+            "Please try again in a moment.",
+        ) from None
+    try:
+        # Only mail still to go: a sent row stays, it counts toward the mail budget and caps.
+        session.execute(
+            delete(MailOutbox).where(
+                MailOutbox.template.in_(("notes_ready", "tasks_assigned")),
+                MailOutbox.status != "sent",
+                MailOutbox.payload["meeting_id"].astext == str(meeting_id),
+            )
+        )
+        session.delete(locked)
+        session.commit()
+    except OperationalError as exc:  # the mail worker holds the row while it sends
+        session.rollback()
+        if getattr(exc.orig, "sqlstate", None) != LOCK_NOT_AVAILABLE:
+            raise
+        raise Refused(
+            409, "meeting_busy", "The meeting is being worked on right now. Try again in a moment."
+        ) from None
+    try:
+        shutil.rmtree(audio_path(meeting_id).parent)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.error("meeting %s: could not remove its audio folder", meeting_id)
 
 
 def can_end(meeting: Meeting) -> bool:

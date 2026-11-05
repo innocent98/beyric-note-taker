@@ -499,7 +499,16 @@ export interface paths {
         get: operations["get_meeting"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Meeting
+         * @description Delete a meeting and everything taken from it: transcript, notes, translations, decisions,
+         *     open questions, review items, notifications, mail still waiting to be sent, the audio and
+         *     Vexa's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate
+         *     or anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are
+         *     being written, 409 `meeting_busy` when the worker holds it (try again), 502
+         *     `recording_delete_failed` when Vexa would not remove the recording: nothing is deleted.
+         */
+        delete: operations["delete_meeting"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3762,6 +3771,80 @@ export interface operations {
             };
             /** @description Malformed request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_meeting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

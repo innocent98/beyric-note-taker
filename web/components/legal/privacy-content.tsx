@@ -81,7 +81,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h2 id="retention">How long we keep information</h2>
       <ul>
         <li>Meeting audio: deleted automatically {days} days after the meeting.</li>
-        <li>Transcripts and notes, and the lists of decisions, open questions, Please check items and tasks taken from them: kept until you ask us to delete them or close your account.</li>
+        <li>Transcripts and notes, and the lists of decisions, open questions, Please check items and tasks taken from them: kept until you ask us to delete them or close your account. When a meeting is deleted, everything taken from it is deleted with it: its transcript, notes, translations, decisions, open questions, Please check items and tasks, and its audio. The hours it counted stay counted.</li>
         <li>Calendar data: we keep only what is needed for upcoming meetings, and delete it when you disconnect your calendar.</li>
         <li>Account information: kept while your account is active and deleted within 30 days of closing it, except where the law requires us to keep records.</li>
         <li>An account whose email address is not confirmed within 48 hours is deleted.</li>

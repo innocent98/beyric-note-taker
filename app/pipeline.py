@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, object_session
 
-from app import audio, mail, placement, usage, workspace
+from app import ai_runs, audio, mail, placement, usage, workspace
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
@@ -644,8 +644,17 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
 def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> bool:
     if meeting.speaker_transcript is None:
         info = _lookup(vexa, meeting)
+        spent: list = []
         text, complete = label_transcript(
-            meeting.transcript or "", info.segments, client=openai_client
+            meeting.transcript or "", info.segments, client=openai_client, usage=spent
+        )
+        ai_runs.record_usage(
+            session,
+            meeting.id,
+            "label",
+            get_settings().notes_model,
+            spent,
+            user_id=meeting.owner_user_id,
         )
         meeting.speaker_transcript = text
         meeting.speakers_incomplete = not complete
@@ -657,8 +666,17 @@ def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> b
 def _step_notes(session: Session, meeting: Meeting, openai_client) -> bool:
     template = session.get(Template, meeting.template_id)
     text = meeting.speaker_transcript or meeting.transcript or ""
+    spent: list = []
     meeting.notes = generate_notes(
-        text, template, _terms(session, meeting.owner_user_id), client=openai_client
+        text, template, _terms(session, meeting.owner_user_id), client=openai_client, usage=spent
+    )
+    ai_runs.record_usage(
+        session,
+        meeting.id,
+        "notes",
+        get_settings().notes_model,
+        spent,
+        user_id=meeting.owner_user_id,
     )
     meeting.status, meeting.step, meeting.failure_reason = "ready", "done", None
     # Queued in the same commit as the notes, and worked by its own job (app/workspace.py): it can

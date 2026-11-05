@@ -1,0 +1,16 @@
+{
+  "note": "The meeting and its derived rows are gone; usage seconds and the AI-run row stay, with no link to the meeting. Vexa was asked to delete recording [77].",
+  "content": {
+    "meeting": 0,
+    "translations": 0,
+    "decisions": 0,
+    "open_questions": 0,
+    "review_items": 0,
+    "notifications": 0,
+    "ai_runs_still_linked": 0,
+    "usage_entries_still_linked": 0,
+    "mail_waiting_for_it": 0,
+    "owner_usage_seconds": 1800,
+    "owner_ai_runs": 1
+  }
+}
