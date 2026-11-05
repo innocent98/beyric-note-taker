@@ -203,6 +203,9 @@ class MeetingDetail(MeetingSummary):
     can_end: bool
     can_retry: bool
     can_regenerate: bool
+    # True for the owner of a meeting that is ready or failed: `DELETE /api/meetings/{id}` is 409
+    # `meeting_active` while the bot is in the call or the notes are being written.
+    can_delete: bool
     join_attempts: int
     max_join_attempts: int
     bot_left_early: bool

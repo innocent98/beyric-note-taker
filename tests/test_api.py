@@ -500,7 +500,7 @@ def test_detail_of_a_meeting_waiting_for_its_bot(api, session, template):
     assert body["status"] == "bot_sent" and body["status_text"] == "Bot sent"
     assert body["status_tone"] == "warning"
     assert body["can_cancel"] is True and body["can_retry"] is False
-    assert body["can_regenerate"] is False
+    assert body["can_regenerate"] is False and body["can_delete"] is False
     assert body["refresh_after_seconds"] == 30
     assert body["join_attempts"] == 2 and body["max_join_attempts"] == 3
     assert body["failure_reason"] is None and body["retry_block"] is None
@@ -531,7 +531,8 @@ def test_detail_of_a_ready_meeting_has_notes_and_transcript(api, session, templa
     assert body["notes"] == NOTES
     assert "<h2>Summary</h2>" in body["notes_html"]
     assert body["transcript"] == TRANSCRIPT and body["speakers_incomplete"] is True
-    assert body["can_regenerate"] is True and body["refresh_after_seconds"] is None
+    assert body["can_regenerate"] is True and body["can_delete"] is True
+    assert body["refresh_after_seconds"] is None
     assert body["bot_left_early"] is False
 
 

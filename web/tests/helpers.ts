@@ -34,6 +34,10 @@ function withDetailDefaults<T>(body: T): T {
   if (body && typeof body === "object" && "notes_html" in body && !("participants" in body)) {
     Object.assign(body, { duration_seconds: null, participants: [], decisions_count: 0, review_open_count: 0 });
   }
+  if (body && typeof body === "object" && "notes_html" in body && !("can_delete" in body)) {
+    // Captures made before `can_delete`: the API's rule is the owner of a meeting that is not active.
+    Object.assign(body, { can_delete: !("status" in body && ["bot_sent", "processing"].includes(String(body.status))) });
+  }
   return body;
 }
 

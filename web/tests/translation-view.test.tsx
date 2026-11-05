@@ -8,6 +8,8 @@ import { ApiError } from "@/lib/api/client";
 import type { Meeting, NoteLanguage, Template, Translation } from "@/lib/api/types";
 import { translateBody, translateCapture } from "./helpers";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 // The Language select, the two bars under it, the translated notes and transcript, the copy
 // button and the Download note, fed the bodies the running API answered with
 // (docs/fe-captures/translate/, the model faked: they hold the designer's own French and Spanish).

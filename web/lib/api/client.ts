@@ -230,6 +230,9 @@ export function createApi(options: ApiOptions = {}) {
         request<MeetingList>("GET", "/api/meetings", { query }),
       get: (id: number) => request<Meeting>("GET", `/api/meetings/${id}`),
       create: (body: NewMeeting) => request<Meeting>("POST", "/api/meetings", { body, write: true }),
+      // 204 and no body. 409 `meeting_active` (bot in the call or notes being written), 502
+      // `recording_delete_failed` (nothing deleted); a repeat is 404 (docs/fe-integration-guide-meeting-delete.md).
+      remove: (id: number) => request<void>("DELETE", `/api/meetings/${id}`, { write: true }),
       cancel: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/cancel`, { write: true }),
       end: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/end`, { write: true }),
       retry: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/retry`, { write: true }),

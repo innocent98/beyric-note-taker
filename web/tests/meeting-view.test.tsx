@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TimeZoneProvider } from "@/components/app/time-zone-context";
@@ -17,10 +17,13 @@ const mocks = vi.hoisted(() => ({
   cancel: vi.fn(),
   end: vi.fn(),
   regenerate: vi.fn(),
+  remove: vi.fn(),
+  push: vi.fn(),
 }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/lib/api/browser", () => ({
   api: {
-    meetings: { get: mocks.get, retry: mocks.retry, cancel: mocks.cancel, end: mocks.end, regenerate: mocks.regenerate },
+    meetings: { get: mocks.get, retry: mocks.retry, cancel: mocks.cancel, end: mocks.end, regenerate: mocks.regenerate, remove: mocks.remove },
   },
 }));
 
@@ -390,5 +393,71 @@ describe("failed meeting", () => {
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("This meeting cannot be retried.")).toBeTruthy();
     await waitFor(() => expect(mocks.get).toHaveBeenCalled());
+  });
+});
+
+// Delete (lead-designed, not in the designer's file): the red text button, the inline ask in the
+// Decisions "Remove from log" style, then the meetings list with a toast.
+describe("delete meeting", () => {
+  const ready = () => meeting("47-meeting-detail-ready.json");
+
+  beforeEach(() => sessionStorage.clear());
+
+  it("asks first, naming what goes and that hours stay counted, and calls nothing until confirmed", async () => {
+    show(ready());
+    await userEvent.click(screen.getByRole("button", { name: "Delete meeting" }));
+    expect(mocks.remove).not.toHaveBeenCalled();
+    const ask = screen.getByRole("group", { name: "Delete this meeting?" });
+    expect(ask.textContent).toContain("the notes, the transcript, any translations");
+    expect(ask.textContent).toContain("decisions and review items");
+    expect(ask.textContent).toContain("the recording");
+    expect(ask.textContent).toContain("The hours it used stay counted.");
+    expect(ask.textContent).not.toMatch(/task/i); // task counts arrive with W2
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByRole("button", { name: "Delete meeting" })).toBeTruthy();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("deletes, then goes to the list and leaves the flag for its toast", async () => {
+    mocks.remove.mockResolvedValue(undefined);
+    show(ready());
+    await userEvent.click(screen.getByRole("button", { name: "Delete meeting" }));
+    await userEvent.click(within(screen.getByRole("group", { name: "Delete this meeting?" })).getByRole("button", { name: "Delete meeting" }));
+    expect(mocks.remove).toHaveBeenCalledWith(7);
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/"));
+    expect(sessionStorage.getItem("beyric:meeting-deleted")).toBe("1");
+  });
+
+  it("treats a repeat (404) as deleted", async () => {
+    mocks.remove.mockRejectedValue(new ApiError(404, "not_found", "No such meeting"));
+    show(ready());
+    await userEvent.click(screen.getByRole("button", { name: "Delete meeting" }));
+    await userEvent.click(within(screen.getByRole("group", { name: "Delete this meeting?" })).getByRole("button", { name: "Delete meeting" }));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/"));
+  });
+
+  it.each([
+    [409, "meeting_active", "This meeting is still being recorded or its notes are being written. Delete it once it has finished."],
+    [502, "recording_delete_failed", "The recording could not be removed, so nothing was deleted. Please try again in a moment."],
+  ])("shows the real text of a %s and stays on the page", async (status, code, text) => {
+    mocks.remove.mockRejectedValue(new ApiError(status, code, text));
+    mocks.get.mockResolvedValue(ready());
+    show(ready());
+    await userEvent.click(screen.getByRole("button", { name: "Delete meeting" }));
+    await userEvent.click(within(screen.getByRole("group", { name: "Delete this meeting?" })).getByRole("button", { name: "Delete meeting" }));
+    expect(await screen.findByText(text)).toBeTruthy();
+    expect(mocks.push).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem("beyric:meeting-deleted")).toBeNull();
+  });
+
+  it("is offered on a failed meeting, and not while the bot is in the call or the notes are being written", () => {
+    show(meeting("52-meeting-detail-failed-never-recorded.json"));
+    expect(screen.getByRole("button", { name: "Delete meeting" })).toBeTruthy();
+    cleanup();
+    show(meeting("35-meeting-detail-bot-sent.json"));
+    expect(screen.queryByRole("button", { name: "Delete meeting" })).toBeNull();
+    cleanup();
+    show({ ...ready(), can_delete: false }); // a teammate reading a shared meeting
+    expect(screen.queryByRole("button", { name: "Delete meeting" })).toBeNull();
   });
 });

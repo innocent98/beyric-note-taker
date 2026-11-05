@@ -954,6 +954,10 @@
             "title": "Can Cancel",
             "type": "boolean"
           },
+          "can_delete": {
+            "title": "Can Delete",
+            "type": "boolean"
+          },
           "can_end": {
             "title": "Can End",
             "type": "boolean"
@@ -1218,6 +1222,7 @@
           "can_end",
           "can_retry",
           "can_regenerate",
+          "can_delete",
           "join_attempts",
           "max_join_attempts",
           "bot_left_early",

@@ -94,6 +94,7 @@ for (const meeting of details) {
   meeting.participants = ready ? ["Adebayo", "Daniel Okoro", "Amara Nwosu"] : [];
   meeting.decisions_count = ready ? 2 : 0;
   meeting.review_open_count = ready ? 3 : 0;
+  meeting.can_delete = meeting.status !== "bot_sent" && meeting.status !== "processing";
   if (ready) meeting.extraction_status = "done";
 }
 // The owner-app captures predate `template_name`; the running API sends it on every meeting.
@@ -108,6 +109,7 @@ const translateCapture = (name) => JSON.parse(readFileSync(join(captureDir, "tra
 const sample = {
   ...translateCapture("05-meeting-before"),
   id: 8,
+  can_delete: true,
   title: "Zoom 88205679674",
   platform: "zoom",
   native_id: "88205679674",
@@ -291,6 +293,15 @@ const server = http.createServer(async (req, res) => {
     return found ? json(res, 200, found) : json(res, 404, noTranslation);
   }
   const detail = /^\/api\/meetings\/(\d+)$/.exec(path);
+  if (detail && method === "DELETE") {
+    // 204 for a meeting that can go; the replay of the real 409 for one still being worked on.
+    const at = details.findIndex((m) => m.id === Number(detail[1]));
+    if (at === -1 && Number(detail[1]) !== sample.id) return json(res, 404, { error: { code: "not_found", message: "No such meeting" } });
+    if (at !== -1 && !details[at].can_delete) return json(res, 409, { error: { code: "meeting_active", message: "This meeting is still being recorded or its notes are being written. Delete it once it has finished." } });
+    if (at !== -1) details.splice(at, 1);
+    res.writeHead(204);
+    return res.end();
+  }
   if (detail && method === "GET") {
     const meeting =
       Number(detail[1]) === sample.id

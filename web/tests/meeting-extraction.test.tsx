@@ -6,6 +6,8 @@ import { MeetingView } from "@/components/app/meeting-view";
 import type { Meeting, Template } from "@/lib/api/types";
 import { captured, workspaceBody } from "./helpers";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 // What the meeting page says about the reading of its notes for the Decisions and Review screens
 // (`extraction_status`), from the bodies captured in docs/fe-captures/ai-workspace-w1/ (section 2 of
 // docs/fe-integration-guide-ai-workspace.md), and the transcript tab the Review screen links to.

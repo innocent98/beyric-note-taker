@@ -266,7 +266,7 @@ def test_a_teammate_reads_a_shared_meeting(app, world, teammate):
 def test_a_teammate_is_offered_no_action_on_a_shared_meeting(app, api, world, teammate):
     """The page must not show buttons whose routes answer a teammate 404."""
     _, shared = world
-    flags = ("can_cancel", "can_end", "can_retry", "can_regenerate")
+    flags = ("can_cancel", "can_end", "can_retry", "can_regenerate", "can_delete")
     mine = api.get(f"/api/meetings/{shared.id}").json()
     assert mine["can_regenerate"] is True
     theirs = sign_in(app, TEAMMATE_EMAIL).get(f"/api/meetings/{shared.id}").json()

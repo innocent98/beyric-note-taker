@@ -222,6 +222,18 @@ def run(server_base, engine, vexa) -> None:
     )
 
     owner.call(
+        "detail-ready",
+        "GET",
+        f"/api/meetings/{done_id}",
+        note="A finished meeting: `can_delete` is true for its owner.",
+    )
+    owner.call(
+        "detail-bot-in-call",
+        "GET",
+        f"/api/meetings/{live_id}",
+        note="The bot is in the call: `can_delete` is false (the control is hidden).",
+    )
+    owner.call(
         "delete-without-csrf",
         "DELETE",
         f"/api/meetings/{done_id}",

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Button, Card, EmptyState, Icon, ListRow } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, Icon, ListRow, Toast } from "@/components/ui";
+import { useToast } from "@/components/ui/toast";
+import { DELETED_FLAG } from "@/lib/deleted-flag";
 import { api } from "@/lib/api/browser";
 import type { MeetingList as MeetingListData, MeetingSummary, Template } from "@/lib/api/types";
 import { LocalTime } from "@/components/app/local-time";
@@ -18,6 +20,19 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
   const [paging, setPaging] = useState<{ hasMore: boolean; before: number | null } | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [toast, flash] = useToast();
+
+  // Arriving from a delete on the meeting page: say so once.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(DELETED_FLAG)) {
+        sessionStorage.removeItem(DELETED_FLAG);
+        flash("Meeting deleted");
+      }
+    } catch {
+      // No storage: no toast.
+    }
+  }, [flash]);
 
   // Refreshing re-renders the server component with a new `initial`, so the interval stops by
   // itself once nothing listed is being worked on (it becomes null).
@@ -55,6 +70,7 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
   }
 
   return (
+    <>
     <Card flush>
       {meetings.length > 0 ? (
         <>
@@ -113,5 +129,7 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
         <EmptyState title="No meetings yet.">Paste a meeting link above to send the note taker.</EmptyState>
       )}
     </Card>
+    <Toast message={toast} />
+    </>
   );
 }

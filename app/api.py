@@ -300,6 +300,7 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         can_end=owner and services.can_end(meeting),
         can_retry=owner and failed and block is None,
         can_regenerate=owner and ready,
+        can_delete=owner and not active,
         join_attempts=meeting.join_attempts,
         max_join_attempts=MAX_JOIN_ATTEMPTS,
         bot_left_early=ready and meeting.completion_reason in REMOVAL_REASONS,

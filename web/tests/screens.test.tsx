@@ -147,6 +147,17 @@ describe("meeting list", () => {
     expect(within(screen.getAllByRole("listitem")[0]).getByText("Interview")).toBeTruthy();
   });
 
+  it("says 'Meeting deleted' once after a delete, then not again", () => {
+    sessionStorage.setItem("beyric:meeting-deleted", "1");
+    const list = captured<MeetingListData>("53-meetings-list.json");
+    const { unmount } = render(<MeetingList initial={list} templates={templates} />);
+    expect(screen.getByRole("status").textContent).toContain("Meeting deleted");
+    expect(sessionStorage.getItem("beyric:meeting-deleted")).toBeNull();
+    unmount();
+    render(<MeetingList initial={list} templates={templates} />);
+    expect(screen.getByRole("status").textContent).toBe("");
+  });
+
   it("lists the captured meetings with status badges, template names and links", () => {
     render(<MeetingList initial={captured<MeetingListData>("53-meetings-list.json")} templates={templates} />);
     const rows = screen.getAllByRole("listitem");
