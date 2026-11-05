@@ -422,6 +422,7 @@ export function MeetingView({
             <p>
               <strong>Delete this meeting?</strong> This deletes the notes, the transcript, any translations, the
               decisions and review items taken from it, and the recording. This cannot be undone.
+              {m.tasks_count > 0 ? ` This also deletes its ${plural(m.tasks_count, "task")}.` : ""}
             </p>
             <p>The hours it used stay counted.</p>
             <div className="dec-ask-actions">

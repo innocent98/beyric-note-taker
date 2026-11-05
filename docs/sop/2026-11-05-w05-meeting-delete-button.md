@@ -13,7 +13,7 @@ The UI for `DELETE /api/meetings/{id}` ([W0.5 SOP](2026-11-05-w05-meeting-delete
 | Toast "Meeting deleted" on the list | the designer's toast (`useToast`/`Toast`) | shown once, via a `sessionStorage` flag (`lib/deleted-flag.ts`) because a toast does not survive navigation |
 | Visibility | `can_delete` on `GET /api/meetings/{id}` = owner and not `bot_sent`/`processing` (same idea as `can_cancel`, `can_end`: hidden, not disabled) | |
 | Errors | 409 `meeting_active` and 502 `recording_delete_failed` show the API's own text in the page alert and keep the page; 409 refetches; 404 counts as deleted | |
-Task counts: the ask names none yet; the line arrives with W2 (not built here).
+Task count (D17, added 2026-11-05, **lead-designed, not in the designer's file**): when the meeting has tasks, the first paragraph ends with "This also deletes its 3 tasks." ("1 task" for one, no sentence for none), from `tasks_count` already on `GET /api/meetings/{id}`; no API change.
 
 Rejected: a modal `Dialog` (the page uses one for Cancel, but the drawn destructive confirm for a record is the inline ask); a disabled button while working (the page hides its other actions).
 
@@ -30,4 +30,4 @@ Rejected: a modal `Dialog` (the page uses one for Cancel, but the drawn destruct
 Revert the PR; the API from #86 is unaffected. `can_delete` is additive.
 
 ## Follow-ups
-Designer to confirm or redraw (button position, ask wording). W2: add the task count line to the ask.
+Designer to confirm or redraw (button position, ask wording). Designer to confirm the task-count sentence too. Vitest covers 0, 1 and 3 tasks (`web/tests/meeting-view.test.tsx`).
