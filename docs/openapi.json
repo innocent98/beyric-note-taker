@@ -2010,6 +2010,38 @@
         "title": "TermOut",
         "type": "object"
       },
+      "TimeZoneIn": {
+        "additionalProperties": false,
+        "properties": {
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time_zone"
+        ],
+        "title": "TimeZoneIn",
+        "type": "object"
+      },
+      "TimeZoneOut": {
+        "properties": {
+          "is_set": {
+            "title": "Is Set",
+            "type": "boolean"
+          },
+          "time_zone": {
+            "title": "Time Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "time_zone",
+          "is_set"
+        ],
+        "title": "TimeZoneOut",
+        "type": "object"
+      },
       "TranslationBrief": {
         "description": "What the meeting page needs to know about a translation without fetching it.",
         "properties": {
@@ -2305,6 +2337,17 @@
               }
             ],
             "title": "Name"
+          },
+          "time_zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Zone"
           }
         },
         "required": [
@@ -6225,6 +6268,118 @@
           }
         },
         "summary": "Write Language Preferences",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/time-zone": {
+      "get": {
+        "description": "The zone meeting times, due dates and reminder mails are written in. `UTC` with `is_set`\nfalse until the person chooses one.",
+        "operationId": "read_time_zone",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimeZoneOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Time Zone",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Set the caller's time zone (a name from the IANA database, e.g. `Africa/Lagos`).",
+        "operationId": "write_time_zone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimeZoneIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimeZoneOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`time_zone_unsupported`"
+          }
+        },
+        "summary": "Write Time Zone",
         "tags": [
           "settings"
         ]

@@ -43,7 +43,7 @@ describe("decisions", () => {
   it("says there are no decisions yet when nothing has been read from any notes", () => {
     render(<DecisionsView initial={{ groups: [], has_more: false, next_before_id: null }} />);
     expect(screen.getByText("No decisions yet.")).toBeTruthy();
-    expect(screen.getByText(/usually a minute after the notes are written/)).toBeTruthy();
+    expect(screen.getByText("Decisions made in your meetings will appear here after each meeting ends.")).toBeTruthy();
   });
 
   it("searches the API after typing pauses, and shows only the matching decision", async () => {
@@ -72,15 +72,15 @@ describe("decisions", () => {
     expect(screen.queryByText("No decisions yet.")).toBeNull();
   });
 
-  it("shows Searching... while the answer is on its way, and keeps the old list under it", async () => {
+  it("shows Loading decisions... in place of the list while the answer is on its way", async () => {
     let answer: (list: DecisionList) => void = () => undefined;
     mocks.list.mockReturnValue(new Promise<DecisionList>((resolve) => (answer = resolve)));
     render(<DecisionsView initial={all} />);
     await search("x");
-    expect(await screen.findByText("Searching...")).toBeTruthy();
-    expect(screen.getByText("Renew the vendor for one more year.")).toBeTruthy();
+    expect(await screen.findByText("Loading decisions...")).toBeTruthy();
+    expect(screen.queryByText("Renew the vendor for one more year.")).toBeNull();
     answer(none);
-    await waitFor(() => expect(screen.queryByText("Searching...")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Loading decisions...")).toBeNull());
   });
 
   it("drops a slow answer to an older search", async () => {
@@ -103,7 +103,7 @@ describe("decisions", () => {
     mocks.list.mockRejectedValueOnce(new ApiError(0, "network_error", "x")).mockResolvedValueOnce(byWords);
     render(<DecisionsView initial={all} />);
     await search("metrika");
-    expect((await screen.findByRole("alert")).textContent).toContain("Could not load the decisions.");
+    expect((await screen.findByRole("alert")).textContent).toContain("Could not load decisions. Check your connection and try again.");
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Proceed with the Metrika rollout in the next release.")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
@@ -128,6 +128,23 @@ describe("decisions", () => {
   });
 });
 
+describe("the first load failed", () => {
+  it("draws the designer's failed state, and Try again loads the list", async () => {
+    mocks.list.mockResolvedValue(all);
+    render(<DecisionsView initial={null} />);
+    expect((await screen.findByRole("alert")).textContent).toContain("Could not load decisions. Check your connection and try again.");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Renew the vendor for one more year.")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(mocks.list).toHaveBeenCalledWith({ q: undefined });
+  });
+
+  it("says Decisions made in your meetings, newest first.", () => {
+    render(<DecisionsView initial={all} />);
+    expect(screen.getByText("Decisions made in your meetings, newest first.")).toBeTruthy();
+  });
+});
+
 describe("remove from log", () => {
   const first = all.groups[0].decisions[0];
 
@@ -137,10 +154,11 @@ describe("remove from log", () => {
     await userEvent.click(screen.getByRole("button", { name: `Remove from log: ${first.text}` }));
     expect(mocks.hide).not.toHaveBeenCalled();
     const ask = screen.getByRole("group", { name: "Remove this decision from the log?" });
-    expect(ask.textContent).toContain("The notes keep it.");
+    expect(ask.textContent).toContain("Remove this decision from the log? It stays in the meeting notes.");
     await userEvent.click(within(ask).getByRole("button", { name: "Remove" }));
     expect(mocks.hide).toHaveBeenCalledWith(first.id);
     await waitFor(() => expect(screen.queryByText(first.text)).toBeNull());
+    expect(await screen.findByText("Decision removed from the log")).toBeTruthy();
     expect(screen.getByText("Leave the work estimate unassigned for now.")).toBeTruthy();
   });
 
@@ -156,7 +174,7 @@ describe("remove from log", () => {
   it("changes nothing when the owner keeps the decision", async () => {
     render(<DecisionsView initial={all} />);
     await userEvent.click(screen.getByRole("button", { name: `Remove from log: ${first.text}` }));
-    await userEvent.click(screen.getByRole("button", { name: "Keep" }));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(mocks.hide).not.toHaveBeenCalled();
     expect(screen.getByText(first.text)).toBeTruthy();
     expect(screen.queryByRole("group")).toBeNull();

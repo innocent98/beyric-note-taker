@@ -1,0 +1,25 @@
+{
+  "note": "A half-hour zone.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/time-zone",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "time_zone": "Asia/Kolkata"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "time_zone": "Asia/Kolkata",
+      "is_set": true
+    }
+  }
+}

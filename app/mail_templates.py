@@ -20,12 +20,12 @@ below (`ready_meeting`), not its own copy of the checks.
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import titles
+from app import timezones, titles
 from app.config import Settings
 from app.mail_layout import (
     Block,
@@ -242,9 +242,15 @@ def meeting_name(meeting: Meeting) -> str:
     return clean_line(titles.mail_title(meeting), 80)
 
 
-def when_line(meeting: Meeting) -> str:
-    when = meeting.created_at.astimezone(UTC)
-    return f"{when.day:02d} {when:%b %Y, %H:%M} UTC"
+def owner_time_zone(session: Session, owner: User) -> str | None:
+    return session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == owner.id))
+
+
+def when_line(meeting: Meeting, time_zone: str | None = None) -> str:
+    """ "05 Nov 2026, 14:30 GMT+1": the meeting's start in the owner's zone, labelled with it
+    ("UTC" while the owner has not chosen one)."""
+    when, label = timezones.localise(meeting.created_at, time_zone)
+    return f"{when.day:02d} {when:%b %Y, %H:%M} {label}"
 
 
 # ---- abridged notes: the part of the notes a mail carries ----
@@ -355,7 +361,7 @@ def _notes_ready(
     )
     name = meeting_name(meeting)
     blocks: list[Block] = [
-        Meta(f"{name} · {when_line(meeting)}"),
+        Meta(f"{name} · {when_line(meeting, owner_time_zone(session, owner))}"),
         Heading("Your meeting notes are ready"),
         *abridged_blocks(doc.sections),
         Button("View full notes", f"{settings.public_base_url.rstrip('/')}/meetings/{meeting.id}"),

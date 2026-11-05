@@ -1,0 +1,22 @@
+{
+  "note": "Chosen on purpose: `is_set` is true although the zone is UTC.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/settings/time-zone",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "time_zone": "UTC",
+      "is_set": true
+    }
+  }
+}

@@ -293,6 +293,8 @@ class UserSettings(Base):
     notify_email: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
     # The language notes and transcripts open in when a translation exists; `en` is the original.
     default_language: Mapped[str] = mapped_column(String(2), default="en", server_default="en")
+    # The person's own IANA time zone ("Africa/Lagos"); null = UTC, as every time was before.
+    time_zone: Mapped[str | None] = mapped_column(String(64))
 
 
 class CalendarConnection(Base):

@@ -12,6 +12,7 @@ import { captured, workspaceBody, workspaceError } from "./helpers";
 
 const mocks = vi.hoisted(() => ({
   refresh: vi.fn(),
+  list: vi.fn(),
   check: vi.fn(),
   uncheck: vi.fn(),
   addToVocabulary: vi.fn(),
@@ -21,7 +22,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
 vi.mock("@/lib/api/browser", () => ({
   api: {
-    review: { check: mocks.check, uncheck: mocks.uncheck, addToVocabulary: mocks.addToVocabulary },
+    review: { list: mocks.list, check: mocks.check, uncheck: mocks.uncheck, addToVocabulary: mocks.addToVocabulary },
     meetings: { get: mocks.get, regenerate: mocks.regenerate },
   },
 }));
@@ -87,7 +88,9 @@ describe("open items", () => {
     mocks.check.mockRejectedValue(new ApiError(status, code, message));
     render(<ReviewView open={open} checked={noChecked} />);
     await userEvent.click(within(card(metrika.text)).getByRole("button", { name: "Mark as checked" }));
-    expect(await screen.findByText(/no longer there/)).toBeTruthy();
+    expect(await screen.findByText("This item is no longer available. Its meeting was deleted.")).toBeTruthy();
+    // The row stays, with the designer's "Remove from list"; pressing it drops the row.
+    await userEvent.click(screen.getByRole("button", { name: "Remove from list" }));
     expect(screen.queryByText(metrika.text)).toBeNull();
   });
 });
@@ -123,8 +126,9 @@ describe("add to vocabulary", () => {
     await userEvent.click(screen.getByRole("button", { name: "Add to vocabulary" }));
     expect(mocks.addToVocabulary).toHaveBeenCalledWith(1, "Metrika");
     const offer = await screen.findByRole("status");
-    expect(offer.textContent).toContain("Added Metrika to your vocabulary.");
-    expect(offer.textContent).toContain("still have the old spelling");
+    expect(offer.textContent).toContain(
+      "\u201cMetrika\u201d was added to your vocabulary. Rewrite the notes for Google Meet nat-aaaa-bbb so they use the new spelling?",
+    );
     expect(offer.textContent).toContain("Decisions you removed and items you checked may come back");
     expect(screen.getByRole("button", { name: "Checked (1)" })).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "Mark as checked" })).toHaveLength(2);
@@ -133,7 +137,7 @@ describe("add to vocabulary", () => {
   it("does not call the API for an empty term, and says so in the API's own words", async () => {
     render(<ReviewView open={open} checked={noChecked} />);
     await userEvent.click(screen.getByRole("button", { name: "Add to vocabulary" }));
-    expect(screen.getByText(workspaceError("35-review-vocabulary-invalid.json").message)).toBeTruthy();
+    expect(screen.getByText("Type the correct spelling first.")).toBeTruthy();
     expect(mocks.addToVocabulary).not.toHaveBeenCalled();
   });
 
@@ -147,17 +151,15 @@ describe("add to vocabulary", () => {
     expect(screen.getAllByRole("button", { name: "Mark as checked" })).toHaveLength(3);
   });
 
-  it("treats the captured 409 as done: the item is checked and the rewrite is still offered", async () => {
+  it("says the term is already there (captured 409) on the row, as the designer draws it, and offers no rewrite", async () => {
     const { status, code, message } = workspaceError("38-review-vocabulary-duplicate.json");
     mocks.addToVocabulary.mockRejectedValue(new ApiError(status, code, message));
     render(<ReviewView open={open} checked={noChecked} />);
     await userEvent.type(screen.getByLabelText("Correct spelling of Metrika"), "Metrika");
     await userEvent.click(screen.getByRole("button", { name: "Add to vocabulary" }));
-    const offer = await screen.findByRole("status");
-    expect(offer.textContent).toContain("is already in your vocabulary, so nothing was added.");
-    expect(screen.getByRole("button", { name: "Checked (1)" })).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Mark as checked" })).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Rewrite the notes with the corrected spelling" })).toBeTruthy();
+    expect(await within(card(metrika.text)).findByText("\u201cMetrika\u201d is already in your vocabulary.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Rewrite notes" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Mark as checked" })).toHaveLength(3);
   });
 
   it("empties the box once the term is added, so Undo does not bring the old text back", async () => {
@@ -187,7 +189,7 @@ describe("rewrite offer", () => {
     await userEvent.click(screen.getByRole("button", { name: "Add to vocabulary" }));
     await screen.findByRole("status");
   }
-  const rewriteButton = () => screen.getByRole("button", { name: "Rewrite the notes with the corrected spelling" });
+  const rewriteButton = () => screen.getByRole("button", { name: "Rewrite notes" });
 
   it("rewrites with the meeting's own template, shows it running, then links to the notes", async () => {
     let finish: (m: Meeting) => void = () => undefined;
@@ -195,12 +197,13 @@ describe("rewrite offer", () => {
     mocks.regenerate.mockReturnValue(new Promise<Meeting>((resolve) => (finish = resolve)));
     await addMetrika();
     await userEvent.click(rewriteButton());
-    expect(await screen.findByText(/Rewriting the notes. This can take a few minutes/)).toBeTruthy();
+    expect(await screen.findByText("Rewriting the notes for Google Meet nat-aaaa-bbb...")).toBeTruthy();
     expect(mocks.get).toHaveBeenCalledWith(1);
     expect(mocks.regenerate).toHaveBeenCalledWith(1, readyMeeting.template_id);
     finish(readyMeeting);
-    expect(await screen.findByText(/were rewritten/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Open notes" }).getAttribute("href")).toBe("/meetings/1");
+    expect(await screen.findByText("The notes for Google Meet nat-aaaa-bbb now use \u201cMetrika.\u201d")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("leaves the offer away on Not now", async () => {
@@ -228,17 +231,57 @@ describe("rewrite offer", () => {
   });
 });
 
+describe("the designer's loading and failed states", () => {
+  const list = (items: typeof open.items) => ({ items, open_count: items.length, truncated: false });
+
+  it("draws the failed line when the first load failed, then Loading review items... and the lists on Try again", async () => {
+    let finish: (v: typeof open) => void = () => undefined;
+    mocks.list.mockReturnValueOnce(new Promise((resolve) => (finish = resolve))).mockResolvedValueOnce(noChecked);
+    render(<ReviewView open={null} checked={null} />);
+    expect(screen.getByRole("alert").textContent).toContain("Could not load review items. Check your connection and try again.");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Loading review items...")).toBeTruthy();
+    finish(open);
+    expect(await screen.findByText(metrika.text)).toBeTruthy();
+    expect(screen.queryByText("Loading review items...")).toBeNull();
+  });
+
+  it("goes back to the failed line when Try again fails too", async () => {
+    mocks.list.mockRejectedValue(new ApiError(0, "network_error", "x"));
+    render(<ReviewView open={null} checked={null} />);
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Could not load review items.");
+  });
+
+  it("says the subtitle in the designer's words", () => {
+    render(<ReviewView open={list([])} checked={list([])} />);
+    expect(
+      screen.getByText(
+        "Parts of your meeting transcripts that may have been misheard. Check them against the transcript and fix names in your vocabulary.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("shows a checked row as its text, then the meeting, the day and Open transcript", async () => {
+    render(<ReviewView open={list([])} checked={withChecked} />);
+    await userEvent.click(screen.getByRole("button", { name: /^Checked/ }));
+    const row = screen.getByRole("button", { name: "Undo" }).closest("li") as HTMLElement;
+    expect(row.textContent).toContain("Google Meet nat-aaaa-bbb · Sat 31 Oct 2026 · Open transcript");
+    expect(within(row).getByRole("link", { name: "Open transcript" }).getAttribute("href")).toBe("/meetings/1?tab=transcript");
+  });
+});
+
 describe("empty and long lists", () => {
   it("says there is nothing to review yet when no item exists, open or checked", () => {
     render(<ReviewView open={{ items: [], open_count: 0, truncated: false }} checked={{ items: [], open_count: 0, truncated: false }} />);
     expect(screen.getByText("Nothing to review yet.")).toBeTruthy();
-    expect(screen.getByText(/Meetings from before this feature were not scanned/)).toBeTruthy();
+    expect(screen.getByText("Words that may have been misheard in your meetings will appear here after each meeting ends.")).toBeTruthy();
   });
 
   it("says All caught up when every item has been checked", () => {
     render(<ReviewView open={{ items: [], open_count: 0, truncated: false }} checked={withChecked} />);
     expect(screen.getByText("All caught up")).toBeTruthy();
-    expect(screen.getByText("New items appear here after each meeting.")).toBeTruthy();
+    expect(screen.getByText("New items from your meetings appear here after each meeting.")).toBeTruthy();
     expect(screen.queryByText("Nothing to review yet.")).toBeNull();
   });
 

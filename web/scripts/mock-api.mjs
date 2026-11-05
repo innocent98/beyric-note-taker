@@ -37,8 +37,18 @@ const { values } = parseArgs({
     calendar: { type: "string", default: "not_connected" },
     recurring: { type: "string", default: "series" },
     language: { type: "string", default: "en" },
+    decisions: { type: "string", default: "live" },
+    review: { type: "string", default: "live" },
+    "time-zone": { type: "string" },
   },
 });
+
+// Decisions and Review: `--decisions live|loading|failed|empty|retry-loading` and `--review ...` (same words)
+// pick what those lists answer (the captures in docs/fe-captures/ai-workspace-w1/; `loading` answers
+// after 4 s, `failed` is a 500, `empty` has no item). Removing, checking and adding a term answer the
+// captures too; the terms "Dup" and "Beyric" answer the captured 409 and "Gone" a 404 (the item's meeting deleted).
+// `--time-zone Africa/Lagos` starts the account with that zone chosen (without it GET
+// /api/settings/time-zone answers UTC, not set); PUT keeps what it is given, in memory.
 
 // Translation (W7): `--language fr|es|en` is the account's default notes language to start with.
 // Meeting 8 is the designer's sample meeting ("Zoom 88205679674", the notes and transcript of
@@ -114,7 +124,11 @@ function json(res, status, payload, headers = {}) {
 }
 
 let notifyEmail = true;
-const MOCK_USER = { email: "owner@example.test", name: null, is_admin: false, email_verified: true };
+let timeZone = values["time-zone"] ?? null;
+const mockUser = () => ({ email: "owner@example.test", name: null, is_admin: false, email_verified: true, time_zone: timeZone });
+const wsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "ai-workspace-w1", `${name}.json`), "utf8")).response.body;
+const armed = { decisions: true, review: true }; // `retry-loading` fails once after each reset
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const readJson = (req) =>
   new Promise((resolve) => {
@@ -184,10 +198,18 @@ const server = http.createServer(async (req, res) => {
   const method = req.method ?? "GET";
   const data = ["POST", "PUT", "PATCH"].includes(method) ? await readJson(req) : (req.resume(), null);
 
+  // Not part of the API: `/__mock/set?decisions=failed&review=empty` changes the Decisions and Review
+  // states while the mock runs (the Next build proxies the browser's calls to one address, so one mock
+  // has to serve every state).
+  if (path === "/__mock/set") {
+    for (const key of ["decisions", "review"]) if (url.searchParams.has(key)) values[key] = url.searchParams.get(key);
+    return json(res, 200, { decisions: values.decisions, review: values.review });
+  }
   // Not part of the API: lets parity-shots.mjs start each translation screen from nothing.
   if (path === "/__mock/reset") {
     for (const language of Object.keys(translating)) delete translating[language];
     defaultLanguage = values.language;
+    armed.decisions = armed.review = true;
     return json(res, 200, { reset: true });
   }
 
@@ -219,12 +241,12 @@ const server = http.createServer(async (req, res) => {
         return res.end("<html><body><h1>429 Too Many Requests</h1><hr>nginx</body></html>");
       }
       if (data?.password === "wrong") return json(res, 401, accountBody("21-login-before-verifying"));
-      return json(res, 200, { authenticated: true, csrf_token: "mock-csrf", user: MOCK_USER, usage: { used_seconds: 0, cap_seconds: 18000 } }, { "set-cookie": "session=owner; Path=/; HttpOnly; SameSite=Lax" });
+      return json(res, 200, { authenticated: true, csrf_token: "mock-csrf", user: mockUser(), usage: { used_seconds: 0, cap_seconds: 18000 } }, { "set-cookie": "session=owner; Path=/; HttpOnly; SameSite=Lax" });
     }
     if (method === "DELETE") {
       return json(res, 200, { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null }, { "set-cookie": "session=; Path=/; Max-Age=0" });
     }
-    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: MOCK_USER, usage: { used_seconds: 0, cap_seconds: 18000 }, unread_notifications: 1 } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
+    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: mockUser(), usage: { used_seconds: 0, cap_seconds: 18000 }, unread_notifications: 1 } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
   }
   if (path.startsWith("/api/") && !loggedIn) {
     return json(res, 401, { error: { code: "not_authenticated", message: "Log in to continue." } });
@@ -269,6 +291,54 @@ const server = http.createServer(async (req, res) => {
     }
     return json(res, 200, { default_language: defaultLanguage });
   }
+  if (path === "/api/settings/time-zone") {
+    if (method === "PUT") {
+      try {
+        new Intl.DateTimeFormat("en", { timeZone: data?.time_zone });
+      } catch {
+        return json(res, 422, { error: { code: "time_zone_unsupported", message: "That time zone is not one we know. Pick one from the list." } });
+      }
+      timeZone = data.time_zone;
+    }
+    return json(res, 200, { time_zone: timeZone ?? "UTC", is_set: timeZone !== null });
+  }
+  if (path === "/api/decisions" && method === "GET") {
+    // `retry-loading`: the first answer fails (the page draws "Could not load"), then each one is slow, so
+    // pressing Try again shows the loading line.
+    if (values.decisions === "retry-loading" && armed.decisions) {
+      armed.decisions = false;
+      return json(res, 500, { error: { code: "server_error", message: "Something went wrong on our side." } });
+    }
+    if (values.decisions === "failed") return json(res, 500, { error: { code: "server_error", message: "Something went wrong on our side." } });
+    if (values.decisions === "loading" || values.decisions === "retry-loading") await wait(4000);
+    if (values.decisions === "empty") return json(res, 200, { groups: [], has_more: false, next_before_id: null });
+    return json(res, 200, wsCapture("13-decisions"));
+  }
+  if (/^\/api\/decisions\/\d+\/hide$/.test(path) && method === "POST") {
+    res.writeHead(204);
+    return res.end();
+  }
+  if (path === "/api/review" && method === "GET") {
+    // `retry-loading`: the first answer fails (the page draws "Could not load"), then each one is slow, so
+    // pressing Try again shows the loading line.
+    if (values.review === "retry-loading" && armed.review) {
+      armed.review = false;
+      return json(res, 500, { error: { code: "server_error", message: "Something went wrong on our side." } });
+    }
+    if (values.review === "failed") return json(res, 500, { error: { code: "server_error", message: "Something went wrong on our side." } });
+    if (values.review === "loading" || values.review === "retry-loading") await wait(4000);
+    const checked = url.searchParams.get("state") === "checked";
+    if (values.review === "empty") return json(res, 200, { items: [], open_count: 0, truncated: false });
+    return json(res, 200, wsCapture(checked ? "33-review-checked" : "29-review-open"));
+  }
+  if (/^\/api\/review\/\d+\/vocabulary$/.test(path) && method === "POST") {
+    if (!String(data?.term ?? "").trim()) return json(res, 400, wsCapture("35-review-vocabulary-invalid"));
+    if (["Dup", "Beyric"].includes(data.term)) return json(res, 409, wsCapture("38-review-vocabulary-duplicate"));
+    if (data.term === "Gone") return json(res, 404, wsCapture("40-review-check-foreign"));
+    return json(res, 201, wsCapture("36-review-vocabulary"));
+  }
+  if (/^\/api\/review\/\d+\/check$/.test(path) && method === "POST") return json(res, 200, wsCapture("31-review-check"));
+  if (/^\/api\/review\/\d+\/uncheck$/.test(path) && method === "POST") return json(res, 200, wsCapture("34-review-uncheck"));
   if (path === "/api/settings/email") {
     if (method === "PUT") notifyEmail = data?.notify_email === true;
     return json(res, 200, { notify_email: notifyEmail });

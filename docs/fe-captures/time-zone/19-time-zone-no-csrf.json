@@ -1,0 +1,26 @@
+{
+  "note": "A write without the token: 403.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/time-zone",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "time_zone": "Asia/Tokyo"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "note": "An empty name: the same 422.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/time-zone",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "time_zone": ""
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "time_zone_unsupported",
+        "message": "That time zone is not one we know. Pick one from the list."
+      }
+    }
+  }
+}

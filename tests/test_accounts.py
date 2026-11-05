@@ -108,6 +108,7 @@ def test_the_session_state_names_the_user(api, owner):
         "name": None,
         "is_admin": False,
         "email_verified": True,
+        "time_zone": None,
     }
 
 
