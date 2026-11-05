@@ -10,13 +10,15 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import auth, services, translation
+from app import auth, services, timezones, translation
 from app.api_schemas import (
     EmailPreferencesIn,
     EmailPreferencesOut,
     ErrorResponse,
     LanguagePreferencesIn,
     LanguagePreferencesOut,
+    TimeZoneIn,
+    TimeZoneOut,
 )
 from app.db import get_session
 from app.models import User, UserSettings
@@ -86,3 +88,39 @@ def write_language_preferences(
     )
     session.commit()
     return LanguagePreferencesOut(default_language=body.default_language)
+
+
+@router.get("/time-zone")
+def read_time_zone(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> TimeZoneOut:
+    """The zone meeting times, due dates and reminder mails are written in. `UTC` with `is_set`
+    false until the person chooses one."""
+    value = session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user.id))
+    return TimeZoneOut(time_zone=value or "UTC", is_set=value is not None)
+
+
+@router.put(
+    "/time-zone",
+    responses={422: {"model": ErrorResponse, "description": "`time_zone_unsupported`"}},
+)
+def write_time_zone(
+    body: TimeZoneIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> TimeZoneOut:
+    """Set the caller's time zone (a name from the IANA database, e.g. `Africa/Lagos`)."""
+    name = body.time_zone.strip()
+    if not timezones.is_known(name):
+        raise services.Refused(
+            422,
+            "time_zone_unsupported",
+            "That time zone is not one we know. Pick one from the list.",
+        )
+    session.execute(
+        insert(UserSettings)
+        .values(user_id=user.id, time_zone=name)
+        .on_conflict_do_update(index_elements=["user_id"], set_={"time_zone": name})
+    )
+    session.commit()
+    return TimeZoneOut(time_zone=name, is_set=True)

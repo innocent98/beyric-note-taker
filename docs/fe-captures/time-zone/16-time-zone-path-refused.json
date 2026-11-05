@@ -1,0 +1,27 @@
+{
+  "note": "A path is not a zone: the same 422.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/time-zone",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "time_zone": "../etc/passwd"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "time_zone_unsupported",
+        "message": "That time zone is not one we know. Pick one from the list."
+      }
+    }
+  }
+}

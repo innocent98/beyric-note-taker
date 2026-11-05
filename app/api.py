@@ -55,7 +55,7 @@ from app.api_schemas import (
     UserOut,
 )
 from app.db import get_session
-from app.models import Meeting, MeetingTranslation, User
+from app.models import Meeting, MeetingTranslation, User, UserSettings
 from app.notes_document import build_notes_document, content_disposition, export_filename
 from app.pipeline import (
     MAX_JOIN_ATTEMPTS,
@@ -170,6 +170,9 @@ def _session_state(request: Request, db: Session) -> SessionState:
             name=user.name,
             is_admin=user.is_admin,
             email_verified=user.email_verified_at is not None,
+            time_zone=db.scalar(
+                select(UserSettings.time_zone).where(UserSettings.user_id == user.id)
+            ),
         ),
         usage=UsageOut(used_seconds=used, cap_seconds=usage.effective_cap(db, user)),
         unread_notifications=notifications.unread_count(db, user),

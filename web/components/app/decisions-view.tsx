@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Alert, AppLink, Button, EmptyState, Field, Icon, PageHead } from "@/components/ui";
+import { Alert, AppLink, Button, EmptyState, Field, Icon, PageHead, Toast } from "@/components/ui";
+import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { DecisionGroup, DecisionList } from "@/lib/api/types";
@@ -19,13 +20,21 @@ type Load = "idle" | "searching" | "failed";
 // match lists every decision of that meeting), and older meetings come with before_id
 // (docs/fe-integration-guide-ai-workspace.md section 3). Removing hides a decision from the log and
 // never edits the notes; there is no way to bring it back from here, so it asks first.
-export function DecisionsView({ initial }: { initial: DecisionList }) {
-  const [groups, setGroups] = useState<DecisionGroup[]>(initial.groups);
-  const [paging, setPaging] = useState<Paging>({ hasMore: initial.has_more, before: initial.next_before_id });
+//
+// The designer's states: "Loading decisions..." while a list is being fetched, the red "Could not
+// load decisions" line with Try again (also what the page draws when the first load failed: `initial`
+// is null), the dashed empty box, and a toast after a removal.
+export function DecisionsView({ initial }: { initial: DecisionList | null }) {
+  const [groups, setGroups] = useState<DecisionGroup[]>(initial?.groups ?? []);
+  const [paging, setPaging] = useState<Paging>({
+    hasMore: initial?.has_more ?? false,
+    before: initial?.next_before_id ?? null,
+  });
   const [query, setQuery] = useState("");
   // The search the list on screen answers (what the empty state names).
   const [shownQuery, setShownQuery] = useState("");
-  const [load, setLoad] = useState<Load>("idle");
+  const [load, setLoad] = useState<Load>(initial === null ? "failed" : "idle");
+  const [toast, flash] = useToast();
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreFailed, setMoreFailed] = useState(false);
   const [confirming, setConfirming] = useState<number | null>(null);
@@ -99,6 +108,7 @@ export function DecisionsView({ initial }: { initial: DecisionList }) {
       await api.decisions.hide(id);
       dropDecision(id);
       setConfirming(null);
+      flash("Decision removed from the log");
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 404) {
         // Already gone (a rewrite replaced it, or another tab removed it): gone either way.
@@ -116,7 +126,7 @@ export function DecisionsView({ initial }: { initial: DecisionList }) {
 
   return (
     <div className="stack-md measure-wide">
-      <PageHead title="Decisions" subtitle="Everything agreed in your meetings, newest first." />
+      <PageHead title="Decisions" subtitle="Decisions made in your meetings, newest first." />
       <div role="search">
         <Field
           id="decision-search"
@@ -134,21 +144,24 @@ export function DecisionsView({ initial }: { initial: DecisionList }) {
       {error ? <Alert kind="error">{error}</Alert> : null}
 
       {load === "failed" ? (
-        <Alert kind="error">
-          <p className="alert-text">Could not load the decisions. Check your connection and try again.</p>
+        <div className="state-fail" role="alert">
+          <span className="state-fail-text">
+            <Icon name="info" />
+            Could not load decisions. Check your connection and try again.
+          </span>
           <Button kind="secondary" size="sm" type="button" onClick={() => void search(query.trim())}>
             Try again
           </Button>
-        </Alert>
+        </div>
+      ) : searching ? (
+        <p className="state-line" role="status">
+          <Icon name="spinner" />
+          Loading decisions...
+        </p>
       ) : (
-        <div className="stack-md" aria-busy={searching}>
-          {searching ? (
-            <p className="meta" role="status">
-              Searching...
-            </p>
-          ) : null}
+        <div className="stack-md">
           {groups.map((group) => (
-            <section className={`card card-flush${searching ? " is-busy" : ""}`} key={group.meeting.id}>
+            <section className="card card-flush" key={group.meeting.id}>
               <div className="dec-head">
                 <div className="dec-head-text">
                   <span className="dec-date"><LocalTime iso={group.meeting.created_at} kind="day" /></span>
@@ -159,35 +172,28 @@ export function DecisionsView({ initial }: { initial: DecisionList }) {
                 </AppLink>
               </div>
               <ul className="dec-list">
-                {group.decisions.map((decision) => (
-                  <li className="dec-item" key={decision.id}>
-                    <Icon name="check" />
-                    <div className="dec-body">
+                {group.decisions.map((decision) =>
+                  confirming === decision.id ? (
+                    <li className="dec-item dec-item-confirm" key={decision.id}>
                       <p className="dec-text">{decision.text}</p>
-                      {confirming === decision.id ? (
-                        <div className="dec-confirm" role="group" aria-label="Remove this decision from the log?">
-                          <span>Remove it from this log? The notes keep it.</span>
-                          <Button
-                            kind="secondary"
-                            size="sm"
-                            type="button"
-                            disabled={removing !== null}
-                            onClick={() => void remove(decision.id)}
-                          >
+                      <div className="dec-ask" role="group" aria-label="Remove this decision from the log?">
+                        <span className="dec-ask-text">Remove this decision from the log? It stays in the meeting notes.</span>
+                        <div className="dec-ask-actions">
+                          <Button kind="secondary" size="sm" type="button" disabled={removing !== null} onClick={() => setConfirming(null)}>
+                            Cancel
+                          </Button>
+                          <Button kind="danger" size="sm" type="button" disabled={removing !== null} onClick={() => void remove(decision.id)}>
                             {removing === decision.id ? "Removing..." : "Remove"}
                           </Button>
-                          <Button
-                            kind="quiet"
-                            type="button"
-                            disabled={removing !== null}
-                            onClick={() => setConfirming(null)}
-                          >
-                            Keep
-                          </Button>
                         </div>
-                      ) : null}
-                    </div>
-                    {confirming === decision.id ? null : (
+                      </div>
+                    </li>
+                  ) : (
+                    <li className="dec-item" key={decision.id}>
+                      <Icon name="check" />
+                      <div className="dec-body">
+                        <p className="dec-text">{decision.text}</p>
+                      </div>
                       <Button
                         kind="quiet"
                         type="button"
@@ -196,20 +202,20 @@ export function DecisionsView({ initial }: { initial: DecisionList }) {
                       >
                         Remove from log
                       </Button>
-                    )}
-                  </li>
-                ))}
+                    </li>
+                  ),
+                )}
               </ul>
             </section>
           ))}
 
-          {empty && !searching ? (
+          {empty ? (
             <div className="empty-box">
               {shownQuery ? (
                 <EmptyState title="No decisions match your search." />
               ) : (
                 <EmptyState title="No decisions yet.">
-                  Decisions from your meeting notes appear here, usually a minute after the notes are written.
+                  Decisions made in your meetings will appear here after each meeting ends.
                 </EmptyState>
               )}
             </div>
@@ -217,7 +223,7 @@ export function DecisionsView({ initial }: { initial: DecisionList }) {
 
           {paging.hasMore ? (
             <div className="load-more">
-              <Button kind="secondary" size="sm" type="button" onClick={loadOlder} disabled={loadingMore || searching}>
+              <Button kind="secondary" size="sm" type="button" onClick={loadOlder} disabled={loadingMore}>
                 {loadingMore ? "Loading..." : "Show older meetings"}
               </Button>
               {moreFailed ? <span className="meta">Could not load older meetings. Try again.</span> : null}
@@ -225,6 +231,7 @@ export function DecisionsView({ initial }: { initial: DecisionList }) {
           ) : null}
         </div>
       )}
+      <Toast message={toast} />
     </div>
   );
 }

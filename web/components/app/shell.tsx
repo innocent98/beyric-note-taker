@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { TimeZoneProvider } from "@/components/app/time-zone-context";
 import { IconButton, Logo, NavLink } from "@/components/ui";
 
 export type NavSection = "meetings" | "decisions" | "review" | "notifications" | "templates" | "vocabulary" | "settings";
@@ -6,15 +7,19 @@ export type NavSection = "meetings" | "decisions" | "review" | "notifications" |
 // The owner app's frame: a sidebar on desktop, a top bar on phones (components.css). Log out is a
 // plain form post to /logout (app/logout/route.ts), so it works without JavaScript. `reviewOpen` is
 // `badges.review_open` from GET /api/session (null when unknown): the count beside Review.
+// `timeZone` is `user.time_zone` of the same answer: the zone every time on the page is written in
+// (null = the browser's own).
 export function AppShell({
   current,
   reviewOpen = null,
   unread = null,
+  timeZone = null,
   children,
 }: {
   current: NavSection;
   reviewOpen?: number | null;
   unread?: number | null;
+  timeZone?: string | null;
   children: ReactNode;
 }) {
   return (
@@ -52,7 +57,7 @@ export function AppShell({
       </aside>
       <div className="shell-main">
         <main id="main" className="page">
-          {children}
+          <TimeZoneProvider value={timeZone}>{children}</TimeZoneProvider>
         </main>
       </div>
     </div>

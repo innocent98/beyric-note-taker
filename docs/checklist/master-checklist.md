@@ -492,11 +492,22 @@ Legal and business
 - [ ] Follow-up: the Review page's "Rewrite with the corrected spelling" offer fails with "Choose a template." for a meeting whose template was deleted
 - [ ] Follow-up: designer to rule on the confirmation ask and on deleting the last template
 
+## Decisions and Review states, and Settings > Time zone (2026-11-05, `feature/decisions-review-timezone`, PR open, SOP `docs/sop/2026-11-05-decisions-review-states-and-time-zone.md`)
+
+- [x] Decisions: subtitle, loading, failed with Try again (also on first load), empty text, Remove from log ask with Cancel / Remove, toast (the hide API already existed)
+- [x] Review: loading, failed, empty, rewrite offer (Not now / Rewrite notes, working, done, Dismiss), row errors, Remove from list, All caught up wording, checked rows with meeting, day, Open transcript
+- [x] Migration 0018 `user_settings.time_zone` (nullable, null = UTC); `GET/PUT /api/settings/time-zone`; `user.time_zone` in the session
+- [x] Settings > Time zone card (18 zones, local time, Use my device, toasts); notes-ready mail and the pages use the stored zone
+- [x] FE guide `docs/fe-integration-guide-settings-time-zone.md` with live captures (`docs/fe-captures/time-zone/`)
+- [ ] Meeting detail page passes `timeZone` to `AppShell` (parallel session)
+- [ ] In-app notification texts from the join runner are still UTC
+- [ ] Not verified: pages in a browser against a live FastAPI
+
 ## Local time display (2026-11-04, `feature/local-time-display`, merged as #76 `32b612d`, SOP `docs/sop/2026-11-04-local-time-display.md`)
 
 - [x] Web pages show every date and time in the viewer's own browser zone with a short zone label ("02 Nov 2026, 22:16 GMT+1"); the server render and first browser render stay UTC, then `LocalTime` swaps in the zone after mount (no hydration warning)
 - [x] Applied to Meetings list, meeting detail (header, Details, retry notice), Notifications, Decisions and Review day labels, Settings "Last updated"; Upcoming already was local and now shares the same zone helper
 - [x] Tests with fixed zones (Lagos, New York across the 2026-11-01 clock change, Kolkata, UTC), day boundary, post-mount swap, hydration without a console error; vitest pins `TZ=UTC`
 - [x] Parity: Lagos and UTC runs at 1440/768/390 (`docs/ui/parity/after/local-time-{lagos,utc}/`) and a layout check (`web/scripts/parity-local-time.mjs`)
-- [ ] Follow-up: mail and the old Jinja pages are still UTC (needs a stored per-user zone)
-- [ ] Follow-up: designer to draw a "Time zone" row in Settings before any stored zone is built
+- [x] Mail now follows the stored per-user zone (see the next section); the old Jinja pages are still UTC
+- [x] Designer drew the "Time zone" row (#80); built below

@@ -1,0 +1,11 @@
+{
+  "note": "`mail.deliver_pending`: the notes-ready mail names the meeting's start.",
+  "content": {
+    "sent": 1,
+    "first_lines": [
+      "Zoom 81234567890 · 05 Nov 2026, 23:30 UTC",
+      "",
+      "Your meeting notes are ready"
+    ]
+  }
+}

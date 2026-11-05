@@ -976,6 +976,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/time-zone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Time Zone
+         * @description The zone meeting times, due dates and reminder mails are written in. `UTC` with `is_set`
+         *     false until the person chooses one.
+         */
+        get: operations["read_time_zone"];
+        /**
+         * Write Time Zone
+         * @description Set the caller's time zone (a name from the IANA database, e.g. `Africa/Lagos`).
+         */
+        put: operations["write_time_zone"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/signup": {
         parameters: {
             query?: never;
@@ -1894,6 +1919,18 @@ export interface components {
             /** Term */
             term: string;
         };
+        /** TimeZoneIn */
+        TimeZoneIn: {
+            /** Time Zone */
+            time_zone: string;
+        };
+        /** TimeZoneOut */
+        TimeZoneOut: {
+            /** Is Set */
+            is_set: boolean;
+            /** Time Zone */
+            time_zone: string;
+        };
         /**
          * TranslationBrief
          * @description What the meeting page needs to know about a translation without fetching it.
@@ -2007,6 +2044,8 @@ export interface components {
             is_admin: boolean;
             /** Name */
             name: string | null;
+            /** Time Zone */
+            time_zone?: string | null;
         };
         /** Verified */
         Verified: {
@@ -4971,6 +5010,104 @@ export interface operations {
                 };
             };
             /** @description `language_unsupported` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_time_zone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeZoneOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_time_zone: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimeZoneIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeZoneOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `time_zone_unsupported` */
             422: {
                 headers: {
                     [name: string]: unknown;

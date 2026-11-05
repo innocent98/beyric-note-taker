@@ -55,6 +55,9 @@ class UserOut(BaseModel):
     name: str | None
     is_admin: bool
     email_verified: bool
+    # The IANA zone the person chose on Settings; null until they do (times are then UTC in mail,
+    # and the browser's own zone on the pages).
+    time_zone: str | None = None
 
 
 class UsageOut(BaseModel):
@@ -507,6 +510,19 @@ class LanguagePreferencesOut(BaseModel):
     # `en` means the original (no translation); `fr` or `es` opens meetings in that language
     # when a translation exists.
     default_language: Literal["en", "fr", "es"]
+
+
+class TimeZoneOut(BaseModel):
+    # The stored IANA zone name, or "UTC" when none was ever chosen.
+    time_zone: str
+    # True once the person chose one (or used their device); false while "UTC" is only the default.
+    is_set: bool
+
+
+class TimeZoneIn(Body):
+    # An IANA zone name such as "Africa/Lagos"; anything the server does not know is 422
+    # `time_zone_unsupported`.
+    time_zone: str
 
 
 class LanguagePreferencesIn(Body):

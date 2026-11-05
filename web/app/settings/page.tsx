@@ -4,10 +4,11 @@ import { AppShell } from "@/components/app/shell";
 import { EmailSettingsSection } from "@/components/app/email-settings-section";
 import { SettingsCalendar } from "@/components/app/settings-calendar";
 import { SettingsLanguage } from "@/components/app/settings-language";
+import { SettingsTimeZone } from "@/components/app/settings-time-zone";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 import { PageHead } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
-import { getReviewOpen, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTimeZone, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
 import { calendarNotice } from "@/lib/calendar-notice";
 import type { CalendarState, Template } from "@/lib/api/types";
 
@@ -40,13 +41,18 @@ export default async function SettingsPage({
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect("/login");
   }
-  const [email, language] = await Promise.all([load(api.settings.email.get()), load(api.settings.language.get())]);
+  const [email, language, timeZone] = await Promise.all([
+    load(api.settings.email.get()),
+    load(api.settings.language.get()),
+    load(api.settings.timeZone.get()),
+  ]);
   return (
-    <AppShell current="settings" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()}>
+    <AppShell current="settings" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()} timeZone={await getTimeZone()}>
       <div className="stack-md measure">
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
         <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} templates={templates} />
         <SettingsPlannedSections />
+        <SettingsTimeZone initial={timeZone.time_zone} />
         <SettingsLanguage initial={language.default_language} />
         <EmailSettingsSection email={email} />
       </div>

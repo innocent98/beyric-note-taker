@@ -716,3 +716,24 @@ def test_autojoin_marker_columns_round_trip_and_start_unset(scratch_url):
     command.downgrade(cfg, "0016")
     assert "autojoin_started_at" not in _app_state_columns(engine)
     engine.dispose()
+
+
+# ---- 0018 time zone ----
+
+
+def test_time_zone_column_round_trips_and_existing_rows_stay_null(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0017")
+    engine = create_engine(scratch_url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("user_settings")}
+
+    assert "time_zone" not in columns()
+    command.upgrade(cfg, "head")
+    assert "time_zone" in columns()
+    assert _rows(engine, "select count(*) from user_settings where time_zone is not null") == [(0,)]
+    command.downgrade(cfg, "0017")
+    assert "time_zone" not in columns()
+    command.upgrade(cfg, "head")
+    engine.dispose()

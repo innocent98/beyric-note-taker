@@ -1,0 +1,22 @@
+{
+  "note": "No login: 401.",
+  "client": "visitor",
+  "request": {
+    "method": "GET",
+    "path": "/api/settings/time-zone",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

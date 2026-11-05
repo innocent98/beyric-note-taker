@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import DecisionsPage from "@/app/decisions/page";
 import ReviewPage from "@/app/review/page";
 import { AppShell } from "@/components/app/shell";
+import { ApiError } from "@/lib/api/client";
 import { NEXT_PAGES, isNextPage } from "@/lib/routes";
 import { workspaceBody } from "./helpers";
 import type { DecisionList, ReviewList } from "@/lib/api/types";
@@ -10,7 +11,7 @@ import type { DecisionList, ReviewList } from "@/lib/api/types";
 // The sidebar's Decisions and Review links and the badge (`badges.review_open`), and the server half
 // of the two pages.
 
-const state = vi.hoisted(() => ({ calls: [] as string[], reviewOpen: 3 as number | null, authenticated: true }));
+const state = vi.hoisted(() => ({ calls: [] as string[], reviewOpen: 3 as number | null, authenticated: true, fail: null as null | number }));
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => {
     throw new Error(`redirect:${to}`);
@@ -27,12 +28,14 @@ vi.mock("@/lib/api/server", () => ({
       decisions: {
         list: async () => {
           state.calls.push("decisions");
+          if (state.fail !== null) throw new ApiError(state.fail, "x", "x");
           return workspaceBody<DecisionList>("13-decisions.json");
         },
       },
       review: {
         list: async (which: string) => {
           state.calls.push(`review:${which}`);
+          if (state.fail !== null) throw new ApiError(state.fail, "x", "x");
           return workspaceBody<ReviewList>(which === "open" ? "29-review-open.json" : "33-review-checked.json");
         },
       },
@@ -40,6 +43,7 @@ vi.mock("@/lib/api/server", () => ({
   },
   getReviewOpen: async () => state.reviewOpen,
   getUnreadNotifications: async () => null,
+  getTimeZone: async () => null,
   load: <T,>(call: Promise<T>) => call,
 }));
 
@@ -88,6 +92,18 @@ describe("pages", () => {
     expect(state.calls.sort()).toEqual(["review:checked", "review:open"]);
     expect(html).toContain("Heard as");
     expect(html).toContain("Mark as checked");
+  });
+
+  it("draw the designer's failed state, not the error page, when the first load fails", async () => {
+    state.fail = 500;
+    const decisions = renderToStaticMarkup(await DecisionsPage());
+    expect(decisions).toContain("Could not load decisions. Check your connection and try again.");
+    const review = renderToStaticMarkup(await ReviewPage());
+    expect(review).toContain("Could not load review items. Check your connection and try again.");
+    state.fail = 401;
+    await expect(DecisionsPage()).rejects.toThrow("redirect:/login");
+    await expect(ReviewPage()).rejects.toThrow("redirect:/login");
+    state.fail = null;
   });
 
   it("send a visitor who is not logged in to /login", async () => {

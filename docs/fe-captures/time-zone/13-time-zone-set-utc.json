@@ -1,0 +1,25 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/time-zone",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "time_zone": "UTC"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "time_zone": "UTC",
+      "is_set": true
+    }
+  }
+}

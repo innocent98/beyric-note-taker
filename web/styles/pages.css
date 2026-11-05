@@ -328,3 +328,27 @@
   .pl-head, .pl-row { padding-left: 16px; padding-right: 16px; }
   .pl-language { padding: 18px 16px; }
 }
+
+/* Settings > Time zone: the line under the select (the clock there, "Use my device" at the right). */
+.tz-foot { display: flex; justify-content: space-between; gap: var(--space-2); font-size: var(--text-xs); color: var(--text-3); }
+.tz-device { padding: 0; border: 0; background: transparent; color: var(--teal); font-size: var(--text-xs); font-weight: 550; cursor: pointer; }
+
+/* Decisions and Review: the waiting line and the inline failure of the designer's states. */
+.state-line { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); color: var(--text-2); font-size: var(--text-base); }
+.state-line .icon { color: var(--text-4, var(--ink-3)); animation: state-spin 1s linear infinite; }
+@keyframes state-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .state-line .icon { animation: none; } }
+.state-fail { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border: 1px solid var(--danger-line); border-radius: var(--radius-lg); background: var(--danger-tint); color: var(--danger-text); font-size: var(--text-base); }
+.state-fail-text { display: flex; align-items: center; gap: 10px; }
+.state-fail-text .icon { flex: none; color: var(--danger); }
+.dec-item-confirm { flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--danger-line); border-radius: 10px; background: var(--danger-tint); }
+.dec-item-confirm .dec-text { font-size: var(--text-sm); color: var(--ink-2); }
+.dec-ask { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dec-ask-text { font-size: var(--text-sm); font-weight: 550; color: var(--danger-text); }
+.dec-ask-actions { display: flex; gap: var(--space-2); }
+.rv-row-error { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: var(--text-sm); color: var(--danger); }
+.rv-row-error .icon { flex: none; }
+.rv-row-error-text { display: flex; align-items: center; gap: 8px; }
+.rv-row-error-link { padding: 0; border: 0; background: transparent; color: var(--danger-text); font-size: var(--text-sm); font-weight: 550; text-decoration: underline; cursor: pointer; }
+.rv-fix.rv-bad .input { border-color: var(--danger-line); }
+.rv-done-row > .icon { flex: none; margin-top: 2px; color: var(--teal); }

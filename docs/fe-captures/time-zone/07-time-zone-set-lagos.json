@@ -1,0 +1,25 @@
+{
+  "note": "The answer is the stored zone.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/time-zone",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "time_zone": "Africa/Lagos"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "time_zone": "Africa/Lagos",
+      "is_set": true
+    }
+  }
+}

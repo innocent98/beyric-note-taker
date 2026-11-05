@@ -10,6 +10,7 @@ import type {
   ExportFormat,
   FieldError,
   LanguagePreferences,
+  TimeZonePreferences,
   Meeting,
   MeetingList,
   NewMeeting,
@@ -280,6 +281,12 @@ export function createApi(options: ApiOptions = {}) {
         get: () => request<LanguagePreferences>("GET", "/api/settings/language"),
         set: (default_language: NoteLanguage) =>
           request<LanguagePreferences>("PUT", "/api/settings/language", { body: { default_language }, write: true }),
+      },
+      // The person's own time zone (GET and PUT /api/settings/time-zone).
+      timeZone: {
+        get: () => request<TimeZonePreferences>("GET", "/api/settings/time-zone"),
+        set: (time_zone: string) =>
+          request<TimeZonePreferences>("PUT", "/api/settings/time-zone", { body: { time_zone }, write: true }),
       },
       email: {
         get: () => request<EmailPreferences>("GET", "/api/settings/email"),

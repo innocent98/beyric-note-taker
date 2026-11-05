@@ -39,11 +39,13 @@ vi.mock("@/lib/api/server", () => ({
       settings: {
         email: { get: async () => ({ notify_email: true }) },
         language: { get: async () => ({ default_language: "en" }) },
+        timeZone: { get: async () => ({ time_zone: "UTC", is_set: false }) },
       },
     };
   },
   getReviewOpen: async () => 2,
   getUnreadNotifications: async () => null,
+  getTimeZone: async () => null,
   load: <T,>(call: Promise<T>) => call,
 }));
 
@@ -101,7 +103,7 @@ describe("page", () => {
       state.answer = answer;
       const html = await render();
       const order = [
-        ...["Calendar", "Sprints and reminders", "Tasks", "Default notes language"].map((title) =>
+        ...["Calendar", "Sprints and reminders", "Tasks", "Time zone", "Default notes language"].map((title) =>
           html.indexOf(`>${title}</h2>`),
         ),
         html.indexOf('id="email-preferences"'),
@@ -141,7 +143,7 @@ describe("page", () => {
     for (const answer of [async () => connected, off]) {
       state.answer = answer;
       const html = await render();
-      const order = ["Calendar", "Sprints and reminders", "Tasks", "Default notes language"].map((title) =>
+      const order = ["Calendar", "Sprints and reminders", "Tasks", "Time zone", "Default notes language"].map((title) =>
         html.indexOf(`>${title}</h2>`),
       );
       expect(order.every((at) => at > -1)).toBe(true);

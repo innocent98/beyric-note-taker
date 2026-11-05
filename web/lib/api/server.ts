@@ -67,6 +67,12 @@ export async function getUnreadNotifications(): Promise<number | null> {
   return (await getSession())?.unread_notifications ?? null;
 }
 
+// The time zone the person chose on Settings, from the session this request already read; null when
+// none was chosen (or it is not known): the pages then use the browser's zone.
+export async function getTimeZone(): Promise<string | null> {
+  return (await getSession())?.user?.time_zone ?? null;
+}
+
 // For pages that are only for the owner. Anyone else goes to /login.
 export async function requireOwner() {
   const session = await getSession();

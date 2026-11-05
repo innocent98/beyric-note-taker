@@ -96,6 +96,45 @@ const SCREENS = {
     true,
     [LANG("French", 3800), { text: "Download", wait: 300 }],
   ],
+  // Decisions and Review (the designer's states: run the mock with --decisions/--review failed|empty|loading
+  // and the design copy with its "Preview states" default changed, see the SOP). Live list, the
+  // inline remove ask and its toast, the rewrite offer, the row errors, the checked rows.
+  "app-decisions": [APP, [["Decisions", "first", 1200]], "/decisions", true],
+  "app-decisions-confirm": [APP, [["Decisions", "first", 1200], ["Remove from log", "first"]], "/decisions", true, [{ text: "Remove from log" }]],
+  "app-decisions-removed": [
+    APP,
+    [["Decisions", "first", 1200], ["Remove from log", "first"], ["Remove", "first", 300]],
+    "/decisions",
+    true,
+    [{ text: "Remove from log" }, { text: "Remove", wait: 500 }],
+  ],
+  // Decisions/Review loading: the mock's `retry-loading` fails the page load, then answers slowly.
+  "app-decisions-loading": [APP, [["Decisions", "first", 300]], "/decisions", true, [{ text: "Try again", wait: 600 }]],
+  "app-review-loading": [APP, [["Review", "first", 300]], "/review", true, [{ text: "Try again", wait: 600 }]],
+  "app-review": [APP, [["Review", "first", 1200]], "/review", true],
+  "app-review-offer": [
+    APP,
+    [["Review", "first", 1200], { fill: "e.g. company name", value: "Metrika" }, ["Add to vocabulary", "first", 400]],
+    "/review",
+    true,
+    [{ fill: "e.g. company name", value: "Metrika" }, { text: "Add to vocabulary", wait: 600 }],
+  ],
+  "app-review-empty-term": [APP, [["Review", "first", 1200], ["Add to vocabulary", "first", 400]], "/review", true, [{ text: "Add to vocabulary", wait: 400 }]],
+  "app-review-dup": [
+    APP,
+    [["Review", "first", 1200], { fill: "e.g. company name", value: "Beyric" }, ["Add to vocabulary", "first", 400]],
+    "/review",
+    true,
+    [{ fill: "e.g. company name", value: "Beyric" }, { text: "Add to vocabulary", wait: 600 }],
+  ],
+  "app-review-gone": [null, [], "/review", true, [{ fill: "e.g. company name", value: "Gone" }, { text: "Add to vocabulary", wait: 600 }]],
+  "app-settings-timezone": [
+    APP,
+    [["Settings", "first"], { select: "(UTC+9) Tokyo", design: "Tokyo", wait: 300 }],
+    "/settings",
+    true,
+    [{ select: "(UTC+9) Tokyo", design: "Tokyo", next: "Time zone", wait: 500 }],
+  ],
   "app-settings-language": [APP, [["Settings", "first"], DEFAULT_LANG("French", 300)], "/settings", true, [DEFAULT_LANG("French", 400)]],
 };
 
@@ -122,7 +161,9 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
   await page.waitForTimeout(1200);
   for (const step of clicks) {
     if (!Array.isArray(step)) {
-      if (step.select) {
+      if (step.fill) {
+        await page.getByPlaceholder(step.fill).first().fill(step.value);
+      } else if (step.select) {
         const field =
           side === "design"
             ? page.locator("select", { hasText: step.design })
