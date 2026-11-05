@@ -412,10 +412,19 @@ describe("delete meeting", () => {
     expect(ask.textContent).toContain("decisions and review items");
     expect(ask.textContent).toContain("the recording");
     expect(ask.textContent).toContain("The hours it used stay counted.");
-    expect(ask.textContent).not.toMatch(/task/i); // task counts arrive with W2
+    expect(ask.textContent).not.toMatch(/task/i); // no tasks: no line
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("button", { name: "Delete meeting" })).toBeTruthy();
     expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [1, "This also deletes its 1 task."],
+    [3, "This also deletes its 3 tasks."],
+  ])("names the task count (%i)", async (count, line) => {
+    show({ ...ready(), tasks_count: count });
+    await userEvent.click(screen.getByRole("button", { name: "Delete meeting" }));
+    expect(screen.getByRole("group", { name: "Delete this meeting?" }).textContent).toContain(line);
   });
 
   it("deletes, then goes to the list and leaves the flag for its toast", async () => {
