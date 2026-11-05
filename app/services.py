@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
-from app import auth, edge, passwords, placement, titles, usage, visibility, workspace
+from app import auth, deletion, edge, passwords, placement, titles, usage, visibility, workspace
 from app.config import Settings, get_settings
 from app.models import (
     AppState,
@@ -645,27 +645,49 @@ def delete_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> None
             "This meeting is still being recorded or its notes are being written. "
             "Delete it once it has finished.",
         )
-    if locked.vexa_recording_id is not None and locked.audio_deleted_at is None:
-        try:
-            vexa.delete_recording(locked.vexa_recording_id)
-        except VexaError as exc:
-            session.rollback()
-            logger.warning(
-                "meeting %s: delete_recording failed (%s)", locked.id, type(exc).__name__
-            )
-            raise Refused(
-                502,
-                "recording_delete_failed",
-                "The recording could not be removed, so nothing was deleted. "
-                "Please try again in a moment.",
-            ) from None
-    session.execute(
-        delete(MailOutbox).where(MailOutbox.payload["meeting_id"].astext == str(locked.id))
-    )
     meeting_id = locked.id
-    session.delete(locked)
-    session.commit()
-    shutil.rmtree(audio_path(meeting_id).parent, ignore_errors=True)
+    try:
+        if locked.audio_deleted_at is None:
+            # Settle Vexa's side the way account deletion does: a cancelled meeting never had the
+            # recording id stored, so ask Vexa for it (waiting out its grace) before it is lost.
+            recording_id = deletion.recording_to_delete(
+                session, vexa, locked, datetime.now(UTC), set()
+            )
+            if recording_id is not None:
+                vexa.delete_recording(recording_id)
+    except (VexaError, ValueError) as exc:
+        session.rollback()
+        logger.warning("meeting %s: Vexa cleanup failed (%s)", meeting_id, type(exc).__name__)
+        raise Refused(
+            502,
+            "recording_delete_failed",
+            "The recording could not be removed, so nothing was deleted. "
+            "Please try again in a moment.",
+        ) from None
+    try:
+        # Only mail still to go: a sent row stays, it counts toward the mail budget and caps.
+        session.execute(
+            delete(MailOutbox).where(
+                MailOutbox.template == "notes_ready",
+                MailOutbox.status != "sent",
+                MailOutbox.payload["meeting_id"].astext == str(meeting_id),
+            )
+        )
+        session.delete(locked)
+        session.commit()
+    except OperationalError as exc:  # the mail worker holds the row while it sends
+        session.rollback()
+        if getattr(exc.orig, "sqlstate", None) != LOCK_NOT_AVAILABLE:
+            raise
+        raise Refused(
+            409, "meeting_busy", "The meeting is being worked on right now. Try again in a moment."
+        ) from None
+    try:
+        shutil.rmtree(audio_path(meeting_id).parent)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logger.error("meeting %s: could not remove its audio folder", meeting_id)
 
 
 def can_end(meeting: Meeting) -> bool:

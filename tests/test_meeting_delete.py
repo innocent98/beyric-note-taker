@@ -210,3 +210,42 @@ def test_the_audio_folder_goes_with_the_meeting(api, session, template, tmp_path
     meeting = ready(session, template)
     assert api.delete(f"/api/meetings/{meeting.id}").status_code == 204
     assert not folder.exists()
+
+
+def test_a_cancelled_meeting_whose_recording_id_was_never_stored_is_asked_of_vexa(
+    api, fake_vexa, session, template
+):
+    """The bot was stopped and the meeting marked failed before Vexa's recording id was seen."""
+    from types import SimpleNamespace
+
+    deleted = []
+    fake_vexa.delete_recording = deleted.append
+    fake_vexa.get_meeting_by_id = lambda _id: SimpleNamespace(status="completed", recording_id=91)
+    meeting = ready(session, template, status="failed", vexa_meeting_id="55")
+    assert api.delete(f"/api/meetings/{meeting.id}").status_code == 204
+    assert deleted == [91]
+
+
+def test_a_meeting_vexa_has_not_settled_is_not_deleted(api, fake_vexa, session, template):
+    from types import SimpleNamespace
+
+    fake_vexa.get_meeting_by_id = lambda _id: SimpleNamespace(status="active", recording_id=None)
+    meeting = ready(session, template, status="failed", vexa_meeting_id="56")
+    error_of(api.delete(f"/api/meetings/{meeting.id}"), 502, "recording_delete_failed")
+    session.expire_all()
+    assert session.get(Meeting, meeting.id) is not None
+
+
+def test_mail_already_sent_stays_for_the_budget_and_only_waiting_mail_goes(api, session, template):
+    meeting = ready(session, template)
+    session.add(
+        MailOutbox(
+            to_email="o@example.test",
+            template="notes_ready",
+            payload={"meeting_id": meeting.id},
+            status="sent",
+        )
+    )
+    session.commit()
+    assert api.delete(f"/api/meetings/{meeting.id}").status_code == 204
+    assert len(session.scalars(select(MailOutbox)).all()) == 1

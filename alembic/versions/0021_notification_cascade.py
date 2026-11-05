@@ -5,7 +5,7 @@ and body name a deleted meeting. Deleting a meeting (W0.5) must take them with i
 key now cascades. No data moves.
 
 Revision ID: 0021
-Revises: 0020
+Revises: 0019 (re-point to 0020 once the calendar migration is on main)
 Create Date: 2026-11-05
 """
 
