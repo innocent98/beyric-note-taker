@@ -466,8 +466,8 @@ export interface paths {
         };
         /**
          * List Meetings
-         * @description The caller's meetings, newest first. For the next page pass `before_id` =
-         *     `next_before_id`.
+         * @description The caller's meetings, plus any shared with their team, newest first. For the next page
+         *     pass `before_id` = `next_before_id`.
          */
         get: operations["list_meetings"];
         put?: never;
@@ -3687,7 +3687,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No such meeting (or not the caller's) */
+            /** @description No such meeting (or not one the caller may read) */
             404: {
                 headers: {
                     [name: string]: unknown;

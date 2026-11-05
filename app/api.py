@@ -33,6 +33,7 @@ from app import (
     services,
     translation,
     usage,
+    visibility,
     workspace,
 )
 from app.api_schemas import (
@@ -278,13 +279,16 @@ def _workspace_counts(meeting: Meeting, session: Session) -> tuple[int, int]:
     return decisions or 0, review or 0
 
 
-def _detail(meeting: Meeting, session: Session) -> MeetingDetail:
+def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
     """The meeting as its page shows it. The meeting link is never included: a Zoom link
-    carries its meeting password."""
+    carries its meeting password. The `can_*` flags are false for a teammate reading a shared
+    meeting: only the owner may change it (those routes answer 404 to anyone else)."""
     failed, ready = meeting.status == "failed", meeting.status == "ready"
+    owner = visibility.owns(user, meeting)
     block = services.retry_block(meeting) if failed else None
     active = meeting.status in services.ACTIVE
     decisions_count, review_open_count = _workspace_counts(meeting, session) if ready else (0, 0)
+    review_open_count = review_open_count if owner else 0  # review items are owner-only
     return MeetingDetail(
         **_summary(
             meeting, services.template_names(session, [meeting])[meeting.template_id]
@@ -292,10 +296,10 @@ def _detail(meeting: Meeting, session: Session) -> MeetingDetail:
         failure_reason=(meeting.failure_reason or REASON_UNEXPECTED) if failed else None,
         retry_block=block,
         retry_block_message=services.retry_block_message(meeting, block),
-        can_cancel=services.can_cancel(meeting),
-        can_end=services.can_end(meeting),
-        can_retry=failed and block is None,
-        can_regenerate=ready,
+        can_cancel=owner and services.can_cancel(meeting),
+        can_end=owner and services.can_end(meeting),
+        can_retry=owner and failed and block is None,
+        can_regenerate=owner and ready,
         join_attempts=meeting.join_attempts,
         max_join_attempts=MAX_JOIN_ATTEMPTS,
         bot_left_early=ready and meeting.completion_reason in REMOVAL_REASONS,
@@ -333,8 +337,8 @@ def list_meetings(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MeetingList:
-    """The caller's meetings, newest first. For the next page pass `before_id` =
-    `next_before_id`."""
+    """The caller's meetings, plus any shared with their team, newest first. For the next page
+    pass `before_id` = `next_before_id`."""
     rows = services.list_meetings(session, user, limit + 1, before_id)
     page = rows[:limit]
     names = services.template_names(session, page)
@@ -355,7 +359,7 @@ def get_meeting(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MeetingDetail:
-    return _detail(services.meeting_or_404(session, user, meeting_id), session)
+    return _detail(services.visible_meeting_or_404(session, user, meeting_id), session, user)
 
 
 EXPORT_RESPONSES = {
@@ -366,7 +370,10 @@ EXPORT_RESPONSES = {
             export.FORMATS["docx"][0]: {"schema": {"type": "string", "format": "binary"}},
         },
     },
-    404: {"model": ErrorResponse, "description": "No such meeting (or not the caller's)"},
+    404: {
+        "model": ErrorResponse,
+        "description": "No such meeting (or not one the caller may read)",
+    },
     409: {
         "model": ErrorResponse,
         "description": "`not_ready`: the notes are not written yet; `translation_missing`: no "
@@ -402,7 +409,7 @@ def export_meeting(
     request meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's
     title, cleaned, in `Content-Disposition`.
     """
-    meeting = services.meeting_or_404(session, user, meeting_id)
+    meeting = services.visible_meeting_or_404(session, user, meeting_id)
     if meeting.status != "ready" or not meeting.notes:
         raise Refused(409, "not_ready", "The notes are not ready yet.")
     title = _title(meeting)
@@ -488,7 +495,7 @@ def create_meeting(
         session, vexa, user, body.url, body.template_id, request.app.state.settings
     )
     response.headers["Location"] = f"/api/meetings/{meeting.id}"
-    return _detail(meeting, session)
+    return _detail(meeting, session, user)
 
 
 @router.post(
@@ -507,8 +514,8 @@ def cancel_meeting(
     `already_ending`, and while the bot is still starting (its send got no clear answer; the page
     reads "Starting the bot") it is 409 `bot_starting`: try again in a minute; 409 `meeting_busy`
     when the worker holds the meeting, try again."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
-    return _detail(services.cancel_meeting(session, vexa, meeting), session)
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
+    return _detail(services.cancel_meeting(session, vexa, meeting), session, user)
 
 
 @router.post(
@@ -527,8 +534,8 @@ def end_meeting(
     when it was asked already, 409 `meeting_busy` when the worker holds the meeting: try again).
     The meeting stays `bot_sent` while the bot leaves, then follows the usual steps; it is not a
     cancel and nothing is discarded."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
-    return _detail(services.end_meeting(session, vexa, meeting), session)
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
+    return _detail(services.end_meeting(session, vexa, meeting), session, user)
 
 
 @router.post(
@@ -545,8 +552,8 @@ def retry_meeting(
     """Resume a failed meeting at the step that failed. Only when `can_retry` is true. For a
     meeting whose join the worker ended (Google refused the bot, or it hung on a prompt) this
     sends a new bot instead, no sooner than 5 minutes after the failure."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
-    return _detail(services.retry_meeting(session, meeting, vexa), session)
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
+    return _detail(services.retry_meeting(session, meeting, vexa), session, user)
 
 
 @router.post(
@@ -562,9 +569,11 @@ def regenerate_notes(
     openai_client=Depends(get_openai_client),
 ) -> MeetingDetail:
     """Rewrite the notes of a `ready` meeting with a template. Runs in the request: allow 5 min."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
     return _detail(
-        services.regenerate_notes(session, meeting, body.template_id, openai_client), session
+        services.regenerate_notes(session, meeting, body.template_id, openai_client),
+        session,
+        user,
     )
 
 

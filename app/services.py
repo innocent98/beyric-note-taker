@@ -4,9 +4,11 @@ Each action does the work and commits, or raises `Refused` with the HTTP status,
 and the message the user reads. The callers only decide how to show that: a page with a notice,
 or a JSON error. Keeping the rules here means the two can never disagree.
 
-Every function that touches meetings, templates or vocabulary takes the acting `User` and filters
-by `owner_user_id`. A row that belongs to someone else is "no such row" (404, never 403: ids are
-sequential, so a 403 would confirm that the row exists).
+Every function that touches meetings, templates or vocabulary takes the acting `User`. Templates
+and vocabulary filter by `owner_user_id`; meetings are *read* through `visibility.visible_meetings`
+(own meetings plus those shared with the caller's team) and *changed* only by their owner. A row
+the caller may not touch is "no such row" (404, never 403: ids are sequential, so a 403 would
+confirm that the row exists).
 """
 
 import logging
@@ -21,7 +23,7 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
-from app import auth, edge, passwords, placement, titles, usage, workspace
+from app import auth, edge, passwords, placement, titles, usage, visibility, workspace
 from app.config import Settings, get_settings
 from app.models import AppState, Meeting, Template, User, UserSettings, VocabularyTerm
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
@@ -356,12 +358,7 @@ def worker_is_stale(session: Session) -> bool:
 def list_meetings(
     session: Session, user: User, limit: int = 50, before_id: int | None = None
 ) -> list[Meeting]:
-    query = (
-        select(Meeting)
-        .where(Meeting.owner_user_id == user.id)
-        .order_by(Meeting.id.desc())
-        .limit(limit)
-    )
+    query = visibility.visible_meetings(user).order_by(Meeting.id.desc()).limit(limit)
     if before_id is not None:
         query = query.where(Meeting.id < before_id)
     return list(session.scalars(query))
@@ -373,13 +370,26 @@ def meeting_title(meeting: Meeting) -> str:
     return titles.meeting_name(meeting)
 
 
-def meeting_or_404(session: Session, user: User, meeting_id: int) -> Meeting:
+def visible_meeting_or_404(session: Session, user: User, meeting_id: int) -> Meeting:
+    """A meeting the caller may READ: their own, or one shared with their team. Use this for
+    reads only; a route that changes the meeting uses `owned_meeting_or_404`."""
     meeting = None
     if _in_range(meeting_id):
         meeting = session.scalars(
-            select(Meeting).where(Meeting.id == meeting_id, Meeting.owner_user_id == user.id)
+            visibility.visible_meetings(user).where(Meeting.id == meeting_id)
         ).first()
     if meeting is None:
+        raise HTTPException(404, "No such meeting")
+    return meeting
+
+
+def owned_meeting_or_404(session: Session, user: User, meeting_id: int) -> Meeting:
+    """A meeting the caller may CHANGE (cancel, end, retry, rewrite, translate, delete): only the
+    one who recorded it. A teammate who can read a shared meeting gets 404 here, the same as for
+    one that does not exist: the answer must not tell a reader that the id is real and writable
+    by someone else. Goes through `visible_meetings` first, so it can never be wider than a read."""
+    meeting = visible_meeting_or_404(session, user, meeting_id)
+    if not visibility.owns(user, meeting):
         raise HTTPException(404, "No such meeting")
     return meeting
 

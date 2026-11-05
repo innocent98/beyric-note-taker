@@ -4139,7 +4139,7 @@
     },
     "/api/meetings": {
       "get": {
-        "description": "The caller's meetings, newest first. For the next page pass `before_id` =\n`next_before_id`.",
+        "description": "The caller's meetings, plus any shared with their team, newest first. For the next page\npass `before_id` = `next_before_id`.",
         "operationId": "list_meetings",
         "parameters": [
           {
@@ -4659,7 +4659,7 @@
                 }
               }
             },
-            "description": "No such meeting (or not the caller's)"
+            "description": "No such meeting (or not one the caller may read)"
           },
           "409": {
             "content": {

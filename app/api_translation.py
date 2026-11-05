@@ -86,7 +86,7 @@ def request_translation(
     translation when one is already cached for the current text; otherwise 202 with
     `status: "translating"` and the work is queued. A failed or stale translation asked for again
     is queued again. Asking again while it is being made changes nothing."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
     row, cached = translation.request_translation(session, user, meeting, body.language)
     response.status_code = 200 if cached else 202
     return _out(row, meeting)
@@ -106,7 +106,7 @@ def get_translation(
     """The translation in one language: its `status` (poll every 2 seconds while `translating`),
     and when `ready` the `notes`, `notes_html` and `transcript`. 404 `no_translation` when none
     was asked for, or for a language that is not offered."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
+    meeting = services.visible_meeting_or_404(session, user, meeting_id)
     return _out(_existing(session, meeting, language), meeting)
 
 
@@ -124,7 +124,7 @@ def delete_translation(
 ) -> Response:
     """Throw the translation away so it can be made again (also cancels one still queued). It does
     not give back one of the day's 20."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
     session.delete(_existing(session, meeting, language))
     session.commit()
     return Response(status_code=204)

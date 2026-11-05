@@ -24,6 +24,7 @@ from app.extraction import (
     parse_notes,
 )
 from app.models import Decision, Meeting, OpenQuestion, ReviewItem, User
+from app.visibility import can_read_clause
 
 logger = logging.getLogger(__name__)
 
@@ -310,13 +311,14 @@ def _contains(text: str):
 def list_decisions(
     session: Session, user: User, query: str | None, limit: int, before_id: int | None
 ) -> tuple[list[tuple[Meeting, list[Decision]]], bool]:
-    """The caller's decisions, newest meeting first, grouped by meeting, hidden ones left out.
+    """The decisions of the meetings the caller may read (their own and those shared with their
+    team: `visibility`), newest meeting first, grouped by meeting, hidden ones left out.
 
     A search matches the decision's words or its meeting's title (the calendar title, or the
     meeting code); a title match brings every decision of that meeting. Returns the groups of up
     to `limit` meetings and whether there are more; `before_id` is the last meeting id of the
     previous page."""
-    shown = [Meeting.owner_user_id == user.id, Decision.hidden_at.is_(None)]
+    shown = [can_read_clause(user), Decision.hidden_at.is_(None)]
     if query and query.strip():
         pattern = _contains(query.strip())
         shown.append(
