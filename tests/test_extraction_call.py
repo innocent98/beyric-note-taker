@@ -134,13 +134,13 @@ def test_the_reply_is_requested_as_strict_json_schema():
         {"action_items": "nope"},
         "",
         None,
-        ("{}", "length"),
+        ("{}", "length"),  # and the retry below is cut off too (see FakeChat script)
         ("{}", "content_filter"),
     ],
 )
 def test_an_unusable_reply_fails_the_extraction(reply):
     with pytest.raises(ExtractionFailed):
-        run(FakeChat([reply]))
+        run(FakeChat([reply, reply]))  # a length cut-off is retried once, so give it a second
 
 
 def test_a_failed_reply_still_reports_its_tokens():
@@ -165,12 +165,94 @@ def test_one_attempt_only_a_transient_error_fails_the_call_and_is_not_retried():
     assert "APIConnectionError" in str(caught.value)
 
 
-def test_the_output_is_capped_and_a_cut_off_reply_fails():
+def test_the_first_cap_is_sized_to_the_bullets():
+    assert extraction.output_budget(0) == 4000 and extraction.output_budget(3) == 4000
+    assert extraction.output_budget(25) == 6500
+    assert extraction.output_budget(500) == 16000
     client = FakeChat([REPLY])
-    run(client)
-    assert client.calls[0]["max_completion_tokens"] == extraction.MAX_OUTPUT_TOKENS
-    with pytest.raises(ExtractionFailed):
-        run(FakeChat([("{}", "length")]))
+    run(client)  # two action bullets and one please-check bullet
+    assert client.calls[0]["max_completion_tokens"] == 4000
+
+
+def test_a_cut_off_reply_is_retried_once_larger_and_the_second_answer_is_used():
+    client = FakeChat([("{}", "length"), REPLY])
+    out = run(client)
+    assert [c["max_completion_tokens"] for c in client.calls] == [4000, 16000]
+    assert out.budgets == (4000, 16000)
+    assert out.result.review[0].heard_as == "Metrika"
+    assert (out.input_tokens, out.output_tokens) == (2400, 600)  # both calls were paid for
+
+
+def test_a_second_cut_off_fails_with_a_reason_and_never_returns_a_partial_answer():
+    partial = json.dumps(
+        {"action_items": [REPLY["action_items"][0]], "review": [], "milestones": []}
+    )
+    client = FakeChat([(partial[:40], "length"), (partial, "length"), REPLY])
+    with pytest.raises(ExtractionFailed) as caught:
+        run(client)
+    assert len(client.calls) == 2  # one retry, not a loop
+    assert "cut off" in str(caught.value) and "4,000, 16,000" in str(caught.value)
+    assert (caught.value.input_tokens, caught.value.output_tokens) == (2400, 600)
+
+
+def test_the_retry_stops_at_the_configured_ceiling(monkeypatch):
+    try:
+        monkeypatch.setenv("EXTRACT_MAX_OUTPUT_TOKENS", "4000")
+        extraction.get_settings.cache_clear()
+        client = FakeChat([("{}", "length"), REPLY])
+        with pytest.raises(ExtractionFailed):
+            run(client)
+        assert len(client.calls) == 1  # no room above the first cap
+        monkeypatch.setenv("EXTRACT_MAX_OUTPUT_TOKENS", "9000")
+        extraction.get_settings.cache_clear()
+        client = FakeChat([("{}", "length"), REPLY])
+        run(client)
+        assert [c["max_completion_tokens"] for c in client.calls] == [4000, 9000]
+    finally:
+        monkeypatch.undo()
+        extraction.get_settings.cache_clear()
+
+
+def test_a_long_meeting_that_overflows_the_old_cap_succeeds_with_the_sized_budget():
+    """The shape of the live failure (real meeting 5): about 25 action bullets. A fake model that
+    needs about 150 tokens a bullet, reasoning included, cuts off at the old 2,000 cap."""
+    bullets = [f"Tunde: follow up on supplier {n} (by Friday)" for n in range(25)]
+    notes = ParsedNotes([], bullets, [], [])
+    transcript = "\n".join(f"[Tunde]: I'll follow up on supplier {n} by Friday." for n in range(25))
+    answer = {
+        "action_items": [
+            {
+                "index": n,
+                "title": bullets[n],
+                "spoken_owner": "Tunde",
+                "due_phrase": "by Friday",
+                "due_date": "2026-11-06",
+                "quote": f"I'll follow up on supplier {n} by Friday.",
+                "confidence": "high",
+            }
+            for n in range(25)
+        ],
+        "review": [],
+        "milestones": [],
+    }
+
+    class NeedsRoom(FakeChat):
+        def _create(self, **kwargs):
+            if kwargs["max_completion_tokens"] < 25 * 150:
+                self.script = [("{}", "length")]
+            else:
+                self.script = [answer]
+            return super()._create(**kwargs)
+
+    client = NeedsRoom([])
+    out = extract(notes, transcript, date(2026, 11, 3), "UTC", client=client, model="m", full=True)
+    assert len(out.result.action_items) == 25 and out.budgets == (6500,)
+    # Forced to the old fixed cap the first call is cut off, and only the retry saves it.
+    out = extract(
+        notes, transcript, date(2026, 11, 3), "UTC", client=NeedsRoom([]), model="m", full=True,
+        max_output_tokens=2000,
+    )  # fmt: skip
+    assert out.budgets == (2000, 8000) and len(out.result.action_items) == 25
 
 
 def test_the_default_client_is_short_and_makes_no_retries_of_its_own(monkeypatch):
@@ -182,7 +264,8 @@ def test_the_default_client_is_short_and_makes_no_retries_of_its_own(monkeypatch
 
     monkeypatch.setattr(extraction, "OpenAI", fake_openai)
     extract(NOTES, TRANSCRIPT, date(2026, 11, 3), "UTC", model="m")
-    assert seen["timeout"] == extraction.EXTRACT_TIMEOUT <= 60
+    assert seen["timeout"] == extraction.EXTRACT_TIMEOUT == 60.0
+    assert extraction._timeout_for(16000) == 160.0 and extraction._timeout_for(32000) == 180.0
     assert seen["max_retries"] == 0
 
 

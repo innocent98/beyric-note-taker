@@ -37,10 +37,18 @@ MIN_FUZZY_WORDS = 3
 TITLE_SHARED_WORDS = 0.6
 FUZZY_SHARED_WORDS = 0.6  # a window is only scored when it has this share of the quote's words
 MAX_DUE_DAYS = 400
-# The worker calls the model inline, so the call is short and its answer capped (an extraction
-# answer is a few hundred tokens; the cap leaves room for the model's own reasoning).
-EXTRACT_TIMEOUT = 60.0
-MAX_OUTPUT_TOKENS = 2000
+# The worker calls the model inline, so the call has a time limit and a capped answer. The cap pays
+# for the model's hidden reasoning as well as the JSON, and both grow with the number of bullets,
+# so the first cap is sized to the work (`output_budget`) and a reply cut off by it is retried
+# once with more room (`next_budget`). Never stored as if complete: a second cut-off is a failure.
+EXTRACT_TIMEOUT = 60.0  # the shortest limit; a bigger budget gets more time, see `_timeout_for`
+MAX_TIMEOUT = 180.0
+OUTPUT_BASE = 1500
+OUTPUT_PER_ITEM = 200  # tokens per bullet asked about, reasoning included (eval: about 150)
+OUTPUT_FLOOR = 4000
+OUTPUT_START_CEILING = 16000
+RETRY_FACTOR = 4
+RETRY_FLOOR = 8000
 _LABEL = re.compile(r"(?m)^\[[^\]\n]{1,80}\]:[ \t]*")
 _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _WEEKDAYS = {
@@ -351,12 +359,36 @@ class ExtractionFailed(Exception):
         self.output_tokens = output_tokens
 
 
+class ExtractionTruncated(ExtractionFailed):
+    """The answer hit the output cap, again after the one retry. Its own class so the ledger
+    (`ai_runs.error`, which keeps class names only) says why: `ExtractionTruncated`."""
+
+
 @dataclass(frozen=True)
 class ExtractionCall:
     result: ModelExtraction
     model: str
     input_tokens: int | None
     output_tokens: int | None
+    budgets: tuple[int, ...] = ()  # the output cap of each attempt; two means the first was cut off
+
+
+def output_budget(items: int) -> int:
+    """The first output cap for a call about `items` bullets: 1,500 + 200 per bullet, between 4,000
+    and 16,000. It is a ceiling, not a spend: the model stops when it is done."""
+    return min(max(OUTPUT_BASE + OUTPUT_PER_ITEM * items, OUTPUT_FLOOR), OUTPUT_START_CEILING)
+
+
+def next_budget(cap: int, ceiling: int) -> int:
+    """The cap of the retry after a cut-off: four times the last, at least 8,000, at most the
+    ceiling (`EXTRACT_MAX_OUTPUT_TOKENS`). Not more than `cap` means there is no room to retry."""
+    return min(max(cap * RETRY_FACTOR, RETRY_FLOOR), ceiling)
+
+
+def _timeout_for(cap: int) -> float:
+    """A bigger budget lets the model think longer, so the limit grows with it (a second per 100
+    tokens), from 60 to 180 seconds."""
+    return min(max(EXTRACT_TIMEOUT, cap / 100), MAX_TIMEOUT)
 
 
 EXTRACT_SYSTEM_FULL = """\
@@ -524,6 +556,7 @@ def extract(
     client=None,
     model: str | None = None,
     full: bool = False,
+    max_output_tokens: int | None = None,
 ) -> ExtractionCall:
     """Make the one extraction call. Raises `ExtractionFailed` for anything unusable; what comes
     back is still unchecked (`check_extraction`).
@@ -532,40 +565,74 @@ def extract(
     prompt and schema, and nothing for the code to verify beyond the word itself. `full=True` also
     asks for action items and milestones (what the AI1 eval measures and the Tasks phase will use).
 
-    One attempt, a short timeout and a capped answer: the worker loop calls this inline, so a slow
-    or runaway reply must not hold up the polling of live meetings or bill three times. A failure
-    is retried by the worker on a later pass, five minutes on.
+    The worker loop calls this inline, so the answer is capped (sized to the number of bullets, see
+    `output_budget`) and the call has a time limit. A reply cut off by the cap (`length`) is retried
+    once with more room, and a second cut-off raises `ExtractionFailed` saying so: a truncated reply
+    is never parsed or kept. Any other failure is one attempt; the worker retries it on a later
+    pass, five minutes on. `max_output_tokens` overrides the first cap (the review script's flag).
     """
-    model = model or get_settings().extract_model
-    if client is None:
-        client = OpenAI(
-            api_key=get_settings().openai_api_key, max_retries=0, timeout=EXTRACT_TIMEOUT
-        )
+    settings = get_settings()
+    model = model or settings.extract_model
     user = _user_message(notes, transcript, meeting_date, timezone, roster or [], full)
     system = EXTRACT_SYSTEM_FULL if full else EXTRACT_SYSTEM_REVIEW
     schema = EXTRACT_SCHEMA_FULL if full else EXTRACT_SCHEMA_REVIEW
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            response_format={
-                "type": "json_schema",
-                "json_schema": {"name": "meeting_extraction", "strict": True, "schema": schema},
-            },
-            max_completion_tokens=MAX_OUTPUT_TOKENS,
+    items = (len(notes.action_items) if full else 0) + len(notes.please_check)
+    cap = max_output_tokens or output_budget(items)
+    ceiling = max(settings.extract_max_output_tokens, cap)
+    budgets: list[int] = []
+    input_total = output_total = 0
+    reported = False
+    while True:
+        budgets.append(cap)
+        try:
+            response = (
+                client
+                or OpenAI(api_key=settings.openai_api_key, max_retries=0, timeout=_timeout_for(cap))
+            ).chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {"name": "meeting_extraction", "strict": True, "schema": schema},
+                },
+                max_completion_tokens=cap,
+            )
+        except openai.OpenAIError as exc:
+            # The class name only: an OpenAI error's text can carry request details.
+            raise ExtractionFailed(
+                f"extraction: {type(exc).__name__}",
+                input_tokens=input_total if reported else None,
+                output_tokens=output_total if reported else None,
+            ) from exc
+        usage = getattr(response, "usage", None)
+        used_in, used_out = (
+            getattr(usage, "prompt_tokens", None),
+            getattr(usage, "completion_tokens", None),
         )
-    except openai.OpenAIError as exc:
-        # The class name only: an OpenAI error's text can carry request details.
-        raise ExtractionFailed(f"extraction: {type(exc).__name__}") from exc
-    usage = getattr(response, "usage", None)
-    tokens = {
-        "input_tokens": getattr(usage, "prompt_tokens", None),
-        "output_tokens": getattr(usage, "completion_tokens", None),
-    }
-    choice = response.choices[0]
+        if used_in is not None or used_out is not None:
+            reported = True
+            input_total += used_in or 0
+            output_total += used_out or 0
+        tokens = {
+            "input_tokens": input_total if reported else None,
+            "output_tokens": output_total if reported else None,
+        }
+        choice = response.choices[0]
+        if choice.finish_reason == "length":
+            # Cut off by the cap: whatever came back is incomplete and is never used.
+            retry = next_budget(cap, ceiling)
+            if len(budgets) == 1 and retry > cap:  # one retry only
+                cap = retry
+                continue
+            raise ExtractionTruncated(
+                "extraction: the answer was cut off by the output limit "
+                f"(length, tried {', '.join(f'{b:,}' for b in budgets)} tokens)",
+                **tokens,
+            )
+        break
     if choice.finish_reason != "stop":
         raise ExtractionFailed(
             f"extraction: the model did not finish normally ({choice.finish_reason})",
@@ -582,4 +649,4 @@ def extract(
         raise ExtractionFailed(
             "extraction: the reply was not the requested JSON", **tokens
         ) from None
-    return ExtractionCall(result, model, **tokens)
+    return ExtractionCall(result, model, budgets=tuple(budgets), **tokens)
