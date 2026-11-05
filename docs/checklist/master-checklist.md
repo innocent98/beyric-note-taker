@@ -187,7 +187,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
     - [x] Meeting page: "Decisions and review" card from `extraction_status` (pending and running with 5 s polling for 2 minutes, stalled, done, failed, skipped), the line near Rewrite notes
     - [x] Tests: `review-view.test.tsx` (20), `meeting-extraction.test.tsx` (11), `decisions-review-shell.test.tsx` (7); `npm run gen:api` gave no difference
     - [ ] Not verified: a successful rewrite from the offer, the real worker filling the lists, Safari and Firefox, the live site, 200 items
-  - [ ] D5, Tasks (needs W2; owners need W3; projects need W4; sprints need W9): filter chips, project tabs, Board and Backlog, drag and drop, task drawer, "needs attention" banner, New task, sprint header and Close sprint, milestone card, meeting page Action items as tasks; states for extraction pending and failed (designer gap)
+  - [x] D5, Tasks, built for what has data now (W2 PR 2; the rest waits for W3, W4, W9, see the W2 section; needs W2; owners need W3; projects need W4; sprints need W9): filter chips, project tabs, Board and Backlog, drag and drop, task drawer, "needs attention" banner, New task, sprint header and Close sprint, milestone card, meeting page Action items as tasks; states for extraction pending and failed (designer gap)
   - [ ] D6, Projects (needs W4): list, name, colour, recurring meetings, keywords, sprint length, milestone (proposal chip is a designer gap), delete
   - [ ] D7, Team (needs W3; W0.4 first): members, roles, aliases (editing is a designer gap), invite dialog (name field is a designer gap), Resend, remove, "Share with team" switch on the meeting page (designer gap)
   - [ ] D8, Series (needs W8, and Module 2 phase C for recurring ids): cards on Meetings, series page (unfinished, finished since, carried questions, agenda, past meetings, attendees), "On next agenda" toggles, Send agenda, Details row on the meeting page, "Add to recurring meeting" and "Possibly resolved" chips (designer gaps)
@@ -420,7 +420,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Privacy and terms rows for tasks (Jinja and Next); the "Last updated" date is not bumped (see the SOP)
   - [x] Opus review of the injection path and the mail (outcome in the SOP)
   - [ ] Server steps after merge: migrate (deploy does), then `docker compose exec web python scripts/backfill_extraction.py` once
-  - [ ] PR 2: Tasks screen (D5), task drawer, meeting page Action items as tasks, meetings list task count, Settings Tasks card toggles live
+  - [x] PR 2 (open, not merged): Tasks screen (D5), task drawer, meeting page Action items as tasks, meetings list task count, Settings Tasks card toggles live, parity shots under `docs/ui/parity/after/`
   - [ ] Waits for W3: teammate filter chips, "Invite them to the team" in the drawer. Waits for W4: project tabs, project badge, "Check project", milestone select and card. Waits for W9: sprint selector, sprint header and Close sprint, Backlog view, Carried over. Waits for W8: the unfinished-tasks chip on Recurring cards
 - [ ] W5 Export (merged), W3 Team, W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`

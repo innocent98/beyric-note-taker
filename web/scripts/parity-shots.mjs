@@ -11,7 +11,7 @@
 //
 //   PLAYWRIGHT=/path/to/playwright/index.mjs [CHROME=/path/to/chrome] node scripts/parity-shots.mjs \
 //     --design http://127.0.0.1:8700 --next http://127.0.0.1:3100 --out /tmp/parity [--only landing,signin] \
-//     [--mock http://127.0.0.1:8031] [--tz Africa/Lagos]
+//     [--mock http://127.0.0.1:8031] [--tz Africa/Lagos] [--now 2026-11-02T10:00:00Z]
 //
 // `--mock` is the mock API's own address: before each Next shot of a screen that changes state (the
 // translation screens) it is asked to start again from nothing (`/__mock/reset`).
@@ -33,6 +33,7 @@ const { values } = parseArgs({
     only: { type: "string" },
     mock: { type: "string" },
     tz: { type: "string" },
+    now: { type: "string" },
   },
 });
 for (const key of ["design", "next", "out"]) {
@@ -135,6 +136,18 @@ const SCREENS = {
     true,
     [{ select: "(UTC+9) Tokyo", design: "Tokyo", next: "Time zone", wait: 500 }],
   ],
+  // Tasks (W2). The prototype's "today" is Mon 2 Nov 2026: run with --now 2026-11-02T10:00:00Z. The board
+  // has no project tabs, sprint header, milestone card or Board / Backlog tabs: they wait for W3, W4, W9.
+  "app-tasks": [APP, [["Tasks", "first", 800]], "/tasks", true],
+  "app-tasks-due": [APP, [["Tasks", "first", 800], ["Due date", "first"]], "/tasks", true, [{ text: "Due date" }]],
+  "app-tasks-drawer": [
+    APP,
+    [["Tasks", "first", 800], ["Finish payment checkout", "first", 400]],
+    "/tasks",
+    true,
+    [{ text: "Finish payment checkout", wait: 400 }],
+  ],
+  "app-tasks-review": [APP, [["Tasks", "first", 800], ["Review", "first", 400]], "/tasks", true, [{ text: "Review", wait: 400 }]],
   "app-settings-language": [APP, [["Settings", "first"], DEFAULT_LANG("French", 300)], "/settings", true, [DEFAULT_LANG("French", 400)]],
 };
 
@@ -150,6 +163,8 @@ async function reset() {
 async function shoot(url, width, clicks, signedIn, side = "design") {
   const context = await browser.newContext({ viewport: { width, height: 900 }, timezoneId: values.tz });
   if (signedIn) await context.addCookies([{ name: "session", value: "owner", url: NEXT }]);
+  // The prototype has its own fixed "today" (2 Nov 2026); `--now` gives the Next page the same one.
+  if (side === "next" && values.now) await context.clock.setFixedTime(new Date(values.now));
   const page = await context.newPage();
   if (side === "next") {
     page.on("console", (message) => message.type() === "error" && console.log(`  console error on ${url}: ${message.text()}`));

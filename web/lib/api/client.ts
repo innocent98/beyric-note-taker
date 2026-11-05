@@ -13,7 +13,9 @@ import type {
   TimeZonePreferences,
   Meeting,
   MeetingList,
+  MeetingTasks,
   NewMeeting,
+  NewTask,
   NoteLanguage,
   NoticeList,
   Pilot,
@@ -23,6 +25,10 @@ import type {
   ReviewTermResult,
   SessionState,
   SignUpBody,
+  Task,
+  TaskChanges,
+  TaskList,
+  TasksSettings,
   Template,
   TemplateInput,
   Term,
@@ -266,6 +272,20 @@ export function createApi(options: ApiOptions = {}) {
         request<DecisionList>("GET", "/api/decisions", { query }),
       hide: (id: number) => request<void>("POST", `/api/decisions/${id}/hide`, { write: true }),
     },
+    // Tasks (docs/fe-integration-guide-tasks.md). `list` is the board: `assignee` is me, none or a
+    // user id. `update` sends only the fields that change and answers the whole task; a change the
+    // caller may not make is 403 `team_forbidden` (nothing applied), a task they cannot see is 404.
+    // Deleting answers 204. `forMeeting` is the meeting page's Action items.
+    tasks: {
+      list: (query: { assignee?: string; status?: string; limit?: number; before_id?: number } = {}) =>
+        request<TaskList>("GET", "/api/tasks", { query }),
+      get: (id: number) => request<Task>("GET", `/api/tasks/${id}`),
+      create: (body: Partial<NewTask> = {}) => request<Task>("POST", "/api/tasks", { body, write: true }),
+      update: (id: number, body: TaskChanges) =>
+        request<Task>("PATCH", `/api/tasks/${id}`, { body, write: true }),
+      remove: (id: number) => request<void>("DELETE", `/api/tasks/${id}`, { write: true }),
+      forMeeting: (meetingId: number) => request<MeetingTasks>("GET", `/api/meetings/${meetingId}/tasks`),
+    },
     // Items to check against the transcript. Adding a term also marks the item checked.
     review: {
       list: (state: ReviewState = "open") => request<ReviewList>("GET", "/api/review", { query: { state } }),
@@ -287,6 +307,11 @@ export function createApi(options: ApiOptions = {}) {
         get: () => request<TimeZonePreferences>("GET", "/api/settings/time-zone"),
         set: (time_zone: string) =>
           request<TimeZonePreferences>("PUT", "/api/settings/time-zone", { body: { time_zone }, write: true }),
+      },
+      // The two switches of the Tasks card (GET and PUT /api/settings/tasks); both are sent together.
+      tasks: {
+        get: () => request<TasksSettings>("GET", "/api/settings/tasks"),
+        set: (body: TasksSettings) => request<TasksSettings>("PUT", "/api/settings/tasks", { body, write: true }),
       },
       email: {
         get: () => request<EmailPreferences>("GET", "/api/settings/email"),

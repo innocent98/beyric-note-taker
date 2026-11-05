@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 // The one place server-rendered HTML is put into a page. `notes_html` is the API's own markdown
 // rendering of the notes: raw HTML escaped, javascript: links dropped, links given
 // rel="noopener noreferrer nofollow", images turned into links (docs/fe-integration-guide-owner-app.md
@@ -44,6 +46,30 @@ export function wrapSections(html: string): string {
     .join("");
 }
 
-export function NotesHtml({ html }: { html: string }) {
-  return <div className="notes-body notes" dangerouslySetInnerHTML={{ __html: wrapSections(html) }} />;
+// `actions`, when given, is drawn in place of the notes' own "Action items" part: the tasks made
+// from it (components/app/action-tasks.tsx). Each other part is still the API's HTML, in a section
+// of its own with the same classes as `wrapSections` gives it.
+export function NotesHtml({ html, actions }: { html: string; actions?: ReactNode }) {
+  if (!actions) return <div className="notes-body notes" dangerouslySetInnerHTML={{ __html: wrapSections(html) }} />;
+  return (
+    <div className="notes-body notes">
+      {html
+        .split(/(?=<h2[ >])/)
+        .filter(Boolean)
+        .map((part, index) => {
+          const heading = /^<h2[^>]*>([\s\S]*?)<\/h2>/.exec(part)?.[1];
+          if (heading === undefined) return <div key={index} dangerouslySetInnerHTML={{ __html: part }} />;
+          const name = heading.replace(/<[^>]*>/g, "").trim().toLowerCase();
+          if (name === "action items") {
+            return (
+              <section key={index} className="notes-sec notes-sec-actions">
+                {actions}
+              </section>
+            );
+          }
+          const known = Object.hasOwn(SECTION_CLASS, name) ? SECTION_CLASS[name] : "";
+          return <section key={index} className={`notes-sec ${known}`} dangerouslySetInnerHTML={{ __html: part }} />;
+        })}
+    </div>
+  );
 }

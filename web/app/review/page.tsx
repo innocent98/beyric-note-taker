@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app/shell";
 import { ReviewView } from "@/components/app/review-view";
 import { ApiError } from "@/lib/api/client";
 import type { ReviewList } from "@/lib/api/types";
-import { getReviewOpen, getTimeZone, getUnreadNotifications, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getUnreadNotifications, requireOwner } from "@/lib/api/server";
 
 export const metadata: Metadata = { title: "Review", robots: { index: false, follow: false } };
 
@@ -23,6 +23,7 @@ export default async function ReviewPage() {
     <AppShell
       current="review"
       reviewOpen={await getReviewOpen()}
+      tasksNew={await getTasksNew()}
       unread={await getUnreadNotifications()}
       timeZone={await getTimeZone()}
     >

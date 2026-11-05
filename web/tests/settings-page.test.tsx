@@ -40,10 +40,12 @@ vi.mock("@/lib/api/server", () => ({
         email: { get: async () => ({ notify_email: true }) },
         language: { get: async () => ({ default_language: "en" }) },
         timeZone: { get: async () => ({ time_zone: "UTC", is_set: false }) },
+        tasks: { get: async () => ({ auto_create_tasks: true, email_assignees: true }) },
       },
     };
   },
   getReviewOpen: async () => 2,
+  getTasksNew: async () => 0,
   getUnreadNotifications: async () => null,
   getTimeZone: async () => null,
   load: <T,>(call: Promise<T>) => call,
