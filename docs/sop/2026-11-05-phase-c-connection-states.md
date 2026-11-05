@@ -31,6 +31,9 @@ Decision: the 30-minute clock needs the first failure's time, hence `calendar_co
 ## Verification
 `tests/test_calendar_states.py` (12 tests, real Postgres, `FakeGoogleCalendar`): revoked grant, expired vs revoked reason, transient under 30 minutes, degraded after 30 with one bell and joins kept, connected -> degraded -> needs_reconnect -> revive, revive only live deadlines, decrypt failure + admin alert, one notification per disconnect and no mail row, 24-hour count, admin wave, expiry warning with the flag on and off. Touched suites (sync, client, runner, connect, API, accounts, migrations): 600 passed. Not tested live: a real Google revoke.
 
+## Review (one Opus round, 2026-11-05)
+No High. Fixed: revive now resets `rechecked_at` and `attempts` (Medium: a revived row could skip the re-check and join a deleted event); revive needs 2 minutes of deadline left; the unreadable-token admin alert is keyed by `connected_at` too. Left (Low, follow-ups): possible lock-order deadlock between a runner re-check and a simultaneous sync failure (rare, aborts one side); a missing vault key shows the user `degraded` but tells no admin.
+
 ## Operate / roll back
 Deploy runs migration 0020 (nullable column, no backfill). Roll back with `alembic downgrade 0018`; the code before this PR ignores the column.
 

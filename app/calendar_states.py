@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 DEGRADE_AFTER = timedelta(minutes=30)
 ADMIN_WINDOW = timedelta(hours=1)
 NEXT_DAY = timedelta(hours=24)
+# A skipped join this close to its deadline stays skipped: revived, it would end "not recorded"
+# a minute later and mail the owner about a meeting they had already been told was off.
+REVIVE_MARGIN = timedelta(minutes=2)
 # The joins a dead connection can still hold back: not started, not finished.
 PAUSABLE_STATES = ("scheduled", "no_capacity")
 SKIP_REASON = "needs_reconnect"
@@ -101,7 +104,7 @@ def mark_needs_reconnect(
             title="A calendar connection's stored token could not be read",
             body=f"The token of user {conn.user_id}'s calendar connection could not be decrypted "
             f"at {now:%H:%M} UTC. Check the token key; the user must connect again.",
-            dedupe_key=f"admin.calendar_token_unreadable:{conn.id}",
+            dedupe_key=f"admin.calendar_token_unreadable:{conn.id}:{int(conn.connected_at.timestamp())}",
         )
     _tell_admins_of_a_wave(session, now)
     return soon
@@ -188,10 +191,17 @@ def revive_on_reconnect(session: Session, conn: CalendarConnection, now: datetim
             ScheduledJoin.source == "calendar",
             ScheduledJoin.state == "skipped",
             ScheduledJoin.skip_reason == SKIP_REASON,
-            ScheduledJoin.deadline_at > now,
+            ScheduledJoin.deadline_at > now + REVIVE_MARGIN,
             _own_joins(conn),
         )
-        .values(state="scheduled", skip_reason=None, last_error=None, updated_at=now)
+        .values(
+            state="scheduled",
+            skip_reason=None,
+            last_error=None,
+            attempts=0,
+            rechecked_at=None,  # the event may have moved or gone while disconnected
+            updated_at=now,
+        )
     )
     return result.rowcount
 
