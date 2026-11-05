@@ -381,12 +381,12 @@ def test_other_states_and_deleted_owners_are_not_taken(session, user):
 def test_backfill_gives_recent_meetings_the_full_run_and_old_ones_decisions_only(session, user):
     recent = make_meeting(session, user, created=NOW - timedelta(days=3))
     old = make_meeting(session, user, created=NOW - timedelta(days=40))
-    done = make_meeting(session, user, extraction_status="done")
+    done = make_meeting(session, user, extraction_status="done", created=NOW - timedelta(days=40))
     not_ready = make_meeting(session, user, status="processing", notes=None)
 
     counts = workspace.backfill(session, NOW)
 
-    assert counts == {"queued": 1, "decisions_only": 1}
+    assert counts == {"queued": 1, "decisions_only": 1, "tasks_queued": 0}
     for row in (recent, old, done, not_ready):
         session.refresh(row)
     assert recent.extraction_status == "pending"
@@ -395,7 +395,11 @@ def test_backfill_gives_recent_meetings_the_full_run_and_old_ones_decisions_only
     old_decisions = session.scalars(select(Decision).where(Decision.meeting_id == old.id)).all()
     assert len(old_decisions) == 2
     assert session.scalars(select(ReviewItem).where(ReviewItem.meeting_id == old.id)).all() == []
-    assert workspace.backfill(session, NOW) == {"queued": 0, "decisions_only": 0}  # idempotent
+    assert workspace.backfill(session, NOW) == {
+        "queued": 0,
+        "decisions_only": 0,
+        "tasks_queued": 0,
+    }  # idempotent
 
 
 # ---- the worker runs it ----
@@ -503,6 +507,6 @@ def test_backfill_leaves_meetings_of_accounts_being_deleted_alone(session, user)
     )
     session.add(gone)
     session.commit()
-    assert workspace.backfill(session, NOW) == {"queued": 0, "decisions_only": 0}
+    assert workspace.backfill(session, NOW) == {"queued": 0, "decisions_only": 0, "tasks_queued": 0}
     session.refresh(gone)
     assert gone.extraction_status is None
