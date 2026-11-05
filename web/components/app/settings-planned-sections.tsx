@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { SettingsTasksRows } from "@/components/app/settings-tasks";
+import type { TasksSettings } from "@/lib/api/types";
 
 // The Settings sections the designer drew below Calendar (`isSettings` in Beyric Note Taker.dc.html):
 // Sprints and reminders, Tasks. Their features are not built yet (tasks, sprints, reminders, tool
@@ -61,7 +63,9 @@ function Text({ title, children }: { title: string; children?: ReactNode }) {
   );
 }
 
-export function SettingsPlannedSections() {
+// `tasks` makes the first two rows of the Tasks card live (Create tasks, Email assignees); without it
+// (the settings could not be read) they are drawn off like the rest.
+export function SettingsPlannedSections({ tasks = null }: { tasks?: TasksSettings | null }) {
   return (
     <>
       <section className="card card-flush" aria-labelledby="set-sprints">
@@ -110,9 +114,15 @@ export function SettingsPlannedSections() {
               Tasks
             </h2>
             <p className="pl-sub">What happens to action items after a meeting ends.</p>
-            <p className="meta pl-soon">These settings are not available yet.</p>
+            <p className="meta pl-soon">
+              {tasks ? "Sync with your project tool and Post tasks to Slack are not available yet." : "These settings are not available yet."}
+            </p>
           </div>
         </div>
+        {tasks ? (
+          <SettingsTasksRows initial={tasks} />
+        ) : (
+          <>
         <div className="pl-row">
           <Text title="Create tasks from action items">
             Each action item becomes a task assigned to the teammate named as its owner.
@@ -123,6 +133,8 @@ export function SettingsPlannedSections() {
           <Text title="Email assignees">Send each person a list of their new tasks after the meeting.</Text>
           <Switch label="Email assignees" />
         </div>
+          </>
+        )}
         <div className="pl-row pl-row-center">
           <Text title="Sync with your project tool">Send tasks, projects and sprints to a tool your team already uses.</Text>
           <div className="pl-controls">

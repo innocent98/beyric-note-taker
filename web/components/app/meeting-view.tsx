@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CopyButton } from "@/components/app/copy-button";
 import { DownloadMenu } from "@/components/app/download-menu";
+import { ActionTasks } from "@/components/app/action-tasks";
 import { NotesHtml } from "@/components/app/notes-html";
 import { LanguageSelect, TranslationBanner, useTranslation } from "@/components/app/translation";
 import { TranscriptPanel } from "@/components/app/transcript-panel";
@@ -272,7 +273,12 @@ export function MeetingView({
               </div>
             ) : (
               <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" lang={translation.shown}>
-                <NotesHtml html={translation.translated?.notes_html ?? m.notes_html ?? ""} />
+                <NotesHtml
+                  html={translation.translated?.notes_html ?? m.notes_html ?? ""}
+                  actions={
+                    !translation.translated && m.tasks.length > 0 ? <ActionTasks key={m.tasks.map((t) => t.id).join()} initial={m.tasks} /> : undefined
+                  }
+                />
               </div>
             )}
           </section>

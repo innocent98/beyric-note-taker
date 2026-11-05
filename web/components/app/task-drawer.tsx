@@ -1,0 +1,202 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Alert, AppLink, Button, Icon } from "@/components/ui";
+import { api } from "@/lib/api/browser";
+import { errorMessage } from "@/lib/api/client";
+import type { Task, TaskChanges, TaskPerson } from "@/lib/api/types";
+import { assignedLabel, COLUMNS, dueOptions, sourceLabel } from "@/lib/tasks";
+
+// The task drawer (the designer's `drawerOpen` panel): a side panel with the task's title, the
+// notice about a spoken owner nobody on the team matched, the Status, Assignee, Due and Assigned
+// rows, the quote and a link to its meeting, Delete task and Done. Each change is one PATCH of
+// only that field (docs/fe-integration-guide-tasks.md); the answer is the whole task and replaces
+// the one on screen. What the person may change comes with the task (`can_*`); a control they may
+// not use is disabled, not hidden, and a refusal (403 `team_forbidden`) is shown in the panel.
+//
+// Not drawn here, because the data behind them does not exist yet: Milestone and Project (W4),
+// Sprint (W9), the "Check project" line (W4) and "Invite them to the team" (W3).
+export function TaskDrawer({
+  task,
+  people,
+  today,
+  onChange,
+  onDelete,
+  onClose,
+}: {
+  task: Task;
+  people: TaskPerson[];
+  today: string;
+  onChange: (task: Task) => void;
+  onDelete: (id: number) => void;
+  onClose: () => void;
+}) {
+  const [title, setTitle] = useState(task.title);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const closeNow = useRef(onClose);
+  useEffect(() => {
+    closeNow.current = onClose;
+  });
+
+  // A different task, or the same one changed from outside (a drag on the board): show its title.
+  const [shownTitle, setShownTitle] = useState(task.title);
+  if (task.title !== shownTitle) {
+    setShownTitle(task.title);
+    setTitle(task.title);
+  }
+  useEffect(() => {
+    const before = document.activeElement;
+    closeRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeNow.current();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      if (before instanceof HTMLElement) before.focus();
+    };
+  }, []);
+
+  async function save(changes: TaskChanges) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onChange(await api.tasks.update(task.id, changes));
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setTitle(task.title);
+    }
+    setBusy(false);
+  }
+
+  async function remove() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.tasks.remove(task.id);
+      onDelete(task.id);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setBusy(false);
+    }
+  }
+
+  // Someone who may only take a task (a member) is offered "Unassigned" and themselves; an owner or
+  // admin is offered the whole team.
+  const assignable = task.can_assign ? people : people.filter((p) => p.is_you);
+  const assigneeDisabled = !(task.can_assign || task.can_claim);
+  const assignee = task.assignee ? String(task.assignee.user_id) : "";
+  const dueChoices = dueOptions(today, task.due_date);
+
+  return (
+    <div className="td-scrim" onClick={onClose}>
+      <div className="td-panel" role="dialog" aria-modal="true" aria-label="Task" onClick={(event) => event.stopPropagation()}>
+        <div className="td-bar">
+          <span className="td-bar-title">Task</span>
+          <button type="button" className="td-close" aria-label="Close" onClick={onClose} ref={closeRef}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        <div className="td-body">
+          <textarea
+            className="td-title"
+            aria-label="Task title"
+            rows={2}
+            maxLength={200}
+            placeholder="What needs to be done?"
+            value={title}
+            readOnly={!task.can_edit}
+            onChange={(event) => setTitle(event.target.value)}
+            onBlur={() => {
+              if (task.can_edit && title !== task.title) void save({ title });
+            }}
+          />
+          {error ? <Alert kind="error">{error}</Alert> : null}
+          {!task.assignee && task.spoken_owner ? (
+            <div className="td-notice">
+              <span>&quot;{task.spoken_owner}&quot; was named as the owner in the meeting, but is not on your team.</span>
+            </div>
+          ) : null}
+          <div className="td-grid">
+            <label htmlFor="td-status">Status</label>
+            <select
+              id="td-status"
+              className="select td-select"
+              value={task.status}
+              disabled={!task.can_update || busy}
+              onChange={(event) => void save({ status: event.target.value as Task["status"] })}
+            >
+              {COLUMNS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <label htmlFor="td-assignee">Assignee</label>
+            <select
+              id="td-assignee"
+              className="select td-select"
+              value={assignee}
+              disabled={assigneeDisabled || busy}
+              onChange={(event) => void save({ assignee_user_id: event.target.value ? Number(event.target.value) : null })}
+            >
+              <option value="">Unassigned</option>
+              {assignable.map((p) => (
+                <option key={p.user_id} value={p.user_id}>
+                  {p.name}
+                  {p.is_you ? " (you)" : ""}
+                </option>
+              ))}
+            </select>
+            <label htmlFor="td-due">Due</label>
+            <select
+              id="td-due"
+              className="select td-select"
+              value={task.due_date ?? ""}
+              disabled={!task.can_update || busy}
+              onChange={(event) => void save({ due_date: event.target.value || null })}
+            >
+              {dueChoices.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <span>Assigned</span>
+            <span className="td-assigned">{assignedLabel(task.assigned_on, today)}</span>
+          </div>
+          {task.from_meeting ? (
+            <div className="td-source">
+              <div className="td-source-label">FROM THE MEETING</div>
+              {task.quote ? <div className="td-quote">{task.quote}</div> : null}
+              {task.meeting ? (
+                <AppLink className="td-source-link" href={`/meetings/${task.meeting.id}`}>
+                  <Icon name="video" size={12} />
+                  {sourceLabel(task)}
+                </AppLink>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <div className="td-foot">
+          {task.can_delete ? (
+            <button type="button" className="td-delete" disabled={busy} onClick={() => void remove()}>
+              Delete task
+            </button>
+          ) : (
+            <span />
+          )}
+          <Button type="button" size="md" onClick={onClose}>
+            Done
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -2,9 +2,10 @@ import type { ReactNode } from "react";
 import { TimeZoneProvider } from "@/components/app/time-zone-context";
 import { IconButton, Logo, NavLink } from "@/components/ui";
 
-export type NavSection = "meetings" | "decisions" | "review" | "notifications" | "templates" | "vocabulary" | "settings";
+export type NavSection = "meetings" | "tasks" | "decisions" | "review" | "notifications" | "templates" | "vocabulary" | "settings";
 
 // The owner app's frame: a sidebar on desktop, a top bar on phones (components.css). Log out is a
+// `tasksNew` is `badges.tasks_new`: the count beside Tasks.
 // plain form post to /logout (app/logout/route.ts), so it works without JavaScript. `reviewOpen` is
 // `badges.review_open` from GET /api/session (null when unknown): the count beside Review.
 // `timeZone` is `user.time_zone` of the same answer: the zone every time on the page is written in
@@ -12,12 +13,14 @@ export type NavSection = "meetings" | "decisions" | "review" | "notifications" |
 export function AppShell({
   current,
   reviewOpen = null,
+  tasksNew = null,
   unread = null,
   timeZone = null,
   children,
 }: {
   current: NavSection;
   reviewOpen?: number | null;
+  tasksNew?: number | null;
   unread?: number | null;
   timeZone?: string | null;
   children: ReactNode;
@@ -33,6 +36,7 @@ export function AppShell({
         </div>
         <nav className="nav" aria-label="Main">
           <NavLink href="/" label="Meetings" current={current === "meetings"} />
+          <NavLink href="/tasks" label="Tasks" current={current === "tasks"} badge={tasksNew ?? 0} />
           <NavLink href="/decisions" label="Decisions" current={current === "decisions"} />
           <NavLink href="/review" label="Review" current={current === "review"} badge={reviewOpen ?? 0} />
           <NavLink href="/notifications" label="Notifications" current={current === "notifications"} badge={unread ?? 0} badgeLabel="unread" />

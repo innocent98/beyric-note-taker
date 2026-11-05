@@ -110,6 +110,7 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
                       {names.get(m.template_id) ?? m.template_name ? (
                         <span>{names.get(m.template_id) ?? m.template_name}</span>
                       ) : null}
+                      {m.tasks_count > 0 ? <span className="meta-tasks">{plural(m.tasks_count, "task")}</span> : null}
                     </span>
                   </span>
                 </span>

@@ -22,6 +22,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/api/server", () => ({
   getSession: async () => ({ authenticated: true }),
   getReviewOpen: async () => null,
+  getTasksNew: async () => 0,
   getUnreadNotifications: async () => null,
   getTimeZone: async () => null,
   load: <T,>(call: Promise<T>) => call,
