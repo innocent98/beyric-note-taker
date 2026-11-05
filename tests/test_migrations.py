@@ -864,3 +864,4 @@ def test_0023_lets_the_ledger_hold_notes_and_label_calls_and_downgrades_cleanly(
     assert _rows(engine, "select kind from ai_runs order by id") == [("extract",)]
     with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
         conn.execute(text("insert into ai_runs (kind, model) values ('notes', 'm')"))
+    engine.dispose()
