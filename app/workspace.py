@@ -217,7 +217,7 @@ def run_extraction(
         )
         tasks.reconcile(
             session, meeting, team_id, parsed.action_items, from_notes.action_items, members, day,
-            quiet=quiet,
+            quiet=quiet, refresh=False,
         )  # fmt: skip
     session.commit()  # no row lock or open transaction while the model is being asked
 
@@ -366,7 +366,7 @@ def backfill(session: Session, now: datetime, *, task_days: int = BACKFILL_TASK_
 
 def backfill_tasks(session: Session, now: datetime, *, task_days: int = BACKFILL_TASK_DAYS) -> int:
     """Queue, quietly, the recent meetings that were read before tasks existed (their extraction
-    finished with the review-only prompt, or failed) so the worker makes their tasks. Meetings
+    finished with the review-only prompt) so the worker makes their tasks. Meetings
     older than `task_days` are left for the on-demand button, and an owner who has switched tasks
     off is left alone. Quiet means the tasks are not New and nobody is mailed (spec 3.3). Returns
     how many were queued; a second run queues none."""
@@ -383,7 +383,7 @@ def backfill_tasks(session: Session, now: datetime, *, task_days: int = BACKFILL
                 Meeting.status == "ready",
                 Meeting.notes.is_not(None),
                 Meeting.created_at >= recent_after,
-                Meeting.extraction_status.in_(("done", "failed")),
+                Meeting.extraction_status == "done",
                 Meeting.extraction_version.is_distinct_from(ai_runs.EXTRACT_PROMPT_VERSION),
                 Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
                 wants_tasks,

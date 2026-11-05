@@ -579,8 +579,8 @@ def deliver(session, now=NOW, **overrides):
     return sent, mailer
 
 
-def test_the_mail_is_the_designers_and_lists_only_their_tasks(session, owner, daniel):
-    meeting = make_meeting(session, owner, title="Beyric Monday planning")
+def test_the_mail_is_the_designers_and_lists_only_their_tasks(session, owner, daniel, team):
+    meeting = make_meeting(session, owner, title="Beyric Monday planning", shared_team_id=team.id)
     run(session, meeting)
     sent, mailer = deliver(session)
     assert sent == 1
@@ -688,3 +688,39 @@ def test_tasks_assigned_is_registered_as_a_notes_template():
 def test_the_model_has_the_tables_the_migration_makes(session):
     assert session.scalar(select(Team.id).limit(1)) is None or True
     assert Task.__table__.c.meeting_id.foreign_keys.pop().ondelete == "CASCADE"
+
+
+def test_a_private_meetings_title_is_not_in_the_mail_but_whose_it_was_is(session, owner, daniel):
+    meeting = make_meeting(session, owner, title="Secret layoffs")
+    run(session, meeting)
+    _, mailer = deliver(session)
+    message = mailer.sent[0][0]
+    assert "Secret layoffs" not in message.subject + message.text + message.html
+    assert "A meeting of Ada Lovelace" in message.text
+
+
+def test_a_shared_meetings_mail_names_the_meeting_and_who_recorded_it(session, owner, daniel, team):
+    meeting = make_meeting(session, owner, title="Planning", shared_team_id=team.id)
+    run(session, meeting)
+    _, mailer = deliver(session)
+    assert "Planning · recorded by Ada Lovelace" in mailer.sent[0][0].text
+
+
+def test_a_quiet_meeting_rewritten_later_mails_only_new_tasks(session, owner, daniel):
+    meeting = make_meeting(session, owner, extraction_quiet=True)
+    run(session, meeting)  # backfilled: tasks exist, not New, no mail
+    assert queued(session) == []
+    workspace.mark_pending(meeting)  # a rewrite: not quiet any more
+    session.commit()
+    workspace.run_extraction(session, meeting, client=FakeChat([GOOD]), now=NOW)
+    assert queued(session) == []  # the old tasks are not New, so nobody hears about them
+
+
+def test_the_pass_before_the_call_keeps_what_the_model_refined(session, owner, daniel):
+    meeting = make_meeting(session, owner)
+    run(session, meeting)
+    before = [(t.quote, t.unverified, t.assignee_user_id) for t in all_tasks(session, meeting)]
+    run(session, meeting, ["not json"], NOW + timedelta(hours=1))
+    assert [
+        (t.quote, t.unverified, t.assignee_user_id) for t in all_tasks(session, meeting)
+    ] == before

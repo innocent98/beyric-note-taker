@@ -96,7 +96,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -198,7 +198,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -230,7 +230,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -296,7 +296,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -328,7 +328,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -438,7 +438,7 @@ Response body:
   "source": "ai",
   "assigned_on": "2026-11-03",
   "done_at": null,
-  "created_at": "2026-11-05T14:40:32.816202Z",
+  "created_at": "2026-11-05T14:57:20.160822Z",
   "from_meeting": true,
   "meeting": null,
   "can_update": true,
@@ -514,7 +514,7 @@ Response body:
   "source": "ai",
   "assigned_on": "2026-11-03",
   "done_at": null,
-  "created_at": "2026-11-05T14:40:32.816202Z",
+  "created_at": "2026-11-05T14:57:20.160822Z",
   "from_meeting": true,
   "meeting": null,
   "can_update": true,
@@ -555,7 +555,7 @@ Response body:
   "source": "ai",
   "assigned_on": "2026-11-03",
   "done_at": null,
-  "created_at": "2026-11-05T14:40:32.816202Z",
+  "created_at": "2026-11-05T14:57:20.160822Z",
   "from_meeting": true,
   "meeting": null,
   "can_update": true,
@@ -657,7 +657,7 @@ Response body:
   "source": "ai",
   "assigned_on": "2026-11-03",
   "done_at": null,
-  "created_at": "2026-11-05T14:40:32.816202Z",
+  "created_at": "2026-11-05T14:57:20.160822Z",
   "from_meeting": true,
   "meeting": null,
   "can_update": true,
@@ -701,7 +701,7 @@ Response body:
   "source": "ai",
   "assigned_on": "2026-11-03",
   "done_at": null,
-  "created_at": "2026-11-05T14:40:32.816202Z",
+  "created_at": "2026-11-05T14:57:20.160822Z",
   "from_meeting": true,
   "meeting": {
     "id": 1,
@@ -771,7 +771,7 @@ Response body:
   "source": "ai",
   "assigned_on": "2026-11-03",
   "done_at": null,
-  "created_at": "2026-11-05T14:40:32.816202Z",
+  "created_at": "2026-11-05T14:57:20.160822Z",
   "from_meeting": true,
   "meeting": {
     "id": 1,
@@ -938,8 +938,8 @@ Response body:
   "unverified": false,
   "source": "ai",
   "assigned_on": "2026-11-03",
-  "done_at": "2026-11-05T14:40:34.669914Z",
-  "created_at": "2026-11-05T14:40:32.816202Z",
+  "done_at": "2026-11-05T14:57:22.240459Z",
+  "created_at": "2026-11-05T14:57:20.160822Z",
   "from_meeting": true,
   "meeting": {
     "id": 1,
@@ -984,8 +984,8 @@ Response body:
   "unverified": false,
   "source": "ai",
   "assigned_on": "2026-11-03",
-  "done_at": "2026-11-05T14:40:34.669914Z",
-  "created_at": "2026-11-05T14:40:32.816202Z",
+  "done_at": "2026-11-05T14:57:22.240459Z",
+  "created_at": "2026-11-05T14:57:20.160822Z",
   "from_meeting": true,
   "meeting": {
     "id": 1,
@@ -1038,7 +1038,7 @@ Response body:
   "source": "manual",
   "assigned_on": "2026-11-05",
   "done_at": null,
-  "created_at": "2026-11-05T14:40:34.748989Z",
+  "created_at": "2026-11-05T14:57:22.285778Z",
   "from_meeting": false,
   "meeting": null,
   "can_update": true,
@@ -1074,7 +1074,7 @@ Response body:
   "source": "manual",
   "assigned_on": "2026-11-05",
   "done_at": null,
-  "created_at": "2026-11-05T14:40:34.787620Z",
+  "created_at": "2026-11-05T14:57:22.343998Z",
   "from_meeting": false,
   "meeting": null,
   "can_update": true,
@@ -1218,7 +1218,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -1306,7 +1306,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -1338,7 +1338,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -1370,7 +1370,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -1402,7 +1402,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -1616,7 +1616,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": null,
       "can_update": true,
@@ -1643,7 +1643,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": null,
       "can_update": true,
@@ -1792,7 +1792,7 @@ Response body:
   "source": "ai",
   "assigned_on": "2026-11-03",
   "done_at": null,
-  "created_at": "2026-11-05T14:40:32.816202Z",
+  "created_at": "2026-11-05T14:57:20.160822Z",
   "from_meeting": true,
   "meeting": {
     "id": 1,
@@ -1835,7 +1835,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -1861,7 +1861,8 @@ Response body:
 One mail per assignee per meeting, sent by the background worker after the extraction finishes, never to the meeting's owner for their own tasks, never for backfilled meetings, never for a task nobody owns, and only while the owner's "Email assignees" is on and the recipient's email preference allows it. Nothing for the frontend to call. What it means for the UI:
 
 * A person can receive the mail for a task they then find is not theirs: the mail says "Not yours? Open the task to reassign it." The drawer's Assignee select is that path.
-* The mail lists only tasks still `todo` and still assigned to them when it is sent.
+* The mail lists only tasks still `todo`, still New, and still assigned to them when it is sent.
+* If the meeting is private to its owner, the mail does not carry its title: it says "A meeting of <owner>" (as below). Once the meeting is shared with the team it carries the title and "recorded by <owner>".
 
 The outbox rows (ids only, never text) and what the mail provider would be handed (**NOT LIVE** for delivery: the script uses a capturing mailer, not Resend; the message is built by the real code). The "Due ..." words are worked out against the day the script ran (a real clock), not against the sample meeting's date, so "Due tomorrow" next to 2026-11-04 is an artefact of running the script later:
 
@@ -1898,15 +1899,15 @@ What the mail provider would be handed (CAPTURING MAILER, not Resend).
 [
   {
     "to": "chidi@example.test",
-    "subject": "You have 2 new tasks: Google Meet nat-aaaa-bbb",
-    "text": "Google Meet nat-aaaa-bbb · 03 Nov 2026\n\nYou have 2 new tasks\n\nHi Chidi, these action items from the meeting were assigne… <332 more characters omitted> …",
-    "html": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-sca… <2664 more characters omitted> …"
+    "subject": "You have 2 new tasks: A meeting of Dan Okoro",
+    "text": "A meeting of Dan Okoro · 03 Nov 2026\n\nYou have 2 new tasks\n\nHi Chidi, these action items from the meeting were assigned … <330 more characters omitted> …",
+    "html": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-sca… <2660 more characters omitted> …"
   },
   {
     "to": "amina@example.test",
-    "subject": "You have 2 new tasks: Google Meet nat-aaaa-bbb",
-    "text": "Google Meet nat-aaaa-bbb · 03 Nov 2026\n\nYou have 2 new tasks\n\nHi Amina, these action items from the meeting were assigne… <321 more characters omitted> …",
-    "html": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-sca… <2656 more characters omitted> …"
+    "subject": "You have 2 new tasks: A meeting of Dan Okoro",
+    "text": "A meeting of Dan Okoro · 03 Nov 2026\n\nYou have 2 new tasks\n\nHi Amina, these action items from the meeting were assigned … <319 more characters omitted> …",
+    "html": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-sca… <2652 more characters omitted> …"
   }
 ]
 ```
@@ -1995,7 +1996,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -2027,7 +2028,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -2059,7 +2060,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -2091,7 +2092,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -2176,7 +2177,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -2208,7 +2209,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -2240,7 +2241,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -2272,7 +2273,7 @@ Response body:
       "source": "ai",
       "assigned_on": "2026-11-03",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:32.816202Z",
+      "created_at": "2026-11-05T14:57:20.160822Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
@@ -2342,7 +2343,7 @@ Response body:
       "source": "manual",
       "assigned_on": "2026-11-05",
       "done_at": null,
-      "created_at": "2026-11-05T14:40:34.787620Z",
+      "created_at": "2026-11-05T14:57:22.343998Z",
       "from_meeting": false,
       "meeting": null,
       "can_update": true,

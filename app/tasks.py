@@ -142,6 +142,7 @@ def reconcile(
     day: date,
     *,
     quiet: bool,
+    refresh: bool = True,
 ) -> list[Task]:
     """Make the meeting's AI tasks match its action `bullets`, keyed by fingerprint. `items` are
     the checked results, one per bullet and in the same order. Returns the live AI tasks.
@@ -149,6 +150,8 @@ def reconcile(
     * same fingerprint, untouched: kept (same id), fields refreshed from this run;
     * same fingerprint, touched or deleted by a person: left exactly as it is;
     * vanished and untouched: removed (a vanished tombstone too);
+    * `refresh=False` (the pass before the model is asked) only adds and removes: it never
+      overwrites what an earlier answer from the model refined;
     * new: created, "New" unless the meeting is `quiet` (backfill), owner matched by code.
     The caller commits."""
     existing = {
@@ -172,6 +175,9 @@ def reconcile(
             kept.append(task)
             continue
         item = by_index.get(position)
+        if task is not None and not refresh:
+            kept.append(task)
+            continue
         if item is None:  # `items` has one per bullet; this keeps a short list from deleting
             if task is not None:
                 kept.append(task)
@@ -213,7 +219,13 @@ def new_assignees(tasks: list[Task], owner_id: int) -> list[int]:
     seen: list[int] = []
     for task in tasks:
         who = task.assignee_user_id
-        if who is None or who == owner_id or task.status != "todo" or task.deleted_at:
+        if (
+            who is None
+            or who == owner_id
+            or task.status != "todo"
+            or task.deleted_at
+            or not task.is_new
+        ):
             continue
         if who not in seen:
             seen.append(who)

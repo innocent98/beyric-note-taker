@@ -437,6 +437,7 @@ def _tasks_assigned(
                 Task.source == "ai",
                 Task.deleted_at.is_(None),
                 Task.status == "todo",
+                Task.is_new.is_(True),  # backfilled (quiet) tasks are never New
             )
             .order_by(Task.position, Task.id)
         )
@@ -446,7 +447,11 @@ def _tasks_assigned(
     zone = owner_time_zone(session, owner)
     meeting_day = timezones.localise(meeting.created_at, zone)[0].date()
     today = timezones.localise(now, zone)[0].date()
-    name = meeting_name(meeting)
+    shared = meeting.shared_team_id is not None and meeting.shared_team_id == team_id
+    owner_name = clean_line(owner.name or owner.email.split("@")[0], 60)
+    # An assignee of a private meeting's task is not told its title (spec 8.2), only whose it was.
+    name = meeting_name(meeting) if shared else f"A meeting of {owner_name}"
+    by = f" · recorded by {owner_name}" if shared else ""
     count = len(tasks)
     shown = tasks[:MAX_TASKS_IN_MAIL]
     rows = tuple(
@@ -462,7 +467,7 @@ def _tasks_assigned(
     lead = f"Hi {first}, {noun}" if first else noun.capitalize()
     intro = f"{lead} from {when} {verb} assigned to you."
     blocks: list[Block] = [
-        Meta(f"{name} · {meeting_day.day:02d} {meeting_day:%b %Y}"),
+        Meta(f"{name}{by} · {meeting_day.day:02d} {meeting_day:%b %Y}"),
         Heading(heading),
         Para(intro),
         Rows(rows),
