@@ -9,16 +9,16 @@ invitation to an address with no account holds a place of the pilot (`app/signup
 nothing here needs a counter. `teams.share_new_meetings` is the team default for "Share with team"
 (off); it is read when a meeting's notes are first written, never when the bot joins.
 
-Revision ID: 0025
-Revises: 0024
+Revision ID: 0026
+Revises: 0025
 Create Date: 2026-11-05
 """
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0025"
-down_revision = "0024"
+revision = "0026"
+down_revision = "0025"
 branch_labels = None
 depends_on = None
 

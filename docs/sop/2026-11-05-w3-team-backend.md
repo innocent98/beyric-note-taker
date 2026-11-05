@@ -1,7 +1,7 @@
 # SOP: W3 Team, backend (PR 1 of 2)
 
 ## What shipped
-Invitations to a team (hashed single-use link, 7 days, resend, revoke), joining as a new person (reserves a pilot place, bypasses a closed or full pilot for that address) or as an existing account (their team of one dissolves into the one they join), roles with `403 team_forbidden`, remove and leave, per-meeting share and unshare, the team default `share_new_meetings`, alias editing, the "Team invite" mail, the account-deletion rule for team owners, and the route-enumeration tests. Backend only: the screens are PR 2 (`feature/w3-team-screens`), stacked on this one. Migration **0025**. Branch `feature/w3-team-backend`. PR: see the PR page (not merged).
+Invitations to a team (hashed single-use link, 7 days, resend, revoke), joining as a new person (reserves a pilot place, bypasses a closed or full pilot for that address) or as an existing account (their team of one dissolves into the one they join), roles with `403 team_forbidden`, remove and leave, per-meeting share and unshare, the team default `share_new_meetings`, alias editing, the "Team invite" mail, the account-deletion rule for team owners, and the route-enumeration tests. Backend only: the screens are PR 2 (`feature/w3-team-screens`), stacked on this one. Migration **0026**. Branch `feature/w3-team-backend`. PR: see the PR page (not merged).
 
 ## Why
 Spec sections 2 (rows 1, 2, 4, 5, 19), 4, 6.1, 8.1 to 8.4, decisions D1 to D3. W0.4 gave every account a team of one and `visible_meetings(user)`; W2 made tasks that name teammates. Without invites there was nobody to name, and the rule "a meeting is private unless shared" had no way to be shared. The risky parts are permissions (who sees a meeting), tokens (an invite link joins a team) and slot reservation (an invite lets someone in past a closed pilot), so each is one function with its own tests.
@@ -27,7 +27,7 @@ Spec sections 2 (rows 1, 2, 4, 5, 19), 4, 6.1, 8.1 to 8.4, decisions D1 to D3. W
 | Mail | "Team invite" built from the designer's `Emails.dc.html` (heading naming the inviter, one sentence, **Accept invite**, the 7-day line). The inviter's name is used only when it is plainly a name (`PLAIN_NAME`, as the greeting is), else "You have been invited to join a team"; the footer is the standard signature with Beyrichq LTD (spec row 18) | |
 
 ## What's involved
-- `alembic/versions/0025_team_invites.py`: `teams.share_new_meetings`, `team_invites` (partial unique `(team_id, email)` while neither accepted nor revoked; `token_hash` unique; roles `admin`/`member`; email lower-case check). Sits on 0024: **check `alembic heads`** at merge; `small-fixes-w2` may take 0025.
+- `alembic/versions/0026_team_invites.py`: `teams.share_new_meetings`, `team_invites` (partial unique `(team_id, email)` while neither accepted nor revoked; `token_hash` unique; roles `admin`/`member`; email lower-case check). Sits on 0025 (`0025_ai_runs_transcribe`, merged as #95): **check `alembic heads`** shows one head at merge.
 - New: `app/team_invites.py`, `app/team_admin.py`, `app/api_team.py`, `scripts/transfer_team_owner.py`, `scripts/capture_team_api.py`.
 - Changed: `app/teams.py` (`join`, `leave`, `apply_share_default`, `owns_team_with_others`, `transfer_owner`), `app/models.py`, `app/signup.py` (`slots_taken`, `may_confirm`, the invite branch of sign-up, joining at `verify_email`), `app/google_signin.py`, `app/tasks.py` (`visible`), `app/pipeline.py`, `app/api.py` (share routes, `_detail` fields), `app/api_schemas.py`, `app/auth.py` (public preview), `app/mail_templates.py`, `app/admin.py`, `app/deletion.py`, `app/maintenance.py` (the hourly token sweep also drops invitations finished more than 7 days ago), `app/tokens.py`, `scripts/delete_user.py`, `docs/openapi.json`, `web/lib/api/schema.d.ts`.
 - Tests: `tests/test_team.py` (new, 52), `tests/test_team_visibility.py` (the two share routes classified), `tests/test_accounts.py` (IDOR guard knows `invite_id` and `user_id`), `tests/test_api.py` (public list), `tests/test_pipeline.py` (default read at notes time, not at join).
@@ -39,9 +39,9 @@ Spec sections 2 (rows 1, 2, 4, 5, 19), 4, 6.1, 8.1 to 8.4, decisions D1 to D3. W
 - Opus review: see "Opus review" below.
 
 ## Operate / roll back
-- **Deploy:** migration 0025 runs with the app (adds a column with a default and a new table; no data change). Nothing to backfill.
-- **Server steps before merge:** none. No new environment variables. Confirm `alembic heads` shows one head after rebasing on `small-fixes-w2`.
-- **Roll back:** `alembic downgrade 0024` drops `team_invites` and `teams.share_new_meetings`; meetings keep their `shared_team_id` (set by the share switch), so teammates would keep reading them after a code rollback to W0.4 (the W0.4 code reads that column already). Revoke by `update meetings set shared_team_id = null` if sharing must stop.
+- **Deploy:** migration 0026 runs with the app (adds a column with a default and a new table; no data change). Nothing to backfill.
+- **Server steps before merge:** none. No new environment variables. Confirm `alembic heads` shows one head (`0026`).
+- **Roll back:** `alembic downgrade 0025` drops `team_invites` and `teams.share_new_meetings`; meetings keep their `shared_team_id` (set by the share switch), so teammates would keep reading them after a code rollback to W0.4 (the W0.4 code reads that column already). Revoke by `update meetings set shared_team_id = null` if sharing must stop.
 - Hand a team to someone before deleting its owner: `docker compose exec web python scripts/transfer_team_owner.py <team id> <new owner email>`.
 
 ## Follow-ups
