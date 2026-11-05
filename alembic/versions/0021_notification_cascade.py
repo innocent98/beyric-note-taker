@@ -5,14 +5,14 @@ and body name a deleted meeting. Deleting a meeting (W0.5) must take them with i
 key now cascades. No data moves.
 
 Revision ID: 0021
-Revises: 0019 (re-point to 0020 once the calendar migration is on main)
+Revises: 0020 (re-point to 0020 once the calendar migration is on main)
 Create Date: 2026-11-05
 """
 
 from alembic import op
 
 revision = "0021"
-down_revision = "0019"  # re-pointed to 0020 once the calendar migration is on main
+down_revision = "0020"
 branch_labels = None
 depends_on = None
 
