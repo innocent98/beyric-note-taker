@@ -44,8 +44,25 @@ describe("extraction state on the meeting page", () => {
   it("links to Decisions and Review when it is done", () => {
     show(done);
     expect(done.extraction_status).toBe("done");
-    expect(screen.getByRole("link", { name: "Decisions" }).getAttribute("href")).toBe("/decisions");
+    expect(screen.getByRole("link", { name: "View" }).getAttribute("href")).toBe("/decisions");
     expect(screen.getByRole("link", { name: "Review" }).getAttribute("href")).toBe("/review");
+  });
+
+  it("counts this meeting's decisions and items to check, in the designer's words", () => {
+    const counted = { ...done, decisions_count: 4, review_open_count: 3 } as Meeting;
+    const { unmount } = show(counted);
+    expect(screen.getByText("4 decisions")).toBeTruthy();
+    expect(screen.getByText("In the decisions log")).toBeTruthy();
+    expect(screen.getByText("3 to check")).toBeTruthy();
+    expect(screen.getByText("Words that may have been misheard")).toBeTruthy();
+    unmount();
+    show({ ...done, decisions_count: 1, review_open_count: 0 } as Meeting);
+    expect(screen.getByText("1 decision")).toBeTruthy();
+    expect(screen.getByText("Nothing to check")).toBeTruthy();
+    expect(screen.getByText("All review items are checked")).toBeTruthy();
+    cleanup();
+    show({ ...done, decisions_count: 0 } as Meeting);
+    expect(screen.getByText("No decisions")).toBeTruthy();
   });
 
   it("says only the hints are missing, and how to try again, when it failed", () => {
@@ -54,10 +71,11 @@ describe("extraction state on the meeting page", () => {
     expect(screen.getByText(/could not be added\. Rewrite the notes to try again\./)).toBeTruthy();
   });
 
-  it("says an older meeting has decisions only when it was skipped", () => {
+  it("draws the counts for an older meeting that was skipped (it has no review items)", () => {
     show(skipped);
     expect(skipped.extraction_status).toBe("skipped");
-    expect(screen.getByText("An older meeting: its decisions are on the Decisions screen. It has no Review items.")).toBeTruthy();
+    expect(screen.getByText("Nothing to check")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "View" }).getAttribute("href")).toBe("/decisions");
   });
 
   it("says nothing when the meeting has no extraction state (an owner-app capture)", () => {
@@ -80,7 +98,7 @@ describe("polling the state", () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
     expect(mocks.get).toHaveBeenCalledWith(pending.id);
-    expect(screen.getByRole("link", { name: "Decisions" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "View" })).toBeTruthy();
     // done: no more polling
     mocks.get.mockClear();
     await act(async () => {

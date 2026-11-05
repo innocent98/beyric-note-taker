@@ -1565,6 +1565,10 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Decisions Count */
+            decisions_count: number;
+            /** Duration Seconds */
+            duration_seconds: number | null;
             /** Extraction Status */
             extraction_status: ("pending" | "running" | "done" | "failed" | "skipped") | null;
             /** Failure Reason */
@@ -1583,6 +1587,8 @@ export interface components {
             notes: string | null;
             /** Notes Html */
             notes_html: string | null;
+            /** Participants */
+            participants: string[];
             /**
              * Platform
              * @enum {string}
@@ -1594,6 +1600,8 @@ export interface components {
             retry_block: ("not_failed" | "no_audio" | "no_speech" | "audio_deleted") | null;
             /** Retry Block Message */
             retry_block_message: string | null;
+            /** Review Open Count */
+            review_open_count: number;
             /** Speakers Incomplete */
             speakers_incomplete: boolean;
             /**

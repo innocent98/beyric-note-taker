@@ -352,3 +352,18 @@
 .rv-row-error-link { padding: 0; border: 0; background: transparent; color: var(--danger-text); font-size: var(--text-sm); font-weight: 550; text-decoration: underline; cursor: pointer; }
 .rv-fix.rv-bad .input { border-color: var(--danger-line); }
 .rv-done-row > .icon { flex: none; margin-top: 2px; color: var(--teal); }
+/* Meeting page side column: Participants under Details, the Decisions and review rows. */
+.side-rule { height: 1px; margin: 16px 0 14px; background: var(--border-soft); }
+.side-people { display: flex; flex-direction: column; gap: 8px; }
+.side-person { display: flex; align-items: center; gap: 10px; font-size: var(--text-sm); }
+.side-card { display: flex; flex-direction: column; gap: 12px; }
+.side-card .side-title { margin: 0; }
+.side-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.side-row-text { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.side-row-label { font-size: var(--text-sm); font-weight: 550; }
+.side-row-sub { font-size: var(--text-xs); color: var(--text-3); }
+.side-tile { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex: none; background: var(--primary-tint); color: var(--link); }
+.side-tile-warn { background: var(--warning-tint); color: var(--warning); }
+.side-tile-quiet { background: var(--surface-hover); color: var(--text-3); }
+.side-row .btn-link { font-size: var(--text-sm); font-weight: 550; }
+.notes-sec-actions > p { margin: 0; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: 8px; color: var(--text-3); }

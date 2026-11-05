@@ -230,6 +230,17 @@ class MeetingDetail(MeetingSummary):
     transcript: str | None
     # The translations this meeting has (any state), at most one per language; empty unless ready.
     translations: list[TranslationBrief]
+    # Length of the recording in seconds (what the hours cap counts); null until the recording
+    # has been prepared, and for a meeting that never recorded.
+    duration_seconds: int | None
+    # The people named in the speaker-labelled transcript, in the order they first speak. Empty
+    # when the transcript has no speaker names.
+    participants: list[str]
+    # For the page's "Decisions and review" card: this meeting's decisions that are still shown on
+    # the Decisions screen, and its review items not yet checked. Both 0 unless the meeting is
+    # ready; read `extraction_status` before trusting a 0 while it is pending or running.
+    decisions_count: int
+    review_open_count: int
 
 
 class MeetingList(BaseModel):

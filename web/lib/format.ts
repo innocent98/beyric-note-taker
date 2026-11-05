@@ -102,6 +102,17 @@ export function platformLabel(platform: "google_meet" | "zoom"): string {
   return platform === "zoom" ? "Zoom" : "Google Meet";
 }
 
+// The length of a meeting as the designer writes it: "46 min", "1 hr", "1 hr 5 min". No recording
+// yet reads "In progress" while the meeting is being worked on and "0 min" otherwise.
+export function durationLabel(seconds: number | null, inProgress: boolean): string {
+  if (seconds === null) return inProgress ? "In progress" : "0 min";
+  const minutes = Math.max(0, Math.round(seconds / 60));
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+}
+
 export function plural(count: number, one: string, many = `${one}s`): string {
   return `${count} ${count === 1 ? one : many}`;
 }
