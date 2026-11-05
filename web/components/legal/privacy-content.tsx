@@ -28,6 +28,8 @@ export function PrivacyContent({ days }: { days: number }) {
         <li>Files you export (a PDF or Word file of your notes, and of the transcript if you choose it) are built when you ask and are not stored.</li>
       </ul>
       <p>We do not record video or screen sharing.</p>
+      <h3>Teams</h3>
+      <p>People you invite to your team can see tasks assigned to them, including a short quote from the meeting, and any meeting you choose to share with the team. Meetings are private to you unless you share them. We keep the name and email address you enter for an invitation until it is accepted, cancelled or expires.</p>
       <h3>Information collected automatically</h3>
       <ul>
         <li>Server logs, which include your IP address, the pages you request and the time of each request. We use them to run and secure the service.</li>
@@ -55,7 +57,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <ul>
         <li>To provide the service: joining meetings, recording audio, and producing transcripts and notes for you.</li>
         <li>To apply your templates and vocabulary so notes follow your format and spell names correctly.</li>
-        <li>To send service emails, such as account verification, password resets, waiting-list invitations and notices that an address already has an account, an email when the notes of a meeting you sent the note taker to are ready, and an email to a teammate listing the tasks from a meeting that were assigned to them. You can turn these emails off for yourself in Settings, under Email preferences, and stop emails to the people your own tasks are assigned to under Tasks.</li>
+        <li>To send service emails, such as account verification, password resets, waiting-list and team invitations and notices that an address already has an account, an email when the notes of a meeting you sent the note taker to are ready, and an email to a teammate listing the tasks from a meeting that were assigned to them. You can turn these emails off for yourself in Settings, under Email preferences, and stop emails to the people your own tasks are assigned to under Tasks.</li>
         <li>To keep the service secure, prevent abuse and fix problems.</li>
         <li>To meet legal obligations and enforce our Terms of Service.</li>
       </ul>
@@ -64,7 +66,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h2 id="share">Who we share information with</h2>
       <ul>
         <li><strong>OpenAI</strong> turns meeting audio into a transcript, writes notes from it, reads the action items to find who took each one and by when, and checks the notes against the transcript to find names and terms that may have been misheard. Under OpenAI's API terms, data sent through its API is not used to train its models.</li>
-        <li><strong>Resend</strong> sends our service emails (account verification, password resets, waiting-list invitations, notices that an address already has an account, notes-ready emails and task assignment emails). It receives the email address and, if given, the name on each of those emails, and their content, which includes one-time links and, in a notes-ready email, a short extract of your notes (the summary, decisions, action items and open questions) and, in a task email, the titles and due dates of the tasks assigned to the recipient.</li>
+        <li><strong>Resend</strong> sends our service emails (account verification, password resets, waiting-list and team invitations, notices that an address already has an account, notes-ready emails and task assignment emails). It receives the email address and, if given, the name on each of those emails, and their content, which includes one-time links and, in a notes-ready email, a short extract of your notes (the summary, decisions, action items and open questions) and, in a task email, the titles and due dates of the tasks assigned to the recipient.</li>
         <li><strong>Contabo</strong> hosts our server, in France.</li>
         <li><strong>Cloudflare</strong> provides our domain's DNS and may carry traffic to the site.</li>
         <li><strong>Meeting and calendar platforms</strong> (Google and Zoom), as needed to join meetings and to read calendar events you have authorised.</li>

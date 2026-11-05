@@ -32,6 +32,8 @@ export const config = {
     "/pilot-full",
     "/meetings/:id",
     "/tasks",
+    "/team",
+    "/accept-invite",
     "/decisions",
     "/review",
     "/share",

@@ -30,6 +30,14 @@ import type {
   TaskList,
   TasksSettings,
   Template,
+  Team,
+  TeamChanges,
+  TeamInvite,
+  TeamInvitesCreated,
+  TeamMemberChanges,
+  TeamMembers,
+  InvitePreview,
+  InviteRole,
   TemplateInput,
   Term,
   Translation,
@@ -239,6 +247,9 @@ export function createApi(options: ApiOptions = {}) {
       // 204 and no body. 409 `meeting_active` (bot in the call or notes being written), 502
       // `recording_delete_failed` (nothing deleted); a repeat is 404 (docs/fe-integration-guide-meeting-delete.md).
       remove: (id: number) => request<void>("DELETE", `/api/meetings/${id}`, { write: true }),
+      // "Share with team": the answer is the whole meeting (owner only; anyone else gets 404).
+      share: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/share`, { write: true }),
+      unshare: (id: number) => request<Meeting>("DELETE", `/api/meetings/${id}/share`, { write: true }),
       cancel: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/cancel`, { write: true }),
       end: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/end`, { write: true }),
       retry: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/retry`, { write: true }),
@@ -288,6 +299,21 @@ export function createApi(options: ApiOptions = {}) {
         request<Task>("PATCH", `/api/tasks/${id}`, { body, write: true }),
       remove: (id: number) => request<void>("DELETE", `/api/tasks/${id}`, { write: true }),
       forMeeting: (meetingId: number) => request<MeetingTasks>("GET", `/api/meetings/${meetingId}/tasks`),
+    },
+    // The Team screen (docs/fe-integration-guide-team.md). A member is addressed by `user_id`.
+    team: {
+      get: () => request<Team>("GET", "/api/team"),
+      update: (body: TeamChanges) => request<Team>("PATCH", "/api/team", { body, write: true }),
+      members: () => request<TeamMembers>("GET", "/api/team/members"),
+      updateMember: (userId: number, body: TeamMemberChanges) =>
+        request<TeamMembers>("PATCH", `/api/team/members/${userId}`, { body, write: true }),
+      removeMember: (userId: number) => request<void>("DELETE", `/api/team/members/${userId}`, { write: true }),
+      invite: (invitees: Array<{ email: string; name?: string | null }>, role: InviteRole) =>
+        request<TeamInvitesCreated>("POST", "/api/team/invites", { body: { invitees, role }, write: true }),
+      resend: (id: number) => request<TeamInvite>("POST", `/api/team/invites/${id}/resend`, { write: true }),
+      revoke: (id: number) => request<void>("DELETE", `/api/team/invites/${id}`, { write: true }),
+      preview: (token: string) => request<InvitePreview>("GET", "/api/team/invites/preview", { query: { token } }),
+      accept: (token: string) => request<Team>("POST", "/api/team/invites/accept", { body: { token }, write: true }),
     },
     // Items to check against the transcript. Adding a term also marks the item checked.
     review: {

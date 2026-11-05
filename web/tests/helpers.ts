@@ -38,6 +38,10 @@ function withDetailDefaults<T>(body: T): T {
     // Captures made before `can_delete`: the API's rule is the owner of a meeting that is not active.
     Object.assign(body, { can_delete: !("status" in body && ["bot_sent", "processing"].includes(String(body.status))) });
   }
+  // Captures made before W3 lack the share fields: a meeting its owner has not shared.
+  if (body && typeof body === "object" && "notes_html" in body && !("shared_with_team" in body)) {
+    Object.assign(body, { shared_with_team: false, can_share: true, shared_by: null });
+  }
   // Captures made before Tasks lack `tasks` and `tasks_count`, which the API now always sends.
   if (body && typeof body === "object" && "notes_html" in body && !("tasks" in body)) {
     Object.assign(body, { tasks: [], tasks_count: 0 });
@@ -129,4 +133,10 @@ export function settingsError(file: string): { status: number; code: string; mes
 // (docs/fe-captures/tasks-w2/<file>, `python scripts/capture_tasks_api.py`).
 export function tasksBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/tasks-w2", file))).response.body as T;
+}
+
+// The body of a capture from the running API for the Team routes
+// (docs/fe-captures/team-w3/<file>, `python scripts/capture_team_api.py`).
+export function teamBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/team-w3", file))).response.body as T;
 }

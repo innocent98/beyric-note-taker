@@ -18,6 +18,8 @@ export default async function TasksPage() {
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect("/login");
   }
+  // Only to know whether to offer "Invite them to the team": a failure here changes nothing else.
+  const canInvite = await api.team.get().then((team) => team.can_manage, () => false);
   return (
     <AppShell
       current="tasks"
@@ -26,7 +28,7 @@ export default async function TasksPage() {
       unread={await getUnreadNotifications()}
       timeZone={await getTimeZone()}
     >
-      <TasksView initial={initial} />
+      <TasksView initial={initial} canInviteToTeam={canInvite} />
     </AppShell>
   );
 }

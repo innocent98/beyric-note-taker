@@ -434,7 +434,8 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Route enumeration: team routes classified, other-team user 404 on every id route, Member 403 on every owner/admin route, share routes classified
   - [x] FE guide from live captures (`scripts/capture_team_api.py`)
   - [ ] Opus review fixes (see the SOP)
-  - [ ] PR 2 screens: Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, and the four lead-designed pieces (Share with team switch, optional name in the invite dialog, alias editing, "Add email" which may wait for W6); privacy "Teams" paragraph and terms pilot row; parity shots
+  - [x] PR 2 screens (`feature/w3-team-screens`, open, not merged; SOP `docs/sop/2026-11-05-w3-team-ui.md`): Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, lead-designed Share with team switch, optional name in the invite dialog and alias editing (designer to confirm); privacy "Teams" paragraph and terms pilot rows; parity shots in `docs/ui/parity/after/`
+  - [ ] "Add email" beside a non-member participant (waits for W6)
 - [ ] W5 Export (merged), W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)

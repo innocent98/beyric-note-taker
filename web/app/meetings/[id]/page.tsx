@@ -37,6 +37,8 @@ export default async function MeetingPage({ params, searchParams }: Props) {
     load(api.templates.list()),
     load(api.settings.language.get()),
   ]);
+  // Only to know whether there is a team to share with; a failure just hides the switch.
+  const teamSize = meeting.can_share ? await api.team.get().then((team) => team.member_count, () => 0) : 0;
   return (
     <AppShell
       current="meetings"
@@ -50,6 +52,7 @@ export default async function MeetingPage({ params, searchParams }: Props) {
         templates={templates}
         initialTab={tab === "transcript" ? "transcript" : "notes"}
         defaultLanguage={language.default_language}
+        teamSize={teamSize}
       />
     </AppShell>
   );

@@ -454,3 +454,62 @@
 .ai-who { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--ink-2); white-space: nowrap; }
 .ai-who .avatar { width: 22px; height: 22px; font-size: 9px; }
 .meta-tasks { color: var(--teal); font-weight: 500; }
+
+/* ---- Team (the designer's isTeam screen and its invite dialog; W3) ---- */
+.tm { max-width: 920px; }
+.tm-card { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.tm-card-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border-softer); }
+.tm-card-head h2 { margin: 0; font-size: var(--text-md, 15px); font-weight: 600; }
+.tm-card-head span { font-size: var(--text-sm); color: var(--text-3); }
+.tm-list { margin: 0; padding: 0; list-style: none; }
+.tm-list > li { border-bottom: 1px solid var(--border-softer); }
+.tm-row { display: grid; grid-template-columns: 36px minmax(180px, 1fr) 110px 100px 92px; align-items: center; gap: 14px; padding: 14px 20px; }
+.tm-avatar { width: 36px; height: 36px; font-size: 12px; font-weight: 600; }
+.tm-who { min-width: 0; }
+.tm-name { display: flex; align-items: center; gap: var(--space-2); font-weight: 550; }
+.tm-you { padding: 1px 7px; border-radius: var(--radius-pill); background: var(--surface-active); color: var(--text-2); font-size: 11px; font-weight: 400; }
+.tm-email { font-size: var(--text-xs); color: var(--text-3); overflow-wrap: anywhere; }
+.tm-alias { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: 3px; font-size: var(--text-xs); color: var(--text-3); }
+.tm-alias-edit { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: 6px; }
+.tm-alias-edit .input { flex: 1 1 200px; height: 32px; font-size: var(--text-sm); }
+.tm-link { padding: 4px 0; border: 0; background: transparent; color: var(--link); font: inherit; font-size: var(--text-xs); font-weight: 550; cursor: pointer; }
+.tm-link:disabled { opacity: 0.55; cursor: default; }
+.tm-resend { padding: 4px; }
+.tm-role-text { font-size: var(--text-sm); color: var(--ink-2); }
+.tm-select { width: 100%; height: 32px; padding: 0 28px 0 10px; font-size: var(--text-sm); background-position: right 10px center; }
+.tm-open { font-size: var(--text-sm); color: var(--text-2); }
+.tm-actions { display: flex; justify-content: flex-end; gap: 4px; }
+.tm-x { display: flex; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-faint); cursor: pointer; }
+.tm-x:hover { background: var(--danger-tint); color: var(--danger); }
+.tm-x:disabled { opacity: 0.55; cursor: default; }
+.tm-invited { display: inline-flex; padding: 2px 9px; border-radius: var(--radius-pill); background: var(--warning-tint); color: var(--warning); font-size: var(--text-xs); font-weight: 550; }
+.tm-ask { margin: 0 20px 14px; }
+.tm-info { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--space-4); }
+.tm-info-card { display: flex; flex-direction: column; gap: var(--space-2); padding: 18px 20px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); font-size: var(--text-sm); color: var(--ink-2); }
+.tm-info-card h2 { margin: 0 0 4px; font-size: var(--text-base); font-weight: 600; color: var(--text); }
+.tm-info-card p { margin: 0; line-height: 1.6; }
+.tm-info-card strong { font-weight: 550; color: var(--text); }
+@media (max-width: 700px) {
+  .tm-row { grid-template-columns: 36px minmax(0, 1fr) auto; row-gap: 8px; padding: 14px 16px; }
+  .tm-role { grid-column: 2; }
+  .tm-open { grid-column: 2; }
+  .tm-actions { grid-column: 3; grid-row: 1; }
+  .tm-ask { margin: 0 16px 14px; }
+}
+.tm-dialog { max-width: 480px; margin: 96px auto auto; padding: 0; overflow: hidden; }
+.tm-dialog-head { padding: 20px 22px 0; }
+.tm-dialog-head .dialog-title { margin: 0; font-size: 17px; }
+.tm-dialog-sub { margin: 2px 0 0; font-size: var(--text-sm); color: var(--text-2); }
+.tm-dialog-body { display: flex; flex-direction: column; gap: 16px; padding: 18px 22px; }
+.tm-dialog-foot { display: flex; justify-content: flex-end; gap: var(--space-2); padding: 14px 22px; border-top: 1px solid var(--border-softer); background: var(--surface-row); }
+.tm-chipbox { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 40px; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius); }
+.tm-chipbox input { flex: 1; min-width: 180px; height: 28px; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; font-size: var(--text-sm); }
+.tm-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 9px; border-radius: 6px; background: var(--surface-active); font-size: var(--text-xs); font-weight: 500; }
+.tm-chip button { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 0; border-radius: 4px; background: transparent; color: var(--text-3); cursor: pointer; }
+
+/* Lead-designed (not in the designer's file): the "Share with team" card on the meeting page and
+   the share line under Details. Built from the side cards' own rows and the settings switch. */
+.sh-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.sh-title { font-size: var(--text-sm); font-weight: 600; }
+.sh-sub { margin: 2px 0 0; font-size: var(--text-xs); color: var(--text-3); line-height: 1.5; }
+.td-notice-link { align-self: flex-start; padding: 0; border: 0; background: transparent; color: var(--warning-text); font: inherit; font-size: var(--text-sm); font-weight: 600; text-decoration: underline; cursor: pointer; }
