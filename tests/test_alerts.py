@@ -360,7 +360,7 @@ def test_admin_alert_mail_renders_the_text_and_never_a_url(session, admins):
         session,
         mailer,
         make_settings(admin_alert_email="ops@example.test"),
-        NOW + timedelta(days=1),
+        NOW + timedelta(days=30),
     )
     assert sent == 1
     (message, _key) = mailer.sent[0]
