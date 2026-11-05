@@ -33,6 +33,7 @@ from types import SimpleNamespace
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
+from app import calendar_states
 from app.calendar_source import CalendarSource, CalendarSourceError, SyncBatch, SyncTokenExpired
 from app.config import Settings, get_settings
 from app.gcal_client import WINDOW_AFTER, WINDOW_BEFORE, GoogleSource
@@ -497,7 +498,13 @@ def _fetch(source: CalendarSource, conn: CalendarConnection, now: datetime) -> S
         return source.sync(conn, now=now, full=True)
 
 
-def _record_error(session: Session, conn: CalendarConnection, exc: Exception, now: datetime):
+def _record_error(
+    session: Session,
+    conn: CalendarConnection,
+    exc: Exception,
+    now: datetime,
+    settings: Settings | None = None,
+):
     """Remember the failure on the connection (C13 will act on it: degrade after 30 minutes, ask
     for a reconnect on a revoked grant). A source's messages carry only a status or an exception
     type by contract; any other exception is recorded by type alone."""
@@ -505,6 +512,7 @@ def _record_error(session: Session, conn: CalendarConnection, exc: Exception, no
     text = f"{name}: {exc}" if isinstance(exc, CalendarSourceError) and str(exc) else name
     logger.warning("calendar sync for connection %s failed (%s)", conn.id, name)
     conn.last_error, conn.last_error_at = text[:ERROR_LIMIT], now
+    calendar_states.on_sync_failure(session, conn, exc, now, settings=settings)
     session.commit()
 
 
@@ -527,11 +535,12 @@ def sync_connection(
         apply_batch(session, conn, batch, user_settings, now=now, settings=settings, vexa=vexa)
     except Exception as exc:
         session.rollback()
-        _record_error(session, conn, exc, now)
+        _record_error(session, conn, exc, now, settings)
         return
     # The batch is committed. Only now may the connection move on.
     if not batch.complete:
-        _record_error(session, conn, CalendarSourceError("the calendar was only partly read"), now)
+        partly = CalendarSourceError("the calendar was only partly read")
+        _record_error(session, conn, partly, now, settings)
         return
     if batch.next_sync_token is not None:
         conn.sync_token = batch.next_sync_token
@@ -539,6 +548,7 @@ def sync_connection(
         conn.last_full_sync_at = now
     conn.last_sync_at = now
     conn.last_error = conn.last_error_at = None
+    calendar_states.mark_healthy(session, conn, now)
     session.commit()
 
 

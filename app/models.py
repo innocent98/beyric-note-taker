@@ -379,6 +379,9 @@ class CalendarConnection(Base):
     last_full_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When the current run of failed syncs began (null while the last sync worked). The calendar
+    # is `degraded` once this is 30 minutes old (app/calendar_states.py).
+    error_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sync_token: Mapped[str | None] = mapped_column(Text)
     # connected_at + 7 days, set only while the OAuth app is in Testing.
     expected_expiry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
