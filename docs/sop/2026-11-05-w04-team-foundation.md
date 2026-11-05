@@ -62,11 +62,15 @@ Open questions have no read route yet (W1 built only extraction); when one is ad
 - No new settings, no new routes, no response shape change, so no FE guide.
 
 ## Review
-(filled in after the Opus review: see below)
+One Opus review of the diff (visibility leaks, missed query paths, backfill, migration safety). **No Critical or High findings.** Two Medium:
+
+| Finding | Outcome |
+|---|---|
+| A deleted owner's shared meetings stayed readable by the team | Fixed (`8ddb01e`): the read rule excludes meetings whose owner is deleted |
+| A teammate saw `can_cancel`, `can_end`, `can_retry`, `can_regenerate` true on a shared meeting although those routes answer 404 | Fixed: `_detail` ANDs each flag with `visibility.owns` (`app/api.py`); test `test_a_teammate_is_offered_no_action_on_a_shared_meeting` |
 
 ## Follow-ups
 - W3: invites, roles, the Team screen, the share switch that writes `shared_team_id`, and the rule that a calendar "all meetings" never publishes silently (read at share time).
 - `MeetingDetail.template` and the list summary name the owner's template. Templates are owner-only (spec 8.2); once a meeting is shared, a teammate sees that one name. Decide with the designer whether to hide it for non-owners.
-- `MeetingDetail` still carries `can_cancel`, `can_end`, `can_retry`, `can_regenerate` for a teammate, true or false by status though the routes refuse them. W3 should add `is_owner` and zero these.
 - Spec 8.3: teammates translating or exporting a shared meeting cost the recorder nothing. Translate stays owner-only here; revisit in W3.
 - `teams` sprint and reminder columns, `share_new_meetings` (spec 8.2) arrive with W3/W8/W9.

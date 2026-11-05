@@ -262,6 +262,16 @@ def test_a_teammate_reads_a_shared_meeting(app, world, teammate):
     assert [m["id"] for m in mate.get("/api/meetings").json()["meetings"]] == [shared.id]
 
 
+def test_a_teammate_is_offered_no_action_on_a_shared_meeting(app, api, world, teammate):
+    """The page must not show buttons whose routes answer a teammate 404."""
+    _, shared = world
+    flags = ("can_cancel", "can_end", "can_retry", "can_regenerate")
+    mine = api.get(f"/api/meetings/{shared.id}").json()
+    assert mine["can_regenerate"] is True
+    theirs = sign_in(app, TEAMMATE_EMAIL).get(f"/api/meetings/{shared.id}").json()
+    assert {flag: theirs[flag] for flag in flags} == dict.fromkeys(flags, False)
+
+
 def test_a_teammate_cannot_change_a_shared_meeting_and_the_answer_is_404(
     app, world, teammate, session
 ):
