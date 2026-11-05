@@ -1,0 +1,23 @@
+{
+  "note": "`mail_outbox` after the extraction: one row per assignee, ids only; none for Dan (the owner) and none for the task nobody owns.",
+  "content": [
+    {
+      "to": "chidi@example.test",
+      "template": "tasks_assigned",
+      "payload": {
+        "user_id": 3,
+        "meeting_id": 1
+      },
+      "status": "pending"
+    },
+    {
+      "to": "amina@example.test",
+      "template": "tasks_assigned",
+      "payload": {
+        "user_id": 4,
+        "meeting_id": 1
+      },
+      "status": "pending"
+    }
+  ]
+}

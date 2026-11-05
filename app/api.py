@@ -23,6 +23,7 @@ from app import (
     api_accounts,
     api_admin,
     api_settings,
+    api_tasks,
     api_translation,
     api_workspace,
     auth,
@@ -31,6 +32,7 @@ from app import (
     export,
     notifications,
     services,
+    tasks,
     translation,
     usage,
     visibility,
@@ -182,7 +184,10 @@ def _session_state(request: Request, db: Session) -> SessionState:
         ),
         usage=UsageOut(used_seconds=used, cap_seconds=usage.effective_cap(db, user)),
         unread_notifications=notifications.unread_count(db, user),
-        badges=BadgesOut(review_open=workspace.open_review_count(db, user)),
+        badges=BadgesOut(
+            review_open=workspace.open_review_count(db, user),
+            tasks_new=tasks.new_count(db, user),
+        ),
     )
 
 
@@ -236,7 +241,7 @@ def _platform_label(meeting: Meeting) -> str:
     return "Zoom" if meeting.platform == "zoom" else "Google Meet"
 
 
-def _summary(meeting: Meeting, template_name: str) -> MeetingSummary:
+def _summary(meeting: Meeting, template_name: str, tasks_count: int = 0) -> MeetingSummary:
     return MeetingSummary(
         id=meeting.id,
         title=_title(meeting),
@@ -249,6 +254,7 @@ def _summary(meeting: Meeting, template_name: str) -> MeetingSummary:
         template_id=meeting.template_id,
         template_name=template_name,
         created_at=meeting.created_at,
+        tasks_count=tasks_count,
     )
 
 
@@ -289,9 +295,12 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
     active = meeting.status in services.ACTIVE
     decisions_count, review_open_count = _workspace_counts(meeting, session) if ready else (0, 0)
     review_open_count = review_open_count if owner else 0  # review items are owner-only
+    task_rows = tasks.meeting_tasks(session, user, meeting.id) if ready else []
     return MeetingDetail(
         **_summary(
-            meeting, services.template_names(session, [meeting])[meeting.template_id]
+            meeting,
+            services.template_names(session, [meeting])[meeting.template_id],
+            len(task_rows),
         ).model_dump(),
         failure_reason=(meeting.failure_reason or REASON_UNEXPECTED) if failed else None,
         retry_block=block,
@@ -317,6 +326,7 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         participants=_participants(meeting),
         decisions_count=decisions_count,
         review_open_count=review_open_count,
+        tasks=api_tasks.present(session, user, task_rows),
         translations=[
             api_translation.brief(row, meeting)
             for row in session.scalars(
@@ -342,8 +352,12 @@ def list_meetings(
     rows = services.list_meetings(session, user, limit + 1, before_id)
     page = rows[:limit]
     names = services.template_names(session, page)
+    counts = tasks.counts_for_meetings(session, user, [m.id for m in page])
     return MeetingList(
-        meetings=[_summary(meeting, names[meeting.template_id]) for meeting in page],
+        meetings=[
+            _summary(meeting, names[meeting.template_id], counts.get(meeting.id, 0))
+            for meeting in page
+        ],
         has_more=len(rows) > limit,
         next_before_id=page[-1].id if len(rows) > limit else None,
         worker_stale=services.worker_is_stale(session),
@@ -691,4 +705,5 @@ router.include_router(api_settings.router)
 router.include_router(calendar_api.router)
 router.include_router(calendar_recurring.router)
 router.include_router(api_workspace.router)
+router.include_router(api_tasks.router)
 router.include_router(api_translation.router)

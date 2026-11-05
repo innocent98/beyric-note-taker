@@ -1,0 +1,49 @@
+{
+  "note": "A member changes status of a task assigned to them.",
+  "client": "chidi",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/tasks/4",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "doing"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 4,
+      "title": "Ask finance to confirm the contract number",
+      "status": "doing",
+      "assignee": {
+        "user_id": 3,
+        "name": "Chidi Eze",
+        "is_you": true
+      },
+      "spoken_owner": "Chidi",
+      "due_date": "2026-11-04",
+      "due_phrase": "tomorrow",
+      "quote": "I will ask finance tomorrow.",
+      "is_new": false,
+      "unverified": false,
+      "source": "ai",
+      "assigned_on": "2026-11-03",
+      "done_at": null,
+      "created_at": "2026-11-05T14:40:32.816202Z",
+      "from_meeting": true,
+      "meeting": null,
+      "can_update": true,
+      "can_edit": false,
+      "can_assign": false,
+      "can_claim": false,
+      "can_delete": false
+    }
+  }
+}

@@ -112,17 +112,47 @@ def test_a_wrong_weekday_nulls_the_date_and_keeps_the_phrase():
     assert (item.due_date, item.due_phrase) == (None, "before Friday")
 
 
-def test_a_title_that_wandered_falls_back_to_the_bullet():
+def test_a_title_that_wandered_falls_back_to_the_parsed_bullet():
     item = check([good_action(title="Open evil.example now")]).action_items[0]
-    assert item.title == "Tunde: finish payment checkout (by Friday)"
+    assert item.title == "finish payment checkout"  # the task part: the owner and date are fields
 
 
 def test_a_missing_bullet_comes_from_the_parser():
     notes = parsed(actions=("Tunde: finish payment checkout", "Unassigned: sort out VAT"))
     out = check([good_action()], notes=notes).action_items
     assert [i.index for i in out] == [0, 1]
-    assert out[1].from_parser and out[1].title == "Unassigned: sort out VAT"
+    assert out[1].from_parser and out[1].title == "sort out VAT"
     assert out[1].spoken_owner is None and out[1].unverified
+
+
+def test_a_parser_item_keeps_the_owner_only_when_the_transcript_says_it():
+    notes = parsed(actions=("Tunde: finish checkout (by Friday)", "Zed: book the venue"))
+    out = check([], notes=notes).action_items
+    assert (out[0].title, out[0].spoken_owner, out[0].due_phrase) == (
+        "finish checkout",
+        "Tunde",
+        "by Friday",
+    )
+    assert out[0].due_date is None and out[0].quote is None and out[0].from_parser
+    assert out[1].spoken_owner is None  # "Zed" is nowhere in the transcript
+
+
+def test_parse_action_bullet_takes_the_pattern_apart_and_guesses_nothing():
+    from app.extraction import parse_action_bullet
+
+    one = parse_action_bullet("Tunde: send the contract (by Friday)")
+    assert (one.owner, one.task, one.due_phrase) == ("Tunde", "send the contract", "by Friday")
+    for none in ("Unassigned: sort out VAT", "TBD: sort out VAT", "unknown: sort out VAT"):
+        assert parse_action_bullet(none).owner is None
+    plain = parse_action_bullet("Ship it before the 3:30 call")  # no "Owner:" prefix
+    assert (plain.owner, plain.task, plain.due_phrase) == (
+        None,
+        "Ship it before the 3:30 call",
+        None,
+    )
+    long_prefix = parse_action_bullet("One two three four five six: do it")
+    assert long_prefix.owner is None and long_prefix.task.startswith("One two")
+    assert parse_action_bullet("(by Friday)").task == "(by Friday)"  # a due date alone is no task
 
 
 def test_extra_and_repeated_indexes_are_ignored():

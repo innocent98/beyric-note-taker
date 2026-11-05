@@ -1,0 +1,54 @@
+{
+  "note": "`done_at` set.",
+  "client": "amina",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/tasks/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "done"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "title": "Share a draft of the dashboards",
+      "status": "done",
+      "assignee": {
+        "user_id": 3,
+        "name": "Chidi Eze",
+        "is_you": false
+      },
+      "spoken_owner": "Amina",
+      "due_date": "2026-11-12",
+      "due_phrase": "on Wednesday of next week",
+      "quote": "I'll share a draft on Wednesday of next week.",
+      "is_new": false,
+      "unverified": false,
+      "source": "ai",
+      "assigned_on": "2026-11-03",
+      "done_at": "2026-11-05T14:40:34.669914Z",
+      "created_at": "2026-11-05T14:40:32.816202Z",
+      "from_meeting": true,
+      "meeting": {
+        "id": 1,
+        "title": "Google Meet nat-aaaa-bbb",
+        "platform": "google_meet",
+        "created_at": "2026-11-03T10:00:00Z"
+      },
+      "can_update": true,
+      "can_edit": true,
+      "can_assign": true,
+      "can_claim": false,
+      "can_delete": true
+    }
+  }
+}

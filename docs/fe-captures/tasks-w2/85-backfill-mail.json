@@ -1,0 +1,7 @@
+{
+  "note": "Newest outbox id before and after the backfilled meeting was read: nobody is mailed.",
+  "content": {
+    "before": 2,
+    "after": 2
+  }
+}

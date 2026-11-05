@@ -1,0 +1,39 @@
+{
+  "note": "`badges.tasks_new` counts the New open tasks.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-B>",
+      "user": {
+        "email": "dan@example.test",
+        "name": "Dan Okoro",
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 18000
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 2,
+        "tasks_new": 4
+      }
+    }
+  }
+}

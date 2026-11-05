@@ -256,6 +256,31 @@ def queue_notes_ready(session: Session, meeting: Meeting) -> MailOutbox | None:
         return None
 
 
+def queue_tasks_assigned(session: Session, meeting: Meeting, user_ids: list[int]) -> int:
+    """Queue one "New tasks assigned" mail for each of these people about this meeting, in the
+    caller's transaction. A unique index on (meeting, person) is what makes it once: asking again
+    for the same pair (a later pass, a rewrite of the notes) queues nothing. Only active people,
+    and not the meeting's owner; the sender checks all of it again, and the owner's "Email
+    assignees" and the person's own preference, when it sends. Returns how many were queued."""
+    queued = 0
+    for user_id in user_ids:
+        person = session.get(User, user_id)
+        if person is None or person.status != "active" or person.id == meeting.owner_user_id:
+            continue
+        try:
+            with session.begin_nested():
+                enqueue(
+                    session,
+                    person.email,
+                    "tasks_assigned",
+                    {"meeting_id": meeting.id, "user_id": person.id},
+                )
+            queued += 1
+        except IntegrityError:
+            continue
+    return queued
+
+
 def _due(row: MailOutbox, now: datetime) -> bool:
     return row.attempts < MAX_ATTEMPTS and now >= row.created_at + RETRY_AGES[row.attempts]
 

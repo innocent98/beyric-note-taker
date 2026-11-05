@@ -47,6 +47,7 @@ from app.models import (
     MailOutbox,
     Meeting,
     Notification,
+    Task,
     Template,
     UsageEntry,
     User,
@@ -132,7 +133,10 @@ def purge_user(
     session.execute(delete(AuthToken).where(AuthToken.email == email))
     session.execute(delete(WaitlistEntry).where(WaitlistEntry.email == email))
     session.execute(delete(UserSettings).where(UserSettings.user_id == user_id))
-    session.execute(delete(Meeting).where(Meeting.owner_user_id == user_id))
+    session.execute(delete(Meeting).where(Meeting.owner_user_id == user_id))  # tasks cascade
+    # Tasks they typed in go with them (spec 4); other people's tasks they held become unassigned
+    # by the foreign key.
+    session.execute(delete(Task).where(Task.created_by_user_id == user_id, Task.source == "manual"))
     session.execute(delete(VocabularyTerm).where(VocabularyTerm.owner_user_id == user_id))
     session.execute(delete(Template).where(Template.owner_user_id == user_id))
     teams.remove_users(session, [user_id])

@@ -1,10 +1,11 @@
-from datetime import datetime
+from datetime import date, datetime
 
 import sqlalchemy as sa
 from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -60,6 +61,8 @@ EXTRACTION_STATUSES = ("pending", "running", "done", "failed", "skipped")
 # English is the original, so only these two are translated into (spec section 11, D8).
 NOTE_LANGUAGES = ("en", "fr", "es")
 TRANSLATION_STATUSES = ("translating", "ready", "failed")
+TASK_STATUSES = ("todo", "doing", "done")
+TASK_SOURCES = ("ai", "manual")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -202,6 +205,14 @@ class MailOutbox(Base):
             unique=True,
             postgresql_where=sa.text("template = 'notes_ready'"),
         ),
+        # One "New tasks assigned" mail per assignee per meeting (spec 6.1), however many passes.
+        Index(
+            "uq_mail_outbox_tasks_assigned",
+            sa.text("(payload->>'meeting_id')"),
+            sa.text("(payload->>'user_id')"),
+            unique=True,
+            postgresql_where=sa.text("template = 'tasks_assigned'"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -332,6 +343,10 @@ class UserSettings(Base):
     default_language: Mapped[str] = mapped_column(String(2), default="en", server_default="en")
     # The person's own IANA time zone ("Africa/Lagos"); null = UTC, as every time was before.
     time_zone: Mapped[str | None] = mapped_column(String(64))
+    # Settings > Tasks (spec 12): whether action items of this person's meetings become tasks, and
+    # whether the people they are assigned to are emailed about them.
+    auto_create_tasks: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    email_assignees: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
 
 
 class CalendarConnection(Base):
@@ -555,6 +570,11 @@ class Meeting(Base):
     extraction_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # The prompt version of the last finished extraction (app/ai_versions.py).
     extraction_version: Mapped[str | None] = mapped_column(String(32))
+    # True for a meeting read by the backfill or by an on-demand "extract tasks": its tasks are not
+    # marked New and nobody is mailed about them. Cleared when the notes are rewritten.
+    extraction_quiet: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
     # The one thing that makes a meeting visible to anyone but its owner (spec 4, 8.2): the team
     # it is shared with. Null = private, which is the default and what every row starts as. Only
     # `app/visibility.py` turns this into who may read; nothing else may compare it.
@@ -648,6 +668,66 @@ class ReviewItem(Base):
     fingerprint: Mapped[str] = mapped_column(String(64))
     heard_as: Mapped[str | None] = mapped_column(String(100))
     checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Task(Base):
+    """A thing someone has to do: an action item read from a meeting's notes (`source` `ai`) or a
+    task a person typed in (`manual`, no meeting). Every task belongs to a team, which is the
+    meeting owner's team for an AI task. The notes bullet is the record; the model only helps with
+    the owner, the due date and the quote, and everything it said is checked (app/extraction.py).
+
+    `ai_fingerprint` is the identity across a re-run (spec 3.3). A task a person touched
+    (`edited_at` set, or `status` not `todo`) is never overwritten or removed by a re-run. A deleted
+    AI task is kept as a tombstone (`deleted_at` set, text cleared) so the same bullet does not
+    bring it back."""
+
+    __tablename__ = "tasks"
+    __table_args__ = (
+        CheckConstraint(_in("status", TASK_STATUSES), name="ck_tasks_status"),
+        CheckConstraint(_in("source", TASK_SOURCES), name="ck_tasks_source"),
+        Index(
+            "uq_tasks_meeting_fingerprint",
+            "meeting_id",
+            "ai_fingerprint",
+            unique=True,
+            postgresql_where=sa.text("meeting_id is not null and ai_fingerprint is not null"),
+        ),
+        Index("ix_tasks_team_id", "team_id", "id"),
+        Index("ix_tasks_assignee_user_id", "assignee_user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    meeting_id: Mapped[int | None] = mapped_column(
+        ForeignKey("meetings.id", ondelete="CASCADE"), index=True
+    )
+    title: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    assignee_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # The name as said in the meeting, kept when no teammate matched it ("Needs owner").
+    spoken_owner: Mapped[str | None] = mapped_column(String(100))
+    due_date: Mapped[date | None] = mapped_column(Date)
+    due_phrase: Mapped[str | None] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(8), default="todo", server_default="todo")
+    quote: Mapped[str | None] = mapped_column(String(300))
+    is_new: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    # The model's quote was not found in the transcript: shown without a quote, counted as
+    # needing attention.
+    unverified: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    source: Mapped[str] = mapped_column(String(8), default="manual", server_default="manual")
+    ai_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    # Position of the bullet in the notes, so a meeting's tasks list in the order of its notes.
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The meeting's date in its owner's zone; today for a manual task.
+    assigned_on: Mapped[date | None] = mapped_column(Date)
+    done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

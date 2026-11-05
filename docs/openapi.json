@@ -509,15 +509,38 @@
         "title": "AdminWaitlistEntry",
         "type": "object"
       },
+      "AttentionOut": {
+        "properties": {
+          "needs_owner": {
+            "title": "Needs Owner",
+            "type": "integer"
+          },
+          "unverified": {
+            "title": "Unverified",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "needs_owner",
+          "unverified"
+        ],
+        "title": "AttentionOut",
+        "type": "object"
+      },
       "BadgesOut": {
         "properties": {
           "review_open": {
             "title": "Review Open",
             "type": "integer"
+          },
+          "tasks_new": {
+            "title": "Tasks New",
+            "type": "integer"
           }
         },
         "required": [
-          "review_open"
+          "review_open",
+          "tasks_new"
         ],
         "title": "BadgesOut",
         "type": "object"
@@ -875,6 +898,26 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "ExtractQueued": {
+        "properties": {
+          "extraction_status": {
+            "enum": [
+              "pending",
+              "running",
+              "done",
+              "failed",
+              "skipped"
+            ],
+            "title": "Extraction Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "extraction_status"
+        ],
+        "title": "ExtractQueued",
+        "type": "object"
+      },
       "FieldError": {
         "properties": {
           "field": {
@@ -1164,6 +1207,17 @@
             "title": "Step",
             "type": "string"
           },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Tasks",
+            "type": "array"
+          },
+          "tasks_count": {
+            "title": "Tasks Count",
+            "type": "integer"
+          },
           "template_id": {
             "title": "Template Id",
             "type": "integer"
@@ -1211,6 +1265,7 @@
           "template_id",
           "template_name",
           "created_at",
+          "tasks_count",
           "failure_reason",
           "retry_block",
           "retry_block_message",
@@ -1233,7 +1288,8 @@
           "duration_seconds",
           "participants",
           "decisions_count",
-          "review_open_count"
+          "review_open_count",
+          "tasks"
         ],
         "title": "MeetingDetail",
         "type": "object"
@@ -1381,6 +1437,10 @@
             "title": "Step",
             "type": "string"
           },
+          "tasks_count": {
+            "title": "Tasks Count",
+            "type": "integer"
+          },
           "template_id": {
             "title": "Template Id",
             "type": "integer"
@@ -1405,9 +1465,50 @@
           "status_tone",
           "template_id",
           "template_name",
-          "created_at"
+          "created_at",
+          "tasks_count"
         ],
         "title": "MeetingSummary",
+        "type": "object"
+      },
+      "MeetingTasks": {
+        "properties": {
+          "assigned_people": {
+            "title": "Assigned People",
+            "type": "integer"
+          },
+          "extraction_status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "running",
+                  "done",
+                  "failed",
+                  "skipped"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Status"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks",
+          "assigned_people",
+          "extraction_status"
+        ],
+        "title": "MeetingTasks",
         "type": "object"
       },
       "NewMeeting": {
@@ -1579,6 +1680,30 @@
           "status"
         ],
         "title": "PasswordChanged",
+        "type": "object"
+      },
+      "PersonOut": {
+        "description": "A member of the caller's team who can be given a task.",
+        "properties": {
+          "is_you": {
+            "title": "Is You",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "is_you"
+        ],
+        "title": "PersonOut",
         "type": "object"
       },
       "PilotOut": {
@@ -1946,6 +2071,373 @@
           "accept_terms"
         ],
         "title": "SignUp",
+        "type": "object"
+      },
+      "TaskCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "assignee_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee User Id"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "status": {
+            "default": "todo",
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "default": "",
+            "maxLength": 200,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "TaskCreate",
+        "type": "object"
+      },
+      "TaskList": {
+        "properties": {
+          "attention": {
+            "$ref": "#/components/schemas/AttentionOut"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_before_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Before Id"
+          },
+          "people": {
+            "items": {
+              "$ref": "#/components/schemas/PersonOut"
+            },
+            "title": "People",
+            "type": "array"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks",
+          "people",
+          "attention",
+          "has_more",
+          "next_before_id"
+        ],
+        "title": "TaskList",
+        "type": "object"
+      },
+      "TaskOut": {
+        "properties": {
+          "assigned_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assigned On"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PersonOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "can_assign": {
+            "title": "Can Assign",
+            "type": "boolean"
+          },
+          "can_claim": {
+            "title": "Can Claim",
+            "type": "boolean"
+          },
+          "can_delete": {
+            "title": "Can Delete",
+            "type": "boolean"
+          },
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "can_update": {
+            "title": "Can Update",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "done_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Done At"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "due_phrase": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Phrase"
+          },
+          "from_meeting": {
+            "title": "From Meeting",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_new": {
+            "title": "Is New",
+            "type": "boolean"
+          },
+          "meeting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "source": {
+            "enum": [
+              "ai",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "spoken_owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spoken Owner"
+          },
+          "status": {
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unverified": {
+            "title": "Unverified",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status",
+          "assignee",
+          "spoken_owner",
+          "due_date",
+          "due_phrase",
+          "quote",
+          "is_new",
+          "unverified",
+          "source",
+          "assigned_on",
+          "done_at",
+          "created_at",
+          "from_meeting",
+          "meeting",
+          "can_update",
+          "can_edit",
+          "can_assign",
+          "can_claim",
+          "can_delete"
+        ],
+        "title": "TaskOut",
+        "type": "object"
+      },
+      "TaskPatch": {
+        "additionalProperties": false,
+        "description": "A partial change: send only the fields that change. A field you leave out is untouched;\n`assignee_user_id` and `due_date` set to null clear them.",
+        "properties": {
+          "assignee_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignee User Id"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "todo",
+                  "doing",
+                  "done"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "TaskPatch",
+        "type": "object"
+      },
+      "TasksSettingsIn": {
+        "additionalProperties": false,
+        "properties": {
+          "auto_create_tasks": {
+            "title": "Auto Create Tasks",
+            "type": "boolean"
+          },
+          "email_assignees": {
+            "title": "Email Assignees",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "auto_create_tasks",
+          "email_assignees"
+        ],
+        "title": "TasksSettingsIn",
+        "type": "object"
+      },
+      "TasksSettingsOut": {
+        "properties": {
+          "auto_create_tasks": {
+            "title": "Auto Create Tasks",
+            "type": "boolean"
+          },
+          "email_assignees": {
+            "title": "Email Assignees",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "auto_create_tasks",
+          "email_assignees"
+        ],
+        "title": "TasksSettingsOut",
         "type": "object"
       },
       "TemplateIn": {
@@ -4924,6 +5416,162 @@
         ]
       }
     },
+    "/api/meetings/{meeting_id}/tasks": {
+      "get": {
+        "description": "A meeting's action items as tasks, for its page (\"8 tasks created, assigned to 3 people\").\nAnyone who can read the meeting may ask.",
+        "operationId": "meeting_tasks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingTasks"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Meeting Tasks",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/tasks/extract": {
+      "post": {
+        "description": "Read the tasks out of an older meeting's notes (\"Extract tasks from this meeting\"). Owner\nonly. 409 `extraction_pending` while the meeting is already being read, 409 `tasks_off` when\nthe owner has switched tasks off. The tasks it makes are not New and nobody is emailed.",
+        "operationId": "extract_tasks",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractQueued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Extract Tasks",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
     "/api/meetings/{meeting_id}/translations": {
       "post": {
         "description": "Translate the notes and transcript of a ready meeting into French or Spanish. 200 with the\ntranslation when one is already cached for the current text; otherwise 202 with\n`status: \"translating\"` and the work is queued. A failed or stale translation asked for again\nis queued again. Asking again while it is being made changes nothing.",
@@ -6303,6 +6951,118 @@
         ]
       }
     },
+    "/api/settings/tasks": {
+      "get": {
+        "description": "The two switches of Settings > Tasks (both on by default, also for an account with no\nsettings row yet).",
+        "operationId": "read_tasks_settings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TasksSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Tasks Settings",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Set both switches. They are read when a meeting is read (tasks) and when the mail is sent\n(assignees), so turning email off also stops mail already queued.",
+        "operationId": "write_tasks_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TasksSettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TasksSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Write Tasks Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/settings/time-zone": {
       "get": {
         "description": "The zone meeting times, due dates and reminder mails are written in. `UTC` with `is_set`\nfalse until the person chooses one.",
@@ -6566,6 +7326,407 @@
         "summary": "Resend Verification",
         "tags": [
           "signup"
+        ]
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "description": "The tasks the caller can see: those assigned to them, those from meetings they can read,\nand their team's manual tasks. Newest first; for the next page pass `before_id` =\n`next_before_id`. `attention` counts every open task the caller sees, whatever the filter.",
+        "operationId": "list_tasks",
+        "parameters": [
+          {
+            "description": "`me`, `none` (Needs owner) or a user id",
+            "in": "query",
+            "name": "assignee",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(me|none|\\d{1,10})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`me`, `none` (Needs owner) or a user id",
+              "title": "Assignee"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "todo",
+                    "doing",
+                    "done"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Before Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "List Tasks",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "post": {
+        "description": "Make a task by hand, in the caller's team. Anyone on the team may. It has no meeting.",
+        "operationId": "create_task",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`assignee_not_on_team`"
+          }
+        },
+        "summary": "Create Task",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/{task_id}": {
+      "delete": {
+        "description": "Delete a task. Owners and admins may delete any task they can see; a member only the tasks\nthey made. An AI task deleted here does not come back when the notes are read again.",
+        "operationId": "delete_task",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Delete Task",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "get": {
+        "operationId": "get_task",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Get Task",
+        "tags": [
+          "tasks"
+        ]
+      },
+      "patch": {
+        "description": "Change some fields of a task. Owners and admins may change anything. A member may change\nthe status and due date of a task assigned to them, take a task that has no owner (set\n`assignee_user_id` to themselves), and change everything about a task they made; anything\nmore is 403 `team_forbidden` and nothing is changed. A status change clears \"New\".",
+        "operationId": "patch_task",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Patch Task",
+        "tags": [
+          "tasks"
         ]
       }
     },

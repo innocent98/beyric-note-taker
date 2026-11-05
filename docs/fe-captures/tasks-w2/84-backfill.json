@@ -1,0 +1,8 @@
+{
+  "note": "`workspace.backfill` (what scripts/backfill_extraction.py runs).",
+  "content": {
+    "queued": 0,
+    "decisions_only": 0,
+    "tasks_queued": 2
+  }
+}

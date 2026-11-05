@@ -20,7 +20,7 @@ below (`ready_meeting`), not its own copy of the checks.
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -35,11 +35,12 @@ from app.mail_layout import (
     Label,
     Meta,
     Para,
+    Rows,
     render_html,
     render_text,
 )
 from app.mail_message import Message, clean_line
-from app.models import Meeting, User, UserSettings
+from app.models import Meeting, Task, TeamMember, User, UserSettings
 from app.notes_document import ListBlock, Paragraph, Section, build_notes_document
 
 SIGNATURE = "Beyric Note Taker, a product of Beyrichq LTD"
@@ -377,6 +378,104 @@ def _notes_ready(
         f"{settings.public_base_url.rstrip('/')}/settings#email-preferences",
     )
     subject = clean_line(f"Your notes are ready: {name}", 120)
+    return Message(
+        to=to,
+        subject=subject,
+        text=render_text(blocks, footer, prefs),
+        html=render_html(subject, blocks, footer, prefs),
+    )
+
+
+# ---- "New tasks assigned" ----
+
+MAX_TASKS_IN_MAIL = 10
+MAX_TASK_CHARS = 120
+
+
+def due_note(due: date | None, today: date) -> str:
+    """ "Due today", "Due tomorrow", "Due Fri 6 Nov", or nothing when there is no date."""
+    if due is None:
+        return ""
+    if due == today:
+        return "Due today"
+    if (due - today).days == 1:
+        return "Due tomorrow"
+    return f"Due {due:%a} {due.day} {due:%b}"
+
+
+@notes_template("tasks_assigned")
+def _tasks_assigned(
+    session: Session, payload: dict, to: str, settings: Settings, now: datetime
+) -> Message | Skip:
+    found = ready_meeting(session, payload["meeting_id"])
+    if isinstance(found, Skip):
+        return found
+    meeting, owner = found
+    recipient_id = payload.get("user_id")
+    recipient = session.get(User, recipient_id) if isinstance(recipient_id, int) else None
+    if recipient is None or recipient.status != "active":
+        return Skip("recipient_inactive")
+    if to != recipient.email.lower():
+        return Skip("recipient_changed")
+    if recipient.id == owner.id:
+        return Skip("own_tasks")  # nobody is told about the tasks of their own meeting
+    owner_settings = session.scalar(
+        select(UserSettings.email_assignees).where(UserSettings.user_id == owner.id)
+    )
+    if owner_settings is False:
+        return Skip("assignees_not_emailed")
+    if not notes_ready_wanted(session, recipient):  # their email preference
+        return Skip("opted_out")
+    team_id = session.scalar(select(TeamMember.team_id).where(TeamMember.user_id == recipient.id))
+    tasks = list(
+        session.scalars(
+            select(Task)
+            .where(
+                Task.meeting_id == meeting.id,
+                Task.team_id == team_id,
+                Task.assignee_user_id == recipient.id,
+                Task.source == "ai",
+                Task.deleted_at.is_(None),
+                Task.status == "todo",
+            )
+            .order_by(Task.position, Task.id)
+        )
+    )
+    if not tasks:
+        return Skip("no_tasks")
+    zone = owner_time_zone(session, owner)
+    meeting_day = timezones.localise(meeting.created_at, zone)[0].date()
+    today = timezones.localise(now, zone)[0].date()
+    name = meeting_name(meeting)
+    count = len(tasks)
+    shown = tasks[:MAX_TASKS_IN_MAIL]
+    rows = tuple(
+        (titles.mail_line(t.title, MAX_TASK_CHARS) or "Untitled task", due_note(t.due_date, today))
+        for t in shown
+    )
+    base = settings.public_base_url.rstrip("/")
+    heading = "You have 1 new task" if count == 1 else f"You have {count} new tasks"
+    when = "today's meeting" if meeting_day == today else "the meeting"
+    noun, verb = ("this action item", "was") if count == 1 else ("these action items", "were")
+    full_name = (recipient.name or "").strip()
+    first = full_name.split()[0] if PLAIN_NAME.fullmatch(full_name) else ""
+    lead = f"Hi {first}, {noun}" if first else noun.capitalize()
+    intro = f"{lead} from {when} {verb} assigned to you."
+    blocks: list[Block] = [
+        Meta(f"{name} · {meeting_day.day:02d} {meeting_day:%b %Y}"),
+        Heading(heading),
+        Para(intro),
+        Rows(rows),
+    ]
+    if count > len(shown):
+        blocks.append(Para(f"and {count - len(shown)} more in your tasks", muted=True))
+    blocks += [
+        Button("Open my tasks", f"{base}/tasks"),
+        Para("Not yours? Open the task to reassign it.", muted=True),
+    ]
+    footer = "You received this because you are on the Beyric team."
+    prefs = ("Email preferences", f"{base}/settings#email-preferences")
+    subject = clean_line(f"{heading}: {name}", 120)
     return Message(
         to=to,
         subject=subject,

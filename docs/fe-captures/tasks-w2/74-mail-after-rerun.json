@@ -1,0 +1,13 @@
+{
+  "note": "The outbox after the re-run: still one mail per assignee.",
+  "content": [
+    {
+      "to": "chidi@example.test",
+      "status": "sent"
+    },
+    {
+      "to": "amina@example.test",
+      "status": "sent"
+    }
+  ]
+}

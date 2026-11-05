@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app import accounts, auth, google_oauth, passwords
+from app import accounts, auth, google_oauth, passwords, teams
 from app.models import (
     CalendarConnection,
     CalendarEvent,
@@ -17,6 +17,7 @@ from app.models import (
     Meeting,
     Notification,
     ReviewItem,
+    Task,
     Template,
     UserSettings,
     VocabularyTerm,
@@ -572,7 +573,15 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     review = ReviewItem(
         meeting_id=mine.id, owner_user_id=owner.id, text="r", position=0, fingerprint="r"
     )
-    session.add_all([term, note, decision, review])
+    task = Task(
+        team_id=teams.ensure_team(session, owner).id,
+        meeting_id=mine.id,
+        title="t",
+        source="ai",
+        ai_fingerprint="t",
+        assignee_user_id=owner.id,
+    )
+    session.add_all([term, note, decision, review, task])
     session.commit()
     # The calendar routes answer 404 `calendar_unavailable` while the feature is off, which would
     # hide an unscoped id: switch it on, and give BOTH people a live connection so that only the
@@ -610,6 +619,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "notification_id": note.id,
         "decision_id": decision.id,
         "item_id": review.id,
+        "task_id": task.id,
         "language": "fr",  # with the owner's meeting id: a translation is reached through it
     }
     anon.log_in(email=OTHER_EMAIL)
@@ -625,6 +635,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/vocabulary": {"term": "Metrika"},
             "/translations": {"language": "fr"},
             "/override": {"override": False},
+            "/api/tasks/{task_id}": {"status": "done"},
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
         }
         body = next((b for key, b in bodies.items() if path.endswith(key)), None)
