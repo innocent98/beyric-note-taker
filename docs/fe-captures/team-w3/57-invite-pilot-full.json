@@ -1,0 +1,33 @@
+{
+  "note": "No free place: 409 `pilot_full`, nothing sent, nobody invited.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/team/invites",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "invitees": [
+        {
+          "email": "newcomer@example.test"
+        }
+      ],
+      "role": "member"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "pilot_full",
+        "message": "The pilot has no free places. Ask the pilot admin."
+      }
+    }
+  }
+}

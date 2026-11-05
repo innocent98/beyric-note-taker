@@ -984,12 +984,17 @@ def test_0025_follows_0024():
     assert script.get_revision("0025").down_revision == "0024"
 
 
-# ---- 0026 provider-neutral calendar connections ----
+def test_0026_follows_0025_and_is_the_only_head():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0026").down_revision == "0025"
 
 
-def test_0026_renames_the_identity_columns_keeps_the_data_and_downgrades_cleanly(scratch_url):
+# ---- 0027 provider-neutral calendar connections ----
+
+
+def test_0027_renames_the_identity_columns_keeps_the_data_and_downgrades_cleanly(scratch_url):
     cfg = alembic_config(scratch_url)
-    command.upgrade(cfg, "0025")
+    command.upgrade(cfg, "0026")
     engine = create_engine(scratch_url)
     with engine.begin() as conn:
         conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
@@ -1041,10 +1046,10 @@ def test_0026_renames_the_identity_columns_keeps_the_data_and_downgrades_cleanly
 
     # The downgrade cannot represent a Microsoft connection: it refuses until the row is gone.
     with pytest.raises(sa.exc.DBAPIError):
-        command.downgrade(cfg, "0025")
+        command.downgrade(cfg, "0026")
     with engine.begin() as conn:
         conn.execute(text("delete from calendar_connections where provider = 'microsoft'"))
-    command.downgrade(cfg, "0025")
+    command.downgrade(cfg, "0026")
     old = {c["name"] for c in inspect(engine).get_columns("calendar_connections")}
     assert {"google_account_email", "google_sub", "google_hosted_domain"} <= old
     assert not {"tenant_id", "account_kind", "tenant_domains", "account_email"} & old
@@ -1056,6 +1061,6 @@ def test_0026_renames_the_identity_columns_keeps_the_data_and_downgrades_cleanly
     engine.dispose()
 
 
-def test_0026_follows_0025():
+def test_0027_follows_0026():
     script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
-    assert script.get_revision("0026").down_revision == "0025"
+    assert script.get_revision("0027").down_revision == "0026"

@@ -1,0 +1,28 @@
+{
+  "note": "Single use: 400 `invite_invalid`.",
+  "client": "chidi",
+  "request": {
+    "method": "POST",
+    "path": "/api/team/invites/accept",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "token": "<token>"
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invite_invalid",
+        "message": "That invitation is not valid any more. Ask for a new one."
+      }
+    }
+  }
+}

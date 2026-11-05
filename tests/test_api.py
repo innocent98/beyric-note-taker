@@ -259,6 +259,7 @@ PUBLIC = {
     ("POST", "/api/password/forgot"),
     ("POST", "/api/password/reset"),
     ("POST", "/api/waitlist"),
+    ("GET", "/api/team/invites/preview"),
     ("GET", "/api/auth/google/start"),
     ("GET", "/api/auth/google/callback"),
     ("GET", "/api/calendar/google/callback"),
@@ -303,6 +304,8 @@ def test_reads_work_without_the_header_and_no_route_is_cross_wired(api, app, tem
         if method == "GET":
             # an ordinary user is refused the admin routes (tests/test_admin.py covers each)
             allowed = (403,) if path.startswith("/api/admin/") else (200, 404)
+            if path == "/api/team/invites/preview":
+                allowed = (422,)  # a public read that needs its token in the query
             assert api.get(concrete(path)).status_code in allowed
 
 

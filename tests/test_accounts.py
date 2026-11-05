@@ -18,6 +18,7 @@ from app.models import (
     Notification,
     ReviewItem,
     Task,
+    TeamInvite,
     Template,
     UserSettings,
     VocabularyTerm,
@@ -581,7 +582,14 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         ai_fingerprint="t",
         assignee_user_id=owner.id,
     )
-    session.add_all([term, note, decision, review, task])
+    pending_invite = TeamInvite(
+        team_id=teams.ensure_team(session, owner).id,
+        email="invited@example.test",
+        token_hash="f" * 64,
+        invited_by=owner.id,
+        expires_at=datetime.now(UTC) + timedelta(days=7),
+    )
+    session.add_all([term, note, decision, review, task, pending_invite])
     session.commit()
     # The calendar routes answer 404 `calendar_unavailable` while the feature is off, which would
     # hide an unscoped id: switch it on, and give BOTH people a live connection so that only the
@@ -620,6 +628,8 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "decision_id": decision.id,
         "item_id": review.id,
         "task_id": task.id,
+        "invite_id": pending_invite.id,
+        "user_id": owner.id,  # a member of the owner's team, reached through the team routes
         "language": "fr",  # with the owner's meeting id: a translation is reached through it
     }
     anon.log_in(email=OTHER_EMAIL)
@@ -636,6 +646,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/translations": {"language": "fr"},
             "/override": {"override": False},
             "/api/tasks/{task_id}": {"status": "done"},
+            "/api/team/members/{user_id}": {"aliases": ["x"]},
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
         }
         body = next((b for key, b in bodies.items() if path.endswith(key)), None)

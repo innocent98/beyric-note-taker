@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
-from app import mail, signup, tokens, usage
+from app import mail, signup, teams, tokens, usage
 from app.config import Settings
 from app.models import (
     AppState,
@@ -135,6 +135,14 @@ def schedule_deletion(session: Session, user: User) -> None:
     if _is_last_admin(session, user):
         session.rollback()
         raise _refuse_last_admin()
+    if teams.owns_team_with_others(session, user.id):
+        session.rollback()
+        raise Refused(
+            409,
+            "team_owner_has_members",
+            "This account owns a team that still has other members. Hand the team to one of "
+            "them first (scripts/transfer_team_owner.py), then delete the account.",
+        )
     user.status, user.deleted_at = "deleted", datetime.now(UTC)
     session.commit()
 

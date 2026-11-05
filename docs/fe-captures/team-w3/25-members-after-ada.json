@@ -1,0 +1,63 @@
+{
+  "note": "Ada is on the team, with 'Ada L' as an alias; her invite is gone from `invites`.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/team/members",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "members": [
+        {
+          "user_id": 2,
+          "name": "Dan Okoro",
+          "email": "dan@example.test",
+          "role": "owner",
+          "is_you": true,
+          "aliases": [],
+          "open_tasks": 0,
+          "joined_at": "2026-11-05T20:13:31.142139Z",
+          "can_change_role": false,
+          "can_edit_aliases": true,
+          "can_remove": false
+        },
+        {
+          "user_id": 5,
+          "name": "Ada Lovelace",
+          "email": "ada@example.test",
+          "role": "member",
+          "is_you": false,
+          "aliases": [
+            "Ada L"
+          ],
+          "open_tasks": 0,
+          "joined_at": "2026-11-05T20:13:32.903718Z",
+          "can_change_role": true,
+          "can_edit_aliases": true,
+          "can_remove": true
+        }
+      ],
+      "invites": [
+        {
+          "id": 2,
+          "email": "chidi@example.test",
+          "name": null,
+          "role": "member",
+          "status": "pending",
+          "invited_by": "Dan Okoro",
+          "last_sent_at": "2026-11-05T20:13:31.873140Z",
+          "expires_at": "2026-11-12T20:13:31.873140Z"
+        }
+      ]
+    }
+  }
+}

@@ -35,7 +35,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, select, text, update
 from sqlalchemy.orm import Session
 
-from app import accounts, google_oauth, signup, tokens
+from app import accounts, google_oauth, signup, team_invites, tokens
 from app.config import Settings
 from app.google_oauth import Identity
 from app.models import AuthToken, OAuthFlow, User, WaitlistEntry
@@ -188,6 +188,7 @@ def _link_by_email(session: Session, user: User, identity: Identity, now: dateti
         user.email_verified_at = now
         user.password_hash = None
         tokens.revoke(session, "verify_email", user.id, now)
+        team_invites.accept_confirmed(session, user, now)  # Google proved the address
     return Outcome(user=user)
 
 
@@ -195,7 +196,8 @@ def _create(
     session: Session, identity: Identity, address: str, accepted_terms: bool, now: datetime
 ) -> Outcome:
     invite = tokens.live_invite_for(session, address, now)
-    if invite is None:
+    team_invited = team_invites.live_for_email(session, address, now) is not None
+    if invite is None and not team_invited:
         state = signup.pilot_state(session, now)
         if state == "closed":
             return Outcome(error="pilot_closed")
@@ -220,6 +222,8 @@ def _create(
         session.execute(
             update(WaitlistEntry).where(WaitlistEntry.email == address).values(status="joined")
         )
+    if team_invited:
+        team_invites.accept_confirmed(session, user, now)  # Google proved the address
     return Outcome(user=user)
 
 

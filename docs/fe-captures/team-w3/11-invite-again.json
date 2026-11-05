@@ -1,0 +1,45 @@
+{
+  "note": "Within a minute of the last mail: `already_invited`, no second mail.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/team/invites",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "invitees": [
+        {
+          "email": "ada@example.test"
+        }
+      ],
+      "role": "member"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "results": [
+        {
+          "email": "ada@example.test",
+          "status": "already_invited",
+          "invite": {
+            "id": 1,
+            "email": "ada@example.test",
+            "name": "Ada L",
+            "role": "member",
+            "status": "pending",
+            "invited_by": "Dan Okoro",
+            "last_sent_at": "2026-11-05T20:13:31.873140Z",
+            "expires_at": "2026-11-12T20:13:31.873140Z"
+          }
+        }
+      ]
+    }
+  }
+}

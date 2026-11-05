@@ -1,0 +1,26 @@
+{
+  "note": "Within a minute of the last mail: 429 `too_soon`.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/team/invites/3/resend",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "too_soon",
+        "message": "That invitation was sent a moment ago. Try again shortly."
+      }
+    }
+  }
+}

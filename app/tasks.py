@@ -243,7 +243,9 @@ def visible(user: User):
     return and_(
         Task.deleted_at.is_(None),
         or_(
-            Task.assignee_user_id == user.id,
+            # Assigned to them AND still on that task's team: a person who left or was removed
+            # keeps no window into the old team's tasks (a done task still names them).
+            and_(Task.assignee_user_id == user.id, Task.team_id == their_team),
             readable,
             and_(Task.meeting_id.is_(None), Task.team_id == their_team),
         ),

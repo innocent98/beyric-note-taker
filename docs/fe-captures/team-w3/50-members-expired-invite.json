@@ -1,0 +1,76 @@
+{
+  "note": "TIME FAKED in the database: the invite reads `expired`.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/team/members",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "members": [
+        {
+          "user_id": 2,
+          "name": "Dan Okoro",
+          "email": "dan@example.test",
+          "role": "owner",
+          "is_you": true,
+          "aliases": [],
+          "open_tasks": 0,
+          "joined_at": "2026-11-05T20:13:31.142139Z",
+          "can_change_role": false,
+          "can_edit_aliases": true,
+          "can_remove": false
+        },
+        {
+          "user_id": 5,
+          "name": "Ada Lovelace",
+          "email": "ada@example.test",
+          "role": "member",
+          "is_you": false,
+          "aliases": [
+            "Ada"
+          ],
+          "open_tasks": 0,
+          "joined_at": "2026-11-05T20:13:32.903718Z",
+          "can_change_role": true,
+          "can_edit_aliases": true,
+          "can_remove": true
+        },
+        {
+          "user_id": 3,
+          "name": "Chidi Eze",
+          "email": "chidi@example.test",
+          "role": "admin",
+          "is_you": false,
+          "aliases": [],
+          "open_tasks": 0,
+          "joined_at": "2026-11-05T20:13:33.281663Z",
+          "can_change_role": true,
+          "can_edit_aliases": true,
+          "can_remove": true
+        }
+      ],
+      "invites": [
+        {
+          "id": 3,
+          "email": "later@example.test",
+          "name": null,
+          "role": "member",
+          "status": "expired",
+          "invited_by": "Dan Okoro",
+          "last_sent_at": "2026-10-28T20:13:33.547631Z",
+          "expires_at": "2026-11-04T20:13:33.547638Z"
+        }
+      ]
+    }
+  }
+}

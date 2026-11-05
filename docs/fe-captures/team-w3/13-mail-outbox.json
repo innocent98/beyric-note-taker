@@ -1,0 +1,23 @@
+{
+  "note": "Queued Team invite mails (payload holds the link: scrubbed once sent).",
+  "content": [
+    {
+      "to": "ada@example.test",
+      "template": "team_invite",
+      "payload": {
+        "link": "https://notes.example.test/accept-invite?token=<invite-token-1>",
+        "inviter": "Dan Okoro"
+      },
+      "status": "pending"
+    },
+    {
+      "to": "chidi@example.test",
+      "template": "team_invite",
+      "payload": {
+        "link": "https://notes.example.test/accept-invite?token=<invite-token-2>",
+        "inviter": "Dan Okoro"
+      },
+      "status": "pending"
+    }
+  ]
+}

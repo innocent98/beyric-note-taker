@@ -210,6 +210,13 @@ class MeetingDetail(MeetingSummary):
     # True for the owner of a meeting that is ready or failed: `DELETE /api/meetings/{id}` is 409
     # `meeting_active` while the bot is in the call or the notes are being written.
     can_delete: bool
+    # Whether the meeting is shared with the owner's team (the "Share with team" switch). Only the
+    # owner may change it: `can_share` is false for a teammate reading a shared meeting.
+    shared_with_team: bool
+    can_share: bool
+    # Who recorded it, for a teammate reading a shared meeting ("Shared by Dan"); null for the
+    # owner's own view.
+    shared_by: str | None
     join_attempts: int
     max_join_attempts: int
     bot_left_early: bool
@@ -659,6 +666,119 @@ class TasksSettingsIn(Body):
 
 class ExtractQueued(BaseModel):
     extraction_status: ExtractionStatus
+
+
+TeamRole = Literal["owner", "admin", "member"]
+InviteRole = Literal["admin", "member"]
+InviteStatus = Literal["pending", "expired"]
+InviteOutcome = Literal["sent", "resent", "already_member", "already_invited", "invalid_email"]
+
+
+class TeamOut(BaseModel):
+    id: int
+    name: str
+    # The team default for "Share with team": new meetings of the team's owner and admins are
+    # shared when their notes are first written. Off by default; members' meetings are never
+    # shared by it.
+    share_new_meetings: bool
+    my_role: TeamRole
+    member_count: int
+    # Live (not expired) invitations; they count toward the pilot's accounts.
+    pending_invites: int
+    # Owner or admin: invite, remove members, edit the team and everyone's aliases.
+    can_manage: bool
+    # Owner only: change roles.
+    can_change_roles: bool
+
+
+class TeamPatch(Body):
+    name: str | None = Field(None, min_length=1, max_length=100)
+    share_new_meetings: bool | None = None
+
+
+class TeamMemberOut(BaseModel):
+    user_id: int
+    # Plain text: the account name, or the part of the email before the @.
+    name: str
+    email: str
+    role: TeamRole
+    is_you: bool
+    # How the person is named aloud in meetings, for matching task owners ("Matched in meetings
+    # as"). Plain text.
+    aliases: list[str]
+    open_tasks: int
+    joined_at: UtcDatetime
+    can_change_role: bool
+    can_edit_aliases: bool
+    # True for removing someone else, and for "Leave team" on your own row.
+    can_remove: bool
+
+
+class TeamInviteOut(BaseModel):
+    id: int
+    email: str
+    name: str | None
+    role: InviteRole
+    # `expired`: the link no longer works; Resend sends a new one.
+    status: InviteStatus
+    invited_by: str | None
+    last_sent_at: UtcDatetime | None
+    expires_at: UtcDatetime
+
+
+class TeamMembers(BaseModel):
+    members: list[TeamMemberOut]
+    invites: list[TeamInviteOut]
+
+
+class TeamMemberPatch(Body):
+    """Change a role (owner only) and/or the aliases (an owner or admin, or the person themselves).
+    Aliases replace the whole list."""
+
+    role: InviteRole | None = None
+    aliases: list[str] | None = Field(None, max_length=20)
+
+
+class Invitee(Body):
+    email: str = Field(max_length=254)
+    # What you call them; becomes one of their aliases when they join. Optional.
+    name: str | None = Field(None, max_length=100)
+
+
+class InvitesIn(Body):
+    invitees: list[Invitee] = Field(min_length=1, max_length=10)
+    role: InviteRole = "member"
+
+
+class InviteResult(BaseModel):
+    email: str
+    status: InviteOutcome
+    invite: TeamInviteOut | None
+
+
+class InvitesCreated(BaseModel):
+    results: list[InviteResult]
+
+
+class InvitePreview(BaseModel):
+    """What an invitation link says, for the page that opens it (public: the token is the key)."""
+
+    # The address the invitation was sent to: the account must use it.
+    email: str
+    # What the inviter calls them, if they said.
+    name: str | None
+    role: InviteRole
+    team_name: str
+    # Plain text; null when the inviter's name is not plainly a name.
+    inviter_name: str | None
+    # True when an account already has this address: sign in and accept. False: sign up with the
+    # link (`invite_token` on `POST /api/signup`), or continue with Google.
+    has_account: bool
+    expires_at: UtcDatetime
+
+
+class AcceptInviteIn(Body):
+    token: str = Field(max_length=2000)
 
 
 MeetingDetail.model_rebuild()

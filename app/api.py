@@ -24,6 +24,7 @@ from app import (
     api_admin,
     api_settings,
     api_tasks,
+    api_team,
     api_translation,
     api_workspace,
     auth,
@@ -33,6 +34,8 @@ from app import (
     notifications,
     services,
     tasks,
+    teams,
+    titles,
     translation,
     usage,
     visibility,
@@ -285,6 +288,13 @@ def _workspace_counts(meeting: Meeting, session: Session) -> tuple[int, int]:
     return decisions or 0, review or 0
 
 
+def _owner_name(session: Session, meeting: Meeting) -> str | None:
+    owner = session.get(User, meeting.owner_user_id)
+    if owner is None:
+        return None
+    return titles.clean_title(owner.name, 100) or owner.email.split("@")[0]
+
+
 def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
     """The meeting as its page shows it. The meeting link is never included: a Zoom link
     carries its meeting password. The `can_*` flags are false for a teammate reading a shared
@@ -310,6 +320,9 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         can_retry=owner and failed and block is None,
         can_regenerate=owner and ready,
         can_delete=owner and not active,
+        shared_with_team=meeting.shared_team_id is not None,
+        can_share=owner,
+        shared_by=None if owner else _owner_name(session, meeting),
         join_attempts=meeting.join_attempts,
         max_join_attempts=MAX_JOIN_ATTEMPTS,
         bot_left_early=ready and meeting.completion_reason in REMOVAL_REASONS,
@@ -537,6 +550,49 @@ def delete_meeting(
 
 
 @router.post(
+    "/meetings/{meeting_id:id}/share",
+    tags=["meetings"],
+    responses={
+        404: {"model": ErrorResponse, "description": "No such meeting (or not the caller's)"}
+    },
+)
+def share_meeting(
+    meeting_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingDetail:
+    """Share the meeting with the caller's team (the "Share with team" switch): teammates may read
+    its notes, transcript and tasks, never change it. Only the one who recorded it (a teammate or
+    anyone else gets 404). Doing it twice is fine. The team's default (`share_new_meetings`) is
+    read once, when the notes are first written; this is how a person shares one by hand."""
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
+    team = teams.ensure_team(session, user)
+    meeting.shared_team_id = team.id
+    session.commit()
+    return _detail(meeting, session, user)
+
+
+@router.delete(
+    "/meetings/{meeting_id:id}/share",
+    tags=["meetings"],
+    responses={
+        404: {"model": ErrorResponse, "description": "No such meeting (or not the caller's)"}
+    },
+)
+def unshare_meeting(
+    meeting_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingDetail:
+    """Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone
+    else. Doing it twice is fine."""
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
+    meeting.shared_team_id = None
+    session.commit()
+    return _detail(meeting, session, user)
+
+
+@router.post(
     "/meetings/{meeting_id:id}/cancel",
     tags=["meetings"],
     responses={code: {"model": ErrorResponse} for code in (404, 409, 502)},
@@ -730,4 +786,5 @@ router.include_router(calendar_api.router)
 router.include_router(calendar_recurring.router)
 router.include_router(api_workspace.router)
 router.include_router(api_tasks.router)
+router.include_router(api_team.router)
 router.include_router(api_translation.router)

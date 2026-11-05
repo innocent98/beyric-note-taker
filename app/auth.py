@@ -331,6 +331,9 @@ PUBLIC_API = frozenset(
         ("POST", "/api/password/forgot"),
         ("POST", "/api/password/reset"),
         ("POST", "/api/waitlist"),
+        # What a team invitation link says (who invited you, to which address), for the page that
+        # asks a visitor to sign in or sign up: the 256-bit token in the query is the credential.
+        ("GET", "/api/team/invites/preview"),
         ("GET", "/api/auth/google/start"),
         ("GET", "/api/auth/google/callback"),
         # Answers a signed-out visitor itself (a redirect, not JSON). The flow is bound to the

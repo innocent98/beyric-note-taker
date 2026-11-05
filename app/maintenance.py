@@ -11,7 +11,7 @@ from sqlalchemy import delete, or_
 from sqlalchemy.orm import Session
 
 from app import accounts, mail
-from app.models import AuthToken, CalendarEvent, Notification, OAuthFlow, RateHit
+from app.models import AuthToken, CalendarEvent, Notification, OAuthFlow, RateHit, TeamInvite
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +31,21 @@ def sweep_oauth_flows(session: Session, now: datetime) -> None:
 
 
 def sweep_auth_tokens(session: Session, now: datetime) -> None:
-    """Tokens used, or expired, more than `TOKEN_KEEP` ago. Commits."""
+    """Tokens used, or expired, more than `TOKEN_KEEP` ago; the same for a team's invitations
+    (accepted, revoked or expired that long ago). Commits."""
     session.execute(
         delete(AuthToken).where(
             or_(AuthToken.used_at < now - TOKEN_KEEP, AuthToken.expires_at < now - TOKEN_KEEP)
+        )
+    )
+    cutoff = now - TOKEN_KEEP
+    session.execute(
+        delete(TeamInvite).where(
+            or_(
+                TeamInvite.accepted_at < cutoff,
+                TeamInvite.revoked_at < cutoff,
+                TeamInvite.expires_at < cutoff,
+            )
         )
     )
     session.commit()

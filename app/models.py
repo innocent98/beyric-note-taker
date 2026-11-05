@@ -24,6 +24,7 @@ STEPS = ("waiting", "audio", "transcribing", "speakers", "notes", "done")
 MEETING_SOURCES = ("manual", "calendar", "instant_meet")
 USER_STATUSES = ("active", "suspended", "deleted")
 TEAM_ROLES = ("owner", "admin", "member")
+INVITE_ROLES = ("admin", "member")
 TOKEN_PURPOSES = ("verify_email", "reset_password", "waitlist_invite")
 OAUTH_PURPOSES = ("signin", "calendar", "meet_scope")
 WAITLIST_STATUSES = ("waiting", "invited", "joined", "removed")
@@ -292,6 +293,51 @@ class Team(Base):
     name: Mapped[str] = mapped_column(String(200), default="My team", server_default="My team")
     owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", server_default="UTC")
+    # The team default for "Share with team" (spec 8.2): off. Read when a meeting's notes are first
+    # written (`teams.apply_share_default`), never when the bot joins, and never copied anywhere.
+    share_new_meetings: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TeamInvite(Base):
+    """An invitation to join a team (spec 4, 8.1). Only the hash of the link's token is stored.
+    Live = neither accepted nor revoked, and not past `expires_at`. A live row for an address with
+    no account holds one of the pilot's places (`signup.slots_taken`). `claimed_user_id` is the
+    account made from the link whose email is not confirmed yet: it joins when it is."""
+
+    __tablename__ = "team_invites"
+    __table_args__ = (
+        CheckConstraint(_in("role", INVITE_ROLES), name="ck_team_invites_role"),
+        CheckConstraint("email = lower(email)", name="ck_team_invites_email_lower"),
+        Index("ix_team_invites_email", "email"),
+        Index(
+            "uq_team_invites_live",
+            "team_id",
+            "email",
+            unique=True,
+            postgresql_where=sa.text("accepted_at is null and revoked_at is null"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    email: Mapped[str] = mapped_column(String(254))
+    # What the inviter calls them: seeds their aliases when they join (spec 2, row 4).
+    name: Mapped[str | None] = mapped_column(String(100))
+    role: Mapped[str] = mapped_column(String(8), default="member", server_default="member")
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    invited_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    claimed_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

@@ -635,6 +635,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{meeting_id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Share Meeting
+         * @description Share the meeting with the caller's team (the "Share with team" switch): teammates may read
+         *     its notes, transcript and tasks, never change it. Only the one who recorded it (a teammate or
+         *     anyone else gets 404). Doing it twice is fine. The team's default (`share_new_meetings`) is
+         *     read once, when the notes are first written; this is how a person shares one by hand.
+         */
+        post: operations["share_meeting"];
+        /**
+         * Unshare Meeting
+         * @description Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone
+         *     else. Doing it twice is fine.
+         */
+        delete: operations["unshare_meeting"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{meeting_id}/tasks": {
         parameters: {
             query?: never;
@@ -1188,6 +1216,199 @@ export interface paths {
         patch: operations["patch_task"];
         trace?: never;
     };
+    "/api/team": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Team
+         * @description The caller's team: its name, the sharing default, the caller's role and what that role may
+         *     do. Every account has one (a team of one until it joins another).
+         */
+        get: operations["read_team"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Team
+         * @description Rename the team and/or switch "Share new meetings" (owner or admin). The default applies,
+         *     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
+         *     member's meetings are never shared by it. 403 `team_forbidden`.
+         */
+        patch: operations["update_team"];
+        trace?: never;
+    };
+    "/api/team/invites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Invite People
+         * @description Invite up to 10 people by email (owner or admin; only the owner may invite an admin). One
+         *     mail each, a link that works once for 7 days. A new person's invitation reserves one of the
+         *     pilot's places (409 `pilot_full` when there is none) and bypasses a closed or full pilot for
+         *     that address. Answers per address: `sent`, `resent` (already invited: a new link went out),
+         *     `already_member`, `already_invited` (one went out a minute ago), `invalid_email`. The answer
+         *     is the same for an address with an account and one without (except `pilot_full`, which only
+         *     an address needing a place can get). 409 `invite_limit`: 10 open invitations or 20 a day per
+         *     team.
+         */
+        post: operations["invite_people"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team/invites/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Invite
+         * @description Join the team of an invitation link, signed in with the account the invitation was sent to
+         *     (the same answer for a wrong, used, expired, revoked or someone else's link). Your team of one
+         *     is dissolved: your tasks move to the team you join; your meetings stay yours and private. 409
+         *     `already_on_team` when you are on a team with other people: leave it first. A new person does
+         *     not call this: signing up with the link joins them when their email is confirmed.
+         */
+        post: operations["accept_invite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team/invites/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Invite
+         * @description What an invitation link is for, so the page can say "Dan invited you to join Product team"
+         *     and send the visitor to sign in (`has_account`) or sign up with the link. Public: the token in
+         *     the query is the credential, and it reveals nothing to anyone who does not hold it. 400
+         *     `invite_invalid` for a wrong, used, expired or revoked link: one answer for all of them.
+         */
+        get: operations["preview_invite"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team/invites/{invite_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Invite
+         * @description Cancel an invitation: its link stops working and its place is free again.
+         */
+        delete: operations["revoke_invite"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team/invites/{invite_id}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resend Invite
+         * @description Send an open (or expired) invitation again: a new link, the old one stops working, 7 more
+         *     days. 429 `too_soon` within a minute of the last mail; 409 `pilot_full` for an expired
+         *     invitation to a new person when the pilot has filled up meanwhile.
+         */
+        post: operations["resend_invite"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Members
+         * @description The people on the team, and (for everyone) the invitations still open. Each member carries
+         *     what the caller may do to them, so the screen shows only buttons that work.
+         */
+        get: operations["list_members"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team/members/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Member
+         * @description Remove a member, or leave the team (your own id). They get a fresh team of one; the open
+         *     tasks assigned to them become unassigned; their meetings stay theirs and are unshared. An owner
+         *     or admin removes members; only the owner removes an admin; the owner cannot be removed and
+         *     cannot leave while others remain (409 `owner_cannot_leave`). 403 `team_forbidden`.
+         */
+        delete: operations["remove_member"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Member
+         * @description Change a member's role (owner only; `admin` or `member`) and/or the names they are matched
+         *     by in meetings (`aliases`, replacing the list: an owner or admin for anyone, a member for
+         *     themselves). All of it is refused if any part is not allowed (403 `team_forbidden`).
+         */
+        patch: operations["update_member"];
+        trace?: never;
+    };
     "/api/templates": {
         parameters: {
             query?: never;
@@ -1325,6 +1546,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AcceptInviteIn */
+        AcceptInviteIn: {
+            /** Token */
+            token: string;
+        };
         /**
          * Accepted
          * @description The one answer sign-up, resend and forgot-password give, whatever the address.
@@ -1684,6 +1910,66 @@ export interface components {
             /** Message */
             message: string;
         };
+        /**
+         * InvitePreview
+         * @description What an invitation link says, for the page that opens it (public: the token is the key).
+         */
+        InvitePreview: {
+            /** Email */
+            email: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Has Account */
+            has_account: boolean;
+            /** Inviter Name */
+            inviter_name: string | null;
+            /** Name */
+            name: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "admin" | "member";
+            /** Team Name */
+            team_name: string;
+        };
+        /** InviteResult */
+        InviteResult: {
+            /** Email */
+            email: string;
+            invite: components["schemas"]["TeamInviteOut"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "sent" | "resent" | "already_member" | "already_invited" | "invalid_email";
+        };
+        /** Invitee */
+        Invitee: {
+            /** Email */
+            email: string;
+            /** Name */
+            name?: string | null;
+        };
+        /** InvitesCreated */
+        InvitesCreated: {
+            /** Results */
+            results: components["schemas"]["InviteResult"][];
+        };
+        /** InvitesIn */
+        InvitesIn: {
+            /** Invitees */
+            invitees: components["schemas"]["Invitee"][];
+            /**
+             * Role
+             * @default member
+             * @enum {string}
+             */
+            role: "admin" | "member";
+        };
         /** LanguagePreferencesIn */
         LanguagePreferencesIn: {
             /** Default Language */
@@ -1718,6 +2004,8 @@ export interface components {
             can_regenerate: boolean;
             /** Can Retry */
             can_retry: boolean;
+            /** Can Share */
+            can_share: boolean;
             /**
              * Created At
              * Format: date-time
@@ -1760,6 +2048,10 @@ export interface components {
             retry_block_message: string | null;
             /** Review Open Count */
             review_open_count: number;
+            /** Shared By */
+            shared_by: string | null;
+            /** Shared With Team */
+            shared_with_team: boolean;
             /** Speakers Incomplete */
             speakers_incomplete: boolean;
             /**
@@ -2189,6 +2481,112 @@ export interface components {
             auto_create_tasks: boolean;
             /** Email Assignees */
             email_assignees: boolean;
+        };
+        /** TeamInviteOut */
+        TeamInviteOut: {
+            /** Email */
+            email: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Id */
+            id: number;
+            /** Invited By */
+            invited_by: string | null;
+            /** Last Sent At */
+            last_sent_at: string | null;
+            /** Name */
+            name: string | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "admin" | "member";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "expired";
+        };
+        /** TeamMemberOut */
+        TeamMemberOut: {
+            /** Aliases */
+            aliases: string[];
+            /** Can Change Role */
+            can_change_role: boolean;
+            /** Can Edit Aliases */
+            can_edit_aliases: boolean;
+            /** Can Remove */
+            can_remove: boolean;
+            /** Email */
+            email: string;
+            /** Is You */
+            is_you: boolean;
+            /**
+             * Joined At
+             * Format: date-time
+             */
+            joined_at: string;
+            /** Name */
+            name: string;
+            /** Open Tasks */
+            open_tasks: number;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member";
+            /** User Id */
+            user_id: number;
+        };
+        /**
+         * TeamMemberPatch
+         * @description Change a role (owner only) and/or the aliases (an owner or admin, or the person themselves).
+         *     Aliases replace the whole list.
+         */
+        TeamMemberPatch: {
+            /** Aliases */
+            aliases?: string[] | null;
+            /** Role */
+            role?: ("admin" | "member") | null;
+        };
+        /** TeamMembers */
+        TeamMembers: {
+            /** Invites */
+            invites: components["schemas"]["TeamInviteOut"][];
+            /** Members */
+            members: components["schemas"]["TeamMemberOut"][];
+        };
+        /** TeamOut */
+        TeamOut: {
+            /** Can Change Roles */
+            can_change_roles: boolean;
+            /** Can Manage */
+            can_manage: boolean;
+            /** Id */
+            id: number;
+            /** Member Count */
+            member_count: number;
+            /**
+             * My Role
+             * @enum {string}
+             */
+            my_role: "owner" | "admin" | "member";
+            /** Name */
+            name: string;
+            /** Pending Invites */
+            pending_invites: number;
+            /** Share New Meetings */
+            share_new_meetings: boolean;
+        };
+        /** TeamPatch */
+        TeamPatch: {
+            /** Name */
+            name?: string | null;
+            /** Share New Meetings */
+            share_new_meetings?: boolean | null;
         };
         /** TemplateIn */
         TemplateIn: {
@@ -4293,6 +4691,122 @@ export interface operations {
             };
         };
     };
+    share_meeting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDetail"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such meeting (or not the caller's) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    unshare_meeting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDetail"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such meeting (or not the caller's) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     meeting_tasks: {
         parameters: {
             query?: never;
@@ -6133,6 +6647,597 @@ export interface operations {
                 };
             };
             /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    invite_people: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitesCreated"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `pilot_full`, `invite_limit` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    accept_invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptInviteIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamOut"];
+                };
+            };
+            /** @description `invite_invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `already_on_team` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_invite: {
+        parameters: {
+            query: {
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitePreview"];
+                };
+            };
+            /** @description `invite_invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    revoke_invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invite_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not on the caller's team */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    resend_invite: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invite_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamInviteOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not on the caller's team */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_members: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMembers"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    remove_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not on the caller's team */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamMemberPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMembers"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not on the caller's team */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
             422: {
                 headers: {
                     [name: string]: unknown;
