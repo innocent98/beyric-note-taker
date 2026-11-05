@@ -1,0 +1,29 @@
+{
+  "note": "202, as for every sign-up. The pilot is closed and this still works.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-G>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ada Lovelace",
+      "email": "ada@example.test",
+      "password": "ada-chosen-password-5",
+      "accept_terms": true,
+      "invite_token": "<invite-token>"
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "check_your_email"
+    }
+  }
+}

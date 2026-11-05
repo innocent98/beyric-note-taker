@@ -1,0 +1,26 @@
+{
+  "note": "Confirming the address is what joins the team.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/verify-email",
+    "headers": {
+      "X-CSRF-Token": "<csrf-G>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "token": "<token>",
+      "password": "ada-chosen-password-5"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "verified"
+    }
+  }
+}

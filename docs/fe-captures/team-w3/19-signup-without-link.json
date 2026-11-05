@@ -1,0 +1,31 @@
+{
+  "note": "No link: the pilot is closed, 403 `pilot_closed`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-G>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ada Lovelace",
+      "email": "ada@example.test",
+      "password": "ada-chosen-password-5",
+      "accept_terms": true
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "pilot_closed",
+        "message": "Sign-up is not open yet. Check back soon or join the waiting list."
+      }
+    }
+  }
+}

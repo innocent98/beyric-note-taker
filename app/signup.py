@@ -30,7 +30,7 @@ from sqlalchemy import func, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import accounts, limits, mail, passwords, tokens
+from app import accounts, limits, mail, passwords, team_invites, tokens
 from app.config import Settings
 from app.limits import Limit
 from app.models import AppState, AuthToken, User, WaitlistEntry
@@ -99,7 +99,7 @@ def slots_taken(session: Session, now: datetime) -> int:
             AuthToken.expires_at > now,
         )
     )
-    return users + invites
+    return users + invites + team_invites.reserving_count(session, now)
 
 
 def has_room(session: Session, now: datetime) -> bool:
@@ -133,7 +133,11 @@ def may_confirm(session: Session, user: User, now: datetime) -> bool:
             WaitlistEntry.email == user.email, WaitlistEntry.status == "joined"
         )
     ).first()
-    if invited is not None or tokens.live_invite_for(session, user.email, now) is not None:
+    if (
+        invited is not None
+        or tokens.live_invite_for(session, user.email, now) is not None
+        or team_invites.live_for_email(session, user.email, now) is not None  # a team's invitation
+    ):
         return True
     return has_room(session, now)
 
@@ -355,9 +359,15 @@ def _sign_up_locked(
     origin_allowed: Callable[[str], bool],
 ) -> None:
     invite = None
+    team_invite = None
     if invite_token:
         invite = tokens.find_live(session, invite_token, "waitlist_invite", now)
-        if invite is None or invite.email != address:
+        if invite is None:
+            # A teammate's invitation works the same way: it bypasses `closed` and `full` for its
+            # own address (its place was reserved when it was sent) and the account joins the
+            # team when its email is confirmed.
+            team_invite = team_invites.find_by_token(session, invite_token, now)
+        if (invite is None and team_invite is None) or (invite or team_invite).email != address:
             raise Refused(
                 400,
                 "invite_invalid",
@@ -372,7 +382,7 @@ def _sign_up_locked(
             "password_signup_disabled",
             "Creating an account with a password is not available yet. Use Google to sign up.",
         )
-    if invite is None:
+    if invite is None and team_invite is None:
         # Before the lookup, so a new address and an existing one get the same answer.
         _check_unconfirmed_caps(session, origin, now, origin_allowed)
     if not mail_allowed(address):
@@ -400,6 +410,8 @@ def _sign_up_locked(
             session.execute(
                 update(WaitlistEntry).where(WaitlistEntry.email == address).values(status="joined")
             )
+        if team_invite is not None:
+            team_invites.claim(session, team_invite, user)
         _send_verification(session, settings, user, password_hash, now)
     elif existing.status == "active" and existing.email_verified_at is None:
         # Still unconfirmed: the sign-in answer follows the newest submission, but what a link
@@ -407,6 +419,8 @@ def _sign_up_locked(
         # for this address, sent with the form, is redeemed for this account.
         if invite is not None:
             redeem_invite(session, address, now)
+        if team_invite is not None:
+            team_invites.claim(session, team_invite, existing)
         existing.name, existing.password_hash = name, password_hash
         existing.terms_accepted_at, existing.terms_version = now, TERMS_VERSION
         _send_verification(session, settings, existing, password_hash, now)
@@ -474,9 +488,12 @@ def verify_email(
             "The pilot filled up before this account was confirmed. Join the waiting list and "
             "we will write when a place opens.",
         )
+    first_time = user.email_verified_at is None
     user.email_verified_at = user.email_verified_at or now
     user.password_hash = token.pending_password_hash
     tokens.revoke(session, "verify_email", user.id, now)
+    if first_time:  # a new account made from a team's invitation joins that team now
+        team_invites.accept_confirmed(session, user, now)
     origin = user.signup_origin
     session.commit()
     if origin_hits is not None and origin is not None:

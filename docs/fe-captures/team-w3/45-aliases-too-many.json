@@ -1,0 +1,56 @@
+{
+  "note": "At most 20: 422.",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/team/members/5",
+    "headers": {
+      "X-CSRF-Token": "<csrf-H>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "aliases": [
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a",
+        "a"
+      ]
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "aliases",
+            "message": "List should have at most 20 items after validation, not 21"
+          }
+        ]
+      }
+    }
+  }
+}

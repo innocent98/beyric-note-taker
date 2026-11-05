@@ -1,0 +1,33 @@
+{
+  "note": "Only the owner may invite an admin: 403.",
+  "client": "chidi",
+  "request": {
+    "method": "POST",
+    "path": "/api/team/invites",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "invitees": [
+        {
+          "email": "y@example.test"
+        }
+      ],
+      "role": "admin"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only the owner of the team can invite an admin."
+      }
+    }
+  }
+}

@@ -424,7 +424,18 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] Server steps after merge: migrate (deploy does), then `docker compose exec web python scripts/backfill_extraction.py` once
   - [x] PR 2 (open, not merged): Tasks screen (D5), task drawer, meeting page Action items as tasks, meetings list task count, Settings Tasks card toggles live, parity shots under `docs/ui/parity/after/`
   - [ ] Waits for W3: teammate filter chips, "Invite them to the team" in the drawer. Waits for W4: project tabs, project badge, "Check project", milestone select and card. Waits for W9: sprint selector, sprint header and Close sprint, Backlog view, Carried over. Waits for W8: the unfinished-tasks chip on Recurring cards
-- [ ] W5 Export (merged), W3 Team, W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
+- [ ] W3 Team (Opus: permissions, invites, slot reservation). Backend PR 1 `feature/w3-team-backend` (open, not merged, 2026-11-05) and screens PR 2 `feature/w3-team-screens` (not started). SOP `docs/sop/2026-11-05-w3-team-backend.md`; FE guide `docs/fe-integration-guide-team.md` with `docs/fe-captures/team-w3/`
+  - [x] Migration 0026 (`team_invites`, `teams.share_new_meetings`); sits on 0025, check `alembic heads` at merge
+  - [x] Invitations: hashed single-use token (7 days), resend (a minute apart), revoke, caps (10 open, 20 a day); "Team invite" mail as drawn (`Emails.dc.html`); public `GET /api/team/invites/preview` for the link page
+  - [x] A new person signs up with the link (bypasses closed and full for that address, joins on confirming the email; Google too); an existing account accepts (team of one dissolves, tasks move, meetings stay theirs and private); 409 `pilot_full` and 409 `already_on_team`; invitees hold a pilot place (D2, `slots_taken`)
+  - [x] Roles owner/admin/member with 403 `team_forbidden`; remove and leave (open tasks unassigned, tasks of their own meetings go with them, shared meetings unshared, fresh team of one); aliases editable; owner matching on ACTIVE members only
+  - [x] `POST/DELETE /api/meetings/{id}/share` (owner only), `shared_with_team`, `can_share`, `shared_by`; team default `share_new_meetings` (off; read once when notes are first written; owners' and admins' meetings only; **lead to confirm**)
+  - [x] Account deletion refused for an owner with other members; `scripts/transfer_team_owner.py`
+  - [x] Route enumeration: team routes classified, other-team user 404 on every id route, Member 403 on every owner/admin route, share routes classified
+  - [x] FE guide from live captures (`scripts/capture_team_api.py`)
+  - [ ] Opus review fixes (see the SOP)
+  - [ ] PR 2 screens: Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, and the four lead-designed pieces (Share with team switch, optional name in the invite dialog, alias editing, "Add email" which may wait for W6); privacy "Teams" paragraph and terms pilot row; parity shots
+- [ ] W5 Export (merged), W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)
   - [x] Headings from a fixed dictionary in code; transcript and notes split in code into lines, only the words go to the model; checks for count, structure, links and markup, numbers, names; one retry per chunk

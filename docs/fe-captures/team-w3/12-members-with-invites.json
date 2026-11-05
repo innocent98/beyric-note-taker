@@ -1,0 +1,58 @@
+{
+  "note": "`invites` lists the open ones; no token anywhere.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/team/members",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "members": [
+        {
+          "user_id": 2,
+          "name": "Dan Okoro",
+          "email": "dan@example.test",
+          "role": "owner",
+          "is_you": true,
+          "aliases": [],
+          "open_tasks": 0,
+          "joined_at": "2026-11-05T20:13:31.142139Z",
+          "can_change_role": false,
+          "can_edit_aliases": true,
+          "can_remove": false
+        }
+      ],
+      "invites": [
+        {
+          "id": 1,
+          "email": "ada@example.test",
+          "name": "Ada L",
+          "role": "member",
+          "status": "pending",
+          "invited_by": "Dan Okoro",
+          "last_sent_at": "2026-11-05T20:13:31.873140Z",
+          "expires_at": "2026-11-12T20:13:31.873140Z"
+        },
+        {
+          "id": 2,
+          "email": "chidi@example.test",
+          "name": null,
+          "role": "member",
+          "status": "pending",
+          "invited_by": "Dan Okoro",
+          "last_sent_at": "2026-11-05T20:13:31.873140Z",
+          "expires_at": "2026-11-12T20:13:31.873140Z"
+        }
+      ]
+    }
+  }
+}
