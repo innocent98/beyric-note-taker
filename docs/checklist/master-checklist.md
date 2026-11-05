@@ -392,7 +392,8 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] Resend webhook (bounce, complaint) into `mail_suppressions`
   - [ ] A setting that turns `notify_email` off (Settings screen) and an "Email preferences" link in the mails
 - [x] W0.4 Team foundation (2026-11-05, PR open, migration 0019): `teams`, `team_members`, a team of one per account (sign-up, Google, backfill), `meetings.shared_team_id`, `visible_meetings()` in `app/visibility.py`, route enumeration test; SOP `docs/sop/2026-11-05-w04-team-foundation.md`
-- [ ] W0.5 Meeting delete
+- [x] W0.5 Meeting delete (2026-11-05, PR open, migration 0021): `DELETE /api/meetings/{id}`, owner only, 409 `meeting_active` while recording or processing, DB cascade (notifications now cascade), outbox mail, audio and Vexa copy removed; hours, ai_runs and calendar joins stay unlinked; SOP `docs/sop/2026-11-05-w05-meeting-delete.md`, FE guide `docs/fe-integration-guide-meeting-delete.md`
+  - [ ] Delete control and confirmation naming the task count: designer gap (not drawn in `docs/ui/`)
 - [x] W1 Extraction, Decisions, Review (2026-11-03; migration `0011`; SOP `2026-11-03-ai-workspace-w1-extraction.md`; FE guide `docs/fe-integration-guide-ai-workspace.md`)
   - [x] Worker job with states `pending`, `running`, `done`, `failed`, `skipped`, 3 attempts, crash recovery
   - [x] Parsers for Decisions, Open questions, Please check; reconcile by fingerprint (hidden and checked survive a re-run that keeps the words)

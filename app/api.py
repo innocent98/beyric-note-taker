@@ -498,6 +498,29 @@ def create_meeting(
     return _detail(meeting, session, user)
 
 
+@router.delete(
+    "/meetings/{meeting_id:id}",
+    status_code=204,
+    tags=["meetings"],
+    responses={code: {"model": ErrorResponse} for code in (404, 409, 502)},
+)
+def delete_meeting(
+    meeting_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+    vexa=Depends(get_vexa),
+) -> Response:
+    """Delete a meeting and everything taken from it: transcript, notes, translations, decisions,
+    open questions, review items, notifications, mail still waiting to be sent, the audio and
+    Vexa's copy of it. The recorded hours stay counted. Only the one who recorded it (a teammate
+    or anyone else gets 404). 409 `meeting_active` while the bot is in the call or the notes are
+    being written, 409 `meeting_busy` when the worker holds it (try again), 502
+    `recording_delete_failed` when Vexa would not remove the recording: nothing is deleted."""
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
+    services.delete_meeting(session, vexa, meeting)
+    return Response(status_code=204)
+
+
 @router.post(
     "/meetings/{meeting_id:id}/cancel",
     tags=["meetings"],

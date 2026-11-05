@@ -186,6 +186,7 @@ READS = {
     ("GET", "/api/meetings/{meeting_id}/translations/{language}"),
 }
 OWNER_ONLY = {
+    ("DELETE", "/api/meetings/{meeting_id}"),
     ("POST", "/api/meetings/{meeting_id}/cancel"),
     ("POST", "/api/meetings/{meeting_id}/end"),
     ("POST", "/api/meetings/{meeting_id}/retry"),

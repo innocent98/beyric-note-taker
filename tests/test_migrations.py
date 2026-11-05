@@ -809,3 +809,43 @@ def test_0019_gives_every_live_account_a_team_of_one_and_shares_nothing(scratch_
     assert _rows(engine, "select count(*) from meetings") == [(1,)]
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+# ---- 0021 notifications cascade with the meeting ----
+
+
+def _notification_fk_rule(engine) -> str:
+    return _rows(
+        engine,
+        "select confdeltype::text from pg_constraint "
+        "where conname = 'notifications_meeting_id_fkey'",
+    )[0][0]
+
+
+def test_0021_makes_a_notification_go_with_its_meeting_and_downgrades(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0019")
+    engine = create_engine(scratch_url)
+    assert _notification_fk_rule(engine) == "n"  # SET NULL
+    command.upgrade(cfg, "0021")
+    assert _notification_fk_rule(engine) == "c"  # CASCADE
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
+                "select u.id, 'u', 'google_meet', 'abc', t.id from users u, templates t limit 1"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into notifications (user_id, kind, title, meeting_id, dedupe_key) "
+                "select owner_user_id, 'k', 't', id, 'd' from meetings"
+            )
+        )
+        conn.execute(text("delete from meetings"))
+    assert _rows(engine, "select count(*) from notifications") == [(0,)]
+    command.downgrade(cfg, "0019")
+    assert _notification_fk_rule(engine) == "n"
+    command.upgrade(cfg, "head")
+    assert _notification_fk_rule(engine) == "c"
+    engine.dispose()
