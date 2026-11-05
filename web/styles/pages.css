@@ -155,7 +155,10 @@
 /* The foot of the template editor: Delete template on the left, Saved and Save on the right (the design's row). */
 .tpl-foot { justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); }
 .tpl-foot-left { min-width: 0; }
-.tpl-delete { display: block; } /* a flex item of the foot row in the design */
+.tpl-delete { display: block; }
+.meeting-delete-row { display: flex; } /* lead-designed: red text button below the page, like Delete template */
+.meeting-delete-ask { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border: 1px solid var(--danger-line); border-radius: 10px; background: var(--danger-tint); } /* the Decisions "Remove from log" ask */
+.meeting-delete-ask p { margin: 0; font-size: var(--text-sm); color: var(--ink-2); } /* a flex item of the foot row in the design */
 .tpl-foot-right { display: flex; align-items: center; gap: var(--space-3); margin-left: auto; }
 .tpl-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-2); }
 
@@ -226,8 +229,8 @@
 .cal-tile { display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; flex: none; border-radius: var(--radius); background: var(--teal-tint); color: var(--teal); }
 .cal-provider { font-size: var(--text-base); font-weight: 550; }
 .cal-account-sub { font-size: var(--text-xs); color: var(--text-3); overflow-wrap: anywhere; line-height: 1.5; }
-.cal-text-danger, .tpl-delete { padding: 6px 0; border: 0; background: transparent; color: var(--danger); font: inherit; font-size: var(--text-sm); font-weight: 500; line-height: normal; cursor: pointer; }
-.cal-text-danger:disabled, .tpl-delete:disabled { opacity: 0.55; cursor: not-allowed; }
+.cal-text-danger, .tpl-delete, .meeting-delete { padding: 6px 0; border: 0; background: transparent; color: var(--danger); font: inherit; font-size: var(--text-sm); font-weight: 500; line-height: normal; cursor: pointer; }
+.cal-text-danger:disabled, .tpl-delete:disabled, .meeting-delete:disabled { opacity: 0.55; cursor: not-allowed; }
 .cal-confirm { display: flex; flex-direction: column; gap: var(--space-2); margin: 0 22px; padding: 12px 14px; border: 1px solid var(--danger-line); border-radius: var(--radius-md); background: var(--danger-tint); }
 .cal-confirm p { margin: 0; font-size: var(--text-sm); color: var(--danger-text); line-height: 1.55; }
 .cal-field-label { font-size: var(--text-sm); font-weight: 550; color: var(--ink-2); }

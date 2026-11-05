@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { CopyButton } from "@/components/app/copy-button";
 import { DownloadMenu } from "@/components/app/download-menu";
 import { NotesHtml } from "@/components/app/notes-html";
@@ -21,6 +22,7 @@ import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { Meeting, NoteLanguage, RetryBlock, Template } from "@/lib/api/types";
 import { LocalTime } from "@/components/app/local-time";
+import { DELETED_FLAG } from "@/lib/deleted-flag";
 import { durationLabel, initials, platformLabel, plural } from "@/lib/format";
 
 const AVATAR_TONES = ["avatar-a", "avatar-b", "avatar-c", "avatar-d", "avatar-e"] as const;
@@ -34,7 +36,8 @@ const RETRY_BLOCKED: Record<RetryBlock, string> = {
   not_failed: "This meeting can't be retried.",
 };
 
-type Busy = "cancel" | "end" | "retry" | "rewrite" | null;
+type Busy = "cancel" | "end" | "retry" | "rewrite" | "delete" | null;
+
 
 // While the notes are being read for decisions and review items, ask again every 5 seconds for up to
 // 2 minutes, then stop and say so (docs/fe-integration-guide-ai-workspace.md section 2).
@@ -59,7 +62,9 @@ export function MeetingView({
   // The account's default notes language (Settings): opened when that translation exists.
   defaultLanguage?: NoteLanguage;
 }) {
+  const router = useRouter();
   const [meeting, setMeeting] = useState(initial);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [tab, setTab] = useState<string>(initialTab);
   const [extractionStalled, setExtractionStalled] = useState(false);
   const extractionPolls = useRef(0);
@@ -140,6 +145,35 @@ export function MeetingView({
     }
     busyRef.current = null;
     setBusy(null);
+  }
+
+  // Delete (lead-designed, not in the designer's file): 204 goes to the list with a toast. A 404 means
+  // it is already gone (a second tab, a double click), which is the same outcome. 409 and 502 show
+  // their own words and keep the page.
+  async function remove() {
+    if (busyRef.current !== null) return;
+    busyRef.current = "delete";
+    setBusy("delete");
+    setError(null);
+    setNotice(null);
+    try {
+      await api.meetings.remove(initial.id);
+    } catch (caught) {
+      if (!(caught instanceof ApiError && caught.status === 404)) {
+        setError(errorMessage(caught));
+        if (caught instanceof ApiError && caught.status === 409) void refetch();
+        setConfirmingDelete(false);
+        busyRef.current = null;
+        setBusy(null);
+        return;
+      }
+    }
+    try {
+      sessionStorage.setItem(DELETED_FLAG, "1");
+    } catch {
+      // Private mode: the list is shown without the toast.
+    }
+    router.push("/");
   }
 
   const m = meeting;
@@ -374,6 +408,32 @@ export function MeetingView({
           </div>
           <TranscriptPanel text={m.transcript} incomplete={m.speakers_incomplete} />
         </section>
+      ) : null}
+
+      {m.can_delete ? (
+        confirmingDelete ? (
+          <div className="meeting-delete-ask" role="group" aria-label="Delete this meeting?">
+            <p>
+              <strong>Delete this meeting?</strong> This deletes the notes, the transcript, any translations, the
+              decisions and review items taken from it, and the recording. This cannot be undone.
+            </p>
+            <p>The hours it used stay counted.</p>
+            <div className="dec-ask-actions">
+              <Button kind="secondary" size="sm" type="button" disabled={busy !== null} onClick={() => setConfirmingDelete(false)}>
+                Cancel
+              </Button>
+              <Button kind="danger" size="sm" type="button" disabled={busy !== null} onClick={() => void remove()}>
+                {busy === "delete" ? "Deleting..." : "Delete meeting"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="meeting-delete-row">
+            <button type="button" className="meeting-delete" disabled={busy !== null} onClick={() => setConfirmingDelete(true)}>
+              Delete meeting
+            </button>
+          </div>
+        )
       ) : null}
 
       <Dialog id="end-dialog" title="End the meeting and write the notes?">

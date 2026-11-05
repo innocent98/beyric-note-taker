@@ -8,6 +8,8 @@ import { ApiError } from "@/lib/api/client";
 import type { Meeting, Template } from "@/lib/api/types";
 import { captured, read, REPO } from "./helpers";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 // The Download menu on the meeting page. Meetings are the bodies captured from the running API
 // (docs/fe-captures/owner-app/); the errors are the ones the export endpoint answered with
 // (docs/fe-captures/export/, `python scripts/capture_export_api.py`).

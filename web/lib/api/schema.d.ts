@@ -1563,6 +1563,8 @@ export interface components {
             bot_left_early: boolean;
             /** Can Cancel */
             can_cancel: boolean;
+            /** Can Delete */
+            can_delete: boolean;
             /** Can End */
             can_end: boolean;
             /** Can Regenerate */
