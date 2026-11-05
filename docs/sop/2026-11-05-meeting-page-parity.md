@@ -28,7 +28,7 @@ Adebayo (2026-11-04) saw the live page differ from `docs/ui/Beyric Note Taker re
 
 ## Verification
 - pytest `tests/test_api.py -k detail`, `tests/test_accounts.py`, the route enumeration and OpenAPI tests; ruff check and format; `npm run lint`, `typecheck`, `vitest` (543 pass; older captures get the new fields' empty values in `tests/helpers.ts`).
-- Parity shots (`web/scripts/parity-shots.mjs` against `mock-api.mjs`, mock values are the mock's own) at 1440/768/390: `docs/ui/parity/after/app-detail-*.jpg` (plus processing and failed). Side by side at 1440: header, Details, Participants, Decisions and review match in position, size, colour and words. Differences left: dates are in the viewer's zone (decision of 2026-11-04, the file says UTC); avatar colours go by order, the file gives each sample person a colour; the "Decisions you removed..." line under Rewrite notes is earlier wording, not in the file.
+- Parity shots (`web/scripts/parity-shots.mjs` against `mock-api.mjs`, mock values are the mock's own) at 1440/768/390: `docs/ui/parity/after/app-detail-*.jpg` (plus processing and failed). Side by side at 1440: header, Details, Participants, Decisions and review match in position, size, colour and words. Differences left: dates are in the zone stored in Settings (the page passes `timeZone={await getTimeZone()}` to `AppShell`, like the other pages; the file says UTC); avatar colours go by order, the file gives each sample person a colour; the "Decisions you removed..." line under Rewrite notes is earlier wording, not in the file.
 - Not done: the FE integration guide was not touched (no live capture of the new fields was taken; shapes are in the OpenAPI file and the tests).
 
 ## Waits for W2 / W8 (not drawn, no dead buttons)

@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { TimeZoneProvider } from "@/components/app/time-zone-context";
 import { MeetingView } from "@/components/app/meeting-view";
 import { ApiError } from "@/lib/api/client";
 import type { Meeting, Template } from "@/lib/api/types";
@@ -59,6 +60,18 @@ describe("ready meeting", () => {
     show({ ...base, duration_seconds: 3900, participants: [] });
     expect(screen.queryByText("Participants")).toBeNull();
     expect(document.querySelector(".details")?.textContent).toContain("1 hr 5 min");
+  });
+
+  it("writes the meeting's date in the stored time zone", () => {
+    const base = meeting("47-meeting-detail-ready.json");
+    const at = { ...base, created_at: "2026-11-02T22:30:00Z" };
+    render(
+      <TimeZoneProvider value="Pacific/Auckland">
+        <MeetingView initial={at} templates={templates} />
+      </TimeZoneProvider>,
+    );
+    // 22:30 UTC is 11:30 the next morning in Auckland (UTC+13 in November).
+    expect(document.querySelector(".details dd time")?.textContent).toContain("03 Nov 2026, 11:30");
   });
 
   it("names the template a meeting was written with after that template was deleted", () => {

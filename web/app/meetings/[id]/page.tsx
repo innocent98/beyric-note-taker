@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { AppShell } from "@/components/app/shell";
 import { MeetingView } from "@/components/app/meeting-view";
-import { getReviewOpen, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTimeZone, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -38,7 +38,12 @@ export default async function MeetingPage({ params, searchParams }: Props) {
     load(api.settings.language.get()),
   ]);
   return (
-    <AppShell current="meetings" reviewOpen={await getReviewOpen()} unread={await getUnreadNotifications()}>
+    <AppShell
+      current="meetings"
+      reviewOpen={await getReviewOpen()}
+      unread={await getUnreadNotifications()}
+      timeZone={await getTimeZone()}
+    >
       <MeetingView
         initial={meeting}
         templates={templates}
