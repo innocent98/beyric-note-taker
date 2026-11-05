@@ -13,6 +13,8 @@ import { tasksBody } from "./helpers";
 // would (capture 51).
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() }));
+const nav = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: nav.push }) }));
 vi.mock("@/lib/api/browser", () => ({ api: { tasks: mocks } }));
 
 const board = tasksBody<TaskList>("17-tasks.json");
@@ -45,7 +47,27 @@ describe("the Tasks screen", () => {
     for (const column of ["To do", "In progress", "Done"]) expect(screen.getByRole("region", { name: column })).toBeTruthy();
   });
 
-  it("leaves out what needs projects, sprints and teammates: no tabs, sprint or milestone controls", () => {
+  it("draws one chip per active teammate by first name, between My tasks and Needs owner", async () => {
+    render(<TasksView initial={board} />);
+    const chips = within(screen.getByRole("group", { name: "Filter tasks" })).getAllByRole("button").map((b) => b.textContent);
+    const mates = board.people.filter((p) => !p.is_you).map((p) => p.name.split(" ")[0]);
+    expect(chips).toEqual(["All tasks", "My tasks", ...mates, "Needs owner"]);
+    await userEvent.click(screen.getByRole("button", { name: mates[0] }));
+    const shown = board.tasks.filter((t) => t.assignee?.name.split(" ")[0] === mates[0]);
+    const todo = screen.getByRole("region", { name: "To do" });
+    expect(within(todo).getAllByTitle(new RegExp(mates[0])).length).toBe(shown.filter((t) => t.status === "todo").length);
+  });
+
+  it("opens the Team page with the spoken name when Invite them to the team is pressed", async () => {
+    const first = { ...board.tasks[0], assignee: null, spoken_owner: "Kemi Adeyemi", can_claim: true };
+    render(<TasksView initial={{ ...board, tasks: [first, ...board.tasks.slice(1)] }} canInviteToTeam />);
+    await userEvent.click(screen.getAllByText(first.title)[0]);
+    await userEvent.click(await screen.findByRole("button", { name: "Invite them to the team" }));
+    expect(window.sessionStorage.getItem("beyric.invite-name")).toBe("Kemi Adeyemi");
+    expect(nav.push).toHaveBeenCalledWith("/team");
+  });
+
+  it("leaves out what needs projects and sprints: no tabs, sprint or milestone controls", () => {
     render(<TasksView initial={board} />);
     for (const absent of ["All projects", "Board", "Backlog", "Close sprint", "Show launch tasks"]) {
       expect(screen.queryByText(absent)).toBeNull();

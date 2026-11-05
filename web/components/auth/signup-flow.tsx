@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Alert, AppLink, Button, Checkbox, Field } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import {
@@ -51,6 +51,9 @@ export function SignupFlow({
   const [screen, setScreen] = useState<Screen>(initial);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  // A team's invitation names its address: when the link is one, the email is filled in and locked
+  // to it (the invitation works for that address only), and the banner says who invited you.
+  const [teamInvite, setTeamInvite] = useState<{ email: string; by: string | null; team: string } | null>(null);
   const [password, setPassword] = useState("");
   const [accepted, setAccepted] = useState(false);
   const [show, setShow] = useState(false);
@@ -61,6 +64,23 @@ export function SignupFlow({
   const [resendNote, setResendNote] = useState<string | null>(null);
   const [resending, setResending] = useState(false);
   const wait = useCountdown(RESEND_WAIT_SECONDS);
+  useEffect(() => {
+    if (!invite) return;
+    let cancelled = false;
+    api.team
+      .preview(invite)
+      .then((preview) => {
+        if (cancelled) return;
+        setTeamInvite({ email: preview.email, by: preview.inviter_name, team: preview.team_name });
+        setEmail(preview.email);
+      })
+      .catch(() => {
+        // not a team link (a waiting-list invitation): the form works as it always did
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [invite]);
   const termsRef = useRef<HTMLInputElement>(null);
 
   function validate(): Errors {
@@ -171,7 +191,12 @@ export function SignupFlow({
   return (
     <form className="auth-form" method="post" onSubmit={submit} noValidate>
       <AuthHead title="Create your account">Send the note taker to your next meeting in a few minutes.</AuthHead>
-      {invited ? (
+      {teamInvite ? (
+        <Alert kind="info" role="status">
+          {teamInvite.by ? `${teamInvite.by} invited you to join ${teamInvite.team}.` : `You are invited to join ${teamInvite.team}.`}{" "}
+          Create your account with {teamInvite.email} to join; the invitation works for that address only.
+        </Alert>
+      ) : invited ? (
         <Alert kind="info" role="status">
           You have an invitation to the pilot. Use the email address it was sent to: the invitation works for that
           address only.
@@ -203,6 +228,7 @@ export function SignupFlow({
           autoComplete="email"
           placeholder="you@company.com"
           value={email}
+          readOnly={teamInvite !== null}
           error={errors.email}
           onChange={(event) => setEmail(event.target.value)}
         />

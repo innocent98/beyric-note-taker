@@ -103,10 +103,18 @@ describe("the task drawer", () => {
     expect(options).toEqual(["Unassigned", "Dan Okoro (you)"]);
   });
 
-  it("names a spoken owner nobody on the team matched, without an invite button", () => {
+  it("names a spoken owner nobody on the team matched; a member is told to ask an owner or admin", () => {
     setup({ ...base, assignee: null, spoken_owner: "Kemi Adeyemi" });
     expect(screen.getByText('"Kemi Adeyemi" was named as the owner in the meeting, but is not on your team.')).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Invite/ })).toBeNull();
+    expect(screen.getByText("Ask an owner or admin of your team to invite them.")).toBeTruthy();
+  });
+
+  it("offers Invite them to the team to an owner or admin, with the spoken name", async () => {
+    const onInvite = vi.fn();
+    setup({ ...base, assignee: null, spoken_owner: "Kemi Adeyemi" }, { canInvite: true, onInvite });
+    await userEvent.click(screen.getByRole("button", { name: "Invite them to the team" }));
+    expect(onInvite).toHaveBeenCalledWith("Kemi Adeyemi");
   });
 
   it("shows the quote but no meeting link when the meeting is private to someone else", () => {

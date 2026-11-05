@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   forgotPassword: vi.fn(),
   resetPassword: vi.fn(),
   joinWaitlist: vi.fn(),
+  preview: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: mocks.replace, refresh: mocks.refresh }) }));
 vi.mock("@/lib/api/browser", () => ({
@@ -36,6 +37,7 @@ vi.mock("@/lib/api/browser", () => ({
     forgotPassword: mocks.forgotPassword,
     resetPassword: mocks.resetPassword,
     joinWaitlist: mocks.joinWaitlist,
+    team: { preview: mocks.preview },
   },
 }));
 
@@ -52,6 +54,7 @@ function at(search: string) {
 
 beforeEach(() => {
   Object.values(mocks).forEach((fn) => fn.mockReset());
+  mocks.preview.mockRejectedValue(new Error("not a team link")); // a waiting-list invitation
   vi.useRealTimers();
   window.history.replaceState(null, "", "/page");
 });
@@ -519,5 +522,33 @@ describe("sign-in additions", () => {
     await user.type(screen.getByLabelText("Password"), "x");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
     expect((await screen.findByRole("alert")).textContent).toBe("Too many attempts. Try again later.");
+  });
+});
+
+
+describe("sign-up with a team's invitation link (docs/fe-captures/team-w3/)", () => {
+  it("fills in and locks the invited address, says who invited you, and sends the link as invite_token", async () => {
+    mocks.preview.mockResolvedValue({
+      email: "ada@example.test",
+      name: "Ada L",
+      role: "member",
+      team_name: "Product team",
+      inviter_name: "Dan Okoro",
+      has_account: false,
+      expires_at: "2026-11-12T20:11:08Z",
+    });
+    mocks.signup.mockResolvedValue(accountBody("18-signup-ok.json"));
+    window.history.replaceState(null, "", "/signup?invite=team-token");
+    render(<SignupFlow pilot="closed" google hasInvite />);
+    expect(await screen.findByText(/Dan Okoro invited you to join Product team/)).toBeTruthy();
+    const email = screen.getByLabelText("Work email") as HTMLInputElement;
+    expect(email.value).toBe("ada@example.test");
+    expect(email.readOnly).toBe(true);
+    await userEvent.type(screen.getByLabelText("Full name"), "Ada Lovelace");
+    await userEvent.type(screen.getByLabelText("Password"), "a-long-enough-pass-9");
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: /Create account/ }));
+    await waitFor(() => expect(mocks.signup).toHaveBeenCalled());
+    expect(mocks.signup.mock.calls[0][0]).toMatchObject({ email: "ada@example.test", invite_token: "team-token" });
   });
 });

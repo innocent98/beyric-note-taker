@@ -26,7 +26,7 @@ export function TermsContent() {
       <p>The Service is in a pilot. We may change, add or remove features, and we may limit how many accounts or recorded hours are available.</p>
 
       <h2 id="pilot">Pilot, fees and limits</h2>
-      <p>The Service is free during the pilot. Each pilot account has a limit on recorded hours, shown in the app; when it is used up, the note taker stops joining new meetings. The pilot has a limited number of accounts. When it is full you can join a waiting list. If we introduce paid plans, we will tell you the price before anything is charged, and nothing will be charged without your agreement.</p>
+      <p>The Service is free during the pilot. Each pilot account has a limit on recorded hours, shown in the app; when it is used up, the note taker stops joining new meetings. The pilot has a limited number of accounts. When it is full you can join a waiting list. If we introduce paid plans, we will tell you the price before anything is charged, and nothing will be charged without your agreement. People you invite to your team count toward the limit on accounts while their invitation is open.</p>
 
       <h2 id="recording">Recording laws and consent</h2>
       <p>You are solely responsible for complying with every law that applies to recording conversations, including laws that require the consent of all participants. Before the note taker records, you must:</p>
@@ -41,6 +41,7 @@ export function TermsContent() {
       <p>You keep ownership of the meeting audio, transcripts, notes, templates and other content that you or your meetings provide or produce through the Service ("Your Content").</p>
       <p>You give Beyric a limited, worldwide, non-exclusive licence to host, process, transmit and display Your Content only as needed to provide and secure the Service and as described in the Privacy Policy. We do not use Your Content to train artificial intelligence models.</p>
       <p>You confirm that you have the rights needed to give Your Content to us and that it does not break the law or anyone else's rights.</p>
+      <p>You are responsible for who you invite to your team and for what you choose to share with them.</p>
 
       <h2 id="accuracy">Accuracy of notes</h2>
       <p>Transcripts and notes are produced automatically and may contain errors, omissions or the wrong speaker, especially with poor audio, overlapping speech or specialist terms. Tasks, owners and due dates read from the notes are produced the same way and can be wrong: the original notes and the transcript are the record. Review them before relying on them. Do not use the Service as the only record for legal, medical, financial or other high-stakes decisions.</p>

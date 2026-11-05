@@ -18,6 +18,7 @@ import {
   Icon,
   SelectField,
   TabButtons,
+  Toggle,
 } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
@@ -37,7 +38,7 @@ const RETRY_BLOCKED: Record<RetryBlock, string> = {
   not_failed: "This meeting can't be retried.",
 };
 
-type Busy = "cancel" | "end" | "retry" | "rewrite" | "delete" | null;
+type Busy = "cancel" | "end" | "retry" | "rewrite" | "delete" | "share" | null;
 
 
 // While the notes are being read for decisions and review items, ask again every 5 seconds for up to
@@ -56,12 +57,16 @@ export function MeetingView({
   templates,
   initialTab = "notes",
   defaultLanguage = "en",
+  teamSize = 0,
 }: {
   initial: Meeting;
   templates: Template[];
   initialTab?: "notes" | "transcript";
   // The account's default notes language (Settings): opened when that translation exists.
   defaultLanguage?: NoteLanguage;
+  // How many people are on the owner's team (`GET /api/team` `member_count`; 0 when unknown). The
+  // "Share with team" card is drawn only when there is someone to share with.
+  teamSize?: number;
 }) {
   const router = useRouter();
   const [meeting, setMeeting] = useState(initial);
@@ -294,6 +299,12 @@ export function MeetingView({
                 <dd>{platformLabel(m.platform)}</dd>
                 <dt>Duration</dt>
                 <dd>{duration}</dd>
+                {m.shared_by ? (
+                  <>
+                    <dt>Shared by</dt>
+                    <dd>{m.shared_by}</dd>
+                  </>
+                ) : null}
                 {templateName ? (
                   <>
                     <dt>Template</dt>
@@ -318,6 +329,32 @@ export function MeetingView({
                 </>
               ) : null}
             </Card>
+            {m.can_share && teamSize > 1 ? (
+              <Card compact>
+                {/* Lead-designed, not in the designer's file: the "Share with team" switch (spec 8.2). */}
+                <div className="sh-row">
+                  <div>
+                    <h2 className="sh-title" id="share-team-label">
+                      Share with team
+                    </h2>
+                    <p className="sh-sub" id="share-team-sub">
+                      {m.shared_with_team
+                        ? "Everyone on your team can read these notes and the transcript."
+                        : "Private to you. Turn this on to let your team read the notes, transcript and tasks."}
+                    </p>
+                  </div>
+                  <Toggle
+                    checked={m.shared_with_team}
+                    disabled={busy !== null}
+                    aria-labelledby="share-team-label"
+                    aria-describedby="share-team-sub"
+                    onClick={() =>
+                      void act("share", () => (m.shared_with_team ? api.meetings.unshare(m.id) : api.meetings.share(m.id)))
+                    }
+                  />
+                </div>
+              </Card>
+            ) : null}
             <ExtractionCard
               status={m.extraction_status ?? null}
               stalled={extractionStalled}

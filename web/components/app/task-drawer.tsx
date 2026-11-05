@@ -15,11 +15,14 @@ import { assignedLabel, COLUMNS, dueOptions, sourceLabel } from "@/lib/tasks";
 // not use is disabled, not hidden, and a refusal (403 `team_forbidden`) is shown in the panel.
 //
 // Not drawn here, because the data behind them does not exist yet: Milestone and Project (W4),
-// Sprint (W9), the "Check project" line (W4) and "Invite them to the team" (W3).
+// Sprint (W9) and the "Check project" line (W4). "Invite them to the team" opens the Team page
+// with its invite dialog filled in (W3); a member, who may not invite, is told to ask.
 export function TaskDrawer({
   task,
   people,
   today,
+  canInvite = false,
+  onInvite,
   onChange,
   onDelete,
   onClose,
@@ -27,6 +30,9 @@ export function TaskDrawer({
   task: Task;
   people: TaskPerson[];
   today: string;
+  // An owner or admin of the team may invite the person a meeting named (`GET /api/team` `can_manage`).
+  canInvite?: boolean;
+  onInvite?: (spokenName: string) => void;
   onChange: (task: Task) => void;
   onDelete: (id: number) => void;
   onClose: () => void;
@@ -121,6 +127,13 @@ export function TaskDrawer({
           {!task.assignee && task.spoken_owner ? (
             <div className="td-notice">
               <span>&quot;{task.spoken_owner}&quot; was named as the owner in the meeting, but is not on your team.</span>
+              {canInvite && onInvite ? (
+                <button type="button" className="td-notice-link" onClick={() => onInvite(task.spoken_owner ?? "")}>
+                  Invite them to the team
+                </button>
+              ) : (
+                <span>Ask an owner or admin of your team to invite them.</span>
+              )}
             </div>
           ) : null}
           <div className="td-grid">
