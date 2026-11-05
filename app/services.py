@@ -24,7 +24,18 @@ from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
-from app import auth, deletion, edge, passwords, placement, titles, usage, visibility, workspace
+from app import (
+    ai_runs,
+    auth,
+    deletion,
+    edge,
+    passwords,
+    placement,
+    titles,
+    usage,
+    visibility,
+    workspace,
+)
 from app.config import Settings, get_settings
 from app.models import (
     AppState,
@@ -537,8 +548,9 @@ def regenerate_notes(
             select(VocabularyTerm.term).where(VocabularyTerm.owner_user_id == meeting.owner_user_id)
         )
     )
+    spent: list = []
     try:
-        notes = generate_notes(source, template, terms, client=openai_client)
+        notes = generate_notes(source, template, terms, client=openai_client, usage=spent)
     except NotesFailed as exc:
         logger.error("meeting %s: regenerate failed (%s)", meeting.id, type(exc).__name__)
         raise Refused(
@@ -546,6 +558,14 @@ def regenerate_notes(
         ) from None
     meeting.notes = notes
     meeting.template_id = template.id
+    ai_runs.record_usage(
+        session,
+        meeting.id,
+        "notes",
+        get_settings().notes_model,
+        spent,
+        user_id=meeting.owner_user_id,
+    )
     workspace.mark_pending(meeting)  # the lists read from the notes follow the new ones
     session.commit()
     return meeting

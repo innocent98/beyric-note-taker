@@ -99,7 +99,12 @@ def _fence(text: str, tag: str) -> str:
     return f"<{tag}>\n{safe}\n</{tag}>"
 
 
-def _complete(client, system: str, user: str, *, what: str, failure=NotesFailed) -> str:
+def _complete(
+    client, system: str, user: str, *, what: str, failure=NotesFailed, usage: list | None = None
+) -> str:
+    """One call. When `usage` is a list, the reply's (input, output) token counts are appended to
+    it as soon as a reply comes back, also when that reply is then refused: those tokens were
+    paid for."""
     settings = get_settings()
 
     def call():
@@ -109,6 +114,11 @@ def _complete(client, system: str, user: str, *, what: str, failure=NotesFailed)
         )
 
     response = call_with_retry(call, what=what, failure=failure)
+    if usage is not None:
+        counts = getattr(response, "usage", None)
+        usage.append(
+            (getattr(counts, "prompt_tokens", None), getattr(counts, "completion_tokens", None))
+        )
     choice = response.choices[0]
     if choice.finish_reason == "length":
         raise failure(f"{what}: the reply was cut off at the model's output limit")
@@ -219,7 +229,9 @@ def label_speakers(transcript: str, segments: list[dict], *, client=None) -> str
     return label_transcript(transcript, segments, client=client)[0]
 
 
-def label_transcript(transcript: str, segments: list[dict], *, client=None) -> tuple[str, bool]:
+def label_transcript(
+    transcript: str, segments: list[dict], *, client=None, usage: list | None = None
+) -> tuple[str, bool]:
     """Return (text, complete): `transcript` with "[Name]: " turns, and whether every section
     was labelled.
 
@@ -248,7 +260,7 @@ def label_transcript(transcript: str, segments: list[dict], *, client=None) -> t
         live = "\n".join(f"{name}: {text}" for name, text in _segments_for(turns, start, end))
         user = f"{_fence(section, 'transcript')}\n\n{_fence(live, 'live_segments')}"
         try:
-            labelled = _complete(client, LABEL_SYSTEM, user, what="speaker labelling")
+            labelled = _complete(client, LABEL_SYSTEM, user, what="speaker labelling", usage=usage)
         except NotesFailed as exc:
             logger.warning(
                 "speaker labelling failed for section %d of %d (%s); left unlabelled",
@@ -318,7 +330,14 @@ def _vocabulary(terms: list[str]) -> list[str]:
     return sorted(clean)
 
 
-def generate_notes(transcript: str, template: Template, terms: list[str], *, client=None) -> str:
+def generate_notes(
+    transcript: str,
+    template: Template,
+    terms: list[str],
+    *,
+    client=None,
+    usage: list | None = None,
+) -> str:
     """Write notes for `transcript` following `template`. `terms` are names to spell right."""
     if not transcript.strip():
         raise NotesFailed("notes: the transcript is empty")
@@ -335,4 +354,4 @@ def generate_notes(transcript: str, template: Template, terms: list[str], *, cli
         "Write the notes now, using only what the transcript supports.",
     ]
     user = "\n\n".join(part for part in parts if part)
-    return _normalise_headings(_complete(client, NOTES_SYSTEM, user, what="notes"))
+    return _normalise_headings(_complete(client, NOTES_SYSTEM, user, what="notes", usage=usage))
