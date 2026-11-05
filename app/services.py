@@ -13,19 +13,28 @@ confirm that the row exists).
 
 import logging
 import math
+import shutil
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, Request
 from markdown_it import MarkdownIt
 from markupsafe import Markup
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from starlette.convertors import Convertor, register_url_convertor
 
 from app import auth, edge, passwords, placement, titles, usage, visibility, workspace
 from app.config import Settings, get_settings
-from app.models import AppState, Meeting, Template, User, UserSettings, VocabularyTerm
+from app.models import (
+    AppState,
+    MailOutbox,
+    Meeting,
+    Template,
+    User,
+    UserSettings,
+    VocabularyTerm,
+)
 from app.notes import MAX_TERM_CHARS, NotesFailed, generate_notes
 from app.pipeline import (
     BOT_END_REQUESTED,
@@ -36,6 +45,7 @@ from app.pipeline import (
     REASON_CANCELLED,
     REASON_NO_SPEECH,
     SEND_UNCONFIRMED,
+    audio_path,
     is_join_failure,
     manual_retry_wait,
     send_again,
@@ -610,6 +620,52 @@ def cancel_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meet
     locked.status, locked.failure_reason = "failed", REASON_CANCELLED
     session.commit()
     return locked
+
+
+def delete_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> None:
+    """Delete a meeting and everything derived from it (spec 3.3), for good.
+
+    Refused (409 `meeting_active`) while the bot is in the call or the notes are being written:
+    the owner cancels or waits first, so the worker never loses a row under its hands. The rest
+    is the database's cascade (transcript, notes and speaker text live on the row; translations,
+    decisions, open questions, review items and notifications reference it `ON DELETE CASCADE`,
+    and a table added later must do the same: `tests/test_meeting_delete.py` fails until it does),
+    plus what no foreign key can reach: mail still waiting for the meeting (its id sits in a JSON
+    payload), the audio folder, and Vexa's copy of the recording. Rows kept on purpose, with
+    `meeting_id` nulled: `usage_entries` (the hours stay spent), `ai_runs` (cost and the daily
+    translation count) and `scheduled_joins` (the calendar event stays joined, so the scheduler
+    does not send a bot to it again). None of those holds a word of the meeting.
+    """
+    locked = _lock_meeting(session, meeting)
+    if locked.status in ACTIVE:
+        session.rollback()
+        raise Refused(
+            409,
+            "meeting_active",
+            "This meeting is still being recorded or its notes are being written. "
+            "Delete it once it has finished.",
+        )
+    if locked.vexa_recording_id is not None and locked.audio_deleted_at is None:
+        try:
+            vexa.delete_recording(locked.vexa_recording_id)
+        except VexaError as exc:
+            session.rollback()
+            logger.warning(
+                "meeting %s: delete_recording failed (%s)", locked.id, type(exc).__name__
+            )
+            raise Refused(
+                502,
+                "recording_delete_failed",
+                "The recording could not be removed, so nothing was deleted. "
+                "Please try again in a moment.",
+            ) from None
+    session.execute(
+        delete(MailOutbox).where(MailOutbox.payload["meeting_id"].astext == str(locked.id))
+    )
+    meeting_id = locked.id
+    session.delete(locked)
+    session.commit()
+    shutil.rmtree(audio_path(meeting_id).parent, ignore_errors=True)
 
 
 def can_end(meeting: Meeting) -> bool:

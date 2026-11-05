@@ -1,0 +1,25 @@
+{
+  "note": "The notes are being written (`processing`): the same 409.",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/meetings/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "meeting_active",
+        "message": "This meeting is still being recorded or its notes are being written. Delete it once it has finished."
+      }
+    }
+  }
+}
