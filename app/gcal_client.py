@@ -34,6 +34,7 @@ import httpx
 from app import vault
 from app.calendar_source import (
     AuthRevoked,
+    RefreshTokenUnreadable,
     SyncBatch,
     SyncTokenExpired,
     TransientError,
@@ -220,7 +221,7 @@ def _refresh_token(conn: CalendarConnection) -> str:
         # The server's key is missing or broken: the user's grant is fine.
         raise TransientError("the token vault is unavailable") from None
     except vault.VaultError:
-        raise AuthRevoked("the stored refresh token cannot be read") from None
+        raise RefreshTokenUnreadable("the stored refresh token cannot be read") from None
     return secret.reveal()
 
 

@@ -50,8 +50,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app import alerts, titles
-from app.calendar_source import CalendarSource, CalendarSourceError, SyncBatch
+from app import alerts, calendar_states, titles
+from app.calendar_source import AuthRevoked, CalendarSource, CalendarSourceError, SyncBatch
 from app.config import Settings, get_settings
 from app.gcal_rules import JoinSettings, will_join
 from app.gcal_sync import DEFAULT_USER_SETTINGS, apply_batch
@@ -547,6 +547,11 @@ def _recheck(
         return AGAIN
     except CalendarSourceError as exc:
         logger.warning("re-check of join %s failed (%s)", join.id, type(exc).__name__)
+        if isinstance(exc, AuthRevoked):
+            # A revoked grant is a state change, not a blip: the next tick's gate skips the row.
+            calendar_states.on_sync_failure(session, conn, exc, now, settings=settings)
+            session.commit()
+            return WAIT
         if now >= join.run_at:
             join.rechecked_at = now  # time is up: go on what is stored
             _touch(join, now)

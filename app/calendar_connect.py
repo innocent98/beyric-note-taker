@@ -47,7 +47,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import google_oauth, google_signin, tokens, vault
+from app import calendar_states, google_oauth, google_signin, tokens, vault
 from app.config import Settings
 from app.gcal_client import AccessTokenCache
 from app.google_oauth import CALENDAR_SCOPE, MEET_SCOPE, GoogleError, GoogleOAuth
@@ -319,6 +319,7 @@ def _store(
         conn.needs_reconnect_reason = None
         conn.last_error = None
         conn.last_error_at = None
+        conn.error_since = None
         # The token is the old one, so its age (and any 7-day expiry already noted) is unchanged.
         if not settings.google_oauth_testing:
             conn.expected_expiry_at = None
@@ -350,6 +351,8 @@ def _store(
     conn.last_error = None
     conn.last_error_at = None
     conn.expected_expiry_at = now + TESTING_EXPIRY if settings.google_oauth_testing else None
+    session.flush()
+    calendar_states.revive_on_reconnect(session, conn, now)
     return _commit(session)
 
 
