@@ -435,7 +435,16 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] FE guide from live captures (`scripts/capture_team_api.py`)
   - [ ] Opus review fixes (see the SOP)
   - [ ] PR 2 screens: Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, and the four lead-designed pieces (Share with team switch, optional name in the invite dialog, alias editing, "Add email" which may wait for W6); privacy "Teams" paragraph and terms pilot row; parity shots
-- [ ] W5 Export (merged), W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
+- [ ] W4 Projects and milestones. Backend PR 1 `feature/w4-projects-backend` (open, not merged, 2026-11-05) and screens PR 2 `feature/w4-projects-screens` (not started). SOP `docs/sop/2026-11-05-w4-projects-backend.md`; FE guide `docs/fe-integration-guide-projects.md` with `docs/fe-captures/projects-w4/`
+  - [x] Migration 0028 (`projects`, `milestones`, `tasks.project_id/milestone_id/check_project`); down_revision 0026, re-point if 0027 (#96) merges first
+  - [x] Projects API (list/create/get/patch/delete; owner and admin write, member 403 `team_forbidden`, other team 404); milestones API (list, create, patch, delete, confirm, `GET /api/meetings/{id}/milestones`)
+  - [x] Filing by keywords in `app/filing.py` (clear winner quiet, weak or tied match sets `check_project`, one-project team unflagged, none otherwise); the series rule is a seam (`series_project`) until W8
+  - [x] Milestone proposals from the extraction call, stored unconfirmed with the quote, never auto-created; rewrite replaces the unconfirmed ones
+  - [x] Tasks API: `project`/`milestone` filters, `project_id`/`milestone_id`/`check_project` on a task and in PATCH, `attention.check_project`
+  - [x] Route enumeration extended; FE guide from live captures (`scripts/capture_projects_api.py`)
+  - [ ] PR 2 screens: Projects (D6), project tabs, milestone card, drawer Project and Milestone and "Check project", meeting page "Set milestone" with Confirm
+  - [ ] Waits for W8: Recurring meetings list on a project and the series filing rule. Waits for W9: Sprint length on a project and the "In current sprint" and "In backlog" stats
+- [ ] W5 Export (merged), W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)
   - [x] Headings from a fixed dictionary in code; transcript and notes split in code into lines, only the words go to the model; checks for count, structure, links and markup, numbers, names; one retry per chunk

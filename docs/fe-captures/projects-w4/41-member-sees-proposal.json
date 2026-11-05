@@ -1,0 +1,25 @@
+{
+  "note": "404: Dan's meeting is private (not shared with the team).",
+  "client": "chidi",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/milestones",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

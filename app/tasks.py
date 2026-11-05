@@ -24,9 +24,9 @@ from datetime import UTC, date, datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import teams, titles
+from app import filing, teams, titles
 from app.extraction import CheckedAction, fingerprint, normalise
-from app.models import Meeting, Task, TeamMember, User
+from app.models import Meeting, Milestone, Project, Task, TeamMember, User
 from app.visibility import can_read_clause
 
 logger = logging.getLogger(__name__)
@@ -166,6 +166,9 @@ def reconcile(
         if key not in wanted and (task.deleted_at is not None or not touched(task)):
             session.delete(task)
     by_index = {item.index: item for item in items}
+    team_projects = filing.team_projects(session, team_id)
+    meeting_name = titles.meeting_name(meeting)
+    series_project = filing.series_project(session, meeting)
     kept: list[Task] = []
     for key, (position, _text) in wanted.items():
         task = existing.get(key)
@@ -193,6 +196,12 @@ def reconcile(
             "position": position,
             "assigned_on": day,
         }
+        placed = filing.file_task(
+            team_projects,
+            series_project_id=series_project,
+            text=filing.filing_text(meeting_name, fields["title"], item.quote),
+        )
+        fields["project_id"], fields["check_project"] = placed.project_id, placed.check
         if task is None:
             task = Task(
                 team_id=team_id,
@@ -308,9 +317,12 @@ def list_tasks(
     status: str | None,
     limit: int,
     before_id: int | None,
+    project: str | None = None,
+    milestone: int | None = None,
 ) -> tuple[list[Task], bool]:
     """The tasks the caller may see, newest first. `assignee` is `me`, `none` (Needs owner) or a
-    user id. Returns up to `limit` and whether there are more."""
+    user id; `project` is `none` (no project) or a project id; `milestone` is a milestone id.
+    Returns up to `limit` and whether there are more."""
     query = select(Task).where(visible(user))
     if assignee == "me":
         query = query.where(Task.assignee_user_id == user.id)
@@ -320,6 +332,12 @@ def list_tasks(
         query = query.where(Task.assignee_user_id == int(assignee))
     if status is not None:
         query = query.where(Task.status == status)
+    if project == "none":
+        query = query.where(Task.project_id.is_(None))
+    elif project is not None:
+        query = query.where(Task.project_id == int(project))
+    if milestone is not None:
+        query = query.where(Task.milestone_id == milestone)
     if before_id is not None:
         query = query.where(Task.id < before_id)
     rows = list(session.scalars(query.order_by(Task.id.desc()).limit(limit + 1)))
@@ -351,7 +369,7 @@ def counts_for_meetings(session: Session, user: User, meeting_ids: list[int]) ->
 
 def attention(session: Session, user: User) -> dict[str, int]:
     """The "needs attention" counts over every open task the caller sees: tasks with no owner, and
-    tasks whose quote could not be found in the transcript."""
+    tasks whose quote could not be found in the transcript, and tasks filed by a guess."""
     open_ = and_(visible(user), Task.status != "done")
     needs_owner = session.scalar(
         select(func.count()).select_from(Task).where(open_, Task.assignee_user_id.is_(None))
@@ -359,7 +377,10 @@ def attention(session: Session, user: User) -> dict[str, int]:
     unverified = session.scalar(
         select(func.count()).select_from(Task).where(open_, Task.unverified.is_(True))
     )
-    return {"needs_owner": needs_owner, "unverified": unverified}
+    check_project = session.scalar(
+        select(func.count()).select_from(Task).where(open_, Task.check_project.is_(True))
+    )
+    return {"needs_owner": needs_owner, "unverified": unverified, "check_project": check_project}
 
 
 def new_count(session: Session, user: User) -> int:
@@ -369,6 +390,33 @@ def new_count(session: Session, user: User) -> int:
         .select_from(Task)
         .where(visible(user), Task.is_new.is_(True), Task.status != "done")
     )
+
+
+def check_assignable(
+    session: Session, team_id: int, project_id: int | None, milestone_id: int | None
+) -> None:
+    """A task may only be given a project of its own team and a confirmed milestone of its own
+    team (a proposal is not a milestone yet). Raises `TaskInvalid` (422) otherwise."""
+    if (
+        project_id is not None
+        and session.scalar(
+            select(Project.id).where(Project.id == project_id, Project.team_id == team_id)
+        )
+        is None
+    ):
+        raise TaskInvalid("project_not_on_team", "That project is not on your team.")
+    if (
+        milestone_id is not None
+        and session.scalar(
+            select(Milestone.id).where(
+                Milestone.id == milestone_id,
+                Milestone.team_id == team_id,
+                Milestone.confirmed_at.is_not(None),
+            )
+        )
+        is None
+    ):
+        raise TaskInvalid("milestone_not_on_team", "That milestone is not on your team.")
 
 
 def _title(value: str) -> str:
@@ -389,17 +437,20 @@ def create(
     due_date: date | None,
     status: str,
     today: date,
+    project_id: int | None = None,
 ) -> Task:
     """A manual task in the caller's team. Anyone on the team may make one. Commits."""
     team = teams.ensure_team(session, user)
     if assignee_user_id is not None:
         _assignable(session, team.id, assignee_user_id)
+    check_assignable(session, team.id, project_id, None)
     task = Task(
         team_id=team.id,
         title=_title(title),
         assignee_user_id=assignee_user_id,
         due_date=due_date,
         status=status,
+        project_id=project_id,
         done_at=datetime.now(UTC) if status == "done" else None,
         source="manual",
         created_by_user_id=user.id,
@@ -427,6 +478,12 @@ def update(session: Session, user: User, task: Task, changes: dict, now: datetim
         raise TaskForbidden
     if ("status" in real or "due_date" in real) and not allowed.update:
         raise TaskForbidden
+    if ({"project_id", "milestone_id", "check_project"} & real.keys()) and not allowed.update:
+        raise TaskForbidden
+    if "project_id" in real or "milestone_id" in real:
+        check_assignable(session, task.team_id, real.get("project_id"), real.get("milestone_id"))
+    if "project_id" in real:
+        real["check_project"] = False  # a person chose it: nothing left to check
     if "assignee_user_id" in real:
         target = real["assignee_user_id"]
         claiming = target == user.id and task.assignee_user_id is None and allowed.claim

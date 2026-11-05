@@ -1,0 +1,30 @@
+{
+  "note": "422 `keyword_too_long`.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/projects/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "keywords": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ]
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "keyword_too_long",
+        "message": "A keyword can be at most 40 characters."
+      }
+    }
+  }
+}

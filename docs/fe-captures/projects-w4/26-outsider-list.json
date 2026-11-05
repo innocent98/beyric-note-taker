@@ -1,0 +1,23 @@
+{
+  "note": "Another team sees none of it.",
+  "client": "eve",
+  "request": {
+    "method": "GET",
+    "path": "/api/projects",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "projects": [],
+      "can_manage": true
+    }
+  }
+}

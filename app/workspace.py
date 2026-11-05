@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app import ai_runs, mail, tasks, teams, timezones
+from app import ai_runs, filing, mail, projects, tasks, teams, timezones, titles
 from app.extraction import (
     CheckedExtraction,
     ExtractionFailed,
@@ -267,6 +267,11 @@ def run_extraction(
         live = tasks.reconcile(
             session, meeting, team_id, parsed.action_items, checked.action_items, members, day,
             quiet=quiet,
+        )  # fmt: skip
+        # Dates the meeting stated for a launch or deadline: proposals only, a person confirms.
+        projects.propose(
+            session, meeting, team_id, checked.milestones,
+            filing.team_projects(session, team_id), titles.meeting_name(meeting),
         )  # fmt: skip
         # Not for a meeting older than the outbox keeps its sent rows: the unique index that makes
         # "once" true would be gone, so a rewrite that long after could mail the same people twice.

@@ -744,6 +744,8 @@ class Task(Base):
         ),
         Index("ix_tasks_team_id", "team_id", "id"),
         Index("ix_tasks_assignee_user_id", "assignee_user_id"),
+        Index("ix_tasks_project_id", "project_id"),
+        Index("ix_tasks_milestone_id", "milestone_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -777,6 +779,62 @@ class Task(Base):
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # W4. A project or milestone that goes away leaves the task with none (the task stays).
+    project_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("projects.id", ondelete="SET NULL")
+    )
+    milestone_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("milestones.id", ondelete="SET NULL")
+    )
+    # Filing was a guess (one keyword hit or a tie): shown as "Check project" until a person
+    # confirms or changes the project.
+    check_project: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+
+
+class Project(Base):
+    """A project of a team (spec 4, 6.3): a name, a colour and the keywords tasks are filed by.
+    Visible to the whole team; the counts inside it follow what the viewer may see. Deleting one
+    leaves its tasks with no project (`tasks.project_id` is SET NULL) and removes its milestones.
+    The recurring meetings link and the sprint length override wait for W8 and W9."""
+
+    __tablename__ = "projects"
+    __table_args__ = (Index("ix_projects_team_id", "team_id", "id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    color: Mapped[str] = mapped_column(String(7))
+    keywords: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default=sa.text("'{}'::text[]")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Milestone(Base):
+    """A dated goal. The extraction call may propose one from a meeting (`confirmed_at` null, with
+    the words said in `quote`); it only counts once someone confirms it (spec D14). The source
+    meeting is kept as a plain reference: deleting the meeting deletes its proposals
+    (`services.delete_meeting`) and leaves a confirmed milestone."""
+
+    __tablename__ = "milestones"
+    __table_args__ = (
+        Index("ix_milestones_team_id", "team_id", "id"),
+        Index("ix_milestones_source_meeting_id", "source_meeting_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    project_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    due_date: Mapped[date] = mapped_column(Date)
+    source_meeting_id: Mapped[int | None] = mapped_column(
+        ForeignKey("meetings.id", ondelete="SET NULL")
+    )
+    quote: Mapped[str | None] = mapped_column(String(300))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

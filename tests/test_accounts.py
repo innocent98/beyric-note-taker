@@ -15,7 +15,9 @@ from app.models import (
     CalendarEvent,
     Decision,
     Meeting,
+    Milestone,
     Notification,
+    Project,
     ReviewItem,
     Task,
     TeamInvite,
@@ -589,7 +591,16 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         invited_by=owner.id,
         expires_at=datetime.now(UTC) + timedelta(days=7),
     )
-    session.add_all([term, note, decision, review, task, pending_invite])
+    project = Project(
+        team_id=teams.ensure_team(session, owner).id, name="P", color="#0E6B5E", keywords=[]
+    )
+    milestone = Milestone(
+        team_id=project.team_id,
+        name="Launch",
+        due_date=datetime.now(UTC).date(),
+        source_meeting_id=mine.id,
+    )
+    session.add_all([term, note, decision, review, task, pending_invite, project, milestone])
     session.commit()
     # The calendar routes answer 404 `calendar_unavailable` while the feature is off, which would
     # hide an unscoped id: switch it on, and give BOTH people a live connection so that only the
@@ -629,6 +640,8 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "item_id": review.id,
         "task_id": task.id,
         "invite_id": pending_invite.id,
+        "project_id": project.id,
+        "milestone_id": milestone.id,
         "user_id": owner.id,  # a member of the owner's team, reached through the team routes
         "language": "fr",  # with the owner's meeting id: a translation is reached through it
     }
@@ -646,6 +659,8 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/translations": {"language": "fr"},
             "/override": {"override": False},
             "/api/tasks/{task_id}": {"status": "done"},
+            "/api/projects/{project_id}": {"name": "x"},
+            "/api/milestones/{milestone_id}": {"name": "x"},
             "/api/team/members/{user_id}": {"aliases": ["x"]},
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
         }
