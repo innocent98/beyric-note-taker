@@ -984,7 +984,12 @@ def test_0025_follows_0024():
     assert script.get_revision("0025").down_revision == "0024"
 
 
-def test_0026_follows_0025_and_is_the_only_head():
+def test_0026_follows_0025():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0026").down_revision == "0025"
-    assert script.get_heads() == ["0026"]
+
+
+def test_0029_follows_0026_and_is_the_only_head():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0029").down_revision == "0026"
+    assert script.get_heads() == ["0029"]

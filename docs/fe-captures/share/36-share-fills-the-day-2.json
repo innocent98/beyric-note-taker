@@ -1,0 +1,42 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/2/shares",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipients": [
+        {
+          "email": "fill-b0@example.test"
+        },
+        {
+          "email": "fill-b1@example.test"
+        },
+        {
+          "email": "fill-b2@example.test"
+        },
+        {
+          "email": "fill-b3@example.test"
+        },
+        {
+          "email": "fill-b4@example.test"
+        }
+      ],
+      "language": "en"
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "share_id": 5,
+      "status": "queued"
+    }
+  }
+}

@@ -1858,6 +1858,34 @@
         "title": "NotificationOut",
         "type": "object"
       },
+      "OptOutIn": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "OptOutIn",
+        "type": "object"
+      },
+      "OptOutOut": {
+        "properties": {
+          "status": {
+            "const": "unsubscribed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "OptOutOut",
+        "type": "object"
+      },
       "OverrideIn": {
         "additionalProperties": false,
         "description": "The person's switch for one meeting: true joins it, false does not, null clears the switch\nso the rule decides again. The field is required (null must be sent on purpose).",
@@ -2239,6 +2267,231 @@
           }
         },
         "title": "SettingsIn",
+        "type": "object"
+      },
+      "ShareCreated": {
+        "properties": {
+          "share_id": {
+            "title": "Share Id",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "waiting_translation"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "share_id",
+          "status"
+        ],
+        "title": "ShareCreated",
+        "type": "object"
+      },
+      "ShareIn": {
+        "additionalProperties": false,
+        "properties": {
+          "attach": {
+            "default": "none",
+            "enum": [
+              "none",
+              "pdf",
+              "docx"
+            ],
+            "title": "Attach",
+            "type": "string"
+          },
+          "include_transcript": {
+            "default": false,
+            "title": "Include Transcript",
+            "type": "boolean"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/ShareRecipientIn"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Recipients",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipients",
+          "language"
+        ],
+        "title": "ShareIn",
+        "type": "object"
+      },
+      "ShareList": {
+        "properties": {
+          "shares": {
+            "items": {
+              "$ref": "#/components/schemas/ShareOut"
+            },
+            "title": "Shares",
+            "type": "array"
+          }
+        },
+        "required": [
+          "shares"
+        ],
+        "title": "ShareList",
+        "type": "object"
+      },
+      "ShareOut": {
+        "properties": {
+          "attach": {
+            "enum": [
+              "none",
+              "pdf",
+              "docx"
+            ],
+            "title": "Attach",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "include_transcript": {
+            "title": "Include Transcript",
+            "type": "boolean"
+          },
+          "language": {
+            "enum": [
+              "en",
+              "fr",
+              "es"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/ShareRecipientOut"
+            },
+            "title": "Recipients",
+            "type": "array"
+          },
+          "share_id": {
+            "title": "Share Id",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "waiting_translation",
+              "queued",
+              "failed",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "share_id",
+          "status",
+          "language",
+          "attach",
+          "include_transcript",
+          "message",
+          "created_at",
+          "recipients"
+        ],
+        "title": "ShareOut",
+        "type": "object"
+      },
+      "ShareRecipientIn": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "ShareRecipientIn",
+        "type": "object"
+      },
+      "ShareRecipientOut": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "is_team_member": {
+            "title": "Is Team Member",
+            "type": "boolean"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "sent",
+              "not_sent",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "status",
+          "is_team_member"
+        ],
+        "title": "ShareRecipientOut",
         "type": "object"
       },
       "SignUp": {
@@ -5138,6 +5391,78 @@
         ]
       }
     },
+    "/api/mail/opt-out": {
+      "post": {
+        "description": "Stop mail from Beyric Note Taker to the address a shared-notes mail was sent to. Public:\nthe token in the mail's footer link is the credential. The page the link opens must show a\nbutton that calls this (mail scanners open links, and a GET must not opt anyone out). The\ntoken works once, for 180 days. Mail that lets a person into their own account (sign-in,\npassword reset) is not stopped.",
+        "operationId": "opt_out",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OptOutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptOutOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`token_invalid_or_expired`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Opt Out",
+        "tags": [
+          "shares"
+        ]
+      }
+    },
     "/api/meetings": {
       "get": {
         "description": "The caller's meetings, plus any shared with their team, newest first. For the next page\npass `before_id` = `next_before_id`.",
@@ -6150,6 +6475,190 @@
         "summary": "Share Meeting",
         "tags": [
           "meetings"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/shares": {
+      "get": {
+        "description": "The shares of a meeting, newest first, for \"Shared with ...\": who each went to and whether\nit was sent. Only the person who recorded the meeting sees them.",
+        "operationId": "list_shares",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Shares",
+        "tags": [
+          "shares"
+        ]
+      },
+      "post": {
+        "description": "Mail the notes of a ready meeting to up to 10 people, each in their own mail, sent as the\ncaller (`Reply-To` is the caller, the footer names them). The mail holds the Summary,\nDecisions, Action items and Open questions, abridged; a PDF or Word file with every section\ncan be attached, with the transcript if ticked. Nobody outside the caller's team gets a link\nto the notes. A language that is not translated yet is translated first: the answer is still\n202 and `status` is `waiting_translation`. Limits: 10 recipients a share and 20 a day per\naccount (429 `share_limit`). Needs a confirmed email.",
+        "operationId": "create_share",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareCreated"
+                }
+              }
+            },
+            "description": "Queued: the mails go within a minute, or after the translation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`email_not_verified`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such meeting (or not the caller's)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_ready`: the notes are not written yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`language_unsupported`, `invalid_recipient`, `no_recipients`, `too_many_recipients` (more than 10)"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`share_limit`: 20 recipients a day per account; `translation_limit`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`mail_unavailable`: no mail provider"
+          }
+        },
+        "summary": "Create Share",
+        "tags": [
+          "shares"
         ]
       }
     },

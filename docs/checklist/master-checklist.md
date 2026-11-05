@@ -378,7 +378,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
 - [ ] W0.1 Spikes
   - [x] AI1 extraction eval: **go on `gpt-6-luna`** (2026-11-03: 7 synthetic cases, 30 bullets, 0 invented owners, 30/30 quotes, 17/17 dates; `docs/spike/ai-extraction-eval.md`). Five real transcripts reviewed by Adebayo are still owed before W2
   - [ ] EX1 PDF memory and time (W5)
-  - [ ] ML1 Resend attachments and limits (W6)
+  - [x] ML1 Resend attachments and limits (W6): re-read from Resend's docs 2026-11-05, caps unchanged (docs/sop/2026-11-05-w6-share-backend.md); a real send is still "not verified live"
   - [ ] TR1 French and Spanish with names (W7)
 - [x] W0.2 AI ledger and settings: `ai_runs`, `EXTRACT_MODEL`, prompt versions (2026-11-03, SOP `2026-11-03-ai-workspace-w1-extraction.md`)
   - [x] Notes and speaker-labelling calls in the ledger too (`kind` `notes`, `label`; migration 0023; 2026-11-05, SOP `docs/sop/2026-11-05-notes-cost-ledger.md`). Transcription counted too (`kind` `transcribe`, `audio_seconds`, migration 0025, 2026-11-05, PR open). Not counted yet: failed transcription and notes calls, the `extraction_review.py` script
@@ -389,7 +389,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] `mail_suppressions` (hash only) honoured at send time; `scripts/suppress_email.py`
   - [x] Send-time checks (meeting, owner, setting), `skipped` status; per-recipient and daily caps
   - [x] "Notes ready" mail queued with the notes, owner setting checked
-  - [ ] Real send with a PDF and Word attachment from the production domain; read the Resend plan (spike ML1 follow-up)
+  - [ ] Real send with a PDF and Word attachment from the production domain; read the Resend plan (spike ML1 follow-up) (command: `scripts/send_test_mail.py`, in the W6 SOP)
   - [ ] Resend webhook (bounce, complaint) into `mail_suppressions`
   - [ ] A setting that turns `notify_email` off (Settings screen) and an "Email preferences" link in the mails
 - [x] W0.4 Team foundation (2026-11-05, PR open, migration 0019): `teams`, `team_members`, a team of one per account (sign-up, Google, backfill), `meetings.shared_team_id`, `visible_meetings()` in `app/visibility.py`, route enumeration test; SOP `docs/sop/2026-11-05-w04-team-foundation.md`
@@ -435,8 +435,18 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] FE guide from live captures (`scripts/capture_team_api.py`)
   - [ ] Opus review fixes (see the SOP)
   - [x] PR 2 screens (`feature/w3-team-screens`, open, not merged; SOP `docs/sop/2026-11-05-w3-team-ui.md`): Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, lead-designed Share with team switch, optional name in the invite dialog and alias editing (designer to confirm); privacy "Teams" paragraph and terms pilot rows; parity shots in `docs/ui/parity/after/`
-  - [ ] "Add email" beside a non-member participant (waits for W6)
+  - [ ] "Add email" beside a non-member participant (waits for W6) (W6 PR 2, lead-designed)
 - [ ] W5 Export (merged), W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
+
+### W6 Share notes by email (2026-11-05)
+- [ ] PR 1 backend `feature/w6-share-backend` (#99, migration 0029): open, CI green
+  - [x] `meeting_shares`, recipients and `share_usage`; `POST`/`GET /api/meetings/{id}/shares`; 10 a share, 20 a day; verified senders; owner only
+  - [x] "Notes shared with you" mail (designer layout, PDF/Word/transcript attachments, Reply-To, sender line, no link for outsiders)
+  - [x] Opt-out token and `POST /api/mail/opt-out` (nginx zone added); translation first then mail (hook + hourly sweep)
+  - [x] Privacy and terms rows (spec 13.1), "Last updated" unchanged; Opus review done
+  - [ ] Merged
+- [ ] PR 2 screens `feature/w6-share-screens`: Share dialog, "Shared with ...", toast, `/unsubscribe` page, lead-designed "Add email" (starts after PR 1 merges)
+
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)
   - [x] Headings from a fixed dictionary in code; transcript and notes split in code into lines, only the words go to the model; checks for count, structure, links and markup, numbers, names; one retry per chunk

@@ -1,0 +1,32 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/3/shares",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipients": [
+        {
+          "email": "client@example.test"
+        }
+      ],
+      "language": "en"
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_ready",
+        "message": "The notes are not ready yet."
+      }
+    }
+  }
+}

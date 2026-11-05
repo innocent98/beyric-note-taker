@@ -331,6 +331,8 @@ PUBLIC_API = frozenset(
         ("POST", "/api/password/forgot"),
         ("POST", "/api/password/reset"),
         ("POST", "/api/waitlist"),
+        # Opt out of shared-notes mail: the token in the mail's footer link is the credential.
+        ("POST", "/api/mail/opt-out"),
         # What a team invitation link says (who invited you, to which address), for the page that
         # asks a visitor to sign in or sign up: the 256-bit token in the query is the credential.
         ("GET", "/api/team/invites/preview"),

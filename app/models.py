@@ -25,7 +25,12 @@ MEETING_SOURCES = ("manual", "calendar", "instant_meet")
 USER_STATUSES = ("active", "suspended", "deleted")
 TEAM_ROLES = ("owner", "admin", "member")
 INVITE_ROLES = ("admin", "member")
-TOKEN_PURPOSES = ("verify_email", "reset_password", "waitlist_invite")
+TOKEN_PURPOSES = ("verify_email", "reset_password", "waitlist_invite", "mail_optout")
+SHARE_LANGUAGES = ("en", "fr", "es")
+SHARE_ATTACH = ("none", "pdf", "docx")
+# A share waits for its translation, then its mails are queued; `failed` means they never were.
+SHARE_STATUSES = ("waiting_translation", "queued", "failed", "revoked")
+SHARE_RECIPIENT_STATUSES = ("pending", "sent", "not_sent", "failed")
 OAUTH_PURPOSES = ("signin", "calendar", "meet_scope")
 WAITLIST_STATUSES = ("waiting", "invited", "joined", "removed")
 SEVERITIES = ("info", "warning", "error")
@@ -207,6 +212,13 @@ class MailOutbox(Base):
             postgresql_where=sa.text("template = 'notes_ready'"),
         ),
         # One "New tasks assigned" mail per assignee per meeting (spec 6.1), however many passes.
+        Index(
+            "uq_mail_outbox_notes_shared",
+            sa.text("(payload->>'share_id')"),
+            sa.text("(payload->>'recipient_id')"),
+            unique=True,
+            postgresql_where=sa.text("template = 'notes_shared'"),
+        ),
         Index(
             "uq_mail_outbox_tasks_assigned",
             sa.text("(payload->>'meeting_id')"),
@@ -840,6 +852,78 @@ class MeetingTranslation(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MeetingShare(Base):
+    """One "Share notes by email" request (spec section 10). Holds ids and the sender's own words
+    only: the notes are read from the meeting when each mail is SENT, never copied here or into
+    `mail_outbox`. Deleted with the meeting."""
+
+    __tablename__ = "meeting_shares"
+    __table_args__ = (
+        CheckConstraint(_in("status", SHARE_STATUSES), name="ck_meeting_shares_status"),
+        CheckConstraint(_in("language", SHARE_LANGUAGES), name="ck_meeting_shares_language"),
+        CheckConstraint(_in("attach", SHARE_ATTACH), name="ck_meeting_shares_attach"),
+        Index("ix_meeting_shares_meeting_id", "meeting_id", "id"),
+        Index("ix_meeting_shares_sender_created", "sender_user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
+    sender_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE")
+    )
+    language: Mapped[str] = mapped_column(String(2))
+    attach: Mapped[str] = mapped_column(String(8), default="none", server_default="none")
+    include_transcript: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
+    # The sender's optional note: plain text, at most 500 characters, shown escaped and unlinked.
+    message: Mapped[str] = mapped_column(Text, default="", server_default="")
+    status: Mapped[str] = mapped_column(String(24))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MeetingShareRecipient(Base):
+    """One person a share goes to. `user_id` is set when the address is an active member of the
+    sender's team at share time. `status` is what the sender may be told: `not_sent` covers every
+    reason a mail did not go (a suppressed address included, never named)."""
+
+    __tablename__ = "meeting_share_recipients"
+    __table_args__ = (
+        CheckConstraint(
+            _in("status", SHARE_RECIPIENT_STATUSES), name="ck_meeting_share_recipients_status"
+        ),
+        CheckConstraint("email = lower(email)", name="ck_meeting_share_recipients_email_lower"),
+        UniqueConstraint("share_id", "email", name="uq_meeting_share_recipients_share_email"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    share_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("meeting_shares.id", ondelete="CASCADE")
+    )
+    email: Mapped[str] = mapped_column(String(254))
+    name: Mapped[str | None] = mapped_column(String(100))
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ShareUsage(Base):
+    """How many recipients an account asked to mail, and when: the daily limit's ledger. Kept apart
+    from `meeting_shares` so deleting a meeting (which deletes its shares) does not give the day's
+    capacity back. Holds no address and no meeting; goes with the account."""
+
+    __tablename__ = "share_usage"
+    __table_args__ = (Index("ix_share_usage_user_created", "user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    recipients: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class RateHit(Base):

@@ -20,28 +20,45 @@ below (`ready_meeting`), not its own copy of the checks.
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import timezones, titles
+from app import export, timezones, titles, tokens
 from app.config import Settings
 from app.mail_layout import (
     Block,
     Bullets,
     Button,
+    Divider,
     Heading,
     Label,
     Meta,
     Para,
+    Quote,
     Rows,
     render_html,
     render_text,
 )
-from app.mail_message import Message, clean_line
-from app.models import Meeting, Task, TeamMember, User, UserSettings
-from app.notes_document import ListBlock, Paragraph, Section, build_notes_document
+from app.mail_message import Attachment, Message, clean_line
+from app.models import (
+    Meeting,
+    MeetingShare,
+    MeetingShareRecipient,
+    MeetingTranslation,
+    Task,
+    TeamMember,
+    User,
+    UserSettings,
+)
+from app.notes_document import (
+    ListBlock,
+    Paragraph,
+    Section,
+    build_notes_document,
+    export_filename,
+)
 
 SIGNATURE = "Beyric Note Taker, a product of Beyrichq LTD"
 
@@ -364,12 +381,11 @@ def _section_text(section: Section) -> tuple[list[str], list[str]]:
     return [p for p in paragraphs if p.strip()], items
 
 
-def abridged_blocks(sections: list[Section]) -> list[Block]:
-    """Blocks for the sections a mail carries. A notes template written by the owner may use
-    other headings: then the first section stands in, so a mail is never empty of notes."""
-    wanted = [
-        s for s in sections if s.heading and clean_line(s.heading, 80).lower() in MAIL_SECTIONS
-    ]
+def abridged_blocks(sections: list[Section], names: tuple[str, ...] = MAIL_SECTIONS) -> list[Block]:
+    """Blocks for the sections a mail carries (`names`: the headings, lower-cased, in the notes'
+    language). A notes template written by the owner may use other headings: then the first
+    section stands in, so a mail is never empty of notes."""
+    wanted = [s for s in sections if s.heading and clean_line(s.heading, 80).lower() in names]
     if not wanted:
         wanted = [s for s in sections if _section_text(s) != ([], [])][:1]
     blocks: list[Block] = []
@@ -378,12 +394,13 @@ def abridged_blocks(sections: list[Section]) -> list[Block]:
         heading = clean_line(section.heading or "Notes", MAX_HEADING_CHARS)
         blocks.append(Label(heading))
         if items:
-            shown = tuple(clip(i, MAX_ITEM_CHARS) for i in items[:MAX_ITEMS])
+            shown = tuple(clip(titles.mail_line(i, 400), MAX_ITEM_CHARS) for i in items[:MAX_ITEMS])
             if len(items) > MAX_ITEMS:
                 shown += (f"and {len(items) - MAX_ITEMS} more in the full notes",)
             blocks.append(Bullets(shown))
         elif paragraphs:
-            blocks.append(Para(clip(" ".join(paragraphs), MAX_PARAGRAPH_CHARS)))
+            joined = titles.mail_line(" ".join(paragraphs), MAX_PARAGRAPH_CHARS * 2)
+            blocks.append(Para(clip(joined, MAX_PARAGRAPH_CHARS)))
         else:
             blocks.append(Para("None noted.", muted=True))
     return blocks
@@ -551,4 +568,178 @@ def _tasks_assigned(
         subject=subject,
         text=render_text(blocks, footer, prefs),
         html=render_html(subject, blocks, footer, prefs),
+    )
+
+
+# ---- "Notes shared with you" (W6, spec section 10) ----
+
+OPT_OUT_TTL = timedelta(days=180)
+SHARE_ATTACHMENT_TYPES = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+
+
+def _mail_section_names(language: str) -> tuple[str, ...]:
+    """The four sections a mail carries, as they are headed in `language`, lower-cased."""
+    from app import translation  # translation imports services, which imports this module
+
+    table = translation.HEADINGS[language]
+    return tuple(
+        table[h].lower() for h in ("Summary", "Decisions", "Action items", "Open questions")
+    )
+
+
+def _share_attachments(
+    share: MeetingShare, meeting: Meeting, notes: str, words: str, now: datetime
+) -> tuple[Attachment, ...]:
+    """The files of a share, built now from the same text the mail shows: the notes as PDF or
+    Word (with the transcript inside when ticked), or, with no notes file, the transcript alone
+    as plain text. Nothing is stored."""
+    title = meeting_name(meeting)
+    with_transcript = share.include_transcript and bool(words.strip())
+    if share.attach in SHARE_ATTACHMENT_TYPES:
+        doc = build_notes_document(
+            title=title,
+            platform_label=_platform_label(meeting),
+            started_at=meeting.created_at,
+            recorded_seconds=meeting.recorded_seconds,
+            notes=notes,
+            transcript=words if with_transcript else None,
+            generated_at=now,
+        )
+        content = export.build_file(doc, share.attach)
+        return (
+            Attachment(
+                export_filename(title, share.attach), content, SHARE_ATTACHMENT_TYPES[share.attach]
+            ),
+        )
+    if with_transcript:
+        return (
+            Attachment(export_filename(f"{title} transcript", "txt"), words.encode(), "text/plain"),
+        )
+    return ()
+
+
+@notes_template("notes_shared")
+def _notes_shared(
+    session: Session, payload: dict, to: str, settings: Settings, now: datetime
+) -> Message | Skip:
+    """The mail of one recipient of one share. Everything is checked again here, at SEND time: the
+    share and the recipient exist and the share is live, the meeting is ready, the sender is still
+    an active, confirmed account, and a translated share still has a current translation. The
+    notes are read now; the outbox row holds three ids. Outside recipients get no link to the
+    notes (D7); a teammate who may read the meeting gets one to the signed-in page."""
+    from app import translation  # translation imports services, which imports this module
+
+    share = session.get(MeetingShare, payload["share_id"])
+    recipient = session.get(MeetingShareRecipient, payload["recipient_id"])
+    if share is None or recipient is None or recipient.share_id != share.id:
+        return Skip("share_gone")
+    if share.revoked_at is not None or share.status != "queued":
+        return Skip("share_revoked")
+    if to != recipient.email:
+        return Skip("recipient_changed")
+    found = ready_meeting(session, share.meeting_id)
+    if isinstance(found, Skip):
+        return found
+    meeting, owner = found
+    if owner.id != share.sender_user_id:
+        return Skip("sender_changed")
+    if owner.email_verified_at is None:
+        return Skip("sender_unverified")
+    language = share.language
+    original = meeting.notes or ""
+    words_original = meeting.speaker_transcript or meeting.transcript or ""
+    notes, words = original, words_original
+    if language != "en":
+        row = session.scalars(
+            select(MeetingTranslation).where(
+                MeetingTranslation.meeting_id == meeting.id,
+                MeetingTranslation.language == language,
+            )
+        ).first()
+        if row is None or row.status != "ready" or translation.is_stale(row, meeting):
+            return Skip("translation_missing")
+        notes, words = row.notes_md or "", row.transcript or ""
+    name = meeting_name(meeting)
+    sender_name = titles.mail_line(owner.name or owner.email.split("@")[0], 60)
+    sender_first = sender_name.split()[0] if PLAIN_NAME.fullmatch(sender_name) else ""
+    zone = owner_time_zone(session, owner)
+    meta = f"{name} · {when_line(meeting, zone)}"
+    if meeting.recorded_seconds:
+        meta += f" · {max(1, round(meeting.recorded_seconds / 60))} min"
+    heading = (
+        f"{sender_first} shared meeting notes with you"
+        if sender_first
+        else "Meeting notes were shared with you"
+    )
+    doc = build_notes_document(
+        title=name,
+        platform_label=_platform_label(meeting),
+        started_at=meeting.created_at,
+        recorded_seconds=meeting.recorded_seconds,
+        notes=notes,
+        transcript=None,
+        generated_at=now,
+    )
+    blocks: list[Block] = [Meta(meta), Heading(heading)]
+    if share.message:
+        blocks.append(Quote(share.message))
+    blocks += abridged_blocks(doc.sections, _mail_section_names(language))
+    if language != "en":
+        # Spec section 2, row 11: no link to the original, so the original follows the translation.
+        original_doc = build_notes_document(
+            title=name,
+            platform_label=_platform_label(meeting),
+            started_at=meeting.created_at,
+            recorded_seconds=meeting.recorded_seconds,
+            notes=original,
+            transcript=None,
+            generated_at=now,
+        )
+        blocks += [
+            Divider(),
+            Label("Original notes (English)"),
+            *abridged_blocks(original_doc.sections),
+        ]
+    base = settings.public_base_url.rstrip("/")
+    member = session.get(User, recipient.user_id) if recipient.user_id else None
+    member_team = (
+        session.scalar(select(TeamMember.team_id).where(TeamMember.user_id == member.id))
+        if member is not None and member.status == "active"
+        else None
+    )
+    if member_team is not None and meeting.shared_team_id == member_team:
+        blocks.append(Button("Open notes", f"{base}/meetings/{meeting.id}"))
+    attachments = _share_attachments(share, meeting, notes, words, now)
+    if attachments:
+        has_transcript = share.include_transcript and bool(words.strip())
+        blocks.append(
+            Para(
+                "The full transcript is attached." if has_transcript else "The notes are attached.",
+                muted=True,
+            )
+        )
+    raw = tokens.issue(
+        session,
+        purpose="mail_optout",
+        email=to,
+        user_id=None,
+        now=now,
+        ttl=OPT_OUT_TTL,
+    )
+    footer = f"Sent by {sender_name} ({owner.email}) using Beyric Note Taker."
+    opt_out = (
+        "Don't want these? Stop mail from Beyric Note Taker",
+        f"{base}/unsubscribe?token={raw}",
+    )
+    subject = clean_line(f"{sender_name} shared meeting notes: {name}", 120)
+    return Message(
+        to=to,
+        subject=subject,
+        text=render_text(blocks, footer, opt_out),
+        html=render_html(subject, blocks, footer, opt_out),
+        attachments=attachments,
+        reply_to=owner.email,
     )
