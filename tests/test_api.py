@@ -269,7 +269,7 @@ PUBLIC = {
 def test_every_api_route_needs_login_except_the_listed_public_ones(anon, app):
     for method, path in api_routes(app):
         response = anon.call(method, concrete(path), csrf=False)
-        if (method, path) in PUBLIC:
+        if (method, re.sub(r"\{provider\}", "google", path)) in PUBLIC:
             assert response.status_code != 401, (method, path)
         else:
             error_of(response, 401, "not_authenticated")
