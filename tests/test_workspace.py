@@ -167,6 +167,49 @@ def test_a_failed_call_keeps_the_lists_and_retries_up_to_three_times(session, me
     assert all(r.input_tokens == 700 for r in runs)
 
 
+class AlwaysCutOff(FakeChat):
+    """A reply that never fits: every call ends with finish_reason `length` and half an answer."""
+
+    def _create(self, **kwargs):
+        response = super()._create(**kwargs)
+        response.choices[0].finish_reason = "length"
+        return response
+
+
+def test_a_cut_off_answer_is_never_stored_and_the_meeting_ends_failed_with_the_reason(
+    session, meeting
+):
+    half = '{"action_items": [], "review": [{"index": 0, "heard_as": "Metr'
+    for attempt, expected in ((1, "pending"), (2, "pending"), (3, "failed")):
+        client = AlwaysCutOff([half, half])  # the call retries once, larger, then gives up
+        status = workspace.run_extraction(
+            session, meeting, client=client, now=NOW + timedelta(hours=attempt)
+        )
+        assert status == expected
+        assert len(client.calls) == 2
+        assert client.calls[1]["max_completion_tokens"] > client.calls[0]["max_completion_tokens"]
+    session.refresh(meeting)
+    assert meeting.extraction_status == "failed"
+    assert [r.heard_as for r in rows(session, ReviewItem)] == [None, None]  # nothing from it kept
+    runs = session.scalars(select(AiRun)).all()
+    assert {r.error for r in runs} == {"ExtractionTruncated"} and len(runs) == 3
+    assert all(r.output_tokens == 180 for r in runs)  # both calls were paid for
+
+
+def test_a_cut_off_first_answer_is_recovered_by_the_larger_retry(session, meeting):
+    class CutOffOnce(FakeChat):
+        def _create(self, **kwargs):
+            response = super()._create(**kwargs)
+            if len(self.calls) == 1:
+                response.choices[0].finish_reason = "length"
+            return response
+
+    client = CutOffOnce(["{", GOOD])
+    assert workspace.run_extraction(session, meeting, client=client, now=NOW) == "done"
+    assert [r.heard_as for r in rows(session, ReviewItem)] == ["Metrika", None]
+    assert session.scalars(select(AiRun)).one().output_tokens == 180
+
+
 def test_an_api_failure_is_recorded_as_the_real_cause_not_the_wrapper(session, meeting):
     import httpx
     import openai

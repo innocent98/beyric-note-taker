@@ -8,8 +8,10 @@
     {"match": ["test batch"], "owner": "Amaka", "due_date": "2027-02-03"},
     {"match": ["venue"], "owner": "Amaka", "due_date": null},
     {"match": ["vat"], "owner": null, "due_date": null},
-    {"match": ["typo"], "owner": "Amaka", "due_date": "2027-02-01"}
+    {"match": ["typo"], "owner": "Amaka", "due_date": "2027-02-01"},
+    {"match": ["deposit"], "owner": "Amaka", "due_date": "2027-02-19"},
+    {"match": ["estimate"], "owner": "Tunde", "due_date": null}
   ],
   "review": [],
-  "forbidden_owners": []
+  "forbidden_owners": ["Daniel"]
 }

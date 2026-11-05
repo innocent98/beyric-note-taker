@@ -35,6 +35,11 @@
 [Tunde]: We haven't decided. It depends on whether the March date holds.
 [Adebayo]: Let's park that until we see how the integration goes.
 [Grace]: Fine.
+[Adebayo]: Two more quick ones. The venue deposit needs paying. Amaka, can you pay it by the nineteenth of February?
+[Amaka]: Yes, I'll pay the deposit by the nineteenth of February.
+[Tunde]: Daniel from the payment provider said he would confirm the new sandbox settings, but that's between him and them, not us.
+[Adebayo]: Understood, nothing for us there. And Tunde, the mobile app estimate: can you put that together in the coming weeks?
+[Tunde]: Sure, I'll do the mobile app estimate in the coming weeks, no firm date.
 [Adebayo]: Last thing from me. The name of the product on the login page still says Burek in one place. That's a typo, it should be Beyric.
 [Amaka]: I'll fix that today, it's a one-line change.
 [Adebayo]: Thanks. Anything else?

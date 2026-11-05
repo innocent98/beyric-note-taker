@@ -1,5 +1,7 @@
 # SOP: extraction review tool (the W2 gate on a real meeting)
 
+> Update 2026-11-05: the product's call now sizes its budget and retries on `length` itself (`docs/sop/2026-11-05-extraction-output-cap.md`), and this tool just calls it. The recommendations in "Finding" below that are done: 1 (size the budget), 4 (time limit grows with it), 6 (a failure is named). `--max-output-tokens` now defaults to the sized budget, not 2,000.
+
 ## What shipped
 (Update 2026-11-04, same day: the first real run, meeting 5, failed with a length cut-off. See "Finding: the full call ran out of output budget" below; the tool now explains a failure, retries once, has `--max-output-tokens`, `--timeout` and `--list`.)
 

@@ -558,12 +558,10 @@ class ReasoningChat(FakeChat):
 
 
 def test_the_first_call_uses_the_apps_own_cap_and_a_flag_can_change_it(session, user):
-    from app import extraction
-
     meeting = make_meeting(session, user)
     client = FakeChat([REPLY])
     review(["--meeting", str(meeting.id)], client)
-    assert client.calls[0]["max_completion_tokens"] == extraction.MAX_OUTPUT_TOKENS
+    assert client.calls[0]["max_completion_tokens"] == 4000  # sized to the bullets, as the app does
     client = FakeChat([REPLY])
     review(["--meeting", str(meeting.id), "--max-output-tokens", "5000"], client)
     assert client.calls[0]["max_completion_tokens"] == 5000
@@ -574,7 +572,7 @@ def test_a_reply_cut_off_by_the_cap_is_retried_once_with_a_larger_one(session, u
     client = ReasoningChat([("{}", "length"), REPLY])
     code, html, _ = review(["--meeting", str(meeting.id)], client)
     assert code == 0
-    assert [c["max_completion_tokens"] for c in client.calls] == [2000, 8000]
+    assert [c["max_completion_tokens"] for c in client.calls] == [4000, 16000]
     assert "Finish payment checkout" in html  # the second attempt's answer is on the page
     assert "length" in html  # and the first attempt's finish reason is still reported
     assert "retried" in html.lower()
@@ -605,8 +603,8 @@ def test_a_failure_after_the_retry_says_what_happened_and_keeps_the_transcript(s
     client = ReasoningChat([("{}", "length"), ("{}", "length")])
     code, html, err = review(["--meeting", str(meeting.id)], client)
     assert code == 1 and len(client.calls) == 2
-    assert "did not finish normally (length)" in html
-    for fact in ("2,000", "8,000", "14,000", "1,850"):  # caps, prompt tokens, reasoning tokens
+    assert "cut off by the output limit (length" in html
+    for fact in ("4,000", "16,000", "14,000", "1,850"):  # caps, prompt tokens, reasoning tokens
         assert fact in html
     assert f"{len(TRANSCRIPT)} characters" in html  # the transcript's length
     assert "hidden reasoning" in html.lower()
@@ -618,7 +616,7 @@ def test_a_failure_after_the_retry_says_what_happened_and_keeps_the_transcript(s
 def test_a_success_reports_the_cap_and_the_reasoning_tokens(session, user):
     meeting = make_meeting(session, user)
     _, html, _ = review(["--meeting", str(meeting.id)], ReasoningChat([REPLY]))
-    assert "output cap 2,000" in html
+    assert "output cap 4,000" in html
     assert "1,850 reasoning" in html
 
 

@@ -16,3 +16,19 @@ A made-up meeting with known facts and traps, for comparing notes models. All na
 | Typo | "Burek" on the login page should be "Beyric"; Amaka fixes it today |
 | Travel | Grace away next week; urgent items before Thursday |
 | "Please check" | Only genuinely unclear items; restating clear facts there is a minor fault |
+
+## Owners and dates (the extraction gate, spec section 3.1)
+
+The meeting is dated **Monday 2027-02-01** (`Europe/London`, as in `extraction/planted.json`, which
+scores this table). A name that is only mentioned is never an owner; a vague timing has no date.
+
+| Action item | Owner (as said) | Due phrase | Due date |
+|---|---|---|---|
+| Send the revised contract | Tunde | "by Friday" | 2027-02-05 |
+| Test both email providers with the domain | Amaka | "by Wednesday" | 2027-02-03 |
+| Book the launch venue | Amaka | none | none |
+| Check whether VAT applies to international customers | **none** (nobody took it) | none | none |
+| Fix "Burek" on the login page | Amaka | "today" | 2027-02-01 |
+| Pay the venue deposit | Amaka | "by the nineteenth of February" | 2027-02-19 |
+| Mobile app estimate | Tunde | "in the coming weeks" | **none** (vague) |
+| Daniel (payment provider) confirms sandbox settings | **Daniel is never an owner**: he was only mentioned | none | none |

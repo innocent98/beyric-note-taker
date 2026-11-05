@@ -53,7 +53,6 @@ from app.ai_versions import EXTRACT_PROMPT_VERSION  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.extraction import (  # noqa: E402
-    MAX_OUTPUT_TOKENS,
     ExtractionCall,
     ExtractionFailed,
     ModelAction,
@@ -72,11 +71,10 @@ from app.workspace import DEFAULT_TIMEZONE, _contains  # noqa: E402
 
 SEARCH_LIMIT = 50
 LIST_DEFAULT, LIST_MAX = 20, 200
-# The product's call has a 60 second limit and 2,000 output tokens. The tool keeps the token
-# default (so it shows what Tasks would meet) but waits longer, because a bigger budget lets a
-# reasoning model think for longer, and it retries once, bigger, when the answer was cut off.
+# The product's call sizes its output budget to the bullets and retries once, bigger, when the
+# answer is cut off (`app.extraction.extract`); the tool makes that same call, so it shows what
+# Tasks will do. It only waits longer, because a bigger budget lets a reasoning model think longer.
 DEFAULT_TIMEOUT = 180.0
-RETRY_FACTOR, RETRY_FLOOR, RETRY_CEILING = 4, 8000, 32000
 VERY_LONG_CHARS = 200_000
 LINE_FUZZY_RATIO = 0.85
 _LABEL = re.compile(r"^\[([^\]\n]{1,80})\]:[ \t]*(.*)$")
@@ -213,16 +211,15 @@ class Attempt:
 
 
 class _Spy:
-    """Stands in for the OpenAI client: sets the output budget and records what each call used,
+    """Stands in for the OpenAI client: records the output budget and what each call used,
     so the page can say why a call failed. Everything else is the app's own `extract`."""
 
-    def __init__(self, inner, cap: int):
-        self.inner, self.cap, self.attempts = inner, cap, []
+    def __init__(self, inner):
+        self.inner, self.attempts = inner, []
         self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
 
     def _create(self, **kwargs):
-        kwargs["max_completion_tokens"] = self.cap
-        attempt = Attempt(cap=self.cap)
+        attempt = Attempt(cap=kwargs["max_completion_tokens"])
         self.attempts.append(attempt)
         try:
             response = self.inner.chat.completions.create(**kwargs)
@@ -250,49 +247,31 @@ class Outcome:
     attempts: list[Attempt] = field(default_factory=list)
 
 
-def _next_cap(cap: int) -> int:
-    return min(max(cap * RETRY_FACTOR, RETRY_FLOOR), RETRY_CEILING)
-
-
-def _ask(data: MeetingData, client, model: str | None, cap: int, timeout: float) -> Outcome:
+def _ask(data: MeetingData, client, model: str | None, cap: int | None, timeout: float) -> Outcome:
     parsed = parse_notes(data.notes)
     outcome = Outcome(parsed=parsed)
-    spy = None
-    for attempt_number in (1, 2):
-        outcome.failure = None
-        try:
-            if spy is None:
-                inner = client or OpenAI(
-                    api_key=get_settings().openai_api_key, max_retries=0, timeout=timeout
-                )
-                spy = _Spy(inner, cap)
-            spy.cap = cap
-            call = extract(
-                parsed,
-                data.transcript,
-                data.day,
-                DEFAULT_TIMEZONE,
-                client=spy,
-                model=model,
-                full=True,
-            )
-            outcome.call = call
-            outcome.checked = check_extraction(call.result, parsed, data.transcript, data.day)
-            break
-        except ExtractionFailed as exc:  # its message is built by the app, no request text
-            outcome.failure = str(exc)
-            cut_off = spy.attempts and spy.attempts[-1].finish_reason == "length"
-            if attempt_number == 1 and cut_off and _next_cap(cap) > cap:
-                cap = _next_cap(cap)  # the answer did not fit: try once with more room
-                continue
-            break
-        except Exception as exc:  # class name only: the text of an error can hold secrets or paths
-            outcome.failure = f"extraction: {type(exc).__name__}"
-            break
-    if spy is not None:
-        outcome.attempts = spy.attempts
-        outcome.input_tokens = sum(a.prompt_tokens or 0 for a in spy.attempts) or None
-        outcome.output_tokens = sum(a.completion_tokens or 0 for a in spy.attempts) or None
+    inner = client or OpenAI(api_key=get_settings().openai_api_key, max_retries=0, timeout=timeout)
+    spy = _Spy(inner)
+    try:
+        call = extract(
+            parsed,
+            data.transcript,
+            data.day,
+            DEFAULT_TIMEZONE,
+            client=spy,
+            model=model,
+            full=True,
+            max_output_tokens=cap,
+        )
+        outcome.call = call
+        outcome.checked = check_extraction(call.result, parsed, data.transcript, data.day)
+    except ExtractionFailed as exc:  # its message is built by the app, no request text
+        outcome.failure = str(exc)
+    except Exception as exc:  # class name only: the text of an error can hold secrets or paths
+        outcome.failure = f"extraction: {type(exc).__name__}"
+    outcome.attempts = spy.attempts
+    outcome.input_tokens = sum(a.prompt_tokens or 0 for a in spy.attempts) or None
+    outcome.output_tokens = sum(a.completion_tokens or 0 for a in spy.attempts) or None
     return outcome
 
 
@@ -492,6 +471,7 @@ def _what_happened(outcome: Outcome) -> str:
     last = outcome.attempts[-1] if outcome.attempts else None
     if last is None or last.finish_reason != "length":
         return ""
+    ceiling = get_settings().extract_max_output_tokens
     reasoning = (
         f" (hidden reasoning used {last.reasoning_tokens:,} of them)"
         if last.reasoning_tokens is not None
@@ -501,7 +481,7 @@ def _what_happened(outcome: Outcome) -> str:
         f"The model used its whole output budget of {last.cap:,} tokens before it finished "
         f"answering{reasoning}. For a reasoning model that budget also pays for its hidden "
         f"reasoning, so a long meeting with many action items can run out. Run it again with "
-        f"a bigger budget, for example --max-output-tokens {min(last.cap * 2, RETRY_CEILING):,}."
+        f"a bigger budget, for example --max-output-tokens {min(last.cap * 2, ceiling):,}."
     )
 
 
@@ -823,8 +803,8 @@ def run(argv: list[str], *, client=None, out=None, err=None) -> int:
     parser.add_argument(
         "--max-output-tokens",
         type=int,
-        default=MAX_OUTPUT_TOKENS,
-        help=f"output budget of the first call (default {MAX_OUTPUT_TOKENS:,}, the app's own)",
+        default=None,
+        help="output budget of the first call (default: sized to the bullets, as the app does)",
     )
     parser.add_argument(
         "--timeout", type=float, default=DEFAULT_TIMEOUT, help="seconds the model call may take"
