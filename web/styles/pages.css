@@ -249,6 +249,10 @@
 .cal-band-tile { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex: none; border-radius: var(--radius-md); background: var(--teal-tint); color: var(--teal); }
 .cal-band-text { flex: 1 1 260px; }
 .cal-band-title { font-size: var(--text-md); font-weight: 600; }
+.cal-alert { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 16px; border: 1px solid var(--warning-line); background: var(--warning-wash); border-radius: var(--radius-md); }
+.cal-alert-text { flex: 1 1 280px; color: var(--warning-text); }
+.cal-alert-title { font-size: var(--text-md); font-weight: 600; }
+.cal-alert-sub { font-size: var(--text-sm); }
 .cal-band-sub { font-size: var(--text-sm); color: var(--text-2); }
 .cal-up-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; padding: 14px var(--space-5); border-bottom: 1px solid var(--border-soft); }
 .cal-up-head-left { display: flex; align-items: center; gap: 10px; }

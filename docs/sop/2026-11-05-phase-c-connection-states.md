@@ -22,6 +22,8 @@ Decision: the 30-minute clock needs the first failure's time, hence `calendar_co
 ## Involved
 `app/calendar_states.py` (new: `mark_needs_reconnect`, `mark_degraded`, `mark_healthy`, `on_sync_failure`, `revive_on_reconnect`, `expiry_warning`, `reason_for`); `app/gcal_sync.py` (`_record_error`, success path); `app/join_runner.py` (re-check); `app/calendar_connect.py` (revive, clear `error_since`); `app/calendar_source.py` + `app/gcal_client.py` (`RefreshTokenUnreadable`); `app/models.py`; `alembic/versions/0020_calendar_error_since.py` (down_revision `0018`: 0019 is W0.4, renumber when it merges). No API shape change, so `docs/openapi.json` and the FE types are unchanged.
 
+## Update: the banner and email were later built lead-designed; see `2026-11-05-phase-c-disconnect-banner-email.md`.
+
 ## Designer gaps (nothing invented; decided by Adebayo 2026-11-05 "build without them")
 - The "calendar disconnected" **banner** and its Reconnect action are not in `docs/ui/`. Not built. The Settings card already shows `needs_reconnect` with "Connect again".
 - The **disconnect email** is not drawn in `Emails.dc.html` (only "Could not join" is). **No email is sent**; the user hears through the bell only. The plan's `calendar_disconnected` template and `notify_email` test are therefore deferred.

@@ -31,8 +31,30 @@ export function CalendarBand({
   now?: Date;
 }) {
   if (state === null) return null;
-  if (state.state === "not_connected" || state.state === "needs_reconnect") return <ConnectBand />;
+  if (state.state === "needs_reconnect") return <DisconnectedBanner />;
+  if (state.state === "not_connected") return <ConnectBand />;
   return <Upcoming state={state} timeZone={timeZone} now={now} />;
+}
+
+// LEAD-DESIGNED, not in the designer's file (2026-11-05): the designer drew no "calendar
+// disconnected" banner. It copies the designer's amber "tasks need attention" banner on the Tasks
+// screen (same wash, line, title and secondary button), with the words the Settings card already
+// uses. It shows while the connection needs a reconnect and cannot be dismissed: the designer's
+// banner has no close. Reconnect leads to Settings, where the connect flow lives.
+function DisconnectedBanner() {
+  return (
+    <section className="cal-alert" role="status" aria-label="Calendar disconnected">
+      <div className="cal-alert-text">
+        <div className="cal-alert-title">Your calendar is disconnected</div>
+        <div className="cal-alert-sub">
+          The note taker will not join meetings from your calendar until you connect again.
+        </div>
+      </div>
+      <Button href="/settings" kind="secondary" size="md">
+        Reconnect
+      </Button>
+    </section>
+  );
 }
 
 function ConnectBand() {

@@ -1,0 +1,13 @@
+Subject: Your calendar is disconnected
+
+Your calendar is disconnected
+
+Google no longer lets Beyric read your calendar, so the note taker has stopped joining meetings from it.
+
+Connect again and it carries on with your upcoming meetings.
+
+Reconnect:
+https://notes.beyrictech.com/settings
+
+You received this because your Google Calendar is connected to Beyric Note Taker.
+Email preferences: https://notes.beyrictech.com/settings#email-preferences
