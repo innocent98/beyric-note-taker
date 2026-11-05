@@ -11,7 +11,7 @@
 | Proof | `docs/ui/parity/after/app-meetings-calendar-disconnected-{1440,768,390}.jpg` (Next page against the mock API, `--calendar needs_reconnect`). There is nothing to put beside it in the designer's file, so no side-by-side |
 
 ## Email (`calendar_disconnected`)
-Built from "Could not join" in `Emails.dc.html` (heading, paragraphs, one button, footer with Email preferences) in `app/mail_templates.py`. Subject and heading "Your calendar is disconnected"; body reuses the Settings wording; button "Reconnect" to `/settings`. Render capture: `docs/ui/parity/after/email-calendar-disconnected.{html,txt}`.
+Built from "Could not join" in `Emails.dc.html` (heading, paragraphs, one button, footer with Email preferences) in `app/mail_templates.py`. Subject and heading "Your calendar is disconnected"; body says Beyric can no longer read the calendar; button "Reconnect" to `/settings`. Render capture: `docs/ui/parity/after/email-calendar-disconnected.{html,txt}`.
 - **Once per disconnect:** queued only by the call that writes the bell entry (`cal_disc:{connection}:{connected_at}`), through `alerts.notify_user(email_template=...)`. A reconnect and a later disconnect is a second mail.
 - **Only for `needs_reconnect`**, never `degraded`.
 - Not queued when `notify_email` is off, the address is suppressed (bounce, complaint, unsubscribe), the user is not active, or no mail provider is set. It goes through the outbox and so the global hourly mail budget.
@@ -19,6 +19,9 @@ Built from "Could not join" in `Emails.dc.html` (heading, paragraphs, one button
 
 ## Verification
 `tests/test_calendar_states.py` (17): one mail per disconnect and none for repeats, a second mail after reconnect, none for degraded, none with `notify_email` off or a suppressed address, render has Reconnect and the preferences link. `tests/calendar-upcoming.test.tsx`: banner words, Reconnect to `/settings`, no close button, replaces the band. Web: lint, typecheck, vitest 559 passed. Not tested live: a real send.
+
+## Review (one Opus round, foreground)
+No High or Medium. Fixed the Lows: the mail names no cause (the token may be unreadable on our side), and the banner text uses `--warning-text` like the existing notice. Left: a mail held over the hourly budget is scrubbed after about an hour (the bell and banner still show).
 
 ## Operate / roll back
 No migration. Revert the PR to remove both.

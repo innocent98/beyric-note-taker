@@ -183,7 +183,7 @@ def _calendar_disconnected(payload: dict, to: str, settings: Settings) -> Messag
     blocks: list[Block] = [
         Heading(subject),
         Para(
-            "Google no longer lets Beyric read your calendar, so the note taker has stopped "
+            "Beyric can no longer read your calendar, so the note taker has stopped "
             "joining meetings from it."
         ),
         Para("Connect again and it carries on with your upcoming meetings."),
