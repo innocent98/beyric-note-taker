@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app import auth
 from app.db import get_session
-from app.models import AppState, Decision, Meeting, ReviewItem, Template, VocabularyTerm
+from app.models import AiRun, AppState, Decision, Meeting, ReviewItem, Template, VocabularyTerm
 from app.pipeline import REASON_CANCELLED, REASON_JOIN_REFUSED, REASON_NO_SPEECH
 from app.services import RETRY_BLOCK_TEXT
 from app.vexa import VexaError
@@ -1014,6 +1014,8 @@ def test_regenerate_rewrites_the_notes_without_transcribing(api, template, sessi
     assert len(fake_openai.chat_calls) == 1 and fake_openai.transcription_calls == 0
     session.refresh(meeting)
     assert meeting.template_id == other.id and "Rewritten" in meeting.notes
+    runs = session.scalars(select(AiRun).where(AiRun.meeting_id == meeting.id)).all()
+    assert [(r.kind, r.user_id) for r in runs] == [("notes", meeting.owner_user_id)]
 
 
 def test_regenerate_queues_the_new_notes_for_extraction(api, template, session, fake_openai):

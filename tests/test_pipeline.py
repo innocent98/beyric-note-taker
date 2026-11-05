@@ -8,7 +8,7 @@ from sqlalchemy.exc import OperationalError
 
 from app import audio, pipeline
 from app.config import Settings
-from app.models import AppState, Meeting, Template, VocabularyTerm
+from app.models import AiRun, AppState, Meeting, Template, VocabularyTerm
 from app.notes import HEADINGS
 from app.vexa import VexaError, VexaMeeting
 from tests.test_web import owner  # noqa: F401  (fixture used by name)
@@ -105,7 +105,10 @@ class FakeOpenAI:
                 raise self.fail_notes
             text = self.notes
         message = SimpleNamespace(content=text)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message, finish_reason="stop")])
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=message, finish_reason="stop")],
+            usage=SimpleNamespace(prompt_tokens=100, completion_tokens=40),
+        )
 
 
 @pytest.fixture(autouse=True)
@@ -159,6 +162,18 @@ def test_completed_meeting_reaches_ready(session, meeting, env):
     assert meeting.notes == NOTES + "\n"
     assert meeting.failure_reason is None
     assert (env / "a" / str(meeting.id) / "source.webm").exists()
+
+
+def test_the_labelling_and_notes_calls_are_in_the_cost_ledger(session, meeting, env):
+    run(session, meeting, FakeVexa(DONE))
+    rows = session.execute(
+        select(AiRun.kind, AiRun.model, AiRun.input_tokens, AiRun.output_tokens, AiRun.user_id)
+        .where(AiRun.meeting_id == meeting.id)
+        .order_by(AiRun.id)
+    ).all()
+    assert [r[0] for r in rows] == ["label", "notes"]
+    assert all(r[1] == "gpt-6-luna" and r[4] == meeting.owner_user_id for r in rows)
+    assert rows[1][2:4] == (100, 40)
 
 
 def test_a_ready_meeting_is_queued_for_extraction_in_the_same_commit(session, meeting, env):

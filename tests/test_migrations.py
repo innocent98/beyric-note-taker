@@ -849,3 +849,19 @@ def test_0021_makes_a_notification_go_with_its_meeting_and_downgrades(scratch_ur
     command.upgrade(cfg, "head")
     assert _notification_fk_rule(engine) == "c"
     engine.dispose()
+
+
+def test_0023_lets_the_ledger_hold_notes_and_label_calls_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0023")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        for kind in ("extract", "notes", "label"):
+            conn.execute(
+                text("insert into ai_runs (kind, model) values (:k, 'gpt-6-luna')"), {"k": kind}
+            )
+    command.downgrade(cfg, "0021")
+    assert _rows(engine, "select kind from ai_runs order by id") == [("extract",)]
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('notes', 'm')"))
+    engine.dispose()

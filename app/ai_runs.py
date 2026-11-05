@@ -24,9 +24,15 @@ __all__ = [
     "NOTES_PROMPT_VERSION",
     "TRANSLATE_PROMPT_VERSION",
     "record",
+    "record_usage",
 ]
 
-_VERSION_OF_KIND = {"extract": EXTRACT_PROMPT_VERSION, "translate": TRANSLATE_PROMPT_VERSION}
+_VERSION_OF_KIND = {
+    "extract": EXTRACT_PROMPT_VERSION,
+    "translate": TRANSLATE_PROMPT_VERSION,
+    "notes": NOTES_PROMPT_VERSION,
+    "label": LABEL_PROMPT_VERSION,
+}
 
 
 def record(
@@ -60,3 +66,33 @@ def record(
     session.add(run)
     session.flush()
     return run
+
+
+def record_usage(
+    session: Session,
+    meeting_id: int | None,
+    kind: str,
+    model: str,
+    usage: list[tuple[int | None, int | None]],
+    *,
+    user_id: int | None = None,
+) -> AiRun | None:
+    """Add one ledger row for the calls collected in `usage` (one meeting's notes, or every section
+    of its speaker labelling), summed. Nothing when no call was made. A count the reply left out
+    stays out of the sum; the row is null for it only when every call left it out."""
+    if not usage:
+        return None
+
+    def total(index: int) -> int | None:
+        counts = [pair[index] for pair in usage if pair[index] is not None]
+        return sum(counts) if counts else None
+
+    return record(
+        session,
+        meeting_id,
+        kind,
+        model,
+        input_tokens=total(0),
+        output_tokens=total(1),
+        user_id=user_id,
+    )
