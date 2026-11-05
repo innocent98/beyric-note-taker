@@ -858,3 +858,49 @@ def test_a_link_can_be_read_by_its_holder_before_signing_in(app, api, session, o
         400,
         "invite_invalid",
     )
+
+
+def test_an_unconfirmed_account_needs_a_place_so_a_full_pilot_refuses_its_invitation(
+    api, session, owner
+):
+    open_pilot(session, max_accounts=2)
+    make_user(session, "x@example.test")  # owner + x = full
+    make_user(session, NEW, email_verified_at=None)  # signed up anyway: holds no place yet
+    error_of(invite(api, NEW), 409, "pilot_full")
+
+
+def test_an_alias_cannot_steal_another_members_name(app, api, session, owner, member, admin):
+    member.name, admin.name = "Daniel Okoro", "Amara Nwosu"
+    session.commit()
+    path = f"/api/team/members/{admin.id}"
+    me = as_user(app, MEMBER_EMAIL)
+    error_of(
+        me.call("PATCH", f"/api/team/members/{member.id}", {"aliases": ["Amara"]}),
+        422,
+        "alias_taken",
+    )
+    for stolen in ("Daniel", "okoro", "Daniel Okoro"):
+        error_of(api.call("PATCH", path, {"aliases": [stolen]}), 422, "alias_taken")
+    assert api.call("PATCH", path, {"aliases": ["Mara"]}).status_code == 200
+
+
+def test_two_managers_inviting_the_last_place_at_once_cannot_both_take_it(
+    app, api, session, owner, admin
+):
+    import threading
+
+    open_pilot(session, max_accounts=4)
+    make_user(session, "x@example.test")  # owner, admin and x: one place left
+    results = {}
+
+    def go(email, who):
+        results[email] = invite(who, email).status_code
+
+    boss = as_user(app, ADMIN_EMAIL)
+    threads = [
+        threading.Thread(target=go, args=("a@example.test", api)),
+        threading.Thread(target=go, args=("b@example.test", boss)),
+    ]
+    [t.start() for t in threads]
+    [t.join() for t in threads]
+    assert sorted(results.values()) == [200, 409]

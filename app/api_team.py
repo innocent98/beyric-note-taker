@@ -9,7 +9,8 @@ that is not on the caller's own team is 404, never 403.
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request, Response
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app import auth, signup, team_admin, team_invites, titles
@@ -221,14 +222,18 @@ def invite_people(
     pilot's places (409 `pilot_full` when there is none) and bypasses a closed or full pilot for
     that address. Answers per address: `sent`, `resent` (already invited: a new link went out),
     `already_member`, `already_invited` (one went out a minute ago), `invalid_email`. The answer
-    never says whether an address has an account. 409 `invite_limit`: 10 open invitations or 20 a
-    day per team."""
+    is the same for an address with an account and one without (except `pilot_full`, which only
+    an address needing a place can get). 409 `invite_limit`: 10 open invitations or 20 a day per
+    team."""
     me = team_admin.my_membership(session, user)
     team_admin.require_manager(me)
     if body.role == "admin" and me.role != "owner":
         raise team_admin.forbidden("Only the owner of the team can invite an admin.")
     settings = request.app.state.settings
     now = _now()
+    # The same lock sign-up, confirmation and the admin take around "count the places, take one":
+    # two managers inviting at once cannot both take the last place.
+    session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": signup.SIGNUP_LOCK})
     results: list[InviteResult] = []
     seen: set[str] = set()
     try:
@@ -265,6 +270,9 @@ def invite_people(
     except Refused:
         session.rollback()
         raise
+    except IntegrityError:  # the same address invited twice at once
+        session.rollback()
+        raise Refused(409, "invite_conflict", "That was just invited. Try again.") from None
     session.commit()
     return InvitesCreated(results=results)
 
@@ -292,6 +300,8 @@ def resend_invite(
     team_admin.require_manager(me)
     invite = team_admin.invite_of_my_team(session, me, invite_id)
     now = _now()
+    session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": signup.SIGNUP_LOCK})
+    session.refresh(invite)
     if invite.last_sent_at and now < invite.last_sent_at + team_invites.RESEND_COOLDOWN:
         raise Refused(429, "too_soon", "That invitation was sent a moment ago. Try again shortly.")
     if (

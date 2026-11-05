@@ -153,6 +153,10 @@ def leave(session: Session, user: User, now: datetime) -> Team:
         return ensure_team(session, user)
     old_team_id = member.team_id
     _lock_teams(session, old_team_id)
+    session.refresh(member)  # re-read under the lock; gone means a removal beat us to it
+    member = membership(session, user.id)
+    if member is None or member.team_id != old_team_id:
+        return ensure_team(session, user)
     fresh = Team(owner_user_id=user.id)
     session.add(fresh)
     session.flush()

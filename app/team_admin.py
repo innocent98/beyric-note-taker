@@ -126,8 +126,33 @@ def update_member(
     if role is not None and role != target.role:
         target.role = role
     if aliases is not None:
-        target.aliases = clean_aliases(aliases)
+        cleaned = clean_aliases(aliases)
+        _refuse_taken_aliases(session, target, cleaned)
+        target.aliases = cleaned
     session.flush()
+
+
+def _refuse_taken_aliases(session: Session, target: TeamMember, aliases: list[str]) -> None:
+    """422 `alias_taken` when an alias is another active member's name (whole or one word of it),
+    email name or alias: it would steal the tasks said to be theirs."""
+    others = [m for m in tasks.members_of(session, target.team_id) if m.user_id != target.user_id]
+    for alias in aliases:
+        wanted = normalise(alias)
+        words = {w for w in wanted.split() if len(w) >= tasks.MIN_TOKEN_CHARS}
+        for other in others:
+            names = [
+                normalise(other.name or ""),
+                normalise(other.email.split("@")[0]),
+                *(normalise(a) for a in other.aliases),
+            ]
+            held = {w for n in names for w in n.split()}
+            if wanted in names or (words and words <= held):
+                raise Refused(
+                    422,
+                    "alias_taken",
+                    f'"{alias}" already names {other.display_name} in meetings. Use something '
+                    "that is only this person.",
+                )
 
 
 def remove_member(session: Session, me: TeamMember, target: TeamMember, now: datetime) -> None:

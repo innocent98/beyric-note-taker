@@ -8581,7 +8581,7 @@
     },
     "/api/team/invites": {
       "post": {
-        "description": "Invite up to 10 people by email (owner or admin; only the owner may invite an admin). One\nmail each, a link that works once for 7 days. A new person's invitation reserves one of the\npilot's places (409 `pilot_full` when there is none) and bypasses a closed or full pilot for\nthat address. Answers per address: `sent`, `resent` (already invited: a new link went out),\n`already_member`, `already_invited` (one went out a minute ago), `invalid_email`. The answer\nnever says whether an address has an account. 409 `invite_limit`: 10 open invitations or 20 a\nday per team.",
+        "description": "Invite up to 10 people by email (owner or admin; only the owner may invite an admin). One\nmail each, a link that works once for 7 days. A new person's invitation reserves one of the\npilot's places (409 `pilot_full` when there is none) and bypasses a closed or full pilot for\nthat address. Answers per address: `sent`, `resent` (already invited: a new link went out),\n`already_member`, `already_invited` (one went out a minute ago), `invalid_email`. The answer\nis the same for an address with an account and one without (except `pilot_full`, which only\nan address needing a place can get). 409 `invite_limit`: 10 open invitations or 20 a day per\nteam.",
         "operationId": "invite_people",
         "requestBody": {
           "content": {

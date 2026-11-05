@@ -49,3 +49,15 @@ Spec sections 2 (rows 1, 2, 4, 5, 19), 4, 6.1, 8.1 to 8.4, decisions D1 to D3. W
 - A member cannot be promoted to owner from the app (pilot admin script only, by spec).
 - No "pending" invitations list for the invitee inside the app: they get a mail and a link only.
 - Opus findings left open: see below.
+
+## Opus review (2026-11-05, one pass, before the PR)
+No Critical or High. Fixed in this PR:
+| # | Finding | Fix |
+|---|---|---|
+| M1 | Inviting an **unconfirmed** account skipped the place check, so a full pilot could reach 11 | `needs_place` uses the same "already counted" test as `reserving_count`; test added |
+| M2 | Invite and resend checked for room outside the sign-up advisory lock: two managers could both take the last place | both take `signup.SIGNUP_LOCK` first; a two-thread test proves one wins |
+| M3 | A member could give themselves another member's name or first name as an alias and receive their tasks | `alias_taken` (422) when an alias is, or is made of words of, another active member's name, email name or alias |
+| L5 | Reviving an expired invite skipped the 10-open and 20-a-day caps | caps checked on that branch too |
+| L6 | Races gave a 500 | `teams.leave` re-reads under the team lock; concurrent identical invites answer 409 `invite_conflict` |
+| L4 | Docstrings said the answer never reveals whether an address has an account | reworded: only `pilot_full` can tell, and only to a team manager |
+Left open (Low, accepted): L7 an owner who unshares a meeting while it is still processing gets it re-shared at its first notes if the team default is on (the default applies to owners' and admins' meetings only; the UI says so); L8 the preview token is in a GET query string, so it reaches access logs (the token only works for its own confirmed address; a POST could replace it later); the accept-vs-owner-joins-elsewhere deadlock is unlikely at pilot size and would surface as a retryable 500. Test-naming gap: `test_an_unconfirmed_account_from_a_link_is_not_swept_away_with_its_place` does not run the sweep (the invitation itself stays live, so the place is held).

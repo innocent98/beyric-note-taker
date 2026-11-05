@@ -982,4 +982,9 @@ def test_0025_lets_the_ledger_hold_transcription_with_audio_seconds_and_downgrad
 def test_0025_follows_0024():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0025").down_revision == "0024"
-    assert script.get_heads() == ["0025"]
+
+
+def test_0026_follows_0025_and_is_the_only_head():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0026").down_revision == "0025"
+    assert script.get_heads() == ["0026"]

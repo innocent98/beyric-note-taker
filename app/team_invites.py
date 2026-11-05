@@ -17,7 +17,9 @@ Three kinds of person are invited, and the same link serves all three (the page 
 * **An address nobody opens** costs a place until the link expires or is revoked: at most
   `MAX_PENDING` live invitations per team and `MAX_PER_DAY` created per team per day.
 
-An invitation never says whether an address has an account: the answers are the same for both.
+An invitation's answer is the same for an address with an account and one without, except that
+`pilot_full` is only ever raised for one that needs a place (known, and only shown to a team
+manager).
 Nothing here commits: the caller's transaction decides.
 """
 
@@ -77,13 +79,11 @@ def live_for_email(session: Session, email: str, now: datetime) -> TeamInvite | 
     ).first()
 
 
-def reserving_count(session: Session, now: datetime) -> int:
-    """How many of the pilot's places live invitations hold: distinct addresses with a live
-    invitation that are not already counted another way (a confirmed account, an account made
-    from a waiting-list invitation, a live waiting-list invitation). Added to `slots_taken`, so
-    it needs no counter that could drift."""
-    counted_account = exists().where(
-        User.email == TeamInvite.email,
+def _counted_account(email_column):
+    """SQL: an account with this address that already holds a place of the pilot (not deleted,
+    and an admin, or confirmed, or made from a waiting-list invitation)."""
+    return exists().where(
+        User.email == email_column,
         User.status != "deleted",
         or_(
             User.is_admin.is_(True),
@@ -91,6 +91,13 @@ def reserving_count(session: Session, now: datetime) -> int:
             User.email.in_(select(WaitlistEntry.email).where(WaitlistEntry.status == "joined")),
         ),
     )
+
+
+def reserving_count(session: Session, now: datetime) -> int:
+    """How many of the pilot's places live invitations hold: distinct addresses with a live
+    invitation that are not already counted another way (a confirmed account, an account made
+    from a waiting-list invitation, a live waiting-list invitation). Added to `slots_taken`, so
+    it needs no counter that could drift."""
     waitlist_live = exists().where(
         AuthToken.purpose == "waitlist_invite",
         AuthToken.email == TeamInvite.email,
@@ -99,15 +106,15 @@ def reserving_count(session: Session, now: datetime) -> int:
     )
     return session.scalar(
         select(func.count(func.distinct(TeamInvite.email))).where(
-            *live(now), ~counted_account, ~waitlist_live
+            *live(now), ~_counted_account(TeamInvite.email), ~waitlist_live
         )
     )
 
 
 def needs_place(session: Session, email: str) -> bool:
-    """Whether inviting this address would take a place of the pilot: it has no account yet."""
-    found = session.scalars(select(User.id).where(User.email == email, User.status != "deleted"))
-    return found.first() is None
+    """Whether inviting this address would take a place of the pilot: no account of theirs holds
+    one yet (an unconfirmed account holds none, so it counts as needing one)."""
+    return not session.scalar(select(_counted_account(email)))
 
 
 # ---- creating, resending, revoking ----
@@ -187,28 +194,14 @@ def create(
             return InviteResult(email, "already_invited", existing)
         if is_live(existing, now):
             existing.role, existing.name = role, _clean_name(name) or existing.name
-        else:  # an expired one is reused, and may hold a place again: check below
+        else:  # an expired one is reused: it counts as a new invitation again
+            _check_caps(session, team_id, now)
             existing.role, existing.name = role, _clean_name(name)
             if needs_place(session, email) and not has_room:
                 raise _full()
         send(session, settings, existing, inviter, now)
         return InviteResult(email, "resent", existing)
-    pending = session.scalar(
-        select(func.count())
-        .select_from(TeamInvite)
-        .where(TeamInvite.team_id == team_id, *live(now))
-    )
-    created = session.scalar(
-        select(func.count())
-        .select_from(TeamInvite)
-        .where(TeamInvite.team_id == team_id, TeamInvite.created_at > now - timedelta(days=1))
-    )
-    if pending >= MAX_PENDING or created >= MAX_PER_DAY:
-        raise Refused(
-            409,
-            "invite_limit",
-            "You have reached the limit for invitations. Revoke one, or try again tomorrow.",
-        )
+    _check_caps(session, team_id, now)
     if needs_place(session, email) and not has_room:
         raise _full()
     invite = TeamInvite(
@@ -225,6 +218,25 @@ def create(
     send(session, settings, invite, inviter, now)
     session.flush()
     return InviteResult(email, "sent", invite)
+
+
+def _check_caps(session: Session, team_id: int, now: datetime) -> None:
+    pending = session.scalar(
+        select(func.count())
+        .select_from(TeamInvite)
+        .where(TeamInvite.team_id == team_id, *live(now))
+    )
+    created = session.scalar(
+        select(func.count())
+        .select_from(TeamInvite)
+        .where(TeamInvite.team_id == team_id, TeamInvite.created_at > now - timedelta(days=1))
+    )
+    if pending >= MAX_PENDING or created >= MAX_PER_DAY:
+        raise Refused(
+            409,
+            "invite_limit",
+            "You have reached the limit for invitations. Revoke one, or try again tomorrow.",
+        )
 
 
 def _full() -> Refused:

@@ -1256,8 +1256,9 @@ export interface paths {
          *     pilot's places (409 `pilot_full` when there is none) and bypasses a closed or full pilot for
          *     that address. Answers per address: `sent`, `resent` (already invited: a new link went out),
          *     `already_member`, `already_invited` (one went out a minute ago), `invalid_email`. The answer
-         *     never says whether an address has an account. 409 `invite_limit`: 10 open invitations or 20 a
-         *     day per team.
+         *     is the same for an address with an account and one without (except `pilot_full`, which only
+         *     an address needing a place can get). 409 `invite_limit`: 10 open invitations or 20 a day per
+         *     team.
          */
         post: operations["invite_people"];
         delete?: never;
