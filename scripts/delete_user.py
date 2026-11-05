@@ -19,7 +19,7 @@ from sqlalchemy import func, select
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import admin, deletion, signup  # noqa: E402
+from app import admin, deletion, signup, teams  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.models import Meeting, User  # noqa: E402
 from app.vexa import VexaClient, VexaError  # noqa: E402
@@ -47,6 +47,13 @@ def run(argv: list[str]) -> int:
             if others == 0:
                 print("Refusing: this is the last admin account.", file=sys.stderr)
                 return 1
+        if teams.owns_team_with_others(session, user.id):
+            print(
+                "Refusing: this account owns a team that still has other members. Hand the team "
+                "over first: python scripts/transfer_team_owner.py <team id> <new owner email>.",
+                file=sys.stderr,
+            )
+            return 1
         meetings = session.scalar(
             select(func.count()).select_from(Meeting).where(Meeting.owner_user_id == user.id)
         )

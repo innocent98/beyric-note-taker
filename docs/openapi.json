@@ -1,6 +1,21 @@
 {
   "components": {
     "schemas": {
+      "AcceptInviteIn": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "maxLength": 2000,
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "AcceptInviteIn",
+        "type": "object"
+      },
       "Accepted": {
         "description": "The one answer sign-up, resend and forgot-password give, whatever the address.",
         "properties": {
@@ -936,6 +951,176 @@
         "title": "FieldError",
         "type": "object"
       },
+      "InvitePreview": {
+        "description": "What an invitation link says, for the page that opens it (public: the token is the key).",
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "has_account": {
+            "title": "Has Account",
+            "type": "boolean"
+          },
+          "inviter_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inviter Name"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "team_name": {
+            "title": "Team Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "role",
+          "team_name",
+          "inviter_name",
+          "has_account",
+          "expires_at"
+        ],
+        "title": "InvitePreview",
+        "type": "object"
+      },
+      "InviteResult": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "invite": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TeamInviteOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "sent",
+              "resent",
+              "already_member",
+              "already_invited",
+              "invalid_email"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "status",
+          "invite"
+        ],
+        "title": "InviteResult",
+        "type": "object"
+      },
+      "Invitee": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "Invitee",
+        "type": "object"
+      },
+      "InvitesCreated": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/InviteResult"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "title": "InvitesCreated",
+        "type": "object"
+      },
+      "InvitesIn": {
+        "additionalProperties": false,
+        "properties": {
+          "invitees": {
+            "items": {
+              "$ref": "#/components/schemas/Invitee"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Invitees",
+            "type": "array"
+          },
+          "role": {
+            "default": "member",
+            "enum": [
+              "admin",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "invitees"
+        ],
+        "title": "InvitesIn",
+        "type": "object"
+      },
       "LanguagePreferencesIn": {
         "additionalProperties": false,
         "properties": {
@@ -1011,6 +1196,10 @@
           },
           "can_retry": {
             "title": "Can Retry",
+            "type": "boolean"
+          },
+          "can_share": {
+            "title": "Can Share",
             "type": "boolean"
           },
           "created_at": {
@@ -1170,6 +1359,21 @@
             "title": "Review Open Count",
             "type": "integer"
           },
+          "shared_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shared By"
+          },
+          "shared_with_team": {
+            "title": "Shared With Team",
+            "type": "boolean"
+          },
           "speakers_incomplete": {
             "title": "Speakers Incomplete",
             "type": "boolean"
@@ -1278,6 +1482,9 @@
           "can_retry",
           "can_regenerate",
           "can_delete",
+          "shared_with_team",
+          "can_share",
+          "shared_by",
           "join_attempts",
           "max_join_attempts",
           "bot_left_early",
@@ -2443,6 +2650,303 @@
           "email_assignees"
         ],
         "title": "TasksSettingsOut",
+        "type": "object"
+      },
+      "TeamInviteOut": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "invited_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invited By"
+          },
+          "last_sent_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sent At"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "enum": [
+              "admin",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "expired"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "role",
+          "status",
+          "invited_by",
+          "last_sent_at",
+          "expires_at"
+        ],
+        "title": "TeamInviteOut",
+        "type": "object"
+      },
+      "TeamMemberOut": {
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "can_change_role": {
+            "title": "Can Change Role",
+            "type": "boolean"
+          },
+          "can_edit_aliases": {
+            "title": "Can Edit Aliases",
+            "type": "boolean"
+          },
+          "can_remove": {
+            "title": "Can Remove",
+            "type": "boolean"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "is_you": {
+            "title": "Is You",
+            "type": "boolean"
+          },
+          "joined_at": {
+            "format": "date-time",
+            "title": "Joined At",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "open_tasks": {
+            "title": "Open Tasks",
+            "type": "integer"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "user_id": {
+            "title": "User Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "email",
+          "role",
+          "is_you",
+          "aliases",
+          "open_tasks",
+          "joined_at",
+          "can_change_role",
+          "can_edit_aliases",
+          "can_remove"
+        ],
+        "title": "TeamMemberOut",
+        "type": "object"
+      },
+      "TeamMemberPatch": {
+        "additionalProperties": false,
+        "description": "Change a role (owner only) and/or the aliases (an owner or admin, or the person themselves).\nAliases replace the whole list.",
+        "properties": {
+          "aliases": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aliases"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "enum": [
+                  "admin",
+                  "member"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          }
+        },
+        "title": "TeamMemberPatch",
+        "type": "object"
+      },
+      "TeamMembers": {
+        "properties": {
+          "invites": {
+            "items": {
+              "$ref": "#/components/schemas/TeamInviteOut"
+            },
+            "title": "Invites",
+            "type": "array"
+          },
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberOut"
+            },
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "members",
+          "invites"
+        ],
+        "title": "TeamMembers",
+        "type": "object"
+      },
+      "TeamOut": {
+        "properties": {
+          "can_change_roles": {
+            "title": "Can Change Roles",
+            "type": "boolean"
+          },
+          "can_manage": {
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "member_count": {
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "my_role": {
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "title": "My Role",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pending_invites": {
+            "title": "Pending Invites",
+            "type": "integer"
+          },
+          "share_new_meetings": {
+            "title": "Share New Meetings",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "share_new_meetings",
+          "my_role",
+          "member_count",
+          "pending_invites",
+          "can_manage",
+          "can_change_roles"
+        ],
+        "title": "TeamOut",
+        "type": "object"
+      },
+      "TeamPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "share_new_meetings": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share New Meetings"
+          }
+        },
+        "title": "TeamPatch",
         "type": "object"
       },
       "TemplateIn": {
@@ -5505,6 +6009,150 @@
         ]
       }
     },
+    "/api/meetings/{meeting_id}/share": {
+      "delete": {
+        "description": "Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone\nelse. Doing it twice is fine.",
+        "operationId": "unshare_meeting",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such meeting (or not the caller's)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Unshare Meeting",
+        "tags": [
+          "meetings"
+        ]
+      },
+      "post": {
+        "description": "Share the meeting with the caller's team (the \"Share with team\" switch): teammates may read\nits notes, transcript and tasks, never change it. Only the one who recorded it (a teammate or\nanyone else gets 404). Doing it twice is fine. The team's default (`share_new_meetings`) is\nread once, when the notes are first written; this is how a person shares one by hand.",
+        "operationId": "share_meeting",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such meeting (or not the caller's)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Share Meeting",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
     "/api/meetings/{meeting_id}/tasks": {
       "get": {
         "description": "A meeting's action items as tasks, for its page (\"8 tasks created, assigned to 3 people\").\nAnyone who can read the meeting may ask.",
@@ -7816,6 +8464,713 @@
         "summary": "Patch Task",
         "tags": [
           "tasks"
+        ]
+      }
+    },
+    "/api/team": {
+      "get": {
+        "description": "The caller's team: its name, the sharing default, the caller's role and what that role may\ndo. Every account has one (a team of one until it joins another).",
+        "operationId": "read_team",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Team",
+        "tags": [
+          "team"
+        ]
+      },
+      "patch": {
+        "description": "Rename the team and/or switch \"Share new meetings\" (owner or admin). The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`.",
+        "operationId": "update_team",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Update Team",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/invites": {
+      "post": {
+        "description": "Invite up to 10 people by email (owner or admin; only the owner may invite an admin). One\nmail each, a link that works once for 7 days. A new person's invitation reserves one of the\npilot's places (409 `pilot_full` when there is none) and bypasses a closed or full pilot for\nthat address. Answers per address: `sent`, `resent` (already invited: a new link went out),\n`already_member`, `already_invited` (one went out a minute ago), `invalid_email`. The answer\nnever says whether an address has an account. 409 `invite_limit`: 10 open invitations or 20 a\nday per team.",
+        "operationId": "invite_people",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitesCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`pilot_full`, `invite_limit`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Invite People",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/invites/accept": {
+      "post": {
+        "description": "Join the team of an invitation link, signed in with the account the invitation was sent to\n(the same answer for a wrong, used, expired, revoked or someone else's link). Your team of one\nis dissolved: your tasks move to the team you join; your meetings stay yours and private. 409\n`already_on_team` when you are on a team with other people: leave it first. A new person does\nnot call this: signing up with the link joins them when their email is confirmed.",
+        "operationId": "accept_invite",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptInviteIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`invite_invalid`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`already_on_team`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Accept Invite",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/invites/preview": {
+      "get": {
+        "description": "What an invitation link is for, so the page can say \"Dan invited you to join Product team\"\nand send the visitor to sign in (`has_account`) or sign up with the link. Public: the token in\nthe query is the credential, and it reveals nothing to anyone who does not hold it. 400\n`invite_invalid` for a wrong, used, expired or revoked link: one answer for all of them.",
+        "operationId": "preview_invite",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitePreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`invite_invalid`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Preview Invite",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/invites/{invite_id}": {
+      "delete": {
+        "description": "Cancel an invitation: its link stops working and its place is free again.",
+        "operationId": "revoke_invite",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_id",
+            "required": true,
+            "schema": {
+              "title": "Invite Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Revoke Invite",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/invites/{invite_id}/resend": {
+      "post": {
+        "description": "Send an open (or expired) invitation again: a new link, the old one stops working, 7 more\ndays. 429 `too_soon` within a minute of the last mail; 409 `pilot_full` for an expired\ninvitation to a new person when the pilot has filled up meanwhile.",
+        "operationId": "resend_invite",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "invite_id",
+            "required": true,
+            "schema": {
+              "title": "Invite Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamInviteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Resend Invite",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/members": {
+      "get": {
+        "description": "The people on the team, and (for everyone) the invitations still open. Each member carries\nwhat the caller may do to them, so the screen shows only buttons that work.",
+        "operationId": "list_members",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMembers"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Members",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/members/{user_id}": {
+      "delete": {
+        "description": "Remove a member, or leave the team (your own id). They get a fresh team of one; the open\ntasks assigned to them become unassigned; their meetings stay theirs and are unshared. An owner\nor admin removes members; only the owner removes an admin; the owner cannot be removed and\ncannot leave while others remain (409 `owner_cannot_leave`). 403 `team_forbidden`.",
+        "operationId": "remove_member",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Remove Member",
+        "tags": [
+          "team"
+        ]
+      },
+      "patch": {
+        "description": "Change a member's role (owner only; `admin` or `member`) and/or the names they are matched\nby in meetings (`aliases`, replacing the list: an owner or admin for anyone, a member for\nthemselves). All of it is refused if any part is not allowed (403 `team_forbidden`).",
+        "operationId": "update_member",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamMemberPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMembers"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Update Member",
+        "tags": [
+          "team"
         ]
       }
     },

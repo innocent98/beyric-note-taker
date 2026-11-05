@@ -1,0 +1,30 @@
+{
+  "note": "A new link, 7 more days; the old link stops working.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/team/invites/3/resend",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "email": "later@example.test",
+      "name": null,
+      "role": "member",
+      "status": "pending",
+      "invited_by": "Dan Okoro",
+      "last_sent_at": "2026-11-05T20:13:33.565654Z",
+      "expires_at": "2026-11-12T20:13:33.565654Z"
+    }
+  }
+}

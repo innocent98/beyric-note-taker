@@ -1,0 +1,71 @@
+{
+  "note": "One new person (needs a pilot place), one existing account, one bad address. Same `status` and shape for the first two: the answer never says who has an account.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/team/invites",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "invitees": [
+        {
+          "email": "Ada@Example.test",
+          "name": "Ada L"
+        },
+        {
+          "email": "chidi@example.test"
+        },
+        {
+          "email": "not an email"
+        }
+      ],
+      "role": "member"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "results": [
+        {
+          "email": "ada@example.test",
+          "status": "sent",
+          "invite": {
+            "id": 1,
+            "email": "ada@example.test",
+            "name": "Ada L",
+            "role": "member",
+            "status": "pending",
+            "invited_by": "Dan Okoro",
+            "last_sent_at": "2026-11-05T20:13:31.873140Z",
+            "expires_at": "2026-11-12T20:13:31.873140Z"
+          }
+        },
+        {
+          "email": "chidi@example.test",
+          "status": "sent",
+          "invite": {
+            "id": 2,
+            "email": "chidi@example.test",
+            "name": null,
+            "role": "member",
+            "status": "pending",
+            "invited_by": "Dan Okoro",
+            "last_sent_at": "2026-11-05T20:13:31.873140Z",
+            "expires_at": "2026-11-12T20:13:31.873140Z"
+          }
+        },
+        {
+          "email": "not an email",
+          "status": "invalid_email",
+          "invite": null
+        }
+      ]
+    }
+  }
+}

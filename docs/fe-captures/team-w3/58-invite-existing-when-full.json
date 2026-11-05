@@ -1,0 +1,45 @@
+{
+  "note": "An account needs no place: it still works.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/team/invites",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "invitees": [
+        {
+          "email": "eve@example.test"
+        }
+      ],
+      "role": "member"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "results": [
+        {
+          "email": "eve@example.test",
+          "status": "sent",
+          "invite": {
+            "id": 4,
+            "email": "eve@example.test",
+            "name": null,
+            "role": "member",
+            "status": "pending",
+            "invited_by": "Dan Okoro",
+            "last_sent_at": "2026-11-05T20:13:33.659577Z",
+            "expires_at": "2026-11-12T20:13:33.659577Z"
+          }
+        }
+      ]
+    }
+  }
+}

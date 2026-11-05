@@ -1,0 +1,32 @@
+{
+  "note": "A link works for its own address only: 400 `invite_invalid`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-G>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Eve",
+      "email": "eve2@example.test",
+      "password": "ada-chosen-password-5",
+      "accept_terms": true,
+      "invite_token": "<invite-token>"
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invite_invalid",
+        "message": "That invitation is not valid any more. Join the waiting list to get a new one."
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "note": "`owner` is not a role you can give: 422.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/team/members/5",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "role": "owner"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "role",
+            "message": "Input should be 'admin' or 'member'"
+          }
+        ]
+      }
+    }
+  }
+}

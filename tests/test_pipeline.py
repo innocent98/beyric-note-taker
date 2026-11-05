@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
-from app import audio, pipeline
+from app import audio, pipeline, teams
 from app.config import Settings
 from app.models import AiRun, AppState, Meeting, Template, VocabularyTerm
 from app.notes import HEADINGS
@@ -162,6 +162,25 @@ def test_completed_meeting_reaches_ready(session, meeting, env):
     assert meeting.notes == NOTES + "\n"
     assert meeting.failure_reason is None
     assert (env / "a" / str(meeting.id) / "source.webm").exists()
+
+
+def test_the_teams_share_default_is_read_when_the_notes_are_written(session, meeting, env, owner):
+    team = teams.ensure_team(session, owner)
+    team.share_new_meetings = True
+    session.commit()
+    run(session, meeting, FakeVexa(DONE))
+    assert meeting.shared_team_id == team.id
+
+
+def test_the_share_default_is_not_read_when_the_bot_joins(session, meeting, env, owner):
+    """It was on when the meeting was made and off when the notes were written: private."""
+    team = teams.ensure_team(session, owner)
+    team.share_new_meetings = True
+    session.commit()  # the meeting exists now: the bot has joined
+    team.share_new_meetings = False
+    session.commit()
+    run(session, meeting, FakeVexa(DONE))
+    assert meeting.shared_team_id is None
 
 
 def test_the_labelling_and_notes_calls_are_in_the_cost_ledger(session, meeting, env):

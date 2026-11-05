@@ -48,6 +48,7 @@ from app.models import (
     Meeting,
     Notification,
     Task,
+    TeamInvite,
     Template,
     UsageEntry,
     User,
@@ -132,6 +133,7 @@ def purge_user(
     session.execute(delete(MailOutbox).where(MailOutbox.to_email == email))
     session.execute(delete(AuthToken).where(AuthToken.email == email))
     session.execute(delete(WaitlistEntry).where(WaitlistEntry.email == email))
+    session.execute(delete(TeamInvite).where(TeamInvite.email == email))  # frees their place
     session.execute(delete(UserSettings).where(UserSettings.user_id == user_id))
     session.execute(delete(Meeting).where(Meeting.owner_user_id == user_id))  # tasks cascade
     # Tasks they typed in go with them (spec 4); other people's tasks they held become unassigned

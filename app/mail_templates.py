@@ -147,6 +147,39 @@ def _invite(payload: dict, to: str, settings: Settings) -> Message:
     )
 
 
+def _team_invite(payload: dict, to: str, settings: Settings) -> Message:
+    """The designer's "Team invite" (`Emails.dc.html`): a heading naming the inviter, one sentence,
+    one button, the expiry line. The inviter's name is used only when it is plainly a name (it
+    goes in the subject); otherwise the mail says "a teammate". Account-style mail: the payload
+    holds the link, which carries a raw token, so it is scrubbed once sent."""
+    inviter = payload.get("inviter")
+    plain = isinstance(inviter, str) and PLAIN_NAME.fullmatch(inviter.strip())
+    heading = (
+        f"{inviter.strip()} invited you to join their team"
+        if plain
+        else "You have been invited to join a team"
+    )
+    blocks: list[Block] = [
+        Heading(heading),
+        Para(
+            "Join the team on Beyric Note Taker to see shared meeting notes and the tasks "
+            "assigned to you after each call."
+        ),
+        Button("Accept invite", payload["link"]),
+        Para(
+            "This invite expires in 7 days. If you were not expecting it, you can ignore this "
+            "email.",
+            muted=True,
+        ),
+    ]
+    return Message(
+        to=to,
+        subject=heading,
+        text=render_text(blocks, SIGNATURE),
+        html=render_html(heading, blocks, SIGNATURE),
+    )
+
+
 def _alert(payload: dict, to: str, settings: Settings) -> Message:
     """An alert from `app/alerts.py`: the words the app wrote, no link. The text is in the payload,
     so it is account-style mail (scrubbed once sent, failed and scrubbed after an hour unsent: an
@@ -207,6 +240,7 @@ LINK_TEMPLATES: dict[str, Callable[[dict, str, Settings], Message]] = {
     "reset_password": _reset,
     "already_registered": _already,
     "waitlist_invite": _invite,
+    "team_invite": _team_invite,
 }
 
 

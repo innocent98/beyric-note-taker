@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, object_session
 
-from app import ai_runs, audio, mail, placement, usage, workspace
+from app import ai_runs, audio, mail, placement, teams, usage, workspace
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
@@ -678,6 +678,7 @@ def _step_notes(session: Session, meeting: Meeting, openai_client) -> bool:
     template = session.get(Template, meeting.template_id)
     text = meeting.speaker_transcript or meeting.transcript or ""
     spent: list = []
+    first_notes = meeting.notes is None  # a rewrite never re-shares what the owner unshared
     meeting.notes = generate_notes(
         text, template, _terms(session, meeting.owner_user_id), client=openai_client, usage=spent
     )
@@ -690,6 +691,8 @@ def _step_notes(session: Session, meeting: Meeting, openai_client) -> bool:
         user_id=meeting.owner_user_id,
     )
     meeting.status, meeting.step, meeting.failure_reason = "ready", "done", None
+    if first_notes:
+        teams.apply_share_default(session, meeting)  # read now, not when the bot joined (D3)
     # Queued in the same commit as the notes, and worked by its own job (app/workspace.py): it can
     # fail and retry without touching the meeting, whose notes are the deliverable.
     workspace.mark_pending(meeting)

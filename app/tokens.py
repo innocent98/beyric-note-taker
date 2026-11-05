@@ -30,6 +30,17 @@ def digest(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def mint() -> tuple[str, str]:
+    """A new random token and its hash: the raw one goes in a link, the hash in the database."""
+    raw = secrets.token_urlsafe(32)
+    return raw, digest(raw)
+
+
+def well_formed(raw: str | None) -> bool:
+    """Whether `raw` could be one of ours (checked before any lookup)."""
+    return bool(raw) and len(raw) <= MAX_TOKEN_CHARS and raw.isascii()
+
+
 def issue(
     session: Session,
     *,

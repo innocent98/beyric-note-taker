@@ -259,6 +259,7 @@ PUBLIC = {
     ("POST", "/api/password/forgot"),
     ("POST", "/api/password/reset"),
     ("POST", "/api/waitlist"),
+    ("GET", "/api/team/invites/preview"),
     ("GET", "/api/auth/google/start"),
     ("GET", "/api/auth/google/callback"),
     ("GET", "/api/calendar/google/callback"),

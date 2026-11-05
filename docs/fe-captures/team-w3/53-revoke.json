@@ -1,0 +1,20 @@
+{
+  "note": "",
+  "client": "dan",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/team/invites/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "cache-control": "no-store"
+    },
+    "body": null
+  }
+}

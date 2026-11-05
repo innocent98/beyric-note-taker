@@ -1,0 +1,29 @@
+{
+  "note": "`my_role` member, `can_manage` false.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/team",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "name": "My team",
+      "share_new_meetings": false,
+      "my_role": "member",
+      "member_count": 2,
+      "pending_invites": 1,
+      "can_manage": false,
+      "can_change_roles": false
+    }
+  }
+}
