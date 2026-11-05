@@ -27,12 +27,22 @@ export function rel(path: string): string {
   return relative(WEB, path).split(sep).join("/");
 }
 
+// Meeting captures made before the meeting page was drawn lack `duration_seconds`, `participants`,
+// `decisions_count` and `review_open_count`, which the API now always sends (nothing is invented:
+// the values are what a meeting with no recording, no speakers and nothing extracted has).
+function withDetailDefaults<T>(body: T): T {
+  if (body && typeof body === "object" && "notes_html" in body && !("participants" in body)) {
+    Object.assign(body, { duration_seconds: null, participants: [], decisions_count: 0, review_open_count: 0 });
+  }
+  return body;
+}
+
 // A response body captured from the running API (docs/fe-captures/owner-app/<file>).
 export function captured<T>(file: string): T {
   const body = JSON.parse(read(join(REPO, "docs/fe-captures/owner-app", file))).response.body;
   // Meeting captures made before W7 lack `translations`, which the API now always sends.
   if (body && typeof body === "object" && "notes_html" in body && !("translations" in body)) body.translations = [];
-  return body as T;
+  return withDetailDefaults(body) as T;
 }
 
 // A capture from the running API for the translation routes and the default language
@@ -45,7 +55,7 @@ export function translateCapture(file: string): TranslateCapture {
   return JSON.parse(read(join(REPO, "docs/fe-captures/translate", file)));
 }
 export function translateBody<T>(file: string): T {
-  return translateCapture(file).response.body as T;
+  return withDetailDefaults(translateCapture(file).response.body) as T;
 }
 
 // A capture of the template delete (docs/fe-captures/template-delete/<file>): the whole exchange.
@@ -68,7 +78,7 @@ export function accountBody<T>(file: string): T {
 // The body of a capture from the running API for the AI workspace routes
 // (docs/fe-captures/ai-workspace-w1/<file>).
 export function workspaceBody<T>(file: string): T {
-  return JSON.parse(read(join(REPO, "docs/fe-captures/ai-workspace-w1", file))).response.body as T;
+  return withDetailDefaults(JSON.parse(read(join(REPO, "docs/fe-captures/ai-workspace-w1", file))).response.body) as T;
 }
 
 // A capture from the running API for email preferences and the two notices

@@ -971,6 +971,21 @@
             "title": "Created At",
             "type": "string"
           },
+          "decisions_count": {
+            "title": "Decisions Count",
+            "type": "integer"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
           "extraction_status": {
             "anyOf": [
               {
@@ -1050,6 +1065,13 @@
             ],
             "title": "Notes Html"
           },
+          "participants": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
           "platform": {
             "enum": [
               "google_meet",
@@ -1096,6 +1118,10 @@
               }
             ],
             "title": "Retry Block Message"
+          },
+          "review_open_count": {
+            "title": "Review Open Count",
+            "type": "integer"
           },
           "speakers_incomplete": {
             "title": "Speakers Incomplete",
@@ -1203,7 +1229,11 @@
           "notes",
           "notes_html",
           "transcript",
-          "translations"
+          "translations",
+          "duration_seconds",
+          "participants",
+          "decisions_count",
+          "review_open_count"
         ],
         "title": "MeetingDetail",
         "type": "object"

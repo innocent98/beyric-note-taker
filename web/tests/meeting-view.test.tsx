@@ -47,6 +47,20 @@ describe("ready meeting", () => {
     expect(screen.queryByText(/updates every 30 seconds/)).toBeNull();
   });
 
+  it("draws Duration in the header and Details, and Participants under Details", () => {
+    const base = meeting("47-meeting-detail-ready.json");
+    const { unmount } = show({ ...base, duration_seconds: 2760, participants: ["Adebayo", "Daniel Okoro"] });
+    expect(document.querySelector(".meta-line")?.textContent).toContain("46 min");
+    expect(document.querySelector(".details")?.textContent).toContain("Duration46 min");
+    expect(screen.getByRole("heading", { level: 2, name: "Participants" })).toBeTruthy();
+    expect(document.querySelector(".side-people")?.textContent).toBe("AAdebayoDODaniel Okoro");
+    unmount();
+    // No speaker names: no Participants block (nothing is made up to fill it).
+    show({ ...base, duration_seconds: 3900, participants: [] });
+    expect(screen.queryByText("Participants")).toBeNull();
+    expect(document.querySelector(".details")?.textContent).toContain("1 hr 5 min");
+  });
+
   it("names the template a meeting was written with after that template was deleted", () => {
     // template 9 is not in the list any more: the name comes from the meeting
     show({ ...meeting("47-meeting-detail-ready.json"), template_id: 9, template_name: "Interview" } as Meeting);

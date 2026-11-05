@@ -85,6 +85,17 @@ const details = [
   const age = new Date(Date.UTC(2026, 10, 2, 9 + index, 30)).toISOString();
   return { ...meeting, id: index + 1, title, created_at: age, translations: [] };
 });
+// The owner-app captures also predate the detail's duration, participants and the two counts of
+// the "Decisions and review" card. These are the mock's own values, for looking at the page (the
+// designer's sample: a 46 minute meeting of Adebayo, Daniel Okoro and Amara Nwosu).
+for (const meeting of details) {
+  const ready = meeting.status === "ready";
+  meeting.duration_seconds = ready ? 2760 : null;
+  meeting.participants = ready ? ["Adebayo", "Daniel Okoro", "Amara Nwosu"] : [];
+  meeting.decisions_count = ready ? 2 : 0;
+  meeting.review_open_count = ready ? 3 : 0;
+  if (ready) meeting.extraction_status = "done";
+}
 // The owner-app captures predate `template_name`; the running API sends it on every meeting.
 for (const meeting of details) meeting.template_name = body("11-templates-seeded").templates.find((t) => t.id === meeting.template_id)?.name ?? "General";
 const summary = ({ id, title, platform, native_id, status, step, status_text, status_tone, template_id, template_name, created_at }) => ({
@@ -102,6 +113,11 @@ const sample = {
   native_id: "88205679674",
   template_name: body("11-templates-seeded").templates.find((t) => t.id === translateCapture("05-meeting-before").template_id)?.name ?? "General",
   created_at: "2026-11-02T11:48:00Z",
+  duration_seconds: 180,
+  participants: ["Adebayo", "Ojebola Grace"],
+  decisions_count: 2,
+  review_open_count: 0,
+  extraction_status: "done",
 };
 const translating = {}; // language -> when it was asked for
 const TRANSLATE_AFTER_MS = 1500;

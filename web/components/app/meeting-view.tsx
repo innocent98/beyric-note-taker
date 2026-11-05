@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CopyButton } from "@/components/app/copy-button";
 import { DownloadMenu } from "@/components/app/download-menu";
 import { NotesHtml } from "@/components/app/notes-html";
@@ -21,7 +21,9 @@ import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { Meeting, NoteLanguage, RetryBlock, Template } from "@/lib/api/types";
 import { LocalTime } from "@/components/app/local-time";
-import { platformLabel } from "@/lib/format";
+import { durationLabel, initials, platformLabel, plural } from "@/lib/format";
+
+const AVATAR_TONES = ["avatar-a", "avatar-b", "avatar-c", "avatar-d", "avatar-e"] as const;
 
 // What a failed meeting says about retrying, from `retry_block` (the same words as the Jinja page).
 // The API's own `retry_block_message` is used when it is there; these cover the rest.
@@ -148,6 +150,7 @@ export function MeetingView({
   // The words on the page: the translation's when one is shown, else the original's.
   const shownNotes = translation.translated?.notes ?? m.notes;
   const shownTranscript = translation.translated?.transcript ?? null;
+  const duration = durationLabel(m.duration_seconds, working);
   const retryText = m.retry_block !== null ? (m.retry_block_message ?? RETRY_BLOCKED[m.retry_block]) : null;
 
   return (
@@ -169,6 +172,7 @@ export function MeetingView({
               <LocalTime iso={m.created_at} />
             </span>
             <span>{platformLabel(m.platform)}</span>
+            <span>{duration}</span>
           </p>
         </div>
         {m.status !== "failed" ? (
@@ -248,6 +252,8 @@ export function MeetingView({
                 </dd>
                 <dt>Platform</dt>
                 <dd>{platformLabel(m.platform)}</dd>
+                <dt>Duration</dt>
+                <dd>{duration}</dd>
                 {templateName ? (
                   <>
                     <dt>Template</dt>
@@ -255,8 +261,29 @@ export function MeetingView({
                   </>
                 ) : null}
               </dl>
+              {m.participants.length > 0 ? (
+                <>
+                  <div className="side-rule" />
+                  <h2 className="side-title">Participants</h2>
+                  <div className="side-people">
+                    {m.participants.map((name, index) => (
+                      <div className="side-person" key={name}>
+                        <div className={`avatar avatar-26 ${AVATAR_TONES[index % AVATAR_TONES.length]}`} aria-hidden="true">
+                          {initials(name)}
+                        </div>
+                        {name}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : null}
             </Card>
-            <ExtractionCard status={m.extraction_status ?? null} stalled={extractionStalled} />
+            <ExtractionCard
+              status={m.extraction_status ?? null}
+              stalled={extractionStalled}
+              decisions={m.decisions_count}
+              toCheck={m.review_open_count}
+            />
             {m.can_regenerate ? (
               <Card compact>
                 <form
@@ -382,34 +409,74 @@ export function MeetingView({
   );
 }
 
-// What the Decisions and Review screens know about this meeting, from `extraction_status`.
-// null (not written yet, or a meeting the backfill has not reached) says nothing.
-function ExtractionCard({ status, stalled }: { status: Meeting["extraction_status"] | null; stalled: boolean }) {
+// The "Decisions and review" card: how many decisions this meeting has in the log and how many
+// words are still to check, with a link to each screen. While the notes are still being read (or
+// the reading failed) the counts are not known yet, so the card says that instead (words from
+// before this card was drawn; a designer gap). null (not written yet) says nothing.
+function ExtractionCard({
+  status,
+  stalled,
+  decisions,
+  toCheck,
+}: {
+  status: Meeting["extraction_status"] | null;
+  stalled: boolean;
+  decisions: number;
+  toCheck: number;
+}) {
   if (status === null) return null;
-  let text: ReactNode;
-  if (status === "pending" || status === "running") {
-    text = stalled
-      ? "Reading the notes is taking longer than usual. Decisions and Review will have this meeting when it finishes; this page has stopped checking, so reload it to look again."
-      : "Reading the notes for decisions and items to check. They appear on the Decisions and Review screens in a moment.";
-  } else if (status === "failed") {
-    text =
-      "The decisions are on the Decisions screen. The hints about names that may be misspelled could not be added. Rewrite the notes to try again.";
-  } else if (status === "skipped") {
-    text = "An older meeting: its decisions are on the Decisions screen. It has no Review items.";
-  } else {
-    text = (
-      <>
-        Decisions and items to check from these notes are on the <AppLink href="/decisions">Decisions</AppLink> and{" "}
-        <AppLink href="/review">Review</AppLink> screens.
-      </>
+  if (status === "pending" || status === "running" || status === "failed") {
+    const text =
+      status === "failed"
+        ? "The decisions are on the Decisions screen. The hints about names that may be misspelled could not be added. Rewrite the notes to try again."
+        : stalled
+          ? "Reading the notes is taking longer than usual. Decisions and Review will have this meeting when it finishes; this page has stopped checking, so reload it to look again."
+          : "Reading the notes for decisions and items to check. They appear on the Decisions and Review screens in a moment.";
+    return (
+      <Card compact>
+        <h2 className="side-title">Decisions and review</h2>
+        <p className="side-sub" role={status === "failed" ? undefined : "status"}>
+          {text}
+        </p>
+      </Card>
     );
   }
+  const decisionLabel = decisions === 0 ? "No decisions" : plural(decisions, "decision");
   return (
     <Card compact>
-      <h2 className="side-title">Decisions and review</h2>
-      <p className="side-sub" role={status === "pending" || status === "running" ? "status" : undefined}>
-        {text}
-      </p>
+      <div className="side-card">
+        <h2 className="side-title">Decisions and review</h2>
+        <div className="side-row">
+          <div className="side-row-text">
+            <span className="side-tile">
+              <Icon name="check" size={15} stroke={2.4} />
+            </span>
+            <div>
+              <div className="side-row-label">{decisionLabel}</div>
+              <div className="side-row-sub">In the decisions log</div>
+            </div>
+          </div>
+          <AppLink className="btn-link" href="/decisions">
+            View
+          </AppLink>
+        </div>
+        <div className="side-row">
+          <div className="side-row-text">
+            <span className={`side-tile ${toCheck > 0 ? "side-tile-warn" : "side-tile-quiet"}`}>
+              <Icon name="eye" size={15} />
+            </span>
+            <div>
+              <div className="side-row-label">{toCheck === 0 ? "Nothing to check" : `${toCheck} to check`}</div>
+              <div className="side-row-sub">
+                {toCheck === 0 ? "All review items are checked" : "Words that may have been misheard"}
+              </div>
+            </div>
+          </div>
+          <AppLink className="btn-link" href="/review">
+            Review
+          </AppLink>
+        </div>
+      </div>
     </Card>
   );
 }

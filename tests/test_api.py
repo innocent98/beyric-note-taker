@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from app import auth
 from app.db import get_session
-from app.models import AppState, Meeting, Template, VocabularyTerm
+from app.models import AppState, Decision, Meeting, ReviewItem, Template, VocabularyTerm
 from app.pipeline import REASON_CANCELLED, REASON_JOIN_REFUSED, REASON_NO_SPEECH
 from app.services import RETRY_BLOCK_TEXT
 from app.vexa import VexaError
@@ -533,6 +533,50 @@ def test_detail_of_a_ready_meeting_has_notes_and_transcript(api, session, templa
     assert body["transcript"] == TRANSCRIPT and body["speakers_incomplete"] is True
     assert body["can_regenerate"] is True and body["refresh_after_seconds"] is None
     assert body["bot_left_early"] is False
+
+
+def test_detail_has_duration_participants_and_the_two_counts(api, session, template, owner):
+    spoken = "[Ada]: hi\n[Bo]: hello\n[Ada]: again\ncontinued\n[Cy]: bye"
+    meeting = ready(session, template, speaker_transcript=spoken, recorded_seconds=2760)
+    session.add_all(
+        [
+            Decision(meeting_id=meeting.id, text="a", position=0, fingerprint="a"),
+            Decision(meeting_id=meeting.id, text="b", position=1, fingerprint="b"),
+            Decision(
+                meeting_id=meeting.id,
+                text="c",
+                position=2,
+                fingerprint="c",
+                hidden_at=datetime.now(UTC),
+            ),
+            ReviewItem(
+                meeting_id=meeting.id, owner_user_id=owner.id, text="r", position=0, fingerprint="r"
+            ),
+            ReviewItem(
+                meeting_id=meeting.id,
+                owner_user_id=owner.id,
+                text="s",
+                position=1,
+                fingerprint="s",
+                checked_at=datetime.now(UTC),
+            ),
+        ]
+    )
+    session.commit()
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["duration_seconds"] == 2760
+    assert body["participants"] == ["Ada", "Bo", "Cy"]
+    assert body["decisions_count"] == 2 and body["review_open_count"] == 1
+
+
+def test_detail_without_speakers_or_a_recording_has_empty_values(api, session, template):
+    meeting = ready(session, template, transcript="plain", speaker_transcript=None)
+    body = api.get(f"/api/meetings/{meeting.id}").json()
+    assert body["duration_seconds"] is None and body["participants"] == []
+    assert body["decisions_count"] == 0 and body["review_open_count"] == 0
+    waiting = add_meeting(session, template)
+    body = api.get(f"/api/meetings/{waiting.id}").json()
+    assert body["decisions_count"] == 0 and body["participants"] == []
 
 
 def test_transcript_prefers_the_speaker_version(api, session, template):

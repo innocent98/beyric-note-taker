@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, FastAPI, Query, Request, Response
 from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, PlainTextResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -55,8 +55,13 @@ from app.api_schemas import (
     UserOut,
 )
 from app.db import get_session
-from app.models import Meeting, MeetingTranslation, User, UserSettings
-from app.notes_document import build_notes_document, content_disposition, export_filename
+from app.models import Decision, Meeting, MeetingTranslation, ReviewItem, User, UserSettings
+from app.notes_document import (
+    build_notes_document,
+    content_disposition,
+    export_filename,
+    parse_transcript,
+)
 from app.pipeline import (
     MAX_JOIN_ATTEMPTS,
     REASON_UNEXPECTED,
@@ -246,12 +251,40 @@ def _summary(meeting: Meeting, template_name: str) -> MeetingSummary:
     )
 
 
+def _participants(meeting: Meeting) -> list[str]:
+    """Speaker names from the labelled transcript, each once, in order of first speaking."""
+    if not meeting.speaker_transcript:
+        return []
+    names: list[str] = []
+    for turn in parse_transcript(meeting.speaker_transcript):
+        if turn.speaker and turn.speaker not in names:
+            names.append(turn.speaker)
+    return names
+
+
+def _workspace_counts(meeting: Meeting, session: Session) -> tuple[int, int]:
+    """(shown decisions, open review items) of a meeting, as the Decisions and Review screens
+    count them."""
+    decisions = session.scalar(
+        select(func.count())
+        .select_from(Decision)
+        .where(Decision.meeting_id == meeting.id, Decision.hidden_at.is_(None))
+    )
+    review = session.scalar(
+        select(func.count())
+        .select_from(ReviewItem)
+        .where(ReviewItem.meeting_id == meeting.id, ReviewItem.checked_at.is_(None))
+    )
+    return decisions or 0, review or 0
+
+
 def _detail(meeting: Meeting, session: Session) -> MeetingDetail:
     """The meeting as its page shows it. The meeting link is never included: a Zoom link
     carries its meeting password."""
     failed, ready = meeting.status == "failed", meeting.status == "ready"
     block = services.retry_block(meeting) if failed else None
     active = meeting.status in services.ACTIVE
+    decisions_count, review_open_count = _workspace_counts(meeting, session) if ready else (0, 0)
     return MeetingDetail(
         **_summary(
             meeting, services.template_names(session, [meeting])[meeting.template_id]
@@ -276,6 +309,10 @@ def _detail(meeting: Meeting, session: Session) -> MeetingDetail:
         notes=meeting.notes if ready else None,
         notes_html=str(services.render_markdown(meeting.notes)) if ready else None,
         transcript=meeting.speaker_transcript or meeting.transcript or None,
+        duration_seconds=meeting.recorded_seconds,
+        participants=_participants(meeting),
+        decisions_count=decisions_count,
+        review_open_count=review_open_count,
         translations=[
             api_translation.brief(row, meeting)
             for row in session.scalars(
