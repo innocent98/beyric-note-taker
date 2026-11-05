@@ -15,13 +15,14 @@ from app.services import (
     Refused,
     get_openai_client,
     get_vexa,
-    meeting_or_404,
+    owned_meeting_or_404,
     parse_id,
     render_markdown,
     retry_block,
     status_text,
     status_tone,
     template_or_404,
+    visible_meeting_or_404,
 )
 
 logger = logging.getLogger(__name__)
@@ -167,7 +168,7 @@ def meeting_page(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ):
-    return _meeting_page(request, session, meeting_or_404(session, user, meeting_id))
+    return _meeting_page(request, session, visible_meeting_or_404(session, user, meeting_id))
 
 
 @router.post("/meetings/{meeting_id:id}/regenerate")
@@ -179,7 +180,7 @@ def regenerate(
     user: User = Depends(auth.current_user),
     openai_client=Depends(get_openai_client),
 ):
-    meeting = meeting_or_404(session, user, meeting_id)
+    meeting = owned_meeting_or_404(session, user, meeting_id)
     try:
         services.regenerate_notes(session, meeting, parse_id(template_id), openai_client)
     except Refused as exc:
@@ -195,7 +196,7 @@ def cancel(
     user: User = Depends(auth.current_user),
     vexa=Depends(get_vexa),
 ):
-    meeting = meeting_or_404(session, user, meeting_id)
+    meeting = owned_meeting_or_404(session, user, meeting_id)
     try:
         services.cancel_meeting(session, vexa, meeting)
     except Refused as exc:
@@ -211,7 +212,7 @@ def end(
     user: User = Depends(auth.current_user),
     vexa=Depends(get_vexa),
 ):
-    meeting = meeting_or_404(session, user, meeting_id)
+    meeting = owned_meeting_or_404(session, user, meeting_id)
     try:
         services.end_meeting(session, vexa, meeting)
     except Refused as exc:
@@ -227,7 +228,7 @@ def retry(
     user: User = Depends(auth.current_user),
     vexa=Depends(get_vexa),
 ):
-    meeting = meeting_or_404(session, user, meeting_id)
+    meeting = owned_meeting_or_404(session, user, meeting_id)
     try:
         services.retry_meeting(session, meeting, vexa)
     except Refused as exc:

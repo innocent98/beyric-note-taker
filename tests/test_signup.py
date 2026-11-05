@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import func, select
 
-from app import accounts, mail, passwords, signup, tokens
+from app import accounts, mail, passwords, signup, teams, tokens
 from app.models import (
     AppState,
     AuthToken,
@@ -363,6 +363,7 @@ def test_signing_up_answers_202_and_creates_an_unverified_account(anon, session)
         len(session.scalars(select(Template).where(Template.owner_user_id == user.id)).all()) == 4
     )
     assert session.get(UserSettings, user.id) is not None
+    assert teams.team_of(session, user.id).owner_user_id == user.id  # a team of one
 
 
 def test_sign_up_queues_one_verification_mail_with_a_token_that_expires_in_24_hours(anon, session):

@@ -737,3 +737,75 @@ def test_time_zone_column_round_trips_and_existing_rows_stay_null(scratch_url):
     assert "time_zone" not in columns()
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+# ---- 0019 teams ----
+
+
+def test_0019_gives_every_live_account_a_team_of_one_and_shares_nothing(scratch_url):
+    import importlib.util
+    from pathlib import Path
+
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0018")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        for email, status in [
+            ("a@example.test", "active"),
+            ("b@example.test", "suspended"),
+            ("gone@example.test", "deleted"),
+        ]:
+            conn.execute(
+                text("insert into users (email, status) values (:e, :s)"), {"e": email, "s": status}
+            )
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
+                "select u.id, 'u', 'google_meet', 'abc', t.id from users u, templates t "
+                "where u.email = 'a@example.test' limit 1"
+            )
+        )
+    command.upgrade(cfg, "head")
+    members = _rows(
+        engine,
+        "select u.email, m.role, t.owner_user_id = u.id, t.name from team_members m "
+        "join users u on u.id = m.user_id join teams t on t.id = m.team_id order by u.email",
+    )
+    assert members == [
+        ("a@example.test", "owner", True, "My team"),
+        ("b@example.test", "owner", True, "My team"),
+        (OWNER_EMAIL, "owner", True, "My team"),  # migration 0006's admin is covered too
+    ]  # the deleted account gets none
+    assert _rows(engine, "select count(*) from meetings where shared_team_id is not null") == [(0,)]
+
+    # Safe to run again: the same statements add nothing.
+    path = Path(__file__).parent.parent / "alembic" / "versions" / "0019_teams.py"
+    spec = importlib.util.spec_from_file_location("m0019", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    with engine.begin() as conn:
+        conn.execute(text(module.BACKFILL_TEAMS))
+        conn.execute(text(module.BACKFILL_MEMBERS))
+    assert _rows(engine, "select count(*) from teams") == [(3,)]
+    assert _rows(engine, "select count(*) from team_members") == [(3,)]
+
+    # A half-finished earlier run (a team with no membership) is mended, not doubled.
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "delete from team_members where user_id = "
+                "(select id from users where email = 'a@example.test')"
+            )
+        )
+        conn.execute(text(module.BACKFILL_TEAMS))
+        conn.execute(text(module.BACKFILL_MEMBERS))
+    assert _rows(engine, "select count(*) from teams") == [(3,)]
+    assert _rows(engine, "select count(*) from team_members") == [(3,)]
+
+    command.downgrade(cfg, "0018")
+    tables = set(inspect(engine).get_table_names())
+    assert not {"teams", "team_members"} & tables
+    assert "shared_team_id" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    assert _rows(engine, "select count(*) from meetings") == [(1,)]
+    command.upgrade(cfg, "head")
+    engine.dispose()

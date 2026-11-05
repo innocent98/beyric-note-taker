@@ -333,8 +333,8 @@ def list_meetings(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MeetingList:
-    """The caller's meetings, newest first. For the next page pass `before_id` =
-    `next_before_id`."""
+    """The caller's meetings, plus any shared with their team, newest first. For the next page
+    pass `before_id` = `next_before_id`."""
     rows = services.list_meetings(session, user, limit + 1, before_id)
     page = rows[:limit]
     names = services.template_names(session, page)
@@ -355,7 +355,7 @@ def get_meeting(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MeetingDetail:
-    return _detail(services.meeting_or_404(session, user, meeting_id), session)
+    return _detail(services.visible_meeting_or_404(session, user, meeting_id), session)
 
 
 EXPORT_RESPONSES = {
@@ -366,7 +366,10 @@ EXPORT_RESPONSES = {
             export.FORMATS["docx"][0]: {"schema": {"type": "string", "format": "binary"}},
         },
     },
-    404: {"model": ErrorResponse, "description": "No such meeting (or not the caller's)"},
+    404: {
+        "model": ErrorResponse,
+        "description": "No such meeting (or not one the caller may read)",
+    },
     409: {
         "model": ErrorResponse,
         "description": "`not_ready`: the notes are not written yet; `translation_missing`: no "
@@ -402,7 +405,7 @@ def export_meeting(
     request meanwhile gets 503 `export_busy` with `Retry-After`. The file name is the meeting's
     title, cleaned, in `Content-Disposition`.
     """
-    meeting = services.meeting_or_404(session, user, meeting_id)
+    meeting = services.visible_meeting_or_404(session, user, meeting_id)
     if meeting.status != "ready" or not meeting.notes:
         raise Refused(409, "not_ready", "The notes are not ready yet.")
     title = _title(meeting)
@@ -507,7 +510,7 @@ def cancel_meeting(
     `already_ending`, and while the bot is still starting (its send got no clear answer; the page
     reads "Starting the bot") it is 409 `bot_starting`: try again in a minute; 409 `meeting_busy`
     when the worker holds the meeting, try again."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
     return _detail(services.cancel_meeting(session, vexa, meeting), session)
 
 
@@ -527,7 +530,7 @@ def end_meeting(
     when it was asked already, 409 `meeting_busy` when the worker holds the meeting: try again).
     The meeting stays `bot_sent` while the bot leaves, then follows the usual steps; it is not a
     cancel and nothing is discarded."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
     return _detail(services.end_meeting(session, vexa, meeting), session)
 
 
@@ -545,7 +548,7 @@ def retry_meeting(
     """Resume a failed meeting at the step that failed. Only when `can_retry` is true. For a
     meeting whose join the worker ended (Google refused the bot, or it hung on a prompt) this
     sends a new bot instead, no sooner than 5 minutes after the failure."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
     return _detail(services.retry_meeting(session, meeting, vexa), session)
 
 
@@ -562,7 +565,7 @@ def regenerate_notes(
     openai_client=Depends(get_openai_client),
 ) -> MeetingDetail:
     """Rewrite the notes of a `ready` meeting with a template. Runs in the request: allow 5 min."""
-    meeting = services.meeting_or_404(session, user, meeting_id)
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
     return _detail(
         services.regenerate_notes(session, meeting, body.template_id, openai_client), session
     )

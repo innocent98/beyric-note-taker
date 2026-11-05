@@ -15,13 +15,14 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 STATUSES = ("bot_sent", "processing", "ready", "failed")
 STEPS = ("waiting", "audio", "transcribing", "speakers", "notes", "done")
 MEETING_SOURCES = ("manual", "calendar", "instant_meet")
 USER_STATUSES = ("active", "suspended", "deleted")
+TEAM_ROLES = ("owner", "admin", "member")
 TOKEN_PURPOSES = ("verify_email", "reset_password", "waitlist_invite")
 OAUTH_PURPOSES = ("signin", "calendar", "meet_scope")
 WAITLIST_STATUSES = ("waiting", "invited", "joined", "removed")
@@ -263,6 +264,42 @@ class VocabularyTerm(Base):
     term: Mapped[str] = mapped_column(String(200))
 
 
+class Team(Base):
+    """A small group of accounts that may share meetings (spec 8.1). Every account has one from
+    sign-up (a team of one), so every query is team-aware from day one. Sprint and reminder
+    settings arrive with the phases that use them (W3, W8, W9), as additive columns."""
+
+    __tablename__ = "teams"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), default="My team", server_default="My team")
+    owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    timezone: Mapped[str] = mapped_column(String(64), default="UTC", server_default="UTC")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TeamMember(Base):
+    """A user's membership. `user_id` is unique: one team per user."""
+
+    __tablename__ = "team_members"
+    __table_args__ = (
+        CheckConstraint(_in("role", TEAM_ROLES), name="ck_team_members_role"),
+        Index("ix_team_members_team_id", "team_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), unique=True
+    )
+    role: Mapped[str] = mapped_column(String(8), default="member", server_default="member")
+    # How the person is named aloud in meetings, for matching task owners (W2/W3).
+    aliases: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default=sa.text("'{}'::text[]")
+    )
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class UserSettings(Base):
     """One row per user, created at sign-up with these defaults."""
 
@@ -470,6 +507,11 @@ class Meeting(Base):
             name="ck_meetings_extraction_status",
         ),
         Index("ix_meetings_owner_user_id", "owner_user_id", "id"),
+        Index(
+            "ix_meetings_shared_team_id",
+            "shared_team_id",
+            postgresql_where=sa.text("shared_team_id is not null"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -513,6 +555,12 @@ class Meeting(Base):
     extraction_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # The prompt version of the last finished extraction (app/ai_versions.py).
     extraction_version: Mapped[str | None] = mapped_column(String(32))
+    # The one thing that makes a meeting visible to anyone but its owner (spec 4, 8.2): the team
+    # it is shared with. Null = private, which is the default and what every row starts as. Only
+    # `app/visibility.py` turns this into who may read; nothing else may compare it.
+    shared_team_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

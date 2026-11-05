@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
+from app import teams
 from app.models import (
     MailOutbox,
     Template,
@@ -52,6 +53,7 @@ def add_user_defaults(session: Session, user: User) -> list[Template]:
     session.add_all(templates)
     session.flush()
     session.add(UserSettings(user_id=user.id, calendar_template_id=templates[0].id))
+    teams.ensure_team(session, user)  # a team of one, so no query is ever team-less
     return templates
 
 
@@ -114,6 +116,7 @@ def delete_unverified(session: Session, ids: list[int], emails: list[str]) -> in
     session.execute(delete(VocabularyTerm).where(VocabularyTerm.owner_user_id.in_(ids)))
     session.execute(delete(UserSettings).where(UserSettings.user_id.in_(ids)))
     session.execute(delete(Template).where(Template.owner_user_id.in_(ids)))
+    teams.remove_users(session, ids)
     session.execute(delete(User).where(User.id.in_(ids)))
     return len(ids)
 

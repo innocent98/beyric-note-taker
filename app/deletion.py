@@ -41,7 +41,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from app import placement
+from app import placement, teams
 from app.models import (
     AuthToken,
     MailOutbox,
@@ -135,6 +135,7 @@ def purge_user(
     session.execute(delete(Meeting).where(Meeting.owner_user_id == user_id))
     session.execute(delete(VocabularyTerm).where(VocabularyTerm.owner_user_id == user_id))
     session.execute(delete(Template).where(Template.owner_user_id == user_id))
+    teams.remove_users(session, [user_id])
     session.execute(delete(User).where(User.id == user_id))
     session.commit()
 

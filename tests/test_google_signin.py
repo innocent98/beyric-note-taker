@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import auth, google_oauth, google_signin, signup, tokens
+from app import auth, google_oauth, google_signin, signup, teams, tokens
 from app.db import get_session
 from app.google_oauth import GoogleError, Identity
 from app.main import create_app
@@ -346,6 +346,7 @@ def test_a_full_sign_up_with_google_creates_a_verified_user_and_a_session(gapp, 
         len(session.scalars(select(Template).where(Template.owner_user_id == user.id)).all()) == 4
     )
     assert session.get(UserSettings, user.id) is not None
+    assert teams.team_of(session, user.id).owner_user_id == user.id  # a team of one
     [call] = google.exchanges
     assert call["code"] == "the-code"
 
