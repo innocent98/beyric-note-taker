@@ -7,7 +7,8 @@ import sqlalchemy as sa
 from sqlalchemy import select
 
 from app import audio, pipeline, usage
-from app.models import AppState, Meeting, Notification, UsageEntry
+from app.config import get_settings
+from app.models import AiRun, AppState, Meeting, Notification, UsageEntry
 from tests.test_accounts import visitor
 from tests.test_api import anon, api, error_of  # noqa: F401  (fixtures used by name)
 from tests.test_pipeline import DONE, NOW, RECORDED_SECONDS, FakeVexa, env, meeting, run  # noqa: F401  # noqa: F401  (fixtures used by name)
@@ -363,3 +364,16 @@ def test_a_meeting_that_never_recorded_costs_nothing(session, meeting):
     assert meeting.status == "failed"
     assert session.scalars(select(UsageEntry)).all() == []
     assert meeting.recorded_seconds is None
+
+
+def test_a_transcription_is_one_ledger_row_with_the_audio_seconds(session, meeting, monkeypatch):
+    monkeypatch.setattr(
+        audio, "prepare_recording", lambda s, o: audio.Recording(pipeline_chunks(o), 125)
+    )
+    monkeypatch.setattr(pipeline, "transcribe_chunks", lambda *a, **k: "uh")  # no speech: billed
+    run(session, meeting, FakeVexa(DONE))
+    rows = list(session.scalars(select(AiRun).where(AiRun.kind == "transcribe")))
+    assert [(r.meeting_id, r.audio_seconds, r.status, r.input_tokens) for r in rows] == [
+        (meeting.id, 125, "ok", None)
+    ]
+    assert rows[0].model == get_settings().transcription_model

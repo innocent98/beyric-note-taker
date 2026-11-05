@@ -951,3 +951,35 @@ def test_0023_lets_the_ledger_hold_notes_and_label_calls_and_downgrades_cleanly(
     with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
         conn.execute(text("insert into ai_runs (kind, model) values ('notes', 'm')"))
     engine.dispose()
+
+
+def test_0025_lets_the_ledger_hold_transcription_with_audio_seconds_and_downgrades_cleanly(
+    scratch_url,
+):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0025")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into ai_runs (kind, model, audio_seconds) "
+                "values ('transcribe', 'gpt-transcribe', 1800)"
+            )
+        )
+        conn.execute(text("insert into ai_runs (kind, model) values ('notes', 'm')"))
+    assert _rows(engine, "select kind, audio_seconds from ai_runs order by id") == [
+        ("transcribe", 1800),
+        ("notes", None),
+    ]
+    command.downgrade(cfg, "0024")
+    assert _rows(engine, "select kind from ai_runs order by id") == [("notes",)]
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('transcribe', 'm')"))
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0025_follows_0024():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0025").down_revision == "0024"
+    assert script.get_heads() == ["0025"]
