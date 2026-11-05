@@ -16,7 +16,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app import pipeline, services
-from app.models import Meeting
+from app.models import Meeting, User
 from app.vexa import VexaError, VexaMeeting
 from tests.test_api import anon, api, error_of, ready  # noqa: F401
 from tests.test_pipeline import DONE, NOW, FakeVexa, env, run  # noqa: F401
@@ -270,7 +270,8 @@ def test_a_stopped_meeting_is_not_reported_as_having_been_removed(session, waiti
         segments=DONE.segments,
     )
     run(session, waiting, FakeVexa(stopped), now=NOW + POLL)
-    assert _detail(waiting, session).bot_left_early is False
+    owner = session.get(User, waiting.owner_user_id)
+    assert _detail(waiting, session, owner).bot_left_early is False
 
 
 def test_while_the_recording_is_being_finished_the_words_say_so_not_leaving(session, waiting):
