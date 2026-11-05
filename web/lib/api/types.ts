@@ -34,6 +34,18 @@ export type TasksSettings = Schemas["TasksSettingsOut"];
 export type TaskChanges = Partial<Schemas["TaskPatch"]>;
 export type NewTask = Schemas["TaskCreate"];
 
+export type Team = Schemas["TeamOut"];
+export type TeamRole = Team["my_role"];
+export type TeamMember = Schemas["TeamMemberOut"];
+export type TeamInvite = Schemas["TeamInviteOut"];
+export type TeamMembers = Schemas["TeamMembers"];
+export type TeamInviteResult = Schemas["InviteResult"];
+export type TeamInvitesCreated = Schemas["InvitesCreated"];
+export type InvitePreview = Schemas["InvitePreview"];
+export type InviteRole = Schemas["InvitesIn"]["role"];
+export type TeamChanges = Partial<Schemas["TeamPatch"]>;
+export type TeamMemberChanges = Partial<Schemas["TeamMemberPatch"]>;
+
 export type MeetingStatus = Meeting["status"];
 export type StatusTone = Meeting["status_tone"];
 export type RetryBlock = NonNullable<Meeting["retry_block"]>;

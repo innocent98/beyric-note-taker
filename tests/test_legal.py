@@ -48,8 +48,8 @@ def test_the_email_use_names_only_the_mail_that_is_sent(anon_client):
     page = text(anon_client, PRIVACY)
     assert (
         "To send service emails, such as account verification, password resets, waiting-list "
-        "invitations and notices that an address already has an account, an email when the "
-        "notes of a meeting you sent the note taker to are ready, and an email to a teammate "
+        "and team invitations and notices that an address already has an account, an email when "
+        "the notes of a meeting you sent the note taker to are ready, and an email to a teammate "
         "listing the tasks from a meeting that were assigned to them." in page
     )
     assert "notices about meetings" not in page  # not sent yet: calendar auto-join is later
@@ -85,8 +85,8 @@ def test_resend_is_named_as_a_recipient_with_what_it_receives(anon_client):
     page = text(anon_client, PRIVACY)
     assert (
         "Resend sends our service emails (account verification, password resets, waiting-list "
-        "invitations, notices that an address already has an account, notes-ready emails and "
-        "task assignment emails). "
+        "and team invitations, notices that an address already has an account, notes-ready "
+        "emails and task assignment emails). "
         "It receives the email address and, if given, the name on each of those emails, and "
         "their content, which includes one-time links and, in a notes-ready email, a short "
         "extract of your notes (the summary, decisions, action items and open questions) and, "

@@ -148,6 +148,26 @@ const SCREENS = {
     [{ text: "Finish payment checkout", wait: 400 }],
   ],
   "app-tasks-review": [APP, [["Tasks", "first", 800], ["Review", "first", 400]], "/tasks", true, [{ text: "Review", wait: 400 }]],
+  // Team (W3). The designer drew the Team screen and the invite dialog; the screens with a null design
+  // are LEAD-DESIGNED (no prototype): alias editing, the remove question, the Share with team switch on
+  // the meeting page and the invitation link page. The mock's tokens: new, existing, onteam, dead.
+  "app-team": [APP, [["Team", "first", 800]], "/team", true],
+  "app-team-invite": [APP, [["Team", "first", 800], ["Invite people", "first", 400]], "/team", true, [{ text: "Invite people", wait: 500 }]],
+  "app-team-aliases": [null, [], "/team", true, [{ text: "Edit names", wait: 400 }]],
+  "app-team-remove": [null, [], "/team", true, [{ click: "Remove Amara Nwosu", wait: 400 }]],
+  "app-tasks-invite-owner": [
+    APP,
+    [["Tasks", "first", 800], ["Continue hiring for the customer success lead role", "first", 400]],
+    "/tasks",
+    true,
+    [{ text: "Continue hiring for the customer success lead role", wait: 400 }],
+  ],
+  "app-detail-share": [null, [], "/meetings/1", true],
+  "invite-new": [null, [], "/accept-invite?token=new", false],
+  "invite-signin": [null, [], "/accept-invite?token=existing", false],
+  "invite-accept": [null, [], "/accept-invite?token=existing", true],
+  "invite-dead": [null, [], "/accept-invite?token=dead", false],
+  "signup-team-invite": [null, [], "/signup?invite=new", false],
   "app-settings-language": [APP, [["Settings", "first"], DEFAULT_LANG("French", 300)], "/settings", true, [DEFAULT_LANG("French", 400)]],
 };
 
@@ -184,6 +204,8 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
             ? page.locator("select", { hasText: step.design })
             : page.getByRole("combobox", { name: step.next });
         await field.first().selectOption({ label: step.select });
+      } else if (step.click) {
+        await page.getByRole("button", { name: step.click }).first().evaluate((el) => el.click());
       } else {
         await page.getByText(step.text, { exact: true }).first().evaluate((el) => el.click());
       }

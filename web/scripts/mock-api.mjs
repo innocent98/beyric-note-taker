@@ -40,9 +40,13 @@ const { values } = parseArgs({
     decisions: { type: "string", default: "live" },
     review: { type: "string", default: "live" },
     "time-zone": { type: "string" },
+    role: { type: "string", default: "owner" },
   },
 });
 
+// Team: `--role owner|admin|member` is the caller's role on the sample team (default owner). Invitation links:
+// token "new" is for an address with no account, "existing" for owner@example.test, "onteam" is refused with
+// 409 already_on_team, anything else answers 400 invite_invalid.
 // Decisions and Review: `--decisions live|loading|failed|empty|retry-loading` and `--review ...` (same words)
 // pick what those lists answer (the captures in docs/fe-captures/ai-workspace-w1/; `loading` answers
 // after 4 s, `failed` is a 500, `empty` has no item). Removing, checking and adding a term answer the
@@ -96,6 +100,7 @@ for (const meeting of details) {
   meeting.review_open_count = ready ? 3 : 0;
   meeting.can_delete = meeting.status !== "bot_sent" && meeting.status !== "processing";
   if (ready) meeting.extraction_status = "done";
+  Object.assign(meeting, { shared_with_team: false, can_share: true, shared_by: null });
 }
 // The owner-app captures predate `template_name`; the running API sends it on every meeting.
 for (const meeting of details) meeting.template_name = body("11-templates-seeded").templates.find((t) => t.id === meeting.template_id)?.name ?? "General";
@@ -104,12 +109,41 @@ const summary = ({ id, title, platform, native_id, status, step, status_text, st
   tasks_count: meetingTasks(id).length,
 });
 
+
+// Team (W3). The shapes are the ones in docs/fe-captures/team-w3/; the people are the designer's
+// sample team (Adebayo Tosin owner, Daniel Okoro admin, Amara Nwosu and Ojebola Grace members, Kemi
+// Adeyemi invited). `--role member` shows the screen as a member sees it. Writes change it in memory.
+const teamRole = values.role ?? "owner";
+const team = { id: 1, name: "My team", share_new_meetings: false };
+const teamMembers = [
+  { user_id: 2, name: "Adebayo Tosin", email: "adebayo@beyrictech.com", role: "owner", aliases: ["Tosin", "Adebayo", "s12Adebayo"], open_tasks: 3 },
+  { user_id: 3, name: "Daniel Okoro", email: "daniel@beyrictech.com", role: "admin", aliases: ["Daniel", "Dan"], open_tasks: 2 },
+  { user_id: 4, name: "Amara Nwosu", email: "amara@beyrictech.com", role: "member", aliases: ["Amara"], open_tasks: 3 },
+  { user_id: 5, name: "Ojebola Grace", email: "grace.ojebola@beyrictech.com", role: "member", aliases: ["Grace"], open_tasks: 1 },
+];
+const teamInvites = [
+  { id: 1, email: "kemi.adeyemi@gmail.com", name: null, role: "member", status: "pending", invited_by: "Adebayo Tosin", last_sent_at: "2026-11-02T09:00:00Z", expires_at: "2026-11-09T09:00:00Z" },
+];
+const myTeamId = () => (teamRole === "owner" ? 2 : teamRole === "admin" ? 3 : 4);
+const manager = () => teamRole !== "member";
+const teamOut = () => ({ ...team, my_role: teamRole, member_count: teamMembers.length, pending_invites: teamInvites.length, can_manage: manager(), can_change_roles: teamRole === "owner" });
+const membersOut = () => ({
+  members: teamMembers.map((m) => ({
+    ...m, is_you: m.user_id === myTeamId(), joined_at: "2026-11-01T09:00:00Z",
+    can_change_role: teamRole === "owner" && m.role !== "owner",
+    can_edit_aliases: manager() || m.user_id === myTeamId(),
+    can_remove: m.user_id === myTeamId() ? m.role !== "owner" : m.role === "owner" ? false : teamRole === "owner" || (teamRole === "admin" && m.role === "member"),
+  })),
+  invites: teamInvites,
+});
+const forbidden = { error: { code: "team_forbidden", message: "Only an owner or admin of the team can do that." } };
+
 // Tasks (W2). The shape is the one in docs/fe-captures/tasks-w2/ (`can_*`, `assignee`, `meeting`...);
 // the values are the mock's own: the designer's sample tasks (Beyric Monday planning, 2 Nov), so a
 // screen can be set next to the prototype. Writes change them in memory. Meeting 1 carries the first
 // eight, as in the design; the others point at meetings that are not in the list.
 const me = { user_id: 2, name: "Adebayo Tosin", is_you: true };
-const people = [me, { user_id: 3, name: "Daniel Okoro", is_you: false }, { user_id: 4, name: "Amara Nwosu", is_you: false }];
+const people = [me, { user_id: 3, name: "Daniel Okoro", is_you: false }, { user_id: 4, name: "Amara Nwosu", is_you: false }, { user_id: 5, name: "Ojebola Grace", is_you: false }];
 const personOf = (id) => people.find((p) => p.user_id === id) ?? null;
 const refOf = (id, title, day) => ({ id, title, platform: "zoom", created_at: `${day}T09:30:00Z` });
 const mondayRef = refOf(1, "Beyric Monday planning", "2026-11-02");
@@ -165,6 +199,9 @@ const sample = {
   extraction_status: "done",
   tasks: [],
   tasks_count: 0,
+  shared_with_team: false,
+  can_share: true,
+  shared_by: null,
 };
 const translating = {}; // language -> when it was asked for
 const TRANSLATE_AFTER_MS = 1500;
@@ -311,12 +348,75 @@ const server = http.createServer(async (req, res) => {
     }
     return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: mockUser(), usage: { used_seconds: 0, cap_seconds: 18000 }, unread_notifications: 1, badges: { review_open: 0, tasks_new: tasksNew() } } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
   }
+  // The invitation link: public preview, then (signed in) accept.
+  if (path === "/api/team/invites/preview" && method === "GET") {
+    const token = url.searchParams.get("token");
+    if (!["new", "existing", "onteam"].includes(token)) return json(res, 400, { error: { code: "invite_invalid", message: "That invitation is not valid any more. Ask for a new one." } });
+    return json(res, 200, { email: token === "new" ? "kemi.adeyemi@gmail.com" : "owner@example.test", name: token === "new" ? "Kemi" : null, role: "member", team_name: "Product team", inviter_name: "Adebayo Tosin", has_account: token !== "new", expires_at: "2026-11-09T09:00:00Z" });
+  }
   if (path.startsWith("/api/") && !loggedIn) {
     return json(res, 401, { error: { code: "not_authenticated", message: "Log in to continue." } });
   }
   if (path === "/api/meetings" && method === "GET") {
     const meetings = values.empty ? [] : details.map(summary).reverse();
     return json(res, 200, { meetings, has_more: false, next_before_id: null, worker_stale: values.stale || values.empty });
+  }
+  if (path === "/api/team/invites/accept" && method === "POST") {
+    if (data?.token === "onteam") return json(res, 409, { error: { code: "already_on_team", message: "You are on another team. Leave it first, then accept this invitation." } });
+    if (data?.token !== "existing") return json(res, 400, { error: { code: "invite_invalid", message: "That invitation is not valid any more. Ask for a new one." } });
+    return json(res, 200, teamOut());
+  }
+  // Team: the screen's reads and writes (in memory).
+  if (path === "/api/team" && method === "GET") return json(res, 200, teamOut());
+  if (path === "/api/team" && method === "PATCH") {
+    if (!manager()) return json(res, 403, forbidden);
+    if (typeof data?.share_new_meetings === "boolean") team.share_new_meetings = data.share_new_meetings;
+    if (typeof data?.name === "string") team.name = data.name;
+    return json(res, 200, teamOut());
+  }
+  if (path === "/api/team/members" && method === "GET") return json(res, 200, membersOut());
+  const oneMember = /^\/api\/team\/members\/(\d+)$/.exec(path);
+  if (oneMember) {
+    const member = teamMembers.find((m) => m.user_id === Number(oneMember[1]));
+    if (!member) return json(res, 404, { error: { code: "not_found", message: "No such team member." } });
+    if (method === "DELETE") {
+      teamMembers.splice(teamMembers.indexOf(member), 1);
+      res.writeHead(204);
+      return res.end();
+    }
+    if (method === "PATCH") {
+      if (data?.role && teamRole !== "owner") return json(res, 403, forbidden);
+      if (data?.role) member.role = data.role;
+      if (Array.isArray(data?.aliases)) member.aliases = data.aliases.map((a) => String(a).trim()).filter(Boolean);
+      return json(res, 200, membersOut());
+    }
+  }
+  if (path === "/api/team/invites" && method === "POST") {
+    if (!manager()) return json(res, 403, forbidden);
+    const results = (data?.invitees ?? []).map(({ email, name }) => {
+      if (!/.+@.+\..+/.test(email)) return { email, status: "invalid_email", invite: null };
+      if (teamMembers.some((m) => m.email === email)) return { email, status: "already_member", invite: null };
+      const invite = { id: 10 + teamInvites.length, email, name: name ?? null, role: data.role, status: "pending", invited_by: "Adebayo Tosin", last_sent_at: new Date().toISOString(), expires_at: new Date(Date.now() + 7 * 864e5).toISOString() };
+      teamInvites.push(invite);
+      return { email, status: "sent", invite };
+    });
+    return json(res, 200, { results });
+  }
+  const oneInvite = /^\/api\/team\/invites\/(\d+)(\/resend)?$/.exec(path);
+  if (oneInvite && !path.endsWith("/accept")) {
+    const invite = teamInvites.find((i) => i.id === Number(oneInvite[1]));
+    if (!invite) return json(res, 404, { error: { code: "not_found", message: "No such invitation." } });
+    if (oneInvite[2]) return json(res, 200, { ...invite, last_sent_at: new Date().toISOString() });
+    teamInvites.splice(teamInvites.indexOf(invite), 1);
+    res.writeHead(204);
+    return res.end();
+  }
+  const sharing = /^\/api\/meetings\/(\d+)\/share$/.exec(path);
+  if (sharing && (method === "POST" || method === "DELETE")) {
+    const found = details.find((m) => m.id === Number(sharing[1])) ?? (Number(sharing[1]) === sample.id ? sample : null);
+    if (!found) return json(res, 404, { error: { code: "not_found", message: "No such meeting" } });
+    found.shared_with_team = method === "POST";
+    return json(res, 200, found);
   }
   // Tasks: the list, one task, the changes and the meeting's own list (in memory).
   if (path === "/api/tasks" && method === "GET") {

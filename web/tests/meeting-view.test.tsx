@@ -18,12 +18,14 @@ const mocks = vi.hoisted(() => ({
   end: vi.fn(),
   regenerate: vi.fn(),
   remove: vi.fn(),
+  share: vi.fn(),
+  unshare: vi.fn(),
   push: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/lib/api/browser", () => ({
   api: {
-    meetings: { get: mocks.get, retry: mocks.retry, cancel: mocks.cancel, end: mocks.end, regenerate: mocks.regenerate, remove: mocks.remove },
+    meetings: { get: mocks.get, retry: mocks.retry, cancel: mocks.cancel, end: mocks.end, regenerate: mocks.regenerate, remove: mocks.remove, share: mocks.share, unshare: mocks.unshare },
   },
 }));
 
@@ -468,5 +470,41 @@ describe("delete meeting", () => {
     cleanup();
     show({ ...ready(), can_delete: false }); // a teammate reading a shared meeting
     expect(screen.queryByRole("button", { name: "Delete meeting" })).toBeNull();
+  });
+});
+
+
+describe("Share with team (lead-designed, not in the designer's file)", () => {
+  const base = () => meeting("47-meeting-detail-ready.json");
+  const withTeam = (m: Meeting, teamSize = 3) => render(<MeetingView initial={m} templates={templates} teamSize={teamSize} />);
+
+  it("is drawn for the owner of a meeting when the team has someone else, off by default", () => {
+    withTeam(base());
+    const toggle = screen.getByRole("switch", { name: "Share with team" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByText(/Private to you/)).toBeTruthy();
+  });
+
+  it("is not drawn in a team of one, or when the caller may not share (a teammate)", () => {
+    const { unmount } = withTeam(base(), 1);
+    expect(screen.queryByRole("switch", { name: "Share with team" })).toBeNull();
+    unmount();
+    withTeam({ ...base(), can_share: false, shared_with_team: true, shared_by: "Dan Okoro" });
+    expect(screen.queryByRole("switch", { name: "Share with team" })).toBeNull();
+    expect(document.querySelector(".details")?.textContent).toContain("Shared byDan Okoro");
+  });
+
+  it("shares and unshares with one call each and shows the answer", async () => {
+    mocks.share.mockResolvedValue({ ...base(), shared_with_team: true });
+    mocks.unshare.mockResolvedValue({ ...base(), shared_with_team: false });
+    withTeam(base());
+    const toggle = screen.getByRole("switch", { name: "Share with team" });
+    await userEvent.click(toggle);
+    expect(mocks.share).toHaveBeenCalledWith(base().id);
+    await waitFor(() => expect(toggle.getAttribute("aria-checked")).toBe("true"));
+    expect(screen.getByText("Everyone on your team can read these notes and the transcript.")).toBeTruthy();
+    await userEvent.click(toggle);
+    expect(mocks.unshare).toHaveBeenCalledWith(base().id);
+    await waitFor(() => expect(toggle.getAttribute("aria-checked")).toBe("false"));
   });
 });

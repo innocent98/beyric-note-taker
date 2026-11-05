@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { TaskCard } from "@/components/app/task-card";
 import { TaskDrawer } from "@/components/app/task-drawer";
+import { INVITE_NAME_KEY } from "@/components/app/team-view";
 import { useToday } from "@/components/app/use-today";
 import { Alert, Button, Icon, PageHead, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
@@ -11,12 +13,9 @@ import { errorMessage } from "@/lib/api/client";
 import type { Task, TaskList, TaskStatus } from "@/lib/api/types";
 import { COLUMNS, type GroupBy, groupTasks } from "@/lib/tasks";
 
-type Filter = "all" | "me" | "none";
-const FILTERS: ReadonlyArray<readonly [Filter, string]> = [
-  ["all", "All tasks"],
-  ["me", "My tasks"],
-  ["none", "Needs owner"],
-];
+// "all", "me", "none" (Needs owner), or `u<id>`: one teammate (the designer's chips: All tasks, My
+// tasks, one per active teammate by first name, Needs owner).
+type Filter = string;
 const GROUPS: ReadonlyArray<readonly [GroupBy, string]> = [
   ["assigned", "Date assigned"],
   ["due", "Due date"],
@@ -29,11 +28,11 @@ const COLUMN_DOT: Record<TaskStatus, string> = { todo: "tk-dot-todo", doing: "tk
 // at once and the answer replaces the task on screen; a drop that is refused puts the card back.
 //
 // Left out because what they need does not exist yet, and no control is drawn for them: the project
-// tabs, the sprint selector and header, the Board and Backlog tabs, the milestone card, the teammate
-// chips (the Team screen, W3) and the badges that belong to projects and sprints. Each is listed in
+// tabs, the sprint selector and header, the Board and Backlog tabs, the milestone card and the badges that belong to projects and sprints. Each is listed in
 // docs/sop/2026-11-05-w2-tasks-ui.md as "waits for W3, W4 or W9".
-export function TasksView({ initial }: { initial: TaskList | null }) {
+export function TasksView({ initial, canInviteToTeam = false }: { initial: TaskList | null; canInviteToTeam?: boolean }) {
   const today = useToday();
+  const router = useRouter();
   const [data, setData] = useState<TaskList | null>(initial);
   const [failed, setFailed] = useState(initial === null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -92,8 +91,20 @@ export function TasksView({ initial }: { initial: TaskList | null }) {
     }
   }
 
+  const chips: Array<readonly [Filter, string]> = [
+    ["all", "All tasks"],
+    ["me", "My tasks"],
+    ...people.filter((p) => !p.is_you).map((p) => [`u${p.user_id}`, p.name.split(" ")[0]] as const),
+    ["none", "Needs owner"],
+  ];
   const shown = tasks.filter((t) =>
-    filter === "all" ? true : filter === "none" ? !t.assignee : t.assignee?.is_you === true,
+    filter === "all"
+      ? true
+      : filter === "none"
+        ? !t.assignee
+        : filter === "me"
+          ? t.assignee?.is_you === true
+          : `u${t.assignee?.user_id}` === filter,
   );
   const open = tasks.find((t) => t.id === openId) ?? null;
   const needOwner = tasks.filter((t) => !t.assignee && t.status !== "done");
@@ -123,7 +134,7 @@ export function TasksView({ initial }: { initial: TaskList | null }) {
       </PageHead>
       <div className="tk-bar">
         <div className="tk-chips" role="group" aria-label="Filter tasks">
-          {FILTERS.map(([value, label]) => (
+          {chips.map(([value, label]) => (
             <button
               key={value}
               type="button"
@@ -231,7 +242,24 @@ export function TasksView({ initial }: { initial: TaskList | null }) {
           })}
         </div>
       {open ? (
-        <TaskDrawer task={open} people={people} today={today} onChange={replace} onDelete={drop} onClose={() => setOpenId(null)} />
+        <TaskDrawer
+          task={open}
+          people={people}
+          today={today}
+          canInvite={canInviteToTeam}
+          onInvite={(name) => {
+            // The Team page opens its invite dialog with this name (team-view.tsx).
+            try {
+              window.sessionStorage.setItem(INVITE_NAME_KEY, name);
+            } catch {
+              // storage off: the dialog is one click away on the Team page
+            }
+            router.push("/team");
+          }}
+          onChange={replace}
+          onDelete={drop}
+          onClose={() => setOpenId(null)}
+        />
       ) : null}
       <Toast message={toast} />
     </div>
