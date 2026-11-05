@@ -4,15 +4,17 @@ real `GoogleSource`. Google bodies are SYNTHETIC (tests/fakes/google.py)."""
 
 from datetime import timedelta
 
+import pytest
 from sqlalchemy import select
 
-from app import calendar_states
+from app import alerts, calendar_states, mail
 from app.calendar_source import AuthRevoked, RefreshTokenUnreadable, TransientError
 from app.gcal_sync import SYNC_EVERY, sync_connection
 from app.models import MailOutbox, Notification, User
 from tests.fakes.google import FakeGoogleCalendar
 from tests.test_gcal_sync import HOUR, NOW, joins, make_world, raw_event
 from tests.test_gcal_sync_job import SETTINGS, connected, google, source, vault_key  # noqa: F401
+from tests.test_web import make_settings
 
 
 def bells(session, kind, user_id=None):
@@ -169,7 +171,16 @@ def test_no_banner_and_no_expected_expiry_once_flag_off_even_for_connections_mad
     assert calendar_states.expiry_warning(world.conn, testing=False, now=NOW) is None
 
 
-def test_one_notification_per_disconnect_and_no_email(session, google, source):
+@pytest.fixture
+def mail_on(monkeypatch):
+    monkeypatch.setattr(alerts, "get_settings", lambda: make_settings())
+
+
+def mails(session):
+    return list(session.scalars(select(MailOutbox)))
+
+
+def test_one_notification_and_one_email_per_disconnect(session, google, source, mail_on):
     world = connected(session)
     with_join(session, world, google, source)
     assert calendar_states.mark_needs_reconnect(session, world.conn, "revoked", NOW) == 1
@@ -177,7 +188,51 @@ def test_one_notification_per_disconnect_and_no_email(session, google, source):
     calendar_states.mark_needs_reconnect(session, world.conn, "revoked", NOW)
     session.commit()
     assert len(bells(session, "calendar.disconnected", world.user.id)) == 1
-    assert session.scalars(select(MailOutbox)).first() is None
+    (row,) = mails(session)
+    assert (row.template, row.to_email) == ("calendar_disconnected", world.user.email)
+
+
+def test_a_second_disconnect_after_reconnecting_is_a_second_email(session, google, source, mail_on):
+    world = connected(session)
+    calendar_states.mark_needs_reconnect(session, world.conn, "revoked", NOW)
+    world.conn.status = "connected"
+    world.conn.connected_at = NOW + timedelta(days=1)  # connected again
+    calendar_states.mark_needs_reconnect(session, world.conn, "revoked", NOW + timedelta(days=2))
+    session.commit()
+    assert len(mails(session)) == 2
+
+
+def test_degraded_sends_no_email(session, mail_on):
+    world = make_world(session)
+    world.conn.error_since = NOW - timedelta(hours=1)
+    calendar_states.mark_degraded(session, world.conn, NOW)
+    session.commit()
+    assert mails(session) == []
+
+
+def test_email_skipped_when_notify_email_false(session, mail_on):
+    world = make_world(session)
+    world.user_settings.notify_email = False
+    calendar_states.mark_needs_reconnect(session, world.conn, "revoked", NOW)
+    session.commit()
+    assert mails(session) == []
+    assert len(bells(session, "calendar.disconnected", world.user.id)) == 1
+
+
+def test_email_skipped_for_a_suppressed_address(session, mail_on):
+    world = make_world(session)
+    mail.suppress(session, world.user.email, "unsubscribed")
+    calendar_states.mark_needs_reconnect(session, world.conn, "revoked", NOW)
+    session.commit()
+    assert mails(session) == []
+
+
+def test_the_email_renders_in_the_designers_layout(session):
+    message = mail.render("calendar_disconnected", {}, "ada@example.test", make_settings())
+    assert message.subject == "Your calendar is disconnected"
+    assert "Reconnect" in message.html and "/settings" in message.html
+    assert "Email preferences" in message.html
+    assert "/settings#email-preferences" in message.text
 
 
 def test_count_is_joins_in_the_next_24_hours(session, google, source):

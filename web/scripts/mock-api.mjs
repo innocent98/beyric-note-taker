@@ -56,7 +56,7 @@ const { values } = parseArgs({
 // the captured 202, then the captured translation 1.5 seconds later. Nothing is translated here:
 // the French and Spanish are the designer's own words, as captured with the model faked.
 
-// `--calendar not_connected|connected|off`: what GET /api/calendar answers (the captures in
+// `--calendar not_connected|connected|needs_reconnect|off`: what GET /api/calendar answers (the captures in
 // docs/fe-captures/calendar-state/; `paused` is connected with auto-join stopped by the operator; `off` is the feature being dark: 404 calendar_unavailable).
 // GET /api/calendar/recurring follows the same flag: `connected` replays the captures in
 // docs/fe-captures/calendar-recurring/ (by `?tz=`: Africa/Lagos, Pacific/Auckland, else UTC), the
@@ -381,6 +381,7 @@ const server = http.createServer(async (req, res) => {
         auto_join_paused_text: calendarCapture("22-state-auto-join-paused").auto_join_paused_text,
       });
     }
+    if (values.calendar === "needs_reconnect") return json(res, 200, calendarCapture("15-state-needs-reconnect-revoked"));
     return json(res, 200, calendarCapture(values.calendar === "connected" ? "09-state-connected-with-upcoming" : "05-state-not-connected"));
   }
   if (path === "/api/calendar/recurring" && method === "GET") {

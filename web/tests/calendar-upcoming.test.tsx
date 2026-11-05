@@ -63,9 +63,15 @@ describe("no calendar connected", () => {
     expect(screen.queryByText("Upcoming")).toBeNull();
   });
 
-  it("is the same band when Google needs the person to connect again", () => {
+  it("draws the lead-designed disconnected banner, with Reconnect to Settings, when Google needs the person to connect again", () => {
     show(needsReconnect);
-    expect(screen.getByRole("link", { name: "Connect calendar" })).toBeTruthy();
+    expect(screen.getByText("Your calendar is disconnected")).toBeTruthy();
+    expect(
+      screen.getByText("The note taker will not join meetings from your calendar until you connect again."),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Reconnect" }).getAttribute("href")).toBe("/settings");
+    expect(screen.queryByRole("button", { name: /close|dismiss/i })).toBeNull();
+    expect(screen.queryByText("Join meetings automatically")).toBeNull();
     expect(screen.queryByText("Upcoming")).toBeNull();
   });
 

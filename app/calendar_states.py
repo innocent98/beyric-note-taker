@@ -12,9 +12,9 @@ States (`calendar_connections.status`): `connected` -> `degraded` -> `needs_reco
 * **reconnect** (`calendar_connect`): `revive_on_reconnect` puts those joins back on the schedule
   when their 15-minute deadline has not passed; older ones stay skipped.
 
-No email goes to the user yet: the designer has not drawn the disconnect mail. The bell text is
-the wording the Settings card already uses (`calendar_text`). Nothing here commits: the caller's
-transaction owns the rows.
+The user is mailed once per disconnect (`calendar_disconnected`, lead-designed from the "Could not
+join" mail; never for `degraded`). The bell text is the wording the Settings card already uses
+(`calendar_text`). Nothing here commits: the caller's transaction owns the rows.
 """
 
 import logging
@@ -23,7 +23,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from app import alerts, calendar_text
+from app import alerts, calendar_text, mail_templates
 from app.calendar_source import AuthRevoked, RefreshTokenUnreadable
 from app.config import Settings, get_settings
 from app.models import CalendarConnection, CalendarEvent, ScheduledJoin
@@ -96,6 +96,8 @@ def mark_needs_reconnect(
         title=text,
         body=text,
         dedupe_key=f"cal_disc:{conn.id}:{int(conn.connected_at.timestamp())}",
+        # One mail per disconnect: the mail is queued only by the call that wrote the bell entry.
+        email_template=mail_templates.CALENDAR_DISCONNECTED,
     )
     if reason == "error":
         alerts.notify_admins(
