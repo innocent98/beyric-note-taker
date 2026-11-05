@@ -47,6 +47,7 @@ def record(
     error: BaseException | None = None,
     prompt_version: str | None = None,
     user_id: int | None = None,
+    audio_seconds: int | None = None,
 ) -> AiRun:
     """Add one call to the ledger (the caller commits). `error` is stored as a class name only:
     the underlying one when the exception wraps another (an `ExtractionFailed` over a
@@ -60,6 +61,7 @@ def record(
         prompt_version=prompt_version or _VERSION_OF_KIND.get(kind),
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        audio_seconds=audio_seconds,
         status=status,
         error=type(error.__cause__ or error).__name__ if error is not None else None,
     )

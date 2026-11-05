@@ -30,11 +30,19 @@ ruff clean; `tests/test_ai_runs_usage.py`, `test_pipeline.py`, `test_notes.py`, 
 ## Operate / roll back
 After deploy, the cost per kind (prices per million tokens; change them to the provider's):
 ```bash
-ssh haven-respite 'cd /opt/beyric-note-taker && docker compose exec -T db sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB"' <<< "select kind, model, count(*) as calls, sum(input_tokens) as tokens_in, sum(output_tokens) as tokens_out, round(sum(coalesce(input_tokens,0))*0.10/1e6 + sum(coalesce(output_tokens,0))*0.50/1e6, 4) as usd from ai_runs group by kind, model order by usd desc;"
+ssh haven-respite 'cd /opt/beyric-note-taker && docker compose exec -T db sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB"' <<< "select kind, model, count(*) as calls, sum(input_tokens) as tokens_in, sum(output_tokens) as tokens_out, round(sum(coalesce(audio_seconds,0))/60.0, 1) as audio_min, round(sum(coalesce(input_tokens,0))*0.10/1e6 + sum(coalesce(output_tokens,0))*0.50/1e6 + sum(coalesce(audio_seconds,0))/60.0*0.0045, 4) as usd from ai_runs group by kind, model order by usd desc;"
 ```
 Roll back: revert the PR; `alembic downgrade 0021` deletes the `notes` and `label` rows and restores the narrow check.
 
 ## Follow-ups
-- Transcription cost (`app/transcribe.py`, priced per audio minute): record minutes per meeting.
+- ~~Transcription cost~~ done 2026-11-05, see the section below.
 - A failed notes or labelling step's tokens are not recorded (its transaction rolls back); record them in a separate commit if the numbers matter.
 - `scripts/extraction_review.py` calls the model without the ledger (a few cents per review).
+
+## Addendum 2026-11-05: transcription (`kind = 'transcribe'`)
+**What:** `_step_transcribing` writes one `ai_runs` row per transcribed meeting: `kind = 'transcribe'`, `model = settings.transcription_model` (`gpt-transcribe`), `audio_seconds` = `recording.seconds` (the whole recording, rounded up, which is what the chunks add up to), `user_id` = owner, no tokens. Migration **0025** adds nullable `ai_runs.audio_seconds` and widens `ck_ai_runs_kind`; downgrade deletes the `transcribe` rows, restores the narrow check and drops the column. Branch `feature/transcription-cost-ledger`.
+**Same commit rule:** the row is added after `transcribe_chunks` returns and committed with the step's result (transcript saved, or no speech: it was still billed). A retry after a saved transcript skips the step, so it is counted once.
+**Price:** `gpt-transcribe` is $0.0045 per audio minute (25% under `whisper-1` / `gpt-4o-transcribe` at $0.006), from secondary sources (Spokenly, OpenRouter, CostGoat quoting the model page); **not confirmed on OpenAI's own pricing page**, so check platform.openai.com/docs/pricing. The cost query above prices these rows as `sum(audio_seconds)/60 * 0.0045` and shows `audio_min`.
+**Not recorded:** a transcription that fails (nothing comes back, so no row; chunks done before the failure were billed). Same trade-off as the notes step.
+**Tests:** `tests/test_usage.py` (row with seconds, no-speech case), `tests/test_pipeline.py` (ledger rows of a normal meeting), `tests/test_migrations.py` (0025 round trip, single head).
+**Roll back:** revert the PR; `alembic downgrade 0024`.

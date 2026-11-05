@@ -631,6 +631,17 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
         text = transcribe_chunks(
             recording.chunks, _terms(session, meeting.owner_user_id), client=openai_client
         )
+        # One row per transcription, written in the same commit as whatever this step ends with
+        # (no speech included: it was still billed). `recording.seconds` is the whole recording,
+        # which is what the chunks add up to. A failed transcription records nothing.
+        ai_runs.record(
+            session,
+            meeting.id,
+            "transcribe",
+            get_settings().transcription_model,
+            audio_seconds=recording.seconds,
+            user_id=meeting.owner_user_id,
+        )
         if len(text.split()) < MIN_WORDS:
             # The audio check only looks at peak volume, so noise can slip through.
             _fail(session, meeting, REASON_NO_SPEECH)

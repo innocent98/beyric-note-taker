@@ -168,12 +168,17 @@ def test_the_labelling_and_notes_calls_are_in_the_cost_ledger(session, meeting, 
     run(session, meeting, FakeVexa(DONE))
     rows = session.execute(
         select(AiRun.kind, AiRun.model, AiRun.input_tokens, AiRun.output_tokens, AiRun.user_id)
-        .where(AiRun.meeting_id == meeting.id)
+        .where(AiRun.meeting_id == meeting.id, AiRun.kind != "transcribe")
         .order_by(AiRun.id)
     ).all()
     assert [r[0] for r in rows] == ["label", "notes"]
     assert all(r[1] == "gpt-6-luna" and r[4] == meeting.owner_user_id for r in rows)
     assert rows[1][2:4] == (100, 40)
+    transcription = session.scalars(
+        select(AiRun).where(AiRun.meeting_id == meeting.id, AiRun.kind == "transcribe")
+    ).one()
+    assert transcription.audio_seconds == RECORDED_SECONDS
+    assert transcription.user_id == meeting.owner_user_id
 
 
 def test_a_ready_meeting_is_queued_for_extraction_in_the_same_commit(session, meeting, env):
