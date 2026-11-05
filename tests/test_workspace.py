@@ -7,7 +7,17 @@ from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from app import ai_runs, workspace
-from app.models import AiRun, Decision, Meeting, OpenQuestion, ReviewItem, Template, User
+from app.models import (
+    AiRun,
+    Decision,
+    Meeting,
+    OpenQuestion,
+    ReviewItem,
+    Task,
+    Template,
+    User,
+    UserSettings,
+)
 
 NOW = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
 TRANSCRIPT = "[Adebayo]: We use Metrika now.\n[Grace]: Launch is fourteenth of March."
@@ -115,24 +125,38 @@ def test_a_run_stores_what_the_notes_say_and_what_the_model_heard(session, meeti
     session.refresh(meeting)
     assert (meeting.extraction_status, meeting.extraction_version) == (
         "done",
-        ai_runs.EXTRACT_REVIEW_PROMPT_VERSION,
+        ai_runs.EXTRACT_PROMPT_VERSION,
     )
     run = session.scalars(select(AiRun)).one()
     assert (run.kind, run.status, run.input_tokens, run.output_tokens) == ("extract", "ok", 700, 90)
-    assert run.prompt_version == ai_runs.EXTRACT_REVIEW_PROMPT_VERSION
+    assert run.prompt_version == ai_runs.EXTRACT_PROMPT_VERSION
     assert run.meeting_id == meeting.id
 
 
-def test_the_call_is_only_asked_about_the_please_check_bullets_in_w1(session, meeting):
+def test_the_call_asks_about_the_action_items_too_when_tasks_are_on(session, meeting):
     client = FakeChat([GOOD])
     workspace.run_extraction(session, meeting, client=client, now=NOW)
     prompt = "\n".join(m["content"] for m in client.calls[0]["messages"])
     assert '0: "Metrika" may be misheard.' in prompt
     assert (
-        "<action_items>" not in prompt
-        and "send the contract" not in prompt.split("<transcript>")[0]
+        "<action_items>" in prompt
+        and "0: Tunde: send the contract (by Friday)"
+        in prompt.replace("(by Friday)", "(by Friday)")
     )
+
+
+def test_the_call_is_only_asked_about_the_please_check_bullets_when_tasks_are_off(session, meeting):
+    session.add(UserSettings(user_id=meeting.owner_user_id, auto_create_tasks=False))
+    session.commit()
+    client = FakeChat([GOOD])
+    workspace.run_extraction(session, meeting, client=client, now=NOW)
+    prompt = "\n".join(m["content"] for m in client.calls[0]["messages"])
+    assert '0: "Metrika" may be misheard.' in prompt
+    assert "<action_items>" not in prompt
     assert "milestone" not in client.calls[0]["messages"][0]["content"].lower()
+    session.refresh(meeting)
+    assert meeting.extraction_version == ai_runs.EXTRACT_REVIEW_PROMPT_VERSION
+    assert session.scalars(select(Task)).all() == []  # off means no tasks are made
 
 
 def test_a_term_the_transcript_never_had_is_not_kept(session, meeting):
@@ -144,7 +168,7 @@ def test_a_term_the_transcript_never_had_is_not_kept(session, meeting):
 def test_no_call_is_made_when_there_is_nothing_to_check(session, user):
     notes = NOTES.replace(
         '- "Metrika" may be misheard.\n- Grace\'s budget figure is unclear.', "None noted"
-    )
+    ).replace("- Tunde: send the contract (by Friday)", "None noted")
     meeting = make_meeting(session, user, notes=notes)
     client = FakeChat([])
     assert workspace.run_extraction(session, meeting, client=client, now=NOW) == "done"
@@ -357,12 +381,12 @@ def test_other_states_and_deleted_owners_are_not_taken(session, user):
 def test_backfill_gives_recent_meetings_the_full_run_and_old_ones_decisions_only(session, user):
     recent = make_meeting(session, user, created=NOW - timedelta(days=3))
     old = make_meeting(session, user, created=NOW - timedelta(days=40))
-    done = make_meeting(session, user, extraction_status="done")
+    done = make_meeting(session, user, extraction_status="done", created=NOW - timedelta(days=40))
     not_ready = make_meeting(session, user, status="processing", notes=None)
 
     counts = workspace.backfill(session, NOW)
 
-    assert counts == {"queued": 1, "decisions_only": 1}
+    assert counts == {"queued": 1, "decisions_only": 1, "tasks_queued": 0}
     for row in (recent, old, done, not_ready):
         session.refresh(row)
     assert recent.extraction_status == "pending"
@@ -371,7 +395,11 @@ def test_backfill_gives_recent_meetings_the_full_run_and_old_ones_decisions_only
     old_decisions = session.scalars(select(Decision).where(Decision.meeting_id == old.id)).all()
     assert len(old_decisions) == 2
     assert session.scalars(select(ReviewItem).where(ReviewItem.meeting_id == old.id)).all() == []
-    assert workspace.backfill(session, NOW) == {"queued": 0, "decisions_only": 0}  # idempotent
+    assert workspace.backfill(session, NOW) == {
+        "queued": 0,
+        "decisions_only": 0,
+        "tasks_queued": 0,
+    }  # idempotent
 
 
 # ---- the worker runs it ----
@@ -479,6 +507,6 @@ def test_backfill_leaves_meetings_of_accounts_being_deleted_alone(session, user)
     )
     session.add(gone)
     session.commit()
-    assert workspace.backfill(session, NOW) == {"queued": 0, "decisions_only": 0}
+    assert workspace.backfill(session, NOW) == {"queued": 0, "decisions_only": 0, "tasks_queued": 0}
     session.refresh(gone)
     assert gone.extraction_status is None

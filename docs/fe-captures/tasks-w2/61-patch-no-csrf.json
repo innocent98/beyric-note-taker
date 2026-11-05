@@ -1,0 +1,27 @@
+{
+  "note": "",
+  "client": "amina",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/tasks/2",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "done"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

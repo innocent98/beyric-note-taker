@@ -1,0 +1,28 @@
+{
+  "note": "",
+  "client": "chidi",
+  "request": {
+    "method": "POST",
+    "path": "/api/tasks",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "assignee_user_id": 999999
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "assignee_not_on_team",
+        "message": "That person is not on your team."
+      }
+    }
+  }
+}

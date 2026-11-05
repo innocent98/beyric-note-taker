@@ -1,0 +1,21 @@
+{
+  "note": "`ai_runs` after both attempts.",
+  "content": [
+    {
+      "kind": "extract",
+      "status": "failed",
+      "prompt_version": "extract-v1",
+      "input_tokens": null,
+      "output_tokens": null,
+      "error": "APIConnectionError"
+    },
+    {
+      "kind": "extract",
+      "status": "ok",
+      "prompt_version": "extract-v1",
+      "input_tokens": 1184,
+      "output_tokens": 702,
+      "error": null
+    }
+  ]
+}

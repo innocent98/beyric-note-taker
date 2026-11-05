@@ -811,6 +811,92 @@ def test_0019_gives_every_live_account_a_team_of_one_and_shares_nothing(scratch_
     engine.dispose()
 
 
+# ---- 0024 tasks ----
+
+
+def test_0024_adds_tasks_with_the_cascades_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0023")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
+        conn.execute(
+            text(
+                "insert into user_settings (user_id) "
+                "select id from users where email = 'a@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
+                "select u.id, 'u', 'google_meet', 'abc', t.id from users u, templates t "
+                "where u.email = 'a@example.test' limit 1"
+            )
+        )
+    command.upgrade(cfg, "head")
+    # Existing rows get the defaults: both switches on, no meeting quiet.
+    flags = _rows(engine, "select auto_create_tasks, email_assignees from user_settings")
+    assert flags and set(flags) == {(True, True)}
+    assert _rows(engine, "select extraction_quiet from meetings") == [(False,)]
+    with engine.begin() as conn:
+        team = conn.execute(text("select id from teams limit 1")).scalar()
+        meeting = conn.execute(text("select id from meetings")).scalar()
+        for title in ("one", "two"):
+            conn.execute(
+                text(
+                    "insert into tasks (team_id, meeting_id, title, source, ai_fingerprint) "
+                    "values (:t, :m, :title, 'ai', :fp)"
+                ),
+                {"t": team, "m": meeting, "title": title, "fp": title},
+            )
+        conn.execute(
+            text("insert into tasks (team_id, title, source) values (:t, 'by hand', 'manual')"),
+            {"t": team},
+        )
+    # One task per bullet of a meeting; manual tasks (no meeting) are not constrained by it.
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into tasks (team_id, meeting_id, title, source, ai_fingerprint) "
+                "values (:t, :m, 'again', 'ai', 'one')"
+            ),
+            {"t": team, "m": meeting},
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text("insert into tasks (team_id, title, status) values (:t, 'x', 'blocked')"),
+            {"t": team},
+        )
+    # One "New tasks assigned" mail per person per meeting; another person or meeting is fine.
+    insert = (
+        "insert into mail_outbox (to_email, template, payload) "
+        "values ('x@example.test', 'tasks_assigned', cast(:p as jsonb))"
+    )
+    with engine.begin() as conn:
+        conn.execute(text(insert), {"p": '{"meeting_id": 1, "user_id": 2}'})
+        conn.execute(text(insert), {"p": '{"meeting_id": 1, "user_id": 3}'})
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text(insert), {"p": '{"meeting_id": 1, "user_id": 2}'})
+    # Deleting the meeting deletes its tasks (spec 3.3); the manual one stays.
+    with engine.begin() as conn:
+        conn.execute(text("delete from meetings where id = :m"), {"m": meeting})
+    assert _rows(engine, "select title from tasks") == [("by hand",)]
+
+    command.downgrade(cfg, "0023")
+    assert "tasks" not in set(inspect(engine).get_table_names())
+    assert "extraction_quiet" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    assert not {"auto_create_tasks", "email_assignees"} & {
+        c["name"] for c in inspect(engine).get_columns("user_settings")
+    }
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0024_follows_0023():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0024").down_revision == "0023"
+
+
 # ---- 0021 notifications cascade with the meeting ----
 
 

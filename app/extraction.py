@@ -131,6 +131,38 @@ def parse_notes(notes: str) -> ParsedNotes:
     )
 
 
+_OWNER_PREFIX = re.compile(r"^([^:()\n]{1,60}?)\s*:\s+(\S.*)$")
+_TRAILING_DUE = re.compile(r"\s*\(([^()]{1,100})\)\s*$")
+_NO_OWNER = frozenset({"unassigned", "unknown", "tbd", "none", "nobody", "no owner", "n a"})
+MAX_OWNER_WORDS = 4
+
+
+@dataclass(frozen=True)
+class ParsedAction:
+    owner: str | None  # as the notes wrote it; not yet checked against the transcript
+    task: str
+    due_phrase: str | None
+
+
+def parse_action_bullet(bullet: str) -> ParsedAction:
+    """The notes' "Owner: task (due date if stated)" bullet taken apart by code: what a task is
+    made from when the model gave nothing for it, and the fallback title. "Unassigned" is no
+    owner. Nothing is guessed: a bullet that does not fit the pattern is the task, whole."""
+    text = " ".join(bullet.split())
+    owner = None
+    found = _OWNER_PREFIX.match(text)
+    if found and len(found.group(1).split()) <= MAX_OWNER_WORDS:
+        candidate, text = found.group(1).strip(), found.group(2).strip()
+        plain = normalise(candidate)
+        if plain not in _NO_OWNER and not any(c.isdigit() for c in candidate):
+            owner = candidate
+    due = _TRAILING_DUE.search(text)
+    due_phrase = None
+    if due and text[: due.start()].strip():
+        due_phrase, text = due.group(1).strip(), text[: due.start()].strip()
+    return ParsedAction(owner, text, due_phrase)
+
+
 # ---- what the model returns, and the checks code runs on it ----
 
 
@@ -291,7 +323,7 @@ def _check_action(
     verified = quote is not None and quote_in_transcript(quote, transcript)
     title = _plain(raw.title, MAX_TITLE_CHARS) or ""
     if not title_ok(title, bullet):
-        title = _plain(bullet, MAX_TITLE_CHARS) or ""
+        title = _plain(parse_action_bullet(bullet).task, MAX_TITLE_CHARS) or ""
     owner = _plain(raw.spoken_owner, MAX_HEARD_CHARS)
     return CheckedAction(
         index=raw.index,
@@ -320,8 +352,22 @@ def check_extraction(
         if index in given:
             actions.append(_check_action(given[index], bullet, transcript, meeting_date))
         else:
-            title = _plain(bullet, MAX_TITLE_CHARS) or ""
-            actions.append(CheckedAction(index, title, None, None, None, None, None, True, True))
+            parsed = parse_action_bullet(bullet)
+            title = _plain(parsed.task, MAX_TITLE_CHARS) or ""
+            owner = _plain(parsed.owner, MAX_HEARD_CHARS)
+            actions.append(
+                CheckedAction(
+                    index=index,
+                    title=title,
+                    spoken_owner=owner if name_in_transcript(owner, transcript) else None,
+                    due_phrase=_plain(parsed.due_phrase, MAX_HEARD_CHARS),
+                    due_date=None,
+                    quote=None,
+                    confidence=None,
+                    unverified=True,
+                    from_parser=True,
+                )
+            )
     review: dict[int, CheckedReview] = {}
     for raw_review in result.review:
         heard = _plain(raw_review.heard_as, MAX_HEARD_CHARS)

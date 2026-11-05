@@ -1,0 +1,24 @@
+{
+  "note": "Backfilled: `is_new` false on every task.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/2/tasks",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "tasks": [],
+      "assigned_people": 0,
+      "extraction_status": "pending"
+    }
+  }
+}

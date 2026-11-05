@@ -7,7 +7,9 @@ the extraction release is deployed (spec 3.3 and D5):
 Every ready meeting gets its decisions read from the notes, which needs no model. Meetings from the
 last 14 days (`--task-days`) are also queued for the worker, which reads their open questions and
 review items one pass at a time and asks the model for "heard as" hints. Meetings that already
-have an extraction status are left alone, so running it twice changes nothing. It never sends mail.
+have an extraction status are left alone. Recent meetings that were read before tasks existed are
+queued too, so the worker makes their tasks; those tasks are not marked New. Running it twice
+changes nothing. It never sends mail, whatever the Tasks settings say.
 Run it where the app's `.env` is, for example:
 
     docker compose exec web python scripts/backfill_extraction.py
@@ -37,7 +39,8 @@ def run(argv: list[str]) -> int:
         counts = workspace.backfill(session, datetime.now(UTC), task_days=args.task_days)
     print(
         f"Backfill done: {counts['queued']} queued for the worker, "
-        f"{counts['decisions_only']} decisions only."
+        f"{counts['decisions_only']} decisions only, "
+        f"{counts['tasks_queued']} read again for tasks."
     )
     return 0
 

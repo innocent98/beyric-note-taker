@@ -1,0 +1,25 @@
+{
+  "note": "",
+  "client": "chidi",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/tasks",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

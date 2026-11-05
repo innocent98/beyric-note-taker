@@ -1,13 +1,14 @@
 """W0.5: `DELETE /api/meetings/{id}` and what goes with the meeting.
 
 The cascade test is written over the schema, not over a list of tables: any table that points at
-`meetings.id` must either cascade or be named in `KEPT` with a reason. A table added later (W2's
-`tasks`) fails here until it does one or the other.
+`meetings.id` must either cascade or be named in `KEPT` with a reason. A table added later fails
+here until it does one or the other (W2's `tasks` cascades).
 """
 
 import pytest
 from sqlalchemy import select
 
+from app import teams
 from app.models import (
     AiRun,
     Base,
@@ -19,7 +20,9 @@ from app.models import (
     OpenQuestion,
     ReviewItem,
     ScheduledJoin,
+    Task,
     UsageEntry,
+    User,
 )
 from app.vexa import VexaError
 from tests.test_api import (  # noqa: F401  (fixtures used by name)
@@ -78,6 +81,13 @@ def fill(session, meeting):
                 model="m",
             ),
             Decision(meeting_id=meeting.id, text="d", position=0, fingerprint="d"),
+            Task(
+                team_id=teams.ensure_team(session, session.get(User, uid)).id,
+                meeting_id=meeting.id,
+                title="t",
+                source="ai",
+                ai_fingerprint="t",
+            ),
             OpenQuestion(meeting_id=meeting.id, text="q", position=0, fingerprint="q"),
             ReviewItem(
                 meeting_id=meeting.id, owner_user_id=uid, text="r", position=0, fingerprint="r"
@@ -91,6 +101,11 @@ def fill(session, meeting):
                 to_email="o@example.test",
                 template="notes_ready",
                 payload={"meeting_id": meeting.id},
+            ),
+            MailOutbox(
+                to_email="t@example.test",
+                template="tasks_assigned",
+                payload={"meeting_id": meeting.id, "user_id": uid},
             ),
         ]
     )
@@ -124,12 +139,12 @@ def test_the_owner_deletes_a_meeting_and_everything_derived_from_it(api, session
     assert response.status_code == 204 and response.content == b""
     session.expire_all()
     assert session.get(Meeting, gone_id) is None
-    for model in (MeetingTranslation, Decision, OpenQuestion, ReviewItem, Notification):
+    for model in (MeetingTranslation, Decision, Task, OpenQuestion, ReviewItem, Notification):
         assert count(session, model, meeting_id=gone_id) == 0, model
         assert count(session, model, meeting_id=kept.id) == 1, model
     # mail waiting for this meeting is gone, mail for another meeting is not
     mails = session.scalars(select(MailOutbox)).all()
-    assert [m.payload["meeting_id"] for m in mails] == [kept.id]
+    assert [m.payload["meeting_id"] for m in mails] == [kept.id, kept.id]
     # kept on purpose, unlinked
     assert count(session, UsageEntry, user_id=owner_id, seconds=600) == 2
     assert count(session, UsageEntry, meeting_id=gone_id) == 0

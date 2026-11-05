@@ -688,7 +688,7 @@ def delete_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> None
         # Only mail still to go: a sent row stays, it counts toward the mail budget and caps.
         session.execute(
             delete(MailOutbox).where(
-                MailOutbox.template == "notes_ready",
+                MailOutbox.template.in_(("notes_ready", "tasks_assigned")),
                 MailOutbox.status != "sent",
                 MailOutbox.payload["meeting_id"].astext == str(meeting_id),
             )

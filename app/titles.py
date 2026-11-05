@@ -103,6 +103,15 @@ def alert_name(title: str | None, platform: str | None, native_id: str | None) -
     )
 
 
+def mail_line(text: str | None, limit: int) -> str:
+    """Words somebody said in a meeting (a task title) as one plain line for a mail: a web address
+    is replaced by "[link removed]" and a bare domain has its dots written "[.]", because a mail
+    client would link either. Cut at `limit` characters."""
+    plain = URL.sub(LINK_REMOVED, clean_title(text, limit * 2))
+    plain = _DOMAINISH.sub(lambda found: found.group().replace(".", "[.]"), plain)
+    return clean_title(plain, limit)
+
+
 def mail_title(meeting: Meeting) -> str:
     """`alert_name` for a stored meeting."""
     return alert_name(meeting.title, meeting.platform, meeting.native_id)

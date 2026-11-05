@@ -222,12 +222,12 @@ def test_review_items_belong_to_their_owner_alone(api, session, template, strang
 
 
 def test_the_session_counts_open_review_items_for_the_badge(api, anon_client, session, template):
-    assert api.get("/api/session").json()["badges"] == {"review_open": 0}
+    assert api.get("/api/session").json()["badges"] == {"review_open": 0, "tasks_new": 0}
     extracted(session, template)
-    assert api.get("/api/session").json()["badges"] == {"review_open": 2}
+    assert api.get("/api/session").json()["badges"] == {"review_open": 2, "tasks_new": 1}
     item_id = api.get("/api/review").json()["items"][0]["id"]
     api.post(f"/api/review/{item_id}/check")
-    assert api.get("/api/session").json()["badges"] == {"review_open": 1}
+    assert api.get("/api/session").json()["badges"] == {"review_open": 1, "tasks_new": 1}
 
 
 def test_a_logged_out_session_has_no_badges(anon):

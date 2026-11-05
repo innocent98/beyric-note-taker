@@ -1,0 +1,38 @@
+{
+  "note": "",
+  "client": "dan",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/tasks",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "auto_create_tasks": "yes"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "auto_create_tasks",
+            "message": "Input should be a valid boolean"
+          },
+          {
+            "field": "email_assignees",
+            "message": "Field required"
+          }
+        ]
+      }
+    }
+  }
+}

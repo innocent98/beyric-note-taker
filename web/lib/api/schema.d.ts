@@ -632,6 +632,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{meeting_id}/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Meeting Tasks
+         * @description A meeting's action items as tasks, for its page ("8 tasks created, assigned to 3 people").
+         *     Anyone who can read the meeting may ask.
+         */
+        get: operations["meeting_tasks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{meeting_id}/tasks/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Extract Tasks
+         * @description Read the tasks out of an older meeting's notes ("Extract tasks from this meeting"). Owner
+         *     only. 409 `extraction_pending` while the meeting is already being read, 409 `tasks_off` when
+         *     the owner has switched tasks off. The tasks it makes are not New and nobody is emailed.
+         */
+        post: operations["extract_tasks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{meeting_id}/translations": {
         parameters: {
             query?: never;
@@ -985,6 +1028,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Tasks Settings
+         * @description The two switches of Settings > Tasks (both on by default, also for an account with no
+         *     settings row yet).
+         */
+        get: operations["read_tasks_settings"];
+        /**
+         * Write Tasks Settings
+         * @description Set both switches. They are read when a meeting is read (tasks) and when the mail is sent
+         *     (assignees), so turning email off also stops mail already queued.
+         */
+        put: operations["write_tasks_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/time-zone": {
         parameters: {
             query?: never;
@@ -1059,6 +1128,61 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tasks
+         * @description The tasks the caller can see: those assigned to them, those from meetings they can read,
+         *     and their team's manual tasks. Newest first; for the next page pass `before_id` =
+         *     `next_before_id`. `attention` counts every open task the caller sees, whatever the filter.
+         */
+        get: operations["list_tasks"];
+        put?: never;
+        /**
+         * Create Task
+         * @description Make a task by hand, in the caller's team. Anyone on the team may. It has no meeting.
+         */
+        post: operations["create_task"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tasks/{task_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Task */
+        get: operations["get_task"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Task
+         * @description Delete a task. Owners and admins may delete any task they can see; a member only the tasks
+         *     they made. An AI task deleted here does not come back when the notes are read again.
+         */
+        delete: operations["delete_task"];
+        options?: never;
+        head?: never;
+        /**
+         * Patch Task
+         * @description Change some fields of a task. Owners and admins may change anything. A member may change
+         *     the status and due date of a task assigned to them, take a task that has no owner (set
+         *     `assignee_user_id` to themselves), and change everything about a task they made; anything
+         *     more is 403 `team_forbidden` and nothing is changed. A status change clears "New".
+         */
+        patch: operations["patch_task"];
         trace?: never;
     };
     "/api/templates": {
@@ -1370,10 +1494,19 @@ export interface components {
              */
             status: "waiting" | "invited" | "joined" | "removed";
         };
+        /** AttentionOut */
+        AttentionOut: {
+            /** Needs Owner */
+            needs_owner: number;
+            /** Unverified */
+            unverified: number;
+        };
         /** BadgesOut */
         BadgesOut: {
             /** Review Open */
             review_open: number;
+            /** Tasks New */
+            tasks_new: number;
         };
         /**
          * CalendarOut
@@ -1530,6 +1663,14 @@ export interface components {
         ErrorResponse: {
             error: components["schemas"]["ErrorBody"];
         };
+        /** ExtractQueued */
+        ExtractQueued: {
+            /**
+             * Extraction Status
+             * @enum {string}
+             */
+            extraction_status: "pending" | "running" | "done" | "failed" | "skipped";
+        };
         /** FieldError */
         FieldError: {
             /** Field */
@@ -1632,6 +1773,10 @@ export interface components {
              * @enum {string}
              */
             step: "waiting" | "audio" | "transcribing" | "speakers" | "notes" | "done";
+            /** Tasks */
+            tasks: components["schemas"]["TaskOut"][];
+            /** Tasks Count */
+            tasks_count: number;
             /** Template Id */
             template_id: number;
             /** Template Name */
@@ -1708,12 +1853,23 @@ export interface components {
              * @enum {string}
              */
             step: "waiting" | "audio" | "transcribing" | "speakers" | "notes" | "done";
+            /** Tasks Count */
+            tasks_count: number;
             /** Template Id */
             template_id: number;
             /** Template Name */
             template_name: string;
             /** Title */
             title: string;
+        };
+        /** MeetingTasks */
+        MeetingTasks: {
+            /** Assigned People */
+            assigned_people: number;
+            /** Extraction Status */
+            extraction_status: ("pending" | "running" | "done" | "failed" | "skipped") | null;
+            /** Tasks */
+            tasks: components["schemas"]["TaskOut"][];
         };
         /** NewMeeting */
         NewMeeting: {
@@ -1777,6 +1933,18 @@ export interface components {
              * @constant
              */
             status: "password_changed";
+        };
+        /**
+         * PersonOut
+         * @description A member of the caller's team who can be given a task.
+         */
+        PersonOut: {
+            /** Is You */
+            is_you: boolean;
+            /** Name */
+            name: string;
+            /** User Id */
+            user_id: number;
         };
         /** PilotOut */
         PilotOut: {
@@ -1904,6 +2072,117 @@ export interface components {
             name: string;
             /** Password */
             password: string;
+        };
+        /** TaskCreate */
+        TaskCreate: {
+            /** Assignee User Id */
+            assignee_user_id?: number | null;
+            /** Due Date */
+            due_date?: string | null;
+            /**
+             * Status
+             * @default todo
+             * @enum {string}
+             */
+            status: "todo" | "doing" | "done";
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+        };
+        /** TaskList */
+        TaskList: {
+            attention: components["schemas"]["AttentionOut"];
+            /** Has More */
+            has_more: boolean;
+            /** Next Before Id */
+            next_before_id: number | null;
+            /** People */
+            people: components["schemas"]["PersonOut"][];
+            /** Tasks */
+            tasks: components["schemas"]["TaskOut"][];
+        };
+        /** TaskOut */
+        TaskOut: {
+            /** Assigned On */
+            assigned_on: string | null;
+            assignee: components["schemas"]["PersonOut"] | null;
+            /** Can Assign */
+            can_assign: boolean;
+            /** Can Claim */
+            can_claim: boolean;
+            /** Can Delete */
+            can_delete: boolean;
+            /** Can Edit */
+            can_edit: boolean;
+            /** Can Update */
+            can_update: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Done At */
+            done_at: string | null;
+            /** Due Date */
+            due_date: string | null;
+            /** Due Phrase */
+            due_phrase: string | null;
+            /** From Meeting */
+            from_meeting: boolean;
+            /** Id */
+            id: number;
+            /** Is New */
+            is_new: boolean;
+            meeting: components["schemas"]["MeetingRef"] | null;
+            /** Quote */
+            quote: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "ai" | "manual";
+            /** Spoken Owner */
+            spoken_owner: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "todo" | "doing" | "done";
+            /** Title */
+            title: string;
+            /** Unverified */
+            unverified: boolean;
+        };
+        /**
+         * TaskPatch
+         * @description A partial change: send only the fields that change. A field you leave out is untouched;
+         *     `assignee_user_id` and `due_date` set to null clear them.
+         */
+        TaskPatch: {
+            /** Assignee User Id */
+            assignee_user_id?: number | null;
+            /** Due Date */
+            due_date?: string | null;
+            /** Status */
+            status?: ("todo" | "doing" | "done") | null;
+            /** Title */
+            title?: string | null;
+        };
+        /** TasksSettingsIn */
+        TasksSettingsIn: {
+            /** Auto Create Tasks */
+            auto_create_tasks: boolean;
+            /** Email Assignees */
+            email_assignees: boolean;
+        };
+        /** TasksSettingsOut */
+        TasksSettingsOut: {
+            /** Auto Create Tasks */
+            auto_create_tasks: boolean;
+            /** Email Assignees */
+            email_assignees: boolean;
         };
         /** TemplateIn */
         TemplateIn: {
@@ -3993,6 +4272,131 @@ export interface operations {
             };
         };
     };
+    meeting_tasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingTasks"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    extract_tasks: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExtractQueued"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     request_translation: {
         parameters: {
             query?: never;
@@ -5113,6 +5517,104 @@ export interface operations {
             };
         };
     };
+    read_tasks_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TasksSettingsOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_tasks_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TasksSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TasksSettingsOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     read_time_zone: {
         parameters: {
             query?: never;
@@ -5330,6 +5832,286 @@ export interface operations {
                 };
             };
             /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_tasks: {
+        parameters: {
+            query?: {
+                /** @description `me`, `none` (Needs owner) or a user id */
+                assignee?: string | null;
+                status?: ("todo" | "doing" | "done") | null;
+                limit?: number;
+                before_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_task: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `assignee_not_on_team` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_task: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_task: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_task: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;

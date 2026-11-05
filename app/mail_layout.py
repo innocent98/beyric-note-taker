@@ -56,6 +56,14 @@ class Bullets:
 
 
 @dataclass(frozen=True)
+class Rows:
+    """A ruled list where each row is some text and a small note at the right (a task and when
+    it is due, as in the designer's "New tasks assigned" mail). Both are plain text."""
+
+    items: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class Quote:
     """A box holding someone's own words. Shown as plain text: never linked."""
 
@@ -68,7 +76,7 @@ class Button:
     url: str
 
 
-Block = Heading | Meta | Para | Label | Bullets | Quote | Button
+Block = Heading | Meta | Para | Label | Bullets | Rows | Quote | Button
 
 
 def check_url(url: str) -> str:
@@ -114,6 +122,18 @@ def _block_html(block: Block) -> str:
             return (
                 f'<ul style="margin:0 0 20px;padding-left:20px;color:#2E3532;font-size:14px;'
                 f'line-height:1.55">{rows}</ul>'
+            )
+        case Rows(items):
+            rows = "".join(
+                f'<tr><td style="padding:12px 16px 12px 0;border-bottom:1px solid #EDF0EE;'
+                f'color:{INK};font-size:15px">{esc(text)}</td>'
+                f'<td align="right" style="padding:12px 0;border-bottom:1px solid #EDF0EE;'
+                f'font-size:13px;color:#9A5B00;white-space:nowrap">{esc(note)}</td></tr>'
+                for text, note in items
+            )
+            return (
+                f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+                f'style="margin:0 0 24px;border-top:1px solid #EDF0EE">{rows}</table>'
             )
         case Quote(text):
             return (
@@ -177,6 +197,10 @@ def render_text(
                 parts.append(text)
             case Bullets(items):
                 parts.append("\n".join(f"- {item}" for item in items))
+            case Rows(items):
+                parts.append(
+                    "\n".join(f"- {text}" + (f" ({note})" if note else "") for text, note in items)
+                )
             case Quote(text):
                 parts.append(f"“{text}”")
             case Button(label, url):

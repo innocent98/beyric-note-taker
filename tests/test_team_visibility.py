@@ -184,6 +184,7 @@ READS = {
     ("GET", "/api/meetings/{meeting_id}"),
     ("GET", "/api/meetings/{meeting_id}/export"),
     ("GET", "/api/meetings/{meeting_id}/translations/{language}"),
+    ("GET", "/api/meetings/{meeting_id}/tasks"),
 }
 OWNER_ONLY = {
     ("DELETE", "/api/meetings/{meeting_id}"),
@@ -193,6 +194,7 @@ OWNER_ONLY = {
     ("POST", "/api/meetings/{meeting_id}/regenerate"),
     ("POST", "/api/meetings/{meeting_id}/translations"),
     ("DELETE", "/api/meetings/{meeting_id}/translations/{language}"),
+    ("POST", "/api/meetings/{meeting_id}/tasks/extract"),
 }
 # Routes with no meeting id in the path that still read meeting content, through the same rule.
 LISTS = {("GET", "/api/meetings"), ("GET", "/api/decisions")}

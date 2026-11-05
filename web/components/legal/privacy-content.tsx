@@ -15,7 +15,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h3>Information you give us</h3>
       <ul>
         <li>Account details: your name and email address, and a password (stored only in hashed form) or, if you sign in with Google, your Google account identifier. We also keep a count of the hours of meetings recorded for your account, and, if you join the waiting list, your email address.</li>
-        <li>Settings and content you create: notes templates and vocabulary terms. From each set of notes we also keep the lists of decisions, open questions and Please check items it contains, so you can search and tick them off, and, for a Please check item about a name or term that may have been misheard, the word as it was transcribed.</li>
+        <li>Settings and content you create: notes templates and vocabulary terms. From each set of notes we also keep the lists of decisions, open questions and Please check items it contains, so you can search and tick them off, and, for a Please check item about a name or term that may have been misheard, the word as it was transcribed. From the action items we keep tasks: a short title, who it is assigned to, a due date, a status and a short quote from the transcript that shows where it came from, and any tasks you add yourself.</li>
         <li>Messages you send us, such as support requests.</li>
       </ul>
       <h3>Meeting content</h3>
@@ -55,7 +55,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <ul>
         <li>To provide the service: joining meetings, recording audio, and producing transcripts and notes for you.</li>
         <li>To apply your templates and vocabulary so notes follow your format and spell names correctly.</li>
-        <li>To send service emails, such as account verification, password resets, waiting-list invitations and notices that an address already has an account, and an email when the notes of a meeting you sent the note taker to are ready. You can turn the notes-ready email off in Settings, under Email preferences.</li>
+        <li>To send service emails, such as account verification, password resets, waiting-list invitations and notices that an address already has an account, an email when the notes of a meeting you sent the note taker to are ready, and an email to a teammate listing the tasks from a meeting that were assigned to them. You can turn these emails off for yourself in Settings, under Email preferences, and stop emails to the people your own tasks are assigned to under Tasks.</li>
         <li>To keep the service secure, prevent abuse and fix problems.</li>
         <li>To meet legal obligations and enforce our Terms of Service.</li>
       </ul>
@@ -63,8 +63,8 @@ export function PrivacyContent({ days }: { days: number }) {
 
       <h2 id="share">Who we share information with</h2>
       <ul>
-        <li><strong>OpenAI</strong> turns meeting audio into a transcript, writes notes from it, and checks the notes against the transcript to find names and terms that may have been misheard. Under OpenAI's API terms, data sent through its API is not used to train its models.</li>
-        <li><strong>Resend</strong> sends our service emails (account verification, password resets, waiting-list invitations, notices that an address already has an account, and notes-ready emails). It receives the email address and, if given, the name on each of those emails, and their content, which includes one-time links and, in a notes-ready email, a short extract of your notes (the summary, decisions, action items and open questions).</li>
+        <li><strong>OpenAI</strong> turns meeting audio into a transcript, writes notes from it, reads the action items to find who took each one and by when, and checks the notes against the transcript to find names and terms that may have been misheard. Under OpenAI's API terms, data sent through its API is not used to train its models.</li>
+        <li><strong>Resend</strong> sends our service emails (account verification, password resets, waiting-list invitations, notices that an address already has an account, notes-ready emails and task assignment emails). It receives the email address and, if given, the name on each of those emails, and their content, which includes one-time links and, in a notes-ready email, a short extract of your notes (the summary, decisions, action items and open questions) and, in a task email, the titles and due dates of the tasks assigned to the recipient.</li>
         <li><strong>Contabo</strong> hosts our server, in France.</li>
         <li><strong>Cloudflare</strong> provides our domain's DNS and may carry traffic to the site.</li>
         <li><strong>Meeting and calendar platforms</strong> (Google and Zoom), as needed to join meetings and to read calendar events you have authorised.</li>
@@ -81,7 +81,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h2 id="retention">How long we keep information</h2>
       <ul>
         <li>Meeting audio: deleted automatically {days} days after the meeting.</li>
-        <li>Transcripts and notes, and the lists of decisions, open questions and Please check items taken from them: kept until you ask us to delete them or close your account. When a meeting is deleted, everything taken from it is deleted with it: its transcript, notes, translations, decisions, open questions and Please check items, and its audio. The hours it counted stay counted.</li>
+        <li>Transcripts and notes, and the lists of decisions, open questions, Please check items and tasks taken from them: kept until you ask us to delete them or close your account. When a meeting is deleted, everything taken from it is deleted with it: its transcript, notes, translations, decisions, open questions, Please check items and tasks, and its audio. The hours it counted stay counted.</li>
         <li>Calendar data: we keep only what is needed for upcoming meetings, and delete it when you disconnect your calendar.</li>
         <li>Account information: kept while your account is active and deleted within 30 days of closing it, except where the law requires us to keep records.</li>
         <li>An account whose email address is not confirmed within 48 hours is deleted.</li>

@@ -1,0 +1,165 @@
+{
+  "note": "After 'rewrite the notes': same ids; the moved and edited tasks are untouched; the deleted one did not come back.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/tasks",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "tasks": [
+        {
+          "id": 6,
+          "title": "",
+          "status": "todo",
+          "assignee": null,
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": null,
+          "is_new": false,
+          "unverified": false,
+          "source": "manual",
+          "assigned_on": "2026-11-05",
+          "done_at": null,
+          "created_at": "2026-11-05T14:57:22.343998Z",
+          "from_meeting": false,
+          "meeting": null,
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": true,
+          "can_delete": true
+        },
+        {
+          "id": 4,
+          "title": "Ask finance to confirm the contract number",
+          "status": "doing",
+          "assignee": {
+            "user_id": 3,
+            "name": "Chidi Eze",
+            "is_you": false
+          },
+          "spoken_owner": "Chidi",
+          "due_date": "2026-11-09",
+          "due_phrase": "tomorrow",
+          "quote": "I will ask finance tomorrow.",
+          "is_new": false,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-03",
+          "done_at": null,
+          "created_at": "2026-11-05T14:57:20.160822Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet nat-aaaa-bbb",
+            "platform": "google_meet",
+            "created_at": "2026-11-03T10:00:00Z"
+          },
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": false,
+          "can_delete": true
+        },
+        {
+          "id": 3,
+          "title": "Check the vendor site for the spelling",
+          "status": "todo",
+          "assignee": {
+            "user_id": 4,
+            "name": "Amina Bello",
+            "is_you": false
+          },
+          "spoken_owner": "Amina",
+          "due_date": null,
+          "due_phrase": null,
+          "quote": "I'll look at the vendor site.",
+          "is_new": true,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-03",
+          "done_at": null,
+          "created_at": "2026-11-05T14:57:20.160822Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet nat-aaaa-bbb",
+            "platform": "google_meet",
+            "created_at": "2026-11-03T10:00:00Z"
+          },
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": false,
+          "can_delete": true
+        },
+        {
+          "id": 1,
+          "title": "Set up the tracking plan",
+          "status": "todo",
+          "assignee": {
+            "user_id": 3,
+            "name": "Chidi Eze",
+            "is_you": false
+          },
+          "spoken_owner": "Chidi",
+          "due_date": "2026-11-06",
+          "due_phrase": "by Friday",
+          "quote": "For analytics I will set up the tracking plan by Friday.",
+          "is_new": true,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-03",
+          "done_at": null,
+          "created_at": "2026-11-05T14:57:20.160822Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet nat-aaaa-bbb",
+            "platform": "google_meet",
+            "created_at": "2026-11-03T10:00:00Z"
+          },
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": false,
+          "can_delete": true
+        }
+      ],
+      "people": [
+        {
+          "user_id": 2,
+          "name": "Dan Okoro",
+          "is_you": true
+        },
+        {
+          "user_id": 3,
+          "name": "Chidi Eze",
+          "is_you": false
+        },
+        {
+          "user_id": 4,
+          "name": "Amina Bello",
+          "is_you": false
+        }
+      ],
+      "attention": {
+        "needs_owner": 1,
+        "unverified": 0
+      },
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

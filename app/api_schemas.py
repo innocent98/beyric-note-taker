@@ -3,7 +3,7 @@
 The frontend generates its TypeScript types from these (see `scripts/export_openapi.py`).
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
@@ -70,6 +70,8 @@ class UsageOut(BaseModel):
 class BadgesOut(BaseModel):
     # Review items the user has not checked yet: the number on the Review item in the sidebar.
     review_open: int
+    # Open tasks the user can see that are still marked New: the number on the Tasks item.
+    tasks_new: int
 
 
 class SessionState(BaseModel):
@@ -175,6 +177,8 @@ class MeetingSummary(BaseModel):
     # it was deleted (a deleted template is no longer in GET /api/templates).
     template_name: str
     created_at: UtcDatetime
+    # How many tasks this meeting has that the caller may see ("8 tasks" on the meetings list).
+    tasks_count: int
 
 
 TranslationLanguage = Literal["fr", "es"]
@@ -244,6 +248,9 @@ class MeetingDetail(MeetingSummary):
     # ready; read `extraction_status` before trusting a 0 while it is pending or running.
     decisions_count: int
     review_open_count: int
+    # The meeting's action items as tasks, in the order of the notes. Empty until the extraction
+    # has run (read `extraction_status`) and when the owner has tasks switched off.
+    tasks: list["TaskOut"]
 
 
 class MeetingList(BaseModel):
@@ -542,3 +549,116 @@ class TimeZoneIn(Body):
 class LanguagePreferencesIn(Body):
     # `en`, `fr` or `es`; anything else is 422 `language_unsupported`.
     default_language: str
+
+
+# ---- tasks ----
+
+TaskStatus = Literal["todo", "doing", "done"]
+TaskSource = Literal["ai", "manual"]
+
+
+class PersonOut(BaseModel):
+    """A member of the caller's team who can be given a task."""
+
+    user_id: int
+    name: str
+    is_you: bool
+
+
+class TaskOut(BaseModel):
+    id: int
+    # Plain text, at most 200 characters. Never render it as a link or as HTML.
+    title: str
+    status: TaskStatus
+    # The teammate it is assigned to; null is "Needs owner".
+    assignee: PersonOut | None
+    # The name as said in the meeting, kept when nobody on the team matched it. The drawer's
+    # "was named as the owner in the meeting, but is not on your team" line reads this.
+    spoken_owner: str | None
+    due_date: date | None
+    # The words about timing as said ("before Friday"), also when no date could be worked out.
+    due_phrase: str | None
+    # The words from the transcript that show the task, at most 300 characters, plain text.
+    # Null when none was found in the transcript (see `unverified`) and for a manual task.
+    quote: str | None
+    is_new: bool
+    # The quote the AI gave was not found in the transcript, so none is shown: worth a look.
+    unverified: bool
+    source: TaskSource
+    # The meeting's date in its owner's time zone; the day it was made for a manual task.
+    assigned_on: date | None
+    done_at: UtcDatetime | None
+    created_at: UtcDatetime
+    # True when the task came from a meeting. `meeting` is set only when the caller may read that
+    # meeting: someone given a task from a private meeting sees the task and its quote, nothing
+    # else (spec 8.2), so for them `from_meeting` is true and `meeting` is null.
+    from_meeting: bool
+    meeting: MeetingRef | None
+    # What the caller may do with it, so the screen shows only what will work.
+    can_update: bool  # status and due date
+    can_edit: bool  # the title
+    can_assign: bool  # give it to someone else, or to nobody
+    can_claim: bool  # take a task that has no owner yet
+    can_delete: bool
+
+
+class AttentionOut(BaseModel):
+    # Open tasks with no owner.
+    needs_owner: int
+    # Open tasks whose quote could not be found in the transcript.
+    unverified: int
+
+
+class TaskList(BaseModel):
+    tasks: list[TaskOut]
+    # Who the caller can give a task to (the active members of their team).
+    people: list[PersonOut]
+    # Counted over every open task the caller can see, not only this page or filter.
+    attention: AttentionOut
+    has_more: bool
+    next_before_id: int | None
+
+
+class MeetingTasks(BaseModel):
+    tasks: list[TaskOut]
+    # How many different people the tasks are assigned to ("8 tasks created, assigned to 3").
+    assigned_people: int
+    extraction_status: ExtractionStatus | None
+
+
+class TaskCreate(Body):
+    # Empty is allowed: the drawer opens a blank task and fills the title in. At most 200.
+    title: str = Field("", max_length=200)
+    assignee_user_id: int | None = None
+    # YYYY-MM-DD.
+    due_date: date | None = Field(None, strict=False)
+    status: TaskStatus = "todo"
+
+
+class TaskPatch(Body):
+    """A partial change: send only the fields that change. A field you leave out is untouched;
+    `assignee_user_id` and `due_date` set to null clear them."""
+
+    title: str | None = Field(None, max_length=200)
+    status: TaskStatus | None = None
+    assignee_user_id: int | None = None
+    due_date: date | None = Field(None, strict=False)
+
+
+class TasksSettingsOut(BaseModel):
+    # "Create tasks from action items": off means a meeting's action items stay only in its notes.
+    auto_create_tasks: bool
+    # "Email assignees": off means nobody is emailed about the tasks of this person's meetings.
+    email_assignees: bool
+
+
+class TasksSettingsIn(Body):
+    auto_create_tasks: bool
+    email_assignees: bool
+
+
+class ExtractQueued(BaseModel):
+    extraction_status: ExtractionStatus
+
+
+MeetingDetail.model_rebuild()

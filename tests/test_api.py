@@ -453,6 +453,7 @@ def test_list_items_are_summaries_newest_first(api, session, template):
         "template_id": template.id,
         "template_name": "General",
         "created_at": item["created_at"],
+        "tasks_count": 0,
     }
     assert item["created_at"].endswith("Z")
     assert body["meetings"][1]["title"] == "Google Meet aaa-aaaa-aaa"
