@@ -143,13 +143,34 @@ class Redactor:
                 or key in self.KEEP_KEYS
             ):
                 return self.GUID.sub(self.guid, node) if key == "scope" else node
-            if key in {"displayName", "subject", "name"} and not self.EMAIL.search(node):
+            plain = not self.EMAIL.search(node) and "://" not in node
+            if key in {"displayName", "subject", "name"} and plain:
                 return node[:1] + "…" if len(node) > 1 else node  # titles and names: shape only
             return self.text(node)
         return node
 
 
 # ---------------------------------------------------------------- recording
+
+
+def write_private(path: Path, text: str) -> None:
+    """Create the file owner-only from the start (no window where it is world-readable)."""
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(text)
+
+
+def strip_secrets(node):
+    """Tokens never reach disk, not even in the git-ignored raw copy."""
+    if isinstance(node, dict):
+        return {
+            k: ("<redacted>" if k in Redactor.SECRET_KEYS and v else strip_secrets(v))
+            for k, v in node.items()
+        }
+    if isinstance(node, list):
+        return [strip_secrets(v) for v in node]
+    return node
 
 
 class Recorder:
@@ -159,14 +180,16 @@ class Recorder:
         self.index = 0
         self.notes: list[str] = []
         self.files: list[str] = []
-        RAW.mkdir(parents=True, exist_ok=True)
+        RAW.mkdir(parents=True, exist_ok=True, mode=0o700)
         GRAPH_DIR.mkdir(parents=True, exist_ok=True)
 
     def save(self, name: str, note: str, status: int | None, body, *, request: dict | None = None):
         self.index += 1
         stem = f"{self.index:02d}-{name}.{self.label}"
         payload = {"note": note, "request": request, "status": status, "body": body}
-        (RAW / f"{stem}.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
+        write_private(
+            RAW / f"{stem}.json", json.dumps(strip_secrets(payload), indent=2, ensure_ascii=False)
+        )
         clean = self.redactor.walk(payload)
         (GRAPH_DIR / f"{stem}.json").write_text(
             json.dumps(clean, indent=2, ensure_ascii=False) + "\n"
@@ -374,17 +397,16 @@ def run(args) -> None:
             f"S1: refresh token present: {facts['has_refresh_token']}; expires_in={tbody.get('expires_in')}"
         )
         if tbody.get("refresh_token"):
-            STATE.mkdir(parents=True, exist_ok=True)
-            (STATE / f"state-{args.label}.json").write_text(
+            write_private(
+                STATE / f"state-{args.label}.json",
                 json.dumps(
                     {
                         "authority": args.authority,
                         "scope": scope,
                         "refresh_token": tbody["refresh_token"],
                     }
-                )
+                ),
             )
-            os.chmod(STATE / f"state-{args.label}.json", 0o600)
         claims = decode_claims(tbody["id_token"])
         keep = {
             k: claims.get(k)
@@ -603,7 +625,8 @@ def run(args) -> None:
                 f"id_token in refresh answer: {'id_token' in rb}"
             )
             if rb.get("refresh_token"):
-                (STATE / f"state-{args.label}.json").write_text(
+                write_private(
+                    STATE / f"state-{args.label}.json",
                     json.dumps(
                         {
                             "authority": args.authority,
@@ -611,7 +634,7 @@ def run(args) -> None:
                             "tid": tid,
                             "refresh_token": rb["refresh_token"],
                         }
-                    )
+                    ),
                 )
     finish(rec, args, scope, facts)
 
@@ -700,6 +723,7 @@ def selftest() -> None:
         "body": {
             "content": "<a href='https://us02web.zoom.us/j/81234567890?pwd=SECRETPASS'>Join</a> ada@corp.com"
         },
+        "location": {"displayName": "https://us02web.zoom.us/j/81234567890?pwd=SECRETPASS"},
         "tid": CONSUMER_TENANT,
         "oid": "11111111-2222-3333-4444-555555555555",
         "start": {"dateTime": "2026-11-05T10:00:00.0000000", "timeZone": "UTC"},
@@ -719,7 +743,7 @@ def selftest() -> None:
         assert leak not in out, f"leaked {leak}: {out}"
     assert CONSUMER_TENANT in out and "teams.microsoft.com/l/meetup-join/" in out
     assert "person-1@example.test" in out and "00000000-0000-0000-0000-000000000001" in out
-    assert "%40thread.v2" in out
+    assert "%40thread.v2" in out and "us02web.zoom.us/j/<num:11>" in out
     verifier, challenge = pkce()
     assert len(verifier) >= 43 and "=" not in challenge
     jwt = (

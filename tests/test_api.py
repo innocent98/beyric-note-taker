@@ -246,7 +246,7 @@ def api_routes(app):
 
 
 def concrete(path: str) -> str:
-    return re.sub(r"\{\w+\}", "1", path)
+    return re.sub(r"\{provider\}", "google", re.sub(r"\{(?!provider)\w+\}", "1", path))
 
 
 PUBLIC = {
@@ -262,6 +262,7 @@ PUBLIC = {
     ("GET", "/api/auth/google/start"),
     ("GET", "/api/auth/google/callback"),
     ("GET", "/api/calendar/google/callback"),
+    ("GET", "/api/calendar/microsoft/callback"),
 }
 
 
