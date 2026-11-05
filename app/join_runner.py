@@ -50,7 +50,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app import alerts, calendar_states, titles
+from app import alerts, calendar_providers, calendar_states, titles
 from app.calendar_source import AuthRevoked, CalendarSource, CalendarSourceError, SyncBatch
 from app.config import Settings, get_settings
 from app.gcal_rules import JoinSettings, will_join
@@ -159,16 +159,19 @@ def _connection_of(session: Session, join: ScheduledJoin) -> CalendarConnection 
 def run_due_joins(
     session: Session,
     vexa: VexaClient,
-    calendar: CalendarSource | None,
+    calendar: "calendar_providers.SourceRegistry | CalendarSource | None",
     *,
     now: datetime,
     settings: Settings | None = None,
 ) -> list[JoinOutcome]:
     """Handle every join that is due at `now`; returns what happened to each row it acted on.
     Each row is its own transaction. A failure on one row is logged by type and never stops the
-    others. `calendar` may be None (no source: the two-minute re-check is skipped)."""
+    others. `calendar` is the process's source registry (a single source is accepted too); a join's
+    re-check asks the source of its own connection's provider, and with none the two-minute
+    re-check is skipped."""
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
+    calendar = calendar_providers.as_registry(calendar)
     settings = settings or get_settings()
     outcomes: list[JoinOutcome] = []
     started = time.monotonic()
@@ -354,7 +357,7 @@ def _lock(session: Session, join_id: int, now: datetime) -> ScheduledJoin | None
 def _process(
     session: Session,
     vexa: VexaClient,
-    calendar: CalendarSource | None,
+    calendar: "calendar_providers.SourceRegistry",
     join_id: int,
     now: datetime,
     settings: Settings,
@@ -519,7 +522,7 @@ def _recheck_due(join: ScheduledJoin, now: datetime) -> bool:
 def _recheck(
     session: Session,
     vexa: VexaClient,
-    calendar: CalendarSource | None,
+    calendar: "calendar_providers.SourceRegistry",
     join: ScheduledJoin,
     now: datetime,
     settings: Settings,
@@ -532,13 +535,14 @@ def _recheck(
     what is stored."""
     event = session.get(CalendarEvent, join.calendar_event_id)
     conn = session.get(CalendarConnection, event.connection_id) if event else None
-    if calendar is None or event is None or conn is None or conn.provider != calendar.provider:
+    source = calendar.get(conn.provider) if conn is not None else None
+    if event is None or source is None:
         join.rechecked_at = now  # nothing to ask: do not look again
         _touch(join, now)
         session.commit()
         return AGAIN
     try:
-        raw = calendar.get_event(conn, event.source_event_id)
+        raw = source.get_event(conn, event.source_event_id)
     except ValueError as exc:  # an event id the source refuses will never work: stop asking
         logger.warning("re-check of join %s refused (%s)", join.id, type(exc).__name__)
         join.rechecked_at = now
@@ -904,12 +908,12 @@ def register_join_runner(
     scheduler,
     settings: Settings | None = None,
     *,
-    source: CalendarSource | None = None,
+    source: "calendar_providers.SourceRegistry | CalendarSource | None" = None,
     vexa: VexaClient | None = None,
 ) -> bool:
     """Put the runner on the scheduler's dispatch loop (every tick, 10 s). Not registered while
     `AUTOJOIN_ENABLED` is false (the operator's emergency stop). The scheduler process shares its
-    calendar source with the sync job, so the two share one access-token cache."""
+    source registry with the sync job, so the two share each provider's access-token cache."""
     settings = settings or get_settings()
     if not settings.autojoin_enabled:
         return False

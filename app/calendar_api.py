@@ -20,7 +20,16 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, calendar_connect, calendar_text, gcal_sync, google_oauth, services, titles
+from app import (
+    auth,
+    calendar_connect,
+    calendar_providers,
+    calendar_text,
+    gcal_sync,
+    google_oauth,
+    services,
+    titles,
+)
 from app.api_schemas import ErrorResponse
 from app.db import get_session
 from app.gcal_rules import JoinSettings, will_join
@@ -28,7 +37,9 @@ from app.models import AppState, CalendarConnection, CalendarEvent, User, UserSe
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
-CONNECT_RESPONSES = {code: {"model": ErrorResponse} for code in (404, 503)}
+ProviderName = Literal["google", "microsoft"]  # calendar_providers.ROUTE_PROVIDERS
+
+CONNECT_RESPONSES = {code: {"model": ErrorResponse} for code in (404, 409, 503)}
 CALLBACK_RESPONSES = {302: {"description": "Redirect"}, 404: {"model": ErrorResponse}}
 STATE_RESPONSES = {404: {"model": ErrorResponse}}
 SETTINGS_RESPONSES = {code: {"model": ErrorResponse} for code in (404, 422)}
@@ -99,7 +110,8 @@ class CalendarOut(BaseModel):
     (`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;
     `needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.
     `connected` is true while the calendar can still be read (`connected` or `degraded`).
-    `google_email` is the Google account that was connected, and is null when none is.
+    `account_email` is the account that was connected (shown as the connected address), and
+    `provider` which calendar it is (`google` or `microsoft`); both are null when none is.
     `last_sync_at` is the last time the calendar was read in full, null before the first sync.
     `last_error` is the last failure in plain words, null when the last attempt worked.
     `rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)
@@ -113,7 +125,8 @@ class CalendarOut(BaseModel):
     connected: bool
     state: Literal["not_connected", "connected", "degraded", "needs_reconnect"]
     state_text: str
-    google_email: str | None
+    account_email: str | None
+    provider: Literal["google", "microsoft"] | None
     last_sync_at: datetime | None
     last_error: str | None
     rule: Literal["all", "organizer", "none"]
@@ -165,8 +178,19 @@ def _enabled(request: Request, google: google_oauth.GoogleOAuth | None) -> googl
     return google
 
 
-@router.post("/google/connect", responses=CONNECT_RESPONSES)
-def calendar_google_connect(
+def _provider_client(
+    request: Request, provider: str, google: google_oauth.GoogleOAuth | None
+) -> google_oauth.GoogleOAuth:
+    """The OAuth client of the provider a route names, or 404 `calendar_unavailable`: a provider
+    with no row in the registry (Microsoft until it is built) is simply not available."""
+    if calendar_providers.get(provider) is None:
+        raise services.Refused(404, "calendar_unavailable", "This calendar is not available.")
+    return _enabled(request, google)
+
+
+@router.post("/{provider}/connect", responses=CONNECT_RESPONSES)
+def calendar_connect_start(
+    provider: ProviderName,
     body: ConnectIn,
     request: Request,
     response: Response,
@@ -178,13 +202,21 @@ def calendar_google_connect(
     navigate to. Only the permissions in `features` are asked for, each at the moment its feature
     is switched on; permissions given earlier are kept. Sets the `calendar_flow` cookie that ties
     the callback to this browser. 404 `calendar_unavailable` when the calendar features are off,
-    503 `calendar_unavailable` when the server cannot store a token safely."""
-    google = _enabled(request, google)
+    409 `calendar_already_connected` when another provider's calendar is connected (one calendar at
+    a time), 503 `calendar_unavailable` when the server cannot store a token safely. `provider` is
+    `google`; `microsoft` answers 404 `calendar_unavailable` until it is built."""
+    google = _provider_client(request, provider, google)
     settings = request.app.state.settings
     try:
         url, state = calendar_connect.start_connect(
             session, user, body.features, body.return_to, google=google, now=_now()
         )
+    except calendar_connect.AlreadyConnected:
+        raise services.Refused(
+            409,
+            "calendar_already_connected",
+            "Another calendar is already connected. Disconnect it first.",
+        ) from None
     except calendar_connect.ConnectUnavailable:
         raise services.Refused(
             503, "calendar_unavailable", "Google Calendar cannot be connected right now."
@@ -201,8 +233,9 @@ def calendar_google_connect(
     return ConnectOut(authorize_url=url, show_unverified_notice=not settings.google_app_verified)
 
 
-@router.get("/google/callback", status_code=302, responses=CALLBACK_RESPONSES)
-def calendar_google_callback(
+@router.get("/{provider}/callback", status_code=302, responses=CALLBACK_RESPONSES)
+def calendar_connect_callback(
+    provider: ProviderName,
     request: Request,
     code: str | None = Query(None, max_length=2000),
     state: str | None = Query(None, max_length=2000),
@@ -215,9 +248,10 @@ def calendar_google_callback(
     user the flow was started for, and the `calendar_flow` cookie. Always a redirect, never JSON:
     success goes to the stored `return_to` with `?calendar=connected`; a failure goes there with
     `?calendar_error=` `google_denied`, `google_failed`, `scope_missing` (the calendar box was
-    unticked), `no_refresh_token` or `wrong_account`; nobody signed in goes to
+    unticked), `no_refresh_token`, `wrong_account` or `already_connected` (another provider's
+    calendar is connected); nobody signed in goes to
     `/login?error=google_failed`. 404 `calendar_unavailable` while the feature is off."""
-    google = _enabled(request, google)
+    google = _provider_client(request, provider, google)
     settings = request.app.state.settings
     result = calendar_connect.finish_connect(
         session,
@@ -235,8 +269,9 @@ def calendar_google_callback(
     return response
 
 
-@router.post("/google/disconnect")
-def calendar_google_disconnect(
+@router.post("/{provider}/disconnect")
+def calendar_connect_disconnect(
+    provider: ProviderName,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
@@ -249,23 +284,10 @@ def calendar_google_disconnect(
     local deletion still happens and `revoked` is false: tell the person to remove Beyric at
     myaccount.google.com/permissions.
     Afterwards `connect` works again, for the same or another Google account."""
-    revoked = calendar_connect.disconnect(session, user, google)
+    if calendar_providers.get(provider) is None:
+        raise services.Refused(404, "calendar_unavailable", "This calendar is not available.")
+    revoked = calendar_connect.disconnect(session, user, google, provider)
     return DisconnectOut(revoked=revoked)
-
-
-def _calendar_connection(session: Session, user: User) -> CalendarConnection | None:
-    """The user's Google connection if it gives the calendar feature (a connection made only for
-    Meet is not a connected calendar), else None."""
-    conn = session.scalars(
-        select(CalendarConnection).where(
-            CalendarConnection.user_id == user.id, CalendarConnection.provider == "google"
-        )
-    ).first()
-    if conn is None or conn.status == "disconnected":
-        return None
-    if "calendar" not in calendar_connect.granted_features(conn):
-        return None
-    return conn
 
 
 def _join_settings(prefs: UserSettings | None, request: Request) -> JoinSettings:
@@ -313,7 +335,7 @@ def _upcoming(
 
 def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut:
     """The whole state, as `GET /api/calendar` and `PUT /api/calendar/settings` answer."""
-    conn = _calendar_connection(session, user)
+    conn = calendar_connect.live_calendar_connection(session, user)
     prefs = session.get(UserSettings, user.id)
     rule = prefs.auto_join_rule if prefs else "all"
     template_id = prefs.calendar_template_id if prefs else None
@@ -327,7 +349,8 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
             connected=False,
             state="not_connected",
             state_text=calendar_text.state_text(None, "not_connected"),
-            google_email=None,
+            account_email=None,
+            provider=None,
             last_sync_at=None,
             last_error=None,
             rule=rule,
@@ -342,7 +365,8 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
         connected=state != "needs_reconnect",
         state=state,
         state_text=calendar_text.state_text(conn, state),
-        google_email=conn.google_account_email,
+        account_email=conn.account_email,
+        provider=conn.provider,
         last_sync_at=conn.last_sync_at,
         last_error=calendar_text.error_text(conn.last_error),
         rule=rule,
@@ -401,7 +425,7 @@ def calendar_settings(
     if set_template:
         prefs.calendar_template_id = body.calendar_template_id
         gcal_sync.set_join_template(session, user.id, body.calendar_template_id, commit=False)
-    conn = _calendar_connection(session, user)
+    conn = calendar_connect.live_calendar_connection(session, user)
     if rule_changed:
         session.execute(
             update(CalendarEvent)
@@ -443,7 +467,7 @@ def calendar_event_override(
     before Teams can be joined): `message` is the reason in plain words, and nothing is stored.
     404 `calendar_unavailable` while the calendar features are off."""
     _enabled(request, google)
-    conn = _calendar_connection(session, user)
+    conn = calendar_connect.live_calendar_connection(session, user)
     row = None
     if conn is not None:
         row = session.scalars(

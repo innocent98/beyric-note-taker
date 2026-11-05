@@ -982,4 +982,80 @@ def test_0025_lets_the_ledger_hold_transcription_with_audio_seconds_and_downgrad
 def test_0025_follows_0024():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0025").down_revision == "0024"
-    assert script.get_heads() == ["0025"]
+
+
+# ---- 0026 provider-neutral calendar connections ----
+
+
+def test_0026_renames_the_identity_columns_keeps_the_data_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0025")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
+        conn.execute(
+            text(
+                "insert into calendar_connections (user_id, provider, google_account_email, "
+                "google_sub, google_hosted_domain) select id, 'google', 'g@example.test', "
+                "'g-1', 'example.test' from users where email = 'a@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into oauth_flows (state_hash, purpose, code_verifier, nonce, expires_at) "
+                "values ('h1', 'calendar', 'v', 'n', now())"
+            )
+        )
+    command.upgrade(cfg, "head")
+    columns = {c["name"] for c in inspect(engine).get_columns("calendar_connections")}
+    assert {"account_email", "account_subject", "account_domain"} <= columns
+    assert {"tenant_id", "account_kind", "tenant_domains"} <= columns
+    assert not {"google_account_email", "google_sub", "google_hosted_domain"} & columns
+    # No data moved: the Google row keeps its values under the new names; its Microsoft columns are
+    # empty; the existing flow is Google's. The sign-in column is a different thing and stays.
+    assert _rows(
+        engine,
+        "select provider, account_email, account_subject, account_domain, tenant_id, "
+        "account_kind, tenant_domains from calendar_connections",
+    ) == [("google", "g@example.test", "g-1", "example.test", None, None, None)]
+    assert _rows(engine, "select provider from oauth_flows") == [("google",)]
+    assert "google_sub" in {c["name"] for c in inspect(engine).get_columns("users")}
+
+    with engine.begin() as conn:  # a Microsoft row is now allowed, with its own columns
+        conn.execute(text("insert into users (email, status) values ('b@example.test', 'active')"))
+        conn.execute(
+            text(
+                "insert into calendar_connections (user_id, provider, account_subject, tenant_id, "
+                "account_kind) select id, 'microsoft', 'oid-1', "
+                "'9188040d-6c67-4c5b-b112-36a304b66dad', 'personal' from users "
+                "where email = 'b@example.test'"
+            )
+        )
+    for sql in (
+        "insert into oauth_flows (state_hash, purpose, provider, code_verifier, nonce, expires_at) "
+        "values ('h2', 'calendar', 'yahoo', 'v', 'n', now())",
+        "update calendar_connections set account_kind = 'robot' where provider = 'microsoft'",
+    ):
+        with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+            conn.execute(text(sql))
+
+    # The downgrade cannot represent a Microsoft connection: it refuses until the row is gone.
+    with pytest.raises(sa.exc.DBAPIError):
+        command.downgrade(cfg, "0025")
+    with engine.begin() as conn:
+        conn.execute(text("delete from calendar_connections where provider = 'microsoft'"))
+    command.downgrade(cfg, "0025")
+    old = {c["name"] for c in inspect(engine).get_columns("calendar_connections")}
+    assert {"google_account_email", "google_sub", "google_hosted_domain"} <= old
+    assert not {"tenant_id", "account_kind", "tenant_domains", "account_email"} & old
+    assert "provider" not in {c["name"] for c in inspect(engine).get_columns("oauth_flows")}
+    assert _rows(engine, "select google_account_email, google_sub from calendar_connections") == [
+        ("g@example.test", "g-1")
+    ]
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0026_follows_0025():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0026").down_revision == "0025"

@@ -267,12 +267,11 @@ def register_jobs(scheduler: Scheduler, settings) -> None:
 
     register_default_sweeps(scheduler, settings)
     if settings.calendar_enabled:
-        from app.gcal_client import GoogleSource
+        from app.calendar_providers import build_sources
         from app.gcal_sync import register_calendar_sync
 
-        source = GoogleSource(
-            settings
-        )  # one source, so the sync and the runner share a token cache
+        # One source per enabled provider, so the sync and the runner share each token cache
+        source = build_sources(settings)
         register_calendar_sync(scheduler, settings, source=source)
         if settings.autojoin_enabled:
             from app.join_runner import register_join_runner
