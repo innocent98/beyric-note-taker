@@ -14,7 +14,7 @@ A meeting nobody may read is "no such meeting" (404, never 403), and the platfor
 route into team content: `is_admin` is not consulted here.
 """
 
-from sqlalchemy import ColumnElement, Select, or_, select
+from sqlalchemy import ColumnElement, Select, and_, or_, select
 
 from app.models import Meeting, TeamMember, User
 
@@ -23,7 +23,12 @@ def can_read_clause(user: User) -> ColumnElement[bool]:
     """The `where` condition for "this caller may read this meeting", for queries that join
     `meetings` (decisions, open questions). A caller with no team sees only their own."""
     their_team = select(TeamMember.team_id).where(TeamMember.user_id == user.id).scalar_subquery()
-    return or_(Meeting.owner_user_id == user.id, Meeting.shared_team_id == their_team)
+    # A shared meeting of an account being deleted is treated as absent (see app/deletion.py).
+    live_owner = Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted"))
+    return or_(
+        Meeting.owner_user_id == user.id,
+        and_(Meeting.shared_team_id == their_team, live_owner),
+    )
 
 
 def visible_meetings(user: User) -> Select[tuple[Meeting]]:
