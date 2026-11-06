@@ -349,7 +349,8 @@ def test_another_teams_series_are_not_listed_or_readable(api, app, session, outs
     error_of(other.post(f"/api/series/{weekly.id}/agenda/send"), 404, "not_found")
 
 
-def test_making_and_renaming_a_series(api, app, session, owner, daniel, weekly):
+def test_making_and_renaming_a_series(api, app, session, owner, daniel, weekly, template):
+    share(session, meeting_in(session, template, weekly), owner)  # so the team can see it
     created = api.post("/api/series", {"title": "  Friday  review  "})
     assert created.status_code == 201 and created.json()["title"] == "Friday review"
     error_of(api.post("/api/series", {"title": "   "}), 422, "invalid_title")
@@ -359,8 +360,9 @@ def test_making_and_renaming_a_series(api, app, session, owner, daniel, weekly):
     error_of(patch(other, f"/api/series/{weekly.id}", {"title": "Mine now"}), 403, "team_forbidden")
     own = other.post("/api/series", {"title": "Daniel's"}).json()["id"]
     assert patch(other, f"/api/series/{own}", {"title": "Renamed"}).json()["title"] == "Renamed"
-    # an owner (manager) can rename anyone's
-    assert patch(api, f"/api/series/{own}", {"title": "By manager"}).json()["title"] == "By manager"
+    # a series nobody else can read a meeting of is its maker's own: even the owner of the team
+    # does not see it (named after a person's meeting, it is private until one is shared)
+    error_of(patch(api, f"/api/series/{own}", {"title": "By manager"}), 404, "not_found")
     assert patch(api, f"/api/series/{mine}", {"title": "Friday"}).json()["title"] == "Friday"
 
 
@@ -418,6 +420,17 @@ def test_the_page_carries_every_block_the_designer_drew(
     assert page["agenda_recipients"] == 1  # Daniel; never the caller
 
 
+def test_a_hand_made_series_is_private_to_its_maker_until_a_meeting_is_shared(
+    api, app, session, owner, daniel, template, weekly
+):
+    meeting = meeting_in(session, template, weekly)
+    other = sign_in(app, DANIEL_EMAIL)
+    assert other.get("/api/series").json()["series"] == []
+    error_of(other.get(f"/api/series/{weekly.id}"), 404, "not_found")
+    share(session, meeting, owner)
+    assert [c["title"] for c in other.get("/api/series").json()["series"]] == ["Monday planning"]
+
+
 def test_a_teammates_private_meeting_is_invisible_on_the_page(
     api, app, session, owner, daniel, template, weekly
 ):
@@ -426,22 +439,30 @@ def test_a_teammates_private_meeting_is_invisible_on_the_page(
     task_in(session, team_id, private, "Private task")
     question_in(session, private, "Private question")
     other = sign_in(app, DANIEL_EMAIL)
+    error_of(
+        other.get(f"/api/series/{weekly.id}"), 404, "not_found"
+    )  # nothing of it is his to read
+    other_meeting = meeting_in(session, template, weekly, when=MONDAY - timedelta(days=9))
+    share(session, other_meeting, owner)
     page = other.get(f"/api/series/{weekly.id}").json()
-    assert page["unfinished"] == [] and page["questions"] == []
-    assert page["past_meetings"] == [] and page["attendees"] == []
-    assert page["finished_since_text"] is None
+    assert [t["title"] for t in page["unfinished"]] == []
+    assert page["questions"] == [] and [m["id"] for m in page["past_meetings"]] == [
+        other_meeting.id
+    ]
+    assert all(a["name"] != "x" for a in page["attendees"])
     share(session, private, owner)
     page = other.get(f"/api/series/{weekly.id}").json()
     assert [t["title"] for t in page["unfinished"]] == ["Private task"]
-    assert [m["id"] for m in page["past_meetings"]] == [private.id]
+    assert [m["id"] for m in page["past_meetings"]] == [private.id, other_meeting.id]
 
 
 # ---- the agenda ----
 
 
 def test_the_agenda_is_plain_text_with_limits_and_author_or_manager_removal(
-    api, app, session, owner, daniel, weekly
+    api, app, session, owner, daniel, weekly, template
 ):
+    share(session, meeting_in(session, template, weekly), owner)  # so the team can see the series
     url = f"/api/series/{weekly.id}/agenda"
     first = api.post(url, {"text": " Budget   review "})
     assert first.status_code == 201 and first.json()["text"] == "Budget review"
