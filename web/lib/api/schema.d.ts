@@ -4119,6 +4119,15 @@ export interface operations {
                     "application/json": components["schemas"]["SlackOut"];
                 };
             };
+            /** @description `slack_webhook_invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Not logged in */
             401: {
                 headers: {
@@ -4137,7 +4146,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `slack_webhook_invalid` */
+            /** @description Malformed request */
             422: {
                 headers: {
                     [name: string]: unknown;

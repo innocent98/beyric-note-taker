@@ -278,7 +278,7 @@ def test_another_teams_slack_is_invisible(app, api, session, team, owner, outsid
 
 def test_a_wrong_address_is_refused_and_nothing_is_stored_or_sent(api, session, team, sent):
     for bad in ("https://evil.test/x", "not a url", ""):
-        error_of(api.call("PUT", SLACK, {"webhook_url": bad}), 422, "slack_webhook_invalid")
+        error_of(api.call("PUT", SLACK, {"webhook_url": bad}), 400, "slack_webhook_invalid")
     assert sent.calls == [] and session.scalars(select(Integration)).all() == []
 
 

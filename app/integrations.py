@@ -58,7 +58,7 @@ def connect_slack(
     session: Session, team_id: int, user: User, url: str, now: datetime, *, sender=None
 ) -> Integration:
     """Check the pasted webhook, post one test message to it, and store it (encrypted). A webhook
-    Slack does not accept is not stored. 422 `slack_webhook_invalid`, 429 `integration_rate`,
+    Slack does not accept is not stored. 400 `slack_webhook_invalid`, 429 `integration_rate`,
     502 `slack_unreachable`, 503 `integrations_unavailable`."""
     from app.services import Refused  # not at the top: services imports the worker's modules
 
@@ -66,7 +66,7 @@ def connect_slack(
         clean = slack.check_webhook(url)
     except slack.WebhookInvalid:
         raise Refused(
-            422,
+            400,
             "slack_webhook_invalid",
             "That is not a Slack webhook address. It starts with https://hooks.slack.com/services/.",
         ) from None
