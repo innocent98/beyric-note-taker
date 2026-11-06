@@ -20,7 +20,10 @@ import type {
   NewTask,
   NoteLanguage,
   NoticeList,
+  MeetingSeriesResult,
   OpenQuestion,
+  ReminderPreferences,
+  SeriesCard,
   QuestionChanges,
   SeriesList,
   SeriesPage,
@@ -254,6 +257,12 @@ export function createApi(options: ApiOptions = {}) {
       // `recording_delete_failed` (nothing deleted); a repeat is 404 (docs/fe-integration-guide-meeting-delete.md).
       remove: (id: number) => request<void>("DELETE", `/api/meetings/${id}`, { write: true }),
       // "Share with team": the answer is the whole meeting (owner only; anyone else gets 404).
+      // Recurring meetings (docs/fe-integration-guide-series.md): put the caller's own meeting into a
+      // series of their team, or out (`null`); "Make this a recurring meeting?" makes one from a link
+      // that was used before (409 `not_reused`).
+      setSeries: (id: number, series_id: number | null) =>
+        request<MeetingSeriesResult>("PUT", `/api/meetings/${id}/series`, { body: { series_id }, write: true }),
+      makeRecurring: (id: number) => request<MeetingSeriesResult>("POST", `/api/meetings/${id}/recurring`, { write: true }),
       share: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/share`, { write: true }),
       unshare: (id: number) => request<Meeting>("DELETE", `/api/meetings/${id}/share`, { write: true }),
       cancel: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/cancel`, { write: true }),
@@ -348,6 +357,12 @@ export function createApi(options: ApiOptions = {}) {
         get: () => request<TasksSettings>("GET", "/api/settings/tasks"),
         set: (body: TasksSettings) => request<TasksSettings>("PUT", "/api/settings/tasks", { body, write: true }),
       },
+      // The person's own agenda and reminder mail switch (GET and PUT /api/settings/reminders).
+      reminders: {
+        get: () => request<ReminderPreferences>("GET", "/api/settings/reminders"),
+        set: (notify_reminders: boolean) =>
+          request<ReminderPreferences>("PUT", "/api/settings/reminders", { body: { notify_reminders }, write: true }),
+      },
       email: {
         get: () => request<EmailPreferences>("GET", "/api/settings/email"),
         set: (notify_email: boolean) =>
@@ -359,6 +374,7 @@ export function createApi(options: ApiOptions = {}) {
     // `nothing_to_send`; 429 `agenda_rate_limited`). `question` is "On next agenda" and "Mark resolved".
     series: {
       list: () => request<SeriesList>("GET", "/api/series"),
+      create: (title: string) => request<SeriesCard>("POST", "/api/series", { body: { title }, write: true }),
       get: (id: number) => request<SeriesPage>("GET", `/api/series/${id}`),
       addAgenda: (id: number, text: string) =>
         request<AgendaItem>("POST", `/api/series/${id}/agenda`, { body: { text }, write: true }),

@@ -7,6 +7,8 @@ import { DownloadMenu } from "@/components/app/download-menu";
 import { ActionTasks } from "@/components/app/action-tasks";
 import { NotesHtml } from "@/components/app/notes-html";
 import { OpenQuestions } from "@/components/app/open-questions";
+import { RecurringHint } from "@/components/app/recurring-hint";
+import { SeriesPicker } from "@/components/app/series-picker";
 import { LanguageSelect, TranslationBanner, useTranslation } from "@/components/app/translation";
 import { TranscriptPanel } from "@/components/app/transcript-panel";
 import {
@@ -255,6 +257,8 @@ export function MeetingView({
       ) : null}
 
       {m.status === "ready" ? (
+        <>
+        {m.suggest_recurring && !m.series ? <RecurringHint meetingId={m.id} onDone={() => void refetch()} /> : null}
         <div className="detail-grid">
           <section className="card card-flush detail-main">
             <div className="panel-bar">
@@ -317,13 +321,21 @@ export function MeetingView({
                     <dd>{templateName}</dd>
                   </>
                 ) : null}
-                {m.series ? (
+                {m.series || (m.can_share && m.status === "ready") ? (
                   <>
                     <dt>Series</dt>
-                    <dd>
-                      <AppLink className="det-link" href={`/series/${m.series.id}`}>
-                        {m.series.title}
-                      </AppLink>
+                    <dd className="det-series">
+                      {m.series ? (
+                        <AppLink className="det-link" href={`/series/${m.series.id}`}>
+                          {m.series.title}
+                        </AppLink>
+                      ) : null}
+                      {/* Lead-designed, not in the designer's file: "Add to recurring meeting" (spec 7). */}
+                      {m.can_share && m.status === "ready" ? (
+                        <button type="button" className="det-link det-link-quiet" data-dialog-open="series-dialog">
+                          {m.series ? "Change" : "Add to recurring meeting"}
+                        </button>
+                      ) : null}
                     </dd>
                   </>
                 ) : null}
@@ -416,6 +428,7 @@ export function MeetingView({
             ) : null}
           </aside>
         </div>
+        </>
       ) : (
         <section className="card state-card">
           <span className={`state-tile state-${m.status_tone}`} aria-hidden="true" />
@@ -495,6 +508,10 @@ export function MeetingView({
           </div>
         )
       ) : null}
+
+      <Dialog id="series-dialog" title="Add to recurring meeting">
+        <SeriesPicker dialogId="series-dialog" meetingId={m.id} current={m.series ?? null} onDone={() => void refetch()} />
+      </Dialog>
 
       <Dialog id="end-dialog" title="End the meeting and write the notes?">
         <p>

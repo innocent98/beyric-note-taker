@@ -9,7 +9,7 @@ import { captured } from "./helpers";
 // notes (docs/fe-captures/series-w8/15-meeting-detail.json for the two new fields).
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
-vi.mock("@/lib/api/browser", () => ({ api: { questions: { update: vi.fn() }, meetings: {}, tasks: {} } }));
+vi.mock("@/lib/api/browser", () => ({ api: { questions: { update: vi.fn() }, meetings: {}, tasks: {}, series: { list: vi.fn().mockResolvedValue({ timezone: "UTC", series: [] }), create: vi.fn() } } }));
 
 const base = captured<Meeting>("47-meeting-detail-ready.json");
 const withQuestions = {
@@ -31,8 +31,8 @@ describe("the Series row", () => {
     expect(within(details).getByRole("link", { name: "Beyric Monday planning" }).getAttribute("href")).toBe("/series/1");
   });
 
-  it("is left out when the meeting is in no series", () => {
-    render(<MeetingView initial={{ ...withQuestions, series: null }} templates={[]} />);
+  it("is left out for a teammate reading a meeting that is in no series", () => {
+    render(<MeetingView initial={{ ...withQuestions, series: null, can_share: false }} templates={[]} />);
     expect((document.querySelector(".details") as HTMLElement).textContent).not.toContain("Series");
   });
 });

@@ -16,7 +16,10 @@ Spec section 7, checklist D8, D12 (the "recurring meeting detail page" Adebayo r
 | `settings-reminders.tsx` | The reminders row (switch, timing select) is live for owners and admins (`PATCH /api/team`); anyone else sees the real value with the controls off. The sprint rows stay off with one line: "Sprint settings are not available yet." |
 | `lib/api/*`, `lib/routes.ts`, `proxy.ts` | client methods, types from the regenerated schema, `/series/[id]` as a Next page |
 
-Rejected: building "Add to recurring meeting", "Make this a recurring meeting?" and a personal reminder switch (the designer drew none; the lead decides, the API exists).
+**Lead-designed, not in the designer's file** (Adebayo said "Yes, design them", 2026-11-06; built from the file's own dialog, select, amber-pill and settings-row patterns, for the designer to confirm or redraw):
+1. **"Add to recurring meeting"** (`series-picker.tsx`, a native dialog from the Series row of Details; owner of a ready meeting only; "Change" beside the link when it is already in one). Pick one of the team's recurring meetings, "New recurring meeting" and a name, or "Not in a recurring meeting". Reads the list when the dialog opens.
+2. **"Make this a recurring meeting?" chip** (`recurring-hint.tsx`, above the notes and details): the amber pill with "Make recurring" and "Not now" (hidden per meeting in this browser only). Drawn when the backend's new `suggest_recurring` is true (the owner reused a link). Backend added to #104 (`POST /api/meetings/{id}/recurring`).
+3. **"Email me agendas and reminders"** (`settings-reminder-mail.tsx`): the person's own switch, a row in the Sprints and reminders card under the team's reminders row, live for everyone (`GET/PUT /api/settings/reminders`).
 
 ## Parity table (screenshots `docs/ui/parity/after/app-series-*`, `app-detail-*`, `app-settings-*`, `app-meetings-*`, design left and ours right, at 1440, 768 and 390)
 | Part | Design | Built | Note |
@@ -33,9 +36,12 @@ Rejected: building "Add to recurring meeting", "Make this a recurring meeting?" 
 | Question pill, three states | yes | yes | off for non-owners |
 | Settings reminders toggle and 3-timing select | yes | yes, live | select shown only when on, as designed |
 | Sprint length and sprint toggle | yes | off | W9 |
+| **Add to recurring meeting** (Series row entry and dialog) | **no** | built, **lead-designed, not in the designer's file** | shots `app-meeting-add-series-*` |
+| **Make this a recurring meeting?** chip | **no** | built, **lead-designed, not in the designer's file** | shots `app-meeting-recurring-hint-*` |
+| **Email me agendas and reminders** switch | **no** | built, **lead-designed, not in the designer's file** | row in `app-settings-*` |
 
 ## Gaps for the designer
-- No screen for "Add to recurring meeting" or the reused-link chip (spec 7); no control for a person's own reminder mail preference (the API has `GET/PUT /api/settings/reminders`).
+- **Please confirm or redraw the three lead-designed pieces** (Add to recurring meeting dialog, the "Make this a recurring meeting?" chip, the personal reminder mail switch): none is in the file.
 - No state for a series nobody on the team can read yet, a failed "Send agenda" (the error shows in the page's alert), or a 0-recipient button (drawn off with a title).
 - The prototype's sidebar and date formats differ from the live ones (earlier SOPs).
 
@@ -46,4 +52,4 @@ Rejected: building "Add to recurring meeting", "Make this a recurring meeting?" 
 No server step. Revert the PR; the backend stays valid. Recurring calendar events appear as cards about an hour after the sync sees them (or when their notes are written): until then the Meetings page shows no card for them, where the old list showed every recurring calendar event.
 
 ## Follow-ups
-Lead decisions on the undrawn pieces above; Sprints (W9) for the sprint line; milestone row (W4).
+Designer confirmation of the lead-designed pieces; Sprints (W9) for the sprint line; milestone row (W4).

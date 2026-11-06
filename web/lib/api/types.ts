@@ -86,3 +86,5 @@ export type CarriedQuestion = Schemas["CarriedQuestion"];
 export type AgendaItem = Schemas["AgendaItemOut"];
 export type AgendaSent = Schemas["AgendaSent"];
 export type QuestionChanges = Partial<Schemas["QuestionPatch"]>;
+export type MeetingSeriesResult = Schemas["MeetingSeriesOut"];
+export type ReminderPreferences = Schemas["ReminderPreferencesOut"];

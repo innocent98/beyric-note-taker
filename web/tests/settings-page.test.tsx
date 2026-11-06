@@ -41,6 +41,7 @@ vi.mock("@/lib/api/server", () => ({
         language: { get: async () => ({ default_language: "en" }) },
         timeZone: { get: async () => ({ time_zone: "UTC", is_set: false }) },
         tasks: { get: async () => ({ auto_create_tasks: true, email_assignees: true }) },
+        reminders: { get: async () => ({ notify_reminders: true }) },
       },
       team: { get: async () => ({ id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true }) },
     };

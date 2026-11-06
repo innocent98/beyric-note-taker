@@ -310,6 +310,12 @@ details[0].notes_html =
   Object.values(questionState).map((q) => `<li>${q.text}</li>`).join("") +
   "</ul>";
 
+// Lead-designed pieces (W8, approved 2026-11-06): meeting 6 reuses a link, so it suggests "Make this a
+// recurring meeting?"; "Add to recurring meeting" and "Make recurring" answer in memory; the
+// person's own reminder mail switch is GET/PUT /api/settings/reminders.
+details[5].suggest_recurring = true;
+let notifyReminders = true;
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const path = url.pathname.replace(/\/$/, "");
@@ -384,6 +390,25 @@ const server = http.createServer(async (req, res) => {
     if (data?.token === "onteam") return json(res, 409, { error: { code: "already_on_team", message: "You are on another team. Leave it first, then accept this invitation." } });
     if (data?.token !== "existing") return json(res, 400, { error: { code: "invite_invalid", message: "That invitation is not valid any more. Ask for a new one." } });
     return json(res, 200, teamOut());
+  }
+  if (path === "/api/settings/reminders") {
+    if (method === "PUT" && typeof data?.notify_reminders === "boolean") notifyReminders = data.notify_reminders;
+    return json(res, 200, { notify_reminders: notifyReminders });
+  }
+  const setSeries = /^\/api\/meetings\/(\d+)\/(series|recurring)$/.exec(path);
+  if (setSeries && ["PUT", "POST"].includes(method)) {
+    const meeting = details.find((m) => m.id === Number(setSeries[1]));
+    if (!meeting) return json(res, 404, { error: { code: "not_found", message: "No such meeting" } });
+    if (setSeries[2] === "recurring") {
+      meeting.series = { id: 9, title: meeting.title };
+      meeting.suggest_recurring = false;
+      return json(res, 201, { series: meeting.series });
+    }
+    meeting.series = data?.series_id ? { id: data.series_id, title: "Beyric Monday planning" } : null;
+    return json(res, 200, { series: meeting.series });
+  }
+  if (path === "/api/series" && method === "POST") {
+    return json(res, 201, { id: 9, title: String(data?.title ?? ""), cadence: "Recurring", platform: null, next_starts_at: null, next_text: null, unfinished_tasks: 0, open_questions: 0 });
   }
   // Series (W8): see the block above the server.
   if (path === "/api/series" && method === "GET") return json(res, 200, seriesCapture("08"));

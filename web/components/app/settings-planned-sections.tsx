@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { SettingsTasksRows } from "@/components/app/settings-tasks";
 import { SettingsRemindersRow } from "@/components/app/settings-reminders";
-import type { TasksSettings, Team } from "@/lib/api/types";
+import { SettingsReminderMail } from "@/components/app/settings-reminder-mail";
+import type { ReminderPreferences, TasksSettings, Team } from "@/lib/api/types";
 
 // The Settings sections the designer drew below Calendar (`isSettings` in Beyric Note Taker.dc.html):
 // Sprints and reminders, Tasks. Their features are not built yet (tasks, sprints, reminders, tool
@@ -68,7 +69,15 @@ function Text({ title, children }: { title: string; children?: ReactNode }) {
 // (the settings could not be read) they are drawn off like the rest.
 // `team` makes the reminders row live (owners and admins change it); without it (the team could not
 // be read) the row is drawn off like the sprint rows.
-export function SettingsPlannedSections({ tasks = null, team = null }: { tasks?: TasksSettings | null; team?: Team | null }) {
+export function SettingsPlannedSections({
+  tasks = null,
+  team = null,
+  reminderMail = null,
+}: {
+  tasks?: TasksSettings | null;
+  team?: Team | null;
+  reminderMail?: ReminderPreferences | null;
+}) {
   return (
     <>
       <section className="card card-flush" aria-labelledby="set-sprints">
@@ -114,6 +123,7 @@ export function SettingsPlannedSections({ tasks = null, team = null }: { tasks?:
             </div>
           </div>
         )}
+        {reminderMail ? <SettingsReminderMail initial={reminderMail} /> : null}
       </section>
 
       <section className="card card-flush" aria-labelledby="set-tasks">

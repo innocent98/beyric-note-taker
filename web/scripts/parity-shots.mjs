@@ -79,6 +79,10 @@ const SCREENS = {
   // lists differ and the layout, the blocks and their states are what is compared.
   "app-series": [APP, [["Next: Mon 9 Nov, 14:00", "first"]], "/series/1", true],
   "app-series-friday": [APP, [["Next: Fri 6 Nov, 15:00", "first"]], "/series/3", true],
+  // Lead-designed pieces (no prototype, so shot alone): the Series row's "Add to recurring meeting"
+  // dialog and the "Make this a recurring meeting?" chip (meeting 6 of the mock reuses a link).
+  "app-meeting-recurring-hint": [null, [], "/meetings/6", true],
+  "app-meeting-add-series": [null, [], "/meetings/6", true, [{ text: "Add to recurring meeting", wait: 500 }]],
   "app-detail-processing": [null, [], "/meetings/2", true],
   "app-detail-waiting": [null, [], "/meetings/3", true],
   "app-detail-failed": [null, [], "/meetings/4", true],
