@@ -1,0 +1,28 @@
+{
+  "note": "Only the meeting's owner may.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/meetings/4/series",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "series_id": 5
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "series": {
+        "id": 5,
+        "title": "Hand made"
+      }
+    }
+  }
+}

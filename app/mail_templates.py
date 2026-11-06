@@ -743,3 +743,8 @@ def _notes_shared(
         attachments=attachments,
         reply_to=owner.email,
     )
+
+
+# The agenda and reminder mails of recurring meetings register themselves here (W8). Last, because
+# that module imports the helpers above.
+from app import series_mail  # noqa: E402,F401

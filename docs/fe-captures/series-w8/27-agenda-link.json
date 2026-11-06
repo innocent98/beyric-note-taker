@@ -1,0 +1,28 @@
+{
+  "note": "A web address is refused: 422 `invalid_agenda_item`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/1/agenda",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "See https://example.test/x"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_agenda_item",
+        "message": "Write the item without a web address."
+      }
+    }
+  }
+}

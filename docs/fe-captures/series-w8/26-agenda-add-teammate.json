@@ -1,0 +1,27 @@
+{
+  "note": "Any member may add.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/1/agenda",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "Hiring update"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "text": "Hiring update",
+      "can_remove": true
+    }
+  }
+}

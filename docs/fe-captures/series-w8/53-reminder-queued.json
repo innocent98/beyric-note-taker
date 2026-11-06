@@ -1,0 +1,17 @@
+{
+  "note": "queue_due_reminders returned 2: one 1-hour reminder per attendee. Ids only.",
+  "content": [
+    {
+      "to": "ada@example.test",
+      "payload": {
+        "reminder_id": 1
+      }
+    },
+    {
+      "to": "dan@example.test",
+      "payload": {
+        "reminder_id": 2
+      }
+    }
+  ]
+}

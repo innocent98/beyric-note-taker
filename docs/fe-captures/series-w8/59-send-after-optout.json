@@ -1,0 +1,26 @@
+{
+  "note": "Dan no longer counts as a recipient: nobody left, 409 `no_attendees`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/1/agenda/send",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "no_attendees",
+        "message": "There is nobody on your team to send it to yet. The agenda goes to teammates who were in the last three meetings."
+      }
+    }
+  }
+}

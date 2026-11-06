@@ -1,0 +1,44 @@
+{
+  "note": "Dan sees only what he may read: the counts differ from Ada's.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "id": 3,
+          "title": "Beyric Friday review",
+          "cadence": "Recurring",
+          "platform": "google_meet",
+          "next_starts_at": "2026-11-06T14:07:18.770388Z",
+          "next_text": "Fri 6 Nov, 14:07",
+          "unfinished_tasks": 2,
+          "open_questions": 2
+        },
+        {
+          "id": 1,
+          "title": "Beyric Monday planning",
+          "cadence": "Weekly on Mondays, 14:00",
+          "platform": "google_meet",
+          "next_starts_at": "2026-11-09T14:00:00Z",
+          "next_text": "Mon 9 Nov, 14:00",
+          "unfinished_tasks": 3,
+          "open_questions": 2
+        }
+      ]
+    }
+  }
+}
