@@ -466,6 +466,10 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
 - [ ] Mac app for capture without a bot
 - [ ] (Now W6 of the AI workspace spec) Sharing notes by email (designed in docs/ui)
 
+- [x] **A bot in the waiting room was withdrawn after about 14 minutes** (found live 2026-11-06, meetings 15 and 16, the first calendar auto-join): Vexa's `waiting_room_timeout_approaching` warning (`needs_help` at 80% of its 15-minute lobby budget) tripped our 2-minute prompt rule, and the worker stopped the bot just as the host admitted it. Fixed 2026-11-06 on `fix/lobby-needs-help`: `needs_help` after `awaiting_admission` is left to Vexa's own budget, the page keeps "Waiting to be let in", and Vexa's lobby timeout reads "not let in". SOP `docs/sop/2026-11-06-lobby-timeout-warning.md`. PR open, not merged; live check on the next meeting someone else hosts
+- [ ] Longer lobby for calendar meetings if hosts admit after 15 minutes (`VEXA_LOBBY_BUDGET_S` on `vexa`; check Lite reads it)
+- [ ] Skip the Meet waiting room: a signed-in bot account invited to the event (blocked by Vexa Lite and its issue #1725; separate decision)
+
 ## Deferred follow-ups
 
 - [x] Remove the default trusted-proxy fallback (`172.28.0.1`, `trusted_proxy_ips`, hard-coded `next` trust) once `EDGE_SHARED_SECRET` is live on the server (done 2026-11-03, `chore/remove-trusted-proxy-fallback`; Opus review finding 6; `docs/sop/2026-11-03-edge-secret-and-login-limits.md`)
