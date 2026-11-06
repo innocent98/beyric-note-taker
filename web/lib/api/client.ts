@@ -31,6 +31,8 @@ import type {
   ReviewTermResult,
   SessionState,
   SignUpBody,
+  SprintClosed,
+  SprintList,
   Task,
   TaskChanges,
   TaskList,
@@ -298,7 +300,7 @@ export function createApi(options: ApiOptions = {}) {
     // Deleting answers 204. `forMeeting` is the meeting page's Action items.
     tasks: {
       list: (
-        query: { assignee?: string; status?: string; project?: string; milestone?: number; limit?: number; before_id?: number } = {},
+        query: { assignee?: string; status?: string; project?: string; milestone?: number; sprint?: string; limit?: number; before_id?: number } = {},
       ) =>
         request<TaskList>("GET", "/api/tasks", { query }),
       get: (id: number) => request<Task>("GET", `/api/tasks/${id}`),
@@ -317,6 +319,14 @@ export function createApi(options: ApiOptions = {}) {
       update: (id: number, body: ProjectChanges) =>
         request<Project>("PATCH", `/api/projects/${id}`, { body, write: true }),
       remove: (id: number) => request<void>("DELETE", `/api/projects/${id}`, { write: true }),
+    },
+    // Sprints (docs/fe-integration-guide-sprints.md). Everyone on the team reads; an owner or admin
+    // closes the current one (403 `team_forbidden` otherwise, 409 `sprint_not_current` when it is
+    // already closed or is not the current one). `list` with a project id is that project's own pair
+    // when it has a sprint length of its own, else the team's pair counting only its tasks.
+    sprints: {
+      list: (project?: number) => request<SprintList>("GET", "/api/sprints", { query: { project } }),
+      close: (id: number) => request<SprintClosed>("POST", `/api/sprints/${id}/close`, { body: {}, write: true }),
     },
     milestones: {
       list: () => request<MilestoneList>("GET", "/api/milestones"),

@@ -1,7 +1,9 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BacklogView } from "@/components/app/backlog-view";
+import { SprintHeader } from "@/components/app/sprint-header";
 import { TaskCard } from "@/components/app/task-card";
 import { TaskDrawer } from "@/components/app/task-drawer";
 import { INVITE_NAME_KEY } from "@/components/app/team-view";
@@ -9,8 +11,19 @@ import { useToday } from "@/components/app/use-today";
 import { Alert, Button, Icon, PageHead, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
-import { errorMessage } from "@/lib/api/client";
+import { ApiError, errorMessage } from "@/lib/api/client";
 import type { Milestone, Project, Task, TaskList, TaskStatus } from "@/lib/api/types";
+import {
+  boardSprintIds,
+  listFor,
+  loadSprintBook,
+  sprintChoices,
+  sprintNote,
+  sprintOption,
+  sprintRange,
+  sprintTiming,
+  type SprintBook,
+} from "@/lib/sprints";
 import { COLUMNS, daysLeft, type GroupBy, groupTasks, longDay, shortDay, swatchClass } from "@/lib/tasks";
 
 // "all", "me", "none" (Needs owner), or `u<id>`: one teammate (the designer's chips: All tasks, My
@@ -29,19 +42,25 @@ const COLUMN_DOT: Record<TaskStatus, string> = { todo: "tk-dot-todo", doing: "tk
 //
 // W4 adds the project tabs (All projects and one per project), the milestone card with "Show launch
 // tasks", the project badge and "Check project" on cards, and the attention banner's project line.
-// Left out because what they need does not exist yet, and no control is drawn for them: the sprint
-// selector and header, the Board and Backlog tabs and "Carried over" (W9; docs/sop/2026-11-05-w2-tasks-ui.md).
+// W9 adds the sprint selector (Board only), the Board and Backlog tabs, the sprint card with its
+// progress and Close sprint, "Carried over" on cards, and the Backlog view with a Sprint select per
+// row. Tasks are all loaded once; the sprint chosen, the project tab and the person chips only
+// choose which of them are drawn (`sprints` says which sprint each task is in).
 // `projects` is null when the team's projects could not be read: the tabs and the project rows are
-// then left out rather than drawn empty.
+// then left out rather than drawn empty. `sprints` is null when the sprints could not be read: the
+// board then shows every task, as it did before sprints, with a line and Try again; left out
+// (undefined) it is simply not drawn.
 export function TasksView({
   initial,
   projects = null,
   milestones = [],
+  sprints,
   canInviteToTeam = false,
 }: {
   initial: TaskList | null;
   projects?: Project[] | null;
   milestones?: Milestone[];
+  sprints?: SprintBook | null;
   canInviteToTeam?: boolean;
 }) {
   const today = useToday();
@@ -53,6 +72,10 @@ export function TasksView({
   // "all" or a project id; and whether the board shows only the open milestone's tasks.
   const [projectTab, setProjectTab] = useState<"all" | number>("all");
   const [launchOnly, setLaunchOnly] = useState(false);
+  const [book, setBook] = useState<SprintBook | null | undefined>(sprints);
+  const [view, setView] = useState<"board" | "backlog">("board");
+  const [sprintSel, setSprintSel] = useState<number | null>(null);
+  const [closing, setClosing] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [overColumn, setOverColumn] = useState<TaskStatus | null>(null);
@@ -82,12 +105,48 @@ export function TasksView({
     }
   }
 
+  // Tasks and sprints read again: after Close sprint, when the tab comes back (the hourly job may have
+  // closed a sprint while it was away) and from Try again. A failure while it was away says nothing.
+  const refresh = useCallback(
+    async (quiet: boolean) => {
+      try {
+        const [list, next] = await Promise.all([api.tasks.list({ limit: 500 }), loadSprintBook(api, projects)]);
+        setData(list);
+        setFailed(false);
+        if (next || !quiet) setBook(next);
+      } catch (caught) {
+        if (!quiet) throw caught;
+      }
+    },
+    [projects],
+  );
+  const hasBook = Boolean(book);
+  useEffect(() => {
+    if (!hasBook) return;
+    const back = () => {
+      if (document.visibilityState === "visible") void refresh(true);
+    };
+    document.addEventListener("visibilitychange", back);
+    return () => document.removeEventListener("visibilitychange", back);
+  }, [hasBook, refresh]);
+
+  // The list of sprints the open project tab is planned in, and the sprint shown on the board.
+  const sprintList = book ? listFor(book, projectTab === "all" ? null : projectTab) : null;
+  const sprint = sprintList
+    ? (sprintList.sprints.find((x) => x.id === sprintSel) ?? sprintList.sprints.find((x) => x.id === sprintList.current_id) ?? null)
+    : null;
+
   async function newTask() {
     if (creating) return;
     setCreating(true);
     try {
-      // A new task goes under the project tab that is open (none on "All projects").
-      const made = await api.tasks.create(projectTab === "all" ? {} : { project_id: projectTab });
+      // A new task goes under the project tab that is open (none on "All projects") and, with
+      // sprints, into the sprint the Board shows (the Backlog's New task, and a closed sprint, mean
+      // the Backlog: an explicit null, not the due-date rule).
+      const where = projectTab === "all" ? {} : { project_id: projectTab };
+      const made = await api.tasks.create(
+        book ? { ...where, sprint_id: view === "board" && sprint && sprint.state !== "closed" ? sprint.id : null } : where,
+      );
       setData((current) => (current ? { ...current, tasks: [made, ...current.tasks] } : current));
       setOpenId(made.id);
     } catch (caught) {
@@ -108,6 +167,32 @@ export function TasksView({
     }
   }
 
+  async function plan(task: Task, sprintId: number | null) {
+    try {
+      replace(await api.tasks.update(task.id, { sprint_id: sprintId }));
+    } catch (caught) {
+      flash(errorMessage(caught));
+    }
+  }
+
+  async function closeSprint() {
+    if (!sprint || closing) return;
+    setClosing(true);
+    try {
+      const result = await api.sprints.close(sprint.id);
+      setSprintSel(result.current.id);
+      await refresh(false);
+      flash(
+        `${result.closed.name} closed. ${result.moved} unfinished ${result.moved === 1 ? "task" : "tasks"} moved to ${result.current.name}`,
+      );
+    } catch (caught) {
+      // Already closed by the hourly job (or by someone else): read the sprints again, no alarm.
+      if (caught instanceof ApiError && caught.code === "sprint_not_current") await refresh(true);
+      else flash(errorMessage(caught));
+    }
+    setClosing(false);
+  }
+
   const chips: Array<readonly [Filter, string]> = [
     ["all", "All tasks"],
     ["me", "My tasks"],
@@ -122,8 +207,8 @@ export function TasksView({
       .filter((m) => m.due_date >= today && (projectTab === "all" || m.project_id === projectTab))
       .sort((a, b) => (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : a.id - b.id))[0] ?? null;
   const launch = milestone && launchOnly ? milestone : null;
-  const shown = tasks
-    .filter((t) => projectTab === "all" || t.project_id === projectTab)
+  const inProject = tasks.filter((t) => projectTab === "all" || t.project_id === projectTab);
+  const filtered = inProject
     .filter((t) => (launch ? t.milestone_id === launch.id : true))
     .filter((t) =>
     filter === "all"
@@ -134,6 +219,34 @@ export function TasksView({
           ? t.assignee?.is_you === true
           : `u${t.assignee?.user_id}` === filter,
   );
+  // Which tasks the sprint shown holds: with every project on show, the current sprint stands for the
+  // team's and for each project's own; a closed sprint is only itself. Without sprints, every task.
+  const sprintIds = book && sprintList && sprint ? boardSprintIds(book, sprintList, sprint.id, projectTab === "all") : null;
+  const inSprint = (t: Task) => (sprintIds ? t.sprint_id !== null && sprintIds.includes(t.sprint_id) : true);
+  const shown = filtered.filter(inSprint);
+  const inThisSprint = inProject.filter(inSprint);
+  const sprintDone = inThisSprint.filter((t) => t.status === "done").length;
+  const nextSprint = sprintList?.sprints.find((x) => x.id === sprintList.next_id) ?? null;
+  const nextIds = book && sprintList && nextSprint ? boardSprintIds(book, sprintList, nextSprint.id, projectTab === "all") : [];
+  const sections =
+    sprintList && nextSprint
+      ? [
+          {
+            key: "next",
+            title: nextSprint.name,
+            sub: `Next sprint, ${sprintRange(nextSprint, today)}. Tasks due after this sprint land here.`,
+            emptyText: "Nothing planned yet.",
+            tasks: filtered.filter((t) => t.sprint_id !== null && nextIds.includes(t.sprint_id) && t.status !== "done"),
+          },
+          {
+            key: "backlog",
+            title: "Backlog",
+            sub: "Not scheduled yet. Tasks with no due date land here.",
+            emptyText: "The backlog is empty.",
+            tasks: filtered.filter((t) => t.sprint_id === null && t.status !== "done"),
+          },
+        ]
+      : [];
   const open = tasks.find((t) => t.id === openId) ?? null;
   const needOwner = tasks.filter((t) => !t.assignee && t.status !== "done");
   const needCheck = tasks.filter((t) => t.check_project && t.status !== "done");
@@ -171,52 +284,116 @@ export function TasksView({
           New task
         </Button>
       </PageHead>
-      {projects && projectList.length > 0 ? (
-        <div className="tk-tabs" role="group" aria-label="Project">
-          {([{ id: "all" as const, name: "All projects", color: null }, ...projectList]).map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className={`tk-tab${projectTab === p.id ? " tk-tab-on" : ""}`}
-              aria-pressed={projectTab === p.id}
-              onClick={() => {
-                setProjectTab(p.id);
-                setLaunchOnly(false);
-              }}
-            >
-              {p.id === "all" ? null : <span className={`tk-tab-dot ${swatchClass(p.color)}`} />}
-              {p.name || "Untitled project"}
-            </button>
-          ))}
-        </div>
-      ) : null}
-      {milestone ? (
-        <div className="tk-milestone">
-          <div className="tk-ms-days">
-            <div className="tk-ms-days-n">{daysLeft(milestone.due_date, today)}</div>
-            <div className="tk-ms-days-l">days left</div>
+      <div className="tk-top">
+        {projects && projectList.length > 0 ? (
+          <div className="tk-tabs" role="group" aria-label="Project">
+            {([{ id: "all" as const, name: "All projects", color: null }, ...projectList]).map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className={`tk-tab${projectTab === p.id ? " tk-tab-on" : ""}`}
+                aria-pressed={projectTab === p.id}
+                onClick={() => {
+                  setProjectTab(p.id);
+                  setLaunchOnly(false);
+                  setSprintSel(null);
+                }}
+              >
+                {p.id === "all" ? null : <span className={`tk-tab-dot ${swatchClass(p.color)}`} />}
+                {p.name || "Untitled project"}
+              </button>
+            ))}
           </div>
-          <div className="tk-ms-main">
-            <div className="tk-ms-title">
-              <span className="tk-ms-name">{milestone.name}</span>
-              <span className="tk-ms-date">{longDay(milestone.due_date)}</span>
-            </div>
-            <progress
-              className="tk-ms-bar"
-              max={100}
-              value={launchPct}
-              aria-label={`${launchDone} of ${launchTasks.length} launch tasks done`}
-            />
-            <div className="tk-ms-progress">
-              {launchDone} of {launchTasks.length} launch tasks done
-              {milestone.source_meeting
-                ? ` · Set in ${milestone.source_meeting.title}, ${shortDay(milestone.source_meeting.created_at.slice(0, 10))}`
-                : ""}
+        ) : null}
+        {book && sprintList && sprint ? (
+          <div className="tk-views">
+            {view === "board" ? (
+              <select
+                className="select tk-sprint-select"
+                aria-label="Sprint"
+                value={sprint.id}
+                onChange={(event) => setSprintSel(Number(event.target.value))}
+              >
+                {sprintList.sprints.map((x) => (
+                  <option key={x.id} value={x.id}>
+                    {sprintOption(x)}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <div className="tk-tabs" role="group" aria-label="View">
+              {(
+                [
+                  ["board", "Board"],
+                  ["backlog", "Backlog"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`tk-tab${view === value ? " tk-tab-on" : ""}`}
+                  aria-pressed={view === value}
+                  onClick={() => setView(value)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
-          <button type="button" className="tk-ms-filter" aria-pressed={launchOnly} onClick={() => setLaunchOnly((v) => !v)}>
-            {launchOnly ? "Show all tasks" : "Show launch tasks"}
+        ) : null}
+      </div>
+      {book === null ? (
+        <Alert kind="error">
+          <span>Could not load sprints. </span>
+          <button type="button" className="btn btn-link" onClick={() => void refresh(false).catch(() => setBook(null))}>
+            Try again
           </button>
+        </Alert>
+      ) : null}
+      {(book && sprintList && sprint) || milestone ? (
+        <div className="tk-cards">
+          {book && sprintList && sprint ? (
+            <SprintHeader
+              sprint={sprint}
+              range={sprintRange(sprint, today)}
+              timing={sprintTiming(sprint, today)}
+              note={sprintNote(sprintList)}
+              done={sprintDone}
+              total={inThisSprint.length}
+              canClose={sprint.state === "current" && sprintList.can_manage}
+              closing={closing}
+              onClose={() => void closeSprint()}
+            />
+          ) : null}
+          {milestone ? (
+            <div className="tk-milestone">
+              <div className="tk-ms-days">
+                <div className="tk-ms-days-n">{daysLeft(milestone.due_date, today)}</div>
+                <div className="tk-ms-days-l">days left</div>
+              </div>
+              <div className="tk-ms-main">
+                <div className="tk-ms-title">
+                  <span className="tk-ms-name">{milestone.name}</span>
+                  <span className="tk-ms-date">{longDay(milestone.due_date)}</span>
+                </div>
+                <progress
+                  className="tk-ms-bar"
+                  max={100}
+                  value={launchPct}
+                  aria-label={`${launchDone} of ${launchTasks.length} launch tasks done`}
+                />
+                <div className="tk-ms-progress">
+                  {launchDone} of {launchTasks.length} launch tasks done
+                  {milestone.source_meeting
+                    ? ` · Set in ${milestone.source_meeting.title}, ${shortDay(milestone.source_meeting.created_at.slice(0, 10))}`
+                    : ""}
+                </div>
+              </div>
+              <button type="button" className="tk-ms-filter" aria-pressed={launchOnly} onClick={() => setLaunchOnly((v) => !v)}>
+                {launchOnly ? "Show all tasks" : "Show launch tasks"}
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
       <div className="tk-bar">
@@ -265,6 +442,7 @@ export function TasksView({
           </button>
         </div>
       ) : null}
+      {view === "board" || !book ? (
         <div className="tk-board">
           {COLUMNS.map(([status, label]) => {
             const list = shown.filter((t) => t.status === status);
@@ -329,6 +507,20 @@ export function TasksView({
             );
           })}
         </div>
+      ) : (
+        <BacklogView
+          sections={sections}
+          today={today}
+          projectOf={(task) => {
+            const found = projectOf(task);
+            return found && { name: found.name, color: found.color };
+          }}
+          showProject={projects !== null && projectTab === "all"}
+          choices={(task) => sprintChoices(book, task)}
+          onOpen={(task) => setOpenId(task.id)}
+          onPlan={(task, sprintId) => void plan(task, sprintId)}
+        />
+      )}
       {open ? (
         <TaskDrawer
           task={open}
@@ -336,6 +528,7 @@ export function TasksView({
           today={today}
           projects={projects}
           milestones={milestones}
+          sprints={book ?? null}
           canInvite={canInviteToTeam}
           onInvite={(name) => {
             // The Team page opens its invite dialog with this name (team-view.tsx).

@@ -4,8 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProjectsView } from "@/components/app/projects-view";
 import { ApiError } from "@/lib/api/client";
-import type { Project, ProjectList } from "@/lib/api/types";
-import { projectsBody } from "./helpers";
+import type { Project, ProjectList, Team } from "@/lib/api/types";
+import { projectsBody, sprintsBody } from "./helpers";
 
 // Fed the bodies captured from the running API (docs/fe-captures/projects-w4/, cited in
 // docs/fe-integration-guide-projects.md): Dan's three projects, then the member's read-only view.
@@ -58,13 +58,57 @@ describe("the Projects screen", () => {
     expect(screen.getByText("None yet")).toBeTruthy();
   });
 
-  it("switches off Recurring meetings, Sprint length and the two sprint figures with 'Not available yet' lines", () => {
+  it("switches off Recurring meetings with a 'Not available yet' line, and nothing else", () => {
     render(<ProjectsView initial={owner} />);
+    expect(screen.getAllByText("Not available yet.").length).toBe(1);
+    expect((screen.getByLabelText("Sprint length") as HTMLSelectElement).disabled).toBe(false);
+    expect(screen.queryByText("The sprint figures are not available yet.")).toBeNull();
+  });
+
+  it("shows the two sprint figures from the API and the team's length in the first option", () => {
+    // Capture 16 of the sprints run: a project with figures and one that follows the team's length.
+    const list = sprintsBody<ProjectList>("16-projects-list.json");
+    const figures: ProjectList = { ...list, projects: list.projects.map((p, i) => (i === 0 ? { ...p, open_tasks: 3, in_current_sprint: 2, in_backlog: 1 } : p)) };
+    render(<ProjectsView initial={figures} team={sprintsBody<Team>("10-team.json")} />);
+    expect(screen.getByText("In current sprint").previousElementSibling?.textContent).toBe("2");
+    expect(screen.getByText("In backlog").previousElementSibling?.textContent).toBe("1");
+    const select = screen.getByLabelText("Sprint length") as HTMLSelectElement;
+    expect(Array.from(select.options).map((o) => o.text)).toEqual([
+      "Workspace default (1 week, 5 working days)",
+      "1 week, 5 working days",
+      "1 week, 7 days",
+      "2 weeks",
+      "1 month, 30 days",
+      "3 months",
+      "6 months",
+    ]);
+    expect(select.value).toBe("");
+  });
+
+  it("names a custom team length in days, and plain 'Workspace default' without the team", () => {
+    const team = { ...sprintsBody<Team>("10-team.json"), sprint_length: "custom" as const, sprint_custom_days: 12 };
+    const { unmount } = render(<ProjectsView initial={sprintsBody<ProjectList>("16-projects-list.json")} team={team} />);
+    expect(screen.getByRole("option", { name: "Workspace default (12 days)" })).toBeTruthy();
+    unmount();
+    render(<ProjectsView initial={sprintsBody<ProjectList>("16-projects-list.json")} />);
+    expect(screen.getByRole("option", { name: "Workspace default" })).toBeTruthy();
+  });
+
+  it("sends the project's own length, and null for the workspace default", async () => {
+    const [first] = sprintsBody<ProjectList>("16-projects-list.json").projects;
+    mocks.update.mockResolvedValueOnce({ ...first, sprint_length: "week14" });
+    render(<ProjectsView initial={sprintsBody<ProjectList>("16-projects-list.json")} />);
+    await userEvent.selectOptions(screen.getByLabelText("Sprint length"), "2 weeks");
+    expect(mocks.update).toHaveBeenCalledWith(first.id, { sprint_length: "week14" });
+    await waitFor(() => expect((screen.getByLabelText("Sprint length") as HTMLSelectElement).value).toBe("week14"));
+    mocks.update.mockResolvedValueOnce({ ...first, sprint_length: null });
+    await userEvent.selectOptions(screen.getByLabelText("Sprint length"), "Workspace default");
+    expect(mocks.update).toHaveBeenLastCalledWith(first.id, { sprint_length: null });
+  });
+
+  it("switches the Sprint length select off for a member", () => {
+    render(<ProjectsView initial={member} />);
     expect((screen.getByLabelText("Sprint length") as HTMLSelectElement).disabled).toBe(true);
-    expect(screen.getAllByText("Not available yet.").length).toBe(2);
-    expect(screen.getByText("The sprint figures are not available yet.")).toBeTruthy();
-    expect(screen.getByText("In current sprint")).toBeTruthy();
-    expect(screen.getByText("In backlog")).toBeTruthy();
   });
 
   it("saves the name after a pause, as one PATCH of that field, and keeps what was typed", async () => {

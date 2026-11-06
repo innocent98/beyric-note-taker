@@ -137,8 +137,33 @@ const SCREENS = {
     [{ select: "(UTC+9) Tokyo", design: "Tokyo", next: "Time zone", wait: 500 }],
   ],
   // Tasks (W2). The prototype's "today" is Mon 2 Nov 2026: run with --now 2026-11-02T10:00:00Z. The board
-  // has no sprint header or Board / Backlog tabs: they wait for W9. W4 added the project tabs and the milestone card.
+  // has the sprint card, selector and Board / Backlog tabs (W9); W4 added the project tabs and the milestone card.
   "app-tasks": [APP, [["Tasks", "first", 800]], "/tasks", true],
+  // Sprints (W9): the Backlog view, the next sprint on the Board, Close sprint (the toast says how many moved),
+  // the Settings length with Custom, and a project's own length.
+  "app-tasks-backlog": [APP, [["Tasks", "first", 800], ["Backlog", "first", 400]], "/tasks", true, [{ text: "Backlog", wait: 500 }]],
+  "app-tasks-sprint-next": [
+    APP,
+    [["Tasks", "first", 800], { select: "Sprint 13 (next)", design: "Sprint 12 (current)", wait: 400 }],
+    "/tasks",
+    true,
+    [{ select: "Sprint 13 (next)", next: "Sprint", wait: 500 }],
+  ],
+  "app-tasks-close-sprint": [APP, [["Tasks", "first", 800], ["Close sprint", "first", 400]], "/tasks", true, [{ text: "Close sprint", wait: 800 }]],
+  "app-settings-sprint-custom": [
+    APP,
+    [["Settings", "first"], { select: "Custom", design: "1 week, 5 working days", wait: 300 }],
+    "/settings",
+    true,
+    [{ select: "Custom", next: "Sprint length", wait: 800 }],
+  ],
+  "app-projects-sprint-length": [
+    APP,
+    [["Projects", "first", 800], { select: "2 weeks", design: "Workspace default", wait: 300 }],
+    "/projects",
+    true,
+    [{ select: "2 weeks", next: "Sprint length", wait: 800 }],
+  ],
   "app-tasks-due": [APP, [["Tasks", "first", 800], ["Due date", "first"]], "/tasks", true, [{ text: "Due date" }]],
   "app-tasks-drawer": [
     APP,
@@ -148,8 +173,8 @@ const SCREENS = {
     [{ text: "Finish payment checkout", wait: 400 }],
   ],
   "app-tasks-review": [APP, [["Tasks", "first", 800], ["Review", "first", 400]], "/tasks", true, [{ text: "Review", wait: 400 }]],
-  // Projects (W4). Recurring meetings, Sprint length and the two sprint figures are drawn off with a
-  // "Not available yet" line (W8, W9); the project tab on the board and the Check project line are the designer's.
+  // Projects (W4). Recurring meetings is drawn off with a "Not available yet" line (W8); the Sprint length
+  // select and the two sprint figures are live (W9); the project tab on the board and the Check project line are the designer's.
   "app-projects": [APP, [["Projects", "first", 800]], "/projects", true],
   "app-projects-second": [APP, [["Projects", "first", 800], ["Beyric Note Taker", "last", 400]], "/projects", true, [{ click: "Beyric Note Taker", wait: 400 }]],
   "app-tasks-project": [APP, [["Tasks", "first", 800], ["Beyric Note Taker", "last", 400]], "/tasks", true, [{ click: "Beyric Note Taker", wait: 400 }]],

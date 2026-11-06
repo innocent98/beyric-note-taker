@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app/shell";
 import { ApiError } from "@/lib/api/client";
 import { APP_PATHS, NEXT_PAGES, isNextPage } from "@/lib/routes";
 import type { CalendarState } from "@/lib/api/types";
-import { calendarBody, read, WEB } from "./helpers";
+import { calendarBody, read, sprintsBody, WEB } from "./helpers";
 import { join } from "node:path";
 
 // The server half of /settings/calendar, and where it sits in the app's routes and sidebar.
@@ -36,6 +36,8 @@ vi.mock("@/lib/api/server", () => ({
         },
       },
       templates: { list: async () => (state.templates ? state.templates() : []) },
+      team: { get: async () => sprintsBody("10-team.json") },
+      sprints: { list: async () => sprintsBody("09-sprints-first.json") },
       settings: {
         email: { get: async () => ({ notify_email: true }) },
         language: { get: async () => ({ default_language: "en" }) },

@@ -530,7 +530,6 @@
 .pj-stat { padding: 10px 12px; border-radius: var(--radius-md); background: var(--bg); }
 .pj-stat-value { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
 .pj-stat-label { font-size: var(--text-xs); color: var(--text-3); }
-.pj-stat-off .pj-stat-value { color: var(--text-faint); }
 .pj-soon { margin: -10px 0 0; }
 .pj-field { display: flex; flex-direction: column; gap: 8px; }
 .pj-label { font-size: var(--text-sm); font-weight: 550; color: var(--ink-2); }
@@ -583,6 +582,47 @@
 .ms-propose { display: flex; flex-direction: column; gap: var(--space-2); margin-top: 14px; padding: 12px 14px; border: 1px solid var(--warning-line); border-radius: var(--radius-md); background: var(--warning-wash); color: var(--warning-text); font-size: var(--text-sm); }
 .ms-propose-quote { font-size: var(--text-xs); overflow-wrap: anywhere; }
 .ms-propose-btn { align-self: flex-start; height: 28px; padding: 0 10px; border: 1px solid var(--warning-line-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--warning-text); font-size: var(--text-xs); font-weight: 600; cursor: pointer; }
+
+/* Sprints (W9): the selector and Board / Backlog tabs, the sprint card, "Carried over", the Backlog
+   view, the drawer's and Settings' length controls. The designer's own sizes. */
+.tk-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.tk-views { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.select.tk-sprint-select { width: auto; height: 34px; padding: 0 30px 0 10px; font-size: var(--text-sm); font-weight: 500; background-position: right 10px center; }
+.tk-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.tk-sprint { display: flex; flex-direction: column; gap: var(--space-2); padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.tk-sprint-top, .tk-sprint-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.tk-sprint-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.tk-sprint-title { font-weight: 600; }
+.tk-sprint-range { font-size: var(--text-xs); color: var(--text-3); }
+.tk-sprint-pill { padding: 2px 9px; border-radius: var(--radius-pill); background: var(--surface-hover); color: var(--ink-3); font-size: var(--text-xs); font-weight: 550; }
+.tk-sprint-pill-on { background: var(--teal-tint); color: var(--teal-deep); }
+.tk-sprint-bar { margin-top: 0; }
+.tk-sprint-progress { font-size: var(--text-xs); color: var(--text-2); }
+.tk-sprint-close { height: 28px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: var(--text); font-size: var(--text-xs); font-weight: 550; cursor: pointer; }
+.tk-sprint-close:hover { background: var(--bg); }
+.tk-sprint-close:disabled { opacity: 0.55; cursor: default; }
+.tk-carried { padding: 2px 8px; border-radius: var(--radius-pill); background: var(--info-tint); color: var(--info); font-size: 11px; font-weight: 550; }
+.tk-backlog { display: flex; flex-direction: column; gap: var(--space-4); }
+.tk-bl { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.tk-bl-head { display: flex; flex-direction: column; padding: 12px 18px; border-bottom: 1px solid var(--border-soft); background: var(--surface-soft); }
+.tk-bl-title { display: flex; align-items: baseline; gap: var(--space-2); }
+.tk-bl-name { font-weight: 600; }
+.tk-bl-count, .tk-bl-sub { font-size: var(--text-xs); color: var(--text-3); }
+.tk-bl-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 26px 150px; gap: 14px; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--border-softer); cursor: pointer; }
+.tk-bl-row:hover { background: var(--surface-row); }
+.tk-bl-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.tk-bl-task { font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.tk-bl-due { font-size: var(--text-xs); font-weight: 500; white-space: nowrap; color: var(--text-2); }
+.tk-bl-noowner { width: 24px; height: 24px; border: 1.5px dashed var(--dot-amber); border-radius: 50%; }
+.select.tk-bl-select { width: 100%; height: 32px; padding: 0 28px 0 10px; font-size: var(--text-xs); border-radius: var(--radius-sm); background-position: right 10px center; cursor: pointer; }
+.select.tk-bl-select:disabled { opacity: 0.55; cursor: default; }
+.tk-bl-empty { padding: 16px 18px; font-size: var(--text-sm); color: var(--text-3); }
+@media (max-width: 640px) {
+  .tk-bl-row { grid-template-columns: minmax(0, 1fr) auto 26px; }
+  .tk-bl-row .select { grid-column: 1 / -1; }
+}
+.pl-days { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-2); }
+.pl-days .input { width: 72px; height: 36px; padding: 0 10px; font-size: var(--text-sm); }
 
 /* The project colours as classes (no inline styles under the CSP). */
 .sw-1 { background: var(--swatch-1); }

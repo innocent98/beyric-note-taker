@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app/shell";
 import { TasksView } from "@/components/app/tasks-view";
 import { ApiError } from "@/lib/api/client";
 import type { TaskList } from "@/lib/api/types";
+import { loadSprintBook } from "@/lib/sprints";
 import { getReviewOpen, getTasksNew, getTimeZone, getUnreadNotifications, requireOwner } from "@/lib/api/server";
 
 export const metadata: Metadata = { title: "Tasks", robots: { index: false, follow: false } };
@@ -21,6 +22,8 @@ export default async function TasksPage() {
   // The project tabs and milestone card: a failure leaves them out, the board still works.
   const projects = await api.projects.list().then((list) => list.projects, () => null);
   const milestones = await api.milestones.list().then((list) => list.milestones, () => []);
+  // The sprint selector, the sprint card and the Backlog: a failure is drawn as a line with Try again.
+  const sprints = await loadSprintBook(api, projects);
   // Only to know whether to offer "Invite them to the team": a failure here changes nothing else.
   const canInvite = await api.team.get().then((team) => team.can_manage, () => false);
   return (
@@ -31,7 +34,7 @@ export default async function TasksPage() {
       unread={await getUnreadNotifications()}
       timeZone={await getTimeZone()}
     >
-      <TasksView initial={initial} projects={projects} milestones={milestones} canInviteToTeam={canInvite} />
+      <TasksView initial={initial} projects={projects} milestones={milestones} sprints={sprints} canInviteToTeam={canInvite} />
     </AppShell>
   );
 }

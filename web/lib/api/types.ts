@@ -41,6 +41,11 @@ export type Milestone = Schemas["MilestoneOut"];
 export type MilestoneList = Schemas["MilestoneList"];
 export type MeetingMilestones = Schemas["MeetingMilestones"];
 
+export type Sprint = Schemas["SprintOut"];
+export type SprintList = Schemas["SprintList"];
+export type SprintClosed = Schemas["SprintClosed"];
+export type SprintLength = SprintList["sprint_length"];
+
 export type Team = Schemas["TeamOut"];
 export type TeamRole = Team["my_role"];
 export type TeamMember = Schemas["TeamMemberOut"];

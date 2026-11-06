@@ -158,3 +158,9 @@ export function teamBody<T>(file: string): T {
 export function projectsBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/projects-w4", file))).response.body as T;
 }
+
+// The body of a capture from the running API for the sprint routes
+// (docs/fe-captures/sprints-w9/<file>, `python scripts/capture_sprints_api.py`).
+export function sprintsBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/sprints-w9", file))).response.body as T;
+}

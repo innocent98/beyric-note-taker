@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import { SettingsSprintRows } from "@/components/app/settings-sprints";
 import { SettingsTasksRows } from "@/components/app/settings-tasks";
-import type { TasksSettings } from "@/lib/api/types";
+import type { SprintList, TasksSettings, Team } from "@/lib/api/types";
 
 // The Settings sections the designer drew below Calendar (`isSettings` in Beyric Note Taker.dc.html):
 // Sprints and reminders, Tasks. Their features are not built yet (tasks, sprints, reminders, tool
@@ -64,8 +65,18 @@ function Text({ title, children }: { title: string; children?: ReactNode }) {
 }
 
 // `tasks` makes the first two rows of the Tasks card live (Create tasks, Email assignees); without it
-// (the settings could not be read) they are drawn off like the rest.
-export function SettingsPlannedSections({ tasks = null }: { tasks?: TasksSettings | null }) {
+// (the settings could not be read) they are drawn off like the rest. `team` does the same for the
+// first two rows of Sprints and reminders (Sprint length, the Monday to Friday switch; W9), with
+// `sprints` giving the line under "Sprint length". The reminders row is W8's and stays off.
+export function SettingsPlannedSections({
+  tasks = null,
+  team = null,
+  sprints = null,
+}: {
+  tasks?: TasksSettings | null;
+  team?: Team | null;
+  sprints?: SprintList | null;
+}) {
   return (
     <>
       <section className="card card-flush" aria-labelledby="set-sprints">
@@ -75,10 +86,21 @@ export function SettingsPlannedSections({ tasks = null }: { tasks?: TasksSetting
               Sprints and reminders
             </h2>
             <p className="pl-sub">Workspace defaults. Projects can use their own sprint length.</p>
-            <p className="meta pl-soon">These settings are not available yet.</p>
+            <p className="meta pl-soon">
+              {team
+                ? "Remind attendees before recurring meetings is not available yet."
+                : "These settings are not available yet."}
+            </p>
+            {team && !team.can_manage ? (
+              <p className="meta pl-soon">Only an owner or admin of your team can change the sprint settings.</p>
+            ) : null}
           </div>
           <span className="pl-pill">Owners and admins</span>
         </div>
+        {team ? (
+          <SettingsSprintRows team={team} list={sprints} />
+        ) : (
+          <>
         <div className="pl-row pl-row-center">
           <Text title="Sprint length" />
           <div className="pl-controls">
@@ -89,6 +111,8 @@ export function SettingsPlannedSections({ tasks = null }: { tasks?: TasksSetting
           <Text title="Open and close sprints at recurring meetings">Available for 1 week, 5 working day sprints.</Text>
           <Switch label="Open and close sprints at recurring meetings" />
         </div>
+          </>
+        )}
         <div className="pl-row pl-row-remind">
           <div className="pl-grow">
             <Text title="Remind attendees before recurring meetings">
