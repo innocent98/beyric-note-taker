@@ -18,7 +18,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision = "0028"
-down_revision = "0026"  # 0027 is Outlook M1 (#96): re-point when it merges
+down_revision = "0027"
 branch_labels = None
 depends_on = None
 

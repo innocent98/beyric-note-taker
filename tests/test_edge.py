@@ -864,6 +864,7 @@ NO_ZONE = {
     ("GET", "/api/pilot"),
     ("GET", "/api/auth/google/callback"),
     ("GET", "/api/calendar/google/callback"),
+    ("GET", "/api/calendar/microsoft/callback"),
 }
 
 
