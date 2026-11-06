@@ -524,8 +524,90 @@
         "title": "AdminWaitlistEntry",
         "type": "object"
       },
+      "AgendaItemIn": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "AgendaItemIn",
+        "type": "object"
+      },
+      "AgendaItemOut": {
+        "properties": {
+          "can_remove": {
+            "title": "Can Remove",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "can_remove"
+        ],
+        "title": "AgendaItemOut",
+        "type": "object"
+      },
+      "AgendaSent": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "names"
+        ],
+        "title": "AgendaSent",
+        "type": "object"
+      },
+      "AttendeeOut": {
+        "properties": {
+          "is_teammate": {
+            "title": "Is Teammate",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "is_teammate"
+        ],
+        "title": "AttendeeOut",
+        "type": "object"
+      },
       "AttentionOut": {
         "properties": {
+          "check_project": {
+            "title": "Check Project",
+            "type": "integer"
+          },
           "needs_owner": {
             "title": "Needs Owner",
             "type": "integer"
@@ -537,7 +619,8 @@
         },
         "required": [
           "needs_owner",
-          "unverified"
+          "unverified",
+          "check_project"
         ],
         "title": "AttentionOut",
         "type": "object"
@@ -561,8 +644,19 @@
         "type": "object"
       },
       "CalendarOut": {
-        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`google_email` is the Google account that was connected, and is null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`upcoming` is empty unless connected.",
+        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`upcoming` is empty unless connected.",
         "properties": {
+          "account_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Email"
+          },
           "auto_join_paused": {
             "title": "Auto Join Paused",
             "type": "boolean"
@@ -593,17 +687,6 @@
             "title": "Connected",
             "type": "boolean"
           },
-          "google_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Google Email"
-          },
           "last_error": {
             "anyOf": [
               {
@@ -626,6 +709,21 @@
               }
             ],
             "title": "Last Sync At"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "enum": [
+                  "google",
+                  "microsoft"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
           },
           "rule": {
             "enum": [
@@ -666,7 +764,8 @@
           "connected",
           "state",
           "state_text",
-          "google_email",
+          "account_email",
+          "provider",
           "last_sync_at",
           "last_error",
           "rule",
@@ -677,6 +776,40 @@
           "upcoming"
         ],
         "title": "CalendarOut",
+        "type": "object"
+      },
+      "CarriedQuestion": {
+        "properties": {
+          "can_update": {
+            "title": "Can Update",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "meeting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "meeting",
+          "can_update"
+        ],
+        "title": "CarriedQuestion",
         "type": "object"
       },
       "ConnectIn": {
@@ -1443,6 +1576,14 @@
             ],
             "title": "Notes Html"
           },
+          "open_questions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QuestionOut"
+            },
+            "title": "Open Questions",
+            "type": "array"
+          },
           "participants": {
             "items": {
               "type": "string"
@@ -1501,6 +1642,16 @@
             "title": "Review Open Count",
             "type": "integer"
           },
+          "series": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeriesRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "shared_by": {
             "anyOf": [
               {
@@ -1556,6 +1707,11 @@
             ],
             "title": "Step",
             "type": "string"
+          },
+          "suggest_recurring": {
+            "default": false,
+            "title": "Suggest Recurring",
+            "type": "boolean"
           },
           "tasks": {
             "items": {
@@ -1698,6 +1854,23 @@
         "title": "MeetingList",
         "type": "object"
       },
+      "MeetingMilestones": {
+        "description": "What a meeting's page shows: dates proposed from it (\"Set milestone: <name>, <date>?\") and\nthe ones already confirmed.",
+        "properties": {
+          "milestones": {
+            "items": {
+              "$ref": "#/components/schemas/MilestoneOut"
+            },
+            "title": "Milestones",
+            "type": "array"
+          }
+        },
+        "required": [
+          "milestones"
+        ],
+        "title": "MeetingMilestones",
+        "type": "object"
+      },
       "MeetingRef": {
         "properties": {
           "created_at": {
@@ -1729,6 +1902,48 @@
           "created_at"
         ],
         "title": "MeetingRef",
+        "type": "object"
+      },
+      "MeetingSeriesIn": {
+        "additionalProperties": false,
+        "properties": {
+          "series_id": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740992.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          }
+        },
+        "required": [
+          "series_id"
+        ],
+        "title": "MeetingSeriesIn",
+        "type": "object"
+      },
+      "MeetingSeriesOut": {
+        "properties": {
+          "series": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeriesRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "series"
+        ],
+        "title": "MeetingSeriesOut",
         "type": "object"
       },
       "MeetingSummary": {
@@ -1863,6 +2078,233 @@
           "extraction_status"
         ],
         "title": "MeetingTasks",
+        "type": "object"
+      },
+      "MilestoneConfirm": {
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          }
+        },
+        "title": "MilestoneConfirm",
+        "type": "object"
+      },
+      "MilestoneIn": {
+        "additionalProperties": false,
+        "properties": {
+          "due_date": {
+            "format": "date",
+            "title": "Due Date",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          }
+        },
+        "required": [
+          "name",
+          "due_date"
+        ],
+        "title": "MilestoneIn",
+        "type": "object"
+      },
+      "MilestoneLine": {
+        "description": "The one milestone line a project shows.",
+        "properties": {
+          "due_date": {
+            "format": "date",
+            "title": "Due Date",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "due_date"
+        ],
+        "title": "MilestoneLine",
+        "type": "object"
+      },
+      "MilestoneList": {
+        "properties": {
+          "milestones": {
+            "items": {
+              "$ref": "#/components/schemas/MilestoneOut"
+            },
+            "title": "Milestones",
+            "type": "array"
+          }
+        },
+        "required": [
+          "milestones"
+        ],
+        "title": "MilestoneList",
+        "type": "object"
+      },
+      "MilestoneOut": {
+        "properties": {
+          "can_confirm": {
+            "title": "Can Confirm",
+            "type": "boolean"
+          },
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "done_count": {
+            "title": "Done Count",
+            "type": "integer"
+          },
+          "due_date": {
+            "format": "date",
+            "title": "Due Date",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "source_meeting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task_count": {
+            "title": "Task Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "due_date",
+          "project_id",
+          "source_meeting",
+          "quote",
+          "confirmed_at",
+          "task_count",
+          "done_count",
+          "can_confirm",
+          "can_edit"
+        ],
+        "title": "MilestoneOut",
+        "type": "object"
+      },
+      "MilestonePatch": {
+        "additionalProperties": false,
+        "properties": {
+          "due_date": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          }
+        },
+        "title": "MilestonePatch",
         "type": "object"
       },
       "NewMeeting": {
@@ -2000,6 +2442,34 @@
         "title": "NotificationOut",
         "type": "object"
       },
+      "OptOutIn": {
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "title": "OptOutIn",
+        "type": "object"
+      },
+      "OptOutOut": {
+        "properties": {
+          "status": {
+            "const": "unsubscribed",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "OptOutOut",
+        "type": "object"
+      },
       "OverrideIn": {
         "additionalProperties": false,
         "description": "The person's switch for one meeting: true joins it, false does not, null clears the switch\nso the rule decides again. The field is required (null must be sent on purpose).",
@@ -2034,6 +2504,47 @@
           "status"
         ],
         "title": "PasswordChanged",
+        "type": "object"
+      },
+      "PastMeeting": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "tasks_count": {
+            "title": "Tasks Count",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "duration_seconds",
+          "tasks_count"
+        ],
+        "title": "PastMeeting",
         "type": "object"
       },
       "PersonOut": {
@@ -2093,6 +2604,277 @@
           "google_signin"
         ],
         "title": "PilotOut",
+        "type": "object"
+      },
+      "ProjectIn": {
+        "additionalProperties": false,
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "pattern": "^#[0-9A-Fa-f]{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "Keywords",
+            "type": "array"
+          },
+          "name": {
+            "default": "",
+            "maxLength": 100,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "ProjectIn",
+        "type": "object"
+      },
+      "ProjectList": {
+        "properties": {
+          "can_manage": {
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectOut"
+            },
+            "title": "Projects",
+            "type": "array"
+          }
+        },
+        "required": [
+          "projects",
+          "can_manage"
+        ],
+        "title": "ProjectList",
+        "type": "object"
+      },
+      "ProjectOut": {
+        "properties": {
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "in_backlog": {
+            "title": "In Backlog",
+            "type": "integer"
+          },
+          "in_current_sprint": {
+            "title": "In Current Sprint",
+            "type": "integer"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "milestone": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MilestoneLine"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "open_tasks": {
+            "title": "Open Tasks",
+            "type": "integer"
+          },
+          "sprint_length": {
+            "anyOf": [
+              {
+                "enum": [
+                  "week5",
+                  "week7",
+                  "week14",
+                  "month1",
+                  "month3",
+                  "month6"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Length"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "color",
+          "keywords",
+          "open_tasks",
+          "sprint_length",
+          "in_current_sprint",
+          "in_backlog",
+          "milestone",
+          "created_at"
+        ],
+        "title": "ProjectOut",
+        "type": "object"
+      },
+      "ProjectPatch": {
+        "additionalProperties": false,
+        "description": "A partial change: send only what changes (the screen saves one field at a time).",
+        "properties": {
+          "color": {
+            "anyOf": [
+              {
+                "pattern": "^#[0-9A-Fa-f]{6}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "keywords": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keywords"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "sprint_length": {
+            "anyOf": [
+              {
+                "enum": [
+                  "week5",
+                  "week7",
+                  "week14",
+                  "month1",
+                  "month3",
+                  "month6"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Length"
+          }
+        },
+        "title": "ProjectPatch",
+        "type": "object"
+      },
+      "QuestionOut": {
+        "description": "One open question of a meeting. `carriable` is false for a meeting that is not in a\nrecurring meeting: draw no toggle then. The toggle's states: `resolved` (draw \"Resolved\"),\nelse `carry` (\"On next agenda\"), else \"Add to next agenda\".",
+        "properties": {
+          "can_update": {
+            "title": "Can Update",
+            "type": "boolean"
+          },
+          "carriable": {
+            "title": "Carriable",
+            "type": "boolean"
+          },
+          "carry": {
+            "title": "Carry",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "boolean"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "carriable",
+          "carry",
+          "resolved",
+          "can_update"
+        ],
+        "title": "QuestionOut",
+        "type": "object"
+      },
+      "QuestionPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "carry": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carry"
+          },
+          "resolved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved"
+          }
+        },
+        "title": "QuestionPatch",
         "type": "object"
       },
       "RecurringOut": {
@@ -2159,6 +2941,33 @@
           "template_id"
         ],
         "title": "Regenerate",
+        "type": "object"
+      },
+      "ReminderPreferencesIn": {
+        "additionalProperties": false,
+        "properties": {
+          "notify_reminders": {
+            "title": "Notify Reminders",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "notify_reminders"
+        ],
+        "title": "ReminderPreferencesIn",
+        "type": "object"
+      },
+      "ReminderPreferencesOut": {
+        "properties": {
+          "notify_reminders": {
+            "title": "Notify Reminders",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "notify_reminders"
+        ],
+        "title": "ReminderPreferencesOut",
         "type": "object"
       },
       "ResetIn": {
@@ -2285,6 +3094,292 @@
         "title": "ReviewTermOut",
         "type": "object"
       },
+      "SeriesCard": {
+        "description": "One Recurring card of the Meetings screen. The counts cover only what the caller may\nread. `next_*` are null when no calendar event ahead is known (hide the chip).",
+        "properties": {
+          "cadence": {
+            "title": "Cadence",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "next_starts_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Starts At"
+          },
+          "next_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Text"
+          },
+          "open_questions": {
+            "title": "Open Questions",
+            "type": "integer"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "enum": [
+                  "google_meet",
+                  "zoom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unfinished_tasks": {
+            "title": "Unfinished Tasks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "cadence",
+          "platform",
+          "next_starts_at",
+          "next_text",
+          "unfinished_tasks",
+          "open_questions"
+        ],
+        "title": "SeriesCard",
+        "type": "object"
+      },
+      "SeriesCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "SeriesCreate",
+        "type": "object"
+      },
+      "SeriesList": {
+        "properties": {
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesCard"
+            },
+            "title": "Series",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timezone",
+          "series"
+        ],
+        "title": "SeriesList",
+        "type": "object"
+      },
+      "SeriesPage": {
+        "properties": {
+          "agenda": {
+            "items": {
+              "$ref": "#/components/schemas/AgendaItemOut"
+            },
+            "title": "Agenda",
+            "type": "array"
+          },
+          "agenda_recipients": {
+            "title": "Agenda Recipients",
+            "type": "integer"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/AttendeeOut"
+            },
+            "title": "Attendees",
+            "type": "array"
+          },
+          "cadence": {
+            "title": "Cadence",
+            "type": "string"
+          },
+          "can_rename": {
+            "title": "Can Rename",
+            "type": "boolean"
+          },
+          "finished": {
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Finished",
+            "type": "array"
+          },
+          "finished_since_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished Since Text"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "next_starts_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Starts At"
+          },
+          "next_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Text"
+          },
+          "past_meetings": {
+            "items": {
+              "$ref": "#/components/schemas/PastMeeting"
+            },
+            "title": "Past Meetings",
+            "type": "array"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "enum": [
+                  "google_meet",
+                  "zoom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/CarriedQuestion"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unfinished": {
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Unfinished",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "cadence",
+          "platform",
+          "timezone",
+          "next_starts_at",
+          "next_text",
+          "can_rename",
+          "agenda_recipients",
+          "unfinished",
+          "finished_since_text",
+          "finished",
+          "questions",
+          "agenda",
+          "past_meetings",
+          "attendees"
+        ],
+        "title": "SeriesPage",
+        "type": "object"
+      },
+      "SeriesPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "SeriesPatch",
+        "type": "object"
+      },
+      "SeriesRef": {
+        "description": "A recurring meeting as the meeting page's \"Series\" row links to it.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "SeriesRef",
+        "type": "object"
+      },
       "SessionState": {
         "properties": {
           "authenticated": {
@@ -2381,6 +3476,231 @@
           }
         },
         "title": "SettingsIn",
+        "type": "object"
+      },
+      "ShareCreated": {
+        "properties": {
+          "share_id": {
+            "title": "Share Id",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "waiting_translation"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "share_id",
+          "status"
+        ],
+        "title": "ShareCreated",
+        "type": "object"
+      },
+      "ShareIn": {
+        "additionalProperties": false,
+        "properties": {
+          "attach": {
+            "default": "none",
+            "enum": [
+              "none",
+              "pdf",
+              "docx"
+            ],
+            "title": "Attach",
+            "type": "string"
+          },
+          "include_transcript": {
+            "default": false,
+            "title": "Include Transcript",
+            "type": "boolean"
+          },
+          "language": {
+            "title": "Language",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/ShareRecipientIn"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Recipients",
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipients",
+          "language"
+        ],
+        "title": "ShareIn",
+        "type": "object"
+      },
+      "ShareList": {
+        "properties": {
+          "shares": {
+            "items": {
+              "$ref": "#/components/schemas/ShareOut"
+            },
+            "title": "Shares",
+            "type": "array"
+          }
+        },
+        "required": [
+          "shares"
+        ],
+        "title": "ShareList",
+        "type": "object"
+      },
+      "ShareOut": {
+        "properties": {
+          "attach": {
+            "enum": [
+              "none",
+              "pdf",
+              "docx"
+            ],
+            "title": "Attach",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "include_transcript": {
+            "title": "Include Transcript",
+            "type": "boolean"
+          },
+          "language": {
+            "enum": [
+              "en",
+              "fr",
+              "es"
+            ],
+            "title": "Language",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/ShareRecipientOut"
+            },
+            "title": "Recipients",
+            "type": "array"
+          },
+          "share_id": {
+            "title": "Share Id",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "waiting_translation",
+              "queued",
+              "failed",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "share_id",
+          "status",
+          "language",
+          "attach",
+          "include_transcript",
+          "message",
+          "created_at",
+          "recipients"
+        ],
+        "title": "ShareOut",
+        "type": "object"
+      },
+      "ShareRecipientIn": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "maxLength": 254,
+            "title": "Email",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "email"
+        ],
+        "title": "ShareRecipientIn",
+        "type": "object"
+      },
+      "ShareRecipientOut": {
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "is_team_member": {
+            "title": "Is Team Member",
+            "type": "boolean"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "sent",
+              "not_sent",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "status",
+          "is_team_member"
+        ],
+        "title": "ShareRecipientOut",
         "type": "object"
       },
       "SignUp": {
@@ -2497,6 +3817,178 @@
         "title": "SlackOut",
         "type": "object"
       },
+      "SprintClosed": {
+        "properties": {
+          "closed": {
+            "$ref": "#/components/schemas/SprintOut"
+          },
+          "current": {
+            "$ref": "#/components/schemas/SprintOut"
+          },
+          "moved": {
+            "title": "Moved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "closed",
+          "current",
+          "moved"
+        ],
+        "title": "SprintClosed",
+        "type": "object"
+      },
+      "SprintList": {
+        "properties": {
+          "can_manage": {
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "current_id": {
+            "title": "Current Id",
+            "type": "integer"
+          },
+          "next_id": {
+            "title": "Next Id",
+            "type": "integer"
+          },
+          "own_series": {
+            "title": "Own Series",
+            "type": "boolean"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "sprint_align_weekdays": {
+            "title": "Sprint Align Weekdays",
+            "type": "boolean"
+          },
+          "sprint_custom_days": {
+            "title": "Sprint Custom Days",
+            "type": "integer"
+          },
+          "sprint_length": {
+            "enum": [
+              "week5",
+              "week7",
+              "week14",
+              "month1",
+              "month3",
+              "month6",
+              "custom"
+            ],
+            "title": "Sprint Length",
+            "type": "string"
+          },
+          "sprints": {
+            "items": {
+              "$ref": "#/components/schemas/SprintOut"
+            },
+            "title": "Sprints",
+            "type": "array"
+          },
+          "today": {
+            "format": "date",
+            "title": "Today",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "own_series",
+          "today",
+          "sprint_length",
+          "sprint_custom_days",
+          "sprint_align_weekdays",
+          "sprints",
+          "current_id",
+          "next_id",
+          "can_manage"
+        ],
+        "title": "SprintList",
+        "type": "object"
+      },
+      "SprintOut": {
+        "properties": {
+          "closed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "closed_early": {
+            "title": "Closed Early",
+            "type": "boolean"
+          },
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "closed",
+              "current",
+              "next"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tasks_done": {
+            "title": "Tasks Done",
+            "type": "integer"
+          },
+          "tasks_total": {
+            "title": "Tasks Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "name",
+          "start_date",
+          "end_date",
+          "state",
+          "closed_at",
+          "closed_early",
+          "tasks_total",
+          "tasks_done"
+        ],
+        "title": "SprintOut",
+        "type": "object"
+      },
       "TaskCreate": {
         "additionalProperties": false,
         "properties": {
@@ -2522,6 +4014,30 @@
               }
             ],
             "title": "Due Date"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "sprint_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Id"
           },
           "status": {
             "default": "todo",
@@ -2632,6 +4148,14 @@
             "title": "Can Update",
             "type": "boolean"
           },
+          "carried": {
+            "title": "Carried",
+            "type": "boolean"
+          },
+          "check_project": {
+            "title": "Check Project",
+            "type": "boolean"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -2694,6 +4218,28 @@
               }
             ]
           },
+          "milestone_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Milestone Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
           "quote": {
             "anyOf": [
               {
@@ -2723,6 +4269,17 @@
               }
             ],
             "title": "Spoken Owner"
+          },
+          "sprint_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Id"
           },
           "status": {
             "enum": [
@@ -2759,6 +4316,11 @@
           "created_at",
           "from_meeting",
           "meeting",
+          "project_id",
+          "milestone_id",
+          "sprint_id",
+          "carried",
+          "check_project",
           "can_update",
           "can_edit",
           "can_assign",
@@ -2783,6 +4345,17 @@
             ],
             "title": "Assignee User Id"
           },
+          "check_project": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Project"
+          },
           "due_date": {
             "anyOf": [
               {
@@ -2794,6 +4367,41 @@
               }
             ],
             "title": "Due Date"
+          },
+          "milestone_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Milestone Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "sprint_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Id"
           },
           "status": {
             "anyOf": [
@@ -3112,16 +4720,55 @@
             "title": "Pending Invites",
             "type": "integer"
           },
+          "reminder_timing": {
+            "enum": [
+              "1h",
+              "30m",
+              "both"
+            ],
+            "title": "Reminder Timing",
+            "type": "string"
+          },
+          "reminders_on": {
+            "title": "Reminders On",
+            "type": "boolean"
+          },
           "share_new_meetings": {
             "title": "Share New Meetings",
             "type": "boolean"
+          },
+          "sprint_align_weekdays": {
+            "title": "Sprint Align Weekdays",
+            "type": "boolean"
+          },
+          "sprint_custom_days": {
+            "title": "Sprint Custom Days",
+            "type": "integer"
+          },
+          "sprint_length": {
+            "enum": [
+              "week5",
+              "week7",
+              "week14",
+              "month1",
+              "month3",
+              "month6",
+              "custom"
+            ],
+            "title": "Sprint Length",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "name",
           "share_new_meetings",
+          "reminders_on",
+          "reminder_timing",
           "my_role",
+          "sprint_length",
+          "sprint_custom_days",
+          "sprint_align_weekdays",
           "member_count",
           "pending_invites",
           "can_manage",
@@ -3146,6 +4793,33 @@
             ],
             "title": "Name"
           },
+          "reminder_timing": {
+            "anyOf": [
+              {
+                "enum": [
+                  "1h",
+                  "30m",
+                  "both"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Timing"
+          },
+          "reminders_on": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminders On"
+          },
           "share_new_meetings": {
             "anyOf": [
               {
@@ -3156,6 +4830,50 @@
               }
             ],
             "title": "Share New Meetings"
+          },
+          "sprint_align_weekdays": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Align Weekdays"
+          },
+          "sprint_custom_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Custom Days"
+          },
+          "sprint_length": {
+            "anyOf": [
+              {
+                "enum": [
+                  "week5",
+                  "week7",
+                  "week14",
+                  "month1",
+                  "month3",
+                  "month6",
+                  "custom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Length"
           }
         },
         "title": "TeamPatch",
@@ -4781,253 +6499,6 @@
         ]
       }
     },
-    "/api/calendar/google/callback": {
-      "get": {
-        "description": "Where Google sends the browser back after the consent screen. Public in the guard (it\nanswers a signed-out visitor itself) but checked by the single-use `state`, the signed-in\nuser the flow was started for, and the `calendar_flow` cookie. Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with `?calendar=connected`; a failure goes there with\n`?calendar_error=` `google_denied`, `google_failed`, `scope_missing` (the calendar box was\nunticked), `no_refresh_token` or `wrong_account`; nobody signed in goes to\n`/login?error=google_failed`. 404 `calendar_unavailable` while the feature is off.",
-        "operationId": "calendar_google_callback",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "code",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 2000,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Code"
-            }
-          },
-          {
-            "in": "query",
-            "name": "state",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 2000,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "State"
-            }
-          },
-          {
-            "in": "query",
-            "name": "error",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Error"
-            }
-          }
-        ],
-        "responses": {
-          "302": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Redirect"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not logged in"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Missing or wrong X-CSRF-Token"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Malformed request"
-          }
-        },
-        "summary": "Calendar Google Callback",
-        "tags": [
-          "calendar"
-        ]
-      }
-    },
-    "/api/calendar/google/connect": {
-      "post": {
-        "description": "Start connecting Google Calendar (CSRF header needed). Returns the Google consent URL to\nnavigate to. Only the permissions in `features` are asked for, each at the moment its feature\nis switched on; permissions given earlier are kept. Sets the `calendar_flow` cookie that ties\nthe callback to this browser. 404 `calendar_unavailable` when the calendar features are off,\n503 `calendar_unavailable` when the server cannot store a token safely.",
-        "operationId": "calendar_google_connect",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConnectIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConnectOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not logged in"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Missing or wrong X-CSRF-Token"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Malformed request"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "summary": "Calendar Google Connect",
-        "tags": [
-          "calendar"
-        ]
-      }
-    },
-    "/api/calendar/google/disconnect": {
-      "post": {
-        "description": "Disconnect the caller's Google account (CSRF header needed, no body). Revokes the access at\nGoogle, then deletes the caller's calendar events, all their scheduled joins (every state) and\ncalendar notifications, and the stored token. Meetings already recorded, the hours used and\nthe settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),\nand it works while the calendar features are switched off. If Google cannot be reached the\nlocal deletion still happens and `revoked` is false: tell the person to remove Beyric at\nmyaccount.google.com/permissions.\nAfterwards `connect` works again, for the same or another Google account.",
-        "operationId": "calendar_google_disconnect",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DisconnectOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not logged in"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Missing or wrong X-CSRF-Token"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Malformed request"
-          }
-        },
-        "summary": "Calendar Google Disconnect",
-        "tags": [
-          "calendar"
-        ]
-      }
-    },
     "/api/calendar/recurring": {
       "get": {
         "description": "The Recurring cards of the Meetings screen (no CSRF header needed): each recurring meeting\non the connected calendar with a cadence worked out from its stored times, and its next\noccurrence. `tz` is the viewer's zone (the browser's `Intl.DateTimeFormat().resolvedOptions().\ntimeZone`); without it the texts are in UTC, and the answer says which zone it used. Empty\nwhen no calendar is connected or nothing recurs. Nothing is fetched from Google. 404\n`calendar_unavailable` while the calendar features are off, 422 `invalid_timezone` for a zone\nname that is not known.",
@@ -5178,6 +6649,306 @@
           }
         },
         "summary": "Calendar Settings",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
+    "/api/calendar/{provider}/callback": {
+      "get": {
+        "description": "Where Google sends the browser back after the consent screen. Public in the guard (it\nanswers a signed-out visitor itself) but checked by the single-use `state`, the signed-in\nuser the flow was started for, and the `calendar_flow` cookie. Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with `?calendar=connected`; a failure goes there with\n`?calendar_error=` `google_denied`, `google_failed`, `scope_missing` (the calendar box was\nunticked), `no_refresh_token`, `wrong_account` or `already_connected` (another provider's\ncalendar is connected); nobody signed in goes to\n`/login?error=google_failed`. 404 `calendar_unavailable` while the feature is off.",
+        "operationId": "calendar_connect_callback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "google",
+                "microsoft"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Redirect"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Calendar Connect Callback",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
+    "/api/calendar/{provider}/connect": {
+      "post": {
+        "description": "Start connecting Google Calendar (CSRF header needed). Returns the Google consent URL to\nnavigate to. Only the permissions in `features` are asked for, each at the moment its feature\nis switched on; permissions given earlier are kept. Sets the `calendar_flow` cookie that ties\nthe callback to this browser. 404 `calendar_unavailable` when the calendar features are off,\n409 `calendar_already_connected` when another provider's calendar is connected (one calendar at\na time), 503 `calendar_unavailable` when the server cannot store a token safely. `provider` is\n`google`; `microsoft` answers 404 `calendar_unavailable` until it is built.",
+        "operationId": "calendar_connect_start",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "google",
+                "microsoft"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Calendar Connect Start",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
+    "/api/calendar/{provider}/disconnect": {
+      "post": {
+        "description": "Disconnect the caller's Google account (CSRF header needed, no body). Revokes the access at\nGoogle, then deletes the caller's calendar events, all their scheduled joins (every state) and\ncalendar notifications, and the stored token. Meetings already recorded, the hours used and\nthe settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),\nand it works while the calendar features are switched off. If Google cannot be reached the\nlocal deletion still happens and `revoked` is false: tell the person to remove Beyric at\nmyaccount.google.com/permissions.\nAfterwards `connect` works again, for the same or another Google account.",
+        "operationId": "calendar_connect_disconnect",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "google",
+                "microsoft"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisconnectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Calendar Connect Disconnect",
         "tags": [
           "calendar"
         ]
@@ -5839,6 +7610,78 @@
         "summary": "Connect Slack",
         "tags": [
           "integrations"
+        ]
+      }
+    },
+    "/api/mail/opt-out": {
+      "post": {
+        "description": "Stop mail from Beyric Note Taker to the address a shared-notes mail was sent to. Public:\nthe token in the mail's footer link is the credential. The page the link opens must show a\nbutton that calls this (mail scanners open links, and a GET must not opt anyone out). The\ntoken works once, for 180 days. Mail that lets a person into their own account (sign-in,\npassword reset) is not stopped.",
+        "operationId": "opt_out",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OptOutIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptOutOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`token_invalid_or_expired`"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Opt Out",
+        "tags": [
+          "shares"
         ]
       }
     },
@@ -6507,6 +8350,162 @@
         ]
       }
     },
+    "/api/meetings/{meeting_id}/milestones": {
+      "get": {
+        "description": "The dates proposed from this meeting and the milestones already set from it, for its page.\nAnyone who can read the meeting may ask; `can_confirm` says whether the caller may confirm.",
+        "operationId": "meeting_milestones",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingMilestones"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Meeting Milestones",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/recurring": {
+      "post": {
+        "description": "\"Make this a recurring meeting?\": make a recurring meeting named after this meeting from a\nlink that was used before, and put this meeting and the caller's other meetings of the same\nlink code into it. Only the meeting's owner (404 for anyone else); 409 `not_reused` when the\nlink was not used before; offered by `suggest_recurring` on the meeting.",
+        "operationId": "make_recurring",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingSeriesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_reused` or `series_limit`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Make Recurring",
+        "tags": [
+          "series"
+        ]
+      }
+    },
     "/api/meetings/{meeting_id}/regenerate": {
       "post": {
         "description": "Rewrite the notes of a `ready` meeting with a template. Runs in the request: allow 5 min.",
@@ -6713,6 +8712,89 @@
         ]
       }
     },
+    "/api/meetings/{meeting_id}/series": {
+      "put": {
+        "description": "Put the caller's own meeting into one of their team's recurring meetings, or take it out\n(`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. Agenda\nlines typed before the meeting began are taken by it.",
+        "operationId": "put_meeting_series",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeetingSeriesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingSeriesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Put Meeting Series",
+        "tags": [
+          "series"
+        ]
+      }
+    },
     "/api/meetings/{meeting_id}/share": {
       "delete": {
         "description": "Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone\nelse. Doing it twice is fine.",
@@ -6854,6 +8936,190 @@
         "summary": "Share Meeting",
         "tags": [
           "meetings"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/shares": {
+      "get": {
+        "description": "The shares of a meeting, newest first, for \"Shared with ...\": who each went to and whether\nit was sent. Only the person who recorded the meeting sees them.",
+        "operationId": "list_shares",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Shares",
+        "tags": [
+          "shares"
+        ]
+      },
+      "post": {
+        "description": "Mail the notes of a ready meeting to up to 10 people, each in their own mail, sent as the\ncaller (`Reply-To` is the caller, the footer names them). The mail holds the Summary,\nDecisions, Action items and Open questions, abridged; a PDF or Word file with every section\ncan be attached, with the transcript if ticked. Nobody outside the caller's team gets a link\nto the notes. A language that is not translated yet is translated first: the answer is still\n202 and `status` is `waiting_translation`. Limits: 10 recipients a share and 20 a day per\naccount (429 `share_limit`). Needs a confirmed email.",
+        "operationId": "create_share",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareCreated"
+                }
+              }
+            },
+            "description": "Queued: the mails go within a minute, or after the translation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`email_not_verified`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such meeting (or not the caller's)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_ready`: the notes are not written yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`language_unsupported`, `invalid_recipient`, `no_recipients`, `too_many_recipients` (more than 10)"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`share_limit`: 20 recipients a day per account; `translation_limit`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`mail_unavailable`: no mail provider"
+          }
+        },
+        "summary": "Create Share",
+        "tags": [
+          "shares"
         ]
       }
     },
@@ -7274,6 +9540,375 @@
         ]
       }
     },
+    "/api/milestones": {
+      "get": {
+        "description": "The team's confirmed milestones, soonest first, with how many tasks are filed under each\nand how many are done (over the tasks the caller may see). Proposals are not listed here:\nthey live on the meeting they came from (`GET /api/meetings/{id}/milestones`).",
+        "operationId": "list_milestones",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Milestones",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Make a milestone by hand (owner or admin). It is confirmed at once.",
+        "operationId": "create_milestone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MilestoneIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Create Milestone",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/milestones/{milestone_id}": {
+      "delete": {
+        "description": "Delete a milestone, or turn a proposal down (owner or admin). Tasks filed under it stay,\nwith no milestone.",
+        "operationId": "delete_milestone",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "milestone_id",
+            "required": true,
+            "schema": {
+              "title": "Milestone Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Delete Milestone",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "description": "Rename, move to another date or another project (owner or admin).",
+        "operationId": "patch_milestone",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "milestone_id",
+            "required": true,
+            "schema": {
+              "title": "Milestone Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MilestonePatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Patch Milestone",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/milestones/{milestone_id}/confirm": {
+      "post": {
+        "description": "Turn a proposal into a milestone (\"Set milestone: Client Portal launch, 8 Dec?\" then\nConfirm). Owner or admin. Confirming one that is already confirmed changes nothing. Send a\n`project_id` to choose the project; left out, the one it was filed under stays.",
+        "operationId": "confirm_milestone",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "milestone_id",
+            "required": true,
+            "schema": {
+              "title": "Milestone Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/MilestoneConfirm"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilestoneOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Confirm Milestone",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
     "/api/notifications": {
       "get": {
         "description": "The caller's notifications, newest first. For the next page pass `before_id` =\n`next_before_id`.",
@@ -7679,6 +10314,428 @@
         ]
       }
     },
+    "/api/projects": {
+      "get": {
+        "description": "The team's projects, oldest first. Every member reads them. `open_tasks` counts only the\nopen tasks the caller may see.",
+        "operationId": "list_projects",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Projects",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "description": "Make a project (owner or admin). A blank name is allowed: the screen opens a blank project\nand saves the name as it is typed.",
+        "operationId": "create_project",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Create Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}": {
+      "delete": {
+        "description": "Delete a project (owner or admin). Its tasks stay and now have no project; its milestones\ngo with it.",
+        "operationId": "delete_project",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Delete Project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "get": {
+        "operationId": "get_project",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Get Project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "description": "Change the name, colour or keywords (owner or admin). The screen sends one field per\nchange, debounced; a field left out is untouched. `keywords` replaces the whole list.",
+        "operationId": "patch_project",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Patch Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/questions/{question_id}": {
+      "patch": {
+        "description": "Change an open question: `carry` is \"On next agenda\" (only for a meeting that is in a\nrecurring meeting; turning it on also reopens a resolved question) and `resolved` is \"Mark\nresolved\" (the same words in the series' other meetings you may change are resolved too).\nAllowed for the meeting's owner and the team's owners and admins; a teammate who can only\nread gets 403 `team_forbidden`; a question you cannot read is 404.",
+        "operationId": "patch_question",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_in_series`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Patch Question",
+        "tags": [
+          "series"
+        ]
+      }
+    },
     "/api/review": {
       "get": {
         "description": "The caller's \"Please check\" items from their meetings: `state=open` (default) or\n`checked`. Newest meeting first, in the order of the notes.",
@@ -7993,6 +11050,608 @@
         "summary": "Add Review Term",
         "tags": [
           "review"
+        ]
+      }
+    },
+    "/api/series": {
+      "get": {
+        "description": "The Recurring cards: the caller's team's recurring meetings, soonest next meeting first\n(those with no known next date last, by name). The unfinished-task and open-question counts\ncover only what the caller may read. A recurring meeting appears once the calendar's event\nhas a join scheduled (within the hour) or its first recording has notes.",
+        "operationId": "list_series",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Series",
+        "tags": [
+          "series"
+        ]
+      },
+      "post": {
+        "description": "Make a recurring meeting by hand (a meeting is then attached with\n`PUT /api/meetings/{id}/series`). Any member of the team may. 409 `series_limit`.",
+        "operationId": "create_series",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesCard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Create Series",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/{series_id}": {
+      "get": {
+        "description": "The Series page: next meeting, unfinished tasks from earlier meetings, what was finished\nsince the last meeting, the questions carried over, the agenda lines, past meetings and\nattendees. Everything inside is limited to what the caller may read: a teammate's private\nmeeting is not listed and its tasks and questions are not counted. 404 for another team's.",
+        "operationId": "get_series",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Get Series",
+        "tags": [
+          "series"
+        ]
+      },
+      "patch": {
+        "description": "Rename a recurring meeting (its creator, or an owner or admin).",
+        "operationId": "patch_series",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesCard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Patch Series",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/{series_id}/agenda": {
+      "get": {
+        "description": "The \"Other agenda items\" waiting for the next meeting, in the order they were added.",
+        "operationId": "list_agenda",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgendaItemOut"
+                  },
+                  "title": "Response List Agenda",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Agenda",
+        "tags": [
+          "series"
+        ]
+      },
+      "post": {
+        "description": "Add a line (plain text, at most 200 characters, no web address; any member). 422\n`invalid_agenda_item`; 409 `agenda_full` at 30 waiting lines.",
+        "operationId": "add_agenda",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgendaItemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgendaItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Add Agenda",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/{series_id}/agenda/send": {
+      "post": {
+        "description": "Email the agenda to the teammates who were in the last three meetings (not the caller):\nthe waiting agenda lines, the questions carried over and the unfinished tasks, each limited\nto what that person may read. At most 10 people a send, 5 sends and 20 people a day per\ncaller. Nobody outside the team is ever mailed. The answer lists who it is going to.",
+        "operationId": "send_agenda",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgendaSent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`no_attendees` or `nothing_to_send`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`agenda_rate_limited`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`mail_unavailable`"
+          }
+        },
+        "summary": "Send Agenda",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/{series_id}/agenda/{item_id}": {
+      "delete": {
+        "description": "Remove a line: its author, or an owner or admin.",
+        "operationId": "remove_agenda",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Remove Agenda",
+        "tags": [
+          "series"
         ]
       }
     },
@@ -8392,6 +12051,118 @@
         ]
       }
     },
+    "/api/settings/reminders": {
+      "get": {
+        "description": "Whether the caller is emailed the agenda a teammate sends and the reminders before the\nrecurring meetings they attend (on by default). The team's switch for reminders is\n`PATCH /api/team`.",
+        "operationId": "read_reminder_preferences",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderPreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Reminder Preferences",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Turn the caller's agenda and reminder mail on or off. Checked again when each mail is\nsent, so turning it off also stops one already queued.",
+        "operationId": "write_reminder_preferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReminderPreferencesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderPreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Write Reminder Preferences",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/settings/tasks": {
       "get": {
         "description": "The two switches of Settings > Tasks (both on by default, also for an account with no\nsettings row yet).",
@@ -8770,6 +12541,171 @@
         ]
       }
     },
+    "/api/sprints": {
+      "get": {
+        "description": "The sprints of the board: up to 20 closed ones, the current and the next. With no\n`project` it is the team's series, counting the tasks of every project; with a project it is\nthat project's series (its own when it has a sprint length of its own, else the team's)\ncounting that project's tasks. The first call for a team makes its first two sprints.",
+        "operationId": "list_sprints",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SprintList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Sprints",
+        "tags": [
+          "sprints"
+        ]
+      }
+    },
+    "/api/sprints/{sprint_id}/close": {
+      "post": {
+        "description": "Close the current sprint now (owner or admin). Its unfinished tasks move to the next\nsprint and are marked carried over; the next sprint starts today (its end date does not\nchange) and a new next is made. 409 `sprint_not_current` for a sprint that is closed or is\nstill the next one.",
+        "operationId": "close_sprint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sprint_id",
+            "required": true,
+            "schema": {
+              "title": "Sprint Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SprintClosed"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`sprint_not_current`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Close Sprint",
+        "tags": [
+          "sprints"
+        ]
+      }
+    },
     "/api/tasks": {
       "get": {
         "description": "The tasks the caller can see: those assigned to them, those from meetings they can read,\nand their team's manual tasks. Newest first; for the next page pass `before_id` =\n`next_before_id`. `attention` counts every open task the caller sees, whatever the filter.",
@@ -8813,6 +12749,62 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "description": "`none` (No project) or a project id",
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(none|\\d{1,10})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`none` (No project) or a project id",
+              "title": "Project"
+            }
+          },
+          {
+            "in": "query",
+            "name": "milestone",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Milestone"
+            }
+          },
+          {
+            "description": "`none` (Backlog), `current`, `next` or a sprint id",
+            "in": "query",
+            "name": "sprint",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(none|current|next|\\d{1,10})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`none` (Backlog), `current`, `next` or a sprint id",
+              "title": "Sprint"
             }
           },
           {
@@ -9223,7 +13215,7 @@
         ]
       },
       "patch": {
-        "description": "Rename the team and/or switch \"Share new meetings\" (owner or admin). The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`.",
+        "description": "Rename the team, switch \"Share new meetings\", set the sprint length, custom days and Monday\nto Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other length),\nand/or set the reminders before recurring meetings: `reminders_on` and `reminder_timing`.\nChanging a sprint setting redraws the open sprints. The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`.",
         "operationId": "update_team",
         "requestBody": {
           "content": {

@@ -70,6 +70,7 @@
   --border-soft: #EDF0EE;   /* dividers inside cards */
   --border-softer: #F0F2F1;
   --border-strong: #D5DBD8; /* input borders */
+  --teal-border: #BFDCD5;     /* the "On next agenda" pill */
   --border-hover: #B9C2BE;  /* hovered card border */
   --primary: var(--teal);
   --primary-hover: var(--teal-deep);
@@ -97,6 +98,7 @@
   --info-tint: #EEF0F7;
 
   /* Avatar pairs (background, text) in the order the prototype hands them out */
+  --swatch-1: #0E6B5E; --swatch-2: #3C4A7A; --swatch-3: #8A4B00; --swatch-4: #8A2E5C; --swatch-5: #1F6FB2; --swatch-6: #4A524E;  /* the six project colours */
   --avatar-1-bg: #E6F1EE; --avatar-1-fg: #0E6B5E;
   --avatar-2-bg: #EEF0F7; --avatar-2-fg: #3C4A7A;
   --avatar-3-bg: #FFF1E0; --avatar-3-fg: #8A4B00;

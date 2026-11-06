@@ -1,0 +1,34 @@
+{
+  "note": "422 `validation_error`.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/team",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "sprint_length": "fortnight"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "sprint_length",
+            "message": "Input should be 'week5', 'week7', 'week14', 'month1', 'month3', 'month6' or 'custom'"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/1/agenda",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "Budget review"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "text": "Budget review",
+      "can_remove": true
+    }
+  }
+}

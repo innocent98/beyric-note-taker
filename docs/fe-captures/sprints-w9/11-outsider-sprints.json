@@ -1,0 +1,56 @@
+{
+  "note": "Another team has its own sprints; ids never overlap.",
+  "client": "eve",
+  "request": {
+    "method": "GET",
+    "path": "/api/sprints",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "project_id": null,
+      "own_series": false,
+      "today": "2026-11-06",
+      "sprint_length": "week5",
+      "sprint_custom_days": 10,
+      "sprint_align_weekdays": true,
+      "sprints": [
+        {
+          "id": 3,
+          "number": 1,
+          "name": "Sprint 1",
+          "start_date": "2026-11-02",
+          "end_date": "2026-11-06",
+          "state": "current",
+          "closed_at": null,
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        },
+        {
+          "id": 4,
+          "number": 2,
+          "name": "Sprint 2",
+          "start_date": "2026-11-09",
+          "end_date": "2026-11-13",
+          "state": "next",
+          "closed_at": null,
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        }
+      ],
+      "current_id": 3,
+      "next_id": 4,
+      "can_manage": true
+    }
+  }
+}

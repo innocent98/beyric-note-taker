@@ -762,7 +762,21 @@ def process_next(session: Session, now: datetime | None = None, *, client=None) 
         logger.info(
             "translation %s was changed while it was being made; the answer is dropped", row_id
         )
+    else:
+        _release_shares(session, job)
     return row_id
+
+
+def _release_shares(session: Session, job: "_Job") -> None:
+    """Shares waiting for this translation can now be mailed (or failed). A fault here is logged
+    and left to the hourly sweep, which settles the same shares."""
+    from app import shares  # shares imports this module
+
+    try:
+        shares.on_translation_finished(session, job.meeting_id, job.language)
+    except Exception as exc:
+        session.rollback()
+        logger.warning("translation %s: shares not settled (%s)", job.id, type(exc).__name__)
 
 
 def run_loop(stop: threading.Event, *, session_factory=None, idle_seconds: float = 2.0) -> None:

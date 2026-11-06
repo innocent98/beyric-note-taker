@@ -1,0 +1,29 @@
+{
+  "note": "\"New project\" opens a blank one: `name` is \"\" and the colour is the next swatch.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/projects",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "name": "",
+      "color": "#0E6B5E",
+      "keywords": [],
+      "open_tasks": 0,
+      "milestone": null,
+      "created_at": "2026-11-05T22:00:02.301518Z"
+    }
+  }
+}

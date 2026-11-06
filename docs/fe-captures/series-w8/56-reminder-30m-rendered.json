@@ -1,0 +1,15 @@
+{
+  "note": "26 minutes later 2 more are queued: the 30-minute mail (CAPTURING MAILER).",
+  "content": [
+    {
+      "to": "ada@example.test",
+      "subject": "Starts in 30 minutes: Beyric Friday review",
+      "text": "Starts in 30 minutes\n\nBeyric Friday review\n\nFri 6 Nov, 14:40 to 15:25 UTC · Google Meet\n\nJoin meeting:\nhttps://meet.google.com/abc-defg-hij\n\nOn the agenda\n\n- Which pricing model will the team choose?\n- Who covers support in December?\n- Check on 2 unfinished tasks.\n\nYou are getting this because you attend Beyric Friday review.\nReminder settings: https://notes.example.test/settings#reminders"
+    },
+    {
+      "to": "dan@example.test",
+      "subject": "Starts in 30 minutes: Beyric Friday review",
+      "text": "Starts in 30 minutes\n\nBeyric Friday review\n\nFri 6 Nov, 14:40 to 15:25 UTC · Google Meet\n\nJoin meeting:\nhttps://meet.google.com/abc-defg-hij\n\nOn the agenda\n\n- Which pricing model will the team choose?\n- Who covers support in December?\n- Check on 2 unfinished tasks.\n\nYou are getting this because you attend Beyric Friday review.\nReminder settings: https://notes.example.test/settings#reminders"
+    }
+  ]
+}

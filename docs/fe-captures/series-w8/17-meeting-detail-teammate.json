@@ -1,0 +1,148 @@
+{
+  "note": "A teammate reading the shared meeting: `can_update` false.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/2",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "title": "Beyric Monday planning",
+      "platform": "google_meet",
+      "native_id": "abc-defg-hij",
+      "status": "ready",
+      "step": "done",
+      "status_text": "Ready",
+      "status_tone": "success",
+      "template_id": 5,
+      "template_name": "General",
+      "created_at": "2026-11-02T14:00:00Z",
+      "tasks_count": 2,
+      "failure_reason": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": false,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": false,
+      "can_delete": false,
+      "shared_with_team": true,
+      "can_share": false,
+      "shared_by": "Ada Lovelace",
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "extraction_status": null,
+      "notes": "## Summary\nThe team reviewed Client Portal progress ahead of the launch. Payment checkout is the main risk. A second sentence that makes the summary a little longer.\n\n## Decisions\n- Use Slack for work updates.\n- Finish checkout this week.\n\n## Action items\n- Dan to finish payment checkout by Friday.\n- Someone to log design refinements.\n\n## Open questions\n- Which pricing model will the team choose?\n- Who covers support in December?\n\n## Please check\nNone noted\n",
+      "notes_html": "<h2>Summary</h2>\n<p>The team reviewed Client Portal progress ahead of the launch. Payment checkout is the main risk. A second sentence that makes the summary a little longer.</p>\n<h2>Decisions</h2>\n<ul>\n<li>Use Slack for work updates.</li>\n<li>Finish checkout this week.</li>\n</ul>\n<h2>Action items</h2>\n<ul>\n<li>Dan to finish payment checkout by Friday.</li>\n<li>Someone to log design refinements.</li>\n</ul>\n<h2>Open questions</h2>\n<ul>\n<li>Which pricing model will the team choose?</li>\n<li>Who covers support in December?</li>\n</ul>\n<h2>Please check</h2>\n<p>None noted</p>\n",
+      "transcript": "[Ada Lovelace]: Let us start.\n[Dan Okoro]: I will finish checkout.\n[Guest Visitor]: Hello all.",
+      "translations": [],
+      "duration_seconds": 2760,
+      "participants": [
+        "Ada Lovelace",
+        "Dan Okoro",
+        "Guest Visitor"
+      ],
+      "decisions_count": 1,
+      "review_open_count": 0,
+      "tasks": [
+        {
+          "id": 3,
+          "title": "Finish payment checkout",
+          "status": "todo",
+          "assignee": {
+            "user_id": 3,
+            "name": "Dan Okoro",
+            "is_you": true
+          },
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": null,
+          "is_new": false,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-02",
+          "done_at": null,
+          "created_at": "2026-11-06T13:45:44.421166Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 2,
+            "title": "Beyric Monday planning",
+            "platform": "google_meet",
+            "created_at": "2026-11-02T14:00:00Z"
+          },
+          "can_update": true,
+          "can_edit": false,
+          "can_assign": false,
+          "can_claim": false,
+          "can_delete": false
+        },
+        {
+          "id": 4,
+          "title": "Log design refinements on the tracker",
+          "status": "todo",
+          "assignee": null,
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": null,
+          "is_new": false,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-02",
+          "done_at": null,
+          "created_at": "2026-11-06T13:45:44.421166Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 2,
+            "title": "Beyric Monday planning",
+            "platform": "google_meet",
+            "created_at": "2026-11-02T14:00:00Z"
+          },
+          "can_update": false,
+          "can_edit": false,
+          "can_assign": false,
+          "can_claim": true,
+          "can_delete": false
+        }
+      ],
+      "series": {
+        "id": 1,
+        "title": "Beyric Monday planning"
+      },
+      "open_questions": [
+        {
+          "id": 3,
+          "text": "Which pricing model will the team choose?",
+          "carriable": true,
+          "carry": true,
+          "resolved": false,
+          "can_update": false
+        },
+        {
+          "id": 4,
+          "text": "Who covers support in December?",
+          "carriable": true,
+          "carry": true,
+          "resolved": false,
+          "can_update": false
+        }
+      ]
+    }
+  }
+}

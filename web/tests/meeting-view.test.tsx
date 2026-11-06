@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock("@/lib/api/browser", () => ({
   api: {
+    milestones: { forMeeting: () => Promise.resolve({ milestones: [] }), confirm: vi.fn() },
+    series: { list: vi.fn().mockResolvedValue({ timezone: "UTC", series: [] }), create: vi.fn() },
     meetings: { get: mocks.get, retry: mocks.retry, cancel: mocks.cancel, end: mocks.end, regenerate: mocks.regenerate, remove: mocks.remove, share: mocks.share, unshare: mocks.unshare },
   },
 }));

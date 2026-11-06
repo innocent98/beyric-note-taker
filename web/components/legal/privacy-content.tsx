@@ -17,6 +17,7 @@ export function PrivacyContent({ days }: { days: number }) {
         <li>Account details: your name and email address, and a password (stored only in hashed form) or, if you sign in with Google, your Google account identifier. We also keep a count of the hours of meetings recorded for your account, and, if you join the waiting list, your email address.</li>
         <li>Settings and content you create: notes templates and vocabulary terms. From each set of notes we also keep the lists of decisions, open questions and Please check items it contains, so you can search and tick them off, and, for a Please check item about a name or term that may have been misheard, the word as it was transcribed. From the action items we keep tasks: a short title, who it is assigned to, a due date, a status and a short quote from the transcript that shows where it came from, and any tasks you add yourself.</li>
         <li>Messages you send us, such as support requests.</li>
+        <li>When you share notes by email: the names and email addresses of the people you send them to, and the optional message you write, kept with the meeting so you can see who it went to.</li>
       </ul>
       <h3>Meeting content</h3>
       <p>When you send the note taker to a meeting, we collect:</p>
@@ -57,7 +58,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <ul>
         <li>To provide the service: joining meetings, recording audio, and producing transcripts and notes for you.</li>
         <li>To apply your templates and vocabulary so notes follow your format and spell names correctly.</li>
-        <li>To send service emails, such as account verification, password resets, waiting-list and team invitations and notices that an address already has an account, an email when the notes of a meeting you sent the note taker to are ready, and an email to a teammate listing the tasks from a meeting that were assigned to them. You can turn these emails off for yourself in Settings, under Email preferences, and stop emails to the people your own tasks are assigned to under Tasks.</li>
+        <li>To send service emails, such as account verification, password resets, waiting-list and team invitations and notices that an address already has an account, an email when the notes of a meeting you sent the note taker to are ready, and an email to a teammate listing the tasks from a meeting that were assigned to them, and an email with a meeting's notes to the people you choose to share them with. You can turn these emails off for yourself in Settings, under Email preferences, and stop emails to the people your own tasks are assigned to under Tasks.</li>
         <li>To keep the service secure, prevent abuse and fix problems.</li>
         <li>To meet legal obligations and enforce our Terms of Service.</li>
       </ul>
@@ -66,7 +67,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h2 id="share">Who we share information with</h2>
       <ul>
         <li><strong>OpenAI</strong> turns meeting audio into a transcript, writes notes from it, reads the action items to find who took each one and by when, and checks the notes against the transcript to find names and terms that may have been misheard. Under OpenAI's API terms, data sent through its API is not used to train its models.</li>
-        <li><strong>Resend</strong> sends our service emails (account verification, password resets, waiting-list and team invitations, notices that an address already has an account, notes-ready emails and task assignment emails). It receives the email address and, if given, the name on each of those emails, and their content, which includes one-time links and, in a notes-ready email, a short extract of your notes (the summary, decisions, action items and open questions) and, in a task email, the titles and due dates of the tasks assigned to the recipient.</li>
+        <li><strong>Resend</strong> sends our service emails (account verification, password resets, waiting-list and team invitations, notices that an address already has an account, notes-ready emails and task assignment emails). It receives the email address and, if given, the name on each of those emails, and their content, which includes one-time links and, in a notes-ready email, a short extract of your notes (the summary, decisions, action items and open questions) and, in a task email, the titles and due dates of the tasks assigned to the recipient. In an email of shared notes it delivers to the people you choose the same extract of your notes, the message you wrote, and any PDF, Word or transcript file you attached, in the language you picked.</li>
         <li><strong>Slack</strong>, only if an owner or admin of your team connects it in Settings. After the notes of a meeting you have shared with your team are written, we send one message to the Slack channel the team chose with the meeting&apos;s name, a link to it, and the title and owner name of each task taken from it. Slack is in the United States and is not sent audio, transcripts or notes. The webhook address you paste is encrypted before it is stored, is never shown again, and is deleted when you disconnect.</li>
         <li><strong>Linear</strong>, only if an owner or admin of your team connects it in Settings. For each task taken from a meeting you have shared with your team, we create an issue in the Linear team they chose, with the task's title, due date, the owner's name and a link to the meeting in Beyric. Linear is in the United States and is not sent audio, transcripts or notes. The personal API key you paste is encrypted before it is stored, is never shown again, and is deleted when you disconnect; issues already created stay in Linear.</li>
         <li><strong>Contabo</strong> hosts our server, in France.</li>
@@ -85,7 +86,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h2 id="retention">How long we keep information</h2>
       <ul>
         <li>Meeting audio: deleted automatically {days} days after the meeting.</li>
-        <li>Transcripts and notes, and the lists of decisions, open questions, Please check items and tasks taken from them: kept until you ask us to delete them or close your account. When a meeting is deleted, everything taken from it is deleted with it: its transcript, notes, translations, decisions, open questions, Please check items and tasks, and its audio. The hours it counted stay counted.</li>
+        <li>Transcripts and notes, and the lists of decisions, open questions, Please check items and tasks taken from them: kept until you ask us to delete them or close your account. When a meeting is deleted, everything taken from it is deleted with it: its transcript, notes, translations, the record of who you shared it with, decisions, open questions, Please check items and tasks, and its audio. The hours it counted stay counted.</li>
         <li>Calendar data: we keep only what is needed for upcoming meetings, and delete it when you disconnect your calendar.</li>
         <li>Account information: kept while your account is active and deleted within 30 days of closing it, except where the law requires us to keep records.</li>
         <li>An account whose email address is not confirmed within 48 hours is deleted.</li>
@@ -114,6 +115,7 @@ export function PrivacyContent({ days }: { days: number }) {
       <h2 id="rights">Your rights and choices</h2>
       <p>Depending on where you live, you may have the right to access, correct or delete your information, to receive a copy of it, to restrict or object to some processing, to withdraw consent, and to complain to a data protection authority such as the Nigeria Data Protection Commission.</p>
       <p>To use any of these rights, email <a href="mailto:privacy@beyrictech.com">privacy@beyrictech.com</a>. We will reply within 30 days and may need to confirm your identity first.</p>
+      <p>Anyone who receives notes you shared can stop all notes email from Beyric Note Taker to their address with the link at the bottom of that email. We then keep a one-way fingerprint of the address so that we do not mail it again.</p>
 
       <h2 id="children">Children</h2>
       <p>Beyric Note Taker is not meant for children under 16, and we do not knowingly collect their information. If you believe a child has given us personal information, contact us and we will delete it.</p>

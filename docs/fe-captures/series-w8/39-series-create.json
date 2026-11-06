@@ -1,0 +1,32 @@
+{
+  "note": "Made by hand: no calendar, no next date.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "title": "Design sync"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 4,
+      "title": "Design sync",
+      "cadence": "Recurring",
+      "platform": null,
+      "next_starts_at": null,
+      "next_text": null,
+      "unfinished_tasks": 0,
+      "open_questions": 0
+    }
+  }
+}

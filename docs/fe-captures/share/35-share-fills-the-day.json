@@ -1,0 +1,57 @@
+{
+  "note": "5 recipients were already used today by the calls above.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/2/shares",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipients": [
+        {
+          "email": "fill0@example.test"
+        },
+        {
+          "email": "fill1@example.test"
+        },
+        {
+          "email": "fill2@example.test"
+        },
+        {
+          "email": "fill3@example.test"
+        },
+        {
+          "email": "fill4@example.test"
+        },
+        {
+          "email": "fill5@example.test"
+        },
+        {
+          "email": "fill6@example.test"
+        },
+        {
+          "email": "fill7@example.test"
+        },
+        {
+          "email": "fill8@example.test"
+        },
+        {
+          "email": "fill9@example.test"
+        }
+      ],
+      "language": "en"
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "share_id": 4,
+      "status": "queued"
+    }
+  }
+}

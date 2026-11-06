@@ -6,6 +6,10 @@ import { CopyButton } from "@/components/app/copy-button";
 import { DownloadMenu } from "@/components/app/download-menu";
 import { ActionTasks } from "@/components/app/action-tasks";
 import { NotesHtml } from "@/components/app/notes-html";
+import { OpenQuestions } from "@/components/app/open-questions";
+import { RecurringHint } from "@/components/app/recurring-hint";
+import { SeriesPicker } from "@/components/app/series-picker";
+import { ShareDialog, sentToast } from "@/components/app/share-dialog";
 import { LanguageSelect, TranslationBanner, useTranslation } from "@/components/app/translation";
 import { TranscriptPanel } from "@/components/app/transcript-panel";
 import {
@@ -18,12 +22,15 @@ import {
   Icon,
   SelectField,
   TabButtons,
+  Toast,
   Toggle,
 } from "@/components/ui";
+import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
-import type { Meeting, NoteLanguage, RetryBlock, Template } from "@/lib/api/types";
+import type { Meeting, NoteLanguage, RetryBlock, Share, Template, TeamMember } from "@/lib/api/types";
 import { LocalTime } from "@/components/app/local-time";
+import { MilestoneProposals, MilestoneRows, useMeetingMilestones } from "@/components/app/meeting-milestones";
 import { DELETED_FLAG } from "@/lib/deleted-flag";
 import { durationLabel, initials, platformLabel, plural } from "@/lib/format";
 
@@ -58,6 +65,8 @@ export function MeetingView({
   initialTab = "notes",
   defaultLanguage = "en",
   teamSize = 0,
+  members = [],
+  initialShares = [],
 }: {
   initial: Meeting;
   templates: Template[];
@@ -67,11 +76,16 @@ export function MeetingView({
   // How many people are on the owner's team (`GET /api/team` `member_count`; 0 when unknown). The
   // "Share with team" card is drawn only when there is someone to share with.
   teamSize?: number;
+  // The owner's team, to give a participant an address when their name matches a member's name or
+  // alias (a transcript has names only), and the meeting's shares for "Shared with ...".
+  members?: TeamMember[];
+  initialShares?: Share[];
 }) {
   const router = useRouter();
   const [meeting, setMeeting] = useState(initial);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [tab, setTab] = useState<string>(initialTab);
+  const [milestones, setMilestones] = useMeetingMilestones(meeting.id, meeting.status === "ready", meeting.extraction_status);
   const [extractionStalled, setExtractionStalled] = useState(false);
   const extractionPolls = useRef(0);
   const [busy, setBusy] = useState<Busy>(null);
@@ -82,6 +96,9 @@ export function MeetingView({
     String(templates.some((t) => t.id === initial.template_id) ? initial.template_id : (templates[0]?.id ?? "")),
   );
   const busyRef = useRef<Busy>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shares, setShares] = useState<Share[]>(initialShares);
+  const [toast, flashToast] = useToast(2600);
   const translation = useTranslation(initial.id, initial.translations, defaultLanguage, meeting.notes);
 
   const refetch = useCallback(async () => {
@@ -107,6 +124,21 @@ export function MeetingView({
       document.removeEventListener("visibilitychange", tick);
     };
   }, [interval, refetch]);
+
+  // "Shared with ...": ask again every 5 seconds while a share waits for its translation or has mail
+  // not yet sent, for up to 5 minutes (docs/fe-integration-guide-share.md section 5).
+  const sharePolls = useRef(0);
+  const sharing = shares.some((s) => s.status === "waiting_translation" || s.recipients.some((r) => r.status === "pending"));
+  useEffect(() => {
+    if (!sharing) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      sharePolls.current += 1;
+      if (sharePolls.current > 60) return clearInterval(timer);
+      void api.meetings.shares.list(initial.id).then(setShares, () => {});
+    }, 5_000);
+    return () => clearInterval(timer);
+  }, [sharing, initial.id]);
 
   // The decisions and review items are read from the notes after they are written (and again after a
   // rewrite): `pending` and `running` both mean "not yet".
@@ -191,6 +223,15 @@ export function MeetingView({
   const shownNotes = translation.translated?.notes ?? m.notes;
   const shownTranscript = translation.translated?.transcript ?? null;
   const duration = durationLabel(m.duration_seconds, working);
+  // Everyone a share was (or is being) mailed to, by name or address, once each. Not the ones whose
+  // mail did not go.
+  const sharedWith = [
+    ...new Set(
+      shares.flatMap((s) =>
+        s.status === "failed" ? [] : s.recipients.filter((r) => r.status !== "failed" && r.status !== "not_sent").map((r) => r.name ?? r.email),
+      ),
+    ),
+  ];
   const retryText = m.retry_block !== null ? (m.retry_block_message ?? RETRY_BLOCKED[m.retry_block]) : null;
 
   return (
@@ -223,6 +264,14 @@ export function MeetingView({
             hasTranscript={Boolean(m.transcript)}
             language={translation.shown}
             onNotReady={() => void refetch()}
+            trailing={
+              m.status === "ready" && m.notes && m.can_share ? (
+                <Button size="md" type="button" onClick={() => setShareOpen(true)}>
+                  <Icon name="send" size={15} />
+                  Share notes
+                </Button>
+              ) : null
+            }
           />
         ) : null}
       </div>
@@ -254,6 +303,8 @@ export function MeetingView({
       ) : null}
 
       {m.status === "ready" ? (
+        <>
+        {m.suggest_recurring && !m.series ? <RecurringHint meetingId={m.id} onDone={() => void refetch()} /> : null}
         <div className="detail-grid">
           <section className="card card-flush detail-main">
             <div className="panel-bar">
@@ -283,6 +334,11 @@ export function MeetingView({
                   actions={
                     !translation.translated && m.tasks.length > 0 ? <ActionTasks key={m.tasks.map((t) => t.id).join()} initial={m.tasks} /> : undefined
                   }
+                  questions={
+                    !translation.translated && m.series && m.open_questions.length > 0 ? (
+                      <OpenQuestions key={m.open_questions.map((q) => q.id).join()} initial={m.open_questions} heading="Open questions" />
+                    ) : undefined
+                  }
                 />
               </div>
             )}
@@ -311,11 +367,35 @@ export function MeetingView({
                     <dd>{templateName}</dd>
                   </>
                 ) : null}
+                {m.series || (m.can_share && m.status === "ready") ? (
+                  <>
+                    <dt>Series</dt>
+                    <dd className="det-series">
+                      {m.series ? (
+                        <AppLink className="det-link" href={`/series/${m.series.id}`}>
+                          {m.series.title}
+                        </AppLink>
+                      ) : null}
+                      {/* Lead-designed, not in the designer's file: "Add to recurring meeting" (spec 7). */}
+                      {m.can_share && m.status === "ready" ? (
+                        <button type="button" className="det-link det-link-quiet" data-dialog-open="series-dialog">
+                          {m.series ? "Change" : "Add to recurring meeting"}
+                        </button>
+                      ) : null}
+                    </dd>
+                  </>
+                ) : null}
+                <MilestoneRows rows={milestones} />
               </dl>
-              {m.participants.length > 0 ? (
+              <MilestoneProposals
+                rows={milestones}
+                onConfirmed={(next) => setMilestones((all) => all.map((x) => (x.id === next.id ? next : x)))}
+              />
+              {m.participants.length > 0 || sharedWith.length > 0 ? (
                 <>
                   <div className="side-rule" />
                   <h2 className="side-title">Participants</h2>
+                  {sharedWith.length > 0 ? <p className="sh-shared">Shared with {sharedWith.join(", ")}</p> : null}
                   <div className="side-people">
                     {m.participants.map((name, index) => (
                       <div className="side-person" key={name}>
@@ -400,6 +480,7 @@ export function MeetingView({
             ) : null}
           </aside>
         </div>
+        </>
       ) : (
         <section className="card state-card">
           <span className={`state-tile state-${m.status_tone}`} aria-hidden="true" />
@@ -479,6 +560,28 @@ export function MeetingView({
           </div>
         )
       ) : null}
+
+      {m.can_share && m.status === "ready" && m.notes ? (
+        <ShareDialog
+          open={shareOpen}
+          meetingId={m.id}
+          title={m.title}
+          participants={m.participants}
+          members={members}
+          hasTranscript={Boolean(m.transcript)}
+          language={translation.shown}
+          onClose={() => setShareOpen(false)}
+          onShared={(created, lang, count) => {
+            sharePolls.current = 0;
+            flashToast(sentToast(created, lang, count));
+            void api.meetings.shares.list(initial.id).then(setShares, () => {});
+          }}
+        />
+      ) : null}
+      <Toast message={toast} />
+      <Dialog id="series-dialog" title="Add to recurring meeting">
+        <SeriesPicker dialogId="series-dialog" meetingId={m.id} current={m.series ?? null} onDone={() => void refetch()} />
+      </Dialog>
 
       <Dialog id="end-dialog" title="End the meeting and write the notes?">
         <p>

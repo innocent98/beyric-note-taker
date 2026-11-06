@@ -1,0 +1,28 @@
+{
+  "note": "404.",
+  "client": "eve",
+  "request": {
+    "method": "PUT",
+    "path": "/api/meetings/4/series",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "series_id": 5
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

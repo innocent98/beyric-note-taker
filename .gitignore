@@ -11,3 +11,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 !.env.example
+
+# Outlook M0 spike: the local registration's secret and the unredacted raw answers
+docs/spike/outlook-m0/.env.m0
+docs/spike/outlook-m0/out/

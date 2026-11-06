@@ -1,0 +1,31 @@
+{
+  "note": "Autosave: one field per request.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/projects/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Scratch"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "name": "Scratch",
+      "color": "#0E6B5E",
+      "keywords": [],
+      "open_tasks": 0,
+      "milestone": null,
+      "created_at": "2026-11-05T22:00:02.301518Z"
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "note": "An admin may write.",
+  "client": "amara",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/projects/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "keywords": [
+        "offsite",
+        "venue",
+        "travel"
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "name": "Offsite",
+      "color": "#8A2E5C",
+      "keywords": [
+        "offsite",
+        "venue",
+        "travel"
+      ],
+      "open_tasks": 0,
+      "milestone": null,
+      "created_at": "2026-11-05T22:00:02.328289Z"
+    }
+  }
+}

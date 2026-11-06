@@ -1,0 +1,28 @@
+{
+  "note": "422.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "title": "  "
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_title",
+        "message": "Give the recurring meeting a name."
+      }
+    }
+  }
+}

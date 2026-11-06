@@ -193,9 +193,9 @@ def row_summary(engine) -> list[dict]:
                 {
                     "user_id": conn.user_id,
                     "provider": conn.provider,
-                    "google_account_email": conn.google_account_email,
-                    "google_sub": conn.google_sub,
-                    "google_hosted_domain": conn.google_hosted_domain,
+                    "account_email": conn.account_email,
+                    "account_subject": conn.account_subject,
+                    "account_domain": conn.account_domain,
                     "status": conn.status,
                     "granted_scopes": conn.granted_scopes,
                     "refresh_token_enc": (

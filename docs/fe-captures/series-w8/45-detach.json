@@ -1,0 +1,25 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/meetings/4/series",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "series_id": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "series": null
+    }
+  }
+}

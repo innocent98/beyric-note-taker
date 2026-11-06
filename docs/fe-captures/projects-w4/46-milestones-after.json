@@ -1,0 +1,41 @@
+{
+  "note": "",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/milestones",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "milestones": [
+        {
+          "id": 1,
+          "name": "Client Portal launch",
+          "due_date": "2026-12-08",
+          "project_id": 2,
+          "source_meeting": {
+            "id": 1,
+            "title": "Portal planning",
+            "platform": "google_meet",
+            "created_at": "2026-11-03T10:00:00Z"
+          },
+          "quote": "Launch is December 8.",
+          "confirmed_at": "2026-11-05T22:00:02.625399Z",
+          "task_count": 0,
+          "done_count": 0,
+          "can_confirm": false,
+          "can_edit": true
+        }
+      ]
+    }
+  }
+}

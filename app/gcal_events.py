@@ -159,7 +159,7 @@ def _same_org(organizer: object, hosted_domain: str | None) -> bool:
 
 
 def parse_event(raw: dict, *, hosted_domain: str | None = None) -> ParsedEvent:
-    """`hosted_domain` is the connection's Workspace domain (`google_hosted_domain`), or None."""
+    """`hosted_domain` is the connection's Workspace domain (`account_domain`), or None."""
     event_id = raw.get("id") if isinstance(raw, dict) else None
     if not isinstance(event_id, str) or not event_id:
         raise EventParseError("the event has no id")

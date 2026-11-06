@@ -1,0 +1,28 @@
+{
+  "note": "404.",
+  "client": "eve",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/questions/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "resolved": true
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such question"
+      }
+    }
+  }
+}

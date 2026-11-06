@@ -37,6 +37,18 @@ export type LinearTeam = Schemas["LinearTeamOut"];
 export type TaskChanges = Partial<Schemas["TaskPatch"]>;
 export type NewTask = Schemas["TaskCreate"];
 
+export type Project = Schemas["ProjectOut"];
+export type ProjectList = Schemas["ProjectList"];
+export type ProjectChanges = Partial<Schemas["ProjectPatch"]>;
+export type Milestone = Schemas["MilestoneOut"];
+export type MilestoneList = Schemas["MilestoneList"];
+export type MeetingMilestones = Schemas["MeetingMilestones"];
+export type Share = Schemas["ShareOut"];
+export type ShareList = Schemas["ShareList"];
+export type ShareCreated = Schemas["ShareCreated"];
+export type ShareBody = Schemas["ShareIn"];
+export type ShareRecipient = Schemas["ShareRecipientOut"];
+
 export type Team = Schemas["TeamOut"];
 export type TeamRole = Team["my_role"];
 export type TeamMember = Schemas["TeamMemberOut"];
@@ -78,3 +90,16 @@ export type ConnectStart = Schemas["ConnectOut"];
 export type DisconnectResult = Schemas["DisconnectOut"];
 export type RecurringState = Schemas["RecurringOut"];
 export type RecurringSeries = Schemas["RecurringSeries"];
+
+// Series (docs/fe-integration-guide-series.md).
+export type SeriesCard = Schemas["SeriesCard"];
+export type SeriesList = Schemas["SeriesList"];
+export type SeriesPage = Schemas["SeriesPage"];
+export type SeriesRef = Schemas["SeriesRef"];
+export type OpenQuestion = Schemas["QuestionOut"];
+export type CarriedQuestion = Schemas["CarriedQuestion"];
+export type AgendaItem = Schemas["AgendaItemOut"];
+export type AgendaSent = Schemas["AgendaSent"];
+export type QuestionChanges = Partial<Schemas["QuestionPatch"]>;
+export type MeetingSeriesResult = Schemas["MeetingSeriesOut"];
+export type ReminderPreferences = Schemas["ReminderPreferencesOut"];

@@ -122,7 +122,7 @@ function Upcoming({ state, timeZone, now }: { state: CalendarState; timeZone?: s
           <h2 id="upcoming-title" className="cal-up-title">
             Upcoming
           </h2>
-          {state.google_email ? <span className="cal-chip">{state.google_email}</span> : null}
+          {state.account_email ? <span className="cal-chip">{state.account_email}</span> : null}
         </div>
         <AppLink className="cal-up-rule" href="/settings">
           {state.rule_text}

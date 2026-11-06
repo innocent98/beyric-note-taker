@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BRAND } from "@/lib/brand";
+import { BRAND, PROJECT_COLOURS } from "@/lib/brand";
 import { filesUnder, read, rel, WEB } from "./helpers";
 import { join } from "node:path";
 
@@ -32,6 +32,12 @@ describe("design guards", () => {
       })
       .map(rel);
     expect(offenders, "add a token to tokens.css instead").toEqual([]);
+  });
+
+  it("keeps the six project colours in lib/brand.ts equal to --swatch-1 to --swatch-6", () => {
+    const tokens = read(join(WEB, "styles/tokens.css"));
+    const swatches = [1, 2, 3, 4, 5, 6].map((n) => new RegExp(`--swatch-${n}:\\s*(#[0-9A-Fa-f]{6})`).exec(tokens)?.[1]?.toUpperCase());
+    expect(swatches).toEqual(PROJECT_COLOURS.map((c) => c.toUpperCase()));
   });
 
   it("keeps lib/brand.ts equal to tokens.css", () => {

@@ -132,7 +132,19 @@ export function settingsError(file: string): { status: number; code: string; mes
 // The body of a capture from the running API for the Tasks routes
 // (docs/fe-captures/tasks-w2/<file>, `python scripts/capture_tasks_api.py`).
 export function tasksBody<T>(file: string): T {
-  return JSON.parse(read(join(REPO, "docs/fe-captures/tasks-w2", file))).response.body as T;
+  const body = JSON.parse(read(join(REPO, "docs/fe-captures/tasks-w2", file))).response.body;
+  // Captures made before W4 lack the project fields, which the API now always sends (a task filed
+  // under no project; nothing to check).
+  const fill = (task: Record<string, unknown>) => {
+    task.project_id ??= null;
+    task.milestone_id ??= null;
+    task.check_project ??= false;
+  };
+  if (body && Array.isArray(body.tasks)) {
+    body.tasks.forEach(fill);
+    if (body.attention) body.attention.check_project ??= 0;
+  } else if (body && typeof body === "object" && "can_update" in body) fill(body);
+  return body as T;
 }
 
 // The body of a capture from the running API for the Team routes
@@ -150,4 +162,19 @@ export function integrationsBody<T>(file: string): T {
 export function integrationsError(file: string): { status: number; code: string; message: string } {
   const { response } = JSON.parse(read(join(REPO, "docs/fe-captures/integrations-w10", file)));
   return { status: response.status, ...response.body.error };
+}
+
+// The body of a capture from the running API for projects and milestones
+// (docs/fe-captures/projects-w4/<file>, `python scripts/capture_projects_api.py`).
+export function projectsBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/projects-w4", file))).response.body as T;
+}
+
+// A capture from the running API for the Share routes (docs/fe-captures/share/<file>,
+// `python scripts/capture_share_api.py`).
+export function shareCapture(file: string): { request: { body: unknown }; response: { status: number; body: unknown } } {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/share", file)));
+}
+export function shareBody<T>(file: string): T {
+  return shareCapture(file).response.body as T;
 }

@@ -1,0 +1,26 @@
+{
+  "note": "409 `sprint_not_current`.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/sprints/2/close",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "sprint_not_current",
+        "message": "Only the current sprint can be closed."
+      }
+    }
+  }
+}

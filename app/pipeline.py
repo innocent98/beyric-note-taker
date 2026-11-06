@@ -18,7 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, object_session
 
-from app import ai_runs, audio, mail, placement, teams, usage, workspace
+from app import ai_runs, audio, mail, placement, series, teams, usage, workspace
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
@@ -707,9 +707,21 @@ def _step_notes(session: Session, meeting: Meeting, openai_client) -> bool:
     # Queued in the same commit as the notes, and worked by its own job (app/workspace.py): it can
     # fail and retry without touching the meeting, whose notes are the deliverable.
     workspace.mark_pending(meeting)
+    _link_series(session, meeting)
     _queue_notes_mail(session, meeting)
     session.commit()
     return True
+
+
+def _link_series(session: Session, meeting: Meeting) -> None:
+    """Put a calendar meeting into its recurring meeting (W8), in the same commit as the notes.
+    Best effort like the mail: a failure is logged by type and rolls back only the link (a
+    savepoint), never the notes."""
+    try:
+        with session.begin_nested():
+            series.link_from_calendar(session, meeting)
+    except Exception as exc:
+        logger.warning("meeting %s: not linked to a series (%s)", meeting.id, type(exc).__name__)
 
 
 def _queue_notes_mail(session: Session, meeting: Meeting) -> None:
