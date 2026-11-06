@@ -798,3 +798,33 @@ class SlackOut(BaseModel):
     last_posted_at: datetime | None
     # Whether the caller may connect or disconnect (owner or admin).
     can_manage: bool
+
+
+class LinearKeyIn(Body):
+    # The pasted personal API key; checked, used once, never returned.
+    api_key: str = Field(max_length=200)
+
+
+class LinearIn(Body):
+    api_key: str = Field(max_length=200)
+    team_id: str = Field(max_length=64)
+
+
+class LinearTeamOut(BaseModel):
+    id: str
+    key: str
+    name: str
+
+
+class LinearTeamsOut(BaseModel):
+    teams: list[LinearTeamOut]
+
+
+class LinearOut(BaseModel):
+    connected: bool
+    status: str | None
+    last_error: str | None
+    last_synced_at: datetime | None
+    # The Linear team the tasks go to; null when not connected.
+    team_name: str | None
+    can_manage: bool

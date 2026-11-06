@@ -142,6 +142,19 @@ const SCREENS = {
       { fill: "https://hooks.slack.com/services/...", value: ["https://hooks.slack.com", "services", "TFAKEFAKE", "BFAKEFAKE", "FAKEFAKEFAKEFAKEFAKEFAKE"].join("/"), enter: true, wait: 800 },
     ],
   ],
+  // Linear (W10 part 2): the design's select + Connect connects in one click and shows "Syncing with Jira".
+  "app-settings-linear-form": [APP, [["Settings", "first"]], "/settings", true, [{ click: "Connect", wait: 400 }]],
+  "app-settings-linear-connected": [
+    APP,
+    [["Settings", "first"], ["Connect", "first", 1500]],
+    "/settings",
+    true,
+    [
+      { click: "Connect", wait: 300 },
+      { fill: "lin_api_...", value: ["lin_api", "FAKEFAKEFAKEFAKEFAKEFAKE"].join("_"), enter: true, wait: 800 },
+      { submit: true, wait: 800 },
+    ],
+  ],
   "app-settings-timezone": [
     APP,
     [["Settings", "first"], { select: "(UTC+9) Tokyo", design: "Tokyo", wait: 300 }],
@@ -212,6 +225,8 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
       if (step.fill) {
         await page.getByPlaceholder(step.fill).first().fill(step.value);
         if (step.enter) await page.getByPlaceholder(step.fill).first().press("Enter");
+      } else if (step.submit) {
+        await page.locator("form").first().evaluate((form) => form.requestSubmit());
       } else if (step.select) {
         const field =
           side === "design"

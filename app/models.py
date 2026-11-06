@@ -909,7 +909,7 @@ def _complete_the_join_with_its_meeting(session: Session, flush_context, instanc
         )
 
 
-INTEGRATION_KINDS = ("slack_webhook",)
+INTEGRATION_KINDS = ("slack_webhook", "linear")
 
 
 class Integration(Base):
@@ -931,6 +931,8 @@ class Integration(Base):
     config_enc: Mapped[bytes] = mapped_column(LargeBinary)  # nonce || ciphertext
     key_version: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(12), default="connected", server_default="connected")
+    # A non-secret name to show ("Engineering" for a Linear team); never the key.
+    label: Mapped[str | None] = mapped_column(String(100))
     last_error: Mapped[str | None] = mapped_column(String(200))
     last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -963,3 +965,24 @@ class IntegrationPost(Base):
     kind: Mapped[str] = mapped_column(String(24))
     meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TrackerIssue(Base):
+    """The issue a task became in the team's tracker (one way, created once). Written before the
+    call with `external_id` null as the claim, so two workers never create the same issue; a failed
+    call deletes the claim."""
+
+    __tablename__ = "tracker_issues"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    task_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("tasks.id", ondelete="CASCADE"), unique=True
+    )
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(24))
+    external_id: Mapped[str | None] = mapped_column(String(64))
+    identifier: Mapped[str | None] = mapped_column(String(30))
+    url: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_tracker_issues_team_created", "team_id", "created_at"),)

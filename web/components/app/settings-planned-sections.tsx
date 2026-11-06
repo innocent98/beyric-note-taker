@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { SettingsSlack } from "@/components/app/settings-slack";
+import { SettingsTracker } from "@/components/app/settings-tracker";
 import { SettingsTasksRows } from "@/components/app/settings-tasks";
-import type { SlackState, TasksSettings } from "@/lib/api/types";
+import type { LinearState, SlackState, TasksSettings } from "@/lib/api/types";
 
 // The Settings sections the designer drew below Calendar (`isSettings` in Beyric Note Taker.dc.html):
 // Sprints and reminders, Tasks. Their features are not built yet (tasks, sprints, reminders, tool
@@ -70,10 +71,14 @@ function Text({ title, children }: { title: string; children?: ReactNode }) {
 export function SettingsPlannedSections({
   tasks = null,
   slack = null,
+  linear = null,
 }: {
   tasks?: TasksSettings | null;
   slack?: SlackState | null;
+  linear?: LinearState | null;
 }) {
+  // The Tasks card's rows that are still drawn off, named in its one "not available yet" line.
+  const pending = [...(linear ? [] : ["Sync with your project tool"]), ...(slack ? [] : ["Post tasks to Slack"])];
   return (
     <>
       <section className="card card-flush" aria-labelledby="set-sprints">
@@ -122,13 +127,9 @@ export function SettingsPlannedSections({
               Tasks
             </h2>
             <p className="pl-sub">What happens to action items after a meeting ends.</p>
-            <p className="meta pl-soon">
-              {tasks && slack
-                ? "Sync with your project tool is not available yet."
-                : tasks
-                  ? "Sync with your project tool and Post tasks to Slack are not available yet."
-                  : "These settings are not available yet."}
-            </p>
+            {pending.length > 0 ? (
+              <p className="meta pl-soon">{tasks ? `${pending.join(" and ")} ${pending.length > 1 ? "are" : "is"} not available yet.` : "These settings are not available yet."}</p>
+            ) : null}
           </div>
         </div>
         {tasks ? (
@@ -147,20 +148,24 @@ export function SettingsPlannedSections({
         </div>
           </>
         )}
-        <div className="pl-row pl-row-center">
-          <Text title="Sync with your project tool">Send tasks, projects and sprints to a tool your team already uses.</Text>
-          <div className="pl-controls">
-            <Select
-              label="Project tool"
-              size="pl-s34"
-              defaultValue="Jira"
-              options={PROJECT_TOOLS.map((tool) => [tool, tool] as const)}
-            />
-            <button type="button" className="btn btn-secondary pl-btn" disabled>
-              Connect
-            </button>
+        {linear ? (
+          <SettingsTracker initial={linear} />
+        ) : (
+          <div className="pl-row pl-row-center">
+            <Text title="Sync with your project tool">Send tasks, projects and sprints to a tool your team already uses.</Text>
+            <div className="pl-controls">
+              <Select
+                label="Project tool"
+                size="pl-s34"
+                defaultValue="Jira"
+                options={PROJECT_TOOLS.map((tool) => [tool, tool] as const)}
+              />
+              <button type="button" className="btn btn-secondary pl-btn" disabled>
+                Connect
+              </button>
+            </div>
           </div>
-        </div>
+        )}
         {slack ? (
           <SettingsSlack initial={slack} />
         ) : (

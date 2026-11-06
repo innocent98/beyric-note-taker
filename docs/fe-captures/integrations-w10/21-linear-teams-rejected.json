@@ -1,0 +1,23 @@
+{
+  "note": "Linear refused the key (simulated): 422.",
+  "client": "dan (owner)",
+  "request": {
+    "method": "POST",
+    "path": "/api/integrations/linear/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>"
+    },
+    "body": {
+      "api_key": "<fake-linear-api-key>"
+    }
+  },
+  "response": {
+    "status": 422,
+    "body": {
+      "error": {
+        "code": "linear_key_rejected",
+        "message": "Linear did not accept that key. Create a new personal API key in Linear and paste it."
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "note": "",
+  "client": "dan (owner)",
+  "request": {
+    "method": "GET",
+    "path": "/api/integrations/linear",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "connected": false,
+      "status": null,
+      "last_error": null,
+      "last_synced_at": null,
+      "team_name": null,
+      "can_manage": true
+    }
+  }
+}

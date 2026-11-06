@@ -43,6 +43,9 @@ vi.mock("@/lib/api/server", () => ({
         tasks: { get: async () => ({ auto_create_tasks: true, email_assignees: true }) },
       },
       integrations: {
+        linear: {
+          get: async () => ({ connected: false, status: null, last_error: null, last_synced_at: null, team_name: null, can_manage: true }),
+        },
         slack: {
           get: async () => ({ connected: false, status: null, last_error: null, last_posted_at: null, can_manage: true }),
         },

@@ -28,6 +28,8 @@ import type {
   Task,
   TaskChanges,
   TaskList,
+  LinearState,
+  LinearTeam,
   SlackState,
   TasksSettings,
   Template,
@@ -387,6 +389,15 @@ export function createApi(options: ApiOptions = {}) {
         connect: (webhook_url: string) =>
           request<SlackState>("PUT", "/api/integrations/slack", { body: { webhook_url }, write: true }),
         disconnect: () => request<void>("DELETE", "/api/integrations/slack", { write: true }),
+      },
+      // Linear, the tracker: list the teams a key can reach, then connect with one of them.
+      linear: {
+        get: () => request<LinearState>("GET", "/api/integrations/linear"),
+        teams: (api_key: string) =>
+          request<{ teams: LinearTeam[] }>("POST", "/api/integrations/linear/teams", { body: { api_key }, write: true }),
+        connect: (api_key: string, team_id: string) =>
+          request<LinearState>("PUT", "/api/integrations/linear", { body: { api_key, team_id }, write: true }),
+        disconnect: () => request<void>("DELETE", "/api/integrations/linear", { write: true }),
       },
     },
     vocabulary: {

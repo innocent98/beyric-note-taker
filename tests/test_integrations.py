@@ -317,7 +317,15 @@ def test_reconnecting_replaces_the_address_and_clears_a_failure(api, session, te
 
 def test_every_integrations_route_needs_a_login(app):
     routes = {r for r in api_routes(app) if r[1].startswith("/api/integrations")}
-    assert routes == {("GET", SLACK), ("PUT", SLACK), ("DELETE", SLACK)}
+    assert routes == {
+        ("GET", SLACK),
+        ("PUT", SLACK),
+        ("DELETE", SLACK),
+        ("GET", "/api/integrations/linear"),
+        ("PUT", "/api/integrations/linear"),
+        ("DELETE", "/api/integrations/linear"),
+        ("POST", "/api/integrations/linear/teams"),
+    }
 
 
 def test_a_stored_key_nobody_can_use_is_a_clean_503(api, session, team, sent, monkeypatch):

@@ -6,27 +6,39 @@ needs it, and nowhere else. Posting never raises into the notes pipeline: `notif
 everything, records a failure on the row (a fixed sentence, shown on the card) and returns.
 """
 
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import slack, tasks, titles, vault
-from app.models import Integration, IntegrationPost, Meeting, Task, User
+from app import linear, slack, tasks, titles, vault
+from app.models import Integration, IntegrationPost, Meeting, Task, TrackerIssue, User
 
 logger = logging.getLogger(__name__)
 
 SLACK = "slack_webhook"
+LINEAR = "linear"
 HOUR = timedelta(hours=1)
 # Per team and hour, counting every post (a meeting's, and the test made when connecting).
 POSTS_PER_HOUR = 30
 TESTS_PER_HOUR = 5
+# Linear: issues created per team and hour, and per meeting; a time budget for one meeting's pushes.
+ISSUES_PER_HOUR = 60
+ISSUES_PER_MEETING = 15
 
 
 def _owner(team_id: int, kind: str) -> str:
     return f"team:{team_id}:{kind}"
+
+
+def Refused(status: int, code: str, message: str):  # noqa: N802
+    """`services.Refused`, imported late (services imports modules that import this one)."""
+    from app.services import Refused as Real
+
+    return Real(status, code, message)
 
 
 LOCK_CLASS = 7010  # first half of the two-int advisory lock (6002 and 7001 are taken)
@@ -44,10 +56,12 @@ def get(session: Session, team_id: int, kind: str = SLACK) -> Integration | None
 
 
 def _recent_posts(
-    session: Session, team_id: int, now: datetime, *, tests_only: bool = False
+    session: Session, team_id: int, now: datetime, *, tests_only: bool = False, kind: str = SLACK
 ) -> int:
     query = select(func.count(IntegrationPost.id)).where(
-        IntegrationPost.team_id == team_id, IntegrationPost.created_at > now - HOUR
+        IntegrationPost.team_id == team_id,
+        IntegrationPost.kind == kind,
+        IntegrationPost.created_at > now - HOUR,
     )
     if tests_only:
         query = query.where(IntegrationPost.meeting_id.is_(None))
@@ -60,8 +74,6 @@ def connect_slack(
     """Check the pasted webhook, post one test message to it, and store it (encrypted). A webhook
     Slack does not accept is not stored. 422 `slack_webhook_invalid`, 429 `integration_rate`,
     502 `slack_unreachable`, 503 `integrations_unavailable`."""
-    from app.services import Refused  # not at the top: services imports the worker's modules
-
     try:
         clean = slack.check_webhook(url)
     except slack.WebhookInvalid:
@@ -195,3 +207,206 @@ def notify_meeting(
         except Exception:
             pass
         return False
+
+
+# ---- Linear (the tracker) ----
+
+
+def _linear_refused(error: linear.LinearError):
+    status = {"auth": 422, "no_team": 422, "rate": 429}.get(error.reason, 502)
+    code = {
+        "auth": "linear_key_rejected",
+        "no_team": "linear_team_invalid",
+        "rate": "integration_rate",
+    }
+    return Refused(status, code.get(error.reason, "linear_unreachable"), linear.TEXT[error.reason])
+
+
+def _linear_attempt(session: Session, team_id: int, now: datetime) -> None:
+    """Count one outbound try against the team's hourly cap (a call to Linear checks the key)."""
+    _lock_team(session, team_id)
+    if _recent_posts(session, team_id, now, tests_only=True, kind=LINEAR) >= TESTS_PER_HOUR:
+        raise Refused(429, "integration_rate", "Too many tries. Wait a little and try again.")
+    session.add(IntegrationPost(team_id=team_id, kind=LINEAR, meeting_id=None))
+    session.commit()
+
+
+def _clean_key(key: str) -> str:
+    try:
+        return linear.check_key(key)
+    except linear.KeyInvalid:
+        raise Refused(
+            422,
+            "linear_key_invalid",
+            "That does not look like a Linear personal API key. It starts with lin_api_.",
+        ) from None
+
+
+def linear_teams(
+    session: Session, team_id: int, key: str, now: datetime, *, fetch=None
+) -> list[dict]:
+    """The Linear teams the pasted key can reach (the key is not stored by this call)."""
+    clean = _clean_key(key)
+    _linear_attempt(session, team_id, now)
+    try:
+        found = (fetch or linear.teams)(clean)
+    except linear.LinearError as exc:
+        raise _linear_refused(exc) from None
+    return found
+
+
+def connect_linear(
+    session: Session,
+    team_id: int,
+    user: User,
+    key: str,
+    linear_team_id: str,
+    now: datetime,
+    *,
+    fetch=None,
+) -> Integration:
+    """Check the key against Linear, check the chosen team is one it can reach, and store both
+    (encrypted). 422 `linear_key_invalid` / `linear_key_rejected` / `linear_team_invalid`,
+    429 `integration_rate`, 502 `linear_unreachable`, 503 `integrations_unavailable`."""
+    clean = _clean_key(key)
+    _linear_attempt(session, team_id, now)
+    try:
+        found = (fetch or linear.teams)(clean)
+    except linear.LinearError as exc:
+        raise _linear_refused(exc) from None
+    chosen = next((t for t in found if t["id"] == linear_team_id), None)
+    if chosen is None:
+        raise _linear_refused(linear.LinearError("no_team"))
+    secret = json.dumps({"api_key": clean, "team_id": chosen["id"]})
+    try:
+        blob, version = vault.encrypt(secret, purpose="integration", owner=_owner(team_id, LINEAR))
+    except vault.VaultError:
+        raise Refused(
+            503, "integrations_unavailable", "Connecting is not available right now."
+        ) from None
+    label = chosen["name"] or chosen["key"] or "Linear"
+    session.execute(
+        insert(Integration)
+        .values(
+            team_id=team_id, kind=LINEAR, config_enc=blob, key_version=version,
+            status="connected", label=label, connected_by=user.id,
+        )
+        .on_conflict_do_update(
+            constraint="uq_integrations_team_kind",
+            set_={
+                "config_enc": blob, "key_version": version, "status": "connected",
+                "label": label, "last_error": None, "last_error_at": None, "connected_by": user.id,
+            },
+        )
+    )  # fmt: skip
+    session.commit()
+    return get(session, team_id, LINEAR)
+
+
+def sync_tasks(
+    session: Session,
+    meeting: Meeting,
+    team_id: int,
+    live: list[Task],
+    members: list[tasks.Member],
+    now: datetime | None = None,
+    *,
+    create=None,
+) -> int:
+    """Push a shared meeting's new tasks to Linear, one issue each, once per task. Returns how many
+    issues were created. Never raises: the first failure is written on the integration row and the
+    rest of this meeting's tasks are left for another day (they are never pushed later)."""
+    stamp = now or datetime.now(UTC)
+    made = 0
+    try:
+        row = get(session, team_id, LINEAR)
+        if row is None or meeting.shared_team_id != team_id:
+            return 0
+        if row.status == "failing" and row.last_error in (
+            linear.TEXT["auth"],
+            linear.TEXT["no_team"],
+        ):
+            return 0  # the key was refused: no more tries until it is replaced
+        fresh = sorted(
+            (t for t in live if t.deleted_at is None and t.title), key=lambda t: t.position
+        )[:ISSUES_PER_MEETING]
+        names = {m.user_id: m.display_name for m in members}
+        name = titles.meeting_name(meeting)
+        try:
+            config = json.loads(
+                vault.decrypt(
+                    row.config_enc, row.key_version, purpose="integration",
+                    owner=_owner(team_id, LINEAR),
+                ).reveal()
+            )  # fmt: skip
+            key, linear_team = config["api_key"], config["team_id"]
+        except (vault.VaultError, ValueError, KeyError, TypeError):
+            _fail_linear(session, row, "auth", stamp)
+            return 0
+        for task in fresh:
+            _lock_team(session, team_id)
+            recent = session.scalar(
+                select(func.count(TrackerIssue.id)).where(
+                    TrackerIssue.team_id == team_id,
+                    TrackerIssue.kind == LINEAR,
+                    TrackerIssue.created_at > stamp - HOUR,
+                )
+            )
+            if (recent or 0) >= ISSUES_PER_HOUR:
+                break
+            claimed = session.execute(
+                insert(TrackerIssue)
+                .values(task_id=task.id, team_id=team_id, kind=LINEAR)
+                .on_conflict_do_nothing()
+                .returning(TrackerIssue.id)
+            ).scalar()
+            session.commit()
+            if claimed is None:
+                continue  # already pushed (or being pushed)
+            owner = names.get(task.assignee_user_id) or task.spoken_owner
+            try:
+                issue = (create or linear.create_issue)(
+                    key,
+                    linear_team,
+                    task.title,
+                    linear.description(owner, meeting.id, name),
+                    task.due_date.isoformat() if task.due_date else None,
+                )
+            except linear.LinearError as exc:
+                session.execute(delete(TrackerIssue).where(TrackerIssue.id == claimed))
+                _fail_linear(session, row, exc.reason, stamp)
+                return made
+            session.execute(
+                update(TrackerIssue)
+                .where(TrackerIssue.id == claimed)
+                .values(
+                    external_id=issue["id"],
+                    identifier=issue["identifier"],
+                    url=issue["url"] or None,
+                )
+            )
+            made += 1
+            row.status, row.last_error, row.last_error_at, row.last_posted_at = (
+                "connected", None, None, stamp,
+            )  # fmt: skip
+            session.commit()
+        return made
+    except Exception as exc:
+        logger.error("linear sync failed type=%s", type(exc).__name__)
+        try:
+            session.rollback()
+        except Exception:
+            pass
+        return made
+
+
+def _fail_linear(session: Session, row: Integration, reason: str, now: datetime) -> None:
+    row.status, row.last_error, row.last_error_at = "failing", linear.TEXT[reason], now
+    session.commit()
+
+
+def after_extraction(session, meeting, team_id, live, members, now=None) -> None:
+    """What follows a meeting's finished extraction: the Slack post and the tracker push. Each
+    swallows its own failure."""
+    notify_meeting(session, meeting, team_id, live, members, now)
+    sync_tasks(session, meeting, team_id, live, members, now)

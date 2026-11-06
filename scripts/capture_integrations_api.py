@@ -1,4 +1,4 @@
-"""Drive the Slack integration API over real HTTP and save every exchange for the frontend guide.
+"""Drive the Slack and Linear integration API over real HTTP and save every exchange for the frontend guide.
 
     python scripts/capture_integrations_api.py postgresql+psycopg://USER:PASS@HOST:PORT/postgres
 
@@ -11,7 +11,7 @@ What is real: the app, auth, CSRF, validation, roles, the database, migrations, 
 (a throwaway key made here), serialisation, every error, and the post that follows a real
 `workspace.run_extraction` (the message text is captured as built by `app/slack.py`).
 
-What is NOT real, labelled in the files: **Slack itself.** `slack.post` (the one function that makes
+What is NOT real, labelled in the files: **Slack and Linear themselves.** `slack.post`, `linear.teams` and `linear.create_issue` (the one function that makes
 the outbound call) is replaced by a recorder that answers like Slack would, or fails on request;
 the HTTP layer of that call (pinned address, no redirect, status mapping) is covered by
 `tests/test_integrations.py`, not by a capture. The webhook addresses are obviously fake
@@ -43,6 +43,13 @@ PEOPLE = {
 HOOK = "https://hooks.slack.com/" + "/".join(
     ["services", "TFAKEFAKE", "BFAKEFAKE", "FAKEFAKEFAKEFAKEFAKEFAKE"]
 )
+LKEY = "lin_api_" + "FAKEFAKE" * 3
+LTEAMS = [
+    {"id": "team-0000-fake", "key": "ENG", "name": "Engineering"},
+    {"id": "team-1111-fake", "key": "OPS", "name": "Operations"},
+]
+linear_state = {"fail": None}
+issues: list[dict] = []
 SHOWN = "<fake-slack-webhook-url>"  # captures never hold even a placeholder-shaped webhook address
 
 admin_url = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -61,7 +68,7 @@ from alembic.config import Config  # noqa: E402
 from sqlalchemy import create_engine, select, text  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app import accounts, slack, teams, workspace  # noqa: E402
+from app import accounts, linear, slack, teams, workspace  # noqa: E402
 from app.config import Settings  # noqa: E402
 from app.main import create_app  # noqa: E402
 from app.models import AppState, Meeting, TeamMember, Template, User  # noqa: E402
@@ -80,6 +87,29 @@ def fake_post(url, text_, **_):
 
 
 slack.post = fake_post
+
+
+def fake_teams(key, **_):
+    """Stands in for Linear's team list."""
+    if linear_state["fail"]:
+        raise linear.LinearError(linear_state["fail"])
+    return LTEAMS
+
+
+def fake_create(key, team_id, title, body, due, **_):
+    """Stands in for Linear's issueCreate: records what would be sent (no key in the record)."""
+    if linear_state["fail"]:
+        raise linear.LinearError(linear_state["fail"])
+    n = len(issues) + 1
+    issues.append({"team_id": team_id, "title": title, "description": body, "dueDate": due})
+    return {
+        "id": f"issue-{n:04d}-fake",
+        "identifier": f"ENG-{n}",
+        "url": f"https://linear.app/x/{n}",
+    }
+
+
+linear.teams, linear.create_issue = fake_teams, fake_create
 
 
 class Recorder:
@@ -117,7 +147,10 @@ class Recorder:
             "response": {"status": response.status_code, "body": shown},
         }
         (OUT / f"{Recorder.count:02d}-{name}.json").write_text(
-            json.dumps(record, indent=2, ensure_ascii=False).replace(HOOK, SHOWN) + "\n"
+            json.dumps(record, indent=2, ensure_ascii=False)
+            .replace(HOOK, SHOWN)
+            .replace(LKEY, "<fake-linear-api-key>")
+            + "\n"
         )
         print(f"{Recorder.count:02d}-{name:44} {method:6} {path:30} -> {response.status_code}")
         return response
@@ -282,6 +315,97 @@ def run(base: str, engine) -> None:
     d.call("slack-disconnect", "DELETE", path, note="204; the stored address is deleted.")
     d.call("slack-disconnect-again", "DELETE", path, note="Safe to repeat: 204.")
     d.call("slack-after-disconnect", "GET", path)
+
+    # ---- Linear ----
+    lp = "/api/integrations/linear"
+    d.call("linear-not-connected", "GET", lp, note="Nothing connected yet.")
+    d.call(
+        "linear-teams-bad-key",
+        "POST",
+        lp + "/teams",
+        body={"api_key": "nope"},
+        note="422: not a Linear key shape; Linear is not called.",
+    )
+    linear_state["fail"] = "auth"
+    d.call(
+        "linear-teams-rejected",
+        "POST",
+        lp + "/teams",
+        body={"api_key": LKEY},
+        note="Linear refused the key (simulated): 422.",
+    )
+    linear_state["fail"] = None
+    c.call(
+        "linear-teams-as-member",
+        "POST",
+        lp + "/teams",
+        body={"api_key": LKEY},
+        note="A member may not: 403.",
+    )
+    d.call(
+        "linear-teams",
+        "POST",
+        lp + "/teams",
+        body={"api_key": LKEY},
+        note="The teams the key can reach (simulated Linear). The key is not stored.",
+    )
+    d.call(
+        "linear-wrong-team",
+        "PUT",
+        lp,
+        body={"api_key": LKEY, "team_id": "team-9999-fake"},
+        note="A team the key cannot reach: 422.",
+    )
+    d.call(
+        "linear-connect",
+        "PUT",
+        lp,
+        body={"api_key": LKEY, "team_id": "team-0000-fake"},
+        note="The key is sent once and never returned; `team_name` is shown on the card.",
+    )
+    d.call("linear-connected", "GET", lp)
+    c.call("linear-as-member", "GET", lp, note="A member sees the state, `can_manage` false.")
+    with Session(engine) as session:
+        m3 = Meeting(
+            owner_user_id=session.scalars(select(User.id).where(User.email == "dan@example.test")).one(),
+            url="https://example.test/m3", platform="google_meet", native_id="nat-eeee-fff",
+            template_id=template_id, status="ready", step="done", title="Third call",
+            transcript="[Dan]: Hi.", speaker_transcript="[Dan]: Hi.", notes=NOTES, shared_team_id=team_id,
+        )  # fmt: skip
+        session.add(m3)
+        session.commit()
+        workspace.run_extraction(session, m3, client=CannedModel())
+    note_file(
+        "issues-after-extraction",
+        "What would be sent to Linear for the meeting's tasks (simulated Linear), in order.",
+        issues,
+    )
+    d.call("linear-after-sync", "GET", lp, note="`last_synced_at` is now set.")
+    linear_state["fail"] = "timeout"
+    with Session(engine) as session:
+        m4 = Meeting(
+            owner_user_id=session.scalars(select(User.id).where(User.email == "dan@example.test")).one(),
+            url="https://example.test/m4", platform="google_meet", native_id="nat-gggg-hhh",
+            template_id=template_id, status="ready", step="done", title="Fourth call",
+            transcript="[Dan]: Hi.", speaker_transcript="[Dan]: Hi.", notes=NOTES, shared_team_id=team_id,
+        )  # fmt: skip
+        session.add(m4)
+        session.commit()
+        workspace.run_extraction(session, m4, client=CannedModel())
+    linear_state["fail"] = None
+    d.call(
+        "linear-failing",
+        "GET",
+        lp,
+        note="A push failed (simulated timeout): `status` failing and a fixed sentence. Notes and tasks were not affected.",
+    )
+    d.call(
+        "linear-disconnect",
+        "DELETE",
+        lp,
+        note="204; the stored key is deleted. Issues already created stay in Linear.",
+    )
+    d.call("linear-after-disconnect", "GET", lp)
 
 
 def main() -> None:
