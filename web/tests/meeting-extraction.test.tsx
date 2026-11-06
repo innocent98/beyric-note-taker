@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), regenerate: vi.fn() }));
 vi.mock("@/lib/api/browser", () => ({
-  api: { meetings: { get: mocks.get, regenerate: mocks.regenerate, retry: vi.fn(), cancel: vi.fn(), end: vi.fn() } },
+  api: { milestones: { forMeeting: () => Promise.resolve({ milestones: [] }), confirm: vi.fn() }, meetings: { get: mocks.get, regenerate: mocks.regenerate, retry: vi.fn(), cancel: vi.fn(), end: vi.fn() } },
 }));
 
 const templates: Template[] = [{ id: 1, name: "General", instructions: "g" }];

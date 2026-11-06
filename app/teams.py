@@ -8,7 +8,7 @@ from datetime import datetime
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Meeting, Task, Team, TeamInvite, TeamMember, User
+from app.models import Meeting, Milestone, Project, Task, Team, TeamInvite, TeamMember, User
 
 
 def team_of(session: Session, user_id: int) -> Team | None:
@@ -86,7 +86,18 @@ def move_team_content(session: Session, old_team_id: int, new_team_id: int) -> N
     W4 (projects) and W8 (series) add theirs HERE, in the same function, so a joining account
     never loses them (spec 8.1). Meetings are not team content: they stay theirs, and a meeting
     shared with the dissolved team becomes private (`shared_team_id` null)."""
-    session.execute(update(Task).where(Task.team_id == old_team_id).values(team_id=new_team_id))
+    # The old team's sprints go with it: its tasks arrive in the new team's Backlog (W9).
+    session.execute(
+        update(Task)
+        .where(Task.team_id == old_team_id)
+        .values(team_id=new_team_id, sprint_id=None, carried=False)
+    )
+    session.execute(
+        update(Project).where(Project.team_id == old_team_id).values(team_id=new_team_id)
+    )
+    session.execute(
+        update(Milestone).where(Milestone.team_id == old_team_id).values(team_id=new_team_id)
+    )
     session.execute(
         update(Meeting).where(Meeting.shared_team_id == old_team_id).values(shared_team_id=None)
     )
@@ -171,6 +182,21 @@ def leave(session: Session, user: User, now: datetime) -> Team:
         .values(
             team_id=fresh.id,
             assignee_user_id=case((Task.assignee_user_id == user.id, user.id), else_=None),
+            # The old team's projects and milestones stay with it.
+            project_id=None,
+            milestone_id=None,
+            check_project=False,
+            # ...and so do its sprints: the task is in the new team's Backlog.
+            sprint_id=None,
+            carried=False,
+        )
+    )
+    # A proposal from their meeting must not be confirmable by a team that cannot read it.
+    session.execute(
+        delete(Milestone).where(
+            Milestone.team_id == old_team_id,
+            Milestone.confirmed_at.is_(None),
+            Milestone.source_meeting_id.in_(own_meetings),
         )
     )
     session.execute(

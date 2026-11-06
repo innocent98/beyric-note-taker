@@ -128,7 +128,7 @@ def test_putting_a_rule_stores_it_and_answers_with_the_whole_state(web, session,
     assert response.status_code == 200, response.text
     body = response.json()
     assert (body["rule"], body["rule_text"]) == ("organizer", "Joining meetings you organise")
-    assert body["connected"] is True and body["google_email"] == "grace@example.test"
+    assert body["connected"] is True and body["account_email"] == "grace@example.test"
     assert stored_rule(session, owner) == "organizer"
     assert web.get(URL).json()["rule"] == "organizer"
 

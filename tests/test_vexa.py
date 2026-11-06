@@ -333,6 +333,32 @@ def test_get_meeting_unknown_status_and_missing_fields(httpx_mock, client):
     assert meeting.completion_reason is None
 
 
+@pytest.mark.parametrize(
+    ("history", "expected"),
+    [
+        (["joining", "awaiting_admission", "needs_help"], True),
+        (["joining", "needs_help"], False),
+        ([], False),
+    ],
+)
+def test_get_meeting_reads_whether_the_bot_reached_the_lobby(httpx_mock, client, history, expected):
+    # Vexa keeps the bot's path in `data.status_transition` (seen live on 2026-11-06).
+    body = fixture_data()
+    body["status"] = "needs_help"
+    body["data"] = {
+        "status_transition": [{"to": to, "from": None, "source": "bot_callback"} for to in history]
+    }
+    httpx_mock.add_response(url="http://vexa.test/transcripts/zoom/1", json=body)
+    assert client.get_meeting("zoom", "1").reached_lobby is expected
+
+
+def test_get_meeting_ignores_a_malformed_transition_list(httpx_mock, client):
+    body = fixture_data()
+    body["data"] = {"status_transition": ["awaiting_admission", 3, None]}
+    httpx_mock.add_response(url="http://vexa.test/transcripts/zoom/1", json=body)
+    assert client.get_meeting("zoom", "1").reached_lobby is False
+
+
 def test_get_meeting_http_error(httpx_mock, client):
     httpx_mock.add_response(url="http://vexa.test/transcripts/zoom/1", status_code=404)
     with pytest.raises(VexaError):

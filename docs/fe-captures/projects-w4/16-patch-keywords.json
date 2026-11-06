@@ -1,0 +1,38 @@
+{
+  "note": "Replaces the list; duplicates (any case) are dropped and words trimmed.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/projects/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "keywords": [
+        "Scratch",
+        "scratch",
+        " tmp "
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "name": "Scratch",
+      "color": "#1F6FB2",
+      "keywords": [
+        "Scratch",
+        "tmp"
+      ],
+      "open_tasks": 0,
+      "milestone": null,
+      "created_at": "2026-11-05T22:00:02.301518Z"
+    }
+  }
+}

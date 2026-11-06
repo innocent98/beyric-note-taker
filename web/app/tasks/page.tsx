@@ -18,6 +18,9 @@ export default async function TasksPage() {
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect("/login");
   }
+  // The project tabs and milestone card: a failure leaves them out, the board still works.
+  const projects = await api.projects.list().then((list) => list.projects, () => null);
+  const milestones = await api.milestones.list().then((list) => list.milestones, () => []);
   // Only to know whether to offer "Invite them to the team": a failure here changes nothing else.
   const canInvite = await api.team.get().then((team) => team.can_manage, () => false);
   return (
@@ -28,7 +31,7 @@ export default async function TasksPage() {
       unread={await getUnreadNotifications()}
       timeZone={await getTimeZone()}
     >
-      <TasksView initial={initial} canInviteToTeam={canInvite} />
+      <TasksView initial={initial} projects={projects} milestones={milestones} canInviteToTeam={canInvite} />
     </AppShell>
   );
 }

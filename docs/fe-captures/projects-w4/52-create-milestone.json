@@ -1,0 +1,37 @@
+{
+  "note": "By hand; confirmed at once.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/milestones",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Beta",
+      "due_date": "2026-11-20",
+      "project_id": 3
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "name": "Beta",
+      "due_date": "2026-11-20",
+      "project_id": 3,
+      "source_meeting": null,
+      "quote": null,
+      "confirmed_at": "2026-11-05T22:00:02.694487Z",
+      "task_count": 0,
+      "done_count": 0,
+      "can_confirm": false,
+      "can_edit": true
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "note": "The sprint settings are on the team: `sprint_length`, `sprint_custom_days`, `sprint_align_weekdays`.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/team",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "name": "My team",
+      "share_new_meetings": false,
+      "my_role": "owner",
+      "sprint_length": "week5",
+      "sprint_custom_days": 10,
+      "sprint_align_weekdays": true,
+      "member_count": 3,
+      "pending_invites": 0,
+      "can_manage": true,
+      "can_change_roles": true
+    }
+  }
+}

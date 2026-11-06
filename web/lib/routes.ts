@@ -14,6 +14,7 @@ export const NEXT_PAGES = [
   "/pilot-full",
   "/meetings/[id]",
   "/tasks",
+  "/projects",
   "/team",
   "/accept-invite",
   "/decisions",

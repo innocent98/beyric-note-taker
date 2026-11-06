@@ -27,6 +27,7 @@ import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { Meeting, NoteLanguage, RetryBlock, Share, Template, TeamMember } from "@/lib/api/types";
 import { LocalTime } from "@/components/app/local-time";
+import { MilestoneProposals, MilestoneRows, useMeetingMilestones } from "@/components/app/meeting-milestones";
 import { DELETED_FLAG } from "@/lib/deleted-flag";
 import { durationLabel, initials, platformLabel, plural } from "@/lib/format";
 
@@ -81,6 +82,7 @@ export function MeetingView({
   const [meeting, setMeeting] = useState(initial);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [tab, setTab] = useState<string>(initialTab);
+  const [milestones, setMilestones] = useMeetingMilestones(meeting.id, meeting.status === "ready", meeting.extraction_status);
   const [extractionStalled, setExtractionStalled] = useState(false);
   const extractionPolls = useRef(0);
   const [busy, setBusy] = useState<Busy>(null);
@@ -355,7 +357,12 @@ export function MeetingView({
                     <dd>{templateName}</dd>
                   </>
                 ) : null}
+                <MilestoneRows rows={milestones} />
               </dl>
+              <MilestoneProposals
+                rows={milestones}
+                onConfirmed={(next) => setMilestones((all) => all.map((x) => (x.id === next.id ? next : x)))}
+              />
               {m.participants.length > 0 || sharedWith.length > 0 ? (
                 <>
                   <div className="side-rule" />

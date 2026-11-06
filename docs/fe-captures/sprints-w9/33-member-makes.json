@@ -1,0 +1,51 @@
+{
+  "note": "",
+  "client": "chidi",
+  "request": {
+    "method": "POST",
+    "path": "/api/tasks",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "title": "Chidi's own",
+      "due_date": "2099-01-01"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 8,
+      "title": "Chidi's own",
+      "status": "todo",
+      "assignee": null,
+      "spoken_owner": null,
+      "due_date": "2099-01-01",
+      "due_phrase": null,
+      "quote": null,
+      "is_new": false,
+      "unverified": false,
+      "source": "manual",
+      "assigned_on": "2026-11-06",
+      "done_at": null,
+      "created_at": "2026-11-06T16:00:00.990254Z",
+      "from_meeting": false,
+      "meeting": null,
+      "project_id": null,
+      "milestone_id": null,
+      "sprint_id": 2,
+      "carried": false,
+      "check_project": false,
+      "can_update": true,
+      "can_edit": true,
+      "can_assign": true,
+      "can_claim": true,
+      "can_delete": true
+    }
+  }
+}

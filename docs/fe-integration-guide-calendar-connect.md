@@ -28,6 +28,23 @@ The whole feature is **off** until the server sets `CALENDAR_ENABLED=true` (and 
 encryption key exist). While off, both routes answer 404 `calendar_unavailable` (#06, #07): hide the
 Connect button on that answer.
 
+## 1b. Provider-neutral names (Outlook phase O, M1, 2026-11-05)
+
+The connect, callback and disconnect routes are now `/api/calendar/{provider}/...` with `provider` one of
+`google` or `microsoft`. **Only `google` exists.** The Google URLs in this guide are unchanged
+(`/api/calendar/google/connect`, `.../callback`, `.../disconnect`) and behave exactly as captured below. A
+request for `microsoft` answers `404 calendar_unavailable` ("This calendar is not available."); any other
+name is a 422. Nothing in the app may call a `microsoft` route or print Outlook wording yet.
+
+What else changed, and what to build on it:
+
+| Change | Where it shows |
+|---|---|
+| The stored-row names in the captures below were renamed (`google_account_email` to `account_email`, `google_sub` to `account_subject`, `google_hosted_domain` to `account_domain`). **No API returns these rows**; they are the database dumps of the captures. The files were renamed in place; a fresh run of `scripts/capture_calendar_connect.py` on 2026-11-05 produced the same keys | #10, #28, #31, #35, #38, #40, #44, #46 |
+| New callback error `?calendar_error=already_connected` and new connect error **409 `calendar_already_connected`** ("Another calendar is already connected. Disconnect it first."): the user already has *another provider's* calendar connected. Only reachable once Microsoft exists, since nobody has two providers. A Meet-only Google connection never causes it, and neither does a disconnected one | **tested only** (`tests/test_calendar_providers.py`, with a stand-in Microsoft row); not capturable live yet |
+| `GET /api/calendar` now has `account_email` and `provider` instead of `google_email` (see the settings guide) | `fe-integration-guide-calendar-settings.md` |
+
+
 ## 2. The flow, step by step
 
 1. `POST /api/calendar/google/connect` (signed in, `X-CSRF-Token`). Body is optional.
@@ -128,9 +145,9 @@ unticked box can never switch a feature on.
 {
   "user_id": 1,
   "provider": "google",
-  "google_account_email": "grace@example.test",
-  "google_sub": "g-grace-1",
-  "google_hosted_domain": null,
+  "account_email": "grace@example.test",
+  "account_subject": "g-grace-1",
+  "account_domain": null,
   "status": "connected",
   "granted_scopes": "email https://www.googleapis.com/auth/calendar.events.readonly openid",
   "refresh_token_enc": "<bytes, 51 bytes>",
@@ -141,7 +158,7 @@ unticked box can never switch a feature on.
 }
 ```
 
-- The connected Google account **can differ from the sign-in email** (`google_account_email`). The
+- The connected Google account **can differ from the sign-in email** (`account_email`, called `google_account_email` before 2026-11-05). The
   Settings screen must show which Google account is connected, not assume the login address.
 - `refresh_token_enc` is bytes, never text, and no API ever returns it.
 - A **reconnect with the same Google account replaces** the row (#26–#28): still one connection per
@@ -210,7 +227,7 @@ list Beyric as having access.
 | **Every** scheduled join, in every state | The user's calendar settings (rule, template) |
 | Calendar notifications | Other notifications (for example the hours notice) |
 
-The row after (#40): `"status": "disconnected"`, `"google_account_email": null`, `"google_sub": null`,
+The row after (#40): `"status": "disconnected"`, `"account_email": null`, `"account_subject": null`,
 `"granted_scopes": null`, `"refresh_token_enc": null`, `"key_version": null`, calendar rows 0. The
 counts before were 2 events and 2 joins (one `scheduled`, one `joined`) and the notification kinds
 `calendar.not_recorded` and `usage.hours_low`; after, 0, 0 and `usage.hours_low` only.
@@ -249,6 +266,7 @@ connect the other account".
 | 503 `calendar_unavailable` (no encryption key) | tested only (`tests/test_calendar_connect.py`), not captured |
 | `no_refresh_token` from a real Google | not seen; the fake can omit the token |
 | Google's real consent screen, real scope names (Google may return `https://www.googleapis.com/auth/userinfo.email` where the fake returns `email`), the "unverified app" page, `hd` for a Workspace account | **not verified**: needs Adebayo's Gmail test account |
+| `404 calendar_unavailable` for `/api/calendar/microsoft/*`, `422` for an unknown provider, 409 `calendar_already_connected`, callback `already_connected` | **tested only** (`tests/test_calendar_providers.py`); not captured, they cannot happen against the running app until Microsoft ships |
 | `different_account` while a working connection exists | **live** against the running app, Google faked (#33–#35) |
 | Replacing a dead connection with another account (events dropped), merge of scopes without a new key | tested only (`tests/test_calendar_connect.py`), not captured |
 | `show_unverified_notice` after Google verifies the app | the flag flips in #32; Google's side not seen |

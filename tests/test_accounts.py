@@ -3,7 +3,7 @@ that one user never sees another's meetings, templates or vocabulary."""
 
 import json
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,8 +15,11 @@ from app.models import (
     CalendarEvent,
     Decision,
     Meeting,
+    Milestone,
     Notification,
+    Project,
     ReviewItem,
+    Sprint,
     Task,
     TeamInvite,
     Template,
@@ -589,7 +592,21 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         invited_by=owner.id,
         expires_at=datetime.now(UTC) + timedelta(days=7),
     )
-    session.add_all([term, note, decision, review, task, pending_invite])
+    project = Project(
+        team_id=teams.ensure_team(session, owner).id, name="P", color="#0E6B5E", keywords=[]
+    )
+    milestone = Milestone(
+        team_id=project.team_id,
+        name="Launch",
+        due_date=datetime.now(UTC).date(),
+        source_meeting_id=mine.id,
+    )
+    sprint = Sprint(
+        team_id=project.team_id, number=1, start_date=date(2026, 11, 2), end_date=date(2026, 11, 6)
+    )
+    session.add_all(
+        [term, note, decision, review, task, pending_invite, project, milestone, sprint]
+    )
     session.commit()
     # The calendar routes answer 404 `calendar_unavailable` while the feature is off, which would
     # hide an unscoped id: switch it on, and give BOTH people a live connection so that only the
@@ -629,17 +646,20 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "item_id": review.id,
         "task_id": task.id,
         "invite_id": pending_invite.id,
+        "project_id": project.id,
+        "milestone_id": milestone.id,
+        "sprint_id": sprint.id,
         "user_id": owner.id,  # a member of the owner's team, reached through the team routes
         "language": "fr",  # with the owner's meeting id: a translation is reached through it
     }
     anon.log_in(email=OTHER_EMAIL)
     checked = 0
     for method, path in api_routes(app):
-        names = re.findall(r"\{(\w+)\}", path)
+        names = [n for n in re.findall(r"\{(\w+)\}", path) if n != "provider"]  # a name, not an id
         if not names or path.startswith("/api/admin/"):
             continue  # admin routes answer 403 to any non-admin: tests/test_admin.py
         assert set(names) <= set(ids), f"classify the id in {method} {path} and scope it"
-        url = re.sub(r"\{(\w+)\}", lambda m: str(ids[m[1]]), path)
+        url = re.sub(r"\{(\w+)\}", lambda m: str(ids.get(m[1], "google")), path)
         bodies = {  # a valid body for each route that takes one, so only the id can be wrong
             "/regenerate": {"template_id": strangers_data["template"].id},
             "/vocabulary": {"term": "Metrika"},
@@ -647,6 +667,8 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/shares": {"recipients": [{"email": "x@example.test"}], "language": "en"},
             "/override": {"override": False},
             "/api/tasks/{task_id}": {"status": "done"},
+            "/api/projects/{project_id}": {"name": "x"},
+            "/api/milestones/{milestone_id}": {"name": "x"},
             "/api/team/members/{user_id}": {"aliases": ["x"]},
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
         }

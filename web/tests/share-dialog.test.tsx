@@ -18,6 +18,7 @@ vi.mock("@/lib/api/browser", () => ({
   api: {
     optOutOfMail: mocks.optOut,
     meetings: { shares: { create: mocks.create, list: mocks.list }, get: vi.fn() },
+    milestones: { forMeeting: () => Promise.resolve({ milestones: [] }), confirm: vi.fn() },
   },
 }));
 vi.mock("@/components/auth/use-url-token", () => ({

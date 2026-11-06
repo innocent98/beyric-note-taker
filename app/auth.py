@@ -341,6 +341,7 @@ PUBLIC_API = frozenset(
         # Answers a signed-out visitor itself (a redirect, not JSON). The flow is bound to the
         # signed-in user that started it and to the browser's `calendar_flow` cookie.
         ("GET", "/api/calendar/google/callback"),
+        ("GET", "/api/calendar/microsoft/callback"),
     }
 )
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})

@@ -33,6 +33,7 @@ export const config = {
     "/pilot-full",
     "/meetings/:id",
     "/tasks",
+    "/projects",
     "/team",
     "/accept-invite",
     "/decisions",

@@ -38,7 +38,7 @@ describe("the task drawer", () => {
     expect(screen.getByRole("link", { name: /Google Meet nat-aaaa-bbb, 3 Nov/ }).getAttribute("href")).toBe("/meetings/1");
   });
 
-  it("draws no Milestone, Project or Sprint rows: they need W4 and W9", () => {
+  it("draws no Milestone, Project or Sprint rows without the project lists (Sprint needs W9)", () => {
     setup(base);
     for (const row of ["Milestone", "Project", "Sprint"]) expect(screen.queryByText(row)).toBeNull();
     expect(screen.queryByText(/Invite them to the team/)).toBeNull();

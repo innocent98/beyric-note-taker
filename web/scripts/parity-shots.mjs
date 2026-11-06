@@ -151,7 +151,7 @@ const SCREENS = {
     [{ select: "(UTC+9) Tokyo", design: "Tokyo", next: "Time zone", wait: 500 }],
   ],
   // Tasks (W2). The prototype's "today" is Mon 2 Nov 2026: run with --now 2026-11-02T10:00:00Z. The board
-  // has no project tabs, sprint header, milestone card or Board / Backlog tabs: they wait for W3, W4, W9.
+  // has no sprint header or Board / Backlog tabs: they wait for W9. W4 added the project tabs and the milestone card.
   "app-tasks": [APP, [["Tasks", "first", 800]], "/tasks", true],
   "app-tasks-due": [APP, [["Tasks", "first", 800], ["Due date", "first"]], "/tasks", true, [{ text: "Due date" }]],
   "app-tasks-drawer": [
@@ -162,6 +162,20 @@ const SCREENS = {
     [{ text: "Finish payment checkout", wait: 400 }],
   ],
   "app-tasks-review": [APP, [["Tasks", "first", 800], ["Review", "first", 400]], "/tasks", true, [{ text: "Review", wait: 400 }]],
+  // Projects (W4). Recurring meetings, Sprint length and the two sprint figures are drawn off with a
+  // "Not available yet" line (W8, W9); the project tab on the board and the Check project line are the designer's.
+  "app-projects": [APP, [["Projects", "first", 800]], "/projects", true],
+  "app-projects-second": [APP, [["Projects", "first", 800], ["Beyric Note Taker", "last", 400]], "/projects", true, [{ click: "Beyric Note Taker", wait: 400 }]],
+  "app-tasks-project": [APP, [["Tasks", "first", 800], ["Beyric Note Taker", "last", 400]], "/tasks", true, [{ click: "Beyric Note Taker", wait: 400 }]],
+  "app-tasks-check-project": [
+    APP,
+    [["Tasks", "first", 800], ["Support Daniel Okoro with testing during the week", "first", 400]],
+    "/tasks",
+    true,
+    [{ text: "Support Daniel Okoro with testing during the week", wait: 400 }],
+  ],
+  // LEAD-DESIGNED, no prototype: the offer on a meeting page, "Set milestone: <name>, <date>?" with Confirm.
+  "app-detail-milestone-offer": [null, [], "/meetings/8", true],
   // Team (W3). The designer drew the Team screen and the invite dialog; the screens with a null design
   // are LEAD-DESIGNED (no prototype): alias editing, the remove question, the Share with team switch on
   // the meeting page and the invitation link page. The mock's tokens: new, existing, onteam, dead.
