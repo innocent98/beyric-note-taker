@@ -32,6 +32,7 @@ export const config = {
     "/reset-password",
     "/pilot-full",
     "/meetings/:id",
+    "/series/:id",
     "/tasks",
     "/projects",
     "/team",

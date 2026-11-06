@@ -42,9 +42,9 @@
           "is_new": false,
           "unverified": false,
           "source": "ai",
-          "assigned_on": "2026-11-02",
+          "assigned_on": "2026-10-26",
           "done_at": null,
-          "created_at": "2026-11-06T13:12:19.258692Z",
+          "created_at": "2026-11-06T13:45:44.421166Z",
           "from_meeting": true,
           "meeting": null,
           "can_update": true,
@@ -69,15 +69,15 @@
           "is_new": false,
           "unverified": false,
           "source": "ai",
-          "assigned_on": "2026-11-09",
+          "assigned_on": "2026-11-02",
           "done_at": null,
-          "created_at": "2026-11-06T13:12:19.258692Z",
+          "created_at": "2026-11-06T13:45:44.421166Z",
           "from_meeting": true,
           "meeting": {
             "id": 2,
             "title": "Beyric Monday planning",
             "platform": "google_meet",
-            "created_at": "2026-11-09T14:00:00Z"
+            "created_at": "2026-11-02T14:00:00Z"
           },
           "can_update": true,
           "can_edit": false,
@@ -97,15 +97,15 @@
           "is_new": false,
           "unverified": false,
           "source": "ai",
-          "assigned_on": "2026-11-09",
+          "assigned_on": "2026-11-02",
           "done_at": null,
-          "created_at": "2026-11-06T13:12:19.258692Z",
+          "created_at": "2026-11-06T13:45:44.421166Z",
           "from_meeting": true,
           "meeting": {
             "id": 2,
             "title": "Beyric Monday planning",
             "platform": "google_meet",
-            "created_at": "2026-11-09T14:00:00Z"
+            "created_at": "2026-11-02T14:00:00Z"
           },
           "can_update": false,
           "can_edit": false,
@@ -114,7 +114,7 @@
           "can_delete": false
         }
       ],
-      "finished_since_text": "Mon 9 Nov",
+      "finished_since_text": "Mon 2 Nov",
       "finished": [],
       "questions": [
         {
@@ -124,7 +124,7 @@
             "id": 2,
             "title": "Beyric Monday planning",
             "platform": "google_meet",
-            "created_at": "2026-11-09T14:00:00Z"
+            "created_at": "2026-11-02T14:00:00Z"
           },
           "can_update": false
         },
@@ -135,7 +135,7 @@
             "id": 2,
             "title": "Beyric Monday planning",
             "platform": "google_meet",
-            "created_at": "2026-11-09T14:00:00Z"
+            "created_at": "2026-11-02T14:00:00Z"
           },
           "can_update": false
         }
@@ -145,7 +145,7 @@
         {
           "id": 2,
           "title": "Beyric Monday planning",
-          "created_at": "2026-11-09T14:00:00Z",
+          "created_at": "2026-11-02T14:00:00Z",
           "duration_seconds": 2760,
           "tasks_count": 2
         }

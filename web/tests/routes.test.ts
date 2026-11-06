@@ -32,6 +32,8 @@ describe("routes", () => {
     expect(isNextPage("/login")).toBe(true);
     expect(isNextPage("/meetings/12")).toBe(true);
     expect(isNextPage("/meetings/12?x=1")).toBe(true);
+    expect(isNextPage("/series/12")).toBe(true);
+    expect(isNextPage("/series/12/agenda")).toBe(false);
     expect(isNextPage("/meetings/12/cancel")).toBe(false);
     expect(isNextPage("/meetings")).toBe(false);
     expect(isNextPage("/privacy/extra")).toBe(false);

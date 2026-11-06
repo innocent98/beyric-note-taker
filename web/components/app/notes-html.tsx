@@ -49,8 +49,9 @@ export function wrapSections(html: string): string {
 // `actions`, when given, is drawn in place of the notes' own "Action items" part: the tasks made
 // from it (components/app/action-tasks.tsx). Each other part is still the API's HTML, in a section
 // of its own with the same classes as `wrapSections` gives it.
-export function NotesHtml({ html, actions }: { html: string; actions?: ReactNode }) {
-  if (!actions) return <div className="notes-body notes" dangerouslySetInnerHTML={{ __html: wrapSections(html) }} />;
+// `questions`, likewise, is drawn in place of the "Open questions" part (components/app/open-questions.tsx).
+export function NotesHtml({ html, actions, questions }: { html: string; actions?: ReactNode; questions?: ReactNode }) {
+  if (!actions && !questions) return <div className="notes-body notes" dangerouslySetInnerHTML={{ __html: wrapSections(html) }} />;
   return (
     <div className="notes-body notes">
       {html
@@ -60,7 +61,14 @@ export function NotesHtml({ html, actions }: { html: string; actions?: ReactNode
           const heading = /^<h2[^>]*>([\s\S]*?)<\/h2>/.exec(part)?.[1];
           if (heading === undefined) return <div key={index} dangerouslySetInnerHTML={{ __html: part }} />;
           const name = heading.replace(/<[^>]*>/g, "").trim().toLowerCase();
-          if (name === "action items") {
+          if (name === "open questions" && questions) {
+            return (
+              <section key={index} className="notes-sec notes-sec-questions">
+                {questions}
+              </section>
+            );
+          }
+          if (name === "action items" && actions) {
             return (
               <section key={index} className="notes-sec notes-sec-actions">
                 {actions}
