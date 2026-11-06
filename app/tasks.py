@@ -174,7 +174,9 @@ def reconcile(
         task = existing.get(key)
         if task is not None and task.deleted_at is not None:
             continue  # deleted by a person: the same bullet does not bring it back
-        if task is not None and touched(task):
+        if task is not None and (touched(task) or task.team_id != team_id):
+            # Touched by a person, or moved to another team while the model was asked (its owner
+            # left): never filed into this team's projects.
             kept.append(task)
             continue
         item = by_index.get(position)
@@ -478,7 +480,9 @@ def update(session: Session, user: User, task: Task, changes: dict, now: datetim
         raise TaskForbidden
     if ("status" in real or "due_date" in real) and not allowed.update:
         raise TaskForbidden
-    if ({"project_id", "milestone_id", "check_project"} & real.keys()) and not allowed.update:
+    # Filing is the owner's and admin's (spec 6.3), and the maker's of a manual task: a member given
+    # a task may change its status and due date, not where it is filed.
+    if ({"project_id", "milestone_id", "check_project"} & real.keys()) and not allowed.edit:
         raise TaskForbidden
     if "project_id" in real or "milestone_id" in real:
         check_assignable(session, task.team_id, real.get("project_id"), real.get("milestone_id"))

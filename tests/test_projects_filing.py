@@ -225,3 +225,41 @@ def test_a_name_is_plain_one_line_text_and_an_over_long_name_is_clipped(session,
     row = session.scalars(select(Milestone)).one()
     assert row.name.startswith("Go live now y") and len(row.name) <= 200
     assert "\n" not in row.name and "\x00" not in row.name
+
+
+def test_another_meetings_unconfirmed_proposal_does_not_hide_this_ones(session, owner, team):
+    """Opus review: only a confirmed milestone counts as already there."""
+    first = make_meeting(session, owner)
+    first.speaker_transcript += "\n[Ada]: Launch is December 8."
+    other = make_meeting(session, owner)
+    other.speaker_transcript += "\n[Ada]: Launch is December 8."
+    session.commit()
+    run(session, first, [with_milestones(MS)])
+    run(session, other, [with_milestones(MS)])
+    sources = {m.source_meeting_id for m in session.scalars(select(Milestone))}
+    assert sources == {first.id, other.id}
+
+
+def test_a_task_that_moved_team_during_the_model_call_is_not_filed_into_the_old_teams_project(
+    session, owner, team
+):
+    """Opus review: the owner left the team while the model was asked."""
+    from app import teams as teams_module
+
+    project(session, team, "Portal", "checkout", "payment")
+    meeting = make_meeting(session, owner)
+    run(session, meeting)  # tasks exist, filed in `team`
+    fresh = teams_module.Team(owner_user_id=owner.id)
+    session.add(fresh)
+    session.flush()
+    for task in all_tasks(session, meeting):
+        task.team_id, task.project_id, task.check_project = fresh.id, None, False
+    session.commit()
+    tasks_now = all_tasks(session, meeting)
+    from app import tasks as tasks_module
+
+    tasks_module.reconcile(
+        session, meeting, team.id, [t.title for t in tasks_now], [], [], NOW.date(), quiet=True
+    )
+    session.expire_all()
+    assert all(t.project_id is None for t in all_tasks(session, meeting))

@@ -63,9 +63,16 @@ def _milestone_or_404(session: Session, user: User, me, milestone_id: int) -> Mi
     cannot read that meeting gets 404 on it, whatever their role, so an admin cannot confirm or
     read a date out of a private meeting by trying ids."""
     found = projects.milestone_of_team(session, me.team_id, milestone_id)
-    if found is not None and found.confirmed_at is None and found.source_meeting_id is not None:
-        readable = session.scalar(
-            select(Meeting.id).where(Meeting.id == found.source_meeting_id, can_read_clause(user))
+    if found is not None and found.confirmed_at is None:
+        # Fail closed: a proposal whose meeting is gone or unreadable is no one's.
+        readable = (
+            session.scalar(
+                select(Meeting.id).where(
+                    Meeting.id == found.source_meeting_id, can_read_clause(user)
+                )
+            )
+            if found.source_meeting_id is not None
+            else None
         )
         if readable is None:
             found = None

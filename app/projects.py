@@ -30,6 +30,7 @@ MAX_KEYWORDS = 20
 MAX_KEYWORD_CHARS = 40
 MAX_MILESTONE_CHARS = 200
 MAX_QUOTE_CHARS = 300
+MAX_PROJECTS = 50  # per team: filing costs projects x keywords per task
 MAX_PROPOSALS = 5  # per meeting: a long meeting that names many dates is not a list of goals
 
 
@@ -100,6 +101,10 @@ def create(
     existing = session.scalar(
         select(func.count()).select_from(Project).where(Project.team_id == team_id)
     )
+    if existing >= MAX_PROJECTS:
+        raise ProjectInvalid(
+            "too_many_projects", f"A team can have at most {MAX_PROJECTS} projects."
+        )
     project = Project(
         team_id=team_id,
         name=clean_name(name),
@@ -198,9 +203,15 @@ def propose(
     session.query(Milestone).filter(
         Milestone.source_meeting_id == meeting.id, Milestone.confirmed_at.is_(None)
     ).delete(synchronize_session=False)
+    # Only confirmed ones count as "already there": another meeting's unconfirmed proposal must not
+    # hide this one from the people who can read this meeting.
     have = {
         (normalise(m.name), m.due_date)
-        for m in session.scalars(select(Milestone).where(Milestone.team_id == team_id))
+        for m in session.scalars(
+            select(Milestone).where(
+                Milestone.team_id == team_id, Milestone.confirmed_at.is_not(None)
+            )
+        )
     }
     made: list[Milestone] = []
     for item in proposals[:MAX_PROPOSALS]:
