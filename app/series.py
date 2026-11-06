@@ -97,11 +97,12 @@ def is_manager(session: Session, user: User, team_id: int) -> bool:
 
 
 def _seen_by(user: User):
-    """A series the caller's team owns is shown to the caller only when it is not someone else's
-    private calendar event: the caller made it, or the caller has a
-    meeting of it they may read, or its recurring event is on the caller's own calendar. A series made by hand is no different: it is named after a person's meeting ("Make this a recurring meeting?" uses the meeting's own name), so it stays theirs until a meeting of it is shared. Else the
-    title, cadence and next date of a teammate's private recurring call (a 1:1) would be published
-    to the team (spec 8.2: private by default)."""
+    """A series the caller's team owns is shown to the caller only when the caller made it, has a
+    meeting of it they may read, or have its recurring event on their own calendar. A series made
+    by hand is no different: it is named after a person's meeting ("Make this a recurring
+    meeting?" uses the meeting's own name), so it stays theirs until a meeting of it is shared.
+    Else the title, cadence and next date of a teammate's private recurring call (a 1:1) would be
+    published to the team (spec 8.2: private by default)."""
     readable = select(Meeting.id).where(Meeting.series_id == Series.id, can_read_clause(user))
     own_event = select(CalendarEvent.id).where(
         CalendarEvent.user_id == user.id,
