@@ -13,12 +13,18 @@ import type {
   TimeZonePreferences,
   Meeting,
   MeetingList,
+  MeetingMilestones,
   MeetingTasks,
+  Milestone,
+  MilestoneList,
   NewMeeting,
   NewTask,
   NoteLanguage,
   NoticeList,
   Pilot,
+  Project,
+  ProjectChanges,
+  ProjectList,
   ReviewItem,
   ReviewList,
   ReviewState,
@@ -291,7 +297,9 @@ export function createApi(options: ApiOptions = {}) {
     // caller may not make is 403 `team_forbidden` (nothing applied), a task they cannot see is 404.
     // Deleting answers 204. `forMeeting` is the meeting page's Action items.
     tasks: {
-      list: (query: { assignee?: string; status?: string; limit?: number; before_id?: number } = {}) =>
+      list: (
+        query: { assignee?: string; status?: string; project?: string; milestone?: number; limit?: number; before_id?: number } = {},
+      ) =>
         request<TaskList>("GET", "/api/tasks", { query }),
       get: (id: number) => request<Task>("GET", `/api/tasks/${id}`),
       create: (body: Partial<NewTask> = {}) => request<Task>("POST", "/api/tasks", { body, write: true }),
@@ -299,6 +307,21 @@ export function createApi(options: ApiOptions = {}) {
         request<Task>("PATCH", `/api/tasks/${id}`, { body, write: true }),
       remove: (id: number) => request<void>("DELETE", `/api/tasks/${id}`, { write: true }),
       forMeeting: (meetingId: number) => request<MeetingTasks>("GET", `/api/meetings/${meetingId}/tasks`),
+    },
+    // Projects and milestones (docs/fe-integration-guide-projects.md). Everyone on the team reads;
+    // an owner or admin writes (403 `team_forbidden` otherwise). `update` sends one field.
+    projects: {
+      list: () => request<ProjectList>("GET", "/api/projects"),
+      create: (body: { name?: string; color?: string; keywords?: string[] } = {}) =>
+        request<Project>("POST", "/api/projects", { body, write: true }),
+      update: (id: number, body: ProjectChanges) =>
+        request<Project>("PATCH", `/api/projects/${id}`, { body, write: true }),
+      remove: (id: number) => request<void>("DELETE", `/api/projects/${id}`, { write: true }),
+    },
+    milestones: {
+      list: () => request<MilestoneList>("GET", "/api/milestones"),
+      forMeeting: (meetingId: number) => request<MeetingMilestones>("GET", `/api/meetings/${meetingId}/milestones`),
+      confirm: (id: number) => request<Milestone>("POST", `/api/milestones/${id}/confirm`, { body: {}, write: true }),
     },
     // The Team screen (docs/fe-integration-guide-team.md). A member is addressed by `user_id`.
     team: {

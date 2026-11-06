@@ -34,6 +34,13 @@ export type TasksSettings = Schemas["TasksSettingsOut"];
 export type TaskChanges = Partial<Schemas["TaskPatch"]>;
 export type NewTask = Schemas["TaskCreate"];
 
+export type Project = Schemas["ProjectOut"];
+export type ProjectList = Schemas["ProjectList"];
+export type ProjectChanges = Partial<Schemas["ProjectPatch"]>;
+export type Milestone = Schemas["MilestoneOut"];
+export type MilestoneList = Schemas["MilestoneList"];
+export type MeetingMilestones = Schemas["MeetingMilestones"];
+
 export type Team = Schemas["TeamOut"];
 export type TeamRole = Team["my_role"];
 export type TeamMember = Schemas["TeamMemberOut"];

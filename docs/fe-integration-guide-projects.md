@@ -69,6 +69,9 @@ Keywords are matched as whole words in the meeting title, the task title and the
 ## State and polling
 Proposals appear after the meeting's extraction finishes (`extraction_status` on the meeting): fetch `GET /api/meetings/{id}/milestones` with the meeting, and again when `extraction_status` turns `done`. No other polling.
 
+## Screens built on this
+The Projects screen, the Tasks board's tabs, milestone card and drawer rows, and the meeting page's milestone line and offer are built on exactly these routes (`docs/sop/2026-11-06-w4-projects-ui.md`). Nothing in them needed a route that is not listed here.
+
 ## Verification table
 | Claim | Status |
 |---|---|

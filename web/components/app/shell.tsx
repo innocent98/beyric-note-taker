@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { TimeZoneProvider } from "@/components/app/time-zone-context";
 import { IconButton, Logo, NavLink } from "@/components/ui";
 
-export type NavSection = "meetings" | "tasks" | "decisions" | "review" | "team" | "notifications" | "templates" | "vocabulary" | "settings";
+export type NavSection = "meetings" | "tasks" | "projects" | "decisions" | "review" | "team" | "notifications" | "templates" | "vocabulary" | "settings";
 
 // The owner app's frame: a sidebar on desktop, a top bar on phones (components.css). Log out is a
 // `tasksNew` is `badges.tasks_new`: the count beside Tasks.
@@ -37,6 +37,7 @@ export function AppShell({
         <nav className="nav" aria-label="Main">
           <NavLink href="/" label="Meetings" current={current === "meetings"} />
           <NavLink href="/tasks" label="Tasks" current={current === "tasks"} badge={tasksNew ?? 0} />
+          <NavLink href="/projects" label="Projects" current={current === "projects"} />
           <NavLink href="/decisions" label="Decisions" current={current === "decisions"} />
           <NavLink href="/review" label="Review" current={current === "review"} badge={reviewOpen ?? 0} />
           <NavLink href="/team" label="Team" current={current === "team"} />
