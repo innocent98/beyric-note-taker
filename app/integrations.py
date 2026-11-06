@@ -213,7 +213,7 @@ def notify_meeting(
 
 
 def _linear_refused(error: linear.LinearError):
-    status = {"auth": 422, "no_team": 422, "rate": 429}.get(error.reason, 502)
+    status = {"auth": 400, "no_team": 400, "rate": 429}.get(error.reason, 502)
     code = {
         "auth": "linear_key_rejected",
         "no_team": "linear_team_invalid",
@@ -236,7 +236,7 @@ def _clean_key(key: str) -> str:
         return linear.check_key(key)
     except linear.KeyInvalid:
         raise Refused(
-            422,
+            400,
             "linear_key_invalid",
             "That does not look like a Linear personal API key. It starts with lin_api_.",
         ) from None
@@ -266,7 +266,7 @@ def connect_linear(
     fetch=None,
 ) -> Integration:
     """Check the key against Linear, check the chosen team is one it can reach, and store both
-    (encrypted). 422 `linear_key_invalid` / `linear_key_rejected` / `linear_team_invalid`,
+    (encrypted). 400 `linear_key_invalid` / `linear_key_rejected` / `linear_team_invalid`,
     429 `integration_rate`, 502 `linear_unreachable`, 503 `integrations_unavailable`."""
     clean = _clean_key(key)
     _linear_attempt(session, team_id, now)

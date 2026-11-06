@@ -5468,6 +5468,16 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid`"
+          },
           "401": {
             "content": {
               "application/json": {
@@ -5496,7 +5506,7 @@
                 }
               }
             },
-            "description": "`linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid`"
+            "description": "Malformed request"
           },
           "429": {
             "content": {
@@ -5560,6 +5570,16 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid`"
+          },
           "401": {
             "content": {
               "application/json": {
@@ -5588,7 +5608,7 @@
                 }
               }
             },
-            "description": "`linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid`"
+            "description": "Malformed request"
           },
           "429": {
             "content": {

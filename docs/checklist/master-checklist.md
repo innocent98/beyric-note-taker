@@ -438,7 +438,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] "Add email" beside a non-member participant (waits for W6)
 - [ ] W5 Export (merged), W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
   - [x] W10 part 1, Slack webhook (migration 0032, branch `feature/w10-slack`, 2026-11-06): vault-stored address, SSRF-safe post, per-team caps, Settings row live, privacy line; SOP `docs/sop/2026-11-06-w10-slack.md`, guide `docs/fe-integration-guide-integrations.md`
-  - [ ] W10 part 2, one tracker (migration 0033): waiting for Adebayo to name it (spec D11); lead has the options (Linear recommended)
+  - [x] W10 part 2, Linear tracker (migration 0033, branch `feature/w10-tracker`, 2026-11-06). **Decision: Adebayo chose Linear on 2026-11-06 16:43 WAT** (spec D11). Pasted personal key in the vault, fixed host `api.linear.app`, one-way create-only issues for shared meetings; SOP `docs/sop/2026-11-06-w10-linear-tracker.md`
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)
   - [x] Headings from a fixed dictionary in code; transcript and notes split in code into lines, only the words go to the model; checks for count, structure, links and markup, numbers, names; one retry per chunk

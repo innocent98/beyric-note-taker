@@ -143,14 +143,14 @@ const SCREENS = {
     ],
   ],
   // Linear (W10 part 2): the design's select + Connect connects in one click and shows "Syncing with Jira".
-  "app-settings-linear-form": [APP, [["Settings", "first"]], "/settings", true, [{ click: "Connect", wait: 400 }]],
+  "app-settings-linear-form": [APP, [["Settings", "first"]], "/settings", true, [{ click: "Connect", exact: true, wait: 400 }]],
   "app-settings-linear-connected": [
     APP,
     [["Settings", "first"], ["Connect", "first", 1500]],
     "/settings",
     true,
     [
-      { click: "Connect", wait: 300 },
+      { click: "Connect", exact: true, wait: 300 },
       { fill: "lin_api_...", value: ["lin_api", "FAKEFAKEFAKEFAKEFAKEFAKE"].join("_"), enter: true, wait: 800 },
       { submit: true, wait: 800 },
     ],
@@ -226,7 +226,7 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
         await page.getByPlaceholder(step.fill).first().fill(step.value);
         if (step.enter) await page.getByPlaceholder(step.fill).first().press("Enter");
       } else if (step.submit) {
-        await page.locator("form").first().evaluate((form) => form.requestSubmit());
+        await page.locator("form.pl-slack-form").first().evaluate((form) => form.requestSubmit());
       } else if (step.select) {
         const field =
           side === "design"
@@ -234,7 +234,7 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
             : page.getByRole("combobox", { name: step.next });
         await field.first().selectOption({ label: step.select });
       } else if (step.click) {
-        await page.getByRole("button", { name: step.click }).first().evaluate((el) => el.click());
+        await page.getByRole("button", { name: step.click, exact: step.exact }).first().evaluate((el) => el.click());
       } else {
         await page.getByText(step.text, { exact: true }).first().evaluate((el) => el.click());
       }

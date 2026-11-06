@@ -1,5 +1,5 @@
 {
-  "note": "Linear refused the key (simulated): 422.",
+  "note": "Linear refused the key (simulated): 400.",
   "client": "dan (owner)",
   "request": {
     "method": "POST",
@@ -12,7 +12,7 @@
     }
   },
   "response": {
-    "status": 422,
+    "status": 400,
     "body": {
       "error": {
         "code": "linear_key_rejected",

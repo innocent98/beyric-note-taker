@@ -265,11 +265,11 @@ def test_only_managers_connect_and_a_member_may_look(
 
 def test_a_bad_key_a_refused_key_and_a_wrong_team_are_refused(api, session, team, fake_linear):
     error_of(
-        api.call("PUT", LINEAR, {"api_key": "nope", "team_id": TEAM_ID}), 422, "linear_key_invalid"
+        api.call("PUT", LINEAR, {"api_key": "nope", "team_id": TEAM_ID}), 400, "linear_key_invalid"
     )
     fake_linear["fail"] = "auth"
     response = api.call("PUT", LINEAR, {"api_key": KEY, "team_id": TEAM_ID})
-    error_of(response, 422, "linear_key_rejected")
+    error_of(response, 400, "linear_key_rejected")
     assert "FAKEFAKE" not in response.text
     fake_linear["fail"] = "timeout"
     error_of(
@@ -278,7 +278,7 @@ def test_a_bad_key_a_refused_key_and_a_wrong_team_are_refused(api, session, team
     fake_linear["fail"] = None
     error_of(
         api.call("PUT", LINEAR, {"api_key": KEY, "team_id": "team-9999-fake"}),
-        422,
+        400,
         "linear_team_invalid",
     )
     assert session.scalars(select(Integration)).all() == []

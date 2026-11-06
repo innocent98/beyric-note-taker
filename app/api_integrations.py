@@ -82,7 +82,7 @@ def disconnect_slack(
 
 LINEAR_ERRORS = {
     **FORBIDDEN,
-    422: {
+    400: {
         "model": ErrorResponse,
         "description": "`linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid`",
     },

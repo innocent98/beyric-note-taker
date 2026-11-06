@@ -4211,6 +4211,15 @@ export interface operations {
                     "application/json": components["schemas"]["LinearOut"];
                 };
             };
+            /** @description `linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Not logged in */
             401: {
                 headers: {
@@ -4229,7 +4238,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid` */
+            /** @description Malformed request */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4334,6 +4343,15 @@ export interface operations {
                     "application/json": components["schemas"]["LinearTeamsOut"];
                 };
             };
+            /** @description `linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Not logged in */
             401: {
                 headers: {
@@ -4352,7 +4370,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid` */
+            /** @description Malformed request */
             422: {
                 headers: {
                     [name: string]: unknown;

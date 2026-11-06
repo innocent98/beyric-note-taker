@@ -1,5 +1,5 @@
 {
-  "note": "A team the key cannot reach: 422.",
+  "note": "A team the key cannot reach: 400.",
   "client": "dan (owner)",
   "request": {
     "method": "PUT",
@@ -13,7 +13,7 @@
     }
   },
   "response": {
-    "status": 422,
+    "status": 400,
     "body": {
       "error": {
         "code": "linear_team_invalid",

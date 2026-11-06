@@ -1,5 +1,5 @@
 {
-  "note": "422: not a Linear key shape; Linear is not called.",
+  "note": "400: not a Linear key shape; Linear is not called.",
   "client": "dan (owner)",
   "request": {
     "method": "POST",
@@ -12,7 +12,7 @@
     }
   },
   "response": {
-    "status": 422,
+    "status": 400,
     "body": {
       "error": {
         "code": "linear_key_invalid",

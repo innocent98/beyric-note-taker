@@ -324,7 +324,7 @@ def run(base: str, engine) -> None:
         "POST",
         lp + "/teams",
         body={"api_key": "nope"},
-        note="422: not a Linear key shape; Linear is not called.",
+        note="400: not a Linear key shape; Linear is not called.",
     )
     linear_state["fail"] = "auth"
     d.call(
@@ -332,7 +332,7 @@ def run(base: str, engine) -> None:
         "POST",
         lp + "/teams",
         body={"api_key": LKEY},
-        note="Linear refused the key (simulated): 422.",
+        note="Linear refused the key (simulated): 400.",
     )
     linear_state["fail"] = None
     c.call(
@@ -354,7 +354,7 @@ def run(base: str, engine) -> None:
         "PUT",
         lp,
         body={"api_key": LKEY, "team_id": "team-9999-fake"},
-        note="A team the key cannot reach: 422.",
+        note="A team the key cannot reach: 400.",
     )
     d.call(
         "linear-connect",
