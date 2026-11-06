@@ -27,7 +27,7 @@ the scheduler has been seen doing the work in production; removing it is a follo
 
 import logging
 
-from app import accounts, mail, maintenance
+from app import accounts, mail, maintenance, series, series_mail
 from app.config import Settings, get_settings
 from app.maintenance import TOKEN_KEEP  # noqa: F401  (the window the token sweep keeps)
 from app.scheduler import Scheduler
@@ -35,6 +35,7 @@ from app.scheduler import Scheduler
 logger = logging.getLogger(__name__)
 
 HOURLY = 3600
+MINUTE = 60
 EVERY_TICK = 1  # the shortest interval the scheduler allows: due on every tick of its loop
 MAIL_BUDGET_SECONDS = 60.0  # one send pass stops starting new mails after this long
 
@@ -52,8 +53,12 @@ def register_default_sweeps(
         ("sweep_calendar_events", maintenance.sweep_calendar_events),
         ("sweep_mail_outbox", mail.sweep_outbox),
         ("sweep_unverified_accounts", accounts.sweep_unverified),
+        ("series_from_joins", series.sync_from_joins),
     ):
         scheduler.register(name, HOURLY, sweep, loop="sync")
+    # Reminders before recurring meetings (W8): a cheap look every minute, on the sync loop with
+    # the sweeps so it never delays a dispatch tick. It only queues mail; the mail loop sends it.
+    scheduler.register("series_reminders", MINUTE, series_mail.queue_due_reminders, loop="sync")
 
     mailer = mailer or mail.build_mailer(settings)
     if mailer is None:

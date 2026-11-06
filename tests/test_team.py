@@ -447,6 +447,8 @@ def test_the_team_and_its_members_as_the_screen_needs_them(
         "id": team.id,
         "name": "My team",
         "share_new_meetings": False,
+        "reminders_on": False,
+        "reminder_timing": "both",
         "my_role": "owner",
         "member_count": 3,
         "pending_invites": 0,

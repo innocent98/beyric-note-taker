@@ -1,0 +1,23 @@
+{
+  "note": "Queued agenda mails: ids only, no text.",
+  "content": [
+    {
+      "to": "dan@example.test",
+      "template": "series_agenda",
+      "payload": {
+        "send_id": 1,
+        "user_id": 3
+      },
+      "status": "pending"
+    },
+    {
+      "to": "ada@example.test",
+      "template": "series_agenda",
+      "payload": {
+        "send_id": 2,
+        "user_id": 2
+      },
+      "status": "pending"
+    }
+  ]
+}

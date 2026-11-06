@@ -22,6 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app import (
     api_accounts,
     api_admin,
+    api_series,
     api_settings,
     api_tasks,
     api_team,
@@ -341,6 +342,8 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         decisions_count=decisions_count,
         review_open_count=review_open_count,
         tasks=api_tasks.present(session, user, task_rows),
+        series=api_series.meeting_series(session, user, meeting),
+        open_questions=api_series.meeting_questions(session, user, meeting) if ready else [],
         translations=[
             api_translation.brief(row, meeting)
             for row in session.scalars(
@@ -786,5 +789,6 @@ router.include_router(calendar_api.router)
 router.include_router(calendar_recurring.router)
 router.include_router(api_workspace.router)
 router.include_router(api_tasks.router)
+router.include_router(api_series.router)
 router.include_router(api_team.router)
 router.include_router(api_translation.router)

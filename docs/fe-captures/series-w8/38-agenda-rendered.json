@@ -1,0 +1,15 @@
+{
+  "note": "What the mail provider would be handed (CAPTURING MAILER, not Resend).",
+  "content": [
+    {
+      "to": "dan@example.test",
+      "subject": "Agenda: Beyric Monday planning",
+      "text": "Beyric Monday planning · sent by Ada Lovelace\n\nAgenda for the next meeting\n\nHi Dan, here is what the team wants to cover.\n\nOn the agenda\n\n- Hiring update\n- Budget review\n- Who covers support in December?\n\nStill open from last time\n\n- Finish payment checkout · Dan Okoro (No due date)\n- Finish payment checkout · Dan Okoro (No due date)\n- Log design refinements on the tracker · Needs owner (No due date)\n\nView the agenda:\nhttps://notes.example.test/series/1\n\nYou received this because you attend Beyric Monday planning, and Ada Lovelace sent it.\nReminder settings: https://notes.example.test/settings#reminders"
+    },
+    {
+      "to": "ada@example.test",
+      "subject": "Agenda: Beyric Monday planning",
+      "text": "Beyric Monday planning · sent by Dan Okoro\n\nAgenda for the next meeting\n\nHi Ada, here is what the team wants to cover.\n\nOn the agenda\n\n- Hiring update\n- Budget review\n- Who covers support in December?\n\nStill open from last time\n\n- Finish payment checkout · Dan Okoro (No due date)\n- Log design refinements on the tracker · Needs owner (No due date)\n- Finish payment checkout · Dan Okoro (No due date)\n- Log design refinements on the tracker · Needs owner (No due date)\n\nView the agenda:\nhttps://notes.example.test/series/1\n\nYou received this because you attend Beyric Monday planning, and Dan Okoro sent it.\nReminder settings: https://notes.example.test/settings#reminders"
+    }
+  ]
+}

@@ -87,6 +87,9 @@ def move_team_content(session: Session, old_team_id: int, new_team_id: int) -> N
     never loses them (spec 8.1). Meetings are not team content: they stay theirs, and a meeting
     shared with the dissolved team becomes private (`shared_team_id` null)."""
     session.execute(update(Task).where(Task.team_id == old_team_id).values(team_id=new_team_id))
+    from app import series  # series imports this module
+
+    series.move_team_series(session, old_team_id, new_team_id)
     session.execute(
         update(Meeting).where(Meeting.shared_team_id == old_team_id).values(shared_team_id=None)
     )
@@ -187,6 +190,9 @@ def leave(session: Session, user: User, now: datetime) -> Team:
         .where(Meeting.owner_user_id == user.id, Meeting.shared_team_id == old_team_id)
         .values(shared_team_id=None)
     )
+    from app import series  # series imports this module
+
+    series.forget_meetings_of(session, user.id, old_team_id)
     session.execute(
         update(TeamInvite)
         .where(

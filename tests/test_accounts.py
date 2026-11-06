@@ -16,7 +16,9 @@ from app.models import (
     Decision,
     Meeting,
     Notification,
+    OpenQuestion,
     ReviewItem,
+    Series,
     Task,
     TeamInvite,
     Template,
@@ -589,7 +591,9 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         invited_by=owner.id,
         expires_at=datetime.now(UTC) + timedelta(days=7),
     )
-    session.add_all([term, note, decision, review, task, pending_invite])
+    recurring = Series(team_id=teams.ensure_team(session, owner).id, title="Weekly")
+    question = OpenQuestion(meeting_id=mine.id, text="q", position=0, fingerprint="q")
+    session.add_all([term, note, decision, review, task, pending_invite, recurring, question])
     session.commit()
     # The calendar routes answer 404 `calendar_unavailable` while the feature is off, which would
     # hide an unscoped id: switch it on, and give BOTH people a live connection so that only the
@@ -629,6 +633,8 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "item_id": review.id,
         "task_id": task.id,
         "invite_id": pending_invite.id,
+        "series_id": recurring.id,
+        "question_id": question.id,
         "user_id": owner.id,  # a member of the owner's team, reached through the team routes
         "language": "fr",  # with the owner's meeting id: a translation is reached through it
     }
@@ -646,6 +652,10 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/translations": {"language": "fr"},
             "/override": {"override": False},
             "/api/tasks/{task_id}": {"status": "done"},
+            "/api/series/{series_id}": {"title": "x"},
+            "/api/series/{series_id}/agenda": {"text": "x"},
+            "/api/meetings/{meeting_id}/series": {"series_id": None},
+            "/api/questions/{question_id}": {"carry": True},
             "/api/team/members/{user_id}": {"aliases": ["x"]},
             "/api/templates/{template_id}": {"name": "x", "instructions": "y"},
         }

@@ -984,7 +984,44 @@ def test_0025_follows_0024():
     assert script.get_revision("0025").down_revision == "0024"
 
 
-def test_0026_follows_0025_and_is_the_only_head():
+def test_0026_follows_0025_and_there_is_one_head():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0026").down_revision == "0025"
-    assert script.get_heads() == ["0026"]
+    assert len(script.get_heads()) == 1
+
+
+def test_0030_follows_0026():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0030").down_revision == "0026"
+
+
+def test_0030_adds_series_with_defaults_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0026")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:  # 0006 made the admin account, and 0019 gave it a team
+        before = conn.execute(text("select count(*) from teams")).scalar()
+    assert before >= 1
+    command.upgrade(cfg, "0030")
+    try:
+        # existing teams keep reminders off and "both" timing; existing people keep reminders on
+        assert set(_rows(engine, "select reminders_on, reminder_timing from teams")) == {
+            (False, "both")
+        }
+        insert = (
+            "insert into series (team_id, title, calendar_recurring_id) "
+            "select min(id), :t, 'rid-1' from teams"
+        )
+        with engine.begin() as conn:
+            conn.execute(text(insert), {"t": "Weekly"})
+        with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # one per team and id
+            conn.execute(text(insert), {"t": "Again"})
+        with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+            conn.execute(text("update teams set reminder_timing = 'daily'"))
+        command.downgrade(cfg, "0026")
+        inspector = inspect(engine)
+        assert "series" not in inspector.get_table_names()
+        assert "carry" not in {c["name"] for c in inspector.get_columns("open_questions")}
+        command.upgrade(cfg, "head")
+    finally:
+        engine.dispose()

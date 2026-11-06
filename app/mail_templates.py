@@ -552,3 +552,8 @@ def _tasks_assigned(
         text=render_text(blocks, footer, prefs),
         html=render_html(subject, blocks, footer, prefs),
     )
+
+
+# The agenda and reminder mails of recurring meetings register themselves here (W8). Last, because
+# that module imports the helpers above.
+from app import series_mail  # noqa: E402,F401

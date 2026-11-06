@@ -190,7 +190,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] D5, Tasks, built for what has data now (W2 PR 2; the rest waits for W3, W4, W9, see the W2 section; needs W2; owners need W3; projects need W4; sprints need W9): filter chips, project tabs, Board and Backlog, drag and drop, task drawer, "needs attention" banner, New task, sprint header and Close sprint, milestone card, meeting page Action items as tasks; states for extraction pending and failed (designer gap)
   - [ ] D6, Projects (needs W4): list, name, colour, recurring meetings, keywords, sprint length, milestone (proposal chip is a designer gap), delete
   - [ ] D7, Team (needs W3; W0.4 first): members, roles, aliases (editing is a designer gap), invite dialog (name field is a designer gap), Resend, remove, "Share with team" switch on the meeting page (designer gap)
-  - [ ] D8, Series (needs W8, and Module 2 phase C for recurring ids): cards on Meetings, series page (unfinished, finished since, carried questions, agenda, past meetings, attendees), "On next agenda" toggles, Send agenda, Details row on the meeting page, "Add to recurring meeting" and "Possibly resolved" chips (designer gaps)
+  - [ ] D8, Series (backend built in PR `feature/w8-series-backend`, screens pending; needs W8, and Module 2 phase C for recurring ids): cards on Meetings, series page (unfinished, finished since, carried questions, agenda, past meetings, attendees), "On next agenda" toggles, Send agenda, Details row on the meeting page, "Add to recurring meeting" and "Possibly resolved" chips (designer gaps)
   - [x] D9, Download (W5, 2026-11-03): menu with PDF and Word, transcript tick, the states for preparing, done, failed and not ready; the language note and the download in French or Spanish shipped with W7 (2026-11-04)
   - [ ] D10, Share (needs W6, and W3 for participants): dialog, recipients, language, attachment, transcript, message, "Shared with ..." note, "Add email" on a participant (designer gap), share-limit message (designer gap)
   - [x] D11, Translate (W7, 2026-11-04, SOP `docs/sop/2026-11-04-w7-translate.md`, FE guide `docs/fe-integration-guide-translate.md`): language select on the notes toolbar, "Translating ..." and "Translated from ..." bars, Show original, the transcript tab, Copy, Download in a language, the live "Default notes language" card in Settings with the designer's toast; failed, stale and "Translate to X" states are the smallest things (designer gaps)
@@ -405,7 +405,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Backfill `scripts/backfill_extraction.py` (decisions for all, the rest for 14 days). **Adebayo or the lead runs it once after deploy**
   - [x] Privacy rows for W1 (Jinja and Next, `legal.test.tsx` green)
   - [x] FE guide with live captures (`docs/fe-captures/ai-workspace-w1/`)
-  - [ ] Open questions endpoint (with the series screens, W8)
+  - [x] Open questions endpoint: `PATCH /api/questions/{id}` and `open_questions` on the meeting (W8 backend, 2026-11-06, `docs/sop/2026-11-06-w8-series-backend.md`)
   - [ ] Regenerate `web/lib/api/schema.d.ts` (`npm run gen:api`) with the first screen
 - [x] **W2 gate passed (2026-11-05):** Adebayo reviewed the full extraction (`extract-v1`) on his real meetings 5 and 3: 17 items (8 action items with owners and due dates), every one right, nothing missed
   - [x] Review tool `scripts/extraction_review.py` (2026-11-04, `docs/sop/2026-11-04-extraction-review-tool.md`): one HTML page per run, transcript left, extracted items right, Right / Wrong / Partly per item
@@ -436,6 +436,16 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] Opus review fixes (see the SOP)
   - [x] PR 2 screens (`feature/w3-team-screens`, open, not merged; SOP `docs/sop/2026-11-05-w3-team-ui.md`): Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, lead-designed Share with team switch, optional name in the invite dialog and alias editing (designer to confirm); privacy "Teams" paragraph and terms pilot rows; parity shots in `docs/ui/parity/after/`
   - [ ] "Add email" beside a non-member participant (waits for W6)
+- [ ] **W8 Series, agenda, carry-over, reminders** (backend PR `feature/w8-series-backend`, migration 0030, SOP `docs/sop/2026-11-06-w8-series-backend.md`, FE guide `docs/fe-integration-guide-series.md`; screens PR `feature/w8-series-screens` pending)
+  - [x] `series`, `series_agenda_items`, `series_agenda_sends`, `series_reminders`, `meetings.series_id`, `open_questions.carry/resolved_by`, `teams.reminders_on/reminder_timing`, `user_settings.notify_reminders` (0030)
+  - [x] Linking: `link_from_calendar` when notes are written, hourly `sync_from_joins`, manual make/attach/detach
+  - [x] `GET /api/series` (cards, per-viewer counts), `GET /api/series/{id}` (page), `PATCH`, agenda add/list/remove, `PATCH /api/questions/{id}`, `series` and `open_questions` on the meeting
+  - [x] Send agenda (teammates only, caps, ids-only mail), 1-hour and 30-minute reminders (off by default, once per person and occurrence)
+  - [x] Team switch and timing (`PATCH /api/team`), personal `GET/PUT /api/settings/reminders`
+  - [x] Team join merges series; leave takes the leaver's meetings out
+  - [ ] Opus review of mail, caps and permissions (Critical/High fixed with tests)
+  - [ ] Screens: cards, Series page, meeting Series row and toggles, Settings reminders card (PR 2)
+  - [ ] Deferred: W8b "possibly resolved" chips, sprint line and milestone countdown in the mails (W9, W4), outside recipients for the agenda (needs W6 opt-out), "Add to recurring meeting" UI (designer gap), policy wording for reminders before they are switched on in production
 - [ ] W5 Export (merged), W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)

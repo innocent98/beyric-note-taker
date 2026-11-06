@@ -1,0 +1,30 @@
+{
+  "note": "\"On next agenda\".",
+  "client": "ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/questions/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "carry": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "text": "Which pricing model will the team choose?",
+      "carriable": true,
+      "carry": true,
+      "resolved": false,
+      "can_update": true
+    }
+  }
+}

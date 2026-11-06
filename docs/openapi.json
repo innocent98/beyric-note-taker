@@ -524,6 +524,84 @@
         "title": "AdminWaitlistEntry",
         "type": "object"
       },
+      "AgendaItemIn": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "AgendaItemIn",
+        "type": "object"
+      },
+      "AgendaItemOut": {
+        "properties": {
+          "can_remove": {
+            "title": "Can Remove",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "can_remove"
+        ],
+        "title": "AgendaItemOut",
+        "type": "object"
+      },
+      "AgendaSent": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "names": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Names",
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "names"
+        ],
+        "title": "AgendaSent",
+        "type": "object"
+      },
+      "AttendeeOut": {
+        "properties": {
+          "is_teammate": {
+            "title": "Is Teammate",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "is_teammate"
+        ],
+        "title": "AttendeeOut",
+        "type": "object"
+      },
       "AttentionOut": {
         "properties": {
           "needs_owner": {
@@ -677,6 +755,40 @@
           "upcoming"
         ],
         "title": "CalendarOut",
+        "type": "object"
+      },
+      "CarriedQuestion": {
+        "properties": {
+          "can_update": {
+            "title": "Can Update",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "meeting": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeetingRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "meeting",
+          "can_update"
+        ],
+        "title": "CarriedQuestion",
         "type": "object"
       },
       "ConnectIn": {
@@ -1301,6 +1413,14 @@
             ],
             "title": "Notes Html"
           },
+          "open_questions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/QuestionOut"
+            },
+            "title": "Open Questions",
+            "type": "array"
+          },
           "participants": {
             "items": {
               "type": "string"
@@ -1358,6 +1478,16 @@
           "review_open_count": {
             "title": "Review Open Count",
             "type": "integer"
+          },
+          "series": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeriesRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "shared_by": {
             "anyOf": [
@@ -1587,6 +1717,48 @@
           "created_at"
         ],
         "title": "MeetingRef",
+        "type": "object"
+      },
+      "MeetingSeriesIn": {
+        "additionalProperties": false,
+        "properties": {
+          "series_id": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740992.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Id"
+          }
+        },
+        "required": [
+          "series_id"
+        ],
+        "title": "MeetingSeriesIn",
+        "type": "object"
+      },
+      "MeetingSeriesOut": {
+        "properties": {
+          "series": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SeriesRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "series"
+        ],
+        "title": "MeetingSeriesOut",
         "type": "object"
       },
       "MeetingSummary": {
@@ -1894,6 +2066,47 @@
         "title": "PasswordChanged",
         "type": "object"
       },
+      "PastMeeting": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Seconds"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "tasks_count": {
+            "title": "Tasks Count",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "duration_seconds",
+          "tasks_count"
+        ],
+        "title": "PastMeeting",
+        "type": "object"
+      },
       "PersonOut": {
         "description": "A member of the caller's team who can be given a task.",
         "properties": {
@@ -1951,6 +2164,74 @@
           "google_signin"
         ],
         "title": "PilotOut",
+        "type": "object"
+      },
+      "QuestionOut": {
+        "description": "One open question of a meeting. `carriable` is false for a meeting that is not in a\nrecurring meeting: draw no toggle then. The toggle's states: `resolved` (draw \"Resolved\"),\nelse `carry` (\"On next agenda\"), else \"Add to next agenda\".",
+        "properties": {
+          "can_update": {
+            "title": "Can Update",
+            "type": "boolean"
+          },
+          "carriable": {
+            "title": "Carriable",
+            "type": "boolean"
+          },
+          "carry": {
+            "title": "Carry",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "resolved": {
+            "title": "Resolved",
+            "type": "boolean"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "carriable",
+          "carry",
+          "resolved",
+          "can_update"
+        ],
+        "title": "QuestionOut",
+        "type": "object"
+      },
+      "QuestionPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "carry": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Carry"
+          },
+          "resolved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved"
+          }
+        },
+        "title": "QuestionPatch",
         "type": "object"
       },
       "RecurringOut": {
@@ -2017,6 +2298,33 @@
           "template_id"
         ],
         "title": "Regenerate",
+        "type": "object"
+      },
+      "ReminderPreferencesIn": {
+        "additionalProperties": false,
+        "properties": {
+          "notify_reminders": {
+            "title": "Notify Reminders",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "notify_reminders"
+        ],
+        "title": "ReminderPreferencesIn",
+        "type": "object"
+      },
+      "ReminderPreferencesOut": {
+        "properties": {
+          "notify_reminders": {
+            "title": "Notify Reminders",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "notify_reminders"
+        ],
+        "title": "ReminderPreferencesOut",
         "type": "object"
       },
       "ResetIn": {
@@ -2141,6 +2449,292 @@
           "term"
         ],
         "title": "ReviewTermOut",
+        "type": "object"
+      },
+      "SeriesCard": {
+        "description": "One Recurring card of the Meetings screen. The counts cover only what the caller may\nread. `next_*` are null when no calendar event ahead is known (hide the chip).",
+        "properties": {
+          "cadence": {
+            "title": "Cadence",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "next_starts_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Starts At"
+          },
+          "next_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Text"
+          },
+          "open_questions": {
+            "title": "Open Questions",
+            "type": "integer"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "enum": [
+                  "google_meet",
+                  "zoom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unfinished_tasks": {
+            "title": "Unfinished Tasks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "cadence",
+          "platform",
+          "next_starts_at",
+          "next_text",
+          "unfinished_tasks",
+          "open_questions"
+        ],
+        "title": "SeriesCard",
+        "type": "object"
+      },
+      "SeriesCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "SeriesCreate",
+        "type": "object"
+      },
+      "SeriesList": {
+        "properties": {
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesCard"
+            },
+            "title": "Series",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timezone",
+          "series"
+        ],
+        "title": "SeriesList",
+        "type": "object"
+      },
+      "SeriesPage": {
+        "properties": {
+          "agenda": {
+            "items": {
+              "$ref": "#/components/schemas/AgendaItemOut"
+            },
+            "title": "Agenda",
+            "type": "array"
+          },
+          "agenda_recipients": {
+            "title": "Agenda Recipients",
+            "type": "integer"
+          },
+          "attendees": {
+            "items": {
+              "$ref": "#/components/schemas/AttendeeOut"
+            },
+            "title": "Attendees",
+            "type": "array"
+          },
+          "cadence": {
+            "title": "Cadence",
+            "type": "string"
+          },
+          "can_rename": {
+            "title": "Can Rename",
+            "type": "boolean"
+          },
+          "finished": {
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Finished",
+            "type": "array"
+          },
+          "finished_since_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished Since Text"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "next_starts_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Starts At"
+          },
+          "next_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Text"
+          },
+          "past_meetings": {
+            "items": {
+              "$ref": "#/components/schemas/PastMeeting"
+            },
+            "title": "Past Meetings",
+            "type": "array"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "enum": [
+                  "google_meet",
+                  "zoom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Platform"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/components/schemas/CarriedQuestion"
+            },
+            "title": "Questions",
+            "type": "array"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "unfinished": {
+            "items": {
+              "$ref": "#/components/schemas/TaskOut"
+            },
+            "title": "Unfinished",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "cadence",
+          "platform",
+          "timezone",
+          "next_starts_at",
+          "next_text",
+          "can_rename",
+          "agenda_recipients",
+          "unfinished",
+          "finished_since_text",
+          "finished",
+          "questions",
+          "agenda",
+          "past_meetings",
+          "attendees"
+        ],
+        "title": "SeriesPage",
+        "type": "object"
+      },
+      "SeriesPatch": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "SeriesPatch",
+        "type": "object"
+      },
+      "SeriesRef": {
+        "description": "A recurring meeting as the meeting page's \"Series\" row links to it.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "SeriesRef",
         "type": "object"
       },
       "SessionState": {
@@ -2900,6 +3494,19 @@
             "title": "Pending Invites",
             "type": "integer"
           },
+          "reminder_timing": {
+            "enum": [
+              "1h",
+              "30m",
+              "both"
+            ],
+            "title": "Reminder Timing",
+            "type": "string"
+          },
+          "reminders_on": {
+            "title": "Reminders On",
+            "type": "boolean"
+          },
           "share_new_meetings": {
             "title": "Share New Meetings",
             "type": "boolean"
@@ -2909,6 +3516,8 @@
           "id",
           "name",
           "share_new_meetings",
+          "reminders_on",
+          "reminder_timing",
           "my_role",
           "member_count",
           "pending_invites",
@@ -2933,6 +3542,33 @@
               }
             ],
             "title": "Name"
+          },
+          "reminder_timing": {
+            "anyOf": [
+              {
+                "enum": [
+                  "1h",
+                  "30m",
+                  "both"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminder Timing"
+          },
+          "reminders_on": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reminders On"
           },
           "share_new_meetings": {
             "anyOf": [
@@ -6009,6 +6645,89 @@
         ]
       }
     },
+    "/api/meetings/{meeting_id}/series": {
+      "put": {
+        "description": "Put the caller's own meeting into one of their team's recurring meetings, or take it out\n(`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. Agenda\nlines typed before the meeting began are taken by it.",
+        "operationId": "put_meeting_series",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeetingSeriesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingSeriesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Put Meeting Series",
+        "tags": [
+          "series"
+        ]
+      }
+    },
     "/api/meetings/{meeting_id}/share": {
       "delete": {
         "description": "Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone\nelse. Doing it twice is fine.",
@@ -6975,6 +7694,99 @@
         ]
       }
     },
+    "/api/questions/{question_id}": {
+      "patch": {
+        "description": "Change an open question: `carry` is \"On next agenda\" (only for a meeting that is in a\nrecurring meeting; turning it on also reopens a resolved question) and `resolved` is \"Mark\nresolved\" (the same words in the series' other meetings you may change are resolved too).\nAllowed for the meeting's owner and the team's owners and admins; a teammate who can only\nread gets 403 `team_forbidden`; a question you cannot read is 404.",
+        "operationId": "patch_question",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "question_id",
+            "required": true,
+            "schema": {
+              "title": "Question Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuestionPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuestionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_in_series`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Patch Question",
+        "tags": [
+          "series"
+        ]
+      }
+    },
     "/api/review": {
       "get": {
         "description": "The caller's \"Please check\" items from their meetings: `state=open` (default) or\n`checked`. Newest meeting first, in the order of the notes.",
@@ -7289,6 +8101,608 @@
         "summary": "Add Review Term",
         "tags": [
           "review"
+        ]
+      }
+    },
+    "/api/series": {
+      "get": {
+        "description": "The Recurring cards: the caller's team's recurring meetings, soonest next meeting first\n(those with no known next date last, by name). The unfinished-task and open-question counts\ncover only what the caller may read. A recurring meeting appears once the calendar's event\nhas a join scheduled (within the hour) or its first recording has notes.",
+        "operationId": "list_series",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Series",
+        "tags": [
+          "series"
+        ]
+      },
+      "post": {
+        "description": "Make a recurring meeting by hand (a meeting is then attached with\n`PUT /api/meetings/{id}/series`). Any member of the team may. 409 `series_limit`.",
+        "operationId": "create_series",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesCard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Create Series",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/{series_id}": {
+      "get": {
+        "description": "The Series page: next meeting, unfinished tasks from earlier meetings, what was finished\nsince the last meeting, the questions carried over, the agenda lines, past meetings and\nattendees. Everything inside is limited to what the caller may read: a teammate's private\nmeeting is not listed and its tasks and questions are not counted. 404 for another team's.",
+        "operationId": "get_series",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Get Series",
+        "tags": [
+          "series"
+        ]
+      },
+      "patch": {
+        "description": "Rename a recurring meeting (its creator, or an owner or admin).",
+        "operationId": "patch_series",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesCard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Patch Series",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/{series_id}/agenda": {
+      "get": {
+        "description": "The \"Other agenda items\" waiting for the next meeting, in the order they were added.",
+        "operationId": "list_agenda",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AgendaItemOut"
+                  },
+                  "title": "Response List Agenda",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Agenda",
+        "tags": [
+          "series"
+        ]
+      },
+      "post": {
+        "description": "Add a line (plain text, at most 200 characters, no web address; any member). 422\n`invalid_agenda_item`; 409 `agenda_full` at 30 waiting lines.",
+        "operationId": "add_agenda",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgendaItemIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgendaItemOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Add Agenda",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/{series_id}/agenda/send": {
+      "post": {
+        "description": "Email the agenda to the teammates who were in the last three meetings (not the caller):\nthe waiting agenda lines, the questions carried over and the unfinished tasks, each limited\nto what that person may read. At most 10 people a send, 5 sends and 20 people a day per\ncaller. Nobody outside the team is ever mailed. The answer lists who it is going to.",
+        "operationId": "send_agenda",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgendaSent"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`no_attendees` or `nothing_to_send`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`agenda_rate_limited`"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`mail_unavailable`"
+          }
+        },
+        "summary": "Send Agenda",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/{series_id}/agenda/{item_id}": {
+      "delete": {
+        "description": "Remove a line: its author, or an owner or admin.",
+        "operationId": "remove_agenda",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Remove Agenda",
+        "tags": [
+          "series"
         ]
       }
     },
@@ -7683,6 +9097,118 @@
           }
         },
         "summary": "Write Language Preferences",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/reminders": {
+      "get": {
+        "description": "Whether the caller is emailed the agenda a teammate sends and the reminders before the\nrecurring meetings they attend (on by default). The team's switch for reminders is\n`PATCH /api/team`.",
+        "operationId": "read_reminder_preferences",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderPreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Reminder Preferences",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Turn the caller's agenda and reminder mail on or off. Checked again when each mail is\nsent, so turning it off also stops one already queued.",
+        "operationId": "write_reminder_preferences",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReminderPreferencesIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReminderPreferencesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Write Reminder Preferences",
         "tags": [
           "settings"
         ]
@@ -8519,7 +10045,7 @@
         ]
       },
       "patch": {
-        "description": "Rename the team and/or switch \"Share new meetings\" (owner or admin). The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`.",
+        "description": "Rename the team, switch \"Share new meetings\" and/or set the reminders before recurring\nmeetings: `reminders_on` and `reminder_timing` (owner or admin). The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`.",
         "operationId": "update_team",
         "requestBody": {
           "content": {
