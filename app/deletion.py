@@ -46,6 +46,7 @@ from app.models import (
     AuthToken,
     MailOutbox,
     Meeting,
+    Milestone,
     Notification,
     Task,
     TeamInvite,
@@ -135,6 +136,15 @@ def purge_user(
     session.execute(delete(WaitlistEntry).where(WaitlistEntry.email == email))
     session.execute(delete(TeamInvite).where(TeamInvite.email == email))  # frees their place
     session.execute(delete(UserSettings).where(UserSettings.user_id == user_id))
+    # A date proposed from their meetings goes with them (a confirmed milestone stays, unsourced).
+    session.execute(
+        delete(Milestone).where(
+            Milestone.confirmed_at.is_(None),
+            Milestone.source_meeting_id.in_(
+                select(Meeting.id).where(Meeting.owner_user_id == user_id)
+            ),
+        )
+    )
     session.execute(delete(Meeting).where(Meeting.owner_user_id == user_id))  # tasks cascade
     # Tasks they typed in go with them (spec 4); other people's tasks they held become unassigned
     # by the foreign key.

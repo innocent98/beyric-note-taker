@@ -157,10 +157,10 @@ def test_deleting_a_project_keeps_its_tasks_without_a_project_and_removes_its_mi
 
 
 def test_a_member_may_read_but_every_write_is_403_and_changes_nothing(
-    api, app, session, team, member
+    api, app, session, team, member, shared_meeting
 ):
     pid = make_project(api, "Portal")["id"]
-    ms = make_milestone(session, team, project=pid, confirmed=False)
+    ms = make_milestone(session, team, project=pid, confirmed=False, meeting=shared_meeting)
     them = as_user(app, MEMBER_EMAIL)
     assert [p["id"] for p in them.get("/api/projects").json()["projects"]] == [pid]
     assert them.get("/api/projects").json()["can_manage"] is False
@@ -355,16 +355,55 @@ def outsider_team(session, user):
     return teams.ensure_team(session, user).id
 
 
-def test_a_member_may_file_their_own_task_but_not_someone_elses(
+def test_a_member_may_change_status_but_not_where_a_task_is_filed(
     api, app, session, team, private, member, owner
 ):
+    """Opus review: filing is the owner's and admin's (spec 6.3); a member keeps status and due."""
     pid = make_project(api)["id"]
-    mine = add_task(session, team, private, title="Mine", assignee=member)
-    theirs = add_task(session, team, private, title="Theirs", assignee=owner)
+    mine = add_task(session, team, private, title="Mine", assignee=member, check_project=True)
+    owners = add_task(session, team, private, title="Owners", assignee=owner)
     me = as_user(app, MEMBER_EMAIL)
-    assert me.call("PATCH", f"/api/tasks/{mine.id}", {"project_id": pid}).status_code == 200
+    assert me.call("PATCH", f"/api/tasks/{mine.id}", {"status": "doing"}).status_code == 200
+    for change in ({"project_id": pid}, {"check_project": False}, {"milestone_id": None}):
+        if change == {"milestone_id": None}:
+            continue  # unchanged, so not a change at all
+        error_of(me.call("PATCH", f"/api/tasks/{mine.id}", change), 403, "team_forbidden")
+    session.expire_all()
+    assert (session.get(Task, mine.id).project_id, session.get(Task, mine.id).check_project) == (
+        None,
+        True,
+    )
     # the member cannot see the owner's private-meeting task at all
-    error_of(me.call("PATCH", f"/api/tasks/{theirs.id}", {"project_id": pid}), 404, "not_found")
+    error_of(me.call("PATCH", f"/api/tasks/{owners.id}", {"project_id": pid}), 404, "not_found")
+
+
+def test_a_member_may_file_a_task_they_made_themselves(api, app, session, team, member):
+    pid = make_project(api)["id"]
+    me = as_user(app, MEMBER_EMAIL)
+    made = me.post("/api/tasks", {"title": "Mine"}).json()
+    assert me.call("PATCH", f"/api/tasks/{made['id']}", {"project_id": pid}).status_code == 200
+
+
+def test_a_proposal_with_no_source_meeting_is_no_ones_even_an_admins(
+    api, app, session, team, admin
+):
+    orphan = make_milestone(session, team, confirmed=False, name="Orphan")  # source gone
+    them = as_user(app, ADMIN_EMAIL)
+    for method, path, body in [
+        ("POST", f"/api/milestones/{orphan.id}/confirm", None),
+        ("PATCH", f"/api/milestones/{orphan.id}", {"name": "x"}),
+        ("DELETE", f"/api/milestones/{orphan.id}", None),
+    ]:
+        error_of(them.call(method, path, body), 404, "not_found")
+
+
+def test_a_team_can_have_at_most_fifty_projects(api, session, team):
+    from app import projects as projects_module
+
+    for i in range(projects_module.MAX_PROJECTS):
+        session.add(Project(team_id=team.id, name=f"P{i}", color="#0E6B5E", keywords=[]))
+    session.commit()
+    error_of(api.post("/api/projects", {"name": "one more"}), 422, "too_many_projects")
 
 
 def test_the_list_filters_by_project_and_milestone_and_counts_checks(api, session, team, private):

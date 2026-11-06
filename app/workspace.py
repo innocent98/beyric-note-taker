@@ -264,6 +264,10 @@ def run_extraction(
             if row.fingerprint in hints:
                 row.heard_as = hints[row.fingerprint]
     if checked is not None and full:
+        # The owner may have left the team while the model was asked: file into the team they are
+        # in now, never the one they were in then.
+        team_id = teams.ensure_team(session, session.get(User, owner_id)).id
+        members = tasks.members_of(session, team_id)
         live = tasks.reconcile(
             session, meeting, team_id, parsed.action_items, checked.action_items, members, day,
             quiet=quiet,

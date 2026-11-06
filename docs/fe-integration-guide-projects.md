@@ -54,7 +54,7 @@ After Confirm: `confirmed_at` is `"2026-11-05T22:00:02.625399Z"` and `can_confir
 Every task now carries `project_id`, `milestone_id` (ids, `null` for none) and `check_project` (capture 31). `GET /api/tasks` adds filters `?project=<id>|none` and `?milestone=<id>` (bad values `422 validation_error`, capture 33) and `attention.check_project`, the count for the banner "1 needs its project checked" (capture 30: `{"needs_owner": 0, "unverified": 0, "check_project": 1}`, open tasks only). `POST /api/tasks` takes an optional `project_id` (file a new task under the open project tab). `PATCH /api/tasks/{id}` takes `project_id`, `milestone_id`, `check_project`:
 - choosing a project clears `check_project` (capture 36); `{"check_project": false}` is the Confirm button on the "Check project" line (34); `true` is refused, `422 validation_error` "check_project can only be set to false." (35);
 - a project of another team: `422 project_not_on_team` "That project is not on your team." (37); a milestone of another team or a **proposal**: `422 milestone_not_on_team` (NOT LIVE, covered by tests);
-- who may: the same people who may change a task's status (owner/admin, the assignee, the maker of a manual task); others get `403 team_forbidden`;
+- who may: an owner or admin of the team, or the maker of a manual task; anyone else (a member given the task) gets `403 team_forbidden` and nothing is changed. Use `can_edit` on the task to enable the Project and Milestone controls and the Confirm button (`can_update` is only status and due date);
 - the project dot and name come from joining `project_id` to `GET /api/projects`; fetch projects once per screen.
 
 ### How a task is filed (so the FE can explain "Check project")
@@ -79,5 +79,5 @@ Proposals appear after the meeting's extraction finishes (`extraction_status` on
 | Milestone progress counts, project headline milestone | verified live (50, 51) |
 | Task patch: project, milestone, confirm check, bad project | verified live (34 to 37, 48) |
 | Delete project leaves tasks without project | verified live (54, 55) |
-| `DELETE /api/milestones/{id}`, `milestone_not_on_team`, `too_many_keywords`, a rewrite replacing proposals, a tie or one-hit match flagged in unit form | NOT LIVE: covered by `tests/test_projects_api.py` and `tests/test_projects_filing.py` |
+| `DELETE /api/milestones/{id}`, `milestone_not_on_team`, `too_many_keywords`, `too_many_projects` (422, 50 per team), a rewrite replacing proposals, a tie or one-hit match flagged in unit form | NOT LIVE: covered by `tests/test_projects_api.py` and `tests/test_projects_filing.py` |
 | Real model output for milestones | NOT LIVE: needs a real call; the quality gate for it is the AI1 eval (spec 3.1) |

@@ -12,7 +12,7 @@ Spec 4, 6.2, 6.3, 8.2 and decision D14. W2 made tasks without a place to file th
 | Filing | `app/filing.py`, code only. Score = how many of a project's keywords appear as whole words/phrases (case and accents ignored) in meeting title + task title + quote; a keyword counts once. One project in the team: filed there, unflagged. No hit and several projects: none. One clear winner with two or more hits: confident. One hit or a tie: best (oldest of a tie) and `check_project` | Counting every mention (one repeated word would beat two real keywords); asking the model |
 | Series seam | `filing.series_project(session, meeting)` returns `None` until W8; `file_task(series_project_id=...)` already gives it priority. W8 changes that one function | A guess at the series table now |
 | Where filing runs | `tasks.reconcile`, for every task it creates or refreshes. A task a person touched (`edited_at`) is never refiled, so choosing a project survives a re-run | Filing in the API only |
-| Roles | everyone on the team reads; owner and admin write (403 `team_forbidden`); another team's id is 404 before the role is checked. A member may change a task's project, milestone and check flag when they may change its status (assignee, maker) | Admin-only task filing (a member could not confirm their own task) |
+| Roles | everyone on the team reads; owner and admin write (403 `team_forbidden`); another team's id is 404 before the role is checked. Filing a task (project, milestone, check flag) is owner and admin, plus the maker of a manual task; a member given a task changes status and due only (Opus review, spec 6.1/6.3) | Letting an assignee re-file their task (it moves team-wide counts) |
 | Milestones | proposal = row with `confirmed_at` null and the quote. `propose` runs where the tasks are refined, after the checks (real date, quote in the transcript); at most 5 per meeting; a rewrite replaces the unconfirmed ones and never repeats a confirmed one; it is filed to a project by the same keyword rule. Confirm is `POST /api/milestones/{id}/confirm` (idempotent, optional `project_id`). Only confirmed milestones appear in `GET /api/milestones` or can be given to a task | Auto-create (a spoken date can be a guess, D14) |
 | Privacy of the words | a proposal belongs to its meeting: `_milestone_or_404` gives 404 to anyone who cannot read the source meeting, even an admin, so ids cannot be used to read a date out of a private meeting. A confirmed milestone's `quote` and `source_meeting` are sent only to people who can read that meeting | Sending the quote team-wide |
 | Dismissing | `DELETE` removes a proposal; a rewrite could propose it again (no screen draws a dismiss) | A tombstone column |
@@ -42,3 +42,14 @@ Spec 4, 6.2, 6.3, 8.2 and decision D14. W2 made tasks without a place to file th
 - PR 2: screens (Projects, project tabs, milestone card, drawer fields, "Set milestone" on the meeting page).
 - W8: `series_project` and the Recurring meetings list; W9: sprint length and the two sprint stats.
 - A milestone-quality eval row in the AI1 eval (the model's milestones are only checked by code here).
+
+## Opus review (2026-11-06, one pass, foreground)
+No Critical, no High. Fixed in this PR, each with a test:
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | Medium-High | Account purge deleted meetings in bulk, so their unconfirmed proposals survived with no source meeting and skipped the read rule (an admin could read, confirm or publish the name by guessing ids) | `deletion.purge_user` deletes the proposals first; `_milestone_or_404` fails closed (an unconfirmed proposal with no readable source is 404) |
+| 2 | Medium | A member could re-file a task assigned to them (spec: member = status and due only) | task project, milestone and check changes need `can_edit` (owner, admin, maker of a manual task) |
+| 3 | Low-Medium | The owner leaving the team while the model was asked left a task filed into the old team's project | the team is re-resolved after the model answers; the reconciler never files a task whose team differs |
+| 4 | Low | Another meeting's unconfirmed proposal hid an identical one from this meeting | only confirmed milestones count as "already there" |
+| 6 | Low | No cap on projects per team | 50 per team (422 `too_many_projects`) |
+Left open (Low): 5, proposal names are not checked against the transcript (only the quote is; plain text, clipped, needs a manager's Confirm). The W8 reminder mail must render a milestone name through `titles.mail_title`. No findings in: owner/admin-only writes, team scoping and IDOR on every id route, counts, cascades (other than 1).
