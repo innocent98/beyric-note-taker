@@ -21,8 +21,8 @@
       "cadence": "Recurring",
       "platform": "google_meet",
       "timezone": "UTC",
-      "next_starts_at": "2026-11-06T14:07:18.770388Z",
-      "next_text": "Fri 6 Nov, 14:07",
+      "next_starts_at": "2026-11-06T14:40:44.124050Z",
+      "next_text": "Fri 6 Nov, 14:40",
       "can_rename": true,
       "agenda_recipients": 1,
       "unfinished": [
@@ -44,13 +44,13 @@
           "source": "ai",
           "assigned_on": "2026-10-30",
           "done_at": null,
-          "created_at": "2026-11-06T13:12:19.258692Z",
+          "created_at": "2026-11-06T13:45:44.421166Z",
           "from_meeting": true,
           "meeting": {
             "id": 3,
             "title": "Beyric Friday review",
             "platform": "google_meet",
-            "created_at": "2026-10-30T13:12:18.770388Z"
+            "created_at": "2026-10-30T13:45:44.124050Z"
           },
           "can_update": true,
           "can_edit": true,
@@ -72,13 +72,13 @@
           "source": "ai",
           "assigned_on": "2026-10-30",
           "done_at": null,
-          "created_at": "2026-11-06T13:12:19.258692Z",
+          "created_at": "2026-11-06T13:45:44.421166Z",
           "from_meeting": true,
           "meeting": {
             "id": 3,
             "title": "Beyric Friday review",
             "platform": "google_meet",
-            "created_at": "2026-10-30T13:12:18.770388Z"
+            "created_at": "2026-10-30T13:45:44.124050Z"
           },
           "can_update": true,
           "can_edit": true,
@@ -97,7 +97,7 @@
             "id": 3,
             "title": "Beyric Friday review",
             "platform": "google_meet",
-            "created_at": "2026-10-30T13:12:18.770388Z"
+            "created_at": "2026-10-30T13:45:44.124050Z"
           },
           "can_update": true
         },
@@ -108,7 +108,7 @@
             "id": 3,
             "title": "Beyric Friday review",
             "platform": "google_meet",
-            "created_at": "2026-10-30T13:12:18.770388Z"
+            "created_at": "2026-10-30T13:45:44.124050Z"
           },
           "can_update": true
         }
@@ -118,7 +118,7 @@
         {
           "id": 3,
           "title": "Beyric Friday review",
-          "created_at": "2026-10-30T13:12:18.770388Z",
+          "created_at": "2026-10-30T13:45:44.124050Z",
           "duration_seconds": 2760,
           "tasks_count": 2
         }

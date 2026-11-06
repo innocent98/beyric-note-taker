@@ -197,7 +197,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [ ] **D12, Meeting detail page parity and the recurring meeting detail page (Adebayo, 2026-11-04 21:33: the live meeting page differs a lot from the designer's file)**: compare the live page with `docs/ui/Beyric Note Taker redesign/` at 1440, 768 and 390 and list every difference first, then build to full parity with a parity table and screenshots under `docs/ui/parity/after/`
     - [x] Right-hand side: the full **Details** block and the **Participants** block as designed (2026-11-05, branch `feature/meeting-page-parity`, SOP `docs/sop/2026-11-05-meeting-page-parity.md`; Series and Milestone rows wait for W8) (check which fields the API already has; add API fields only where the design needs them)
     - [x] **Decisions and review** side card with counts (new fields on `GET /api/meetings/{id}`) and the dashed "None noted." Action items state; task rows wait for W2, the carry-over toggle for W8
-    - [ ] The **recurring meeting detail page** (not built: every block needs W2 tasks or W8 series/agenda, and meetings are not linked to a series; see the SOP)
+    - [x] The **recurring meeting detail page** = the Series page (W8 screens PR; was: not built: every block needs W2 tasks or W8 series/agenda, and meetings are not linked to a series; see the SOP)
     - [ ] Ask the designer only for what the file truly lacks
   - [ ] D12, Settings (needs W2, W7, W8, W9, W10): Tasks card, default language, sprints and reminders card, Slack and tracker cards
   - [ ] D13, meeting page details (needs W0.4 and W8): duration (`recorded_seconds`), participants (names from speaker labels), series, milestone
@@ -477,7 +477,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Team switch and timing (`PATCH /api/team`), personal `GET/PUT /api/settings/reminders`
   - [x] Team join merges series; leave takes the leaver's meetings out
   - [x] Opus review of mail, caps and permissions: no Critical; 2 High fixed with tests (2026-11-06)
-  - [ ] Screens: cards, Series page, meeting Series row and toggles, Settings reminders card (PR 2)
+  - [x] Screens (PR `feature/w8-series-screens`, SOP `docs/sop/2026-11-06-w8-series-screens.md`): Recurring cards, Series page, meeting Series row and question pills, Settings reminders row (2026-11-06)
   - [ ] Deferred: W8b "possibly resolved" chips, sprint line and milestone countdown in the mails (W9, W4), outside recipients for the agenda (needs W6 opt-out), "Add to recurring meeting" UI (designer gap), policy wording for reminders before they are switched on in production
 - [ ] W10 Integrations (2026-11-06): Slack webhook first, then one tracker
   - [x] W10 part 1, Slack webhook (migration 0032, branch `feature/w10-slack`, 2026-11-06): vault-stored address, SSRF-safe post, per-team caps, Settings row live, privacy line; SOP `docs/sop/2026-11-06-w10-slack.md`, guide `docs/fe-integration-guide-integrations.md`

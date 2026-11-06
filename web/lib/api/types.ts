@@ -88,3 +88,16 @@ export type ConnectStart = Schemas["ConnectOut"];
 export type DisconnectResult = Schemas["DisconnectOut"];
 export type RecurringState = Schemas["RecurringOut"];
 export type RecurringSeries = Schemas["RecurringSeries"];
+
+// Series (docs/fe-integration-guide-series.md).
+export type SeriesCard = Schemas["SeriesCard"];
+export type SeriesList = Schemas["SeriesList"];
+export type SeriesPage = Schemas["SeriesPage"];
+export type SeriesRef = Schemas["SeriesRef"];
+export type OpenQuestion = Schemas["QuestionOut"];
+export type CarriedQuestion = Schemas["CarriedQuestion"];
+export type AgendaItem = Schemas["AgendaItemOut"];
+export type AgendaSent = Schemas["AgendaSent"];
+export type QuestionChanges = Partial<Schemas["QuestionPatch"]>;
+export type MeetingSeriesResult = Schemas["MeetingSeriesOut"];
+export type ReminderPreferences = Schemas["ReminderPreferencesOut"];
