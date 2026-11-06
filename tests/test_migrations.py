@@ -984,7 +984,7 @@ def test_0025_follows_0024():
     assert script.get_revision("0025").down_revision == "0024"
 
 
-def test_0026_follows_0025_and_is_the_only_head():
+def test_0026_follows_0025():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0026").down_revision == "0025"
 
@@ -1071,10 +1071,15 @@ def test_0028_follows_the_previous_revision():
     assert script.get_revision("0028").down_revision in {"0026", "0027"}
 
 
-def test_0031_follows_the_previous_revision_and_is_the_only_head():
+def test_0031_follows_the_previous_revision():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0031").down_revision in {"0028", "0029", "0030"}
-    assert script.get_heads() == ["0031"]
+
+
+def test_0029_follows_0031_and_is_the_only_head():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0029").down_revision == "0031"
+    assert script.get_heads() == ["0029"]
 
 
 def test_0028_projects_and_milestones_keep_tasks_when_they_go_and_downgrade_cleanly(scratch_url):

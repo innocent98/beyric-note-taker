@@ -664,6 +664,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/regenerate": {"template_id": strangers_data["template"].id},
             "/vocabulary": {"term": "Metrika"},
             "/translations": {"language": "fr"},
+            "/shares": {"recipients": [{"email": "x@example.test"}], "language": "en"},
             "/override": {"override": False},
             "/api/tasks/{task_id}": {"status": "done"},
             "/api/projects/{project_id}": {"name": "x"},

@@ -27,7 +27,7 @@ the scheduler has been seen doing the work in production; removing it is a follo
 
 import logging
 
-from app import accounts, mail, maintenance, sprints
+from app import accounts, mail, maintenance, shares, sprints
 from app.config import Settings, get_settings
 from app.maintenance import TOKEN_KEEP  # noqa: F401  (the window the token sweep keeps)
 from app.scheduler import Scheduler
@@ -51,6 +51,7 @@ def register_default_sweeps(
         ("sweep_notifications", maintenance.sweep_notifications),
         ("sweep_calendar_events", maintenance.sweep_calendar_events),
         ("sweep_mail_outbox", mail.sweep_outbox),
+        ("sweep_shares", shares.sweep),
         ("sweep_unverified_accounts", accounts.sweep_unverified),
         ("rollover_sprints", sprints.rollover_all),
     ):

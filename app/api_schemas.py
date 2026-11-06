@@ -823,6 +823,71 @@ class AcceptInviteIn(Body):
 MeetingDetail.model_rebuild()
 
 
+# ---- Share notes by email (W6, spec section 10) ----
+
+
+class ShareRecipientIn(Body):
+    email: str = Field(max_length=254)
+    # What the sender calls them; optional. A teammate's own name is used when the address is one.
+    name: str | None = Field(None, max_length=100)
+
+
+class ShareIn(Body):
+    # 1 to 10 people. Each one is mailed separately: nobody sees another's address.
+    recipients: list[ShareRecipientIn] = Field(min_length=1, max_length=50)
+    # `en` (the original), `fr` or `es`. Anything else is 422 `language_unsupported`.
+    language: str
+    attach: Literal["none", "pdf", "docx"] = "none"
+    # With a file attached the transcript goes inside it; with `attach: "none"` it is its own
+    # plain-text file. A meeting with no transcript attaches nothing.
+    include_transcript: bool = False
+    # Plain text, at most 500 characters; shown in quotes, escaped, never as a link.
+    message: str | None = Field(None, max_length=500)
+
+
+ShareStatus = Literal["waiting_translation", "queued", "failed", "revoked"]
+ShareRecipientStatus = Literal["pending", "sent", "not_sent", "failed"]
+
+
+class ShareCreated(BaseModel):
+    share_id: int
+    # `queued`: the mails are in the outbox. `waiting_translation`: the notes are being translated
+    # first and the mails follow by themselves (one job); poll GET until the status changes.
+    status: Literal["queued", "waiting_translation"]
+
+
+class ShareRecipientOut(BaseModel):
+    email: str
+    name: str | None
+    # `not_sent` is every reason a mail did not go (an address that opted out included).
+    status: ShareRecipientStatus
+    # True when the address is an active member of the sender's team (they get a sign-in link).
+    is_team_member: bool
+
+
+class ShareOut(BaseModel):
+    share_id: int
+    status: ShareStatus
+    language: Literal["en", "fr", "es"]
+    attach: Literal["none", "pdf", "docx"]
+    include_transcript: bool
+    message: str
+    created_at: UtcDatetime
+    recipients: list[ShareRecipientOut]
+
+
+class ShareList(BaseModel):
+    shares: list[ShareOut]
+
+
+class OptOutIn(Body):
+    token: str
+
+
+class OptOutOut(BaseModel):
+    status: Literal["unsubscribed"]
+
+
 # ---- projects and milestones (W4) ----
 
 

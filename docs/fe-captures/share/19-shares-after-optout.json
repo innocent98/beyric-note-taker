@@ -1,0 +1,45 @@
+{
+  "note": "The address that opted out shows `not_sent`; the reason is never named.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/2/shares",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "shares": [
+        {
+          "share_id": 3,
+          "status": "queued",
+          "language": "en",
+          "attach": "none",
+          "include_transcript": false,
+          "message": "",
+          "created_at": "2026-11-05T22:02:01.996432Z",
+          "recipients": [
+            {
+              "email": "client@example.test",
+              "name": null,
+              "status": "not_sent",
+              "is_team_member": false
+            },
+            {
+              "email": "other@example.test",
+              "name": null,
+              "status": "sent",
+              "is_team_member": false
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
