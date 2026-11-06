@@ -338,6 +338,54 @@ def attach(session: Session, user: User, meeting: Meeting, series_id: int | None
     return series
 
 
+def reused_code(session: Session, meeting: Meeting) -> bool:
+    """Whether the owner has another meeting with this meeting's link code (same platform and
+    code): the sign of a call that repeats, which is when the page may offer "Make this a
+    recurring meeting?" (spec 7, D12). False for a meeting already in a series."""
+    if meeting.series_id is not None:
+        return False
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(Meeting)
+            .where(
+                Meeting.owner_user_id == meeting.owner_user_id,
+                Meeting.platform == meeting.platform,
+                Meeting.native_id == meeting.native_id,
+                Meeting.id != meeting.id,
+            )
+        )
+        > 0
+    )
+
+
+def make_from_reused_link(session: Session, user: User, meeting: Meeting) -> Series:
+    """Make a recurring meeting from a link that was used again: named after the meeting, with this
+    meeting and the caller's other meetings of the same code that are in no series. Only the
+    meeting's owner may (404); 409 `not_reused` when the code was not used before."""
+    if not owns(user, meeting):
+        raise SeriesRefused(404, "not_found", "No such meeting.")
+    if not reused_code(session, meeting):
+        raise SeriesRefused(
+            409,
+            "not_reused",
+            "This link has not been used for another meeting, so it is not recurring.",
+        )
+    made = create(session, user, titles.meeting_name(meeting))
+    others = session.scalars(
+        select(Meeting).where(
+            Meeting.owner_user_id == user.id,
+            Meeting.platform == meeting.platform,
+            Meeting.native_id == meeting.native_id,
+            Meeting.series_id.is_(None),
+        )
+    )
+    for row in others:
+        row.series_id = made.id
+    session.flush()
+    return made
+
+
 def forget_meetings_of(session: Session, user_id: int, team_id: int) -> None:
     """A person leaves a team: their meetings leave that team's series (they never move, and the
     team must not keep a pointer into meetings it can no longer read)."""

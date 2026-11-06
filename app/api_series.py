@@ -371,6 +371,34 @@ def put_meeting_series(
     )
 
 
+@router.post(
+    "/meetings/{meeting_id:id}/recurring",
+    status_code=201,
+    tags=["series"],
+    responses={
+        **NOT_FOUND,
+        409: {"model": ErrorResponse, "description": "`not_reused` or `series_limit`"},
+    },
+)
+def make_recurring(
+    meeting_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingSeriesOut:
+    """ "Make this a recurring meeting?": make a recurring meeting named after this meeting from a
+    link that was used before, and put this meeting and the caller's other meetings of the same
+    link code into it. Only the meeting's owner (404 for anyone else); 409 `not_reused` when the
+    link was not used before; offered by `suggest_recurring` on the meeting."""
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
+    try:
+        made = series.make_from_reused_link(session, user, meeting)
+    except series.SeriesRefused as exc:
+        session.rollback()
+        raise _refuse(exc) from None
+    session.commit()
+    return MeetingSeriesOut(series=SeriesRef(id=made.id, title=_initial_title(made)))
+
+
 # ---- the agenda ----
 
 

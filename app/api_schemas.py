@@ -283,6 +283,9 @@ class MeetingDetail(MeetingSummary):
     # The recurring meeting this belongs to when the caller's team has it (the "Series" row of
     # Details links to `/series/{id}`); null otherwise.
     series: "SeriesRef | None" = None
+    # True for the owner's meeting that is in no series when its link was used for another of their
+    # meetings: draw "Make this a recurring meeting?" (`POST /api/meetings/{id}/recurring`).
+    suggest_recurring: bool = False
     # The meeting's open questions with their "On next agenda" state; empty unless ready.
     open_questions: list["QuestionOut"] = []
 

@@ -198,6 +198,7 @@ OWNER_ONLY = {
     ("POST", "/api/meetings/{meeting_id}/share"),
     ("DELETE", "/api/meetings/{meeting_id}/share"),
     ("PUT", "/api/meetings/{meeting_id}/series"),
+    ("POST", "/api/meetings/{meeting_id}/recurring"),
 }
 # Routes with no meeting id in the path that still read meeting content, through the same rule.
 LISTS = {("GET", "/api/meetings"), ("GET", "/api/decisions")}
