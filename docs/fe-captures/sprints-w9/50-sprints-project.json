@@ -1,0 +1,56 @@
+{
+  "note": "`own_series` true, `project_id` set, counts are this project's tasks.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/sprints?project=2",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "project_id": 2,
+      "own_series": true,
+      "today": "2026-11-06",
+      "sprint_length": "week14",
+      "sprint_custom_days": 12,
+      "sprint_align_weekdays": true,
+      "sprints": [
+        {
+          "id": 5,
+          "number": 1,
+          "name": "Sprint 1",
+          "start_date": "2026-11-06",
+          "end_date": "2026-11-19",
+          "state": "current",
+          "closed_at": null,
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        },
+        {
+          "id": 6,
+          "number": 2,
+          "name": "Sprint 2",
+          "start_date": "2026-11-20",
+          "end_date": "2026-12-03",
+          "state": "next",
+          "closed_at": null,
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        }
+      ],
+      "current_id": 5,
+      "next_id": 6,
+      "can_manage": true
+    }
+  }
+}

@@ -66,6 +66,10 @@ NOTE_LANGUAGES = ("en", "fr", "es")
 TRANSLATION_STATUSES = ("translating", "ready", "failed")
 TASK_STATUSES = ("todo", "doing", "done")
 TASK_SOURCES = ("ai", "manual")
+# The sprint lengths of the Settings list (W9). A project may override the team's with any of
+# them except `custom`: the designer's per-project select has no Custom entry.
+SPRINT_LENGTHS = ("week5", "week7", "week14", "month1", "month3", "month6", "custom")
+PROJECT_SPRINT_LENGTHS = SPRINT_LENGTHS[:-1]
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -288,6 +292,10 @@ class Team(Base):
     settings arrive with the phases that use them (W3, W8, W9), as additive columns."""
 
     __tablename__ = "teams"
+    __table_args__ = (
+        CheckConstraint(_in("sprint_length", SPRINT_LENGTHS), name="ck_teams_sprint_length"),
+        CheckConstraint("sprint_custom_days between 1 and 365", name="ck_teams_sprint_custom_days"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     name: Mapped[str] = mapped_column(String(200), default="My team", server_default="My team")
@@ -297,6 +305,13 @@ class Team(Base):
     # written (`teams.apply_share_default`), never when the bot joins, and never copied anywhere.
     share_new_meetings: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=sa.false()
+    )
+    # W9 (spec 6.4): how long a sprint is for the whole team, the number of days when it is
+    # `custom` (1 to 365), and whether 1-week-5-day sprints run Monday to Friday.
+    sprint_length: Mapped[str] = mapped_column(String(8), default="week5", server_default="week5")
+    sprint_custom_days: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
+    sprint_align_weekdays: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=sa.true()
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -763,6 +778,7 @@ class Task(Base):
         Index("ix_tasks_assignee_user_id", "assignee_user_id"),
         Index("ix_tasks_project_id", "project_id"),
         Index("ix_tasks_milestone_id", "milestone_id"),
+        Index("ix_tasks_sprint_id", "sprint_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -807,16 +823,30 @@ class Task(Base):
     # Filing was a guess (one keyword hit or a tie): shown as "Check project" until a person
     # confirms or changes the project.
     check_project: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    # W9. The sprint it is planned into; null is the Backlog. A sprint that goes away (its project
+    # was deleted) leaves the task in the Backlog.
+    sprint_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("sprints.id", ondelete="SET NULL")
+    )
+    # Moved on from a sprint that closed with the task unfinished ("Carried over").
+    carried: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
 
 
 class Project(Base):
     """A project of a team (spec 4, 6.3): a name, a colour and the keywords tasks are filed by.
     Visible to the whole team; the counts inside it follow what the viewer may see. Deleting one
     leaves its tasks with no project (`tasks.project_id` is SET NULL) and removes its milestones.
-    The recurring meetings link and the sprint length override wait for W8 and W9."""
+    `sprint_length` is the project's own sprint length (W9); null follows the team's. The
+    recurring meetings link waits for W8."""
 
     __tablename__ = "projects"
-    __table_args__ = (Index("ix_projects_team_id", "team_id", "id"),)
+    __table_args__ = (
+        Index("ix_projects_team_id", "team_id", "id"),
+        CheckConstraint(
+            "sprint_length is null or " + _in("sprint_length", PROJECT_SPRINT_LENGTHS),
+            name="ck_projects_sprint_length",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
@@ -825,6 +855,39 @@ class Project(Base):
     keywords: Mapped[list[str]] = mapped_column(
         ARRAY(Text), default=list, server_default=sa.text("'{}'::text[]")
     )
+    sprint_length: Mapped[str | None] = mapped_column(String(8))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Sprint(Base):
+    """One sprint of a team (spec 6.4). A team has one series, and a project with its own sprint
+    length has another (`project_id` set). Each series keeps exactly two open sprints: the current
+    one (the earlier) and the next. Closed ones stay as history. Dates are days in the team's
+    zone; the sprint's name is "Sprint {number}", numbers counting up inside the series."""
+
+    __tablename__ = "sprints"
+    __table_args__ = (
+        Index("ix_sprints_team_id", "team_id", "project_id"),
+        Index(
+            "uq_sprints_series_number",
+            "team_id",
+            sa.text("coalesce(project_id, 0)"),
+            "number",
+            unique=True,
+        ),
+        CheckConstraint("end_date >= start_date", name="ck_sprints_dates"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    project_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    number: Mapped[int] = mapped_column(Integer)
+    start_date: Mapped[date] = mapped_column(Date)
+    end_date: Mapped[date] = mapped_column(Date)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_early: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

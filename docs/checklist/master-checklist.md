@@ -447,6 +447,16 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Route enumeration extended; FE guide from live captures (`scripts/capture_projects_api.py`)
   - [x] PR 2 screens (#102; SOP `docs/sop/2026-11-06-w4-projects-ui.md`): Projects (D6), project tabs, milestone card, drawer Project and Milestone and "Check project", meeting page Milestone row and lead-designed "Set milestone" with Confirm; parity shots under `docs/ui/parity/after/`
   - [ ] Waits for W8: Recurring meetings list on a project and the series filing rule. Waits for W9: Sprint length on a project and the "In current sprint" and "In backlog" stats
+- [ ] W9 Sprints (2026-11-06). Backend PR 1 `feature/w9-sprints-backend` (stacked on `feature/w4-projects-backend`; not merged) and screens PR 2 `feature/w9-sprints-screens` (not started). SOP `docs/sop/2026-11-06-w9-sprints-backend.md`; FE guide `docs/fe-integration-guide-sprints.md` with `docs/fe-captures/sprints-w9/`
+  - [x] Migration 0031 (`sprints`, `teams.sprint_length/sprint_custom_days/sprint_align_weekdays`, `projects.sprint_length`, `tasks.sprint_id/carried`); down_revision 0028, re-point when 0029/0030 merge first
+  - [x] `app/sprints.py`: windows for every length of the Settings list, a current and a next sprint per series (team's, and a project's own), advisory lock per team
+  - [x] Hourly scheduler job `rollover_sprints` closes ended sprints in the team's zone and carries unfinished tasks; "Close sprint" does the same early (next starts today, end date unchanged)
+  - [x] Filing by due date (no date: Backlog; inside or before the current sprint: current; later: next) for AI tasks and for new tasks that name no sprint
+  - [x] API: `GET /api/sprints?project=`, `POST /api/sprints/{id}/close` (owner/admin; member 403; other team 404; not current 409), `sprint_id`/`carried` on tasks, `?sprint=none|current|next|<id>` filter, sprint fields on `GET`/`PATCH /api/team` and `PATCH /api/projects/{id}`, project stats `in_current_sprint`/`in_backlog`
+  - [x] Cross-team ids refused everywhere (`sprint_not_on_team` 422 on tasks, 404 on sprint and project ids); joining a team or leaving one puts tasks in the Backlog
+  - [ ] Opus review of the permission checks (see the SOP)
+  - [ ] PR 2 screens: sprint selector, sprint header and Close sprint, Backlog view, Carried over badge, drawer Sprint select, Settings sprints card (D12), project Sprint length and the two stats
+  - [ ] Waits for W8 merging: the sprint line under "Next meeting" and its sprint rows on the series page (small follow-up once #104 and #105 are in main)
 - [ ] W5 Export (merged), W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)

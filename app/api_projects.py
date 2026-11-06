@@ -82,7 +82,10 @@ def _milestone_or_404(session: Session, user: User, me, milestone_id: int) -> Mi
 
 
 def _project_out(
-    rows: list[Project], counts: dict[int, int], headline: dict[int, Milestone]
+    rows: list[Project],
+    counts: dict[int, int],
+    headline: dict[int, Milestone],
+    sprint_counts: dict[int, tuple[int, int]],
 ) -> list[ProjectOut]:
     return [
         ProjectOut(
@@ -91,6 +94,9 @@ def _project_out(
             color=p.color,
             keywords=list(p.keywords or []),
             open_tasks=counts.get(p.id, 0),
+            sprint_length=p.sprint_length,
+            in_current_sprint=sprint_counts.get(p.id, (0, 0))[0],
+            in_backlog=sprint_counts.get(p.id, (0, 0))[1],
             milestone=(
                 MilestoneLine(
                     id=headline[p.id].id, name=headline[p.id].name, due_date=headline[p.id].due_date
@@ -118,7 +124,8 @@ def present_projects(
         for pid, items in by_project.items()
         if (line := projects.headline_milestone(items, today)) is not None
     }
-    return _project_out(rows, counts, headline)
+    sprint_counts = projects.sprint_counts(session, user, team_id, [p.id for p in rows])
+    return _project_out(rows, counts, headline, sprint_counts)
 
 
 @router.get("/projects", tags=["projects"])
@@ -180,7 +187,8 @@ def patch_project(
     project = _project_or_404(session, me, project_id)
     team_admin.require_manager(me)
     changes = {k: getattr(body, k) for k in body.model_fields_set}
-    if any(v is None for v in changes.values()):
+    # `sprint_length` null is meaningful: "follow the team's".
+    if any(v is None for k, v in changes.items() if k != "sprint_length"):
         raise services.Refused(422, "validation_error", "A field cannot be null.")
     try:
         projects.update(session, project, changes)

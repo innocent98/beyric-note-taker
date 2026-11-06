@@ -1,0 +1,51 @@
+{
+  "note": "No `sprint_id` given: a due date after the current sprint files it in the next sprint.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/tasks",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "title": "Send the invoice",
+      "due_date": "2099-01-01"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 4,
+      "title": "Send the invoice",
+      "status": "todo",
+      "assignee": null,
+      "spoken_owner": null,
+      "due_date": "2099-01-01",
+      "due_phrase": null,
+      "quote": null,
+      "is_new": false,
+      "unverified": false,
+      "source": "manual",
+      "assigned_on": "2026-11-06",
+      "done_at": null,
+      "created_at": "2026-11-06T16:00:00.882263Z",
+      "from_meeting": false,
+      "meeting": null,
+      "project_id": null,
+      "milestone_id": null,
+      "sprint_id": 2,
+      "carried": false,
+      "check_project": false,
+      "can_update": true,
+      "can_edit": true,
+      "can_assign": true,
+      "can_claim": true,
+      "can_delete": true
+    }
+  }
+}

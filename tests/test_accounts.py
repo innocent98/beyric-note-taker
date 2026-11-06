@@ -3,7 +3,7 @@ that one user never sees another's meetings, templates or vocabulary."""
 
 import json
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,6 +19,7 @@ from app.models import (
     Notification,
     Project,
     ReviewItem,
+    Sprint,
     Task,
     TeamInvite,
     Template,
@@ -600,7 +601,12 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         due_date=datetime.now(UTC).date(),
         source_meeting_id=mine.id,
     )
-    session.add_all([term, note, decision, review, task, pending_invite, project, milestone])
+    sprint = Sprint(
+        team_id=project.team_id, number=1, start_date=date(2026, 11, 2), end_date=date(2026, 11, 6)
+    )
+    session.add_all(
+        [term, note, decision, review, task, pending_invite, project, milestone, sprint]
+    )
     session.commit()
     # The calendar routes answer 404 `calendar_unavailable` while the feature is off, which would
     # hide an unscoped id: switch it on, and give BOTH people a live connection so that only the
@@ -642,6 +648,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "invite_id": pending_invite.id,
         "project_id": project.id,
         "milestone_id": milestone.id,
+        "sprint_id": sprint.id,
         "user_id": owner.id,  # a member of the owner's team, reached through the team routes
         "language": "fr",  # with the owner's meeting id: a translation is reached through it
     }

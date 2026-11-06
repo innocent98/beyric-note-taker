@@ -86,7 +86,12 @@ def move_team_content(session: Session, old_team_id: int, new_team_id: int) -> N
     W4 (projects) and W8 (series) add theirs HERE, in the same function, so a joining account
     never loses them (spec 8.1). Meetings are not team content: they stay theirs, and a meeting
     shared with the dissolved team becomes private (`shared_team_id` null)."""
-    session.execute(update(Task).where(Task.team_id == old_team_id).values(team_id=new_team_id))
+    # The old team's sprints go with it: its tasks arrive in the new team's Backlog (W9).
+    session.execute(
+        update(Task)
+        .where(Task.team_id == old_team_id)
+        .values(team_id=new_team_id, sprint_id=None, carried=False)
+    )
     session.execute(
         update(Project).where(Project.team_id == old_team_id).values(team_id=new_team_id)
     )
@@ -181,6 +186,9 @@ def leave(session: Session, user: User, now: datetime) -> Team:
             project_id=None,
             milestone_id=None,
             check_project=False,
+            # ...and so do its sprints: the task is in the new team's Backlog.
+            sprint_id=None,
+            carried=False,
         )
     )
     # A proposal from their meeting must not be confirmable by a team that cannot read it.

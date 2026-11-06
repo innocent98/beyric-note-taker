@@ -605,6 +605,10 @@ class TaskOut(BaseModel):
     # `GET /api/milestones`), null for none.
     project_id: int | None
     milestone_id: int | None
+    # The sprint it is planned into (ids of `GET /api/sprints`), null is the Backlog.
+    sprint_id: int | None
+    # Moved on from a sprint that closed with it unfinished ("Carried over").
+    carried: bool
     # Filing was a guess (one keyword hit, or a tie): show "Check project" until someone confirms
     # (`PATCH` with `check_project: false`) or picks a project.
     check_project: bool
@@ -651,6 +655,10 @@ class TaskCreate(Body):
     status: TaskStatus = "todo"
     # A project of the caller's team (the Tasks screen files a new task under the open tab).
     project_id: int | None = None
+    # An open sprint of the team's series for that project; null is the Backlog. Left out, the
+    # sprint follows the due date: none is the Backlog, one inside or before the current sprint
+    # is the current sprint, a later one is the next.
+    sprint_id: int | None = Field(None, ge=1, le=9223372036854775807)
 
 
 class TaskPatch(Body):
@@ -667,6 +675,9 @@ class TaskPatch(Body):
     milestone_id: int | None = None
     # `false` is "this project is right"; the server sets it, `true` is refused.
     check_project: bool | None = None
+    # An open sprint of the task's team (its series for the task's project), or null for the
+    # Backlog. Owners and admins, and the maker of a manual task, only.
+    sprint_id: int | None = Field(None, ge=1, le=9223372036854775807)
 
 
 class TasksSettingsOut(BaseModel):
@@ -686,6 +697,8 @@ class ExtractQueued(BaseModel):
 
 
 TeamRole = Literal["owner", "admin", "member"]
+SprintLength = Literal["week5", "week7", "week14", "month1", "month3", "month6", "custom"]
+ProjectSprintLength = Literal["week5", "week7", "week14", "month1", "month3", "month6"]
 InviteRole = Literal["admin", "member"]
 InviteStatus = Literal["pending", "expired"]
 InviteOutcome = Literal["sent", "resent", "already_member", "already_invited", "invalid_email"]
@@ -699,6 +712,11 @@ class TeamOut(BaseModel):
     # shared by it.
     share_new_meetings: bool
     my_role: TeamRole
+    # Sprint settings (W9, Settings > Sprints; owners and admins change them): the length key,
+    # the number of days when it is `custom`, and "Monday to Friday" for `week5`.
+    sprint_length: SprintLength
+    sprint_custom_days: int
+    sprint_align_weekdays: bool
     member_count: int
     # Live (not expired) invitations; they count toward the pilot's accounts.
     pending_invites: int
@@ -711,6 +729,10 @@ class TeamOut(BaseModel):
 class TeamPatch(Body):
     name: str | None = Field(None, min_length=1, max_length=100)
     share_new_meetings: bool | None = None
+    sprint_length: SprintLength | None = None
+    sprint_custom_days: int | None = Field(None, ge=1, le=365)
+    # `true` is refused unless the length is `week5`.
+    sprint_align_weekdays: bool | None = None
 
 
 class TeamMemberOut(BaseModel):
@@ -819,6 +841,8 @@ class ProjectPatch(Body):
     color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
     # Replaces the list; at most 20, each at most 40 characters, duplicates ignored.
     keywords: list[str] | None = Field(None, max_length=20)
+    # The project's own sprint length; null follows the team's. Owners and admins only.
+    sprint_length: ProjectSprintLength | None = None
 
 
 class MilestoneLine(BaseModel):
@@ -837,6 +861,11 @@ class ProjectOut(BaseModel):
     keywords: list[str]
     # Open tasks in it that the caller may see.
     open_tasks: int
+    # The project's own sprint length, null when it follows the team's.
+    sprint_length: ProjectSprintLength | None
+    # Open tasks it has in the current sprint and in the Backlog (the caller's view).
+    in_current_sprint: int
+    in_backlog: int
     # The next milestone still ahead, else the latest that passed; null is "None yet".
     milestone: MilestoneLine | None
     created_at: UtcDatetime
@@ -892,3 +921,49 @@ class MeetingMilestones(BaseModel):
     the ones already confirmed."""
 
     milestones: list[MilestoneOut]
+
+
+# ---- sprints (W9) ----
+
+SprintState = Literal["closed", "current", "next"]
+
+
+class SprintOut(BaseModel):
+    id: int
+    number: int
+    # "Sprint 12".
+    name: str
+    start_date: date
+    end_date: date
+    state: SprintState
+    closed_at: UtcDatetime | None
+    # Closed by hand before its end date.
+    closed_early: bool
+    # Tasks in it the caller may see, and how many of those are done ("3 of 8 done"). For the
+    # current and next sprint of "all projects" they cover every series' current and next sprint.
+    tasks_total: int
+    tasks_done: int
+
+
+class SprintList(BaseModel):
+    # The series the list is for: a project that has its own sprint length, else the team's.
+    project_id: int | None
+    own_series: bool
+    # Today in the viewer's time zone, for "4 days left" and "Starts Mon 9 Nov".
+    today: date
+    # The length this series runs on, as the Settings list names it.
+    sprint_length: SprintLength
+    sprint_custom_days: int
+    sprint_align_weekdays: bool
+    # Up to 20 closed sprints (newest last), then the current and the next.
+    sprints: list[SprintOut]
+    current_id: int
+    next_id: int
+    can_manage: bool
+
+
+class SprintClosed(BaseModel):
+    closed: SprintOut
+    current: SprintOut
+    # Unfinished tasks the caller may see that moved on ("3 unfinished tasks moved to Sprint 13").
+    moved: int
