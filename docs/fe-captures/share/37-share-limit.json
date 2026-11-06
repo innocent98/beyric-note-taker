@@ -1,0 +1,32 @@
+{
+  "note": "429 `share_limit`: 20 recipients a day per account.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/2/shares",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipients": [
+        {
+          "email": "one-more@example.test"
+        }
+      ],
+      "language": "en"
+    }
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "share_limit",
+        "message": "You can send notes to 20 people a day. Try again tomorrow."
+      }
+    }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/mail/opt-out",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "token": "not-a-token"
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "token_invalid_or_expired",
+        "message": "This link is not valid any more."
+      }
+    }
+  }
+}

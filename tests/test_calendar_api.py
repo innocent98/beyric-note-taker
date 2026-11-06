@@ -169,7 +169,8 @@ def test_a_person_who_never_connected_gets_the_not_connected_answer(web):
         "connected": False,
         "state": "not_connected",
         "state_text": "Google Calendar is not connected.",
-        "google_email": None,
+        "account_email": None,
+        "provider": None,
         "last_sync_at": None,
         "last_error": None,
         "rule": "all",
@@ -186,7 +187,7 @@ def test_after_disconnecting_it_is_not_connected_and_shows_no_events(web, sessio
     assert web.post(DISCONNECT).status_code == 200
     body = web.get(URL).json()
     assert body["connected"] is False and body["state"] == "not_connected"
-    assert body["google_email"] is None and body["upcoming"] == []
+    assert body["account_email"] is None and body["upcoming"] == []
 
 
 def test_a_meet_only_connection_is_not_a_connected_calendar(web, google):
@@ -202,7 +203,7 @@ def test_a_fresh_connection_shows_the_address_and_no_sync_yet(web, linked):
     body = web.get(URL).json()
     assert body["connected"] is True and body["state"] == "connected"
     assert body["state_text"] == "Connected"
-    assert body["google_email"] == "grace@example.test"
+    assert body["account_email"] == "grace@example.test" and body["provider"] == "google"
     assert body["last_sync_at"] is None and body["last_error"] is None
     assert body["upcoming"] == []
 
@@ -244,7 +245,7 @@ def test_trouble_states_are_named_and_explained(web, session, linked, status, re
     body = web.get(URL).json()
     assert (body["state"], body["state_text"]) == (state, words)
     assert body["connected"] is (state != "needs_reconnect")
-    assert body["google_email"] == "grace@example.test"  # shown so they know which one to fix
+    assert body["account_email"] == "grace@example.test"  # shown so they know which one to fix
 
 
 @pytest.mark.parametrize(
@@ -468,11 +469,11 @@ def test_another_users_events_and_connection_never_appear(
     add_event(session, theirs, 9, hours=1, title="Their private meeting")
     body = web.get(URL).json()
     assert [e["id"] for e in body["upcoming"]] == [mine.id]
-    assert body["google_email"] == "grace@example.test"
+    assert body["account_email"] == "grace@example.test"
     assert "Their private meeting" not in web.get(URL).text
     other_body = other.get(URL).json()
     assert [e["title"] for e in other_body["upcoming"]] == ["Their private meeting"]
-    assert other_body["google_email"] == "other@example.test"
+    assert other_body["account_email"] == "other@example.test"
 
 
 def test_a_read_changes_nothing(web, session, linked):

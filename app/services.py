@@ -41,6 +41,7 @@ from app.models import (
     AppState,
     MailOutbox,
     Meeting,
+    Milestone,
     Template,
     User,
     UserSettings,
@@ -691,6 +692,13 @@ def delete_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> None
                 MailOutbox.template.in_(("notes_ready", "tasks_assigned")),
                 MailOutbox.status != "sent",
                 MailOutbox.payload["meeting_id"].astext == str(meeting_id),
+            )
+        )
+        # A date proposed from this meeting goes with it; a confirmed milestone stays (its source
+        # is cleared by the foreign key).
+        session.execute(
+            delete(Milestone).where(
+                Milestone.source_meeting_id == meeting_id, Milestone.confirmed_at.is_(None)
             )
         )
         session.delete(locked)

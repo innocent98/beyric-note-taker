@@ -331,6 +331,8 @@ PUBLIC_API = frozenset(
         ("POST", "/api/password/forgot"),
         ("POST", "/api/password/reset"),
         ("POST", "/api/waitlist"),
+        # Opt out of shared-notes mail: the token in the mail's footer link is the credential.
+        ("POST", "/api/mail/opt-out"),
         # What a team invitation link says (who invited you, to which address), for the page that
         # asks a visitor to sign in or sign up: the 256-bit token in the query is the credential.
         ("GET", "/api/team/invites/preview"),
@@ -339,6 +341,7 @@ PUBLIC_API = frozenset(
         # Answers a signed-out visitor itself (a redirect, not JSON). The flow is bound to the
         # signed-in user that started it and to the browser's `calendar_flow` cookie.
         ("GET", "/api/calendar/google/callback"),
+        ("GET", "/api/calendar/microsoft/callback"),
     }
 )
 SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})

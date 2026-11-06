@@ -31,7 +31,7 @@ from urllib.parse import quote
 
 import httpx
 
-from app import vault
+from app import calendar_http, vault
 from app.calendar_source import (
     AuthRevoked,
     RefreshTokenUnreadable,
@@ -57,7 +57,6 @@ REFRESH_EARLY = timedelta(minutes=5)
 DEFAULT_LIFETIME = timedelta(hours=1)
 # A transient refresh failure falls back to a cached token only while it has at least this long.
 REUSE_MARGIN = timedelta(seconds=30)
-TIMEOUT = httpx.Timeout(connect=5.0, read=15.0, write=10.0, pool=5.0)
 # 403 reasons that mean the user's grant does not cover this call; every other 403 (rate limits,
 # quota, a project switch) is not something reconnecting would fix.
 GRANT_REASONS = {"insufficientPermissions"}
@@ -68,27 +67,15 @@ def _utc_now() -> datetime:
 
 
 def _client(transport: httpx.BaseTransport | None) -> httpx.Client:
-    return httpx.Client(
-        timeout=TIMEOUT, transport=transport, trust_env=False, follow_redirects=False
-    )
+    return calendar_http.client(transport)
 
 
-def _send(client: httpx.Client, method: str, url: str, **kwargs) -> httpx.Response:
-    try:
-        return client.request(method, url, **kwargs)
-    except httpx.HTTPError as exc:
-        # The exception text can hold the URL; only its type is kept.
-        raise TransientError(f"Google request failed ({type(exc).__name__})") from None
+def _send(http: httpx.Client, method: str, url: str, **kwargs) -> httpx.Response:
+    return calendar_http.send(http, "Google", method, url, **kwargs)
 
 
 def _json_object(response: httpx.Response) -> dict:
-    try:
-        body = response.json()
-    except ValueError:
-        raise TransientError("Google answered with something that is not JSON") from None
-    if not isinstance(body, dict):
-        raise TransientError("Google answered with an unexpected JSON shape")
-    return body
+    return calendar_http.json_object(response, "Google")
 
 
 def _error_reason(response: httpx.Response) -> str | None:

@@ -217,6 +217,9 @@ def _live_state(info: VexaMeeting) -> str | None:
         # Help is asked for, but the bot has already heard the call, so it was in: do not tell
         # the owner it is waiting on a prompt (`_join_problem` leaves such a bot be, too).
         return "active"
+    if info.status == "needs_help" and info.reached_lobby:
+        # Vexa's lobby-timeout warning: to the owner the bot is still waiting to be let in.
+        return "awaiting_admission"
     return info.status if info.status in BOT_LIVE_STATES else None
 
 
@@ -268,7 +271,7 @@ def bot_failure_reason(meeting: Meeting, info: VexaMeeting) -> str:
         return REASON_ENDED_NOTHING_RECORDED  # the owner stopped the bot before it recorded
     if _zoom_blocked(info):
         return _zoom_blocked_reason(meeting.join_attempts)
-    if info.completion_reason == "awaiting_admission_rejected":
+    if info.completion_reason in ("awaiting_admission_rejected", "awaiting_admission_timeout"):
         return REASON_NOT_LET_IN
     if info.failure_reason:
         return f"{REASON_BOT_FAILED} The bot reported: {info.failure_reason}"
@@ -376,7 +379,15 @@ def _join_problem(meeting: Meeting, info: VexaMeeting, now: datetime) -> str | N
     ):
         return MEET_REFUSED
     # A bot that is already recording is Vexa asking for help for another reason: leave it be.
-    if info.status == "needs_help" and not info.segments and info.recording_id is None:
+    # So is one still in the waiting room: there `needs_help` is Vexa warning that its lobby
+    # budget is nearly spent (`waiting_room_timeout_approaching`), and the host may admit it any
+    # moment; Vexa ends the wait itself when the budget runs out (seen live on 2026-11-06).
+    if (
+        info.status == "needs_help"
+        and not info.segments
+        and info.recording_id is None
+        and not info.reached_lobby
+    ):
         since = _needs_help_since.setdefault(meeting.id, now)
         return NEEDS_HELP_MARK if now - since >= NEEDS_HELP_GRACE else None
     _needs_help_since.pop(meeting.id, None)

@@ -1,0 +1,31 @@
+{
+  "note": "202 with `waiting_translation`: the translation is queued and the mail follows.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/shares",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipients": [
+        {
+          "email": "client@example.test"
+        }
+      ],
+      "language": "fr",
+      "attach": "none"
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "share_id": 2,
+      "status": "waiting_translation"
+    }
+  }
+}

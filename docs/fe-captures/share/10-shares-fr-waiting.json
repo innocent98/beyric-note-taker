@@ -1,0 +1,62 @@
+{
+  "note": "",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1/shares",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "shares": [
+        {
+          "share_id": 2,
+          "status": "waiting_translation",
+          "language": "fr",
+          "attach": "none",
+          "include_transcript": false,
+          "message": "",
+          "created_at": "2026-11-05T22:02:01.586963Z",
+          "recipients": [
+            {
+              "email": "client@example.test",
+              "name": null,
+              "status": "pending",
+              "is_team_member": false
+            }
+          ]
+        },
+        {
+          "share_id": 1,
+          "status": "queued",
+          "language": "en",
+          "attach": "docx",
+          "include_transcript": true,
+          "message": "Sharing the notes from today's call. Let me know if anything looks off.",
+          "created_at": "2026-11-05T22:01:59.098118Z",
+          "recipients": [
+            {
+              "email": "client@example.test",
+              "name": "Client Example",
+              "status": "sent",
+              "is_team_member": false
+            },
+            {
+              "email": "pilot@example.test",
+              "name": "Daniel Example",
+              "status": "sent",
+              "is_team_member": true
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

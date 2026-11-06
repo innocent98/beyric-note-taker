@@ -1,0 +1,37 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/shares",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipients": [
+        {
+          "email": "client@example.test",
+          "name": "Client Example"
+        },
+        {
+          "email": "pilot@example.test"
+        }
+      ],
+      "language": "en",
+      "attach": "docx",
+      "include_transcript": true,
+      "message": "Sharing the notes from today's call. Let me know if anything looks off."
+    }
+  },
+  "response": {
+    "status": 202,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "share_id": 1,
+      "status": "queued"
+    }
+  }
+}
