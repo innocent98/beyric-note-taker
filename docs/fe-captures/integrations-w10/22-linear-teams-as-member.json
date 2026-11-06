@@ -1,0 +1,23 @@
+{
+  "note": "A member may not: 403.",
+  "client": "chidi (member)",
+  "request": {
+    "method": "POST",
+    "path": "/api/integrations/linear/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>"
+    },
+    "body": {
+      "api_key": "<fake-linear-api-key>"
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only an owner or admin of the team can do that."
+      }
+    }
+  }
+}

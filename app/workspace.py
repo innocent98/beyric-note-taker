@@ -288,8 +288,8 @@ def run_extraction(
     session.commit()
     session.expire(meeting)
     if post_to_slack is not None:
-        # After the commit and never raising: a Slack failure cannot touch the notes or the tasks.
-        integrations.notify_meeting(session, meeting, team_id, *post_to_slack, now=stamp)
+        # After the commit and never raising: a Slack or Linear failure cannot touch the notes.
+        integrations.after_extraction(session, meeting, team_id, *post_to_slack, now=stamp)
     return status
 
 

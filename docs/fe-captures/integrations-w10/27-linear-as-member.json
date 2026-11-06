@@ -1,0 +1,21 @@
+{
+  "note": "A member sees the state, `can_manage` false.",
+  "client": "chidi (member)",
+  "request": {
+    "method": "GET",
+    "path": "/api/integrations/linear",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "connected": true,
+      "status": "connected",
+      "last_error": null,
+      "last_synced_at": null,
+      "team_name": "Engineering",
+      "can_manage": false
+    }
+  }
+}

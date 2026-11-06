@@ -1,0 +1,24 @@
+{
+  "note": "A team the key cannot reach: 400.",
+  "client": "dan (owner)",
+  "request": {
+    "method": "PUT",
+    "path": "/api/integrations/linear",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>"
+    },
+    "body": {
+      "api_key": "<fake-linear-api-key>",
+      "team_id": "team-9999-fake"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "linear_team_invalid",
+        "message": "That team is not one this key can use."
+      }
+    }
+  }
+}

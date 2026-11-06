@@ -215,6 +215,7 @@ const attention = () => ({ needs_owner: tasks.filter((t) => !t.assignee && t.sta
 let tasksSettings = { auto_create_tasks: true, email_assignees: true };
 const integrationsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "integrations-w10", `${name}.json`), "utf8")).response.body;
 let slackConnected = false;
+let linearConnected = false;
 for (const meeting of details) {
   meeting.tasks = [];
   meeting.tasks_count = 0;
@@ -386,6 +387,7 @@ const server = http.createServer(async (req, res) => {
     resetProjects();
     for (const t of tasks) t.milestone_id = [1, 3, 5, 8, 9, 10, 11, 12].includes(t.id) ? 1 : null;
     proposalOpen = true;
+    linearConnected = false;
     return json(res, 200, { reset: true });
   }
 
@@ -624,6 +626,19 @@ const server = http.createServer(async (req, res) => {
   if (ofMeeting && method === "GET") {
     const list = meetingTasks(Number(ofMeeting[1]));
     return json(res, 200, { tasks: list, assigned_people: new Set(list.filter((t) => t.assignee).map((t) => t.assignee.user_id)).size, extraction_status: "done" });
+  }
+  if (path === "/api/integrations/linear/teams") return json(res, 200, integrationsCapture("23-linear-teams"));
+  if (path === "/api/integrations/linear") {
+    if (method === "PUT") {
+      linearConnected = true;
+      return json(res, 200, integrationsCapture("25-linear-connect"));
+    }
+    if (method === "DELETE") {
+      linearConnected = false;
+      res.writeHead(204);
+      return res.end();
+    }
+    return json(res, 200, integrationsCapture(linearConnected ? "26-linear-connected" : "19-linear-not-connected"));
   }
   if (path === "/api/integrations/slack") {
     if (method === "PUT") {

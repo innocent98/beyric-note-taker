@@ -27,20 +27,15 @@ import logging
 import re
 import socket
 import threading
-import time
 from urllib.parse import urlsplit
 
-import httpx
-
-from app import ics_fetch, titles
+from app import ics_fetch, outbound, titles
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 HOST = "hooks.slack.com"
 HTTPS_PORT = 443
-CONNECT_TIMEOUT = 3.0
-READ_TIMEOUT = 5.0
 TOTAL_TIMEOUT = 10.0
 USER_AGENT = "BeyricNoteTaker/1 (slack webhook)"
 MAX_URL_CHARS = 200
@@ -127,41 +122,18 @@ def test_message() -> str:
 
 
 def _send(url: str, text: str, resolver, transport) -> None:
-    parts = urlsplit(url)
-    try:
-        addresses = ics_fetch._resolve(HOST, resolver)
-    except ics_fetch.IcsRejected as exc:
-        raise SlackError("refused" if exc.reason == "private_address" else "unreachable") from None
-    deadline = time.monotonic() + TOTAL_TIMEOUT
-    timeout = httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT)
-    headers = {"Host": HOST, "User-Agent": USER_AGENT, "Content-Type": "application/json"}
     payload = {"text": text, "unfurl_links": False, "unfurl_media": False, "link_names": False}
-    with httpx.Client(
-        transport=transport, timeout=timeout, follow_redirects=False, trust_env=False
-    ) as client:
-        for index, ip in enumerate(addresses):
-            if time.monotonic() > deadline:
-                raise SlackError("timeout")
-            literal = f"[{ip.compressed}]" if ip.version == 6 else ip.compressed
-            try:
-                response = client.post(
-                    f"https://{literal}{parts.path}",
-                    json=payload,
-                    headers=headers,
-                    extensions={"sni_hostname": HOST},
-                )
-            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
-                if index + 1 < len(addresses):
-                    continue  # the other address of the same validated answer, never a new lookup
-                raise SlackError(
-                    "timeout" if isinstance(exc, httpx.ConnectTimeout) else "unreachable"
-                ) from None
-            except httpx.TimeoutException:
-                raise SlackError("timeout") from None
-            except (httpx.HTTPError, httpx.InvalidURL, OSError):
-                raise SlackError("unreachable") from None
-            break
-    status = response.status_code
+    try:
+        status, _ = outbound.post_json(
+            HOST,
+            urlsplit(url).path,
+            payload,
+            resolver=resolver,
+            transport=transport,
+            max_bytes=1024,
+        )
+    except outbound.OutboundError as exc:
+        raise SlackError(exc.reason if exc.reason in REASONS else "unreachable") from None
     if status == 200:
         return
     if status in (404, 410):

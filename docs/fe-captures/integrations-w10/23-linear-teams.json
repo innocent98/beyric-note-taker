@@ -1,0 +1,31 @@
+{
+  "note": "The teams the key can reach (simulated Linear). The key is not stored.",
+  "client": "dan (owner)",
+  "request": {
+    "method": "POST",
+    "path": "/api/integrations/linear/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>"
+    },
+    "body": {
+      "api_key": "<fake-linear-api-key>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "teams": [
+        {
+          "id": "team-0000-fake",
+          "key": "ENG",
+          "name": "Engineering"
+        },
+        {
+          "id": "team-1111-fake",
+          "key": "OPS",
+          "name": "Operations"
+        }
+      ]
+    }
+  }
+}

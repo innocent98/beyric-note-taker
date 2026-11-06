@@ -1,7 +1,7 @@
-"""The Settings routes for the team's integrations (W10): the Slack webhook. Included into
+"""The Settings routes for the team's integrations (W10): Slack and Linear. Included into
 `app.api.router`. Everyone on the team may read the state; only an owner or admin connects or
-disconnects (403 `team_forbidden`). The webhook address is a secret: it is accepted on PUT and
-never returned by any route.
+disconnects (403 `team_forbidden`). The webhook address and the Linear key are secrets: they are
+accepted on PUT and never returned by any route.
 """
 
 from datetime import UTC, datetime
@@ -10,7 +10,15 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app import auth, integrations, team_admin
-from app.api_schemas import ErrorResponse, SlackIn, SlackOut
+from app.api_schemas import (
+    ErrorResponse,
+    LinearIn,
+    LinearKeyIn,
+    LinearOut,
+    LinearTeamsOut,
+    SlackIn,
+    SlackOut,
+)
 from app.db import get_session
 from app.models import Integration, TeamMember, User
 
@@ -69,4 +77,78 @@ def disconnect_slack(
     me = team_admin.my_membership(session, user)
     team_admin.require_manager(me)
     integrations.disconnect(session, me.team_id)
+    return Response(status_code=204)
+
+
+LINEAR_ERRORS = {
+    **FORBIDDEN,
+    400: {
+        "model": ErrorResponse,
+        "description": "`linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid`",
+    },
+    429: {"model": ErrorResponse, "description": "`integration_rate`"},
+    502: {"model": ErrorResponse, "description": "`linear_unreachable`"},
+    503: {"model": ErrorResponse, "description": "`integrations_unavailable`"},
+}
+
+
+def _linear_out(row: Integration | None, me: TeamMember) -> LinearOut:
+    return LinearOut(
+        connected=row is not None,
+        status=row.status if row else None,
+        last_error=row.last_error if row else None,
+        last_synced_at=row.last_posted_at if row else None,
+        team_name=row.label if row else None,
+        can_manage=me.role in team_admin.MANAGER_ROLES,
+    )
+
+
+@router.get("/linear")
+def read_linear(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> LinearOut:
+    """Whether the team pushes new tasks to Linear, to which team, and how the last push went."""
+    me = team_admin.my_membership(session, user)
+    return _linear_out(integrations.get(session, me.team_id, integrations.LINEAR), me)
+
+
+@router.post("/linear/teams", responses=LINEAR_ERRORS)
+def linear_teams(
+    body: LinearKeyIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> LinearTeamsOut:
+    """The Linear teams a pasted key can reach, for the choice before connecting (owner or admin).
+    The key is checked with Linear and not stored."""
+    me = team_admin.my_membership(session, user)
+    team_admin.require_manager(me)
+    found = integrations.linear_teams(session, me.team_id, body.api_key, datetime.now(UTC))
+    return LinearTeamsOut(teams=found)
+
+
+@router.put("/linear", responses=LINEAR_ERRORS)
+def connect_linear(
+    body: LinearIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> LinearOut:
+    """Connect Linear with a personal API key and one of its teams (owner or admin). New tasks from
+    shared meetings are then created as issues in that team, once each. Replaces an earlier key."""
+    me = team_admin.my_membership(session, user)
+    team_admin.require_manager(me)
+    row = integrations.connect_linear(
+        session, me.team_id, user, body.api_key, body.team_id, datetime.now(UTC)
+    )
+    return _linear_out(row, me)
+
+
+@router.delete("/linear", status_code=204, responses=FORBIDDEN)
+def disconnect_linear(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> Response:
+    """Disconnect Linear and delete the stored key (owner or admin). Issues already created stay in
+    Linear. Safe to repeat."""
+    me = team_admin.my_membership(session, user)
+    team_admin.require_manager(me)
+    integrations.disconnect(session, me.team_id, integrations.LINEAR)
     return Response(status_code=204)

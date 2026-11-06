@@ -1,5 +1,5 @@
 {
-  "note": "400; nothing is posted or stored.",
+  "note": "422; nothing is posted or stored.",
   "client": "dan (owner)",
   "request": {
     "method": "PUT",

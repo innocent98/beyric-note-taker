@@ -1199,7 +1199,48 @@ def test_0030_adds_series_with_defaults_and_downgrades_cleanly(scratch_url):
         engine.dispose()
 
 
-def test_0032_follows_0030_and_is_the_only_head():
+def test_0032_follows_0030():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0032").down_revision == "0030"
-    assert script.get_heads() == ["0032"]
+
+
+def test_0033_follows_0032_and_is_the_only_head():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0033").down_revision == "0032"
+    assert script.get_heads() == ["0033"]
+
+
+def test_0033_round_trips_and_keeps_slack_rows(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0032")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
+        conn.execute(
+            text("insert into teams (name, owner_user_id) select 'T', id from users limit 1")
+        )
+        conn.execute(
+            text(
+                "insert into integrations (team_id, kind, config_enc, key_version) "
+                "select id, 'slack_webhook', 'x', 1 from teams order by id limit 1"
+            )
+        )
+    command.upgrade(cfg, "0033")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into integrations (team_id, kind, config_enc, key_version, label) "
+                "select id, 'linear', 'y', 1, 'Engineering' from teams order by id limit 1"
+            )
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into integrations (team_id, kind, config_enc, key_version) "
+                "select id, 'jira', 'z', 1 from teams order by id limit 1"
+            )
+        )
+    command.downgrade(cfg, "0032")
+    assert _rows(engine, "select kind from integrations") == [("slack_webhook",)]
+    command.upgrade(cfg, "head")
+    engine.dispose()
