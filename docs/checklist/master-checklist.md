@@ -443,7 +443,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Send agenda (teammates only, caps, ids-only mail), 1-hour and 30-minute reminders (off by default, once per person and occurrence)
   - [x] Team switch and timing (`PATCH /api/team`), personal `GET/PUT /api/settings/reminders`
   - [x] Team join merges series; leave takes the leaver's meetings out
-  - [ ] Opus review of mail, caps and permissions (Critical/High fixed with tests)
+  - [x] Opus review of mail, caps and permissions: no Critical; 2 High fixed with tests (2026-11-06)
   - [ ] Screens: cards, Series page, meeting Series row and toggles, Settings reminders card (PR 2)
   - [ ] Deferred: W8b "possibly resolved" chips, sprint line and milestone countdown in the mails (W9, W4), outside recipients for the agenda (needs W6 opt-out), "Add to recurring meeting" UI (designer gap), policy wording for reminders before they are switched on in production
 - [ ] W5 Export (merged), W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)

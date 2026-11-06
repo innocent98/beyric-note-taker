@@ -28,7 +28,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -96,13 +96,36 @@ def is_manager(session: Session, user: User, team_id: int) -> bool:
     return member is not None and member.team_id == team_id and member.role in MANAGER_ROLES
 
 
+def _seen_by(user: User):
+    """A series the caller's team owns is shown to the caller only when it is not someone else's
+    private calendar event: it was made by hand, or the caller made it, or the caller has a
+    meeting of it they may read, or its recurring event is on the caller's own calendar. Else the
+    title, cadence and next date of a teammate's private recurring call (a 1:1) would be published
+    to the team (spec 8.2: private by default)."""
+    readable = select(Meeting.id).where(Meeting.series_id == Series.id, can_read_clause(user))
+    own_event = select(CalendarEvent.id).where(
+        CalendarEvent.user_id == user.id,
+        CalendarEvent.recurring_event_id == Series.calendar_recurring_id,
+    )
+    return or_(
+        Series.calendar_recurring_id.is_(None),
+        Series.owner_user_id == user.id,
+        readable.exists(),
+        own_event.exists(),
+    )
+
+
 def get(session: Session, user: User, series_id: int) -> Series | None:
-    """The series, only when it belongs to the caller's team: anything else is None (404)."""
-    series = session.get(Series, series_id)
+    """The series, only when it belongs to the caller's team and the caller may see it: anything
+    else is None (404)."""
     member = membership(session, user)
-    if series is None or member is None or member.team_id != series.team_id:
+    if member is None:
         return None
-    return series
+    return session.scalars(
+        select(Series).where(
+            Series.id == series_id, Series.team_id == member.team_id, _seen_by(user)
+        )
+    ).first()
 
 
 def list_for(session: Session, user: User) -> list[Series]:
@@ -112,7 +135,7 @@ def list_for(session: Session, user: User) -> list[Series]:
     return list(
         session.scalars(
             select(Series)
-            .where(Series.team_id == member.team_id)
+            .where(Series.team_id == member.team_id, _seen_by(user))
             .order_by(Series.title, Series.id)
             .limit(MAX_SERIES_PER_TEAM)
         )
@@ -200,18 +223,19 @@ def link_from_calendar(session: Session, meeting: Meeting) -> Series | None:
         row.platform or meeting.platform,
         owner.id,
     )
-    join(session, meeting, series)
+    join(session, meeting, series, consume=True)
     return series
 
 
-def join(session: Session, meeting: Meeting, series: Series) -> None:
-    """Make `meeting` a meeting of `series` and take the agenda that was waiting for it: the
-    lines typed before this meeting began are consumed by it (spec 7). In the caller's
-    transaction; the caller has checked who may."""
+def join(session: Session, meeting: Meeting, series: Series, *, consume: bool = False) -> None:
+    """Make `meeting` a meeting of `series`. With `consume` (only when the pipeline links a
+    recorded meeting) the agenda lines typed before it began are consumed by it (spec 7). A hand
+    attach never consumes: it would let any member clear lines they may not remove. In the
+    caller's transaction; the caller has checked who may."""
     first = meeting.series_id != series.id
     meeting.series_id = series.id
     session.flush()
-    if first:
+    if first and consume:
         session.execute(
             update(SeriesAgendaItem)
             .where(

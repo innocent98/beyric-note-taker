@@ -255,7 +255,7 @@ def test_attaching_by_hand_needs_your_meeting_and_your_teams_series(
     error_of(api.put(f"/api/meetings/{mine.id}/series", {"series_id": theirs.id}), 404, "not_found")
 
 
-def test_attaching_takes_the_agenda_that_was_waiting_for_the_meeting(
+def test_only_a_recorded_calendar_meeting_consumes_the_agenda_a_hand_attach_does_not(
     api, session, owner, template, weekly
 ):
     before = SeriesAgendaItem(
@@ -266,9 +266,33 @@ def test_attaching_takes_the_agenda_that_was_waiting_for_the_meeting(
     )
     session.add_all([before, after])
     session.commit()
-    meeting = ready(session, template, created_at=MONDAY)
-    api.put(f"/api/meetings/{meeting.id}/series", {"series_id": weekly.id})
+    weekly.calendar_recurring_id = "rid-1"
+    session.commit()
+    attached = ready(session, template, created_at=MONDAY)
+    api.put(f"/api/meetings/{attached.id}/series", {"series_id": weekly.id})
+    assert len(series.agenda_items(session, weekly)) == 2  # a hand attach clears nothing
+    event = calendar_event(session, owner, "rid-1", MONDAY)
+    recorded = ready(session, template, source="calendar", created_at=MONDAY)
+    join_for(session, owner, event, recorded, state="completed")
+    series.link_from_calendar(session, recorded)
     assert [i.text for i in series.agenda_items(session, weekly)] == ["Hiring"]
+
+
+def test_a_teammates_private_recurring_call_is_not_published_to_the_team(
+    api, app, session, owner, daniel, template
+):
+    event = calendar_event(session, daniel, "rid-private", NOW + timedelta(days=1), title="1:1")
+    join_for(session, daniel, event, state="scheduled")
+    series.sync_from_joins(session, NOW)
+    made = session.scalars(select(Series)).one()
+    mine = sign_in(app, DANIEL_EMAIL)
+    assert [c["title"] for c in mine.get("/api/series").json()["series"]] == ["1:1"]
+    assert api.get("/api/series").json()["series"] == []  # the owner is not on that call
+    error_of(api.get(f"/api/series/{made.id}"), 404, "not_found")
+    # once a meeting of it is shared with the team, the team sees it
+    meeting = meeting_in(session, template, made, user=daniel)
+    share(session, meeting, daniel)
+    assert [c["title"] for c in api.get("/api/series").json()["series"]] == ["1:1"]
 
 
 # ---- the cards ----

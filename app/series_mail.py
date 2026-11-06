@@ -196,7 +196,7 @@ def _recipient(
 
 
 def _title(found: Series) -> str:
-    return clean_line(found.title or series.UNTITLED, 80)
+    return titles.mail_line(found.title or series.UNTITLED, 80) or series.UNTITLED
 
 
 def _tasks_rows(session: Session, user: User, found: Series, today) -> tuple[tuple, int]:
@@ -213,7 +213,7 @@ def _tasks_rows(session: Session, user: User, found: Series, today) -> tuple[tup
     for task in rows[:MAX_TASK_ROWS]:
         assignee = people.get(task.assignee_user_id)
         who = (
-            titles.clean_title(assignee.name, 60) or assignee.email.split("@")[0]
+            titles.mail_line(assignee.name, 60) or assignee.email.split("@")[0]
             if assignee
             else "Needs owner"
         )
@@ -277,7 +277,7 @@ def _series_agenda(
     zone = _zone(session, user)
     today = timezones.localise(now, zone)[0].date()
     name = _title(found)
-    sender_name = clean_line(sender.name or sender.email.split("@")[0], 60)
+    sender_name = titles.mail_line(sender.name, 60) or sender.email.split("@")[0]
     items = [titles.mail_line(i.text, 200) for i in lines]
     items += [titles.mail_line(q.text, 200) for q, _meeting in questions]
     items = [i for i in items if i][: MAX_LISTED * 2]

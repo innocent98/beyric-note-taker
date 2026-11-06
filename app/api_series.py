@@ -47,6 +47,7 @@ from app.series_schemas import (
     SeriesPage,
     SeriesPatch,
 )
+from app.visibility import can_read_clause
 
 router = APIRouter()
 
@@ -99,7 +100,7 @@ def _events(session: Session, found: Series) -> list[CalendarEvent]:
 
 
 def _timing(
-    session: Session, found: Series, zone_name: str | None, now: datetime
+    session: Session, found: Series, zone_name: str | None, now: datetime, viewer: User
 ) -> tuple[str, datetime | None, str | None]:
     """(cadence, next start, next text) for a series, written in the zone. The cadence reads the
     stored event times and the start times of the series' joined meetings; a claim is made only
@@ -111,7 +112,7 @@ def _timing(
         session.scalars(
             select(ScheduledJoin.starts_at)
             .join(Meeting, Meeting.id == ScheduledJoin.meeting_id)
-            .where(Meeting.series_id == found.id)
+            .where(Meeting.series_id == found.id, can_read_clause(viewer))
         )
     )
     cadence = describe_cadence(starts, zone)
@@ -177,7 +178,7 @@ def list_series(
     counts = series.counts_for(session, user, [s.id for s in rows])
     cards = []
     for found in rows:
-        cadence, upcoming, upcoming_text = _timing(session, found, zone_name, now)
+        cadence, upcoming, upcoming_text = _timing(session, found, zone_name, now, user)
         tasks_open, questions_open = counts[found.id]
         cards.append(
             SeriesCard(
@@ -209,7 +210,9 @@ def create_series(
     except series.SeriesRefused as exc:
         raise _refuse(exc) from None
     session.commit()
-    cadence, upcoming, upcoming_text = _timing(session, found, _zone_name(session, user), _now())
+    cadence, upcoming, upcoming_text = _timing(
+        session, found, _zone_name(session, user), _now(), user
+    )
     return SeriesCard(
         id=found.id,
         title=_initial_title(found),
@@ -225,7 +228,7 @@ def create_series(
 def _page(session: Session, user: User, found: Series) -> SeriesPage:
     now = _now()
     zone_name = _zone_name(session, user)
-    cadence, upcoming, upcoming_text = _timing(session, found, zone_name, now)
+    cadence, upcoming, upcoming_text = _timing(session, found, zone_name, now, user)
     unfinished = series.unfinished_tasks(session, user, found)
     last_day = series.last_meeting_day(session, user, found, zone_name)
     finished = series.finished_since(session, user, found, last_day, zone_name) if last_day else []
@@ -328,7 +331,9 @@ def patch_series(
     except series.SeriesRefused as exc:
         raise _refuse(exc) from None
     session.commit()
-    cadence, upcoming, upcoming_text = _timing(session, found, _zone_name(session, user), _now())
+    cadence, upcoming, upcoming_text = _timing(
+        session, found, _zone_name(session, user), _now(), user
+    )
     counts = series.counts_for(session, user, [found.id])[found.id]
     return SeriesCard(
         id=found.id,
@@ -460,7 +465,10 @@ def send_agenda(
         session.rollback()
         raise _refuse(exc) from None
     session.commit()
-    return AgendaSent(count=len(people), names=[p.name for p in people])
+    # Names only of people from meetings the caller may read: who spoke in a teammate's private
+    # meeting is not the caller's to learn.
+    known = {a.user_id for a in series.attendees(session, found, user) if a.user_id}
+    return AgendaSent(count=len(people), names=[p.name for p in people if p.user_id in known])
 
 
 # ---- questions ----

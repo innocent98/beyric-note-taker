@@ -429,3 +429,17 @@ def test_everything_reaches_the_sender_through_the_outbox(
     ]
     # series mail is notes mail: its row keeps ids only after it is sent
     assert all(r.status == "sent" and r.payload for r in queued(session))
+
+
+def test_a_series_title_or_name_with_a_web_address_is_defanged_in_the_mail(
+    session, owner, daniel, weekly, busy
+):
+    weekly.title = "Update: verify at payroll-portal.example.com"
+    owner.name = "Ada visit evil.example.org"
+    add_line(session, weekly, owner)
+    session.commit()
+    series_mail.send_agenda(session, owner, weekly, NOW)
+    message = build(session, queued(session, "series_agenda")[0])
+    assert "payroll-portal.example.com" not in message.subject + message.text
+    assert "payroll-portal[.]example[.]com" in message.subject
+    assert "evil.example.org" not in message.text
