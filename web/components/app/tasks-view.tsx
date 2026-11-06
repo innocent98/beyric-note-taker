@@ -10,8 +10,8 @@ import { Alert, Button, Icon, PageHead, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
-import type { Task, TaskList, TaskStatus } from "@/lib/api/types";
-import { COLUMNS, type GroupBy, groupTasks } from "@/lib/tasks";
+import type { Milestone, Project, Task, TaskList, TaskStatus } from "@/lib/api/types";
+import { COLUMNS, daysLeft, type GroupBy, groupTasks, longDay, shortDay, swatchClass } from "@/lib/tasks";
 
 // "all", "me", "none" (Needs owner), or `u<id>`: one teammate (the designer's chips: All tasks, My
 // tasks, one per active teammate by first name, Needs owner).
@@ -27,16 +27,32 @@ const COLUMN_DOT: Record<TaskStatus, string> = { todo: "tk-dot-todo", doing: "tk
 // (null when it failed: the page then says so and offers Try again). Every change goes to the API
 // at once and the answer replaces the task on screen; a drop that is refused puts the card back.
 //
-// Left out because what they need does not exist yet, and no control is drawn for them: the project
-// tabs, the sprint selector and header, the Board and Backlog tabs, the milestone card and the badges that belong to projects and sprints. Each is listed in
-// docs/sop/2026-11-05-w2-tasks-ui.md as "waits for W3, W4 or W9".
-export function TasksView({ initial, canInviteToTeam = false }: { initial: TaskList | null; canInviteToTeam?: boolean }) {
+// W4 adds the project tabs (All projects and one per project), the milestone card with "Show launch
+// tasks", the project badge and "Check project" on cards, and the attention banner's project line.
+// Left out because what they need does not exist yet, and no control is drawn for them: the sprint
+// selector and header, the Board and Backlog tabs and "Carried over" (W9; docs/sop/2026-11-05-w2-tasks-ui.md).
+// `projects` is null when the team's projects could not be read: the tabs and the project rows are
+// then left out rather than drawn empty.
+export function TasksView({
+  initial,
+  projects = null,
+  milestones = [],
+  canInviteToTeam = false,
+}: {
+  initial: TaskList | null;
+  projects?: Project[] | null;
+  milestones?: Milestone[];
+  canInviteToTeam?: boolean;
+}) {
   const today = useToday();
   const router = useRouter();
   const [data, setData] = useState<TaskList | null>(initial);
   const [failed, setFailed] = useState(initial === null);
   const [filter, setFilter] = useState<Filter>("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("assigned");
+  // "all" or a project id; and whether the board shows only the open milestone's tasks.
+  const [projectTab, setProjectTab] = useState<"all" | number>("all");
+  const [launchOnly, setLaunchOnly] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
   const [dragId, setDragId] = useState<number | null>(null);
   const [overColumn, setOverColumn] = useState<TaskStatus | null>(null);
@@ -70,7 +86,8 @@ export function TasksView({ initial, canInviteToTeam = false }: { initial: TaskL
     if (creating) return;
     setCreating(true);
     try {
-      const made = await api.tasks.create({});
+      // A new task goes under the project tab that is open (none on "All projects").
+      const made = await api.tasks.create(projectTab === "all" ? {} : { project_id: projectTab });
       setData((current) => (current ? { ...current, tasks: [made, ...current.tasks] } : current));
       setOpenId(made.id);
     } catch (caught) {
@@ -97,7 +114,18 @@ export function TasksView({ initial, canInviteToTeam = false }: { initial: TaskL
     ...people.filter((p) => !p.is_you).map((p) => [`u${p.user_id}`, p.name.split(" ")[0]] as const),
     ["none", "Needs owner"],
   ];
-  const shown = tasks.filter((t) =>
+  const projectList = projects ?? [];
+  const projectOf = (t: Task) => projectList.find((p) => p.id === t.project_id) ?? null;
+  // The milestone card: the next confirmed milestone not yet past, within the open project tab.
+  const milestone =
+    milestones
+      .filter((m) => m.due_date >= today && (projectTab === "all" || m.project_id === projectTab))
+      .sort((a, b) => (a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : a.id - b.id))[0] ?? null;
+  const launch = milestone && launchOnly ? milestone : null;
+  const shown = tasks
+    .filter((t) => projectTab === "all" || t.project_id === projectTab)
+    .filter((t) => (launch ? t.milestone_id === launch.id : true))
+    .filter((t) =>
     filter === "all"
       ? true
       : filter === "none"
@@ -108,7 +136,18 @@ export function TasksView({ initial, canInviteToTeam = false }: { initial: TaskL
   );
   const open = tasks.find((t) => t.id === openId) ?? null;
   const needOwner = tasks.filter((t) => !t.assignee && t.status !== "done");
-  const firstToReview = needOwner[0];
+  const needCheck = tasks.filter((t) => t.check_project && t.status !== "done");
+  const firstToReview = needOwner[0] ?? needCheck[0];
+  const attention = needOwner.length + needCheck.length;
+  const parts = [
+    ...(needOwner.length ? [needOwner.length === 1 ? "1 needs an owner" : `${needOwner.length} need an owner`] : []),
+    ...(needCheck.length
+      ? [needCheck.length === 1 ? "1 needs its project checked" : `${needCheck.length} need their project checked`]
+      : []),
+  ];
+  const launchTasks = milestone ? tasks.filter((t) => t.milestone_id === milestone.id) : [];
+  const launchDone = launchTasks.filter((t) => t.status === "done").length;
+  const launchPct = launchTasks.length ? Math.round((launchDone / launchTasks.length) * 100) : 0;
 
   if (failed || data === null) {
     return (
@@ -132,6 +171,54 @@ export function TasksView({ initial, canInviteToTeam = false }: { initial: TaskL
           New task
         </Button>
       </PageHead>
+      {projects && projectList.length > 0 ? (
+        <div className="tk-tabs" role="group" aria-label="Project">
+          {([{ id: "all" as const, name: "All projects", color: null }, ...projectList]).map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`tk-tab${projectTab === p.id ? " tk-tab-on" : ""}`}
+              aria-pressed={projectTab === p.id}
+              onClick={() => {
+                setProjectTab(p.id);
+                setLaunchOnly(false);
+              }}
+            >
+              {p.id === "all" ? null : <span className={`tk-tab-dot ${swatchClass(p.color)}`} />}
+              {p.name || "Untitled project"}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {milestone ? (
+        <div className="tk-milestone">
+          <div className="tk-ms-days">
+            <div className="tk-ms-days-n">{daysLeft(milestone.due_date, today)}</div>
+            <div className="tk-ms-days-l">days left</div>
+          </div>
+          <div className="tk-ms-main">
+            <div className="tk-ms-title">
+              <span className="tk-ms-name">{milestone.name}</span>
+              <span className="tk-ms-date">{longDay(milestone.due_date)}</span>
+            </div>
+            <progress
+              className="tk-ms-bar"
+              max={100}
+              value={launchPct}
+              aria-label={`${launchDone} of ${launchTasks.length} launch tasks done`}
+            />
+            <div className="tk-ms-progress">
+              {launchDone} of {launchTasks.length} launch tasks done
+              {milestone.source_meeting
+                ? ` · Set in ${milestone.source_meeting.title}, ${shortDay(milestone.source_meeting.created_at.slice(0, 10))}`
+                : ""}
+            </div>
+          </div>
+          <button type="button" className="tk-ms-filter" aria-pressed={launchOnly} onClick={() => setLaunchOnly((v) => !v)}>
+            {launchOnly ? "Show all tasks" : "Show launch tasks"}
+          </button>
+        </div>
+      ) : null}
       <div className="tk-bar">
         <div className="tk-chips" role="group" aria-label="Filter tasks">
           {chips.map(([value, label]) => (
@@ -163,12 +250,11 @@ export function TasksView({ initial, canInviteToTeam = false }: { initial: TaskL
           </div>
         </div>
       </div>
-      {needOwner.length > 0 ? (
+      {attention > 0 ? (
         <div className="tk-attention" role="status">
           <div className="tk-attention-text">
             <div className="tk-attention-title">
-              {needOwner.length === 1 ? "1 task needs attention" : `${needOwner.length} tasks need attention`}:{" "}
-              {needOwner.length === 1 ? "1 needs an owner" : `${needOwner.length} need an owner`}
+              {attention === 1 ? "1 task needs attention" : `${attention} tasks need attention`}: {parts.join(", ")}
             </div>
             <div className="tk-attention-sub">
               Owners and projects are filled in from the meeting. These ones could not be matched with confidence.
@@ -216,6 +302,8 @@ export function TasksView({ initial, canInviteToTeam = false }: { initial: TaskL
                         key={task.id}
                         task={task}
                         today={today}
+                        project={projectOf(task) && { name: projectOf(task)!.name, color: projectOf(task)!.color }}
+                        showProject={projects !== null && projectTab === "all"}
                         dragging={dragId === task.id}
                         onOpen={() => setOpenId(task.id)}
                         onDragStart={(event) => {
@@ -246,6 +334,8 @@ export function TasksView({ initial, canInviteToTeam = false }: { initial: TaskL
           task={open}
           people={people}
           today={today}
+          projects={projects}
+          milestones={milestones}
           canInvite={canInviteToTeam}
           onInvite={(name) => {
             // The Team page opens its invite dialog with this name (team-view.tsx).
