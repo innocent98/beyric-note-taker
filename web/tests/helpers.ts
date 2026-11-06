@@ -140,3 +140,14 @@ export function tasksBody<T>(file: string): T {
 export function teamBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/team-w3", file))).response.body as T;
 }
+
+// A capture from the Slack integration routes (docs/fe-captures/integrations-w10/<file>): the body of
+// the response, or the error a failing one carries.
+export function integrationsBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/integrations-w10", file))).response.body as T;
+}
+
+export function integrationsError(file: string): { status: number; code: string; message: string } {
+  const { response } = JSON.parse(read(join(REPO, "docs/fe-captures/integrations-w10", file)));
+  return { status: response.status, ...response.body.error };
+}

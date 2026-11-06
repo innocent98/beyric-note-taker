@@ -510,3 +510,66 @@ def test_backfill_leaves_meetings_of_accounts_being_deleted_alone(session, user)
     assert workspace.backfill(session, NOW) == {"queued": 0, "decisions_only": 0, "tasks_queued": 0}
     session.refresh(gone)
     assert gone.extraction_status is None
+
+
+# ---- W10: the Slack post after extraction ----
+
+
+def _slack_team(session, user, monkeypatch):
+    import base64
+
+    from app import integrations, slack, teams, vault
+    from tests.test_web import make_settings
+
+    settings = make_settings(token_enc_key=base64.b64encode(b"K" * 32).decode())
+    monkeypatch.setattr(vault, "get_settings", lambda: settings)
+    team = teams.ensure_team(session, user)
+    meeting_row = session.scalars(select(Meeting)).first()
+    meeting_row.shared_team_id = team.id  # only a shared meeting's tasks are posted
+    session.commit()
+    hook = "https://hooks.slack.com/" + "/".join(
+        ["services", "TFAKEFAKE", "BFAKEFAKE", "FAKEFAKEFAKEFAKEFAKEFAKE"]
+    )
+    integrations.connect_slack(session, team.id, user, hook, NOW, sender=lambda *a, **k: None)
+    return slack
+
+
+def test_a_finished_extraction_posts_the_new_tasks_to_slack_once(
+    session, user, meeting, monkeypatch
+):
+    slack = _slack_team(session, user, monkeypatch)
+    calls = []
+    monkeypatch.setattr(slack, "post", lambda url, text, **_: calls.append(text))
+    assert workspace.run_extraction(session, meeting, client=FakeChat([GOOD]), now=NOW) == "done"
+    assert len(calls) == 1 and "send the contract" in calls[0]
+    # Re-reading the same meeting does not post it again.
+    meeting.extraction_status = "pending"
+    session.commit()
+    workspace.run_extraction(session, meeting, client=FakeChat([GOOD]), now=NOW)
+    assert len(calls) == 1
+
+
+def test_slack_down_changes_nothing_about_the_notes_or_tasks(session, user, meeting, monkeypatch):
+    slack = _slack_team(session, user, monkeypatch)
+
+    def boom(url, text, **_):
+        raise slack.SlackError("timeout")
+
+    monkeypatch.setattr(slack, "post", boom)
+    assert workspace.run_extraction(session, meeting, client=FakeChat([GOOD]), now=NOW) == "done"
+    session.refresh(meeting)
+    assert meeting.extraction_status == "done"
+    from app.models import Integration, Task
+
+    assert len(session.scalars(select(Task)).all()) == 1
+    assert session.scalars(select(Integration)).one().status == "failing"
+
+
+def test_a_private_meeting_posts_nothing_to_slack(session, user, meeting, monkeypatch):
+    slack = _slack_team(session, user, monkeypatch)
+    meeting.shared_team_id = None
+    session.commit()
+    calls = []
+    monkeypatch.setattr(slack, "post", lambda url, text, **_: calls.append(text))
+    assert workspace.run_extraction(session, meeting, client=FakeChat([GOOD]), now=NOW) == "done"
+    assert calls == []

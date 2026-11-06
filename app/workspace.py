@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app import ai_runs, mail, tasks, teams, timezones
+from app import ai_runs, integrations, mail, tasks, teams, timezones
 from app.extraction import (
     CheckedExtraction,
     ExtractionFailed,
@@ -263,6 +263,7 @@ def run_extraction(
         for row in session.scalars(select(ReviewItem).where(ReviewItem.meeting_id == meeting_id)):
             if row.fingerprint in hints:
                 row.heard_as = hints[row.fingerprint]
+    post_to_slack = None
     if checked is not None and full:
         live = tasks.reconcile(
             session, meeting, team_id, parsed.action_items, checked.action_items, members, day,
@@ -273,8 +274,13 @@ def run_extraction(
         recent = stamp - created < mail.KEEP_SENT_FOR
         if answered and mail_assignees and not quiet and recent:
             mail.queue_tasks_assigned(session, meeting, tasks.new_assignees(live, owner_id))
+        if answered and not quiet and recent and live:
+            post_to_slack = (list(live), members)
     session.commit()
     session.expire(meeting)
+    if post_to_slack is not None:
+        # After the commit and never raising: a Slack failure cannot touch the notes or the tasks.
+        integrations.notify_meeting(session, meeting, team_id, *post_to_slack, now=stamp)
     return status
 
 

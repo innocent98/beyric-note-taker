@@ -984,7 +984,13 @@ def test_0025_follows_0024():
     assert script.get_revision("0025").down_revision == "0024"
 
 
-def test_0026_follows_0025_and_is_the_only_head():
+def test_0026_follows_0025():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0026").down_revision == "0025"
-    assert script.get_heads() == ["0026"]
+
+
+def test_0032_follows_0026_and_is_the_only_head():
+    # Whoever merges after 0027 to 0031 re-points `down_revision` and this line.
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0032").down_revision == "0026"
+    assert script.get_heads() == ["0032"]

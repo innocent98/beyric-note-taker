@@ -42,6 +42,11 @@ vi.mock("@/lib/api/server", () => ({
         timeZone: { get: async () => ({ time_zone: "UTC", is_set: false }) },
         tasks: { get: async () => ({ auto_create_tasks: true, email_assignees: true }) },
       },
+      integrations: {
+        slack: {
+          get: async () => ({ connected: false, status: null, last_error: null, last_posted_at: null, can_manage: true }),
+        },
+      },
     };
   },
   getReviewOpen: async () => 2,

@@ -30,6 +30,7 @@ export type TaskStatus = Task["status"];
 export type TaskPerson = Schemas["PersonOut"];
 export type MeetingTasks = Schemas["MeetingTasks"];
 export type TasksSettings = Schemas["TasksSettingsOut"];
+export type SlackState = Schemas["SlackOut"];
 // A change sends only the fields that change; the schema lists the defaulted ones as required.
 export type TaskChanges = Partial<Schemas["TaskPatch"]>;
 export type NewTask = Schemas["TaskCreate"];

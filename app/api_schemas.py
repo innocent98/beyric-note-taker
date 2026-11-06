@@ -782,3 +782,19 @@ class AcceptInviteIn(Body):
 
 
 MeetingDetail.model_rebuild()
+
+
+class SlackIn(Body):
+    # The pasted incoming-webhook address; checked and stored encrypted, never returned.
+    webhook_url: str = Field(max_length=300)
+
+
+class SlackOut(BaseModel):
+    connected: bool
+    # `connected`, or `failing` after the last post was refused; null when not connected.
+    status: str | None
+    # A fixed sentence about the last failure; null while posts work.
+    last_error: str | None
+    last_posted_at: datetime | None
+    # Whether the caller may connect or disconnect (owner or admin).
+    can_manage: bool
