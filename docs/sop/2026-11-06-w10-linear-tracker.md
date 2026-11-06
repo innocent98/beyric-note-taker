@@ -14,9 +14,10 @@ An owner or admin connects Linear with a pasted personal API key and picks a Lin
 | Fixed host constant `api.linear.app`; calls go through the new `app/outbound.py` (resolve once, public addresses only, pinned IP + SNI, no redirects, timeouts, answer cut at 64 KB, httpx request log silenced). `app/slack.py` now uses it too | One implementation of the SSRF defences for both integrations. |
 | Linear's own error text is never passed on: only fixed sentences (`auth`, `rate`, `rejected`, `timeout`, `unreachable`, `no_team`) | No leak of Linear's wording or of anything it echoes. |
 | Sends the task's title, due date, and a description with the owner's name and a link to the meeting here | No transcript, quote or notes. Title and names go through `titles.mail_line` (web addresses removed, domains defanged). |
-| Pushed only for meetings shared with the team, only at the first full extraction, one issue per task: `tracker_issues` claim row (unique `task_id`) before the call, deleted again if the call fails | Same visibility rule as the Slack finding; no duplicates across retries or two workers. |
+| Pushed only for meetings shared with the team, only at the first full extraction, one issue per task: `tracker_issues` claim row (unique `task_id`) before the call; deleted again only on a definite refusal (a timeout or unreachable keeps it, because Linear may still have made the issue) | Same visibility rule as the Slack finding; no duplicates across retries or two workers. |
 | One-way and create-only: later edits, status changes and deleted tasks are **not** synced | The scope the spec calls "one-way push of tasks". |
 | Caps per team: 15 issues per meeting, 60 issues per hour, 5 key checks per hour; advisory lock around count-then-insert | Rate caps; a capped task is skipped, never queued. |
+| Only tasks still `todo` and untouched are pushed; the key is re-read after each claim (a disconnect or new key mid-meeting stops the push); a 30 s budget per meeting | Opus review fixes: no push with a deleted key, no worker held by a slow Linear. |
 | A refused key (`auth`) stops further pushes until the key is replaced; the first failure of other kinds stops that meeting's remaining tasks | No hammering a dead key; failures are shown on the card. |
 | User-facing validation errors are **400**, not 422 (also fixed for Slack) | `ApiError.isShowable` hides 404/405/422 as developer text; the screen would show "Something went wrong". |
 
@@ -39,6 +40,9 @@ Gaps for the designer: the key and team form, the failing state, the disabled to
 
 ## Operate / roll back
 Revert; `alembic downgrade 0032` removes `tracker_issues` and Linear rows (issues already in Linear stay). A team disconnects itself in Settings (the key is deleted). Rotation of `TOKEN_ENC_KEY` is the vault's existing process (the re-encrypt script does not yet cover `integrations`, follow-up).
+
+## Opus review (2026-11-06): no Critical
+Fixed: HIGH gzip (the request now asks `Accept-Encoding: identity`, test reads a real un-pre-read stream), claim kept on ambiguous failures, row re-read after each claim, per-meeting time budget, only todo/untouched tasks pushed, stray `.bak` and probe files removed. Accepted: a claim left with no `external_id` after a crash is never pushed (fails safe, counts toward the hourly cap); one bad task (e.g. a refused due date) stops that meeting's remaining tasks.
 
 ## Follow-ups
 Sync of status/edits back and forth, assignee mapping (needs email match), Jira/Asana/Taiga, per-task "Open in Linear" link on the board (the issue URL is stored), re-encrypt script coverage.

@@ -357,10 +357,10 @@ def test_a_failed_push_marks_the_card_removes_the_claim_and_stops(
         add_task(session, team, meeting, position=0),
         add_task(session, team, meeting, title="B", position=1),
     ]
-    fake_linear["fail"] = "timeout"
+    fake_linear["fail"] = "rejected"
     assert integrations.sync_tasks(session, meeting, team.id, live, [], NOW) == 0
     row = session.scalars(select(Integration).where(Integration.kind == "linear")).one()
-    assert row.status == "failing" and row.last_error == linear.TEXT["timeout"]
+    assert row.status == "failing" and row.last_error == linear.TEXT["rejected"]
     assert session.scalars(select(TrackerIssue)).all() == []
 
 
@@ -424,3 +424,67 @@ def test_after_extraction_runs_slack_and_linear_and_survives_both(
     live = [add_task(session, team, meeting)]
     integrations.after_extraction(session, meeting, team.id, live, [], NOW)
     assert len(fake_linear["issues"]) == 1
+
+
+def test_a_timeout_keeps_the_claim_so_a_retry_cannot_duplicate(
+    session, team, owner, meeting, fake_linear
+):
+    connect(session, team, owner)
+    live = [add_task(session, team, meeting)]
+    fake_linear["fail"] = "timeout"
+    assert integrations.sync_tasks(session, meeting, team.id, live, [], NOW) == 0
+    [claim] = session.scalars(select(TrackerIssue)).all()
+    assert claim.external_id is None  # Linear may have made the issue: never push this task again
+    fake_linear["fail"] = None
+    connect(session, team, owner)  # clears the failing state
+    assert integrations.sync_tasks(session, meeting, team.id, live, [], NOW) == 0
+    assert fake_linear["issues"] == []
+
+
+def test_a_task_a_person_already_moved_is_not_pushed(session, team, owner, meeting, fake_linear):
+    connect(session, team, owner)
+    done = add_task(session, team, meeting, title="Done", status="done", position=0)
+    edited = add_task(session, team, meeting, title="Edited", edited_at=NOW, position=1)
+    todo = add_task(session, team, meeting, title="Todo", position=2)
+    assert integrations.sync_tasks(session, meeting, team.id, [done, edited, todo], [], NOW) == 1
+    assert [i["title"] for i in fake_linear["issues"]] == ["Todo"]
+
+
+def test_a_disconnect_between_the_claim_and_the_call_stops_the_push(
+    session, team, owner, meeting, fake_linear, monkeypatch
+):
+    connect(session, team, owner)
+    live = [add_task(session, team, meeting)]
+    original = session.refresh
+
+    def refresh_after_delete(row):
+        session.delete(row)
+        session.flush()
+        original(row)
+
+    monkeypatch.setattr(session, "refresh", refresh_after_delete)
+    assert integrations.sync_tasks(session, meeting, team.id, live, [], NOW) == 0
+    assert fake_linear["issues"] == [] and session.scalars(select(TrackerIssue)).all() == []
+
+
+def test_a_slow_linear_stops_the_meeting_at_the_time_budget(
+    session, team, owner, meeting, fake_linear, monkeypatch
+):
+    connect(session, team, owner)
+    live = [add_task(session, team, meeting, title=f"T{n}", position=n) for n in range(5)]
+    clock = iter([0.0, 0.0, 1.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0])
+    monkeypatch.setattr(integrations.time, "monotonic", lambda: next(clock))
+    made = integrations.sync_tasks(session, meeting, team.id, live, [], NOW)
+    assert made < 5
+
+
+def test_the_request_asks_for_an_uncompressed_body_and_reads_a_real_stream():
+    seen: list[httpx.Request] = []
+    payload = b'{"data": {"teams": {"nodes": []}}}'
+
+    def go(request):
+        seen.append(request)
+        return httpx.Response(200, stream=httpx.ByteStream(payload))  # not pre-read
+
+    assert linear.teams(KEY, resolver=pub, transport=httpx.MockTransport(go)) == []
+    assert seen[0].headers["accept-encoding"] == "identity"

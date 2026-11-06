@@ -36,8 +36,6 @@ logger = logging.getLogger(__name__)
 
 HOST = "hooks.slack.com"
 HTTPS_PORT = 443
-CONNECT_TIMEOUT = 3.0
-READ_TIMEOUT = 5.0
 TOTAL_TIMEOUT = 10.0
 USER_AGENT = "BeyricNoteTaker/1 (slack webhook)"
 MAX_URL_CHARS = 200

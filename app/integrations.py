@@ -8,10 +8,12 @@ everything, records a failure on the row (a fixed sentence, shown on the card) a
 
 import json
 import logging
+import time
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
 from app import linear, slack, tasks, titles, vault
@@ -28,6 +30,10 @@ TESTS_PER_HOUR = 5
 # Linear: issues created per team and hour, and per meeting; a time budget for one meeting's pushes.
 ISSUES_PER_HOUR = 60
 ISSUES_PER_MEETING = 15
+LINEAR_BUDGET_SECONDS = (
+    30.0  # one meeting's pushes stop here, so a slow Linear cannot hold the worker
+)
+AMBIGUOUS = ("timeout", "unreachable")  # the call may have reached Linear
 
 
 def _owner(team_id: int, kind: str) -> str:
@@ -328,22 +334,19 @@ def sync_tasks(
         ):
             return 0  # the key was refused: no more tries until it is replaced
         fresh = sorted(
-            (t for t in live if t.deleted_at is None and t.title), key=lambda t: t.position
+            (
+                t
+                for t in live
+                if t.deleted_at is None and t.title and t.status == "todo" and t.edited_at is None
+            ),
+            key=lambda t: t.position,
         )[:ISSUES_PER_MEETING]
         names = {m.user_id: m.display_name for m in members}
         name = titles.meeting_name(meeting)
-        try:
-            config = json.loads(
-                vault.decrypt(
-                    row.config_enc, row.key_version, purpose="integration",
-                    owner=_owner(team_id, LINEAR),
-                ).reveal()
-            )  # fmt: skip
-            key, linear_team = config["api_key"], config["team_id"]
-        except (vault.VaultError, ValueError, KeyError, TypeError):
-            _fail_linear(session, row, "auth", stamp)
-            return 0
+        deadline = time.monotonic() + LINEAR_BUDGET_SECONDS
         for task in fresh:
+            if time.monotonic() > deadline:
+                break  # a slow Linear must not hold the worker: the rest are left for another day
             _lock_team(session, team_id)
             recent = session.scalar(
                 select(func.count(TrackerIssue.id)).where(
@@ -363,6 +366,19 @@ def sync_tasks(
             session.commit()
             if claimed is None:
                 continue  # already pushed (or being pushed)
+            try:
+                # A disconnect or a new key may have landed meanwhile: use what is stored now.
+                session.refresh(row)
+                key, linear_team = _linear_secret(row, team_id)
+            except (vault.VaultError, ValueError, KeyError, TypeError):
+                session.execute(delete(TrackerIssue).where(TrackerIssue.id == claimed))
+                _fail_linear(session, row, "auth", stamp)
+                return made
+            except InvalidRequestError:  # the row is gone: disconnected
+                session.rollback()
+                session.execute(delete(TrackerIssue).where(TrackerIssue.id == claimed))
+                session.commit()
+                return made
             owner = names.get(task.assignee_user_id) or task.spoken_owner
             try:
                 issue = (create or linear.create_issue)(
@@ -373,7 +389,11 @@ def sync_tasks(
                     task.due_date.isoformat() if task.due_date else None,
                 )
             except linear.LinearError as exc:
-                session.execute(delete(TrackerIssue).where(TrackerIssue.id == claimed))
+                if exc.reason not in AMBIGUOUS:
+                    # A definite refusal: nothing was created, so the task may be tried again.
+                    session.execute(delete(TrackerIssue).where(TrackerIssue.id == claimed))
+                # After a timeout Linear may still have created the issue: the claim stays, so a
+                # later read of the same meeting cannot make a duplicate.
                 _fail_linear(session, row, exc.reason, stamp)
                 return made
             session.execute(
@@ -398,6 +418,15 @@ def sync_tasks(
         except Exception:
             pass
         return made
+
+
+def _linear_secret(row: Integration, team_id: int) -> tuple[str, str]:
+    config = json.loads(
+        vault.decrypt(
+            row.config_enc, row.key_version, purpose="integration", owner=_owner(team_id, LINEAR)
+        ).reveal()
+    )
+    return config["api_key"], config["team_id"]
 
 
 def _fail_linear(session: Session, row: Integration, reason: str, now: datetime) -> None:

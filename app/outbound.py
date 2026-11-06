@@ -43,7 +43,15 @@ def _send(host, path, payload, headers, max_bytes, resolver, transport) -> tuple
         ) from None
     deadline = time.monotonic() + TOTAL_TIMEOUT
     timeout = httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT)
-    sent = {"Host": host, "User-Agent": USER_AGENT, "Content-Type": "application/json", **headers}
+    sent = {
+        "Host": host,
+        "User-Agent": USER_AGENT,
+        "Content-Type": "application/json",
+        # httpx would otherwise ask for gzip, and the raw body is read (its size is cut before any
+        # decompression could inflate it).
+        "Accept-Encoding": "identity",
+        **headers,
+    }
     with httpx.Client(
         transport=transport, timeout=timeout, follow_redirects=False, trust_env=False
     ) as client:
@@ -100,8 +108,7 @@ def post_json(
     transport=None,
 ) -> tuple[int, bytes]:
     """POST `payload` as JSON to `https://host/path` and return `(status, body)`. A 3xx is returned
-    as a status, never followed. A body in a content encoding is returned raw (callers send no
-    `Accept-Encoding`, and read only small, bounded answers)."""
+    as a status, never followed. The request asks for `identity`, so the body is not compressed."""
     outcome: dict = {}
 
     def work() -> None:
