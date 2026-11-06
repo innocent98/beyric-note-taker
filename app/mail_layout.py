@@ -76,7 +76,12 @@ class Button:
     url: str
 
 
-Block = Heading | Meta | Para | Label | Bullets | Rows | Quote | Button
+@dataclass(frozen=True)
+class Divider:
+    """A thin rule between two parts of a mail (translated notes, then the original)."""
+
+
+Block = Heading | Meta | Para | Label | Bullets | Rows | Quote | Button | Divider
 
 
 def check_url(url: str) -> str:
@@ -140,6 +145,8 @@ def _block_html(block: Block) -> str:
                 f'<div style="background:{PAGE};border-radius:10px;padding:14px 16px;'
                 f'margin:0 0 22px;color:#2E3532;font-size:14px">“{esc(text)}”</div>'
             )
+        case Divider():
+            return f'<hr style="border:0;border-top:1px solid {CARD_LINE};margin:8px 0 22px">'
         case Button(label, url):
             return (
                 f'<p style="margin:0 0 4px"><a href="{esc(check_url(url))}" '
@@ -203,6 +210,8 @@ def render_text(
                 )
             case Quote(text):
                 parts.append(f"“{text}”")
+            case Divider():
+                parts.append("----")
             case Button(label, url):
                 parts.append(f"{label}:\n{check_url(url)}")
     parts.append(footer)

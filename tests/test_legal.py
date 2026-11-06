@@ -50,7 +50,8 @@ def test_the_email_use_names_only_the_mail_that_is_sent(anon_client):
         "To send service emails, such as account verification, password resets, waiting-list "
         "and team invitations and notices that an address already has an account, an email when "
         "the notes of a meeting you sent the note taker to are ready, and an email to a teammate "
-        "listing the tasks from a meeting that were assigned to them." in page
+        "listing the tasks from a meeting that were assigned to them, and an email with a "
+        "meeting's notes to the people you choose to share them with." in page
     )
     assert "notices about meetings" not in page  # not sent yet: calendar auto-join is later
 

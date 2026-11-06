@@ -1,0 +1,24 @@
+{
+  "note": "Public. The token is the one in the footer link of the first mail (`/unsubscribe?token=...`). It is used up by this call, so the captured mail files show `<opt-out-token>` instead of it.",
+  "request": {
+    "method": "POST",
+    "path": "/api/mail/opt-out",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "token": "<opt-out-token>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "unsubscribed"
+    }
+  }
+}

@@ -39,6 +39,14 @@ export default async function MeetingPage({ params, searchParams }: Props) {
   ]);
   // Only to know whether there is a team to share with; a failure just hides the switch.
   const teamSize = meeting.can_share ? await api.team.get().then((team) => team.member_count, () => 0) : 0;
+  // For "Share notes": the team's addresses (a participant that matches a member gets theirs) and
+  // the shares so far. Either failing only leaves the dialog without them.
+  const [members, shares] = meeting.can_share
+    ? await Promise.all([
+        api.team.members().then((r) => r.members, () => []),
+        api.meetings.shares.list(id).catch(() => []),
+      ])
+    : [[], []];
   return (
     <AppShell
       current="meetings"
@@ -53,6 +61,8 @@ export default async function MeetingPage({ params, searchParams }: Props) {
         initialTab={tab === "transcript" ? "transcript" : "notes"}
         defaultLanguage={language.default_language}
         teamSize={teamSize}
+        members={members}
+        initialShares={shares}
       />
     </AppShell>
   );

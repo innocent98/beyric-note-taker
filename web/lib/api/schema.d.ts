@@ -460,6 +460,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mail/opt-out": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Opt Out
+         * @description Stop mail from Beyric Note Taker to the address a shared-notes mail was sent to. Public:
+         *     the token in the mail's footer link is the credential. The page the link opens must show a
+         *     button that calls this (mail scanners open links, and a GET must not opt anyone out). The
+         *     token works once, for 180 days. Mail that lets a person into their own account (sign-in,
+         *     password reset) is not stopped.
+         */
+        post: operations["opt_out"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings": {
         parameters: {
             query?: never;
@@ -679,6 +703,37 @@ export interface paths {
          *     else. Doing it twice is fine.
          */
         delete: operations["unshare_meeting"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{meeting_id}/shares": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Shares
+         * @description The shares of a meeting, newest first, for "Shared with ...": who each went to and whether
+         *     it was sent. Only the person who recorded the meeting sees them.
+         */
+        get: operations["list_shares"];
+        put?: never;
+        /**
+         * Create Share
+         * @description Mail the notes of a ready meeting to up to 10 people, each in their own mail, sent as the
+         *     caller (`Reply-To` is the caller, the footer names them). The mail holds the Summary,
+         *     Decisions, Action items and Open questions, abridged; a PDF or Word file with every section
+         *     can be attached, with the transcript if ticked. Nobody outside the caller's team gets a link
+         *     to the notes. A language that is not translated yet is translated first: the answer is still
+         *     202 and `status` is `waiting_translation`. Limits: 10 recipients a share and 20 a day per
+         *     account (429 `share_limit`). Needs a confirmed email.
+         */
+        post: operations["create_share"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2494,6 +2549,19 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** OptOutIn */
+        OptOutIn: {
+            /** Token */
+            token: string;
+        };
+        /** OptOutOut */
+        OptOutOut: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "unsubscribed";
+        };
         /**
          * OverrideIn
          * @description The person's switch for one meeting: true joins it, false does not, null clears the switch
@@ -2694,6 +2762,93 @@ export interface components {
             calendar_template_id?: number | null;
             /** Rule */
             rule?: ("all" | "organizer" | "none") | null;
+        };
+        /** ShareCreated */
+        ShareCreated: {
+            /** Share Id */
+            share_id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "waiting_translation";
+        };
+        /** ShareIn */
+        ShareIn: {
+            /**
+             * Attach
+             * @default none
+             * @enum {string}
+             */
+            attach: "none" | "pdf" | "docx";
+            /**
+             * Include Transcript
+             * @default false
+             */
+            include_transcript: boolean;
+            /** Language */
+            language: string;
+            /** Message */
+            message?: string | null;
+            /** Recipients */
+            recipients: components["schemas"]["ShareRecipientIn"][];
+        };
+        /** ShareList */
+        ShareList: {
+            /** Shares */
+            shares: components["schemas"]["ShareOut"][];
+        };
+        /** ShareOut */
+        ShareOut: {
+            /**
+             * Attach
+             * @enum {string}
+             */
+            attach: "none" | "pdf" | "docx";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Include Transcript */
+            include_transcript: boolean;
+            /**
+             * Language
+             * @enum {string}
+             */
+            language: "en" | "fr" | "es";
+            /** Message */
+            message: string;
+            /** Recipients */
+            recipients: components["schemas"]["ShareRecipientOut"][];
+            /** Share Id */
+            share_id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "waiting_translation" | "queued" | "failed" | "revoked";
+        };
+        /** ShareRecipientIn */
+        ShareRecipientIn: {
+            /** Email */
+            email: string;
+            /** Name */
+            name?: string | null;
+        };
+        /** ShareRecipientOut */
+        ShareRecipientOut: {
+            /** Email */
+            email: string;
+            /** Is Team Member */
+            is_team_member: boolean;
+            /** Name */
+            name: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "sent" | "not_sent" | "failed";
         };
         /** SignUp */
         SignUp: {
@@ -4466,6 +4621,66 @@ export interface operations {
             };
         };
     };
+    opt_out: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OptOutIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptOutOut"];
+                };
+            };
+            /** @description `token_invalid_or_expired` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_meetings: {
         parameters: {
             query?: {
@@ -5298,6 +5513,153 @@ export interface operations {
             };
             /** @description Malformed request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_shares: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareIn"];
+            };
+        };
+        responses: {
+            /** @description Queued: the mails go within a minute, or after the translation. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareCreated"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `email_not_verified` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such meeting (or not the caller's) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_ready`: the notes are not written yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `language_unsupported`, `invalid_recipient`, `no_recipients`, `too_many_recipients` (more than 10) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `share_limit`: 20 recipients a day per account; `translation_limit` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `mail_unavailable`: no mail provider */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
