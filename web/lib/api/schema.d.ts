@@ -590,6 +590,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{meeting_id}/recurring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make Recurring
+         * @description "Make this a recurring meeting?": make a recurring meeting named after this meeting from a
+         *     link that was used before, and put this meeting and the caller's other meetings of the same
+         *     link code into it. Only the meeting's owner (404 for anyone else); 409 `not_reused` when the
+         *     link was not used before; offered by `suggest_recurring` on the meeting.
+         */
+        post: operations["make_recurring"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{meeting_id}/regenerate": {
         parameters: {
             query?: never;
@@ -2306,6 +2329,11 @@ export interface components {
              * @enum {string}
              */
             step: "waiting" | "audio" | "transcribing" | "speakers" | "notes" | "done";
+            /**
+             * Suggest Recurring
+             * @default false
+             */
+            suggest_recurring: boolean;
             /** Tasks */
             tasks: components["schemas"]["TaskOut"][];
             /** Tasks Count */
@@ -4895,6 +4923,73 @@ export interface operations {
             };
             /** @description `export_timeout`: it took too long */
             504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    make_recurring: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingSeriesOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_reused` or `series_limit` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
