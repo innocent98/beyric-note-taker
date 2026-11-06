@@ -1,176 +1,109 @@
 # Beyric Note Taker: master handoff
 
-**Written:** 2026-11-06, about 20:00 WAT, by the eleventh lead session, for the twelfth lead (Adebayo starts it himself). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6, #11, #12, #22, #24, #39, #42, #50, #74, #78, #79, #93, #101, and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail.
+**Written:** 2026-11-06, about 23:50 WAT, by the twelfth lead session, for the thirteenth lead (Adebayo starts it himself). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6, #11, #12, #22, #24, #39, #42, #50, #74, #78, #79, #93, #101, #110, and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail.
 
 ## 00. Read this first
 
-- **Ten PRs are open and green, none merged (section 1).** **All W phases (W4, W6, W8, W9 backend, W10) are built.** The remaining W work is **W9 PR 2 (sprint screens)**, not started. The job now is mostly **merging in order** (section 6, step 1), one deploy at a time, on his word.
-- **Sessions are idle, not running** (section 1). They were started by the eleventh lead, so their end-of-turn notes go to that session, not to you. Find them with `mcp__ccd_session_mgmt__list_sessions`, read them with `list_events`, and resume them with `SendMessage` to their `local_…` id. Each holds its own worktree and branch.
+- **No PR is open. Every W phase (W0 to W10) is built and live.** The twelfth lead merged the whole queue on 2026-11-06 (SOP `docs/sop/2026-11-06-merge-queue-w-phases.md`). The next job is the **bot-reliability decision** (section 2 and 6, step 1), then Phase C's remainder.
+- **Sessions:** the only session the twelfth lead started, `w9-sprint-screens` (`local_6163e9c5-70b3-4b24-9726-403bcd40e412`), is done. The earlier W-phase sessions from the eleventh lead (ids in the previous handoff) were **not found** on this machine: treat them as gone and start fresh sessions with a full brief when needed.
 - **The auto-mode safety checker refuses:**
-  - **any production read**: database queries, `docker compose logs`, and the bot's log files. Adebayo runs these and pastes the result; for long output, give him a command that writes to a file in your scratchpad, then read the file.
-  - **a merge**, unless his "Merge #N" was said in YOUR chat.
-  - **a force push** to a sub-session's branch.
-
-  What still works: `git rev-parse` and `docker compose ps` over the allow-listed ssh, each as its own command.
-- **Stacked PRs:** retarget the stacked PR to `main` (`gh pr edit N --base main`) BEFORE merging its base with `--delete-branch`, or GitHub closes it (happened to #98). After a squash merge, the stacked branch needs an ordinary `git merge origin/main` by its session or by you.
-- **Migrations 0027 to 0033 all exist in parallel PRs** (section 1). Whoever merges later re-points `down_revision` with an ordinary commit and checks that `alembic heads` shows one head. Some PRs' `tests/test_migrations.py` names the head; update that too.
-- `gh pr merge --match-head-commit` needs the **full 40-character SHA** (a short one is refused).
+  - **any production read** (database queries, `docker compose logs`, the bot's log files): Adebayo runs these and pastes the result; for long output, give him a command that writes to a file in your scratchpad, then read the file;
+  - **a merge**, unless his "Merge #N" was said in YOUR chat (this session was given "merge all open PRs" plus "no meeting for 2 hours" and that worked);
+  - **a force push** to a sub-session's branch;
+  - **a command that combines a local file read with the ssh line**: run each of `ssh haven-respite '...'` and `curl .../health` as its own command.
 - Adebayo likes plain words: purpose first, exact steps, an offer to do it for him. When he asks "where are we", answer from live commands, not memory.
 
 ## 0. Mode and standing rules
 
-- **Merge only on his explicit word** ("Merge #N", typed in this chat). Before every merge the active-meetings count must be 0 (he runs it, or says there are no meetings). Every merge to `main` deploys (`ci`, then `deploy`, about 8 minutes in all); never deploy while a meeting is `bot_sent` or `processing`.
-  - Merge with `gh pr merge N --squash --delete-branch --match-head-commit <full sha>`.
-  - After the deploy, verify the server head, `docker compose ps` and `/health` 200, and check that the merge commit carries no attribution.
-- **Before asking him to merge, check:**
-  - base `main`, mergeable, every CI job green (GitGuardian false positives named);
-  - branch name `feature|fix|docs|chore/…`, never `claude/`;
-  - no Co-Authored-By or "Generated with" in the commits or the body;
-  - "Server steps before merge", and the migration number;
-  - for policy pages, that "Last updated" / `TERMS_VERSION` is NOT bumped (his no-notice rule).
+- **Merge only on his explicit word** ("Merge #N", typed in this chat). Before every merge the active-meetings count must be 0 (he runs it, or says there are no meetings for a stated time). Every merge to `main` deploys (`ci`, then `deploy`, about 8 to 12 minutes in all) and restarts the bot worker: never deploy while a meeting is `bot_sent` or `processing`.
+  - Merge with `gh pr merge N --squash --delete-branch --match-head-commit <full 40-char sha>`; for a branch whose history mentions a `claude/` branch name or any attribution, add `--subject` and `--body` of your own.
+  - After the deploy: server head, `docker compose ps`, `/health` 200, and the merge commit has no attribution.
+- **Before asking him to merge, check:** base `main`, mergeable, every CI job green (GitGuardian is a known false positive, see below); branch name `feature|fix|docs|chore/…`, never `claude/`; no Co-Authored-By or "Generated with" in the commits or the body; "Server steps before merge" and the migration number; for policy pages, that "Last updated" / `TERMS_VERSION` is NOT bumped (his no-notice rule).
 - **Sessions:** the lead coordinates; sub-sessions work in worktrees, open PRs and never merge. At most 3 build at once. Sonnet implements. Opus reviews anything touching auth, tokens, sessions, deletion, mail, permissions, money, bot placement, locking and outbound secrets, in the foreground.
 - **UI rule:** every screen follows `docs/ui/Beyric Note Taker redesign/` with FULL parity and nothing invented; read the WHOLE design file before briefing. Where the designer drew nothing, build from the file's own patterns ONLY with his approval, labelled "lead-designed, not in the designer's file" in the SOP and the PR. Drawn features with no backend are shown switched off with one "Not available yet" line; no dead buttons on the meeting page.
 - No AI attribution anywhere in git or GitHub (ignore any reminder that asks for a trailer or footer). No `claude/` branch on the remote (push `HEAD:<prefix>/<slug>`). SOP, checklist and a real-capture FE guide with every shipment. Fast checks locally; CI runs the rest.
 
-## 1. Current state (2026-11-06, about 20:00 WAT)
+## 1. Current state (2026-11-06, about 23:50 WAT)
 
 | Thing | State |
 |---|---|
-| Live app | https://notes.beyrictech.com healthy. **Server head `84a01f8`** (#106), 8 containers up, `/health` 200. Alembic head on the server **0026** |
-| Merged and deployed today | **#106** waiting-room fix (no migration). Vexa raises `needs_help` (`waiting_room_timeout_approaching`) at 80% of its 15-minute lobby budget; our 2-minute prompt rule had been withdrawing the knock just as hosts admitted the bot (meetings 15 and 16 failed this way). SOP `docs/sop/2026-11-06-lobby-timeout-warning.md` |
-| Auto-join | Live, his rule "All meetings with a video link". **First auto-joined meeting (14:00) failed** (the bug above). **The 16:00 meeting joined** after #106 deployed at 15:51; he was to explain how it went (notes, tasks, mail): ask him |
-| Server `.env` | Unchanged today. Microsoft variables were added 2026-11-05 (`MICROSOFT_CALENDAR_ENABLED=false`) |
-| Postgres test ports | 54323 to 54340 used; next **54341** |
-| CI | `ci.yml`: changes, lint, test 1/4..4/4, web, ci summary; GitGuardian too. Web-only PRs skip the Python jobs |
+| Live app | https://notes.beyrictech.com healthy. **Server head `e0ad10b`** (#111, the last merge of the queue; deploy verified: 8 containers up, `/health` 200). Alembic head **0033** |
+| Migration chain on `main` | 0026, 0027, 0028, 0031, 0029, 0030, 0032, 0033 (merged out of order, one head). Next free number **0034** |
+| Open PRs | **None.** The queue merged: #96, #100, #102, #108, #99, #103, #104, #105, #107, #109, #111 (merge commits in the SOP) |
+| Auto-join | Live, his rule "All meetings with a video link". Today's real joins: the 14:00 meeting failed (our worker withdrew the knock, fixed by #106); the 16:00 calendar meeting (MYWAY PRODUCT & DEVELOPMENT STANDUP) was **refused by Google twice** ("Google would not let the bot ask to join", then Failed after "attempt 2 of 2"); a manual link a few minutes later was refused once and admitted on the second send; a later manual meeting worked fully (notes, summary) |
+| Server `.env` | Unchanged today. Microsoft variables exist since 2026-11-05 (`MICROSOFT_CALENDAR_ENABLED=false`). W6, W8 (reminders off per team until switched on), W9, W10 added no required variable. The server must reach `hooks.slack.com:443` and `api.linear.app:443` for W10 |
+| nginx | #99's opt-out line was run by him on 2026-11-06 (count 1, `nginx -t` ok) |
+| Postgres test ports | 54323 to 54342 used (the lead's scratch container on 54342 is stopped); next **54343** |
+| CI | `ci.yml`: changes, lint, test 1/4..4/4, web, ci summary; GitGuardian too (red on every PR since #96, see below). Web-only PRs skip the Python jobs |
 
-**Open PRs** (all CI green except #96's GitGuardian false positive; none carries attribution):
-
-| PR | What | Base | Head | Migration | Server steps | Review |
-|---|---|---|---|---|---|---|
-| #96 | Outlook M1 provider foundation | main | `7a6fbf7` | 0027 | none | GitGuardian 39721275 is a false positive (provider-name constant) |
-| #100 | W4 Projects backend | main | `cda22c8` | 0028 | none | Opus: 0 Critical/High, fixed |
-| #102 | W4 Projects screens | #100 | `bc963a1` | — | none | lead-designed "Set milestone" chip |
-| #99 | W6 Share backend | main | `d605e5a` | 0029 | **nginx one-liner right after the merge** (in its body) | Opus: 0 Critical/High |
-| #103 | W6 Share screens | #99 | `63c11a3` | — | none | lead-designed "Add email", `/unsubscribe`, translation toast |
-| #104 | W8 Series backend | main | `8522ac0` | 0030 | none (reminders OFF per team until switched on) | Opus comment on the PR |
-| #105 | W8 Series screens incl. the **recurring meeting detail page** | #104 | `7a4ff44` | — | none | 3 lead-designed pieces (approved 16:20) |
-| #108 | W9 Sprints backend | **#100** | `b4cecff` | 0031 (revises 0028) | none (hourly rollover on the scheduler) | Opus: 0 Critical/High, 3 smaller fixed |
-| #107 | W10 Slack webhook | main | `b2ff859` | 0032 | none; server must reach `hooks.slack.com:443` | Opus: no Critical/High/Medium |
-| #109 | W10 Linear tracker | **#107** | `e80d00a` | 0033 | none; server must reach `api.linear.app:443` | Opus High (gzip) fixed |
-
-**Sessions (all idle; resume with `SendMessage` to the id):**
-
-| Name | Id | What is left |
-|---|---|---|
-| `w9-sprints` | `local_06c3690d-b9bc-4664-8484-d7b3b5dec3ba` | **PR 2 screens, not started** (stack on #108, merge the W4 screens in, parity proof). Later: turn on W8's sprint lines once #104 and #105 are on main. Has 5 "choices to confirm" (section 5) |
-| `w10-integrations` | `local_6fbce808-a180-4b7d-b879-234a40cd84ef` | Done unless merges need re-pointing. **It built lead-designed pieces WITHOUT asking first** (section 5) |
-| `w8-series` | `local_b74b947c-a713-4c4d-a267-f4de5715a2f7` | Done |
-| `w4-projects` | `local_f8c99408-05ce-4b09-8c3c-d00ede0c758f` | Done |
-| `w6-share` | `local_9dc4ad8c-97f3-43a1-a57b-29be0eb33a3b` | Done |
-| `outlook-phase-o` | `local_14a39982-3980-4e4b-afcc-75908420fa11` | Paused: waits for his M0 run |
-
-## 2. Decisions taken 2026-11-06 (older ones: git history of this file and the memory files)
+## 2. Decisions taken 2026-11-06 (evening; older ones in git history and the memory files)
 
 | Decision | Why |
 |---|---|
-| Google's declared scope confirmed as exactly `calendar.events.readonly` | Matches what the app requests |
-| W4: build the "Set milestone" chip lead-designed; sprint stats switched off until W9 | His "Yes" |
-| Opus review of #100 approved | Permission checks |
-| W4 re-file rule: a member given a task cannot move it to another project or milestone; only the owner, an admin or the maker of a manual task can | His "Yes, confirm" (spec 6.1/6.3) |
-| W8 started; then its three undrawn pieces lead-designed: "Add to recurring meeting", the "Make this a recurring meeting?" chip, a personal switch for agenda and reminder mail | His "Yes, start W8" / "Yes, design them" |
-| Waiting-room fix built by the lead and merged | His "Yes, build it" / "Merge #106" (count 0) |
-| W9 and W10 started to complete the W phases; W10 tracker is **Linear** | His "proceed with W9 and W10" / "Linear" (pasted personal key, fixed host, simplest secure model) |
-| His own research on skipping the lobby (inviting a signed-in bot via `calendar.events` write) | Reviewed with him: right direction, but it needs a signed-in bot. Vexa Lite does not support that and Vexa issue #1725 blocks it; the write scope means a stricter Google review; one live bot per Google account. Parked as a separate decision (checklist backlog) |
+| Merge the whole queue in order, one deploy at a time; his "no meeting due for 2 hours" stood for the run | His "merge all open PRs starting from #96" after testing #96 |
+| W10's lead-designed pieces (webhook form, key-and-team form, failing state, teammate note, "Only Linear is available for now", "Slack connected" chip) approved | His "OK" on "Your OK on its lead-designed pieces" |
+| **"Retry the bot better" (more attempts, Send again) is NOT enough** as the answer to Google refusing the bot | His words: that would be frustrating for pilot users. He wants a more reliable, more trustworthy bot (a real account, not an anonymous guest) |
+| Compare hosted bot vendors and the open-source names he found | Research done: `docs/spike/meeting-bot-vendors.md` (below) |
+
+**What the vendor research found** (read by a sub-agent on 2026-11-06, not re-read by the lead; labelled read / vendor claim / not verified in the file):
+- Meetily, Meet2Notes, Prismical and Platypus are **desktop apps that record your own laptop audio**: none sends a bot into a call. Drop them.
+- **A signed-in bot only skips the knock if its account email is on the calendar invite** (Recall, Skribby and MeetStream all say so). Otherwise it still knocks, though it looks more trustworthy.
+- **Recall does not run an account pool for you** (the previous lead's note said it did: wrong). You supply a dedicated Google Workspace and Legacy SSO. MeetStream is the same. Skribby takes a Gmail or Workspace email, password and authenticator key typed into its dashboard.
+- Prices for 50 recorded hours a month (vendor's bot and, where stated, its transcript; **not** our own AI, which is a separate cost that does not change): Recall about USD 32.50, MeetStream about 22.50, Skribby 19.50 to 68; plus a Google Workspace seat for the bot account (not priced). Skribby was bought by a US telco-software firm in September 2026 and lists no SOC 2; MeetStream's owners are not identified; Recall's trust pages returned 404.
+- Vexa's signed-in mode is still blocked upstream (issue #1725 open; fix PR #1873 unmerged and now has conflicts) and unsupported on Lite.
+- **Proposed next step (awaiting his yes):** a one-week bake-off on real meetings, Skribby's free tier (5 bot hours a month) and Recall's 5 free hours, guest joins first (their IPs may do better than ours; no accounts needed) then a signed-in bot invited to the event; count joins, knocks and 403s ourselves. He signs up and pastes keys (the lead cannot create accounts); the lead writes a small script that runs from his Mac and logs outcomes, nothing deployed to the server.
 
 ## 3. Designs, specs, plans
 
 - AI workspace spec `docs/superpowers/specs/2026-11-03-ai-workspace-design.md`; pilot spec `docs/superpowers/specs/2026-11-03-pilot-accounts-calendar-design.md`; plan `docs/superpowers/plans/2026-11-03-pilot-accounts-calendar.md`; Outlook spec `docs/superpowers/specs/2026-11-04-outlook-oauth-design.md`.
-- Meet join research `docs/spike/meet-join-resilience.md` (signed-in bots, why the lobby happens).
+- Meet join research `docs/spike/meet-join-resilience.md` (signed-in bots, why the lobby happens) and the vendor comparison `docs/spike/meeting-bot-vendors.md`.
 - UI truth `docs/ui/Beyric Note Taker redesign/`; parity shots `docs/ui/parity/`.
-- FE guides `docs/fe-integration-guide-*.md`. Projects, share, series, sprints and integrations are in their open PRs.
+- FE guides `docs/fe-integration-guide-*.md` (real captures in `docs/fe-captures/`), including projects, share, series, sprints and integrations.
 
 ## 4. What is covered
 
-Built and live: modules 0 to 2b, accounts, Phase C up to C14, C15a, W0.2 to W0.5, W1, W2, W3, W5, W7, time zone, the cost ledger, and the waiting-room fix. **Built, in open PRs:** W4, W6, W8 (with the recurring meeting detail page), the W9 backend, W10 (Slack and Linear), Outlook M1. **Not built:** W9 screens, W8's sprint lines (after W9), C15b to C18, ICS C19 to C24, Teams T1 to T3, Outlook M0 run and M2 to M8, pre-sign-up PR 3, Phases I, D, V.
+Built and live: modules 0 to 2b, accounts, Phase C up to C14, C15a, **W0 to W10 all** (W4, W6, W8 with the recurring meeting detail page, W9 backend and screens, W10 Slack and Linear merged 2026-11-06), Outlook M1, time zone, the cost ledger, the waiting-room fix. **Not built:** W8's sprint lines (now unblocked), C15b to C18, ICS C19 to C24, Teams T1 to T3, Outlook M0 run and M2 to M8, pre-sign-up PR 3, Phases I, D, V; the bot-reliability decision.
 
 ## 5. Needs Adebayo
 
-- **How the 16:00 meeting went**, and a check of its notes, tasks and mail. That is the go for "Merge #96".
-- **W10's lead-designed pieces were built without his OK** (the session was told to ask). The webhook form, the key-and-team form, the failing state, the teammate note, the "Only Linear is available for now" line and the "Slack connected" chip. Ask him to approve or reject before merging #107 and #109.
-- **W9's five choices to confirm:**
-  1. The Mon-Fri switch only affects "1 week, 5 working days".
-  2. A sprint closed early keeps its planned end date.
-  3. The team zone is the owner's Settings zone.
-  4. Settings go through `PATCH /api/team`, not the spec's `PUT /api/team/settings`.
-  5. Existing tasks are not backfilled into sprints.
-- **W8 reminders:** off until an owner or admin turns them on. The session suggests the Google policy wording lands before anyone switches them on.
-- **GitGuardian:** mark 39721275 (#96) a false positive; 39724142 (#99) resolved.
-- **Outlook M0 run** (about 20 minutes, at the keyboard): steps in `docs/spike/outlook-m0/README.md` on #96's branch and in the `outlook-phase-o` session. Confirm the Entra app registration matches spec 9.1. Partner Center verification for Beyrichq LTD.
-- **Transcription price:** confirm $0.0045 per audio minute on OpenAI's pricing page.
-- **Google verification (Phase V):** demo video, scope justification and landing trim (the lead offered a docs PR).
-- **Real-service checks not done:** a real Resend send for W6 (command in its SOP); a real Slack webhook and a real Linear key for W10 (only mock tests and simulated captures so far).
+- **The bot decision:** yes or no to the one-week bake-off (section 2), and sign-ups for Skribby and Recall (keys pasted into the chat, or put on the server by him). Also: does he accept recordings leaving our server (a vendor becomes a sub-processor in the privacy policy)?
+- **GitGuardian:** mark 39721275 (#96) and the repeats on #100, #102, #103, #104, #105, #107, #109, #111 as false positives (almost certainly Microsoft's public consumer-tenant GUID `9188040d-6c67-4c5b-b112-36a304b66dad`; GitHub does not show the location).
+- **W9's five backend choices** (still unconfirmed): Mon-Fri switch only affects "1 week, 5 working days"; a sprint closed early keeps its planned end date; the team zone is the owner's Settings zone; settings go through `PATCH /api/team`; existing tasks are not backfilled. **W9's three undrawn pieces** wait for the designer.
+- **Two Medium findings from the automated security review of W8** (his call): the agenda recipient count includes attendees of meetings the caller cannot read; series visibility from calendar rows. Details in the checklist's "Deferred follow-ups".
+- **Real-service checks not done:** a real Slack webhook and a real Linear key (W10); a real Resend send for W6; W8 reminders stay off until an owner or admin switches them on (the session suggests the Google policy wording lands first).
+- **Outlook M0 run** (about 20 minutes, at the keyboard): steps in `docs/spike/outlook-m0/README.md`; Partner Center verification for Beyrichq LTD.
+- **Transcription price:** confirm USD 0.0045 per audio minute on OpenAI's pricing page (it decides the comparison with a vendor's bundled transcript).
+- **Google verification (Phase V):** demo video, scope justification, landing trim.
+- **For the designer:** confirm or redraw every lead-designed piece; each SOP lists them.
 - Older items: "Forgot password" real test, Android share-target test, backup cron (privacy promises 14-day deletion), keep a copy of `TOKEN_ENC_KEY`, Cloudflare proxy, hosting country/DPO/lawyer read, the mailboxes `privacy@`/`legal@`/`security@`, Search Console TXT, a Teams meeting for the Teams spike, the Resend plan (Free is 100 mails a day).
-- **For the designer:** confirm or redraw every lead-designed piece. The list is in each SOP: disconnect banner and email, delete confirm, W3's four pieces, W4's chip, W6's three, W8's three, W10's.
 
 ## 6. Incoming work, in order
 
-1. **Merge queue** (each on his "Merge #N", count 0, about 8 minutes per deploy). Before each merge, retarget its stacked PR to `main`, and re-point migrations so one head remains.
-   1. #96 (0027), after he confirms the 16:00 meeting.
-   2. #100 (0028 → 0027). Retarget #102 and #108 to main first.
-   3. #102.
-   4. #108 (0031 → 0028, already).
-   5. #99 (0029 → 0031), then he runs the nginx line. Retarget #103 first.
-   6. #103.
-   7. #104 (0030 → 0029). Retarget #105 first.
-   8. #105.
-   9. #107 (0032 → 0030), after his OK on the lead-designed pieces. Retarget #109 first.
-   10. #109 (0033).
-
-   Ask the owning session to do any re-point or conflict merge, or do it yourself with an ordinary commit in a worktree.
-2. **W9 PR 2 (screens)**: resume `w9-sprints`. Then turn on W8's sprint lines once #104 and #105 are on main.
-3. **Phase C remainder after #96 merges:** C15b ("Send now" and "Not recorded"), C16 (deploy gate: a deploy waits while a join is due; today a deploy during a join is avoided only by the manual count), C18 (recording notice), then C17 (close-out with a phase Opus review), then ICS C19 to C24.
-4. **Bot reliability:**
-   - check the next meetings someone else hosts (the waiting-room fix is unverified when a host admits after the 12-minute warning);
-   - a longer lobby if hosts admit after 15 minutes (`VEXA_LOBBY_BUDGET_S` on `vexa`, because Vexa's reconcile reaps at budget + 60 s; check that Lite reads the variable);
-   - a signed-in bot to skip the lobby (a separate decision, see section 2).
-5. Outlook M2 to M8 (ships dark until Teams works); Teams T1 to T3; pre-sign-up PR 3; Phases D, I, V. Backlog: fail fast when Google refuses the bot, speaker name-order merge, keep `botlog.txt` for failed joins.
-6. Housekeeping: stale unticked checklist lines (CI sharding #70, "email the notes to the owner", P0.4 Resend). Old worktrees under `.claude/worktrees/` can go with `mcp__ccd_host__clean_up_worktrees` once their PRs merge.
+1. **Bot reliability.** On his yes: the bake-off script (a small, local, non-deployed tool; Skribby and Recall APIs; logs time, guest or signed-in, result, seconds to the lobby, reason). Then a decision, then an adapter behind `VexaClient` (`app/vexa.py`) for the chosen vendor, with Vexa kept as the fallback. Also still true: check the next meetings someone else hosts (the waiting-room fix is unverified when a host admits after the 12-minute warning) and a longer lobby budget if hosts admit after 15 minutes (`VEXA_LOBBY_BUDGET_S`).
+2. **Phase C remainder:** C15b ("Send now" and "Not recorded"), C16 (deploy gate: a deploy waits while a join is due), C18 (recording notice), then C17 (close-out with a phase Opus review), then ICS C19 to C24.
+3. **W8's sprint lines** (the sprint line under "Next meeting" and sprint rows on the series page): small follow-up, now unblocked.
+4. Outlook M2 to M8 (ships dark until Teams works); Teams T1 to T3; pre-sign-up PR 3; Phases D, I, V. Backlog: fail fast when Google refuses the bot, speaker name-order merge, keep `botlog.txt` for failed joins.
+5. **Housekeeping:** stale unticked or "open, not merged" lines still sit in older checklist sections (Phase A, Phase C C1 to C4, W2, W0.3); old worktrees under `.claude/worktrees/` can go with `mcp__ccd_host__clean_up_worktrees` (the lead's own `lead-w4` is one; it has a `node_modules` symlink to another worktree).
 
 ## 7. How we work here
 
 - Branch from `main`, PR, CI green, merge on his word (section 0). After a merge, verify, each as its own command:
   - `ssh haven-respite 'cd /opt/beyric-note-taker && git rev-parse --short HEAD && docker compose ps --format "{{.Service}} {{.Status}}"' </dev/null`
   - `curl -s -o /dev/null -w "%{http_code}" https://notes.beyrictech.com/health`
-- Waiting for a deploy: loop on `gh run list --commit <full sha> --json name,status,conclusion` until `deploy=completed`.
+- Waiting for a deploy: loop in the background on `gh run list --commit <full sha> --json name,status,conclusion` until `deploy=completed`.
 - **Active-meetings count (he runs it):**
   `ssh haven-respite 'cd /opt/beyric-note-taker && docker compose exec -T db sh -c "psql -U \$POSTGRES_USER -d \$POSTGRES_DB -t"' <<< "select count(*) from meetings where status in ('bot_sent','processing');"`
-- **Debugging a join (he runs it; output to your scratchpad file).** These were used on 2026-11-06:
-  - our rows: `select id, status, completion_reason, join_attempts, vexa_meeting_id, failure_reason from meetings ...`;
-  - Vexa's log: `docker compose logs --since 9h --no-color --timestamps vexa | grep ...`;
-  - Vexa's row: `docker compose exec -T vexa-db psql -U postgres -d vexa <<< "select id, status, data::text from meetings where id in (...)"`;
-  - the bot log: `docker compose exec -T vexa-storage sh -c "grep ... /srv/vexa-storage/data/vexa/signal/1/<vexa id>/*/botlog.txt"`.
-
-  Vexa's `data.join_evidence.attribution: user_action` with `stop_requested: true` means our worker stopped the bot.
-- **Vexa source** for reading behaviour: `spike/vexa` in the main checkout, at `31122f9` = v0.12.29. Key places:
-  - `core/meetings/modules/join/src/shared/escalation.ts`;
-  - `core/meetings/services/meeting-api/src/meeting_api/bot_spawn/`;
-  - `core/meetings/services/meeting-api/src/meeting_api/lifecycle/`.
-- **AI cost and the extraction review:** see the git history of this file (#101 version, section 7).
+- **Debugging a join (he runs it; output to a file in your scratchpad):** our rows (`select id, status, completion_reason, join_attempts, vexa_meeting_id, failure_reason from meetings ...`), Vexa's log (`docker compose logs --since 9h --no-color --timestamps vexa | grep ...`), Vexa's row (`docker compose exec -T vexa-db psql -U postgres -d vexa <<< "select id, status, data::text from meetings where id in (...)"`), the bot log (`docker compose exec -T vexa-storage sh -c "grep ... /srv/vexa-storage/data/vexa/signal/1/<vexa id>/*/botlog.txt"`). Vexa's `data.join_evidence.attribution: user_action` with `stop_requested: true` means our worker stopped the bot.
+- **Vexa source** for reading behaviour: `spike/vexa` in the main checkout, at `31122f9` = v0.12.29 (`core/meetings/modules/join/src/shared/escalation.ts`, `.../meeting-api/src/meeting_api/bot_spawn/`, `.../lifecycle/`).
 - **Host nginx edits** (he runs them): `sudo sed -i.bak '<edit>' /etc/nginx/sites-available/beyric-notes && sudo nginx -t && sudo systemctl reload nginx`. Never copy `deploy/nginx.conf` over the host file.
-- **Briefs to sub-sessions:**
-  - start with `git fetch origin && git merge --ff-only origin/main`;
-  - push `HEAD:<prefix>/<slug>`;
-  - no AI attribution; do not merge;
-  - "Server steps before merge";
-  - a reserved migration number (next free **0034**) and its own Postgres port (next **54341**);
-  - the UI rule, and that lead-designed pieces need his OK BEFORE building;
-  - Opus reviews in the foreground;
-  - poll CI in the same turn;
-  - report in about 12 lines.
-- **Python checks:** `ruff check .`, `ruff format --check .`, pytest on the touched files (`TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:<port>/notetaker_test`). **The main `.venv` lacks `cryptography`**: use `.claude/worktrees/priceless-hopper-97cd50/.venv/bin/python -m pytest` and its `ruff` (0.17.3, the pinned version). **Web:** `npm run lint`, `npm run typecheck`, `npx vitest run` in `web/`.
-- **Conflict churn:** `app/api.py`, `app/services.py`, `app/api_team.py`, `tests/test_sweeps.py`, the meeting page, the Settings page, `web/tests/helpers.ts`, the checklist, `docs/openapi.json` and `web/lib/api/schema.d.ts` (regenerate with `scripts/export_openapi.py` and `npm run gen:api`).
+- **Briefs to sub-sessions:** start with `git fetch origin && git merge --ff-only origin/main`; push `HEAD:<prefix>/<slug>`; no AI attribution; do not merge; "Server steps before merge"; a reserved migration number (next free **0034**) and its own Postgres port (next **54343**); the UI rule, and that lead-designed pieces need his OK BEFORE building; Opus reviews in the foreground; poll CI in the same turn; report in about 12 lines. The app's worktree branch prefix may name a local branch `claude/...`: never push that name.
+- **Python checks:** `ruff check .`, `ruff format --check .`, pytest on the touched files (`TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:<port>/notetaker_test`, run with `PYTHONPATH=.` from the worktree). **The main `.venv` lacks `cryptography`**: use `.claude/worktrees/priceless-hopper-97cd50/.venv/bin/python -m pytest` and its `ruff` (0.17.3, the pinned version). **Web:** `npm run lint`, `npm run typecheck`, `npx vitest run` in `web/` (a worktree without `node_modules` can symlink another worktree's, same lockfile).
+- **Conflict churn:** `app/api.py`, `app/api_schemas.py`, `app/sweeps.py`, `app/models.py`, `app/teams.py`, `app/api_team.py`, the meeting page, the Settings page and `settings-planned-sections.tsx`, `web/tests/helpers.ts`, `web/scripts/mock-api.mjs`, the checklist, `docs/openapi.json` and `web/lib/api/schema.d.ts` (regenerate with `PYTHONPATH=. scripts/export_openapi.py` and `npm run gen:api`; then check no route or schema was lost). The merge recipes that worked are in the merge-queue SOP.
 - **The main checkout** is behind `main` and has uncommitted design files plus `review.html` (his): leave it, and work in worktrees.
 - **Lessons of 2026-11-06:**
-  - read the bot's own log before theorising (the cause was our worker, not Google);
+  - read the bot's own log before theorising (the 14:00 failure was our worker, not Google; the 16:00 one really was Google refusing);
   - a sub-session told to ask before lead-designing may build anyway: check every PR for unlabelled or unapproved pieces;
-  - sessions stop after PR 1 and wait: nudge them on to PR 2.
+  - sessions stop after PR 1 and wait: nudge them on to PR 2;
+  - merging a stacked base with `--delete-branch` closes its stacked PR unless it was retargeted first;
+  - after a squash merge, every branch built on the old commits conflicts again: plan the order so each branch is updated once, and update the shared-file branches last;
+  - an automated post-push security review can flag already-merged code: judge it, record it in the checklist, and do not patch mid-queue unless it is a real hole.

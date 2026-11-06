@@ -243,7 +243,11 @@ describe("the invite dialog", () => {
     window.sessionStorage.setItem("beyric.invite-name", "Kemi Adeyemi");
     render(<TeamView initialTeam={team} initialMembers={list} />);
     const dialog = await screen.findByRole("dialog", { name: "Invite people" });
-    expect(within(dialog).getByLabelText("Name (optional)")).toHaveProperty("value", "Kemi Adeyemi");
-    expect(window.sessionStorage.getItem("beyric.invite-name")).toBeNull();
+    // The dialog can be on screen a moment before the saved name is put in its field (and the saved
+    // name removed): wait for both, as a slow CI machine showed.
+    await waitFor(() => {
+      expect(within(dialog).getByLabelText("Name (optional)")).toHaveProperty("value", "Kemi Adeyemi");
+      expect(window.sessionStorage.getItem("beyric.invite-name")).toBeNull();
+    });
   });
 });

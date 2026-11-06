@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status (2026-11-06, about 20:00 WAT):** MVP live at notes.beyrictech.com; migrations at **0026** (server head `84a01f8`). Merged and deployed 2026-11-06: **#106** waiting-room fix (Vexa's lobby-timeout warning no longer withdraws the bot; meetings 15 and 16 had failed; the 16:00 meeting joined after the fix). **Built, in open PRs (all green, none merged):** #96 Outlook M1 (0027), **W4** #100 (0028) + #102, **W6** #99 (0029) + #103, **W8** #104 (0030) + #105 (with the recurring meeting detail page), **W9 backend** #108 (0031, stacked on #100), **W10** Slack #107 (0032) + Linear #109 (0033). **Not built:** W9 screens, W8's sprint lines, C15b to C18, ICS (C19 to C24), Teams T1 to T3, Outlook M0 run and M2 to M8, pre-sign-up PR 3, Phases I, D, V. Some older lines below are stale (e.g. CI sharding #70 shipped): reconcile in a docs PR. Merge order and his queued items: `docs/HANDOFF-master.md`.
+**Status (2026-11-06, about 23:45 WAT):** MVP live at notes.beyrictech.com; migrations at **0033** (server head `e0ad10b`, chain 0026, 0027, 0028, 0031, 0029, 0030, 0032, 0033). **All ten PRs of the 2026-11-06 queue are merged and deployed, one at a time:** #96 Outlook M1 (0027, `b239e12`), W4 #100 (0028, `a1488fa`) + #102 (`964e5b9`), W9 backend #108 (0031, `32dee7c`), W6 #99 (0029, `6319dbe`) + #103 (`5ba2305`), W8 #104 (0030, `9471c2c`) + #105 (`4b1e26d`), W10 Slack #107 (0032, `e3b7324`) + Linear #109 (0033, `ee3ec88`), W9 screens #111 (`e0ad10b`). Earlier today: #106 waiting-room fix. **All W phases (W0 to W10) are built.** **Not built:** W8's sprint lines, C15b to C18, ICS (C19 to C24), Teams T1 to T3, Outlook M0 run and M2 to M8, pre-sign-up PR 3, Phases I, D, V; the bot-reliability decision (vendor bake-off, `docs/spike/meeting-bot-vendors.md`). Some older lines below are stale (merged PRs still marked open): reconcile as you touch them. Merge order and his queued items: `docs/HANDOFF-master.md`.
 
 Legend: `[x]` done and verified, `[ ]` not done.
 
@@ -425,7 +425,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] Server steps after merge: migrate (deploy does), then `docker compose exec web python scripts/backfill_extraction.py` once
   - [x] PR 2 (open, not merged): Tasks screen (D5), task drawer, meeting page Action items as tasks, meetings list task count, Settings Tasks card toggles live, parity shots under `docs/ui/parity/after/`
   - [ ] Waits for W3: teammate filter chips, "Invite them to the team" in the drawer. Waits for W4: project tabs, project badge, "Check project", milestone select and card. W9 built (screens PR 2, 2026-11-06): sprint selector, sprint header and Close sprint, Backlog view, Carried over. Waits for W8: the unfinished-tasks chip on Recurring cards
-- [ ] W3 Team (Opus: permissions, invites, slot reservation). Backend PR 1 #97 (merged 2026-11-05, `d0b60b6`, migration 0026) and screens PR 2 #98 `feature/w3-team-screens` (open). SOP `docs/sop/2026-11-05-w3-team-backend.md`; FE guide `docs/fe-integration-guide-team.md` with `docs/fe-captures/team-w3/`
+- [ ] W3 Team (Opus: permissions, invites, slot reservation). Backend PR 1 #97 (merged 2026-11-05, `d0b60b6`, migration 0026) and screens PR 2 #98 (merged 2026-11-06, `82acae3`). SOP `docs/sop/2026-11-05-w3-team-backend.md`; FE guide `docs/fe-integration-guide-team.md` with `docs/fe-captures/team-w3/`
   - [x] Migration 0026 (`team_invites`, `teams.share_new_meetings`); sits on 0025, check `alembic heads` at merge
   - [x] Invitations: hashed single-use token (7 days), resend (a minute apart), revoke, caps (10 open, 20 a day); "Team invite" mail as drawn (`Emails.dc.html`); public `GET /api/team/invites/preview` for the link page
   - [x] A new person signs up with the link (bypasses closed and full for that address, joins on confirming the email; Google too); an existing account accepts (team of one dissolves, tasks move, meetings stay theirs and private); 409 `pilot_full` and 409 `already_on_team`; invitees hold a pilot place (D2, `slots_taken`)
@@ -435,11 +435,11 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Route enumeration: team routes classified, other-team user 404 on every id route, Member 403 on every owner/admin route, share routes classified
   - [x] FE guide from live captures (`scripts/capture_team_api.py`)
   - [ ] Opus review fixes (see the SOP)
-  - [x] PR 2 screens (`feature/w3-team-screens`, open, not merged; SOP `docs/sop/2026-11-05-w3-team-ui.md`): Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, lead-designed Share with team switch, optional name in the invite dialog and alias editing (designer to confirm); privacy "Teams" paragraph and terms pilot rows; parity shots in `docs/ui/parity/after/`
+  - [x] PR 2 screens (#98, merged; SOP `docs/sop/2026-11-05-w3-team-ui.md`): Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, lead-designed Share with team switch, optional name in the invite dialog and alias editing (designer to confirm); privacy "Teams" paragraph and terms pilot rows; parity shots in `docs/ui/parity/after/`
   - [x] "Add email" beside a non-member participant (W6 PR 2, lead-designed)
-  - [ ] PR 2 screens: Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, and the four lead-designed pieces (Share with team switch, optional name in the invite dialog, alias editing, "Add email" which may wait for W6); privacy "Teams" paragraph and terms pilot row; parity shots
-- [ ] W4 Projects and milestones. Backend PR 1 `feature/w4-projects-backend` (open, not merged, 2026-11-05) and screens PR 2 `feature/w4-projects-screens` (not started). SOP `docs/sop/2026-11-05-w4-projects-backend.md`; FE guide `docs/fe-integration-guide-projects.md` with `docs/fe-captures/projects-w4/`
-  - [x] Migration 0028 (`projects`, `milestones`, `tasks.project_id/milestone_id/check_project`); down_revision 0026, re-point if 0027 (#96) merges first
+  - [x] PR 2 screens: Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, and the four lead-designed pieces (Share with team switch, optional name in the invite dialog, alias editing, "Add email" which may wait for W6); privacy "Teams" paragraph and terms pilot row; parity shots (built in #98, merged)
+- [ ] W4 Projects and milestones. Backend PR 1 `feature/w4-projects-backend` (#100, merged 2026-11-06, `a1488fa`) and screens PR 2 `feature/w4-projects-screens` (#102, merged `964e5b9`). SOP `docs/sop/2026-11-05-w4-projects-backend.md`; FE guide `docs/fe-integration-guide-projects.md` with `docs/fe-captures/projects-w4/`
+  - [x] Migration 0028 (`projects`, `milestones`, `tasks.project_id/milestone_id/check_project`); down_revision 0027 (re-pointed at merge)
   - [x] Projects API (list/create/get/patch/delete; owner and admin write, member 403 `team_forbidden`, other team 404); milestones API (list, create, patch, delete, confirm, `GET /api/meetings/{id}/milestones`)
   - [x] Filing by keywords in `app/filing.py` (clear winner quiet, weak or tied match sets `check_project`, one-project team unflagged, none otherwise); the series rule is a seam (`series_project`) until W8
   - [x] Milestone proposals from the extraction call, stored unconfirmed with the quote, never auto-created; rewrite replaces the unconfirmed ones
@@ -447,29 +447,29 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Route enumeration extended; FE guide from live captures (`scripts/capture_projects_api.py`)
   - [x] PR 2 screens (#102; SOP `docs/sop/2026-11-06-w4-projects-ui.md`): Projects (D6), project tabs, milestone card, drawer Project and Milestone and "Check project", meeting page Milestone row and lead-designed "Set milestone" with Confirm; parity shots under `docs/ui/parity/after/`
   - [ ] Waits for W8: Recurring meetings list on a project and the series filing rule. W9 built (screens PR 2, 2026-11-06): Sprint length on a project and the "In current sprint" and "In backlog" stats
-- [ ] W9 Sprints (2026-11-06). Backend PR 1 `feature/w9-sprints-backend` (#108, merged) and screens PR 2 `feature/w9-sprints-screens` (built 2026-11-06; SOP `docs/sop/2026-11-06-w9-sprints-ui.md`). SOP `docs/sop/2026-11-06-w9-sprints-backend.md`; FE guide `docs/fe-integration-guide-sprints.md` with `docs/fe-captures/sprints-w9/`
-  - [x] Migration 0031 (`sprints`, `teams.sprint_length/sprint_custom_days/sprint_align_weekdays`, `projects.sprint_length`, `tasks.sprint_id/carried`); down_revision 0028, re-point when 0029/0030 merge first
+- [ ] W9 Sprints (2026-11-06). Backend PR 1 `feature/w9-sprints-backend` (#108, merged) and screens PR 2 `feature/w9-sprints-screens` (built 2026-11-06; SOP `docs/sop/2026-11-06-w9-sprints-ui.md`). SOP `docs/sop/2026-11-06-w9-sprints-backend.md`; FE guide `docs/fe-integration-guide-sprints.md` with `docs/fe-captures/sprints-w9/` **Merged 2026-11-06:** backend #108 `32dee7c`, screens #111 `e0ad10b`.
+  - [x] Migration 0031 (`sprints`, `teams.sprint_length/sprint_custom_days/sprint_align_weekdays`, `projects.sprint_length`, `tasks.sprint_id/carried`); down_revision 0028; 0029 and 0030 now follow it on main
   - [x] `app/sprints.py`: windows for every length of the Settings list, a current and a next sprint per series (team's, and a project's own), advisory lock per team
   - [x] Hourly scheduler job `rollover_sprints` closes ended sprints in the team's zone and carries unfinished tasks; "Close sprint" does the same early (next starts today, end date unchanged)
   - [x] Filing by due date (no date: Backlog; inside or before the current sprint: current; later: next) for AI tasks and for new tasks that name no sprint
   - [x] API: `GET /api/sprints?project=`, `POST /api/sprints/{id}/close` (owner/admin; member 403; other team 404; not current 409), `sprint_id`/`carried` on tasks, `?sprint=none|current|next|<id>` filter, sprint fields on `GET`/`PATCH /api/team` and `PATCH /api/projects/{id}`, project stats `in_current_sprint`/`in_backlog`
   - [x] Cross-team ids refused everywhere (`sprint_not_on_team` 422 on tasks, 404 on sprint and project ids); joining a team or leaving one puts tasks in the Backlog
-  - [ ] Opus review of the permission checks (see the SOP)
+  - [x] Opus review of the permission checks (see the SOP) (0 Critical/High; three smaller findings fixed, see PR #108)
   - [x] PR 2 screens (2026-11-06): sprint selector, sprint header and Close sprint, Board / Backlog tabs, Backlog view with a Sprint select per row, Carried over badge, drawer Sprint select (also on the meeting page's drawer), Settings sprint length and Monday to Friday switch (D12; the reminders row stays off for W8), project Sprint length and the two stats. Parity table in the SOP; nothing lead-designed except as listed there
-  - [ ] Waits for W8 merging: the sprint line under "Next meeting" and its sprint rows on the series page (small follow-up once #104 and #105 are in main)
+  - [ ] Waits for W8 merging: the sprint line under "Next meeting" and its sprint rows on the series page (small follow-up once #104 and #105 are in main) **Unblocked 2026-11-06: #104 and #105 are on main.**
 
 ### W6 Share notes by email (2026-11-05)
-- [ ] PR 1 backend `feature/w6-share-backend` (#99, migration 0029, follows 0031): CI green
+- [x] PR 1 backend #99 (merged 2026-11-06, `6319dbe`, migration 0029, follows 0031); nginx opt-out line run by Adebayo 2026-11-06
   - [x] `meeting_shares`, recipients and `share_usage`; `POST`/`GET /api/meetings/{id}/shares`; 10 a share, 20 a day; verified senders; owner only
   - [x] "Notes shared with you" mail (designer layout, PDF/Word/transcript attachments, Reply-To, sender line, no link for outsiders)
   - [x] Opt-out token and `POST /api/mail/opt-out` (nginx zone added); translation first then mail (hook + hourly sweep)
   - [x] Privacy and terms rows (spec 13.1), "Last updated" unchanged; Opus review done
-  - [ ] Merged
-- [ ] PR 2 screens `feature/w6-share-screens` (stacked on PR 1): open
+  - [x] Merged and deployed (server head `6319dbe`)
+- [x] PR 2 screens #103 (merged 2026-11-06, `5ba2305`)
   - [x] Share dialog, toast, "Shared with ..." note, Share notes button, `/unsubscribe` page, lead-designed "Add email"; parity shots at 1440/768/390 in `docs/ui/parity/after/`
-  - [ ] CI green; merged after PR 1
+  - [x] CI green; merged after PR 1 (needed one rerun of a flaky W3 test)
 
-- [ ] **W8 Series, agenda, carry-over, reminders** (backend PR `feature/w8-series-backend`, migration 0030 (follows 0029), SOP `docs/sop/2026-11-06-w8-series-backend.md`, FE guide `docs/fe-integration-guide-series.md`; screens PR `feature/w8-series-screens` pending)
+- [ ] **W8 Series, agenda, carry-over, reminders** (backend PR `feature/w8-series-backend`, migration 0030 (follows 0029), SOP `docs/sop/2026-11-06-w8-series-backend.md`, FE guide `docs/fe-integration-guide-series.md`; screens PR `feature/w8-series-screens` pending) **Merged 2026-11-06:** backend #104 `9471c2c`, screens #105 `4b1e26d`.
   - [x] `series`, `series_agenda_items`, `series_agenda_sends`, `series_reminders`, `meetings.series_id`, `open_questions.carry/resolved_by`, `teams.reminders_on/reminder_timing`, `user_settings.notify_reminders` (0030)
   - [x] Linking: `link_from_calendar` when notes are written, hourly `sync_from_joins`, manual make/attach/detach
   - [x] `GET /api/series` (cards, per-viewer counts), `GET /api/series/{id}` (page), `PATCH`, agenda add/list/remove, `PATCH /api/questions/{id}`, `series` and `open_questions` on the meeting
@@ -479,10 +479,10 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Opus review of mail, caps and permissions: no Critical; 2 High fixed with tests (2026-11-06)
   - [x] Screens (PR `feature/w8-series-screens`, SOP `docs/sop/2026-11-06-w8-series-screens.md`): Recurring cards, Series page, meeting Series row and question pills, Settings reminders row (2026-11-06)
   - [ ] Deferred: W8b "possibly resolved" chips, sprint line and milestone countdown in the mails (W9, W4), outside recipients for the agenda (needs W6 opt-out), "Add to recurring meeting" UI (designer gap), policy wording for reminders before they are switched on in production
-- [ ] W10 Integrations (2026-11-06): Slack webhook first, then one tracker
+- [x] W10 Integrations (2026-11-06): Slack webhook #107 (`e3b7324`, 0032) and Linear tracker #109 (`ee3ec88`, 0033), merged and deployed. Real Slack webhook and Linear key not yet tried (mock tests only)
   - [x] W10 part 1, Slack webhook (migration 0032, branch `feature/w10-slack`, 2026-11-06): vault-stored address, SSRF-safe post, per-team caps, Settings row live, privacy line; SOP `docs/sop/2026-11-06-w10-slack.md`, guide `docs/fe-integration-guide-integrations.md`
   - [x] W10 part 2, Linear tracker (migration 0033, branch `feature/w10-tracker`, 2026-11-06). **Decision: Adebayo chose Linear on 2026-11-06 16:43 WAT** (spec D11). Pasted personal key in the vault, fixed host `api.linear.app`, one-way create-only issues for shared meetings; SOP `docs/sop/2026-11-06-w10-linear-tracker.md`
-- [ ] W5 Export (merged), W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
+- [x] W5 Export, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (all merged, spec section 15)
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)
   - [x] Headings from a fixed dictionary in code; transcript and notes split in code into lines, only the words go to the model; checks for count, structure, links and markup, numbers, names; one retry per chunk
@@ -494,6 +494,18 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Eval harness `tests/eval/translation_eval.py` written (TR1)
   - [ ] TR1 run with a real model (no `OPENAI_API_KEY` where this was built): French and Spanish quality, real cost per hour
   - [ ] Privacy and terms rows for translation (sentences in the SOP; the legal pages are another session's)
+
+## Deferred follow-ups from the 2026-11-06 merge queue
+
+- [ ] **Series agenda recipient count** (automated review, Medium, W8 `app/api_series.py`): `series.recipients()` counts attendees of the last three meetings including ones the caller cannot read; names are already filtered, the count is not. Decide: count only visible attendees (then the count can differ from who gets the mail) or keep as is
+- [ ] **Series visibility from calendar rows** (automated review, Medium, `app/series.py` `_seen_by`): a series is visible to anyone holding its recurring event id on their own calendar. By design (invitees only); revisit if series ever become visible outside invitees
+- [ ] GitGuardian: mark 39721275 (#96) and the repeats on #100, #102, #103, #104, #105, #107, #109, #111 as false positives (Microsoft's public consumer tenant GUID `9188040d-6c67-4c5b-b112-36a304b66dad`; inferred, GitHub does not show the location)
+- [ ] Flaky test `web/tests/team-view.test.tsx` "opens by itself with the spoken name": fixed with `waitFor` in the docs PR that carries this line; remove this line once CI has been green a few times
+- [ ] W9: three undrawn pieces (a sentence when a project's own sprint length moves tasks, a Close sprint confirmation, what "All projects" Close sprint does) wait for the designer; the five backend choices are still unconfirmed by Adebayo; the sprint screens were checked against the mock only, not the real backend in a browser
+- [ ] W8: the parity shots of the meeting page (`docs/ui/parity/after/app-detail-*`) show W6 or W8 alone, not W4 + W6 + W8 together: reshoot
+- [ ] W10: real Slack webhook and real Linear key; the server must reach `hooks.slack.com:443` and `api.linear.app:443`
+- [ ] Migration chain on main is 0026, 0027, 0028, 0031, 0029, 0030, 0032, 0033 (numbers merged out of order; one head, 0033): the next free number is **0034**
+- [ ] Bot reliability: vendor bake-off (Skribby free tier, Recall 5 free hours; guest and signed-in, count joins, knocks and 403s) per `docs/spike/meeting-bot-vendors.md`; decision on a signed-in bot
 
 ## CI speed (2026-11-04, PR #70, SOP `docs/sop/2026-11-04-ci-sharding.md`)
 
