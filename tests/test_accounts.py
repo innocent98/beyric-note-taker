@@ -635,11 +635,11 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     anon.log_in(email=OTHER_EMAIL)
     checked = 0
     for method, path in api_routes(app):
-        names = re.findall(r"\{(\w+)\}", path)
+        names = [n for n in re.findall(r"\{(\w+)\}", path) if n != "provider"]  # a name, not an id
         if not names or path.startswith("/api/admin/"):
             continue  # admin routes answer 403 to any non-admin: tests/test_admin.py
         assert set(names) <= set(ids), f"classify the id in {method} {path} and scope it"
-        url = re.sub(r"\{(\w+)\}", lambda m: str(ids[m[1]]), path)
+        url = re.sub(r"\{(\w+)\}", lambda m: str(ids.get(m[1], "google")), path)
         bodies = {  # a valid body for each route that takes one, so only the id can be wrong
             "/regenerate": {"template_id": strangers_data["template"].id},
             "/vocabulary": {"term": "Metrika"},
