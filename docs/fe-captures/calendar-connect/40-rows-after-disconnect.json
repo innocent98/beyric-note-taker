@@ -5,9 +5,9 @@
       {
         "user_id": 1,
         "provider": "google",
-        "google_account_email": null,
-        "google_sub": null,
-        "google_hosted_domain": null,
+        "account_email": null,
+        "account_subject": null,
+        "account_domain": null,
         "status": "disconnected",
         "granted_scopes": null,
         "refresh_token_enc": null,

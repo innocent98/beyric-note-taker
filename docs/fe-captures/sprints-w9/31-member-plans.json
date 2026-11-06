@@ -1,0 +1,28 @@
+{
+  "note": "403 `team_forbidden`: filing (project, milestone, sprint) is the owner's and admin's; Adebayo confirmed 2026-11-06 that a member given a task cannot re-file it.",
+  "client": "chidi",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/tasks/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "sprint_id": 2
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "You can't do that to this task. Ask an owner or admin of your team."
+      }
+    }
+  }
+}

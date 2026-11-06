@@ -1,0 +1,59 @@
+{
+  "note": "",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/tasks/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "sprint_id": 1
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "title": "Finish the portal checkout",
+      "status": "todo",
+      "assignee": {
+        "user_id": 2,
+        "name": "Dan Okoro",
+        "is_you": true
+      },
+      "spoken_owner": "Dan",
+      "due_date": "2026-11-06",
+      "due_phrase": "before Friday",
+      "quote": "I'll finish the portal checkout before Friday.",
+      "is_new": true,
+      "unverified": false,
+      "source": "ai",
+      "assigned_on": "2026-11-03",
+      "done_at": null,
+      "created_at": "2026-11-06T16:00:00.720386Z",
+      "from_meeting": true,
+      "meeting": {
+        "id": 1,
+        "title": "Portal planning",
+        "platform": "google_meet",
+        "created_at": "2026-11-03T10:00:00Z"
+      },
+      "project_id": 1,
+      "milestone_id": null,
+      "sprint_id": 1,
+      "carried": false,
+      "check_project": false,
+      "can_update": true,
+      "can_edit": true,
+      "can_assign": true,
+      "can_claim": false,
+      "can_delete": true
+    }
+  }
+}

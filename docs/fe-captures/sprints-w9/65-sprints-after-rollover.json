@@ -1,0 +1,128 @@
+{
+  "note": "The scheduler's hourly job (real `sprints.rollover_team`, run here with a clock 40 days ahead) closed every sprint whose end date had passed, `closed_early` false, and kept a current and a next. Unfinished tasks went with it.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/sprints",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "project_id": null,
+      "own_series": false,
+      "today": "2026-11-06",
+      "sprint_length": "week5",
+      "sprint_custom_days": 12,
+      "sprint_align_weekdays": true,
+      "sprints": [
+        {
+          "id": 1,
+          "number": 1,
+          "name": "Sprint 1",
+          "start_date": "2026-11-05",
+          "end_date": "2026-11-10",
+          "state": "closed",
+          "closed_at": "2026-11-06T16:00:01.276190Z",
+          "closed_early": true,
+          "tasks_total": 0,
+          "tasks_done": 0
+        },
+        {
+          "id": 2,
+          "number": 2,
+          "name": "Sprint 2",
+          "start_date": "2026-11-06",
+          "end_date": "2026-11-13",
+          "state": "closed",
+          "closed_at": "2026-12-16T16:00:01.320563Z",
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        },
+        {
+          "id": 9,
+          "number": 3,
+          "name": "Sprint 3",
+          "start_date": "2026-11-16",
+          "end_date": "2026-11-20",
+          "state": "closed",
+          "closed_at": "2026-12-16T16:00:01.320563Z",
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        },
+        {
+          "id": 10,
+          "number": 4,
+          "name": "Sprint 4",
+          "start_date": "2026-11-23",
+          "end_date": "2026-11-27",
+          "state": "closed",
+          "closed_at": "2026-12-16T16:00:01.320563Z",
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        },
+        {
+          "id": 11,
+          "number": 5,
+          "name": "Sprint 5",
+          "start_date": "2026-11-30",
+          "end_date": "2026-12-04",
+          "state": "closed",
+          "closed_at": "2026-12-16T16:00:01.320563Z",
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        },
+        {
+          "id": 12,
+          "number": 6,
+          "name": "Sprint 6",
+          "start_date": "2026-12-07",
+          "end_date": "2026-12-11",
+          "state": "closed",
+          "closed_at": "2026-12-16T16:00:01.320563Z",
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        },
+        {
+          "id": 13,
+          "number": 7,
+          "name": "Sprint 7",
+          "start_date": "2026-12-14",
+          "end_date": "2026-12-18",
+          "state": "current",
+          "closed_at": null,
+          "closed_early": false,
+          "tasks_total": 6,
+          "tasks_done": 0
+        },
+        {
+          "id": 14,
+          "number": 8,
+          "name": "Sprint 8",
+          "start_date": "2026-12-21",
+          "end_date": "2026-12-25",
+          "state": "next",
+          "closed_at": null,
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        }
+      ],
+      "current_id": 13,
+      "next_id": 14,
+      "can_manage": true
+    }
+  }
+}

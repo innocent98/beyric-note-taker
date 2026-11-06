@@ -1,0 +1,41 @@
+{
+  "note": "",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/projects",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Offsite",
+      "keywords": [
+        "offsite",
+        "venue"
+      ]
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "name": "Offsite",
+      "color": "#3C4A7A",
+      "keywords": [
+        "offsite",
+        "venue"
+      ],
+      "open_tasks": 0,
+      "sprint_length": null,
+      "in_current_sprint": 0,
+      "in_backlog": 0,
+      "milestone": null,
+      "created_at": "2026-11-06T16:00:00.687211Z"
+    }
+  }
+}

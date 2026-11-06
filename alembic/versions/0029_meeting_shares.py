@@ -8,7 +8,7 @@ so deleting a meeting does not give capacity back. `auth_tokens.purpose` gains `
 hashed token behind "Stop mail from Beyric Note Taker" in a shared-notes mail.
 
 Revision ID: 0029
-Revises: 0026
+Revises: 0031
 Create Date: 2026-11-05
 """
 
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0029"
-down_revision = "0026"
+down_revision = "0031"
 branch_labels = None
 depends_on = None
 

@@ -989,7 +989,175 @@ def test_0026_follows_0025():
     assert script.get_revision("0026").down_revision == "0025"
 
 
-def test_0029_follows_0026_and_is_the_only_head():
+# ---- 0027 provider-neutral calendar connections ----
+
+
+def test_0027_renames_the_identity_columns_keeps_the_data_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0026")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
+        conn.execute(
+            text(
+                "insert into calendar_connections (user_id, provider, google_account_email, "
+                "google_sub, google_hosted_domain) select id, 'google', 'g@example.test', "
+                "'g-1', 'example.test' from users where email = 'a@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into oauth_flows (state_hash, purpose, code_verifier, nonce, expires_at) "
+                "values ('h1', 'calendar', 'v', 'n', now())"
+            )
+        )
+    command.upgrade(cfg, "head")
+    columns = {c["name"] for c in inspect(engine).get_columns("calendar_connections")}
+    assert {"account_email", "account_subject", "account_domain"} <= columns
+    assert {"tenant_id", "account_kind", "tenant_domains"} <= columns
+    assert not {"google_account_email", "google_sub", "google_hosted_domain"} & columns
+    # No data moved: the Google row keeps its values under the new names; its Microsoft columns are
+    # empty; the existing flow is Google's. The sign-in column is a different thing and stays.
+    assert _rows(
+        engine,
+        "select provider, account_email, account_subject, account_domain, tenant_id, "
+        "account_kind, tenant_domains from calendar_connections",
+    ) == [("google", "g@example.test", "g-1", "example.test", None, None, None)]
+    assert _rows(engine, "select provider from oauth_flows") == [("google",)]
+    assert "google_sub" in {c["name"] for c in inspect(engine).get_columns("users")}
+
+    with engine.begin() as conn:  # a Microsoft row is now allowed, with its own columns
+        conn.execute(text("insert into users (email, status) values ('b@example.test', 'active')"))
+        conn.execute(
+            text(
+                "insert into calendar_connections (user_id, provider, account_subject, tenant_id, "
+                "account_kind) select id, 'microsoft', 'oid-1', "
+                "'9188040d-6c67-4c5b-b112-36a304b66dad', 'personal' from users "
+                "where email = 'b@example.test'"
+            )
+        )
+    for sql in (
+        "insert into oauth_flows (state_hash, purpose, provider, code_verifier, nonce, expires_at) "
+        "values ('h2', 'calendar', 'yahoo', 'v', 'n', now())",
+        "update calendar_connections set account_kind = 'robot' where provider = 'microsoft'",
+    ):
+        with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+            conn.execute(text(sql))
+
+    # The downgrade cannot represent a Microsoft connection: it refuses until the row is gone.
+    with pytest.raises(sa.exc.DBAPIError):
+        command.downgrade(cfg, "0026")
+    with engine.begin() as conn:
+        conn.execute(text("delete from calendar_connections where provider = 'microsoft'"))
+    command.downgrade(cfg, "0026")
+    old = {c["name"] for c in inspect(engine).get_columns("calendar_connections")}
+    assert {"google_account_email", "google_sub", "google_hosted_domain"} <= old
+    assert not {"tenant_id", "account_kind", "tenant_domains", "account_email"} & old
+    assert "provider" not in {c["name"] for c in inspect(engine).get_columns("oauth_flows")}
+    assert _rows(engine, "select google_account_email, google_sub from calendar_connections") == [
+        ("g@example.test", "g-1")
+    ]
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0027_follows_0026():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0027").down_revision == "0026"
+
+
+def test_0028_follows_the_previous_revision():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
-    assert script.get_revision("0029").down_revision == "0026"
+    assert script.get_revision("0028").down_revision in {"0026", "0027"}
+
+
+def test_0031_follows_the_previous_revision():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0031").down_revision in {"0028", "0029", "0030"}
+
+
+def test_0029_follows_0031_and_is_the_only_head():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0029").down_revision == "0031"
     assert script.get_heads() == ["0029"]
+
+
+def test_0028_projects_and_milestones_keep_tasks_when_they_go_and_downgrade_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0028")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (id, email) values (9001, 'a@example.test')"))
+        conn.execute(text("insert into teams (id, owner_user_id) values (9001, 9001)"))
+        conn.execute(
+            text("insert into projects (id, team_id, name, color) values (1, 9001, 'P', '#0E6B5E')")
+        )
+        conn.execute(
+            text(
+                "insert into milestones (id, team_id, project_id, name, due_date, confirmed_at) "
+                "values (1, 9001, 1, 'M', '2026-12-08', now())"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into tasks (id, team_id, title, project_id, milestone_id, check_project) "
+                "values (1, 9001, 't', 1, 1, true)"
+            )
+        )
+        conn.execute(text("delete from projects where id = 1"))
+    assert _rows(engine, "select project_id, milestone_id from tasks") == [(None, None)]
+    assert _rows(engine, "select count(*) from milestones") == [(0,)]  # went with its project
+    command.downgrade(cfg, "0027")
+    assert _rows(engine, "select title from tasks") == [("t",)]
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0031_sprints_keep_tasks_when_they_go_and_downgrade_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0031")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (id, email) values (9001, 'a@example.test')"))
+        conn.execute(text("insert into teams (id, owner_user_id) values (9001, 9001)"))
+        conn.execute(
+            text(
+                "insert into sprints (id, team_id, number, start_date, end_date) "
+                "values (1, 9001, 1, '2026-11-02', '2026-11-06')"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into tasks (id, team_id, title, sprint_id, carried) "
+                "values (1, 9001, 't', 1, true)"
+            )
+        )
+    # The team defaults, and the sprint a task is in is the task's only claim on it.
+    defaults = "select sprint_length, sprint_custom_days, sprint_align_weekdays from teams"
+    assert _rows(engine, defaults + " where id = 9001") == [("week5", 10, True)]
+    with engine.begin() as conn:
+        conn.execute(text("delete from sprints where id = 1"))
+    assert _rows(engine, "select sprint_id, carried from tasks") == [(None, True)]
+    # One sprint number per series (a project's own series has its own numbers).
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into sprints (id, team_id, number, start_date, end_date) "
+                "values (2, 9001, 1, '2026-11-02', '2026-11-06')"
+            )
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into sprints (id, team_id, number, start_date, end_date) "
+                "values (3, 9001, 1, '2026-11-09', '2026-11-13')"
+            )
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("update teams set sprint_length = 'daily'"))
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("update teams set sprint_custom_days = 366"))
+    command.downgrade(cfg, "0028")
+    assert _rows(engine, "select title from tasks") == [("t",)]
+    command.upgrade(cfg, "head")
+    engine.dispose()

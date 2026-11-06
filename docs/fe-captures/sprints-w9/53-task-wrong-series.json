@@ -1,0 +1,28 @@
+{
+  "note": "422 `sprint_not_on_team`: that is the team's sprint, not Offsite's.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/tasks/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "sprint_id": 1
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "sprint_not_on_team",
+        "message": "That sprint is not available for this task."
+      }
+    }
+  }
+}
