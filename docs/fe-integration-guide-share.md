@@ -516,5 +516,5 @@ Open questions
 | Resend accepts the mail, the attachment size and types, the daily quota | **not verified live**: needs one real send (command in the SOP) |
 | Translation content | **fake model** (the designer's sample): the flow is verified, the quality is not |
 | `403 email_not_verified`, `503 mail_unavailable`, `429 translation_limit` | **not captured**; strings from the code (covered by tests/test_shares.py for the first) |
-| The `/unsubscribe` page | **built in the screens PR**, not here; the API behind it is verified |
+| The `/unsubscribe` page and the Share dialog | built in the screens PR (`docs/sop/2026-11-06-w6-share-screens.md`); the API behind them is verified live |
 | `share_limit` after 10 + 10 recipients | **live** (capture 37) |

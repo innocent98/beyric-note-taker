@@ -513,3 +513,39 @@
 .sh-title { font-size: var(--text-sm); font-weight: 600; }
 .sh-sub { margin: 2px 0 0; font-size: var(--text-xs); color: var(--text-3); line-height: 1.5; }
 .td-notice-link { align-self: flex-start; padding: 0; border: 0; background: transparent; color: var(--warning-text); font: inherit; font-size: var(--text-sm); font-weight: 600; text-decoration: underline; cursor: pointer; }
+
+/* Share notes (components/app/share-dialog.tsx): the designer's dialog. The "Add email" button on a
+   participant with no address is LEAD-DESIGNED, not in the designer's file. */
+.sh-dialog { margin-top: 72px; max-width: 520px; max-height: calc(100vh - 120px); overflow: auto; }
+.sh-head { display: flex; justify-content: space-between; gap: var(--space-3); padding: 20px 22px 0; }
+.sh-head .dialog-title { margin: 0; font-size: 17px; }
+.sh-close { display: flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px; border: 0; border-radius: 7px; background: transparent; color: var(--text-3); cursor: pointer; }
+.sh-close:hover { background: var(--surface-hover); }
+.sh-people { margin: 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.sh-person { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); border-bottom: 1px solid var(--border-softer); }
+.sh-person:last-child { border-bottom: 0; }
+.sh-person:hover { background: var(--surface-row); }
+.sh-person-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 10px 12px; cursor: pointer; }
+.sh-person-text { display: flex; flex-direction: column; min-width: 0; }
+.sh-person-name { font-size: var(--text-sm); font-weight: 550; }
+.sh-person-email { font-size: var(--text-xs); color: var(--text-3); overflow-wrap: anywhere; }
+.avatar-30 { width: 30px; height: 30px; font-size: 11px; }
+.sh-box { appearance: none; flex: none; width: 18px; height: 18px; margin: 0; border: 1.5px solid var(--border-strong); border-radius: 5px; background: var(--surface); cursor: pointer; display: grid; place-content: center; }
+.sh-box:checked { border-color: var(--teal); background: var(--teal); }
+.sh-box:checked::after { content: ""; width: 4px; height: 8px; margin-bottom: 2px; border: solid var(--on-primary); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.sh-box:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.sh-box:disabled { cursor: not-allowed; opacity: 0.5; }
+.sh-add { flex: none; margin-right: 12px; font-size: var(--text-xs); }
+.sh-add-input { flex: none; width: 200px; height: 32px; margin-right: 12px; font-size: var(--text-xs); }
+.sh-attach { align-self: flex-start; }
+.sh-check { display: flex; align-items: center; gap: 10px; font-size: var(--text-sm); color: var(--ink-2); cursor: pointer; }
+.sh-optional { font-weight: 400; color: var(--text-faint); }
+.sh-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 14px 22px; border-top: 1px solid var(--border-softer); background: var(--surface-row); }
+.sh-foot-actions { display: flex; gap: var(--space-2); }
+.sh-count { font-size: var(--text-xs); color: var(--text-3); }
+.dl { display: flex; align-items: center; gap: var(--space-2); }
+.sh-shared { margin: -2px 0 12px; padding: 8px 10px; border-radius: 7px; background: var(--success-tint); color: var(--success); font-size: var(--text-xs); overflow-wrap: anywhere; }
+@media (max-width: 480px) { .sh-person { flex-wrap: wrap; } .sh-add, .sh-add-input { margin: 0 12px 10px 54px; } }
+.sh-lang { width: 100%; }
+.sh-lang .lang-globe { left: 12px; }
+.select.sh-lang-field { padding-left: 34px; }

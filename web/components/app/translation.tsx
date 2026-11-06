@@ -165,7 +165,7 @@ export function useTranslation(
   };
 }
 
-function Globe({ size }: { size: number }) {
+export function Globe({ size }: { size: number }) {
   return (
     <svg
       className="lang-globe"

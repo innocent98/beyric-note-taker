@@ -34,6 +34,12 @@ export type TasksSettings = Schemas["TasksSettingsOut"];
 export type TaskChanges = Partial<Schemas["TaskPatch"]>;
 export type NewTask = Schemas["TaskCreate"];
 
+export type Share = Schemas["ShareOut"];
+export type ShareList = Schemas["ShareList"];
+export type ShareCreated = Schemas["ShareCreated"];
+export type ShareBody = Schemas["ShareIn"];
+export type ShareRecipient = Schemas["ShareRecipientOut"];
+
 export type Team = Schemas["TeamOut"];
 export type TeamRole = Team["my_role"];
 export type TeamMember = Schemas["TeamMemberOut"];

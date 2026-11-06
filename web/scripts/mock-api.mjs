@@ -203,6 +203,11 @@ const sample = {
   can_share: true,
   shared_by: null,
 };
+// Meeting 9 is the sample with a participant who is not on the team (the lead-designed "Add email").
+const withStranger = { ...sample, id: 9, title: "Zoom 99205679674", native_id: "99205679674", participants: ["Adebayo", "Kemi Adeyemi"] };
+const shareCapture = (name) => JSON.parse(readFileSync(join(captureDir, "share", `${name}.json`), "utf8")).response.body;
+let shares = []; // newest first
+let shareId = 0;
 const translating = {}; // language -> when it was asked for
 const TRANSLATE_AFTER_MS = 1500;
 const translationOf = (language) => {
@@ -309,6 +314,8 @@ const server = http.createServer(async (req, res) => {
   if (path === "/__mock/reset") {
     for (const language of Object.keys(translating)) delete translating[language];
     defaultLanguage = values.language;
+    shares = [];
+    shareId = 0;
     armed.decisions = armed.review = true;
     return json(res, 200, { reset: true });
   }
@@ -456,6 +463,40 @@ const server = http.createServer(async (req, res) => {
     if (method === "PUT") tasksSettings = { auto_create_tasks: !!data?.auto_create_tasks, email_assignees: !!data?.email_assignees };
     return json(res, 200, tasksSettings);
   }
+  // Share notes by email: the refusals replay the real captures in docs/fe-captures/share/; a good
+  // request is kept in memory and answered like the real one (a recipient is `sent` at once).
+  if (path === "/api/mail/opt-out" && method === "POST") {
+    if (data?.token === "dead") return json(res, 400, shareCapture("16-optout-garbage"));
+    return json(res, 200, shareCapture("14-optout-ok"));
+  }
+  const shareRoute = /^\/api\/meetings\/(\d+)\/shares$/.exec(path);
+  if (shareRoute) {
+    if (![sample.id, withStranger.id].includes(Number(shareRoute[1]))) return json(res, 404, { error: { code: "not_found", message: "No such meeting" } });
+    if (method === "GET") return json(res, 200, { shares });
+    const people = data?.recipients ?? [];
+    if (!["en", "fr", "es"].includes(data?.language)) return json(res, 422, shareCapture("20-share-language-unsupported"));
+    if (people.length > 10) return json(res, 422, shareCapture("21-share-too-many"));
+    if (data?.message === "limit") return json(res, 429, shareCapture("37-share-limit"));
+    shareId += 1;
+    const waiting = data.language !== "en" && !translationOf(data.language);
+    shares.unshift({
+      share_id: shareId,
+      status: waiting ? "waiting_translation" : "queued",
+      language: data.language,
+      attach: data.attach ?? "none",
+      include_transcript: !!data.include_transcript,
+      message: data.message ?? "",
+      created_at: new Date().toISOString(),
+      recipients: people.map((r) => ({
+        email: r.email,
+        name: r.name ?? teamMembers.find((m) => m.email === r.email)?.name ?? null,
+        status: waiting ? "pending" : "sent",
+        is_team_member: teamMembers.some((m) => m.email === r.email),
+      })),
+    });
+    res.writeHead(202, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ share_id: shareId, status: shares[0].status }));
+  }
   const translate = /^\/api\/meetings\/(\d+)\/translations(?:\/(\w+))?$/.exec(path);
   if (translate) {
     const language = method === "POST" ? data?.language : translate[2];
@@ -489,8 +530,10 @@ const server = http.createServer(async (req, res) => {
     const meeting =
       Number(detail[1]) === sample.id
         ? { ...sample, translations: ["fr", "es"].filter((l) => translationOf(l)).map((language) => ({ language, status: translationOf(language).status, stale: false })) }
-        : details.find((m) => m.id === Number(detail[1]));
-    if (meeting && meeting !== sample) Object.assign(meeting, { tasks: meetingTasks(meeting.id), tasks_count: meetingTasks(meeting.id).length });
+        : Number(detail[1]) === withStranger.id
+          ? withStranger
+          : details.find((m) => m.id === Number(detail[1]));
+    if (meeting && meeting !== sample && meeting !== withStranger) Object.assign(meeting, { tasks: meetingTasks(meeting.id), tasks_count: meetingTasks(meeting.id).length });
     return meeting ? json(res, 200, meeting) : json(res, 404, { error: { code: "not_found", message: "That meeting was not found." } });
   }
   // Email preferences and the bell: the captures in docs/fe-captures/prelaunch-mail-prefs/. The

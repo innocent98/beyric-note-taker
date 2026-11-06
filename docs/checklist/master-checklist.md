@@ -435,7 +435,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] FE guide from live captures (`scripts/capture_team_api.py`)
   - [ ] Opus review fixes (see the SOP)
   - [x] PR 2 screens (`feature/w3-team-screens`, open, not merged; SOP `docs/sop/2026-11-05-w3-team-ui.md`): Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, lead-designed Share with team switch, optional name in the invite dialog and alias editing (designer to confirm); privacy "Teams" paragraph and terms pilot rows; parity shots in `docs/ui/parity/after/`
-  - [ ] "Add email" beside a non-member participant (waits for W6) (W6 PR 2, lead-designed)
+  - [x] "Add email" beside a non-member participant (W6 PR 2, lead-designed)
 - [ ] W5 Export (merged), W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 
 ### W6 Share notes by email (2026-11-05)
@@ -445,7 +445,9 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Opt-out token and `POST /api/mail/opt-out` (nginx zone added); translation first then mail (hook + hourly sweep)
   - [x] Privacy and terms rows (spec 13.1), "Last updated" unchanged; Opus review done
   - [ ] Merged
-- [ ] PR 2 screens `feature/w6-share-screens`: Share dialog, "Shared with ...", toast, `/unsubscribe` page, lead-designed "Add email" (starts after PR 1 merges)
+- [ ] PR 2 screens `feature/w6-share-screens` (stacked on PR 1): open
+  - [x] Share dialog, toast, "Shared with ..." note, Share notes button, `/unsubscribe` page, lead-designed "Add email"; parity shots at 1440/768/390 in `docs/ui/parity/after/`
+  - [ ] CI green; merged after PR 1
 
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)

@@ -27,6 +27,7 @@ export const config = {
     "/login",
     "/signup",
     "/verify-email",
+    "/unsubscribe",
     "/forgot-password",
     "/reset-password",
     "/pilot-full",

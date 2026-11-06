@@ -30,6 +30,9 @@ import type {
   TaskList,
   TasksSettings,
   Template,
+  ShareBody,
+  ShareCreated,
+  ShareList,
   Team,
   TeamChanges,
   TeamInvite,
@@ -226,6 +229,9 @@ export function createApi(options: ApiOptions = {}) {
     // (docs/fe-integration-guide-pilot-accounts.md section 0).
     pilot: () => request<Pilot>("GET", "/api/pilot"),
     signup: (body: SignUpBody) => request<{ status: "check_your_email" }>("POST", "/api/signup", { body, write: true }),
+    // The "Stop mail from Beyric Note Taker" page (public; the token is the mail's footer link).
+    optOutOfMail: (token: string) =>
+      request<{ status: "unsubscribed" }>("POST", "/api/mail/opt-out", { body: { token }, write: true }),
     resendVerification: (email: string) =>
       request<{ status: "check_your_email" }>("POST", "/api/signup/resend", { body: { email }, write: true }),
     verifyEmail: (token: string, password: string) =>
@@ -262,6 +268,13 @@ export function createApi(options: ApiOptions = {}) {
         download(`/api/meetings/${id}/export`, { format, transcript: String(transcript), language }),
       // Translate the notes and transcript (docs/fe-integration-guide-translate.md). `request`
       // answers the translation: ready (cached) or translating (ask `get` again in 2 seconds).
+      // Share notes by email (docs/fe-integration-guide-share.md). `create` answers 202 with
+      // `queued` or `waiting_translation`; `list` is what "Shared with ..." reads (owner only).
+      shares: {
+        create: (id: number, body: ShareBody) =>
+          request<ShareCreated>("POST", `/api/meetings/${id}/shares`, { body, write: true }),
+        list: async (id: number) => (await request<ShareList>("GET", `/api/meetings/${id}/shares`)).shares,
+      },
       translations: {
         request: (id: number, language: TranslationLanguage) =>
           request<Translation>("POST", `/api/meetings/${id}/translations`, { body: { language }, write: true }),
