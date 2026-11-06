@@ -1,4 +1,6 @@
 import type {
+  AgendaItem,
+  AgendaSent,
   CalendarEvent,
   CalendarSettingsInput,
   CalendarState,
@@ -18,6 +20,10 @@ import type {
   NewTask,
   NoteLanguage,
   NoticeList,
+  OpenQuestion,
+  QuestionChanges,
+  SeriesList,
+  SeriesPage,
   Pilot,
   ReviewItem,
   ReviewList,
@@ -347,6 +353,22 @@ export function createApi(options: ApiOptions = {}) {
         set: (notify_email: boolean) =>
           request<EmailPreferences>("PUT", "/api/settings/email", { body: { notify_email }, write: true }),
       },
+    },
+    // Recurring meetings (docs/fe-integration-guide-series.md). A series of another team is 404.
+    // `sendAgenda` mails the teammates who were in the last three meetings (409 `no_attendees`,
+    // `nothing_to_send`; 429 `agenda_rate_limited`). `question` is "On next agenda" and "Mark resolved".
+    series: {
+      list: () => request<SeriesList>("GET", "/api/series"),
+      get: (id: number) => request<SeriesPage>("GET", `/api/series/${id}`),
+      addAgenda: (id: number, text: string) =>
+        request<AgendaItem>("POST", `/api/series/${id}/agenda`, { body: { text }, write: true }),
+      removeAgenda: (id: number, itemId: number) =>
+        request<void>("DELETE", `/api/series/${id}/agenda/${itemId}`, { write: true }),
+      sendAgenda: (id: number) => request<AgendaSent>("POST", `/api/series/${id}/agenda/send`, { write: true }),
+    },
+    questions: {
+      update: (id: number, body: QuestionChanges) =>
+        request<OpenQuestion>("PATCH", `/api/questions/${id}`, { body, write: true }),
     },
     // The bell: what the app has told the user, newest first. `readAll` answers the new unread count.
     notifications: {

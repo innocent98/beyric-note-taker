@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { SettingsTasksRows } from "@/components/app/settings-tasks";
-import type { TasksSettings } from "@/lib/api/types";
+import { SettingsRemindersRow } from "@/components/app/settings-reminders";
+import type { TasksSettings, Team } from "@/lib/api/types";
 
 // The Settings sections the designer drew below Calendar (`isSettings` in Beyric Note Taker.dc.html):
 // Sprints and reminders, Tasks. Their features are not built yet (tasks, sprints, reminders, tool
@@ -65,7 +66,9 @@ function Text({ title, children }: { title: string; children?: ReactNode }) {
 
 // `tasks` makes the first two rows of the Tasks card live (Create tasks, Email assignees); without it
 // (the settings could not be read) they are drawn off like the rest.
-export function SettingsPlannedSections({ tasks = null }: { tasks?: TasksSettings | null }) {
+// `team` makes the reminders row live (owners and admins change it); without it (the team could not
+// be read) the row is drawn off like the sprint rows.
+export function SettingsPlannedSections({ tasks = null, team = null }: { tasks?: TasksSettings | null; team?: Team | null }) {
   return (
     <>
       <section className="card card-flush" aria-labelledby="set-sprints">
@@ -75,7 +78,9 @@ export function SettingsPlannedSections({ tasks = null }: { tasks?: TasksSetting
               Sprints and reminders
             </h2>
             <p className="pl-sub">Workspace defaults. Projects can use their own sprint length.</p>
-            <p className="meta pl-soon">These settings are not available yet.</p>
+            <p className="meta pl-soon">
+              {team ? "Sprint settings are not available yet." : "These settings are not available yet."}
+            </p>
           </div>
           <span className="pl-pill">Owners and admins</span>
         </div>
@@ -89,22 +94,26 @@ export function SettingsPlannedSections({ tasks = null }: { tasks?: TasksSetting
           <Text title="Open and close sprints at recurring meetings">Available for 1 week, 5 working day sprints.</Text>
           <Switch label="Open and close sprints at recurring meetings" />
         </div>
+        {team ? (
+          <SettingsRemindersRow team={team} />
+        ) : (
         <div className="pl-row pl-row-remind">
-          <div className="pl-grow">
-            <Text title="Remind attendees before recurring meetings">
-              The email covers what the last meeting focused on, decisions made, open questions and unfinished tasks.
-            </Text>
+            <div className="pl-grow">
+              <Text title="Remind attendees before recurring meetings">
+                The email covers what the last meeting focused on, decisions made, open questions and unfinished tasks.
+              </Text>
+            </div>
+            <div className="pl-controls pl-controls-wide">
+              <Select
+                label="Reminder timing"
+                size="pl-s34"
+                defaultValue="1 hour and 30 minutes before"
+                options={REMINDER_TIMINGS.map((timing) => [timing, timing] as const)}
+              />
+              <Switch label="Remind attendees before recurring meetings" />
+            </div>
           </div>
-          <div className="pl-controls pl-controls-wide">
-            <Select
-              label="Reminder timing"
-              size="pl-s34"
-              defaultValue="1 hour and 30 minutes before"
-              options={REMINDER_TIMINGS.map((timing) => [timing, timing] as const)}
-            />
-            <Switch label="Remind attendees before recurring meetings" />
-          </div>
-        </div>
+        )}
       </section>
 
       <section className="card card-flush" aria-labelledby="set-tasks">

@@ -6,6 +6,7 @@ import { CopyButton } from "@/components/app/copy-button";
 import { DownloadMenu } from "@/components/app/download-menu";
 import { ActionTasks } from "@/components/app/action-tasks";
 import { NotesHtml } from "@/components/app/notes-html";
+import { OpenQuestions } from "@/components/app/open-questions";
 import { LanguageSelect, TranslationBanner, useTranslation } from "@/components/app/translation";
 import { TranscriptPanel } from "@/components/app/transcript-panel";
 import {
@@ -283,6 +284,11 @@ export function MeetingView({
                   actions={
                     !translation.translated && m.tasks.length > 0 ? <ActionTasks key={m.tasks.map((t) => t.id).join()} initial={m.tasks} /> : undefined
                   }
+                  questions={
+                    !translation.translated && m.series && m.open_questions.length > 0 ? (
+                      <OpenQuestions key={m.open_questions.map((q) => q.id).join()} initial={m.open_questions} heading="Open questions" />
+                    ) : undefined
+                  }
                 />
               </div>
             )}
@@ -309,6 +315,16 @@ export function MeetingView({
                   <>
                     <dt>Template</dt>
                     <dd>{templateName}</dd>
+                  </>
+                ) : null}
+                {m.series ? (
+                  <>
+                    <dt>Series</dt>
+                    <dd>
+                      <AppLink className="det-link" href={`/series/${m.series.id}`}>
+                        {m.series.title}
+                      </AppLink>
+                    </dd>
                   </>
                 ) : null}
               </dl>

@@ -249,7 +249,6 @@ def run(base: str, engine) -> None:
         monday = datetime(now.year, now.month, now.day, 14, 0, tzinfo=UTC)
         while monday.weekday() != 0:
             monday += timedelta(days=1)
-        monday += timedelta(days=7)
 
         def event(rid, title, starts, n):
             row = CalendarEvent(
@@ -332,7 +331,7 @@ def run(base: str, engine) -> None:
                 ("Log design refinements on the tracker", None, "todo"),
             ):
                 session.add(Task(team_id=team.id, meeting_id=meeting.id, title=title, source="ai", ai_fingerprint=f"{meeting.id}-{title}", assignee_user_id=who, status=status, assigned_on=meeting.created_at.date()))  # fmt: skip
-        session.add(Task(team_id=team.id, meeting_id=meetings[0].id, title="Send the pricing draft", source="ai", ai_fingerprint="done-1", assignee_user_id=ids["ada@example.test"], status="done", done_at=meetings[0].created_at + timedelta(days=1), assigned_on=meetings[0].created_at.date()))  # fmt: skip
+        session.add(Task(team_id=team.id, meeting_id=meetings[0].id, title="Send the pricing draft", source="ai", ai_fingerprint="done-1", assignee_user_id=ids["ada@example.test"], status="done", done_at=meetings[1].created_at + timedelta(days=1), assigned_on=meetings[0].created_at.date()))  # fmt: skip
         session.commit()
         # Ada's second meeting is shared with the team; her first stays private
         meetings[1].shared_team_id = team.id

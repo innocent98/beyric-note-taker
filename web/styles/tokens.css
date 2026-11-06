@@ -70,6 +70,7 @@
   --border-soft: #EDF0EE;   /* dividers inside cards */
   --border-softer: #F0F2F1;
   --border-strong: #D5DBD8; /* input borders */
+  --teal-border: #BFDCD5;     /* the "On next agenda" pill */
   --border-hover: #B9C2BE;  /* hovered card border */
   --primary: var(--teal);
   --primary-hover: var(--teal-deep);

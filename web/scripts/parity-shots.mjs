@@ -74,6 +74,11 @@ const SCREENS = {
   "app-meetings-calendar": [APP, [["Settings", "first"], ["Connect Google Calendar", "first", 1500], ["Meetings", "first"]], "/", true],
   // The notifications list shows each notice's day and time (no prototype).
   "app-notifications": [null, [], "/notifications", true],
+  // Series (W8): a Recurring card opens the Series page. The mock's page is the owner's view of the
+  // captured "Beyric Monday planning"; the designer's has the sample team's data, so the words in the
+  // lists differ and the layout, the blocks and their states are what is compared.
+  "app-series": [APP, [["Next: Mon 9 Nov, 14:00", "first"]], "/series/1", true],
+  "app-series-friday": [APP, [["Next: Fri 6 Nov, 15:00", "first"]], "/series/3", true],
   "app-detail-processing": [null, [], "/meetings/2", true],
   "app-detail-waiting": [null, [], "/meetings/3", true],
   "app-detail-failed": [null, [], "/meetings/4", true],

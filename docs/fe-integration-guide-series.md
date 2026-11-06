@@ -40,8 +40,8 @@ The Recurring cards. Ada sees her private meeting's tasks and questions too.
       "title": "Beyric Friday review",
       "cadence": "Recurring",
       "platform": "google_meet",
-      "next_starts_at": "2026-11-06T14:07:18.770388Z",
-      "next_text": "Fri 6 Nov, 14:07",
+      "next_starts_at": "2026-11-06T14:40:44.124050Z",
+      "next_text": "Fri 6 Nov, 14:40",
       "unfinished_tasks": 2,
       "open_questions": 2
     },
@@ -79,8 +79,8 @@ Dan sees only what he may read: the counts differ from Ada's.
       "title": "Beyric Friday review",
       "cadence": "Recurring",
       "platform": "google_meet",
-      "next_starts_at": "2026-11-06T14:07:18.770388Z",
-      "next_text": "Fri 6 Nov, 14:07",
+      "next_starts_at": "2026-11-06T14:40:44.124050Z",
+      "next_text": "Fri 6 Nov, 14:40",
       "unfinished_tasks": 2,
       "open_questions": 2
     },
@@ -147,15 +147,15 @@ The Series page as the owner of the meetings sees it.
       "is_new": false,
       "unverified": false,
       "source": "ai",
-      "assigned_on": "2026-11-02",
+      "assigned_on": "2026-10-26",
       "done_at": null,
-      "created_at": "2026-11-06T13:12:19.258692Z",
+      "created_at": "2026-11-06T13:45:44.421166Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
         "title": "Beyric Monday planning",
         "platform": "google_meet",
-        "created_at": "2026-11-02T14:00:00Z"
+        "created_at": "2026-10-26T14:00:00Z"
       },
       "can_update": true,
       "can_edit": true,
@@ -175,15 +175,15 @@ The Series page as the owner of the meetings sees it.
       "is_new": false,
       "unverified": false,
       "source": "ai",
-      "assigned_on": "2026-11-02",
+      "assigned_on": "2026-10-26",
       "done_at": null,
-      "created_at": "2026-11-06T13:12:19.258692Z",
+      "created_at": "2026-11-06T13:45:44.421166Z",
       "from_meeting": true,
       "meeting": {
         "id": 1,
         "title": "Beyric Monday planning",
         "platform": "google_meet",
-        "created_at": "2026-11-02T14:00:00Z"
+        "created_at": "2026-10-26T14:00:00Z"
       },
       "can_update": true,
       "can_edit": true,
@@ -193,8 +193,41 @@ The Series page as the owner of the meetings sees it.
     },
     "<… 2 more omitted>"
   ],
-  "finished_since_text": "Mon 9 Nov",
-  "finished": [],
+  "finished_since_text": "Mon 2 Nov",
+  "finished": [
+    {
+      "id": 7,
+      "title": "Send the pricing draft",
+      "status": "done",
+      "assignee": {
+        "user_id": 2,
+        "name": "Ada Lovelace",
+        "is_you": true
+      },
+      "spoken_owner": null,
+      "due_date": null,
+      "due_phrase": null,
+      "quote": null,
+      "is_new": false,
+      "unverified": false,
+      "source": "ai",
+      "assigned_on": "2026-10-26",
+      "done_at": "2026-11-03T14:00:00Z",
+      "created_at": "2026-11-06T13:45:44.421166Z",
+      "from_meeting": true,
+      "meeting": {
+        "id": 1,
+        "title": "Beyric Monday planning",
+        "platform": "google_meet",
+        "created_at": "2026-10-26T14:00:00Z"
+      },
+      "can_update": true,
+      "can_edit": true,
+      "can_assign": true,
+      "can_claim": false,
+      "can_delete": true
+    }
+  ],
   "questions": [
     {
       "id": 3,
@@ -203,7 +236,7 @@ The Series page as the owner of the meetings sees it.
         "id": 2,
         "title": "Beyric Monday planning",
         "platform": "google_meet",
-        "created_at": "2026-11-09T14:00:00Z"
+        "created_at": "2026-11-02T14:00:00Z"
       },
       "can_update": true
     },
@@ -214,7 +247,7 @@ The Series page as the owner of the meetings sees it.
         "id": 2,
         "title": "Beyric Monday planning",
         "platform": "google_meet",
-        "created_at": "2026-11-09T14:00:00Z"
+        "created_at": "2026-11-02T14:00:00Z"
       },
       "can_update": true
     }
@@ -224,14 +257,14 @@ The Series page as the owner of the meetings sees it.
     {
       "id": 2,
       "title": "Beyric Monday planning",
-      "created_at": "2026-11-09T14:00:00Z",
+      "created_at": "2026-11-02T14:00:00Z",
       "duration_seconds": 2760,
       "tasks_count": 2
     },
     {
       "id": 1,
       "title": "Beyric Monday planning",
-      "created_at": "2026-11-02T14:00:00Z",
+      "created_at": "2026-10-26T14:00:00Z",
       "duration_seconds": 2760,
       "tasks_count": 3
     }
@@ -298,9 +331,9 @@ Same page for a teammate: the private meeting is not listed and its tasks and qu
       "is_new": false,
       "unverified": false,
       "source": "ai",
-      "assigned_on": "2026-11-02",
+      "assigned_on": "2026-10-26",
       "done_at": null,
-      "created_at": "2026-11-06T13:12:19.258692Z",
+      "created_at": "2026-11-06T13:45:44.421166Z",
       "from_meeting": true,
       "meeting": null,
       "can_update": true,
@@ -311,7 +344,7 @@ Same page for a teammate: the private meeting is not listed and its tasks and qu
     },
     "<… 2 more omitted>"
   ],
-  "finished_since_text": "Mon 9 Nov",
+  "finished_since_text": "Mon 2 Nov",
   "finished": [],
   "questions": [
     {
@@ -321,7 +354,7 @@ Same page for a teammate: the private meeting is not listed and its tasks and qu
         "id": 2,
         "title": "Beyric Monday planning",
         "platform": "google_meet",
-        "created_at": "2026-11-09T14:00:00Z"
+        "created_at": "2026-11-02T14:00:00Z"
       },
       "can_update": false
     },
@@ -332,7 +365,7 @@ Same page for a teammate: the private meeting is not listed and its tasks and qu
     {
       "id": 2,
       "title": "Beyric Monday planning",
-      "created_at": "2026-11-09T14:00:00Z",
+      "created_at": "2026-11-02T14:00:00Z",
       "duration_seconds": 2760,
       "tasks_count": 2
     }
@@ -935,7 +968,7 @@ Starts in 1 hour
 
 Beyric Friday review
 
-Fri 6 Nov, 14:07 to 14:52 UTC · Google Meet
+Fri 6 Nov, 14:40 to 15:25 UTC · Google Meet
 
 Join meeting:
 https://meet.google.com/abc-defg-hij
@@ -976,7 +1009,7 @@ Starts in 30 minutes
 
 Beyric Friday review
 
-Fri 6 Nov, 14:07 to 14:52 UTC · Google Meet
+Fri 6 Nov, 14:40 to 15:25 UTC · Google Meet
 
 Join meeting:
 https://meet.google.com/abc-defg-hij
