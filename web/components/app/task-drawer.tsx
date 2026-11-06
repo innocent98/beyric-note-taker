@@ -151,7 +151,7 @@ export function TaskDrawer({
                 Filed under {project.name || "Untitled project"} from the meeting it came from, but it could belong
                 elsewhere. Confirm or pick another project below.
               </span>
-              {task.can_update ? (
+              {task.can_edit ? (
                 <button type="button" className="td-confirm" disabled={busy} onClick={() => void save({ check_project: false })}>
                   Confirm {project.name || "Untitled project"}
                 </button>
@@ -210,7 +210,7 @@ export function TaskDrawer({
                   id="td-milestone"
                   className="select td-select"
                   value={task.milestone_id ?? ""}
-                  disabled={!task.can_update || busy}
+                  disabled={!task.can_edit || busy}
                   onChange={(event) => void save({ milestone_id: event.target.value ? Number(event.target.value) : null })}
                 >
                   <option value="">None</option>
@@ -225,7 +225,7 @@ export function TaskDrawer({
                   id="td-project"
                   className="select td-select"
                   value={task.project_id ?? ""}
-                  disabled={!task.can_update || busy}
+                  disabled={!task.can_edit || busy}
                   onChange={(event) => void save({ project_id: event.target.value ? Number(event.target.value) : null })}
                 >
                   <option value="">No project</option>

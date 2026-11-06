@@ -187,7 +187,7 @@ describe("the task drawer's project rows", () => {
   });
 
   it("switches the rows off for someone who may not change the task", () => {
-    setup({ ...byTitle("Review the copy on the portal"), can_update: false });
+    setup({ ...byTitle("Review the copy on the portal"), can_edit: false });
     expect((screen.getByLabelText("Project") as HTMLSelectElement).disabled).toBe(true);
     expect((screen.getByLabelText("Milestone") as HTMLSelectElement).disabled).toBe(true);
     expect(screen.queryByRole("button", { name: /^Confirm / })).toBeNull();
