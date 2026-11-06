@@ -33,11 +33,11 @@ from types import SimpleNamespace
 from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
-from app import calendar_states
+from app import calendar_providers, calendar_states
 from app.calendar_source import CalendarSource, CalendarSourceError, SyncBatch, SyncTokenExpired
 from app.config import Settings, get_settings
-from app.gcal_client import WINDOW_AFTER, WINDOW_BEFORE, GoogleSource
-from app.gcal_events import NO_TIME, ParsedEvent, parse_event
+from app.gcal_client import WINDOW_AFTER, WINDOW_BEFORE
+from app.gcal_events import NO_TIME, ParsedEvent
 from app.gcal_rules import JoinSettings, will_join
 from app.models import (
     AppState,
@@ -152,7 +152,7 @@ def _parse_all(batch: SyncBatch, conn: CalendarConnection, result: ApplyResult):
         if isinstance(raw_id, str):
             named.add(raw_id)
         try:
-            event = parse_event(raw, hosted_domain=conn.google_hosted_domain)
+            event = calendar_providers.parse(raw, conn)
         except Exception as exc:  # one odd event must not stall a user's whole calendar
             result.unreadable += 1
             logger.warning("skipping an unreadable calendar event (%s)", type(exc).__name__)
@@ -596,19 +596,28 @@ def sync_due_connections(
 
 
 def register_calendar_sync(
-    scheduler, settings: Settings | None = None, *, source: CalendarSource | None = None
+    scheduler,
+    settings: Settings | None = None,
+    *,
+    source: "calendar_providers.SourceRegistry | CalendarSource | None" = None,
 ) -> bool:
-    """Put the sync job on the scheduler's sync loop, but only while `CALENDAR_ENABLED` is true.
-    The loop wakes every 60 s; each connection is synced at most every `SYNC_EVERY`. One source,
-    so one access-token cache, for the life of the process."""
+    """Put one sync job per source on the scheduler's sync loop, but only while
+    `CALENDAR_ENABLED` is true. The loop wakes every 60 s; each connection is synced at most every
+    `SYNC_EVERY`. `source` is a registry (or a single source): one source per provider, so one
+    access-token cache per provider for the life of the process. Without it, one source for every
+    provider switched on is built. Google's job keeps its name, `calendar_sync`."""
     settings = settings or get_settings()
     if not settings.calendar_enabled:
         return False
-    source = source or GoogleSource(settings)
-    scheduler.register(
-        "calendar_sync",
-        60,
-        lambda session, now: sync_due_connections(session, now, source, settings=settings),
-        loop="sync",
-    )
+    sources = calendar_providers.build_sources(settings) if source is None else source
+    for each in calendar_providers.as_registry(sources):
+        name = "calendar_sync" if each.provider == "google" else f"calendar_sync_{each.provider}"
+        scheduler.register(
+            name,
+            60,
+            lambda session, now, each=each: sync_due_connections(
+                session, now, each, settings=settings
+            ),
+            loop="sync",
+        )
     return True

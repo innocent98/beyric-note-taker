@@ -52,7 +52,8 @@ minutes).
   "connected": false,
   "state": "not_connected",
   "state_text": "Google Calendar is not connected.",
-  "google_email": null,
+  "account_email": null,
+  "provider": null,
   "last_sync_at": null,
   "last_error": null,
   "rule": "all",
@@ -73,7 +74,8 @@ even when nothing is connected (the person's stored rule, `all` until they choos
   "connected": true,
   "state": "connected",
   "state_text": "Connected",
-  "google_email": "grace@example.test",
+  "account_email": "grace@example.test",
+  "provider": "google",
   "last_sync_at": null,
   "last_error": null,
   "rule": "all",
@@ -93,7 +95,8 @@ calendar.
   "connected": true,
   "state": "connected",
   "state_text": "Connected",
-  "google_email": "grace@example.test",
+  "account_email": "grace@example.test",
+  "provider": "google",
   "last_sync_at": "2026-11-04T14:57:42.885017Z",
   "last_error": null,
   "rule": "all",
@@ -175,7 +178,8 @@ when you turn it on"). It is changed with `PUT /api/calendar/settings` (section 
 | `connected` | `true` while the calendar can still be read: states `connected` and `degraded`. **`false` for `needs_reconnect`** |
 | `state` | `not_connected`, `connected`, `degraded`, `needs_reconnect`. Choose the layout from it |
 | `state_text` | The sentence for the state; show it verbatim when the state is not `connected` |
-| `google_email` | The Google account connected. `null` when not connected. **Present for `needs_reconnect`**, so the person knows which account to fix |
+| `account_email` | The account connected (before 2026-11-05 this field was called `google_email`). `null` when not connected. **Present for `needs_reconnect`**, so the person knows which account to fix |
+| `provider` | Which calendar it is: `"google"` (the only value today; `"microsoft"` is reserved). `null` when not connected. Use it for the provider label; until Microsoft ships, print "Google" as the screen does now |
 | `last_sync_at` | UTC, with microseconds. The last time the calendar was read completely; `null` before the first sync. It does not move while syncs fail |
 | `last_error` | The last failure in plain words, or `null` after a success |
 | `rule`, `rule_text` | The auto-join rule and its label (always present) |
@@ -263,7 +267,7 @@ reads them on the server, shows the message once and removes the query from the 
 | `scope_missing` | To join your meetings automatically we need permission to read your calendar events. Try again and leave the calendar box ticked. |
 | `no_refresh_token` | Google did not finish connecting. Remove Beyric at myaccount.google.com/permissions and try again. |
 | `google_failed` | Something went wrong connecting Google. Try again. |
-| `different_account` | A different Google account is already connected ({email}). To use another one, disconnect first. (`{email}` is `google_email` of the same page's read) |
+| `different_account` | A different Google account is already connected ({email}). To use another one, disconnect first. (`{email}` is `account_email` of the same page's read) |
 | `wrong_account` | This connection was started from a different account. Sign in with the right account and start again. |
 | anything else | the `google_failed` message; the code from the address is never printed |
 
@@ -288,7 +292,8 @@ Request `{"calendar_template_id": 2}` (#w08, answer trimmed to the changed field
   "connected": true,
   "state": "connected",
   "state_text": "Connected",
-  "google_email": "grace@example.test",
+  "account_email": "grace@example.test",
+  "provider": "google",
   "rule": "all",
   "rule_text": "Joining all meetings",
   "calendar_template_id": 2,

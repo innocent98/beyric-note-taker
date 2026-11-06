@@ -566,8 +566,19 @@
         "type": "object"
       },
       "CalendarOut": {
-        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`google_email` is the Google account that was connected, and is null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`upcoming` is empty unless connected.",
+        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`upcoming` is empty unless connected.",
         "properties": {
+          "account_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Email"
+          },
           "auto_join_paused": {
             "title": "Auto Join Paused",
             "type": "boolean"
@@ -598,17 +609,6 @@
             "title": "Connected",
             "type": "boolean"
           },
-          "google_email": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Google Email"
-          },
           "last_error": {
             "anyOf": [
               {
@@ -631,6 +631,21 @@
               }
             ],
             "title": "Last Sync At"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "enum": [
+                  "google",
+                  "microsoft"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
           },
           "rule": {
             "enum": [
@@ -671,7 +686,8 @@
           "connected",
           "state",
           "state_text",
-          "google_email",
+          "account_email",
+          "provider",
           "last_sync_at",
           "last_error",
           "rule",
@@ -5045,253 +5061,6 @@
         ]
       }
     },
-    "/api/calendar/google/callback": {
-      "get": {
-        "description": "Where Google sends the browser back after the consent screen. Public in the guard (it\nanswers a signed-out visitor itself) but checked by the single-use `state`, the signed-in\nuser the flow was started for, and the `calendar_flow` cookie. Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with `?calendar=connected`; a failure goes there with\n`?calendar_error=` `google_denied`, `google_failed`, `scope_missing` (the calendar box was\nunticked), `no_refresh_token` or `wrong_account`; nobody signed in goes to\n`/login?error=google_failed`. 404 `calendar_unavailable` while the feature is off.",
-        "operationId": "calendar_google_callback",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "code",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 2000,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Code"
-            }
-          },
-          {
-            "in": "query",
-            "name": "state",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 2000,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "State"
-            }
-          },
-          {
-            "in": "query",
-            "name": "error",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "maxLength": 200,
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Error"
-            }
-          }
-        ],
-        "responses": {
-          "302": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Redirect"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not logged in"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Missing or wrong X-CSRF-Token"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Malformed request"
-          }
-        },
-        "summary": "Calendar Google Callback",
-        "tags": [
-          "calendar"
-        ]
-      }
-    },
-    "/api/calendar/google/connect": {
-      "post": {
-        "description": "Start connecting Google Calendar (CSRF header needed). Returns the Google consent URL to\nnavigate to. Only the permissions in `features` are asked for, each at the moment its feature\nis switched on; permissions given earlier are kept. Sets the `calendar_flow` cookie that ties\nthe callback to this browser. 404 `calendar_unavailable` when the calendar features are off,\n503 `calendar_unavailable` when the server cannot store a token safely.",
-        "operationId": "calendar_google_connect",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConnectIn"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConnectOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not logged in"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Missing or wrong X-CSRF-Token"
-          },
-          "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not Found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Malformed request"
-          },
-          "503": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Service Unavailable"
-          }
-        },
-        "summary": "Calendar Google Connect",
-        "tags": [
-          "calendar"
-        ]
-      }
-    },
-    "/api/calendar/google/disconnect": {
-      "post": {
-        "description": "Disconnect the caller's Google account (CSRF header needed, no body). Revokes the access at\nGoogle, then deletes the caller's calendar events, all their scheduled joins (every state) and\ncalendar notifications, and the stored token. Meetings already recorded, the hours used and\nthe settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),\nand it works while the calendar features are switched off. If Google cannot be reached the\nlocal deletion still happens and `revoked` is false: tell the person to remove Beyric at\nmyaccount.google.com/permissions.\nAfterwards `connect` works again, for the same or another Google account.",
-        "operationId": "calendar_google_disconnect",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DisconnectOut"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Not logged in"
-          },
-          "403": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Missing or wrong X-CSRF-Token"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            },
-            "description": "Malformed request"
-          }
-        },
-        "summary": "Calendar Google Disconnect",
-        "tags": [
-          "calendar"
-        ]
-      }
-    },
     "/api/calendar/recurring": {
       "get": {
         "description": "The Recurring cards of the Meetings screen (no CSRF header needed): each recurring meeting\non the connected calendar with a cadence worked out from its stored times, and its next\noccurrence. `tz` is the viewer's zone (the browser's `Intl.DateTimeFormat().resolvedOptions().\ntimeZone`); without it the texts are in UTC, and the answer says which zone it used. Empty\nwhen no calendar is connected or nothing recurs. Nothing is fetched from Google. 404\n`calendar_unavailable` while the calendar features are off, 422 `invalid_timezone` for a zone\nname that is not known.",
@@ -5442,6 +5211,306 @@
           }
         },
         "summary": "Calendar Settings",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
+    "/api/calendar/{provider}/callback": {
+      "get": {
+        "description": "Where Google sends the browser back after the consent screen. Public in the guard (it\nanswers a signed-out visitor itself) but checked by the single-use `state`, the signed-in\nuser the flow was started for, and the `calendar_flow` cookie. Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with `?calendar=connected`; a failure goes there with\n`?calendar_error=` `google_denied`, `google_failed`, `scope_missing` (the calendar box was\nunticked), `no_refresh_token`, `wrong_account` or `already_connected` (another provider's\ncalendar is connected); nobody signed in goes to\n`/login?error=google_failed`. 404 `calendar_unavailable` while the feature is off.",
+        "operationId": "calendar_connect_callback",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "google",
+                "microsoft"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 2000,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Redirect"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Calendar Connect Callback",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
+    "/api/calendar/{provider}/connect": {
+      "post": {
+        "description": "Start connecting Google Calendar (CSRF header needed). Returns the Google consent URL to\nnavigate to. Only the permissions in `features` are asked for, each at the moment its feature\nis switched on; permissions given earlier are kept. Sets the `calendar_flow` cookie that ties\nthe callback to this browser. 404 `calendar_unavailable` when the calendar features are off,\n409 `calendar_already_connected` when another provider's calendar is connected (one calendar at\na time), 503 `calendar_unavailable` when the server cannot store a token safely. `provider` is\n`google`; `microsoft` answers 404 `calendar_unavailable` until it is built.",
+        "operationId": "calendar_connect_start",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "google",
+                "microsoft"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Calendar Connect Start",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
+    "/api/calendar/{provider}/disconnect": {
+      "post": {
+        "description": "Disconnect the caller's Google account (CSRF header needed, no body). Revokes the access at\nGoogle, then deletes the caller's calendar events, all their scheduled joins (every state) and\ncalendar notifications, and the stored token. Meetings already recorded, the hours used and\nthe settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),\nand it works while the calendar features are switched off. If Google cannot be reached the\nlocal deletion still happens and `revoked` is false: tell the person to remove Beyric at\nmyaccount.google.com/permissions.\nAfterwards `connect` works again, for the same or another Google account.",
+        "operationId": "calendar_connect_disconnect",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "google",
+                "microsoft"
+              ],
+              "title": "Provider",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisconnectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Calendar Connect Disconnect",
         "tags": [
           "calendar"
         ]

@@ -601,3 +601,59 @@ def test_a_manual_send_respects_the_hours_cap(session, meeting, owner):
         retry_meeting(session, meeting, vexa)
     assert (caught.value.status, caught.value.code) == (403, "hours_cap_reached")
     assert not getattr(vexa, "sent", []) and meeting.status == "failed"
+
+
+# ---- needs_help raised from the waiting room: Vexa's lobby-timeout warning, not a prompt ----
+#
+# Seen live on 2026-11-06 (meetings 15 and 16): the bot sat in the waiting room, Vexa raised
+# `[Escalation] Triggered: waiting_room_timeout_approaching` at 80% of its 15-minute lobby budget
+# (721 s) and turned the bot `needs_help`; the worker read that as a stuck prompt and withdrew the
+# knock two minutes later, just as the host clicked Admit. Vexa's own rule (`lifecycle/machine.py`
+# at `31122f9`) is that `needs_help` entered after `awaiting_admission` is still the lobby.
+
+LOBBY_WARNING = VexaMeeting(status="needs_help", reached_lobby=True)
+
+
+def test_a_lobby_timeout_warning_never_withdraws_the_knock(session, meeting):
+    fresh_send(session, meeting, 1)
+    vexa = FakeVexa(LOBBY)
+    run(session, meeting, vexa, now=NOW)
+    vexa.polls = [LOBBY_WARNING]
+    run(session, meeting, vexa, now=NOW + 12 * MINUTE)
+    run(session, meeting, vexa, now=NOW + 12 * MINUTE + GRACE)
+    run(session, meeting, vexa, now=NOW + 12 * MINUTE + 2 * GRACE)
+    assert meeting.status == "bot_sent"
+    assert not getattr(vexa, "stopped", [])
+
+
+def test_a_lobby_timeout_warning_still_reads_as_waiting_to_be_let_in(session, meeting):
+    fresh_send(session, meeting, 1)
+    run(session, meeting, FakeVexa(LOBBY_WARNING), now=NOW)
+    assert meeting.completion_reason == "awaiting_admission"
+
+
+def test_the_host_admitting_after_the_warning_gets_a_bot_in_the_call(session, meeting):
+    fresh_send(session, meeting, 1)
+    vexa = FakeVexa(LOBBY_WARNING)
+    run(session, meeting, vexa, now=NOW)
+    run(session, meeting, vexa, now=NOW + GRACE + MINUTE)
+    vexa.polls = [VexaMeeting(status="active")]
+    run(session, meeting, vexa, now=NOW + GRACE + 2 * MINUTE)
+    assert meeting.status == "bot_sent" and meeting.completion_reason == "active"
+    assert not getattr(vexa, "stopped", [])
+
+
+def test_vexa_ending_the_lobby_wait_reads_as_not_let_in(session, meeting):
+    fresh_send(session, meeting, 1)
+    timed_out = VexaMeeting(status="failed", completion_reason="awaiting_admission_timeout")
+    run(session, meeting, FakeVexa(timed_out))
+    assert meeting.status == "failed" and meeting.failure_reason == pipeline.REASON_NOT_LET_IN
+
+
+def test_needs_help_before_the_lobby_still_ends_after_the_grace(session, meeting):
+    # A consent gate or captcha before the waiting room: the two-minute rule still applies.
+    fresh_send(session, meeting, 1)
+    vexa = FakeVexa(VexaMeeting(status="needs_help", reached_lobby=False))
+    run(session, meeting, vexa, now=NOW)
+    run(session, meeting, vexa, now=NOW + GRACE)
+    assert meeting.status == "failed" and meeting.failure_reason == pipeline.REASON_NEEDS_HELP
