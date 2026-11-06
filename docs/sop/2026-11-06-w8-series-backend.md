@@ -43,6 +43,9 @@ Fast checks locally (ruff, format, the touched test files, the whole `tests/test
 - No new environment variable, no nginx line, no cron. The reminder job is on the existing scheduler; **reminders are off for every team until an owner/admin switches them on** (PR 2 Settings card, or `PATCH /api/team`).
 - Roll back: `alembic downgrade 0026` drops the new tables and columns (series, agenda, flags); mail rows already queued for `series_agenda`/`series_reminder` would fail with "unknown template" once the code is reverted, which is harmless.
 
+## Addendum (2026-11-06): the reused-link chip
+Adebayo approved lead-designing "Make this a recurring meeting?" (spec D12). Backend: `MeetingDetail.suggest_recurring` (owner's ready meeting, in no series, whose link code the owner used for another meeting) and `POST /api/meetings/{id}/recurring` (owner only, 201, 409 `not_reused`). It makes a hand-made series named after the meeting and puts the owner's meetings with that code (in no series) into it, without consuming agenda lines. Tests in `tests/test_series.py`; route classified in `test_team_visibility.py`.
+
 ## Follow-ups
 - Screens (PR 2). "Add to recurring meeting" and "Make this a recurring meeting?" are not drawn: lead decision needed.
 - W8b "possibly resolved" suggestions (spec 7, optional), the sprint line and milestone countdown in the mails (W9, W4), typed outside recipients for the agenda (needs W6's opt-out).

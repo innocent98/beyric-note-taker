@@ -1545,6 +1545,11 @@
             "title": "Step",
             "type": "string"
           },
+          "suggest_recurring": {
+            "default": false,
+            "title": "Suggest Recurring",
+            "type": "boolean"
+          },
           "tasks": {
             "items": {
               "$ref": "#/components/schemas/TaskOut"
@@ -6436,6 +6441,89 @@
         "summary": "Export Meeting",
         "tags": [
           "meetings"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/recurring": {
+      "post": {
+        "description": "\"Make this a recurring meeting?\": make a recurring meeting named after this meeting from a\nlink that was used before, and put this meeting and the caller's other meetings of the same\nlink code into it. Only the meeting's owner (404 for anyone else); 409 `not_reused` when the\nlink was not used before; offered by `suggest_recurring` on the meeting.",
+        "operationId": "make_recurring",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingSeriesOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_reused` or `series_limit`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Make Recurring",
+        "tags": [
+          "series"
         ]
       }
     },

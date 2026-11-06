@@ -789,6 +789,10 @@ Only the meeting's owner may.
 }
 ```
 
+## "Make this a recurring meeting?" (lead-designed chip)
+
+`GET /api/meetings/{id}` carries **`suggest_recurring`** (bool, default false): true only for the **owner's** ready meeting that is in no series when the same link (platform and code) was used for another of their meetings. Draw the chip then. `POST /api/meetings/{id}/recurring` (no body) makes a recurring meeting named after the meeting and puts this meeting and the owner's other meetings with that code (in no series) into it; it answers **201** `{"series": {"id", "title"}}`. **409 `not_reused`** when the link was not used before; **404** for anyone but the owner. **NOT LIVE:** these shapes come from `tests/test_series.py`, not from a capture; the response shape is the same `MeetingSeriesOut` as `PUT /api/meetings/{id}/series` (captures 42 and 45).
+
 ## Reminders: the Settings card
 
 The designer's **Sprints and reminders** card has the toggle *Remind attendees before recurring meetings* and a timing select. The API:
@@ -1028,4 +1032,5 @@ There is no long-running state: every call answers at once and the mail is sent 
 | Reminder queueing, once per person and occurrence, the two windows | **live** against stored event rows; the scheduler tick itself (every minute) is covered by `tests/test_sweeps.py`, **NOT live** |
 | Calendar linking (`link_from_calendar`) from a real sync | **NOT LIVE**: events and joins are rows made by the script as the sync and the scheduler leave them; the Google round-trip is in the calendar guides |
 | Make/attach/rename by hand, team switch, personal preference | **live** (39 to 52, 57 to 58) |
+| `suggest_recurring` and `POST /api/meetings/{id}/recurring` | tests only (`tests/test_series.py`), **NOT LIVE** |
 | HTML layout of the mails against the designer's file | built by the real layout code; **not compared to a rendered screenshot** |

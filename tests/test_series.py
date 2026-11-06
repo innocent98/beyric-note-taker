@@ -623,3 +623,40 @@ def test_only_a_manager_switches_the_teams_reminders(api, app, session, owner, d
     error_of(patch(api, "/api/team", {"reminder_timing": "2h"}), 422, "validation_error")
     member = sign_in(app, DANIEL_EMAIL)
     error_of(patch(member, "/api/team", {"reminders_on": False}), 403, "team_forbidden")
+
+
+# ---- "Make this a recurring meeting?" ----
+
+
+def test_a_reused_link_is_offered_and_makes_a_series_of_every_meeting_with_that_code(
+    api, session, owner, template
+):
+    first = ready(session, template, created_at=MONDAY, native_id="reuse-aaa")
+    second = ready(session, template, created_at=MONDAY + timedelta(days=7), native_id="reuse-aaa")
+    other = ready(session, template, native_id="different-code")
+    assert api.get(f"/api/meetings/{second.id}").json()["suggest_recurring"] is True
+    assert api.get(f"/api/meetings/{other.id}").json()["suggest_recurring"] is False
+    made = api.post(f"/api/meetings/{second.id}/recurring")
+    assert made.status_code == 201
+    body = made.json()["series"]
+    session.expire_all()
+    assert session.get(Meeting, first.id).series_id == body["id"]
+    assert session.get(Meeting, second.id).series_id == body["id"]
+    assert session.get(Meeting, other.id).series_id is None
+    assert api.get(f"/api/meetings/{second.id}").json()["suggest_recurring"] is False
+
+
+def test_a_link_used_once_is_not_recurring(api, session, template):
+    only = ready(session, template, native_id="once-only")
+    assert api.get(f"/api/meetings/{only.id}").json()["suggest_recurring"] is False
+    error_of(api.post(f"/api/meetings/{only.id}/recurring"), 409, "not_reused")
+
+
+def test_only_the_owner_is_offered_it_and_may_do_it(api, app, session, owner, daniel, template):
+    a = ready(session, template, native_id="shared-code")
+    b = ready(session, template, native_id="shared-code")
+    share(session, b, owner)
+    other = sign_in(app, DANIEL_EMAIL)
+    assert other.get(f"/api/meetings/{b.id}").json()["suggest_recurring"] is False
+    error_of(other.post(f"/api/meetings/{b.id}/recurring"), 404, "not_found")
+    error_of(other.post(f"/api/meetings/{a.id}/recurring"), 404, "not_found")  # private: not theirs
