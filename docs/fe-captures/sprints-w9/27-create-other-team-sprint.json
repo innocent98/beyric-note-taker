@@ -1,0 +1,29 @@
+{
+  "note": "422 `sprint_not_on_team`: the same answer for another team's sprint, a closed one or one that does not exist.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/tasks",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "title": "x",
+      "sprint_id": 3
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "sprint_not_on_team",
+        "message": "That sprint is not available for this task."
+      }
+    }
+  }
+}

@@ -155,20 +155,6 @@ def _enabled(request: Request, google: google_oauth.GoogleOAuth | None) -> None:
         raise services.Refused(404, "calendar_unavailable", "Google Calendar is not available.")
 
 
-def _calendar_connection(session: Session, user: User) -> CalendarConnection | None:
-    """The user's Google connection if it gives the calendar feature, else None."""
-    conn = session.scalars(
-        select(CalendarConnection).where(
-            CalendarConnection.user_id == user.id, CalendarConnection.provider == "google"
-        )
-    ).first()
-    if conn is None or conn.status == "disconnected":
-        return None
-    if "calendar" not in calendar_connect.granted_features(conn):
-        return None
-    return conn
-
-
 def _series(
     session: Session, conn: CalendarConnection, zone: ZoneInfo, now: datetime
 ) -> list[RecurringSeries]:
@@ -223,6 +209,6 @@ def calendar_recurring(
     name that is not known."""
     _enabled(request, google)
     zone = _zone(tz)
-    conn = _calendar_connection(session, user)
+    conn = calendar_connect.live_calendar_connection(session, user)
     series = _series(session, conn, zone, _now()) if conn is not None else []
     return RecurringOut(timezone=zone.key, series=series)

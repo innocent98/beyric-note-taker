@@ -11,7 +11,7 @@ person's own reminder preference (on). `series.project_id` has no foreign key: p
 their own migration (W4), which writes it.
 
 Revision ID: 0030
-Revises: 0026
+Revises: 0029
 Create Date: 2026-11-06
 """
 
@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0030"
-down_revision = "0026"
+down_revision = "0029"
 branch_labels = None
 depends_on = None
 

@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import sessionmaker
 
-from app import accounts, mail, signup, sweeps
+from app import accounts, mail, signup, sprints, sweeps
 from app.models import (
     AppState,
     AuthToken,
@@ -326,6 +326,7 @@ def test_sweeps_are_idempotent(registered, session):
         "sweep_calendar_events",
         "sweep_mail_outbox",
         "sweep_unverified_accounts",
+        "sweep_shares",
     ]
     for name in names:
         run(registered, name, session)
@@ -351,6 +352,8 @@ def test_every_sweep_is_registered_hourly_on_the_sync_loop(registered):
         "sweep_mail_outbox",
         "sweep_unverified_accounts",
         "series_from_joins",
+        "sweep_shares",
+        "rollover_sprints",
     }
     hourly = [j for j in registered._jobs["sync"] if j.every == timedelta(hours=1)]
     assert {j.name for j in hourly} == sweep_names
@@ -358,6 +361,11 @@ def test_every_sweep_is_registered_hourly_on_the_sync_loop(registered):
     assert [j.name for j in registered._jobs["sync"] if j.every != timedelta(hours=1)] == [
         "series_reminders"
     ]
+
+
+def test_the_sprint_rollover_is_the_function_sprints_has(registered):
+    """W9: closing sprints that ended is `sprints.rollover_all`, run hourly with the sweeps."""
+    assert job(registered, "rollover_sprints").fn is sprints.rollover_all
 
 
 def test_the_mail_sender_is_registered_on_the_mail_loop_not_the_dispatch_loop(registered):
@@ -451,7 +459,7 @@ def test_no_mail_sender_is_registered_when_production_has_no_provider(scheduler,
 
     assert scheduler._jobs["dispatch"] == []
     assert "no mail provider" in caplog.text
-    assert len(scheduler._jobs["sync"]) == 8  # the sweeps do not depend on mail
+    assert len(scheduler._jobs["sync"]) == 10  # the sweeps do not depend on mail
 
 
 @pytest.mark.parametrize("calendar_enabled", [False, True])

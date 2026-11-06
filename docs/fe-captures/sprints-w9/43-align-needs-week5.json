@@ -1,0 +1,29 @@
+{
+  "note": "422 `align_needs_week5`: the Monday-to-Friday switch is only for 1 week, 5 working days. Nothing is changed.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/team",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "sprint_length": "week7",
+      "sprint_align_weekdays": true
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "align_needs_week5",
+        "message": "Only available for 1 week, 5 working day sprints."
+      }
+    }
+  }
+}

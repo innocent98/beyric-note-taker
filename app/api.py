@@ -22,8 +22,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app import (
     api_accounts,
     api_admin,
+    api_projects,
     api_series,
     api_settings,
+    api_shares,
+    api_sprints,
     api_tasks,
     api_team,
     api_translation,
@@ -792,5 +795,8 @@ router.include_router(calendar_recurring.router)
 router.include_router(api_workspace.router)
 router.include_router(api_tasks.router)
 router.include_router(api_series.router)
+router.include_router(api_projects.router)
+router.include_router(api_sprints.router)
 router.include_router(api_team.router)
 router.include_router(api_translation.router)
+router.include_router(api_shares.router)

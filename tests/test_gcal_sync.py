@@ -96,9 +96,7 @@ def make_world(session, email="ada@example.test", *, hosted_domain: str | None =
     session.add(template)
     session.flush()
     user_settings = UserSettings(user_id=user.id, calendar_template_id=template.id)
-    conn = CalendarConnection(
-        user_id=user.id, provider="google", google_hosted_domain=hosted_domain
-    )
+    conn = CalendarConnection(user_id=user.id, provider="google", account_domain=hosted_domain)
     session.add_all([user_settings, conn])
     session.commit()
     return World(user, template, user_settings, conn)

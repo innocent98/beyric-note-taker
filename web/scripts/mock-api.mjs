@@ -155,7 +155,7 @@ const makeTask = (id, title, who, due, status, ref, extra = {}) => ({
   id, title, status, assignee: personOf(who), spoken_owner: null, due_date: due, due_phrase: null,
   quote: null, is_new: !!ref && ref === mondayRef && status !== "done", unverified: false, source: ref ? "ai" : "manual",
   assigned_on: ref ? ref.created_at.slice(0, 10) : "2026-11-02", done_at: status === "done" ? "2026-11-02T10:00:00Z" : null,
-  created_at: "2026-11-02T10:00:00Z", from_meeting: !!ref, meeting: ref, ...allowed, ...extra,
+  created_at: "2026-11-02T10:00:00Z", from_meeting: !!ref, meeting: ref, project_id: ref ? 1 : null, milestone_id: null, check_project: false, ...allowed, ...extra,
 });
 const tasks = [
   makeTask(8, "Continue hiring for the customer success lead role", null, "2026-11-06", "todo", mondayRef, { spoken_owner: "Kemi Adeyemi", quote: "Intended start on or before Friday.", can_claim: true }),
@@ -171,9 +171,47 @@ const tasks = [
   makeTask(11, "Implement role-based permissions", 2, null, "done", planningRef),
   makeTask(12, "Update onboarding screens", 3, null, "done", planningRef),
 ];
+// Projects and milestones (W4). The shapes are the ones in docs/fe-captures/projects-w4/; the values
+// are the designer's: Client Portal (teal) and Beyric Note Taker (blue), the milestone "Client Portal
+// launch, Tue 8 Dec 2026" set in the Monday planning, eight launch tasks and one task to check. The
+// designer's recurring-meeting links and sprint lengths have no feature yet and are not mocked.
+// `--role member` shows the screens as a member sees them. Writes change them in memory.
+let proposalOpen = true; // meeting 8 carries one unconfirmed proposal until it is confirmed
+let projects = [];
+let milestones = [];
+let nextProjectId = 10;
+function resetProjects() {
+  projects = [
+    { id: 1, name: "Client Portal", color: "#0E6B5E", keywords: ["portal", "onboarding", "checkout", "pricing"], created_at: "2026-11-01T09:00:00Z" },
+    { id: 2, name: "Beyric Note Taker", color: "#3C4A7A", keywords: ["Beyric", "note taker", "transcript"], created_at: "2026-11-01T09:01:00Z" },
+  ];
+  milestones = [{ id: 1, name: "Client Portal launch", due_date: "2026-12-08", project_id: 1, source_meeting: mondayRef, quote: "Launch is December 8.", confirmed_at: "2026-11-02T11:00:00Z", task_count: 0, done_count: 0 }];
+}
+resetProjects();
+const zoomRef = refOf(8, "Zoom 88205679674", "2026-11-02");
+tasks.push(
+  makeTask(13, "Measure transcript accuracy against the September 12 meeting", 5, "2026-11-05", "todo", zoomRef, { project_id: 2, is_new: false }),
+  makeTask(14, "Decide how sending the note taker can be automated", 2, null, "todo", zoomRef, { project_id: 2, is_new: false }),
+);
+for (const t of tasks) if ([1, 3, 5, 8, 9, 10, 11, 12].includes(t.id)) t.milestone_id = 1;
+tasks.find((t) => t.id === 6).check_project = true;
+const proposal = { id: 2, name: "Beta release", due_date: "2026-11-20", project_id: 2, source_meeting: refOf(8, "Zoom 88205679674", "2026-11-02"), quote: "We want the beta out by the twentieth of November.", confirmed_at: null, task_count: 0, done_count: 0 };
+const projectOut = (p) => ({
+  ...p,
+  open_tasks: tasks.filter((t) => t.project_id === p.id && t.status !== "done").length,
+  milestone: (() => {
+    const m = milestones.filter((x) => x.project_id === p.id && x.confirmed_at).sort((a, b) => (a.due_date < b.due_date ? -1 : 1))[0];
+    return m ? { id: m.id, name: m.name, due_date: m.due_date } : null;
+  })(),
+});
+const milestoneOut = (m) => {
+  const ofIt = tasks.filter((t) => t.milestone_id === m.id);
+  const manage = teamRole !== "member";
+  return { ...m, task_count: ofIt.length, done_count: ofIt.filter((t) => t.status === "done").length, can_confirm: manage && !m.confirmed_at, can_edit: manage };
+};
 const meetingTasks = (id) => tasks.filter((t) => t.meeting?.id === id).sort((a, b) => b.id - a.id);
 const tasksNew = () => tasks.filter((t) => t.is_new && t.status !== "done").length;
-const attention = () => ({ needs_owner: tasks.filter((t) => !t.assignee && t.status !== "done").length, unverified: 0 });
+const attention = () => ({ needs_owner: tasks.filter((t) => !t.assignee && t.status !== "done").length, unverified: 0, check_project: tasks.filter((t) => t.check_project && t.status !== "done").length });
 let tasksSettings = { auto_create_tasks: true, email_assignees: true };
 for (const meeting of details) {
   meeting.tasks = [];
@@ -203,6 +241,11 @@ const sample = {
   can_share: true,
   shared_by: null,
 };
+// Meeting 9 is the sample with a participant who is not on the team (the lead-designed "Add email").
+const withStranger = { ...sample, id: 9, title: "Zoom 99205679674", native_id: "99205679674", participants: ["Adebayo", "Kemi Adeyemi"] };
+const shareCapture = (name) => JSON.parse(readFileSync(join(captureDir, "share", `${name}.json`), "utf8")).response.body;
+let shares = []; // newest first
+let shareId = 0;
 const translating = {}; // language -> when it was asked for
 const TRANSLATE_AFTER_MS = 1500;
 const translationOf = (language) => {
@@ -334,7 +377,12 @@ const server = http.createServer(async (req, res) => {
   if (path === "/__mock/reset") {
     for (const language of Object.keys(translating)) delete translating[language];
     defaultLanguage = values.language;
+    shares = [];
+    shareId = 0;
     armed.decisions = armed.review = true;
+    resetProjects();
+    for (const t of tasks) t.milestone_id = [1, 3, 5, 8, 9, 10, 11, 12].includes(t.id) ? 1 : null;
+    proposalOpen = true;
     return json(res, 200, { reset: true });
   }
 
@@ -499,6 +547,46 @@ const server = http.createServer(async (req, res) => {
     found.shared_with_team = method === "POST";
     return json(res, 200, found);
   }
+  // Projects and milestones (in memory).
+  if (path === "/api/projects" && method === "GET") return json(res, 200, { projects: projects.map(projectOut), can_manage: teamRole !== "member" });
+  if (path === "/api/projects" && method === "POST") {
+    if (teamRole === "member") return json(res, 403, { error: { code: "team_forbidden", message: "Only an owner or admin of the team can do that." } });
+    const made = { id: ++nextProjectId, name: data?.name ?? "", color: data?.color ?? ["#0E6B5E", "#3C4A7A", "#8A4B00", "#8A2E5C", "#1F6FB2", "#4A524E"][projects.length % 6], keywords: data?.keywords ?? [], created_at: new Date().toISOString() };
+    projects.push(made);
+    return json(res, 201, projectOut(made));
+  }
+  const oneProject = /^\/api\/projects\/(\d+)$/.exec(path);
+  if (oneProject) {
+    const project = projects.find((p) => p.id === Number(oneProject[1]));
+    if (!project) return json(res, 404, { error: { code: "not_found", message: "No such project." } });
+    if (method === "GET") return json(res, 200, projectOut(project));
+    if (teamRole === "member") return json(res, 403, { error: { code: "team_forbidden", message: "Only an owner or admin of the team can do that." } });
+    if (method === "DELETE") {
+      projects.splice(projects.indexOf(project), 1);
+      milestones = milestones.filter((m) => m.project_id !== project.id);
+      for (const t of tasks) if (t.project_id === project.id) Object.assign(t, { project_id: null, milestone_id: null, check_project: false });
+      res.writeHead(204);
+      return res.end();
+    }
+    if (method === "PATCH") Object.assign(project, data ?? {});
+    return json(res, 200, projectOut(project));
+  }
+  if (path === "/api/milestones" && method === "GET") return json(res, 200, { milestones: milestones.filter((m) => m.confirmed_at).map(milestoneOut) });
+  const confirming = /^\/api\/milestones\/(\d+)\/confirm$/.exec(path);
+  if (confirming && method === "POST") {
+    const found = [...milestones, ...(proposalOpen ? [proposal] : [])].find((m) => m.id === Number(confirming[1]));
+    if (!found) return json(res, 404, { error: { code: "not_found", message: "No such milestone." } });
+    if (teamRole === "member") return json(res, 403, { error: { code: "team_forbidden", message: "Only an owner or admin of the team can do that." } });
+    found.confirmed_at ??= new Date().toISOString();
+    if (!milestones.includes(found)) milestones.push(found);
+    return json(res, 200, milestoneOut(found));
+  }
+  const ofMeetingMs = /^\/api\/meetings\/(\d+)\/milestones$/.exec(path);
+  if (ofMeetingMs && method === "GET") {
+    const id = Number(ofMeetingMs[1]);
+    const mine = [...milestones, ...(proposalOpen && !milestones.includes(proposal) ? [proposal] : [])].filter((m) => m.source_meeting?.id === id);
+    return json(res, 200, { milestones: mine.map(milestoneOut) });
+  }
   // Tasks: the list, one task, the changes and the meeting's own list (in memory).
   if (path === "/api/tasks" && method === "GET") {
     const who = url.searchParams.get("assignee");
@@ -522,6 +610,7 @@ const server = http.createServer(async (req, res) => {
     if (method === "PATCH") {
       for (const [key, value] of Object.entries(data ?? {})) {
         if (key === "assignee_user_id") task.assignee = personOf(value);
+        else if (key === "project_id") Object.assign(task, { project_id: value, check_project: false });
         else task[key] = value;
       }
       if (data?.status) task.is_new = false;
@@ -536,6 +625,40 @@ const server = http.createServer(async (req, res) => {
   if (path === "/api/settings/tasks") {
     if (method === "PUT") tasksSettings = { auto_create_tasks: !!data?.auto_create_tasks, email_assignees: !!data?.email_assignees };
     return json(res, 200, tasksSettings);
+  }
+  // Share notes by email: the refusals replay the real captures in docs/fe-captures/share/; a good
+  // request is kept in memory and answered like the real one (a recipient is `sent` at once).
+  if (path === "/api/mail/opt-out" && method === "POST") {
+    if (data?.token === "dead") return json(res, 400, shareCapture("16-optout-garbage"));
+    return json(res, 200, shareCapture("14-optout-ok"));
+  }
+  const shareRoute = /^\/api\/meetings\/(\d+)\/shares$/.exec(path);
+  if (shareRoute) {
+    if (![sample.id, withStranger.id].includes(Number(shareRoute[1]))) return json(res, 404, { error: { code: "not_found", message: "No such meeting" } });
+    if (method === "GET") return json(res, 200, { shares });
+    const people = data?.recipients ?? [];
+    if (!["en", "fr", "es"].includes(data?.language)) return json(res, 422, shareCapture("20-share-language-unsupported"));
+    if (people.length > 10) return json(res, 422, shareCapture("21-share-too-many"));
+    if (data?.message === "limit") return json(res, 429, shareCapture("37-share-limit"));
+    shareId += 1;
+    const waiting = data.language !== "en" && !translationOf(data.language);
+    shares.unshift({
+      share_id: shareId,
+      status: waiting ? "waiting_translation" : "queued",
+      language: data.language,
+      attach: data.attach ?? "none",
+      include_transcript: !!data.include_transcript,
+      message: data.message ?? "",
+      created_at: new Date().toISOString(),
+      recipients: people.map((r) => ({
+        email: r.email,
+        name: r.name ?? teamMembers.find((m) => m.email === r.email)?.name ?? null,
+        status: waiting ? "pending" : "sent",
+        is_team_member: teamMembers.some((m) => m.email === r.email),
+      })),
+    });
+    res.writeHead(202, { "content-type": "application/json" });
+    return res.end(JSON.stringify({ share_id: shareId, status: shares[0].status }));
   }
   const translate = /^\/api\/meetings\/(\d+)\/translations(?:\/(\w+))?$/.exec(path);
   if (translate) {
@@ -570,8 +693,10 @@ const server = http.createServer(async (req, res) => {
     const meeting =
       Number(detail[1]) === sample.id
         ? { ...sample, translations: ["fr", "es"].filter((l) => translationOf(l)).map((language) => ({ language, status: translationOf(language).status, stale: false })) }
-        : details.find((m) => m.id === Number(detail[1]));
-    if (meeting && meeting !== sample) Object.assign(meeting, { tasks: meetingTasks(meeting.id), tasks_count: meetingTasks(meeting.id).length });
+        : Number(detail[1]) === withStranger.id
+          ? withStranger
+          : details.find((m) => m.id === Number(detail[1]));
+    if (meeting && meeting !== sample && meeting !== withStranger) Object.assign(meeting, { tasks: meetingTasks(meeting.id), tasks_count: meetingTasks(meeting.id).length });
     return meeting ? json(res, 200, meeting) : json(res, 404, { error: { code: "not_found", message: "That meeting was not found." } });
   }
   // Email preferences and the bell: the captures in docs/fe-captures/prelaunch-mail-prefs/. The

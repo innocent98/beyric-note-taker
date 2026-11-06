@@ -28,6 +28,7 @@ vi.mock("@/lib/api/browser", () => ({
     meetings: { setSeries: mocks.setSeries, makeRecurring: mocks.makeRecurring, get: mocks.get },
     questions: { update: vi.fn() },
     tasks: {},
+    milestones: { forMeeting: () => Promise.resolve({ milestones: [] }), confirm: vi.fn() },
     team: { update: vi.fn() },
     settings: { reminders: { set: mocks.setReminders }, tasks: { set: vi.fn() } },
   },

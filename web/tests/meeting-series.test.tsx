@@ -9,7 +9,7 @@ import { captured } from "./helpers";
 // notes (docs/fe-captures/series-w8/15-meeting-detail.json for the two new fields).
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
-vi.mock("@/lib/api/browser", () => ({ api: { questions: { update: vi.fn() }, meetings: {}, tasks: {}, series: { list: vi.fn().mockResolvedValue({ timezone: "UTC", series: [] }), create: vi.fn() } } }));
+vi.mock("@/lib/api/browser", () => ({ api: { questions: { update: vi.fn() }, meetings: {}, tasks: {}, milestones: { forMeeting: () => Promise.resolve({ milestones: [] }), confirm: vi.fn() }, series: { list: vi.fn().mockResolvedValue({ timezone: "UTC", series: [] }), create: vi.fn() } } }));
 
 const base = captured<Meeting>("47-meeting-detail-ready.json");
 const withQuestions = {

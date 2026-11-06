@@ -14,7 +14,7 @@ from datetime import UTC, date, datetime, timedelta
 from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app import ai_runs, mail, tasks, teams, timezones
+from app import ai_runs, filing, mail, projects, tasks, teams, timezones, titles
 from app.extraction import (
     CheckedExtraction,
     ExtractionFailed,
@@ -264,9 +264,18 @@ def run_extraction(
             if row.fingerprint in hints:
                 row.heard_as = hints[row.fingerprint]
     if checked is not None and full:
+        # The owner may have left the team while the model was asked: file into the team they are
+        # in now, never the one they were in then.
+        team_id = teams.ensure_team(session, session.get(User, owner_id)).id
+        members = tasks.members_of(session, team_id)
         live = tasks.reconcile(
             session, meeting, team_id, parsed.action_items, checked.action_items, members, day,
             quiet=quiet,
+        )  # fmt: skip
+        # Dates the meeting stated for a launch or deadline: proposals only, a person confirms.
+        projects.propose(
+            session, meeting, team_id, checked.milestones,
+            filing.team_projects(session, team_id), titles.meeting_name(meeting),
         )  # fmt: skip
         # Not for a meeting older than the outbox keeps its sent rows: the unique index that makes
         # "once" true would be gone, so a rewrite that long after could mail the same people twice.

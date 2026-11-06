@@ -13,7 +13,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import auth, signup, team_admin, team_invites, titles
+from app import auth, signup, sprints, team_admin, team_invites, titles
 from app.api_schemas import (
     AcceptInviteIn,
     ErrorResponse,
@@ -65,6 +65,9 @@ def _team_out(session: Session, me: TeamMember, now: datetime) -> TeamOut:
         share_new_meetings=team.share_new_meetings,
         reminders_on=team.reminders_on,
         reminder_timing=team.reminder_timing,
+        sprint_length=team.sprint_length,
+        sprint_custom_days=team.sprint_custom_days,
+        sprint_align_weekdays=team.sprint_align_weekdays,
         my_role=me.role,
         member_count=members,
         pending_invites=pending,
@@ -102,8 +105,10 @@ def update_team(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TeamOut:
-    """Rename the team, switch "Share new meetings" and/or set the reminders before recurring
-    meetings: `reminders_on` and `reminder_timing` (owner or admin). The default applies,
+    """Rename the team, switch "Share new meetings", set the sprint length, custom days and Monday
+    to Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other length),
+    and/or set the reminders before recurring meetings: `reminders_on` and `reminder_timing`.
+    Changing a sprint setting redraws the open sprints. The default applies,
     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
     member's meetings are never shared by it. 403 `team_forbidden`."""
     me = team_admin.my_membership(session, user)
@@ -120,6 +125,22 @@ def update_team(
         team.reminders_on = body.reminders_on
     if body.reminder_timing is not None:
         team.reminder_timing = body.reminder_timing
+    sprint_changes = {
+        k: getattr(body, k)
+        for k in ("sprint_length", "sprint_custom_days", "sprint_align_weekdays")
+        if getattr(body, k) is not None
+    }
+    if sprint_changes:
+        length = sprint_changes.get("sprint_length", team.sprint_length)
+        if sprint_changes.get("sprint_align_weekdays") and length != "week5":
+            raise Refused(
+                422,
+                "align_needs_week5",
+                "Only available for 1 week, 5 working day sprints.",
+            )
+        for key, value in sprint_changes.items():
+            setattr(team, key, value)
+        sprints.reflow(session, team)
     session.commit()
     return _team_out(session, me, _now())
 

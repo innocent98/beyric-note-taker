@@ -56,9 +56,24 @@ class VexaMeeting:
     failure_reason: str | None = None
     # Vexa's id for this meeting (the one `send_bot` returns), when the body carries one.
     vexa_id: int | None = None
+    # The bot has stood in the waiting room (`awaiting_admission` in Vexa's own transition
+    # history). Vexa raises `needs_help` there as a warning that its lobby budget is running out,
+    # which is not a prompt the bot is stuck on.
+    reached_lobby: bool = False
 
 
 MAX_FAILURE_REASON_CHARS = 300
+
+
+def _reached_lobby(data: dict) -> bool:
+    """Whether Vexa's `data.status_transition` shows the bot in the waiting room. Entries that
+    are not objects are skipped: this only ever keeps a bot waiting longer, never ends one."""
+    transitions = data.get("status_transition")
+    if not isinstance(transitions, list):
+        return False
+    return any(
+        isinstance(step, dict) and step.get("to") == "awaiting_admission" for step in transitions
+    )
 
 
 def _failure_reason(data: dict) -> str | None:
@@ -262,6 +277,7 @@ class VexaClient:
             recording_status=recording_status,
             completion_reason=completion_reason,
             failure_reason=_failure_reason(data),
+            reached_lobby=_reached_lobby(data),
             vexa_id=body["id"]
             if isinstance(body.get("id"), int) and not isinstance(body.get("id"), bool)
             else None,

@@ -327,8 +327,8 @@ def test_a_good_callback_stores_the_connection_and_goes_back_to_the_page(
     assert landing(response) == ("/settings", {"calendar": "connected"})
     conn = connection_of(session, owner)
     assert conn.provider == "google" and conn.status == "connected"
-    assert conn.google_account_email == "grace@example.test" and conn.google_sub == "g-grace-1"
-    assert conn.google_hosted_domain is None
+    assert conn.account_email == "grace@example.test" and conn.account_subject == "g-grace-1"
+    assert conn.account_domain is None
     assert conn.needs_reconnect_reason is None and conn.last_error is None
     assert (
         conn.last_sync_at is None and conn.sync_token is None
@@ -409,7 +409,7 @@ def test_a_meet_only_connection_has_no_calendar_feature(web, session, owner, goo
 
 def test_granted_features_reads_the_scope_list(session, owner):
     def conn(scopes):
-        return CalendarConnection(user_id=owner.id, granted_scopes=scopes)
+        return CalendarConnection(user_id=owner.id, provider="google", granted_scopes=scopes)
 
     assert calendar_connect.granted_features(conn(None)) == set()
     assert calendar_connect.granted_features(conn("")) == set()
@@ -588,8 +588,8 @@ def test_connected_google_email_may_differ_from_signin_email(web, session, owner
     )
     conn = connection_of(session, owner)
     assert owner.email == OWNER_EMAIL
-    assert conn.google_account_email == "work.person@example.test"
-    assert conn.google_sub == "g-other-9" and conn.google_hosted_domain == "example.test"
+    assert conn.account_email == "work.person@example.test"
+    assert conn.account_subject == "g-other-9" and conn.account_domain == "example.test"
     session.refresh(owner)
     assert owner.google_sub is None  # connecting a calendar is not a sign-in identity
 
@@ -624,7 +624,7 @@ def test_another_google_account_without_a_refresh_token_is_refused(web, session,
     google.issue_refresh_token = False
     response, _, _ = connect_google(web, google, email="someone.else@example.test", sub="g-x")
     assert landing(response)[1] == {"calendar_error": "different_account"}
-    assert connection_of(session, owner).google_sub == "g-grace-1"
+    assert connection_of(session, owner).account_subject == "g-grace-1"
 
 
 def kill(session, owner, reason="revoked"):
@@ -642,7 +642,7 @@ def test_another_account_without_a_refresh_token_on_a_dead_connection_needs_one(
     google.issue_refresh_token = False
     response, _, _ = connect_google(web, google, email="someone.else@example.test", sub="g-x")
     assert landing(response)[1] == {"calendar_error": "no_refresh_token"}
-    assert connection_of(session, owner).google_sub == "g-grace-1"
+    assert connection_of(session, owner).account_subject == "g-grace-1"
 
 
 def test_a_new_scope_without_a_new_refresh_token_is_refused_not_faked(web, session, owner, google):
@@ -807,7 +807,7 @@ def test_a_different_google_account_never_replaces_a_working_connection(
     assert landing(response)[1] == {"calendar_error": "different_account"}
     session.expire_all()
     after = connection_of(session, owner)
-    assert after.google_sub == "g-grace-1" and after.status == status
+    assert after.account_subject == "g-grace-1" and after.status == status
     assert after.refresh_token_enc == blob and after.granted_scopes == scopes
     assert after.meet_subscription_state == "active"
     assert len(session.scalars(select(CalendarEvent)).all()) == 1  # the events survive
@@ -832,7 +832,7 @@ def test_replacing_a_dead_connection_with_another_account_drops_the_old_accounts
     assert session.scalars(select(CalendarEvent)).all() == []
     assert session.scalars(select(ScheduledJoin)).all() == []
     after = connection_of(session, owner)
-    assert after.google_sub == "g-other-2" and after.status == "connected"
+    assert after.account_subject == "g-other-2" and after.status == "connected"
     # The old account's Meet subscription is forgotten, not carried over.
     assert after.meet_subscription_name is None
     assert after.meet_subscription_expires_at is None
@@ -862,8 +862,8 @@ def test_two_users_connect_separately_and_only_see_their_own_row(capp, web, sess
     connect_google(web, google, email="a@example.test", sub="g-a")
     other = browser(capp, OTHER_EMAIL)
     connect_google(other, google, email="b@example.test", sub="g-b")
-    assert connection_of(session, owner).google_account_email == "a@example.test"
-    assert connection_of(session, stranger).google_account_email == "b@example.test"
+    assert connection_of(session, owner).account_email == "a@example.test"
+    assert connection_of(session, stranger).account_email == "b@example.test"
 
 
 def test_expected_expiry_set_to_seven_days_only_while_testing_flag_is_on_and_clear_when_off(
@@ -1005,8 +1005,8 @@ def test_disconnect_revokes_at_google_and_deletes_everything_listed_in_spec_12_2
     assert after.status == "disconnected" and after.needs_reconnect_reason is None
     assert after.refresh_token_enc is None and after.key_version is None
     assert after.granted_scopes is None and granted_features(after) == set()
-    assert after.google_account_email is None and after.google_sub is None
-    assert after.google_hosted_domain is None
+    assert after.account_email is None and after.account_subject is None
+    assert after.account_domain is None
     assert after.sync_token is None and after.last_sync_at is None
     assert after.last_error is None and after.last_error_at is None
     assert after.expected_expiry_at is None
@@ -1146,7 +1146,7 @@ def test_a_second_connection_can_be_created_again_after_disconnect(web, session,
     session.expire_all()
     [row] = session.scalars(select(CalendarConnection)).all()
     assert row.id == first_id and row.status == "connected"
-    assert row.google_sub == "g-grace-1" and row.refresh_token_enc is not None
+    assert row.account_subject == "g-grace-1" and row.refresh_token_enc is not None
     assert row.last_sync_at is None  # a full first sync again
     assert granted_features(row) == {"calendar"}
 
@@ -1156,7 +1156,7 @@ def test_after_disconnect_another_google_account_can_connect(web, session, owner
     web.post(DISCONNECT)
     response, _, _ = connect_google(web, google, email="other@example.test", sub="g-other-2")
     assert landing(response)[1] == {"calendar": "connected"}
-    assert connection_of(session, owner).google_sub == "g-other-2"
+    assert connection_of(session, owner).account_subject == "g-other-2"
 
 
 def test_disconnect_is_idempotent_and_safe_to_double_submit(web, session, owner, google):
@@ -1196,7 +1196,7 @@ def test_disconnect_only_touches_the_signed_in_users_rows(capp, web, session, ow
     assert connection_of(session, owner).status == "disconnected"
     survivor = connection_of(session, stranger)
     assert survivor.status == "connected" and survivor.refresh_token_enc == their_blob
-    assert survivor.google_sub == "g-b"
+    assert survivor.account_subject == "g-b"
     assert count(session, CalendarEvent, user_id=stranger.id) == 1
     assert count(session, ScheduledJoin, user_id=stranger.id) == 1
     assert count(session, Notification, user_id=stranger.id) == 1
@@ -1282,7 +1282,7 @@ def locked_or_stale(engine, *, expect_sub=None) -> str | None:
         if expect_sub is None:
             ok = row.status == "disconnected" and row.refresh_token_enc is None
         else:
-            ok = row.google_sub == expect_sub and row.status == "connected"
+            ok = row.account_subject == expect_sub and row.status == "connected"
         return None if ok else "not committed yet"
 
 

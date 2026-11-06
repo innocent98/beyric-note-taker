@@ -1,0 +1,42 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/session",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "email": "owner@example.test",
+      "password": "capture-password-placeholder"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-B>",
+      "user": {
+        "email": "owner@example.test",
+        "name": "Adebayo Example",
+        "is_admin": true,
+        "email_verified": true,
+        "time_zone": null
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": null
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 0,
+        "tasks_new": 0
+      }
+    }
+  }
+}

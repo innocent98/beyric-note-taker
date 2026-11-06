@@ -2,14 +2,17 @@
 
 import { Icon } from "@/components/ui";
 import type { Task } from "@/lib/api/types";
-import { avatarTone, dueLabel, personInitials, sourceLabel } from "@/lib/tasks";
+import { avatarTone, dueLabel, personInitials, sourceLabel, swatchClass } from "@/lib/tasks";
 
 // A task as the board draws it (the designer's card): the title, a "New" pill, the meeting it came
 // from, the due day and who has it, or "Needs owner". Titles and sources are plain text, always.
-// The project dot, "Carried over" and "Check project" badges wait for projects (W4) and sprints (W9).
+// The badges row: the project (dot and name, or "No project") while the board shows every project,
+// and "Check project" when the filing was a guess. "Carried over" waits for sprints (W9).
 export function TaskCard({
   task,
   today,
+  project = null,
+  showProject = false,
   dragging,
   onOpen,
   onDragStart,
@@ -17,6 +20,9 @@ export function TaskCard({
 }: {
   task: Task;
   today: string;
+  // The task's project (null: none) and whether to draw it, which the board does on "All projects".
+  project?: { name: string; color: string } | null;
+  showProject?: boolean;
   dragging?: boolean;
   onOpen: () => void;
   onDragStart: (event: React.DragEvent) => void;
@@ -47,6 +53,17 @@ export function TaskCard({
         <Icon name="video" size={12} />
         <span>{sourceLabel(task)}</span>
       </div>
+      {showProject || task.check_project ? (
+        <div className="tk-badges">
+          {showProject ? (
+            <span className="tk-proj">
+              <span className={`tk-proj-dot ${swatchClass(project?.color)}`} />
+              {project ? project.name || "Untitled project" : "No project"}
+            </span>
+          ) : null}
+          {task.check_project ? <span className="tk-check">Check project</span> : null}
+        </div>
+      ) : null}
       <div className="tk-card-foot">
         <span className={`tk-due${done ? " tk-due-done" : task.due_date === today ? " tk-due-today" : ""}`}>
           <Icon name="calendar" size={12} />

@@ -291,6 +291,10 @@ def _finish(row: MailOutbox, status: str, error: str | None) -> None:
     row.status, row.last_error = status, error
     if row.template not in NOTES_TEMPLATES:
         row.payload = {}
+    elif row.template == "notes_shared":
+        from app import shares  # shares imports this module
+
+        shares.record_outcome(row)
 
 
 def _tell_owner_of_cap_skip(session: Session, row: MailOutbox, cap: int) -> None:
@@ -331,7 +335,9 @@ def _tell_owner_of_cap_skip(session: Session, row: MailOutbox, cap: int) -> None
         )
 
 
-def _sent_since(session: Session, since: datetime, to: str | None = None) -> int:
+def _sent_since(
+    session: Session, since: datetime, to: str | None = None, shared: bool = False
+) -> int:
     query = (
         select(func.count())
         .select_from(MailOutbox)
@@ -339,7 +345,12 @@ def _sent_since(session: Session, since: datetime, to: str | None = None) -> int
     )
     if to is not None:
         query = query.where(
-            MailOutbox.to_email == to, MailOutbox.template.in_(list(NOTES_TEMPLATES))
+            MailOutbox.to_email == to,
+            MailOutbox.template.in_(list(NOTES_TEMPLATES)),
+            # Mail a colleague chose to send does not use up the address's own notes mail.
+            (MailOutbox.template == "notes_shared")
+            if shared
+            else (MailOutbox.template != "notes_shared"),
         )
     return session.scalar(query)
 
@@ -498,7 +509,9 @@ def deliver_pending(
         # reason is the true one, and the owner is told about the cap only for a mail that would
         # otherwise have gone.
         if notes_mail and settings.mail_recipient_daily_cap > 0:
-            recent = _sent_since(session, now - timedelta(days=1), row.to_email)
+            recent = _sent_since(
+                session, now - timedelta(days=1), row.to_email, row.template == "notes_shared"
+            )
             if recent >= settings.mail_recipient_daily_cap:
                 _tell_owner_of_cap_skip(session, row, settings.mail_recipient_daily_cap)
                 _finish(row, "skipped", "recipient_cap")

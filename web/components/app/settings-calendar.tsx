@@ -75,7 +75,7 @@ export function SettingsCalendar({
 }) {
   const [state, setState] = useState<CalendarState | null>(initial);
   const [message, setMessage] = useState<Message | null>(() =>
-    notice ? messageFor(notice, initial?.google_email ?? null) : null,
+    notice ? messageFor(notice, initial?.account_email ?? null) : null,
   );
   const [connecting, setConnecting] = useState(false);
   // Google's unverified-app warning is explained once the connect call has answered, before leaving.
@@ -216,7 +216,7 @@ export function SettingsCalendar({
                 <div>
                   <div className="cal-provider">Google Calendar</div>
                   <div className="cal-account-sub">
-                    {state.google_email} · {needsReconnect ? "Needs to connect again" : "Connected"}
+                    {state.account_email} · {needsReconnect ? "Needs to connect again" : "Connected"}
                   </div>
                 </div>
               </div>
@@ -338,7 +338,8 @@ function disconnectedFrom(current: CalendarState): CalendarState {
     connected: false,
     state: "not_connected",
     state_text: "Google Calendar is not connected.",
-    google_email: null,
+    account_email: null,
+    provider: null,
     last_sync_at: null,
     last_error: null,
     rule: current.rule,

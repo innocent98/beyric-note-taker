@@ -1,0 +1,36 @@
+{
+  "note": "",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/team",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "sprint_length": "week5",
+      "sprint_align_weekdays": true
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "name": "My team",
+      "share_new_meetings": false,
+      "my_role": "owner",
+      "sprint_length": "week5",
+      "sprint_custom_days": 12,
+      "sprint_align_weekdays": true,
+      "member_count": 3,
+      "pending_invites": 0,
+      "can_manage": true,
+      "can_change_roles": true
+    }
+  }
+}

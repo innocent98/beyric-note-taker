@@ -106,6 +106,20 @@ const SCREENS = {
     true,
     [LANG("French", 3800), { text: "Download", wait: 300 }],
   ],
+  // Share notes (W6). The designer's dialog opens from the "Share notes" button of the meeting page; the
+  // toast and "Shared with ..." follow Send. "Add email" and the unsubscribe page have no prototype
+  // (lead-designed): Next alone. Meeting 9 is the sample with a participant who is not on the team.
+  "app-share-dialog": [APP, [OPEN_ZOOM, ["Share notes", "first", 300]], "/meetings/8", true, [{ text: "Share notes", wait: 300 }]],
+  "app-share-sent": [
+    APP,
+    [OPEN_ZOOM, ["Share notes", "first", 300], ["Send notes", "first", 300]],
+    "/meetings/8",
+    true,
+    [{ text: "Share notes", wait: 300 }, { text: "Send notes", wait: 600 }],
+  ],
+  "app-share-add-email": [null, [], "/meetings/9", true, [{ text: "Share notes", wait: 300 }, { text: "Add email", wait: 200 }]],
+  "app-unsubscribe": [null, [], "/unsubscribe?token=tok", false],
+  "app-unsubscribe-done": [null, [], "/unsubscribe?token=tok", false, [{ text: "Stop these emails", wait: 600 }]],
   // Decisions and Review (the designer's states: run the mock with --decisions/--review failed|empty|loading
   // and the design copy with its "Preview states" default changed, see the SOP). Live list, the
   // inline remove ask and its toast, the rewrite offer, the row errors, the checked rows.
@@ -146,7 +160,7 @@ const SCREENS = {
     [{ select: "(UTC+9) Tokyo", design: "Tokyo", next: "Time zone", wait: 500 }],
   ],
   // Tasks (W2). The prototype's "today" is Mon 2 Nov 2026: run with --now 2026-11-02T10:00:00Z. The board
-  // has no project tabs, sprint header, milestone card or Board / Backlog tabs: they wait for W3, W4, W9.
+  // has no sprint header or Board / Backlog tabs: they wait for W9. W4 added the project tabs and the milestone card.
   "app-tasks": [APP, [["Tasks", "first", 800]], "/tasks", true],
   "app-tasks-due": [APP, [["Tasks", "first", 800], ["Due date", "first"]], "/tasks", true, [{ text: "Due date" }]],
   "app-tasks-drawer": [
@@ -157,6 +171,20 @@ const SCREENS = {
     [{ text: "Finish payment checkout", wait: 400 }],
   ],
   "app-tasks-review": [APP, [["Tasks", "first", 800], ["Review", "first", 400]], "/tasks", true, [{ text: "Review", wait: 400 }]],
+  // Projects (W4). Recurring meetings, Sprint length and the two sprint figures are drawn off with a
+  // "Not available yet" line (W8, W9); the project tab on the board and the Check project line are the designer's.
+  "app-projects": [APP, [["Projects", "first", 800]], "/projects", true],
+  "app-projects-second": [APP, [["Projects", "first", 800], ["Beyric Note Taker", "last", 400]], "/projects", true, [{ click: "Beyric Note Taker", wait: 400 }]],
+  "app-tasks-project": [APP, [["Tasks", "first", 800], ["Beyric Note Taker", "last", 400]], "/tasks", true, [{ click: "Beyric Note Taker", wait: 400 }]],
+  "app-tasks-check-project": [
+    APP,
+    [["Tasks", "first", 800], ["Support Daniel Okoro with testing during the week", "first", 400]],
+    "/tasks",
+    true,
+    [{ text: "Support Daniel Okoro with testing during the week", wait: 400 }],
+  ],
+  // LEAD-DESIGNED, no prototype: the offer on a meeting page, "Set milestone: <name>, <date>?" with Confirm.
+  "app-detail-milestone-offer": [null, [], "/meetings/8", true],
   // Team (W3). The designer drew the Team screen and the invite dialog; the screens with a null design
   // are LEAD-DESIGNED (no prototype): alias editing, the remove question, the Share with team switch on
   // the meeting page and the invitation link page. The mock's tokens: new, existing, onteam, dead.

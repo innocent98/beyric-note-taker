@@ -25,7 +25,12 @@ MEETING_SOURCES = ("manual", "calendar", "instant_meet")
 USER_STATUSES = ("active", "suspended", "deleted")
 TEAM_ROLES = ("owner", "admin", "member")
 INVITE_ROLES = ("admin", "member")
-TOKEN_PURPOSES = ("verify_email", "reset_password", "waitlist_invite")
+TOKEN_PURPOSES = ("verify_email", "reset_password", "waitlist_invite", "mail_optout")
+SHARE_LANGUAGES = ("en", "fr", "es")
+SHARE_ATTACH = ("none", "pdf", "docx")
+# A share waits for its translation, then its mails are queued; `failed` means they never were.
+SHARE_STATUSES = ("waiting_translation", "queued", "failed", "revoked")
+SHARE_RECIPIENT_STATUSES = ("pending", "sent", "not_sent", "failed")
 OAUTH_PURPOSES = ("signin", "calendar", "meet_scope")
 WAITLIST_STATUSES = ("waiting", "invited", "joined", "removed")
 SEVERITIES = ("info", "warning", "error")
@@ -33,7 +38,9 @@ MAIL_STATUSES = ("pending", "sent", "failed", "skipped")
 SUPPRESSION_REASONS = ("bounce", "complaint", "unsubscribed")
 AUTO_JOIN_RULES = ("all", "organizer", "none")
 INSTANT_MEET_MODES = ("events", "poll", "off")
-CONNECTION_PROVIDERS = ("google", "ics")
+CONNECTION_PROVIDERS = ("google", "ics", "microsoft")
+OAUTH_FLOW_PROVIDERS = ("google", "microsoft")
+ACCOUNT_KINDS = ("personal", "work")
 CONNECTION_STATUSES = ("connected", "degraded", "needs_reconnect", "disconnected")
 RECONNECT_REASONS = ("expired", "revoked", "error")
 MEET_SUBSCRIPTION_STATES = ("none", "active", "needs_reconnect", "error")
@@ -68,6 +75,11 @@ TASK_SOURCES = ("ai", "manual")
 # 30 minutes before, or both (the designer draws two mails).
 REMINDER_TIMINGS = ("1h", "30m", "both")
 REMINDER_KINDS = ("1h", "30m")
+
+# The sprint lengths of the Settings list (W9). A project may override the team's with any of
+# them except `custom`: the designer's per-project select has no Custom entry.
+SPRINT_LENGTHS = ("week5", "week7", "week14", "month1", "month3", "month6", "custom")
+PROJECT_SPRINT_LENGTHS = SPRINT_LENGTHS[:-1]
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -143,15 +155,19 @@ class AuthToken(Base):
 
 
 class OAuthFlow(Base):
-    """State of one Google OAuth round trip; short-lived and swept."""
+    """State of one OAuth round trip (Google or Microsoft); short-lived and swept."""
 
     __tablename__ = "oauth_flows"
     __table_args__ = (
         CheckConstraint(_in("purpose", OAUTH_PURPOSES), name="ck_oauth_flows_purpose"),
+        CheckConstraint(_in("provider", OAUTH_FLOW_PROVIDERS), name="ck_oauth_flows_provider"),
     )
 
     state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     purpose: Mapped[str] = mapped_column(String(16))
+    # Which provider's consent screen this round trip went to: a state can only finish at that
+    # provider's callback.
+    provider: Mapped[str] = mapped_column(String(16), default="google", server_default="google")
     user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="CASCADE")
     )
@@ -211,6 +227,13 @@ class MailOutbox(Base):
             postgresql_where=sa.text("template = 'notes_ready'"),
         ),
         # One "New tasks assigned" mail per assignee per meeting (spec 6.1), however many passes.
+        Index(
+            "uq_mail_outbox_notes_shared",
+            sa.text("(payload->>'share_id')"),
+            sa.text("(payload->>'recipient_id')"),
+            unique=True,
+            postgresql_where=sa.text("template = 'notes_shared'"),
+        ),
         Index(
             "uq_mail_outbox_tasks_assigned",
             sa.text("(payload->>'meeting_id')"),
@@ -302,6 +325,8 @@ class Team(Base):
     __tablename__ = "teams"
     __table_args__ = (
         CheckConstraint(_in("reminder_timing", REMINDER_TIMINGS), name="ck_teams_reminder_timing"),
+        CheckConstraint(_in("sprint_length", SPRINT_LENGTHS), name="ck_teams_sprint_length"),
+        CheckConstraint("sprint_custom_days between 1 and 365", name="ck_teams_sprint_custom_days"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -318,6 +343,14 @@ class Team(Base):
     # only once Google verification is done (spec 7, "Google data constraint").
     reminders_on: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
     reminder_timing: Mapped[str] = mapped_column(String(8), default="both", server_default="both")
+
+    # W9 (spec 6.4): how long a sprint is for the whole team, the number of days when it is
+    # `custom` (1 to 365), and whether 1-week-5-day sprints run Monday to Friday.
+    sprint_length: Mapped[str] = mapped_column(String(8), default="week5", server_default="week5")
+    sprint_custom_days: Mapped[int] = mapped_column(Integer, default=10, server_default="10")
+    sprint_align_weekdays: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=sa.true()
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -437,6 +470,10 @@ class CalendarConnection(Base):
         ),
         CheckConstraint(_in("status", CONNECTION_STATUSES), name="ck_calendar_connections_status"),
         CheckConstraint(
+            "account_kind is null or " + _in("account_kind", ACCOUNT_KINDS),
+            name="ck_calendar_connections_account_kind",
+        ),
+        CheckConstraint(
             "needs_reconnect_reason is null or " + _in("needs_reconnect_reason", RECONNECT_REASONS),
             name="ck_calendar_connections_reason",
         ),
@@ -450,10 +487,17 @@ class CalendarConnection(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
     provider: Mapped[str] = mapped_column(String(16), default="google", server_default="google")
-    google_account_email: Mapped[str | None] = mapped_column(String(254))
-    google_sub: Mapped[str | None] = mapped_column(String(64))
-    # The ID token's `hd` claim: present for Workspace accounts, absent for personal Gmail.
-    google_hosted_domain: Mapped[str | None] = mapped_column(String(253))
+    # The connected account, whichever provider: a label (the address shown on Settings), the
+    # provider's stable subject id (Google `sub`; Microsoft `oid`), and the organisation domain
+    # (Google's `hd` claim: present for Workspace accounts, absent for personal Gmail).
+    account_email: Mapped[str | None] = mapped_column(String(254))
+    account_subject: Mapped[str | None] = mapped_column(String(64))
+    account_domain: Mapped[str | None] = mapped_column(String(253))
+    # Microsoft only (null for Google and ICS): the directory (tenant) id, personal or work, and the
+    # organisation's verified domains (space separated), used for the same-organisation test.
+    tenant_id: Mapped[str | None] = mapped_column(String(36))
+    account_kind: Mapped[str | None] = mapped_column(String(8))
+    tenant_domains: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), default="connected", server_default="connected")
     needs_reconnect_reason: Mapped[str | None] = mapped_column(String(16))
     granted_scopes: Mapped[str | None] = mapped_column(Text)
@@ -790,6 +834,9 @@ class Task(Base):
         ),
         Index("ix_tasks_team_id", "team_id", "id"),
         Index("ix_tasks_assignee_user_id", "assignee_user_id"),
+        Index("ix_tasks_project_id", "project_id"),
+        Index("ix_tasks_milestone_id", "milestone_id"),
+        Index("ix_tasks_sprint_id", "sprint_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -823,6 +870,109 @@ class Task(Base):
         BigInteger, ForeignKey("users.id", ondelete="SET NULL")
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # W4. A project or milestone that goes away leaves the task with none (the task stays).
+    project_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("projects.id", ondelete="SET NULL")
+    )
+    milestone_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("milestones.id", ondelete="SET NULL")
+    )
+    # Filing was a guess (one keyword hit or a tie): shown as "Check project" until a person
+    # confirms or changes the project.
+    check_project: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    # W9. The sprint it is planned into; null is the Backlog. A sprint that goes away (its project
+    # was deleted) leaves the task in the Backlog.
+    sprint_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("sprints.id", ondelete="SET NULL")
+    )
+    # Moved on from a sprint that closed with the task unfinished ("Carried over").
+    carried: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+
+
+class Project(Base):
+    """A project of a team (spec 4, 6.3): a name, a colour and the keywords tasks are filed by.
+    Visible to the whole team; the counts inside it follow what the viewer may see. Deleting one
+    leaves its tasks with no project (`tasks.project_id` is SET NULL) and removes its milestones.
+    `sprint_length` is the project's own sprint length (W9); null follows the team's. The
+    recurring meetings link waits for W8."""
+
+    __tablename__ = "projects"
+    __table_args__ = (
+        Index("ix_projects_team_id", "team_id", "id"),
+        CheckConstraint(
+            "sprint_length is null or " + _in("sprint_length", PROJECT_SPRINT_LENGTHS),
+            name="ck_projects_sprint_length",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(100), default="", server_default="")
+    color: Mapped[str] = mapped_column(String(7))
+    keywords: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), default=list, server_default=sa.text("'{}'::text[]")
+    )
+    sprint_length: Mapped[str | None] = mapped_column(String(8))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Sprint(Base):
+    """One sprint of a team (spec 6.4). A team has one series, and a project with its own sprint
+    length has another (`project_id` set). Each series keeps exactly two open sprints: the current
+    one (the earlier) and the next. Closed ones stay as history. Dates are days in the team's
+    zone; the sprint's name is "Sprint {number}", numbers counting up inside the series."""
+
+    __tablename__ = "sprints"
+    __table_args__ = (
+        Index("ix_sprints_team_id", "team_id", "project_id"),
+        Index(
+            "uq_sprints_series_number",
+            "team_id",
+            sa.text("coalesce(project_id, 0)"),
+            "number",
+            unique=True,
+        ),
+        CheckConstraint("end_date >= start_date", name="ck_sprints_dates"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    project_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    number: Mapped[int] = mapped_column(Integer)
+    start_date: Mapped[date] = mapped_column(Date)
+    end_date: Mapped[date] = mapped_column(Date)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_early: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Milestone(Base):
+    """A dated goal. The extraction call may propose one from a meeting (`confirmed_at` null, with
+    the words said in `quote`); it only counts once someone confirms it (spec D14). The source
+    meeting is kept as a plain reference: deleting the meeting deletes its proposals
+    (`services.delete_meeting`) and leaves a confirmed milestone."""
+
+    __tablename__ = "milestones"
+    __table_args__ = (
+        Index("ix_milestones_team_id", "team_id", "id"),
+        Index("ix_milestones_source_meeting_id", "source_meeting_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    project_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("projects.id", ondelete="CASCADE")
+    )
+    name: Mapped[str] = mapped_column(String(200))
+    due_date: Mapped[date] = mapped_column(Date)
+    source_meeting_id: Mapped[int | None] = mapped_column(
+        ForeignKey("meetings.id", ondelete="SET NULL")
+    )
+    quote: Mapped[str | None] = mapped_column(String(300))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -988,6 +1138,78 @@ class MeetingTranslation(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MeetingShare(Base):
+    """One "Share notes by email" request (spec section 10). Holds ids and the sender's own words
+    only: the notes are read from the meeting when each mail is SENT, never copied here or into
+    `mail_outbox`. Deleted with the meeting."""
+
+    __tablename__ = "meeting_shares"
+    __table_args__ = (
+        CheckConstraint(_in("status", SHARE_STATUSES), name="ck_meeting_shares_status"),
+        CheckConstraint(_in("language", SHARE_LANGUAGES), name="ck_meeting_shares_language"),
+        CheckConstraint(_in("attach", SHARE_ATTACH), name="ck_meeting_shares_attach"),
+        Index("ix_meeting_shares_meeting_id", "meeting_id", "id"),
+        Index("ix_meeting_shares_sender_created", "sender_user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
+    sender_user_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="CASCADE")
+    )
+    language: Mapped[str] = mapped_column(String(2))
+    attach: Mapped[str] = mapped_column(String(8), default="none", server_default="none")
+    include_transcript: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=sa.false()
+    )
+    # The sender's optional note: plain text, at most 500 characters, shown escaped and unlinked.
+    message: Mapped[str] = mapped_column(Text, default="", server_default="")
+    status: Mapped[str] = mapped_column(String(24))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class MeetingShareRecipient(Base):
+    """One person a share goes to. `user_id` is set when the address is an active member of the
+    sender's team at share time. `status` is what the sender may be told: `not_sent` covers every
+    reason a mail did not go (a suppressed address included, never named)."""
+
+    __tablename__ = "meeting_share_recipients"
+    __table_args__ = (
+        CheckConstraint(
+            _in("status", SHARE_RECIPIENT_STATUSES), name="ck_meeting_share_recipients_status"
+        ),
+        CheckConstraint("email = lower(email)", name="ck_meeting_share_recipients_email_lower"),
+        UniqueConstraint("share_id", "email", name="uq_meeting_share_recipients_share_email"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    share_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("meeting_shares.id", ondelete="CASCADE")
+    )
+    email: Mapped[str] = mapped_column(String(254))
+    name: Mapped[str | None] = mapped_column(String(100))
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    status: Mapped[str] = mapped_column(String(16), default="pending", server_default="pending")
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ShareUsage(Base):
+    """How many recipients an account asked to mail, and when: the daily limit's ledger. Kept apart
+    from `meeting_shares` so deleting a meeting (which deletes its shares) does not give the day's
+    capacity back. Holds no address and no meeting; goes with the account."""
+
+    __tablename__ = "share_usage"
+    __table_args__ = (Index("ix_share_usage_user_created", "user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    recipients: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class RateHit(Base):
