@@ -1,5 +1,5 @@
 {
-  "note": "422; nothing is posted or stored.",
+  "note": "400; nothing is posted or stored.",
   "client": "dan (owner)",
   "request": {
     "method": "PUT",
@@ -12,7 +12,7 @@
     }
   },
   "response": {
-    "status": 422,
+    "status": 400,
     "body": {
       "error": {
         "code": "slack_webhook_invalid",

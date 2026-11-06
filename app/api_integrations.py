@@ -50,7 +50,7 @@ def read_slack(
     "/slack",
     responses={
         **FORBIDDEN,
-        422: {"model": ErrorResponse, "description": "`slack_webhook_invalid`"},
+        400: {"model": ErrorResponse, "description": "`slack_webhook_invalid`"},
         429: {"model": ErrorResponse, "description": "`integration_rate`"},
         502: {"model": ErrorResponse, "description": "`slack_unreachable`"},
         503: {"model": ErrorResponse, "description": "`integrations_unavailable`"},

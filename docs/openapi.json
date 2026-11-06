@@ -5745,6 +5745,16 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`slack_webhook_invalid`"
+          },
           "401": {
             "content": {
               "application/json": {
@@ -5773,7 +5783,7 @@
                 }
               }
             },
-            "description": "`slack_webhook_invalid`"
+            "description": "Malformed request"
           },
           "429": {
             "content": {
