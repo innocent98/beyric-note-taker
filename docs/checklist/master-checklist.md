@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status (2026-11-05, about 23:30 WAT):** MVP live at notes.beyrictech.com; migrations at **0026** (server head `82acae3`). Merged and deployed 2026-11-05: designer update (#80), Decisions/Review states and stored time zone (#82, 0018), meeting page parity part 1 (#81), extraction output cap (#83), **W0.4 team foundation** (#84, 0019), **C13 + C14** (#85, 0020; banner and email #87, lead-designed), **W0.5 meeting delete** (#86, 0021; button #89; task-count line #94), notes cost ledger (#88, 0023), **W2 Tasks** (#90 backend 0024, #92 screens), transcription in the cost ledger (#95, 0025), **W3 Team complete** (#97 backend 0026, #98 screens with the lead-designed share switch, invite name and alias editing). Open: **#96** Outlook M1 (0027, held until the first auto-joined meeting is checked), **#100** W4 Projects backend (0028), **#99** W6 Share backend (0029). Auto-join is live with his rule "All meetings with a video link"; first real auto-joined meeting expected 2026-11-06. **Not built:** W4 and W6 screens, W8 Series (with the recurring meeting detail page), W9, W10, meeting-page parts waiting for W4/W8/W9, C15b to C18, ICS (C19 to C24), Teams T1 to T3, Outlook M0 run and M2 to M8, pre-sign-up PR 3, Phases I, D, V. Some older lines below are stale (e.g. CI sharding #70 shipped): reconcile in the next docs PR. Next steps and his queued items: `docs/HANDOFF-master.md`.
+**Status (2026-11-06, about 20:00 WAT):** MVP live at notes.beyrictech.com; migrations at **0026** (server head `84a01f8`). Merged and deployed 2026-11-06: **#106** waiting-room fix (Vexa's lobby-timeout warning no longer withdraws the bot; meetings 15 and 16 had failed; the 16:00 meeting joined after the fix). **Built, in open PRs (all green, none merged):** #96 Outlook M1 (0027), **W4** #100 (0028) + #102, **W6** #99 (0029) + #103, **W8** #104 (0030) + #105 (with the recurring meeting detail page), **W9 backend** #108 (0031, stacked on #100), **W10** Slack #107 (0032) + Linear #109 (0033). **Not built:** W9 screens, W8's sprint lines, C15b to C18, ICS (C19 to C24), Teams T1 to T3, Outlook M0 run and M2 to M8, pre-sign-up PR 3, Phases I, D, V. Some older lines below are stale (e.g. CI sharding #70 shipped): reconcile in a docs PR. Merge order and his queued items: `docs/HANDOFF-master.md`.
 
 Legend: `[x]` done and verified, `[ ]` not done.
 
@@ -190,7 +190,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] D5, Tasks, built for what has data now (W2 PR 2; the rest waits for W3, W4, W9, see the W2 section; needs W2; owners need W3; projects need W4; sprints need W9): filter chips, project tabs, Board and Backlog, drag and drop, task drawer, "needs attention" banner, New task, sprint header and Close sprint, milestone card, meeting page Action items as tasks; states for extraction pending and failed (designer gap)
   - [ ] D6, Projects (needs W4): list, name, colour, recurring meetings, keywords, sprint length, milestone (proposal chip is a designer gap), delete
   - [ ] D7, Team (needs W3; W0.4 first): members, roles, aliases (editing is a designer gap), invite dialog (name field is a designer gap), Resend, remove, "Share with team" switch on the meeting page (designer gap)
-  - [ ] D8, Series (needs W8, and Module 2 phase C for recurring ids): cards on Meetings, series page (unfinished, finished since, carried questions, agenda, past meetings, attendees), "On next agenda" toggles, Send agenda, Details row on the meeting page, "Add to recurring meeting" and "Possibly resolved" chips (designer gaps)
+  - [ ] D8, Series (backend built in PR `feature/w8-series-backend`, screens pending; needs W8, and Module 2 phase C for recurring ids): cards on Meetings, series page (unfinished, finished since, carried questions, agenda, past meetings, attendees), "On next agenda" toggles, Send agenda, Details row on the meeting page, "Add to recurring meeting" and "Possibly resolved" chips (designer gaps)
   - [x] D9, Download (W5, 2026-11-03): menu with PDF and Word, transcript tick, the states for preparing, done, failed and not ready; the language note and the download in French or Spanish shipped with W7 (2026-11-04)
   - [ ] D10, Share (needs W6, and W3 for participants): dialog, recipients, language, attachment, transcript, message, "Shared with ..." note, "Add email" on a participant (designer gap), share-limit message (designer gap)
   - [x] D11, Translate (W7, 2026-11-04, SOP `docs/sop/2026-11-04-w7-translate.md`, FE guide `docs/fe-integration-guide-translate.md`): language select on the notes toolbar, "Translating ..." and "Translated from ..." bars, Show original, the transcript tab, Copy, Download in a language, the live "Default notes language" card in Settings with the designer's toast; failed, stale and "Translate to X" states are the smallest things (designer gaps)
@@ -337,7 +337,8 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] Azure steps (lead in his Chrome, stop at any billing page): Entra tenant if none, app registration (multitenant plus personal), redirect URI `https://notes.beyrictech.com/api/calendar/microsoft/callback`, scopes `Calendars.Read User.Read offline_access openid profile`, client secret, branding URLs; optional local-development registration
   - [ ] Test accounts: a spare Outlook.com account; if possible a Microsoft 365 work mailbox in another tenant
   - [ ] **M0** live capture run (real accounts, no application code): token response and ID token claims, consent screens, `calendarView` of every event kind, `/me` and `/organization`, Safe Links, error shapes, Teams join-URL formats, `Calendars.ReadBasic` comparison (the scope list is final before testers connect)
-  - [ ] **M1** provider-neutral foundation (needs C12 merged): `app/calendar_providers.py` registry, migration `0017` (provider check, rename `google_*` to `account_*`, `tenant_id`, `account_kind`, `tenant_domains`, `oauth_flows.provider`), `{provider}` routes, `account_email` and `provider` on `GET /api/calendar`, source registry for sync and runner, one-calendar rule; no change for Google
+    - [x] Capture script ready (2026-11-05): `docs/spike/outlook-m0/capture.py` + README with Adebayo's steps; self-test passes. **Not yet run**: needs the local-development registration (spec 9.1 step 12) and his sign-ins
+  - [x] **M1** provider-neutral foundation (needs C12 merged): `app/calendar_providers.py` registry, migration `0027` (0017 was taken) (provider check, rename `google_*` to `account_*`, `tenant_id`, `account_kind`, `tenant_domains`, `oauth_flows.provider`), `{provider}` routes, `account_email` and `provider` on `GET /api/calendar`, source registry for sync and runner, one-calendar rule; no change for Google (2026-11-05, PR in the list; SOP `docs/sop/2026-11-05-outlook-m1-provider-foundation.md`; full suite run once; Google unchanged)
   - [ ] **M2** Microsoft OAuth client (Opus review): authorize URL, code redemption, ID token and tenant checks, refresh with rotation, error mapping, vault purpose `ms_refresh_token`, start-up check
   - [ ] **M3** connect, callback, disconnect (Opus review): seven checks plus tenant rules, probe before store, 409 `calendar_already_connected`, flag, no revoke at Microsoft
   - [ ] **M4** Graph source and token cache (Opus review): full-window `calendarView`, `Prefer` headers, nextLink rule, `get_event`, compare-and-swap rotation write, 429, client-secret expiry alert
@@ -378,7 +379,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
 - [ ] W0.1 Spikes
   - [x] AI1 extraction eval: **go on `gpt-6-luna`** (2026-11-03: 7 synthetic cases, 30 bullets, 0 invented owners, 30/30 quotes, 17/17 dates; `docs/spike/ai-extraction-eval.md`). Five real transcripts reviewed by Adebayo are still owed before W2
   - [ ] EX1 PDF memory and time (W5)
-  - [ ] ML1 Resend attachments and limits (W6)
+  - [x] ML1 Resend attachments and limits (W6): re-read from Resend's docs 2026-11-05, caps unchanged (docs/sop/2026-11-05-w6-share-backend.md); a real send is still "not verified live"
   - [ ] TR1 French and Spanish with names (W7)
 - [x] W0.2 AI ledger and settings: `ai_runs`, `EXTRACT_MODEL`, prompt versions (2026-11-03, SOP `2026-11-03-ai-workspace-w1-extraction.md`)
   - [x] Notes and speaker-labelling calls in the ledger too (`kind` `notes`, `label`; migration 0023; 2026-11-05, SOP `docs/sop/2026-11-05-notes-cost-ledger.md`). Transcription counted too (`kind` `transcribe`, `audio_seconds`, migration 0025, 2026-11-05, PR open). Not counted yet: failed transcription and notes calls, the `extraction_review.py` script
@@ -389,7 +390,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] `mail_suppressions` (hash only) honoured at send time; `scripts/suppress_email.py`
   - [x] Send-time checks (meeting, owner, setting), `skipped` status; per-recipient and daily caps
   - [x] "Notes ready" mail queued with the notes, owner setting checked
-  - [ ] Real send with a PDF and Word attachment from the production domain; read the Resend plan (spike ML1 follow-up)
+  - [ ] Real send with a PDF and Word attachment from the production domain; read the Resend plan (spike ML1 follow-up) (command: `scripts/send_test_mail.py`, in the W6 SOP)
   - [ ] Resend webhook (bounce, complaint) into `mail_suppressions`
   - [ ] A setting that turns `notify_email` off (Settings screen) and an "Email preferences" link in the mails
 - [x] W0.4 Team foundation (2026-11-05, PR open, migration 0019): `teams`, `team_members`, a team of one per account (sign-up, Google, backfill), `meetings.shared_team_id`, `visible_meetings()` in `app/visibility.py`, route enumeration test; SOP `docs/sop/2026-11-05-w04-team-foundation.md`
@@ -405,7 +406,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Backfill `scripts/backfill_extraction.py` (decisions for all, the rest for 14 days). **Adebayo or the lead runs it once after deploy**
   - [x] Privacy rows for W1 (Jinja and Next, `legal.test.tsx` green)
   - [x] FE guide with live captures (`docs/fe-captures/ai-workspace-w1/`)
-  - [ ] Open questions endpoint (with the series screens, W8)
+  - [x] Open questions endpoint: `PATCH /api/questions/{id}` and `open_questions` on the meeting (W8 backend, 2026-11-06, `docs/sop/2026-11-06-w8-series-backend.md`)
   - [ ] Regenerate `web/lib/api/schema.d.ts` (`npm run gen:api`) with the first screen
 - [x] **W2 gate passed (2026-11-05):** Adebayo reviewed the full extraction (`extract-v1`) on his real meetings 5 and 3: 17 items (8 action items with owners and due dates), every one right, nothing missed
   - [x] Review tool `scripts/extraction_review.py` (2026-11-04, `docs/sop/2026-11-04-extraction-review-tool.md`): one HTML page per run, transcript left, extracted items right, Right / Wrong / Partly per item
@@ -435,10 +436,53 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] FE guide from live captures (`scripts/capture_team_api.py`)
   - [ ] Opus review fixes (see the SOP)
   - [x] PR 2 screens (`feature/w3-team-screens`, open, not merged; SOP `docs/sop/2026-11-05-w3-team-ui.md`): Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, lead-designed Share with team switch, optional name in the invite dialog and alias editing (designer to confirm); privacy "Teams" paragraph and terms pilot rows; parity shots in `docs/ui/parity/after/`
-  - [ ] "Add email" beside a non-member participant (waits for W6)
-- [ ] W5 Export (merged), W4 Projects, W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
+  - [x] "Add email" beside a non-member participant (W6 PR 2, lead-designed)
+  - [ ] PR 2 screens: Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, and the four lead-designed pieces (Share with team switch, optional name in the invite dialog, alias editing, "Add email" which may wait for W6); privacy "Teams" paragraph and terms pilot row; parity shots
+- [ ] W4 Projects and milestones. Backend PR 1 `feature/w4-projects-backend` (open, not merged, 2026-11-05) and screens PR 2 `feature/w4-projects-screens` (not started). SOP `docs/sop/2026-11-05-w4-projects-backend.md`; FE guide `docs/fe-integration-guide-projects.md` with `docs/fe-captures/projects-w4/`
+  - [x] Migration 0028 (`projects`, `milestones`, `tasks.project_id/milestone_id/check_project`); down_revision 0026, re-point if 0027 (#96) merges first
+  - [x] Projects API (list/create/get/patch/delete; owner and admin write, member 403 `team_forbidden`, other team 404); milestones API (list, create, patch, delete, confirm, `GET /api/meetings/{id}/milestones`)
+  - [x] Filing by keywords in `app/filing.py` (clear winner quiet, weak or tied match sets `check_project`, one-project team unflagged, none otherwise); the series rule is a seam (`series_project`) until W8
+  - [x] Milestone proposals from the extraction call, stored unconfirmed with the quote, never auto-created; rewrite replaces the unconfirmed ones
+  - [x] Tasks API: `project`/`milestone` filters, `project_id`/`milestone_id`/`check_project` on a task and in PATCH, `attention.check_project`
+  - [x] Route enumeration extended; FE guide from live captures (`scripts/capture_projects_api.py`)
+  - [x] PR 2 screens (#102; SOP `docs/sop/2026-11-06-w4-projects-ui.md`): Projects (D6), project tabs, milestone card, drawer Project and Milestone and "Check project", meeting page Milestone row and lead-designed "Set milestone" with Confirm; parity shots under `docs/ui/parity/after/`
+  - [ ] Waits for W8: Recurring meetings list on a project and the series filing rule. Waits for W9: Sprint length on a project and the "In current sprint" and "In backlog" stats
+- [ ] W9 Sprints (2026-11-06). Backend PR 1 `feature/w9-sprints-backend` (stacked on `feature/w4-projects-backend`; not merged) and screens PR 2 `feature/w9-sprints-screens` (not started). SOP `docs/sop/2026-11-06-w9-sprints-backend.md`; FE guide `docs/fe-integration-guide-sprints.md` with `docs/fe-captures/sprints-w9/`
+  - [x] Migration 0031 (`sprints`, `teams.sprint_length/sprint_custom_days/sprint_align_weekdays`, `projects.sprint_length`, `tasks.sprint_id/carried`); down_revision 0028, re-point when 0029/0030 merge first
+  - [x] `app/sprints.py`: windows for every length of the Settings list, a current and a next sprint per series (team's, and a project's own), advisory lock per team
+  - [x] Hourly scheduler job `rollover_sprints` closes ended sprints in the team's zone and carries unfinished tasks; "Close sprint" does the same early (next starts today, end date unchanged)
+  - [x] Filing by due date (no date: Backlog; inside or before the current sprint: current; later: next) for AI tasks and for new tasks that name no sprint
+  - [x] API: `GET /api/sprints?project=`, `POST /api/sprints/{id}/close` (owner/admin; member 403; other team 404; not current 409), `sprint_id`/`carried` on tasks, `?sprint=none|current|next|<id>` filter, sprint fields on `GET`/`PATCH /api/team` and `PATCH /api/projects/{id}`, project stats `in_current_sprint`/`in_backlog`
+  - [x] Cross-team ids refused everywhere (`sprint_not_on_team` 422 on tasks, 404 on sprint and project ids); joining a team or leaving one puts tasks in the Backlog
+  - [ ] Opus review of the permission checks (see the SOP)
+  - [ ] PR 2 screens: sprint selector, sprint header and Close sprint, Backlog view, Carried over badge, drawer Sprint select, Settings sprints card (D12), project Sprint length and the two stats
+  - [ ] Waits for W8 merging: the sprint line under "Next meeting" and its sprint rows on the series page (small follow-up once #104 and #105 are in main)
+
+### W6 Share notes by email (2026-11-05)
+- [ ] PR 1 backend `feature/w6-share-backend` (#99, migration 0029, follows 0031): CI green
+  - [x] `meeting_shares`, recipients and `share_usage`; `POST`/`GET /api/meetings/{id}/shares`; 10 a share, 20 a day; verified senders; owner only
+  - [x] "Notes shared with you" mail (designer layout, PDF/Word/transcript attachments, Reply-To, sender line, no link for outsiders)
+  - [x] Opt-out token and `POST /api/mail/opt-out` (nginx zone added); translation first then mail (hook + hourly sweep)
+  - [x] Privacy and terms rows (spec 13.1), "Last updated" unchanged; Opus review done
+  - [ ] Merged
+- [ ] PR 2 screens `feature/w6-share-screens` (stacked on PR 1): open
+  - [x] Share dialog, toast, "Shared with ..." note, Share notes button, `/unsubscribe` page, lead-designed "Add email"; parity shots at 1440/768/390 in `docs/ui/parity/after/`
+  - [ ] CI green; merged after PR 1
+
+- [ ] **W8 Series, agenda, carry-over, reminders** (backend PR `feature/w8-series-backend`, migration 0030 (follows 0029), SOP `docs/sop/2026-11-06-w8-series-backend.md`, FE guide `docs/fe-integration-guide-series.md`; screens PR `feature/w8-series-screens` pending)
+  - [x] `series`, `series_agenda_items`, `series_agenda_sends`, `series_reminders`, `meetings.series_id`, `open_questions.carry/resolved_by`, `teams.reminders_on/reminder_timing`, `user_settings.notify_reminders` (0030)
+  - [x] Linking: `link_from_calendar` when notes are written, hourly `sync_from_joins`, manual make/attach/detach
+  - [x] `GET /api/series` (cards, per-viewer counts), `GET /api/series/{id}` (page), `PATCH`, agenda add/list/remove, `PATCH /api/questions/{id}`, `series` and `open_questions` on the meeting
+  - [x] Send agenda (teammates only, caps, ids-only mail), 1-hour and 30-minute reminders (off by default, once per person and occurrence)
+  - [x] Team switch and timing (`PATCH /api/team`), personal `GET/PUT /api/settings/reminders`
+  - [x] Team join merges series; leave takes the leaver's meetings out
+  - [x] Opus review of mail, caps and permissions: no Critical; 2 High fixed with tests (2026-11-06)
+  - [ ] Screens: cards, Series page, meeting Series row and toggles, Settings reminders card (PR 2)
+  - [ ] Deferred: W8b "possibly resolved" chips, sprint line and milestone countdown in the mails (W9, W4), outside recipients for the agenda (needs W6 opt-out), "Add to recurring meeting" UI (designer gap), policy wording for reminders before they are switched on in production
+- [ ] W10 Integrations (2026-11-06): Slack webhook first, then one tracker
   - [x] W10 part 1, Slack webhook (migration 0032, branch `feature/w10-slack`, 2026-11-06): vault-stored address, SSRF-safe post, per-team caps, Settings row live, privacy line; SOP `docs/sop/2026-11-06-w10-slack.md`, guide `docs/fe-integration-guide-integrations.md`
   - [ ] W10 part 2, one tracker (migration 0033): waiting for Adebayo to name it (spec D11); lead has the options (Linear recommended)
+- [ ] W5 Export (merged), W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`
   - [x] `meeting_translations` table and `user_settings.default_language` (migration 0014, round trip checked on a scratch DB)
   - [x] Headings from a fixed dictionary in code; transcript and notes split in code into lines, only the words go to the model; checks for count, structure, links and markup, numbers, names; one retry per chunk

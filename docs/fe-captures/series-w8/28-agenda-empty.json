@@ -1,0 +1,28 @@
+{
+  "note": "422.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/1/agenda",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "   "
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_agenda_item",
+        "message": "Type what should be discussed."
+      }
+    }
+  }
+}

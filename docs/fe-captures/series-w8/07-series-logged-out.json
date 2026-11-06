@@ -1,0 +1,23 @@
+{
+  "note": "No login: 401.",
+  "client": "visitor",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

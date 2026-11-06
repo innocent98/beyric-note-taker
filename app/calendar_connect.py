@@ -47,7 +47,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import calendar_states, google_oauth, google_signin, tokens, vault
+from app import calendar_providers, calendar_states, google_oauth, google_signin, tokens, vault
 from app.config import Settings
 from app.gcal_client import AccessTokenCache
 from app.google_oauth import CALENDAR_SCOPE, MEET_SCOPE, GoogleError, GoogleOAuth
@@ -71,7 +71,7 @@ DEFAULT_RETURN_TO = "/settings"
 LOGIN_ERROR = "/login?error=google_failed"
 TESTING_EXPIRY = timedelta(days=7)
 LIVE_STATUSES = ("connected", "degraded")  # a connection that still works
-MAX_EMAIL_CHARS = 254  # the `google_account_email` column
+MAX_EMAIL_CHARS = 254  # the `account_email` column
 MAX_DOMAIN_CHARS = 253
 
 # The features a connect can ask for, and the Google scope each one needs. A flow's `purpose` says
@@ -129,10 +129,43 @@ class ConnectResult:
 
 
 def granted_features(conn: CalendarConnection) -> set[str]:
-    """The features this connection can use, from the scopes Google granted: `calendar` and/or
-    `meet`. Exact scope strings only: a broader or look-alike scope is not ours to rely on."""
-    scopes = set((conn.granted_scopes or "").split())
-    return {feature for feature, scope in FEATURE_SCOPES.items() if scope in scopes}
+    """The features this connection can use, by its provider's rules (`calendar_providers`): for
+    Google, `calendar` and/or `meet` from the scopes Google granted, exact strings only."""
+    return calendar_providers.features_of(conn)
+
+
+class AlreadyConnected(Exception):
+    """The user already has another provider's calendar connected: one live calendar at a time
+    (Outlook spec 6.3)."""
+
+
+def other_live_calendar(session: Session, user_id: int, provider: str) -> CalendarConnection | None:
+    """The user's live calendar of a provider other than `provider`, if any: a connection that
+    still works or only needs reconnecting, and that gives the calendar feature. A Meet-only Google
+    row and a `disconnected` row of any provider do not count."""
+    rows = session.scalars(
+        select(CalendarConnection).where(
+            CalendarConnection.user_id == user_id,
+            CalendarConnection.provider != provider,
+            CalendarConnection.status.in_((*LIVE_STATUSES, "needs_reconnect")),
+        )
+    )
+    return next((row for row in rows if "calendar" in granted_features(row)), None)
+
+
+def live_calendar_connection(session: Session, user: User) -> CalendarConnection | None:
+    """The user's calendar connection if it gives the calendar feature (one made only for Meet is
+    not a connected calendar), else None. Only providers with a registry row are considered."""
+    rows = session.scalars(
+        select(CalendarConnection)
+        .where(
+            CalendarConnection.user_id == user.id,
+            CalendarConnection.provider.in_(tuple(calendar_providers.PROVIDERS)),
+            CalendarConnection.status != "disconnected",
+        )
+        .order_by(CalendarConnection.id)
+    )
+    return next((row for row in rows if "calendar" in granted_features(row)), None)
 
 
 def _result(path: str, **query: str) -> str:
@@ -167,11 +200,14 @@ def start_connect(
 
     `features` are `calendar` and/or `meet`. The flow's purpose is `calendar` whenever the
     calendar is asked for (Meet then rides along and counts only if it is granted), else
-    `meet_scope`. Raises `ValueError` for no features or an unknown one and `ConnectUnavailable`
-    when no encryption key can be used."""
+    `meet_scope`. Raises `ValueError` for no features or an unknown one, `AlreadyConnected` when
+    asking for the calendar while another provider's calendar is connected, and
+    `ConnectUnavailable` when no encryption key can be used."""
     wanted = list(dict.fromkeys(features))
     if not wanted or any(feature not in FEATURE_SCOPES for feature in wanted):
         raise ValueError("features must be calendar and/or meet")
+    if "calendar" in wanted and other_live_calendar(session, user.id, "google") is not None:
+        raise AlreadyConnected
     try:
         vault.encrypt("probe", purpose="refresh_token", owner=user.id)
     except vault.VaultError:
@@ -182,6 +218,7 @@ def start_connect(
         OAuthFlow(
             state_hash=tokens.digest(state),
             purpose=PURPOSES["calendar" if "calendar" in wanted else "meet"],
+            provider="google",
             user_id=user.id,
             code_verifier=verifier,
             nonce=nonce,
@@ -200,10 +237,13 @@ def start_connect(
     return url, state
 
 
-def _take_flow(session: Session, state: str | None, now: datetime) -> OAuthFlow | None:
-    """Use up the calendar flow for `state`: its row, or None when unknown, used before, expired
-    or not a calendar flow. A calendar flow's row is deleted whatever the answer, so a state can
-    never be tried twice. Commits."""
+def _take_flow(
+    session: Session, state: str | None, now: datetime, provider: str = "google"
+) -> OAuthFlow | None:
+    """Use up the calendar flow for `state`: its row, or None when unknown, used before, expired,
+    not a calendar flow or started for another provider (a Microsoft state never finishes at the
+    Google callback). A calendar flow's row is deleted whatever the answer, so a state can never
+    be tried twice. Commits."""
     if not state or len(state) > 200:
         return None
     flow = session.scalars(
@@ -215,7 +255,9 @@ def _take_flow(session: Session, state: str | None, now: datetime) -> OAuthFlow 
         .returning(OAuthFlow)
     ).first()
     session.commit()
-    return flow if flow is not None and flow.expires_at > now else None
+    if flow is None or flow.provider != provider:
+        return None
+    return flow if flow.expires_at > now else None
 
 
 # ---- finishing ----
@@ -286,14 +328,19 @@ def _store(
     domain = identity.hosted_domain.strip().lower() if identity.hosted_domain else None
     if len(email) > MAX_EMAIL_CHARS or (domain and len(domain) > MAX_DOMAIN_CHARS):
         return "google_failed"
+    # The user's own row is the lock for "one live calendar at a time": two tabs finishing two
+    # providers at once queue here, and the second sees the first one's committed connection.
+    session.execute(select(User.id).where(User.id == user.id).with_for_update())
+    if purpose == "calendar" and other_live_calendar(session, user.id, "google") is not None:
+        return "already_connected"
     conn = session.scalars(
         select(CalendarConnection)
         .where(CalendarConnection.user_id == user.id, CalendarConnection.provider == "google")
         .with_for_update()
     ).first()
-    same_account = conn is not None and conn.google_sub == identity.sub
+    same_account = conn is not None and conn.account_subject == identity.sub
     live = conn is not None and conn.status in LIVE_STATUSES
-    if live and not same_account and conn.google_sub is not None:
+    if live and not same_account and conn.account_subject is not None:
         # The chooser lets the person pick any Google account whatever the login hint says. A
         # working connection is never replaced by another account's: that would delete the first
         # account's events and joins and could drop its permissions. A switch needs the old
@@ -335,11 +382,11 @@ def _store(
     if conn is None:
         conn = CalendarConnection(user_id=user.id, provider="google")
         session.add(conn)
-    elif not same_account and conn.google_sub is not None:
+    elif not same_account and conn.account_subject is not None:
         released.append(_drop_old_account(session, conn))
-    conn.google_account_email = email
-    conn.google_sub = identity.sub
-    conn.google_hosted_domain = domain
+    conn.account_email = email
+    conn.account_subject = identity.sub
+    conn.account_domain = domain
     conn.status = "connected"
     conn.needs_reconnect_reason = None
     conn.granted_scopes = " ".join(sorted(grant.scopes))
@@ -449,7 +496,9 @@ def _drop_old_account(session: Session, conn: CalendarConnection) -> ReleasedCon
 # ---- disconnecting ----
 
 
-def disconnect(session: Session, user: User, google: GoogleOAuth | None) -> bool:
+def disconnect(
+    session: Session, user: User, google: GoogleOAuth | None, provider: str = "google"
+) -> bool:
     """The user's own "Disconnect Google". Commits. Idempotent: with no connection, or one that
     is already disconnected, it only repeats the deletions (nothing is created).
 
@@ -465,7 +514,7 @@ def disconnect(session: Session, user: User, google: GoogleOAuth | None) -> bool
     when nothing was left to revoke: a repeat cannot re-check an earlier failure)."""
     conn = session.scalars(
         select(CalendarConnection)
-        .where(CalendarConnection.user_id == user.id, CalendarConnection.provider == "google")
+        .where(CalendarConnection.user_id == user.id, CalendarConnection.provider == provider)
         .with_for_update()
     ).first()
     released = _release(conn) if conn is not None else None
@@ -483,9 +532,9 @@ def disconnect(session: Session, user: User, google: GoogleOAuth | None) -> bool
         conn.refresh_token_enc = None
         conn.key_version = None
         conn.granted_scopes = None
-        conn.google_account_email = None
-        conn.google_sub = None
-        conn.google_hosted_domain = None
+        conn.account_email = None
+        conn.account_subject = None
+        conn.account_domain = None
         conn.sync_token = None
         conn.last_sync_at = None
         conn.last_error = None

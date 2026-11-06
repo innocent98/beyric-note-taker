@@ -1,0 +1,26 @@
+{
+  "note": "Dan is a teammate too; he sends to Ada, who attended.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/1/agenda/send",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "count": 1,
+      "names": [
+        "Ada Lovelace"
+      ]
+    }
+  }
+}

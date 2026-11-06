@@ -1,0 +1,23 @@
+{
+  "note": "A new team has none. `can_manage` is true for owner and admin.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/projects",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "projects": [],
+      "can_manage": true
+    }
+  }
+}

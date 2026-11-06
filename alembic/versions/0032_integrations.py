@@ -6,7 +6,7 @@ does not open. `integration_posts` is written before each outbound call: a parti
 makes one post per meeting true across retries, and its recent rows are the per-team rate cap.
 
 Revision ID: 0032
-Revises: 0026
+Revises: 0030
 Create Date: 2026-11-06
 """
 
@@ -14,7 +14,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0032"
-down_revision = "0026"  # re-point to the newest head when merging after 0027 to 0031
+down_revision = "0030"
 branch_labels = None
 depends_on = None
 

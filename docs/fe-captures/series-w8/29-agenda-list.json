@@ -1,0 +1,31 @@
+{
+  "note": "`can_remove` is per line: its author or a manager.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/1/agenda",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": [
+      {
+        "id": 1,
+        "text": "Budget review",
+        "can_remove": false
+      },
+      {
+        "id": 2,
+        "text": "Hiring update",
+        "can_remove": true
+      }
+    ]
+  }
+}

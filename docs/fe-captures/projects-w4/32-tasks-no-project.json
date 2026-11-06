@@ -1,0 +1,46 @@
+{
+  "note": "",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/tasks?project=none",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "tasks": [],
+      "people": [
+        {
+          "user_id": 2,
+          "name": "Dan Okoro",
+          "is_you": true
+        },
+        {
+          "user_id": 3,
+          "name": "Amara Nwosu",
+          "is_you": false
+        },
+        {
+          "user_id": 4,
+          "name": "Chidi Eze",
+          "is_you": false
+        }
+      ],
+      "attention": {
+        "needs_owner": 0,
+        "unverified": 0,
+        "check_project": 1
+      },
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

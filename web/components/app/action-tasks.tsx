@@ -5,7 +5,7 @@ import { TaskDrawer } from "@/components/app/task-drawer";
 import { useToday } from "@/components/app/use-today";
 import { AppLink, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
-import type { Task, TaskPerson } from "@/lib/api/types";
+import type { Milestone, Project, Task, TaskPerson } from "@/lib/api/types";
 import { actionSummary, avatarTone, dueLabel, personInitials } from "@/lib/tasks";
 
 // The meeting page's Action items when the notes have been read into tasks (the designer's
@@ -17,6 +17,8 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
   const today = useToday();
   const [tasks, setTasks] = useState(initial);
   const [people, setPeople] = useState<TaskPerson[]>([]);
+  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
   const [failed, setFailed] = useState<number | null>(null);
 
@@ -27,6 +29,12 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
         setPeople((await api.tasks.list({ limit: 1 })).people);
       } catch {
         // the drawer still opens; the assignee list is just short
+      }
+      try {
+        setProjects((await api.projects.list()).projects);
+        setMilestones((await api.milestones.list()).milestones);
+      } catch {
+        // the Project and Milestone rows are then left out of the drawer
       }
     }
   }
@@ -109,6 +117,8 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
           task={current}
           people={people}
           today={today}
+          projects={projects}
+          milestones={milestones}
           onChange={(next) => setTasks((all) => all.map((t) => (t.id === next.id ? next : t)))}
           onDelete={(id) => {
             setTasks((all) => all.filter((t) => t.id !== id));

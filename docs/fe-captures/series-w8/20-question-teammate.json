@@ -1,0 +1,28 @@
+{
+  "note": "A member who can only read: 403 `team_forbidden`.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/questions/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "resolved": true
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "You can't do that here. Ask an owner or admin of your team."
+      }
+    }
+  }
+}

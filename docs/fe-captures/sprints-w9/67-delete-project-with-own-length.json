@@ -1,0 +1,20 @@
+{
+  "note": "204. Its tasks stay and now sit in the team's sprints.",
+  "client": "dan",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/projects/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "cache-control": "no-store"
+    },
+    "body": null
+  }
+}

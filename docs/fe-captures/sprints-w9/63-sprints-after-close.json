@@ -1,0 +1,68 @@
+{
+  "note": "The closed sprint is listed first, `closed_early` true.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/sprints",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "project_id": null,
+      "own_series": false,
+      "today": "2026-11-06",
+      "sprint_length": "week5",
+      "sprint_custom_days": 12,
+      "sprint_align_weekdays": true,
+      "sprints": [
+        {
+          "id": 1,
+          "number": 1,
+          "name": "Sprint 1",
+          "start_date": "2026-11-05",
+          "end_date": "2026-11-10",
+          "state": "closed",
+          "closed_at": "2026-11-06T16:00:01.276190Z",
+          "closed_early": true,
+          "tasks_total": 0,
+          "tasks_done": 0
+        },
+        {
+          "id": 2,
+          "number": 2,
+          "name": "Sprint 2",
+          "start_date": "2026-11-06",
+          "end_date": "2026-11-13",
+          "state": "current",
+          "closed_at": null,
+          "closed_early": false,
+          "tasks_total": 6,
+          "tasks_done": 0
+        },
+        {
+          "id": 9,
+          "number": 3,
+          "name": "Sprint 3",
+          "start_date": "2026-11-16",
+          "end_date": "2026-11-20",
+          "state": "next",
+          "closed_at": null,
+          "closed_early": false,
+          "tasks_total": 0,
+          "tasks_done": 0
+        }
+      ],
+      "current_id": 2,
+      "next_id": 9,
+      "can_manage": true
+    }
+  }
+}

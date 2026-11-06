@@ -1,0 +1,62 @@
+{
+  "note": "",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/shares",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipients": [
+        {
+          "email": "p0@example.test"
+        },
+        {
+          "email": "p1@example.test"
+        },
+        {
+          "email": "p2@example.test"
+        },
+        {
+          "email": "p3@example.test"
+        },
+        {
+          "email": "p4@example.test"
+        },
+        {
+          "email": "p5@example.test"
+        },
+        {
+          "email": "p6@example.test"
+        },
+        {
+          "email": "p7@example.test"
+        },
+        {
+          "email": "p8@example.test"
+        },
+        {
+          "email": "p9@example.test"
+        },
+        {
+          "email": "p10@example.test"
+        }
+      ],
+      "language": "en"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "too_many_recipients",
+        "message": "You can send to at most 10 people at a time."
+      }
+    }
+  }
+}

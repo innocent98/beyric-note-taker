@@ -1,0 +1,32 @@
+{
+  "note": "No login: 401 JSON, as for every route under /api.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/shares",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "recipients": [
+        {
+          "email": "client@example.test"
+        }
+      ],
+      "language": "en"
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "note": "422 `validation_error`.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/sprints?project=abc",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "project",
+            "message": "Input should be a valid integer, unable to parse string as an integer"
+          }
+        ]
+      }
+    }
+  }
+}

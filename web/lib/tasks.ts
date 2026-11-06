@@ -1,3 +1,4 @@
+import { PROJECT_COLOURS } from "./brand";
 import { initials } from "./format";
 import type { Task, TaskPerson, TaskStatus } from "./api/types";
 
@@ -108,4 +109,36 @@ export function actionSummary(tasks: Task[]): string {
   const people = new Set(tasks.filter((t) => t.assignee).map((t) => t.assignee!.user_id)).size;
   const t = tasks.length;
   return `${t} ${t === 1 ? "task" : "tasks"} created, assigned to ${people} ${people === 1 ? "person" : "people"}`;
+}
+
+// ---- projects and milestones (W4) ----
+
+// "Tue 8 Dec 2026": a milestone's date on its card and on the project.
+export function longDay(iso: string): string {
+  return `${dayLabel(iso)} ${parts(iso).y}`;
+}
+
+// "8 Dec": a milestone's date in a select and on the meeting page.
+export function shortDay(iso: string): string {
+  const { m, d } = parts(iso);
+  return `${d} ${MONTHS[m - 1]}`;
+}
+
+// "Client Portal launch, 8 Dec": how a milestone is named in a select and on the meeting page.
+export function milestoneTitle(m: { name: string; due_date: string }): string {
+  return `${m.name}, ${shortDay(m.due_date)}`;
+}
+
+// Whole days from `today` to `due` (never below 0: a milestone that has passed is not on the board).
+export function daysLeft(due: string, today: string): number {
+  const a = parts(today);
+  const b = parts(due);
+  return Math.max(0, Math.round((Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / 86_400_000));
+}
+
+// The class that paints a project's colour (styles/pages.css `sw-1` to `sw-6`): the CSP forbids
+// inline styles, so a colour is always a class. A colour that is not one of the six is the grey.
+export function swatchClass(color: string | null | undefined): string {
+  const index = PROJECT_COLOURS.findIndex((c) => c.toLowerCase() === (color ?? "").toLowerCase());
+  return index < 0 ? "sw-none" : `sw-${index + 1}`;
 }

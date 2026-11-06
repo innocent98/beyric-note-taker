@@ -35,6 +35,18 @@ export type SlackState = Schemas["SlackOut"];
 export type TaskChanges = Partial<Schemas["TaskPatch"]>;
 export type NewTask = Schemas["TaskCreate"];
 
+export type Project = Schemas["ProjectOut"];
+export type ProjectList = Schemas["ProjectList"];
+export type ProjectChanges = Partial<Schemas["ProjectPatch"]>;
+export type Milestone = Schemas["MilestoneOut"];
+export type MilestoneList = Schemas["MilestoneList"];
+export type MeetingMilestones = Schemas["MeetingMilestones"];
+export type Share = Schemas["ShareOut"];
+export type ShareList = Schemas["ShareList"];
+export type ShareCreated = Schemas["ShareCreated"];
+export type ShareBody = Schemas["ShareIn"];
+export type ShareRecipient = Schemas["ShareRecipientOut"];
+
 export type Team = Schemas["TeamOut"];
 export type TeamRole = Team["my_role"];
 export type TeamMember = Schemas["TeamMemberOut"];

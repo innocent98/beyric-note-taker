@@ -185,6 +185,7 @@ READS = {
     ("GET", "/api/meetings/{meeting_id}/export"),
     ("GET", "/api/meetings/{meeting_id}/translations/{language}"),
     ("GET", "/api/meetings/{meeting_id}/tasks"),
+    ("GET", "/api/meetings/{meeting_id}/milestones"),
 }
 OWNER_ONLY = {
     ("DELETE", "/api/meetings/{meeting_id}"),
@@ -196,7 +197,11 @@ OWNER_ONLY = {
     ("DELETE", "/api/meetings/{meeting_id}/translations/{language}"),
     ("POST", "/api/meetings/{meeting_id}/tasks/extract"),
     ("POST", "/api/meetings/{meeting_id}/share"),
+    ("POST", "/api/meetings/{meeting_id}/shares"),
+    ("GET", "/api/meetings/{meeting_id}/shares"),
     ("DELETE", "/api/meetings/{meeting_id}/share"),
+    ("PUT", "/api/meetings/{meeting_id}/series"),
+    ("POST", "/api/meetings/{meeting_id}/recurring"),
 }
 # Routes with no meeting id in the path that still read meeting content, through the same rule.
 LISTS = {("GET", "/api/meetings"), ("GET", "/api/decisions")}
@@ -216,6 +221,10 @@ def test_every_route_with_a_meeting_id_is_classified(app):
 def call(handle, method, path, meeting):
     url = path.replace("{meeting_id}", str(meeting.id)).replace("{language}", "fr")
     body = {"language": "fr"} if path.endswith("/translations") else None
+    if path.endswith("/series"):
+        body = {"series_id": None}
+    if method == "POST" and path.endswith("/shares"):
+        body = {"recipients": [{"email": "x@example.test"}], "language": "en"}
     if path.endswith("/regenerate"):
         body = {"template_id": meeting.template_id}
     return handle.call(method, url, body)
