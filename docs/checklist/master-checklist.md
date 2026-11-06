@@ -444,7 +444,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Milestone proposals from the extraction call, stored unconfirmed with the quote, never auto-created; rewrite replaces the unconfirmed ones
   - [x] Tasks API: `project`/`milestone` filters, `project_id`/`milestone_id`/`check_project` on a task and in PATCH, `attention.check_project`
   - [x] Route enumeration extended; FE guide from live captures (`scripts/capture_projects_api.py`)
-  - [ ] PR 2 screens: Projects (D6), project tabs, milestone card, drawer Project and Milestone and "Check project", meeting page "Set milestone" with Confirm
+  - [x] PR 2 screens (`feature/w4-projects-screens`, open, not merged, stacked on #100; SOP `docs/sop/2026-11-06-w4-projects-ui.md`): Projects (D6), project tabs, milestone card, drawer Project and Milestone and "Check project", meeting page Milestone row and lead-designed "Set milestone" with Confirm; parity shots under `docs/ui/parity/after/`
   - [ ] Waits for W8: Recurring meetings list on a project and the series filing rule. Waits for W9: Sprint length on a project and the "In current sprint" and "In backlog" stats
 - [ ] W5 Export (merged), W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`

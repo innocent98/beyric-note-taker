@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/api/browser", () => ({
   api: {
+    milestones: { forMeeting: () => Promise.resolve({ milestones: [] }), confirm: vi.fn() },
     meetings: {
       get: mocks.get,
       export: mocks.export,

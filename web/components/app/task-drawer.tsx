@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, AppLink, Button, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
-import type { Task, TaskChanges, TaskPerson } from "@/lib/api/types";
-import { assignedLabel, COLUMNS, dueOptions, sourceLabel } from "@/lib/tasks";
+import type { Milestone, Project, Task, TaskChanges, TaskPerson } from "@/lib/api/types";
+import { assignedLabel, COLUMNS, dueOptions, milestoneTitle, sourceLabel } from "@/lib/tasks";
 
 // The task drawer (the designer's `drawerOpen` panel): a side panel with the task's title, the
 // notice about a spoken owner nobody on the team matched, the Status, Assignee, Due and Assigned
@@ -14,13 +14,17 @@ import { assignedLabel, COLUMNS, dueOptions, sourceLabel } from "@/lib/tasks";
 // the one on screen. What the person may change comes with the task (`can_*`); a control they may
 // not use is disabled, not hidden, and a refusal (403 `team_forbidden`) is shown in the panel.
 //
-// Not drawn here, because the data behind them does not exist yet: Milestone and Project (W4),
-// Sprint (W9) and the "Check project" line (W4). "Invite them to the team" opens the Team page
+// Milestone and Project (W4) are drawn when the lists are given: a milestone is one of the team's
+// confirmed ones, a project one of its projects, and the "Check project" line, with its Confirm
+// button, shows while the filing was a guess. Choosing a project is the confirmation. Not drawn
+// here, because the data behind it does not exist yet: Sprint (W9). "Invite them to the team" opens the Team page
 // with its invite dialog filled in (W3); a member, who may not invite, is told to ask.
 export function TaskDrawer({
   task,
   people,
   today,
+  projects = null,
+  milestones = [],
   canInvite = false,
   onInvite,
   onChange,
@@ -30,6 +34,10 @@ export function TaskDrawer({
   task: Task;
   people: TaskPerson[];
   today: string;
+  // The team's projects and confirmed milestones; `null` when they could not be read (the rows
+  // are then left out rather than drawn empty).
+  projects?: Project[] | null;
+  milestones?: Milestone[];
   // An owner or admin of the team may invite the person a meeting named (`GET /api/team` `can_manage`).
   canInvite?: boolean;
   onInvite?: (spokenName: string) => void;
@@ -97,6 +105,7 @@ export function TaskDrawer({
   const assigneeDisabled = !(task.can_assign || task.can_claim);
   const assignee = task.assignee ? String(task.assignee.user_id) : "";
   const dueChoices = dueOptions(today, task.due_date);
+  const project = projects?.find((p) => p.id === task.project_id) ?? null;
 
   return (
     <div className="td-scrim" onClick={onClose}>
@@ -134,6 +143,19 @@ export function TaskDrawer({
               ) : (
                 <span>Ask an owner or admin of your team to invite them.</span>
               )}
+            </div>
+          ) : null}
+          {task.check_project && project ? (
+            <div className="td-notice">
+              <span>
+                Filed under {project.name || "Untitled project"} from the meeting it came from, but it could belong
+                elsewhere. Confirm or pick another project below.
+              </span>
+              {task.can_update ? (
+                <button type="button" className="td-confirm" disabled={busy} onClick={() => void save({ check_project: false })}>
+                  Confirm {project.name || "Untitled project"}
+                </button>
+              ) : null}
             </div>
           ) : null}
           <div className="td-grid">
@@ -181,6 +203,40 @@ export function TaskDrawer({
                 </option>
               ))}
             </select>
+            {projects ? (
+              <>
+                <label htmlFor="td-milestone">Milestone</label>
+                <select
+                  id="td-milestone"
+                  className="select td-select"
+                  value={task.milestone_id ?? ""}
+                  disabled={!task.can_update || busy}
+                  onChange={(event) => void save({ milestone_id: event.target.value ? Number(event.target.value) : null })}
+                >
+                  <option value="">None</option>
+                  {milestones.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {milestoneTitle(m)}
+                    </option>
+                  ))}
+                </select>
+                <label htmlFor="td-project">Project</label>
+                <select
+                  id="td-project"
+                  className="select td-select"
+                  value={task.project_id ?? ""}
+                  disabled={!task.can_update || busy}
+                  onChange={(event) => void save({ project_id: event.target.value ? Number(event.target.value) : null })}
+                >
+                  <option value="">No project</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name || "Untitled project"}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
             <span>Assigned</span>
             <span className="td-assigned">{assignedLabel(task.assigned_on, today)}</span>
           </div>
