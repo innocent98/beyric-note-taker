@@ -258,3 +258,24 @@ def test_the_sprint_filter_reads_none_current_next_and_ids_of_the_team_only(sess
     assert ids("next") == ids(str(nxt.id)) == {b.id}
     assert ids("999999") == set()
     assert sprints.sprint_filter(session, None, "current") is not None
+
+
+def test_a_project_that_gets_its_own_length_again_weeks_later_starts_today_not_in_the_past(
+    session, team
+):
+    project = Project(team_id=team.id, name="P", color="#0E6B5E")
+    session.add(project)
+    session.flush()
+    sprints.ensure_series(session, team, None, date(2026, 10, 1))
+    sprints.set_project_length(session, team, project, "week7")
+    sprints.set_project_length(session, team, project, None)
+    session.commit()
+    sprints.open_sprints(session, team.id, project.id)  # none now
+    old_end = date(2026, 10, 7)
+    for row in session.scalars(select(Sprint).where(Sprint.project_id == project.id)):
+        row.closed_at, row.end_date = NOW, min(row.end_date, old_end)
+    session.commit()
+    sprints.set_project_length(session, team, project, "week7")
+    session.commit()
+    current = sprints.open_sprints(session, team.id, project.id)[0]
+    assert current.end_date >= sprints.team_today(session, team)

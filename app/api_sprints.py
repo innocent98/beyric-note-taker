@@ -158,6 +158,7 @@ def close_sprint(
     now = datetime.now(UTC)
     sprints.lock(session, team.id)
     session.refresh(sprint)  # re-read under the lock: someone else may have closed it first
+    session.refresh(team)
     key = sprint.project_id
     opened = sprints.open_sprints(session, team.id, key)
     if sprint.closed_at is not None or not opened or opened[0].id != sprint.id:

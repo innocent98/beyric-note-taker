@@ -184,7 +184,11 @@ def ensure_series(
             start = first_start(length, aligned, today or team_today(session, team))
             opened = [_make(session, team, key, 1, start)]
         else:
-            start = next_start(length, aligned, last.end_date)
+            # Not before today: a series resumed after weeks must not start in the past.
+            start = max(
+                next_start(length, aligned, last.end_date),
+                first_start(length, aligned, today or team_today(session, team)),
+            )
             opened = [_make(session, team, key, last.number + 1, start)]
     tail = opened[-1]
     opened.append(
@@ -264,6 +268,8 @@ def rollover_series(
 def rollover_team(session: Session, team: Team, now: datetime) -> int:
     """Keep every series of the team current: make the missing sprints, close the ones that ended.
     Commits."""
+    lock(session, team.id)
+    session.refresh(team)
     today = team_today(session, team, now)
     keys: list[int | None] = [None]
     keys += list(
@@ -330,9 +336,11 @@ def set_project_length(session: Session, team: Team, project: Project, length: s
     """Give a project its own sprint length (or take it back to the team's). A new own series is
     made, and the project's tasks in the team's current and next sprints move into it; taking it
     back moves them the other way and drops the project's open sprints. Closed sprints stay."""
+    lock(session, team.id)
+    session.refresh(project)  # re-read under the lock: a concurrent change may have beaten us
+    session.refresh(team)
     if project.sprint_length == length:
         return
-    lock(session, team.id)
     today = team_today(session, team)
     had = project.sprint_length is not None
     if length is None:

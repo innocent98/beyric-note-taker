@@ -478,6 +478,7 @@ def create(
     if isinstance(sprint_id, Unset):
         sprint_id = sprints.Placer(session, team.id).sprint_for(project_id, due_date)
     elif sprint_id is not None:
+        sprints.lock(session, team.id)  # the check and the write see the same series
         check_sprint(session, team.id, project_id, sprint_id)
     task = Task(
         sprint_id=sprint_id,
@@ -524,11 +525,9 @@ def update(session: Session, user: User, task: Task, changes: dict, now: datetim
         check_assignable(session, task.team_id, real.get("project_id"), real.get("milestone_id"))
     if "project_id" in real:
         real["check_project"] = False  # a person chose it: nothing left to check
-        if "sprint_id" not in real:
-            # Another project can mean another series: keep its place in time (current, next).
-            sprints.rehome(session, task, real["project_id"])
     if "sprint_id" in real:
         if real["sprint_id"] is not None:
+            sprints.lock(session, task.team_id)
             check_sprint(
                 session, task.team_id, real.get("project_id", task.project_id), real["sprint_id"]
             )
@@ -549,6 +548,9 @@ def update(session: Session, user: User, task: Task, changes: dict, now: datetim
                 and match_owner(task.spoken_owner, members) != target
             ):
                 add_alias(session, task.team_id, target, task.spoken_owner)
+    if "project_id" in real and "sprint_id" not in real:
+        # Another project can mean another series: keep its place in time (current, next).
+        sprints.rehome(session, task, real["project_id"])
     for name, value in real.items():
         setattr(task, name, value)
     if "status" in real:
