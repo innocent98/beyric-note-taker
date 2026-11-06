@@ -169,7 +169,10 @@ def test_the_post_goes_to_the_resolved_address_with_the_real_host_name():
     assert request.url.host == "8.8.4.4" and request.url.path.endswith("FAKEFAKEFAKEFAKEFAKEFAKE")
     assert request.headers["host"] == "hooks.slack.com"
     assert request.extensions["sni_hostname"] == "hooks.slack.com"
-    assert request.read() == b'{"text":"hi","unfurl_links":false,"unfurl_media":false}'
+    assert (
+        request.read()
+        == b'{"text":"hi","unfurl_links":false,"unfurl_media":false,"link_names":false}'
+    )
 
 
 def test_a_private_answer_from_dns_is_never_connected_to():
@@ -404,3 +407,36 @@ def test_a_private_meetings_tasks_never_reach_the_channel(session, team, owner, 
     assert sent.calls == [] and session.scalars(select(IntegrationPost)).all() == [
         p for p in session.scalars(select(IntegrationPost)) if p.meeting_id is None
     ]
+
+
+def test_a_webhook_slack_says_is_gone_is_not_tried_again(session, team, owner, meeting, sent):
+    connect(session, team, owner)
+    sent.state["fail"] = "gone"
+    live = [add_task(session, team, meeting)]
+    integrations.notify_meeting(session, meeting, team.id, live, [], NOW)
+    other = add_meeting(session, meeting_template(session), title="Next", shared_team_id=team.id)
+    assert integrations.notify_meeting(session, other, team.id, live, [], NOW) is False
+    assert len(sent.calls) == 1  # the second meeting never called Slack
+
+
+def meeting_template(session):
+    from app.models import Template
+
+    return session.scalars(select(Template)).first()
+
+
+def test_a_disconnect_between_the_claim_and_the_post_stops_the_post(
+    session, team, owner, meeting, sent, monkeypatch
+):
+    connect(session, team, owner)
+    live = [add_task(session, team, meeting)]
+    original = session.refresh
+
+    def refresh_after_delete(row):
+        session.delete(row)
+        session.flush()
+        original(row)
+
+    monkeypatch.setattr(session, "refresh", refresh_after_delete)
+    assert integrations.notify_meeting(session, meeting, team.id, live, [], NOW) is False
+    assert sent.calls == []

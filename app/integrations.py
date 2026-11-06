@@ -9,7 +9,7 @@ everything, records a failure on the row (a fixed sentence, shown on the card) a
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -27,6 +27,14 @@ TESTS_PER_HOUR = 5
 
 def _owner(team_id: int, kind: str) -> str:
     return f"team:{team_id}:{kind}"
+
+
+LOCK_CLASS = 7010  # first half of the two-int advisory lock (6002 and 7001 are taken)
+
+
+def _lock_team(session: Session, team_id: int) -> None:
+    """Serialise the count-then-insert of the rate caps per team, until the next commit."""
+    session.execute(text("select pg_advisory_xact_lock(:c, :t)"), {"c": LOCK_CLASS, "t": team_id})
 
 
 def get(session: Session, team_id: int, kind: str = SLACK) -> Integration | None:
@@ -62,6 +70,7 @@ def connect_slack(
             "slack_webhook_invalid",
             "That is not a Slack webhook address. It starts with https://hooks.slack.com/services/.",
         ) from None
+    _lock_team(session, team_id)
     if _recent_posts(session, team_id, now, tests_only=True) >= TESTS_PER_HOUR:
         raise Refused(429, "integration_rate", "Too many tries. Wait a little and try again.")
     try:
@@ -137,6 +146,9 @@ def notify_meeting(
         # teammates (`tasks.visible`), so they must not reach the team's channel either.
         if meeting.shared_team_id != team_id:
             return False
+        if row.status == "failing" and row.last_error == slack.TEXT["gone"]:
+            return False  # Slack says the webhook is gone: no more tries until it is reconnected
+        _lock_team(session, team_id)
         if _recent_posts(session, team_id, stamp) >= POSTS_PER_HOUR:
             return False  # the cap: this meeting is skipped, not queued
         claimed = session.execute(
@@ -148,6 +160,8 @@ def notify_meeting(
         session.commit()
         if claimed is None:
             return False  # this meeting was already posted
+        # A disconnect or a reconnect may have landed meanwhile: use what is stored now.
+        session.refresh(row)
         names = {m.user_id: m.display_name for m in members}
         lines = [
             (t.title, names.get(t.assignee_user_id) or t.spoken_owner or None)

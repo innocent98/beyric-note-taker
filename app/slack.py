@@ -135,7 +135,7 @@ def _send(url: str, text: str, resolver, transport) -> None:
     deadline = time.monotonic() + TOTAL_TIMEOUT
     timeout = httpx.Timeout(READ_TIMEOUT, connect=CONNECT_TIMEOUT)
     headers = {"Host": HOST, "User-Agent": USER_AGENT, "Content-Type": "application/json"}
-    payload = {"text": text, "unfurl_links": False, "unfurl_media": False}
+    payload = {"text": text, "unfurl_links": False, "unfurl_media": False, "link_names": False}
     with httpx.Client(
         transport=transport, timeout=timeout, follow_redirects=False, trust_env=False
     ) as client:
