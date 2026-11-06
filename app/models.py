@@ -33,7 +33,9 @@ MAIL_STATUSES = ("pending", "sent", "failed", "skipped")
 SUPPRESSION_REASONS = ("bounce", "complaint", "unsubscribed")
 AUTO_JOIN_RULES = ("all", "organizer", "none")
 INSTANT_MEET_MODES = ("events", "poll", "off")
-CONNECTION_PROVIDERS = ("google", "ics")
+CONNECTION_PROVIDERS = ("google", "ics", "microsoft")
+OAUTH_FLOW_PROVIDERS = ("google", "microsoft")
+ACCOUNT_KINDS = ("personal", "work")
 CONNECTION_STATUSES = ("connected", "degraded", "needs_reconnect", "disconnected")
 RECONNECT_REASONS = ("expired", "revoked", "error")
 MEET_SUBSCRIPTION_STATES = ("none", "active", "needs_reconnect", "error")
@@ -143,15 +145,19 @@ class AuthToken(Base):
 
 
 class OAuthFlow(Base):
-    """State of one Google OAuth round trip; short-lived and swept."""
+    """State of one OAuth round trip (Google or Microsoft); short-lived and swept."""
 
     __tablename__ = "oauth_flows"
     __table_args__ = (
         CheckConstraint(_in("purpose", OAUTH_PURPOSES), name="ck_oauth_flows_purpose"),
+        CheckConstraint(_in("provider", OAUTH_FLOW_PROVIDERS), name="ck_oauth_flows_provider"),
     )
 
     state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     purpose: Mapped[str] = mapped_column(String(16))
+    # Which provider's consent screen this round trip went to: a state can only finish at that
+    # provider's callback.
+    provider: Mapped[str] = mapped_column(String(16), default="google", server_default="google")
     user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("users.id", ondelete="CASCADE")
     )
@@ -423,6 +429,10 @@ class CalendarConnection(Base):
         ),
         CheckConstraint(_in("status", CONNECTION_STATUSES), name="ck_calendar_connections_status"),
         CheckConstraint(
+            "account_kind is null or " + _in("account_kind", ACCOUNT_KINDS),
+            name="ck_calendar_connections_account_kind",
+        ),
+        CheckConstraint(
             "needs_reconnect_reason is null or " + _in("needs_reconnect_reason", RECONNECT_REASONS),
             name="ck_calendar_connections_reason",
         ),
@@ -436,10 +446,17 @@ class CalendarConnection(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
     provider: Mapped[str] = mapped_column(String(16), default="google", server_default="google")
-    google_account_email: Mapped[str | None] = mapped_column(String(254))
-    google_sub: Mapped[str | None] = mapped_column(String(64))
-    # The ID token's `hd` claim: present for Workspace accounts, absent for personal Gmail.
-    google_hosted_domain: Mapped[str | None] = mapped_column(String(253))
+    # The connected account, whichever provider: a label (the address shown on Settings), the
+    # provider's stable subject id (Google `sub`; Microsoft `oid`), and the organisation domain
+    # (Google's `hd` claim: present for Workspace accounts, absent for personal Gmail).
+    account_email: Mapped[str | None] = mapped_column(String(254))
+    account_subject: Mapped[str | None] = mapped_column(String(64))
+    account_domain: Mapped[str | None] = mapped_column(String(253))
+    # Microsoft only (null for Google and ICS): the directory (tenant) id, personal or work, and the
+    # organisation's verified domains (space separated), used for the same-organisation test.
+    tenant_id: Mapped[str | None] = mapped_column(String(36))
+    account_kind: Mapped[str | None] = mapped_column(String(8))
+    tenant_domains: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(16), default="connected", server_default="connected")
     needs_reconnect_reason: Mapped[str | None] = mapped_column(String(16))
     granted_scopes: Mapped[str | None] = mapped_column(Text)
