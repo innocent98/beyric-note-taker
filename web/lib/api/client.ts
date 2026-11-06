@@ -43,6 +43,7 @@ import type {
   Task,
   TaskChanges,
   TaskList,
+  SlackState,
   TasksSettings,
   Template,
   ShareBody,
@@ -452,6 +453,15 @@ export function createApi(options: ApiOptions = {}) {
           body: { override },
           write: true,
         }),
+    },
+    // The team's integrations (W10): the Slack webhook. The address goes up on connect and never comes back.
+    integrations: {
+      slack: {
+        get: () => request<SlackState>("GET", "/api/integrations/slack"),
+        connect: (webhook_url: string) =>
+          request<SlackState>("PUT", "/api/integrations/slack", { body: { webhook_url }, write: true }),
+        disconnect: () => request<void>("DELETE", "/api/integrations/slack", { write: true }),
+      },
     },
     vocabulary: {
       list: async () => (await request<{ terms: Term[] }>("GET", "/api/vocabulary")).terms,

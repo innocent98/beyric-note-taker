@@ -1199,6 +1199,7 @@ def test_0030_adds_series_with_defaults_and_downgrades_cleanly(scratch_url):
         engine.dispose()
 
 
-def test_0030_is_the_only_head():
+def test_0032_follows_0030_and_is_the_only_head():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
-    assert script.get_heads() == ["0030"]
+    assert script.get_revision("0032").down_revision == "0030"
+    assert script.get_heads() == ["0032"]

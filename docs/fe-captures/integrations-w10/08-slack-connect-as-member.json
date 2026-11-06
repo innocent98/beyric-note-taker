@@ -1,0 +1,23 @@
+{
+  "note": "A member may not connect: 403.",
+  "client": "chidi (member)",
+  "request": {
+    "method": "PUT",
+    "path": "/api/integrations/slack",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>"
+    },
+    "body": {
+      "webhook_url": "<fake-slack-webhook-url>"
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only an owner or admin of the team can do that."
+      }
+    }
+  }
+}

@@ -43,6 +43,11 @@ vi.mock("@/lib/api/server", () => ({
         tasks: { get: async () => ({ auto_create_tasks: true, email_assignees: true }) },
         reminders: { get: async () => ({ notify_reminders: true }) },
       },
+      integrations: {
+        slack: {
+          get: async () => ({ connected: false, status: null, last_error: null, last_posted_at: null, can_manage: true }),
+        },
+      },
       team: { get: async () => ({ id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true }) },
     };
   },

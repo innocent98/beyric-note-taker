@@ -213,6 +213,8 @@ const meetingTasks = (id) => tasks.filter((t) => t.meeting?.id === id).sort((a, 
 const tasksNew = () => tasks.filter((t) => t.is_new && t.status !== "done").length;
 const attention = () => ({ needs_owner: tasks.filter((t) => !t.assignee && t.status !== "done").length, unverified: 0, check_project: tasks.filter((t) => t.check_project && t.status !== "done").length });
 let tasksSettings = { auto_create_tasks: true, email_assignees: true };
+const integrationsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "integrations-w10", `${name}.json`), "utf8")).response.body;
+let slackConnected = false;
 for (const meeting of details) {
   meeting.tasks = [];
   meeting.tasks_count = 0;
@@ -380,6 +382,7 @@ const server = http.createServer(async (req, res) => {
     shares = [];
     shareId = 0;
     armed.decisions = armed.review = true;
+    slackConnected = false;
     resetProjects();
     for (const t of tasks) t.milestone_id = [1, 3, 5, 8, 9, 10, 11, 12].includes(t.id) ? 1 : null;
     proposalOpen = true;
@@ -621,6 +624,18 @@ const server = http.createServer(async (req, res) => {
   if (ofMeeting && method === "GET") {
     const list = meetingTasks(Number(ofMeeting[1]));
     return json(res, 200, { tasks: list, assigned_people: new Set(list.filter((t) => t.assignee).map((t) => t.assignee.user_id)).size, extraction_status: "done" });
+  }
+  if (path === "/api/integrations/slack") {
+    if (method === "PUT") {
+      slackConnected = true;
+      return json(res, 200, integrationsCapture("10-slack-connected"));
+    }
+    if (method === "DELETE") {
+      slackConnected = false;
+      res.writeHead(204);
+      return res.end();
+    }
+    return json(res, 200, integrationsCapture(slackConnected ? "10-slack-connected" : "05-slack-not-connected"));
   }
   if (path === "/api/settings/tasks") {
     if (method === "PUT") tasksSettings = { auto_create_tasks: !!data?.auto_create_tasks, email_assignees: !!data?.email_assignees };

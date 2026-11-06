@@ -152,6 +152,19 @@ const SCREENS = {
     [{ fill: "e.g. company name", value: "Beyric" }, { text: "Add to vocabulary", wait: 600 }],
   ],
   "app-review-gone": [null, [], "/review", true, [{ fill: "e.g. company name", value: "Gone" }, { text: "Add to vocabulary", wait: 600 }]],
+  // Slack (W10). The design connects in one click after 1 s and shows the channel chip; ours opens the
+  // lead-designed address field first (see docs/sop/2026-11-06-w10-slack.md).
+  "app-settings-slack-form": [APP, [["Settings", "first"]], "/settings", true, [{ text: "Connect Slack", wait: 400 }]],
+  "app-settings-slack-connected": [
+    APP,
+    [["Settings", "first"], ["Connect Slack", "first", 1500]],
+    "/settings",
+    true,
+    [
+      { text: "Connect Slack", wait: 300 },
+      { fill: "https://hooks.slack.com/services/...", value: ["https://hooks.slack.com", "services", "TFAKEFAKE", "BFAKEFAKE", "FAKEFAKEFAKEFAKEFAKEFAKE"].join("/"), enter: true, wait: 800 },
+    ],
+  ],
   "app-settings-timezone": [
     APP,
     [["Settings", "first"], { select: "(UTC+9) Tokyo", design: "Tokyo", wait: 300 }],
@@ -235,6 +248,7 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
     if (!Array.isArray(step)) {
       if (step.fill) {
         await page.getByPlaceholder(step.fill).first().fill(step.value);
+        if (step.enter) await page.getByPlaceholder(step.fill).first().press("Enter");
       } else if (step.select) {
         const field =
           side === "design"

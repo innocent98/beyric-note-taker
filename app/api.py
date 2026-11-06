@@ -22,6 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app import (
     api_accounts,
     api_admin,
+    api_integrations,
     api_projects,
     api_series,
     api_settings,
@@ -790,6 +791,7 @@ def delete_term(
 router.include_router(api_accounts.router)
 router.include_router(api_admin.router)
 router.include_router(api_settings.router)
+router.include_router(api_integrations.router)
 router.include_router(calendar_api.router)
 router.include_router(calendar_recurring.router)
 router.include_router(api_workspace.router)

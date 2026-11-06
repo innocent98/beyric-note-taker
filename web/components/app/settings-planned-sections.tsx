@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
+import { SettingsSlack } from "@/components/app/settings-slack";
 import { SettingsTasksRows } from "@/components/app/settings-tasks";
 import { SettingsRemindersRow } from "@/components/app/settings-reminders";
 import { SettingsReminderMail } from "@/components/app/settings-reminder-mail";
-import type { ReminderPreferences, TasksSettings, Team } from "@/lib/api/types";
+import type { ReminderPreferences, SlackState, TasksSettings, Team } from "@/lib/api/types";
 
 // The Settings sections the designer drew below Calendar (`isSettings` in Beyric Note Taker.dc.html):
 // Sprints and reminders, Tasks. Their features are not built yet (tasks, sprints, reminders, tool
@@ -11,6 +12,7 @@ import type { ReminderPreferences, TasksSettings, Team } from "@/lib/api/types";
 // those two lines are the only words the design does not have. Sample values (the select
 // choices) are the designer's own; no sprint dates and no connected state are shown, because there
 // is no data behind them. Plain server markup on purpose: nothing here may ever call anything.
+// Post tasks to Slack is live when `slack` is given (settings-slack.tsx); Sync with your project tool stays off (W10, tracker).
 // The third section the designer drew there, Default notes language, is live: `settings-language.tsx`.
 
 const SPRINT_LENGTHS = [
@@ -71,10 +73,12 @@ function Text({ title, children }: { title: string; children?: ReactNode }) {
 // be read) the row is drawn off like the sprint rows.
 export function SettingsPlannedSections({
   tasks = null,
+  slack = null,
   team = null,
   reminderMail = null,
 }: {
   tasks?: TasksSettings | null;
+  slack?: SlackState | null;
   team?: Team | null;
   reminderMail?: ReminderPreferences | null;
 }) {
@@ -134,7 +138,11 @@ export function SettingsPlannedSections({
             </h2>
             <p className="pl-sub">What happens to action items after a meeting ends.</p>
             <p className="meta pl-soon">
-              {tasks ? "Sync with your project tool and Post tasks to Slack are not available yet." : "These settings are not available yet."}
+              {tasks && slack
+                ? "Sync with your project tool is not available yet."
+                : tasks
+                  ? "Sync with your project tool and Post tasks to Slack are not available yet."
+                  : "These settings are not available yet."}
             </p>
           </div>
         </div>
@@ -168,12 +176,16 @@ export function SettingsPlannedSections({
             </button>
           </div>
         </div>
-        <div className="pl-row pl-row-center pl-row-last">
-          <Text title="Post tasks to Slack">Share new tasks in a channel so the team can track them there.</Text>
-          <button type="button" className="btn btn-secondary pl-btn" disabled>
-            Connect Slack
-          </button>
-        </div>
+        {slack ? (
+          <SettingsSlack initial={slack} />
+        ) : (
+          <div className="pl-row pl-row-center pl-row-last">
+            <Text title="Post tasks to Slack">Share new tasks in a channel so the team can track them there.</Text>
+            <button type="button" className="btn btn-secondary pl-btn" disabled>
+              Connect Slack
+            </button>
+          </div>
+        )}
       </section>
     </>
   );

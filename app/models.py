@@ -1277,3 +1277,59 @@ def _complete_the_join_with_its_meeting(session: Session, flush_context, instanc
             .values(state="completed")
             .execution_options(synchronize_session="fetch")
         )
+
+
+INTEGRATION_KINDS = ("slack_webhook",)
+
+
+class Integration(Base):
+    """A team's connection to an outside service (W10). `config_enc` is the vault blob of the
+    secret (a Slack incoming-webhook URL); it is never returned by the API and never logged.
+    `status` is `connected` or `failing`; `last_error` is a short fixed sentence, never text from
+    the other service. One row per team and kind."""
+
+    __tablename__ = "integrations"
+    __table_args__ = (
+        CheckConstraint(_in("kind", INTEGRATION_KINDS), name="ck_integrations_kind"),
+        CheckConstraint("status in ('connected', 'failing')", name="ck_integrations_status"),
+        UniqueConstraint("team_id", "kind", name="uq_integrations_team_kind"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(24))
+    config_enc: Mapped[bytes] = mapped_column(LargeBinary)  # nonce || ciphertext
+    key_version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(12), default="connected", server_default="connected")
+    last_error: Mapped[str | None] = mapped_column(String(200))
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    connected_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IntegrationPost(Base):
+    """One outbound post to an integration, written BEFORE the call is made: the unique index
+    makes "once per meeting" true even if the worker retries, and counting a team's rows in the
+    last hour is the rate cap. `meeting_id` is null for the test post made when connecting."""
+
+    __tablename__ = "integration_posts"
+    __table_args__ = (
+        Index("ix_integration_posts_team_created", "team_id", "created_at"),
+        Index(
+            "uq_integration_posts_meeting",
+            "team_id",
+            "kind",
+            "meeting_id",
+            unique=True,
+            postgresql_where=sa.text("meeting_id is not null"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(24))
+    meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

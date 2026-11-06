@@ -1,0 +1,24 @@
+{
+  "note": "The address is sent once and never returned. One test message is posted (simulated Slack).",
+  "client": "dan (owner)",
+  "request": {
+    "method": "PUT",
+    "path": "/api/integrations/slack",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>"
+    },
+    "body": {
+      "webhook_url": "<fake-slack-webhook-url>"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "connected": true,
+      "status": "connected",
+      "last_error": null,
+      "last_posted_at": null,
+      "can_manage": true
+    }
+  }
+}

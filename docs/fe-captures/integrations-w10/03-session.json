@@ -1,0 +1,21 @@
+{
+  "note": "",
+  "client": "chidi (member)",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "authenticated": false,
+      "csrf_token": "<csrf-C>",
+      "user": null,
+      "usage": null,
+      "unread_notifications": null,
+      "badges": null
+    }
+  }
+}

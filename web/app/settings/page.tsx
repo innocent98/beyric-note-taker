@@ -43,6 +43,7 @@ export default async function SettingsPage({
   }
   // The Tasks card's two switches; if they cannot be read the card is drawn off, as before.
   const tasksSettings = await api.settings.tasks.get().catch(() => null);
+  const slack = await api.integrations.slack.get().catch(() => null);
   // The reminders row of the Sprints and reminders card; if it cannot be read the row is drawn off.
   const team = await api.team.get().catch(() => null);
   const reminderMail = await api.settings.reminders.get().catch(() => null);
@@ -57,7 +58,7 @@ export default async function SettingsPage({
       <div className="stack-md measure">
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
         <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} templates={templates} />
-        <SettingsPlannedSections tasks={tasksSettings} team={team} reminderMail={reminderMail} />
+        <SettingsPlannedSections tasks={tasksSettings} slack={slack} team={team} reminderMail={reminderMail} />
         <SettingsTimeZone initial={timeZone.time_zone} />
         <SettingsLanguage initial={language.default_language} />
         <EmailSettingsSection email={email} />

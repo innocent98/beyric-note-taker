@@ -1,0 +1,20 @@
+{
+  "note": "A later post failed (simulated 'gone'): the card shows `status` failing and a fixed sentence. The notes and tasks were not affected.",
+  "client": "dan (owner)",
+  "request": {
+    "method": "GET",
+    "path": "/api/integrations/slack",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "connected": true,
+      "status": "failing",
+      "last_error": "Slack no longer accepts this webhook. It may have been removed, so connect it again.",
+      "last_posted_at": "2026-11-06T16:02:15.004962Z",
+      "can_manage": true
+    }
+  }
+}

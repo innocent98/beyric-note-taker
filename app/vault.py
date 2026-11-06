@@ -23,7 +23,7 @@ from app.config import Settings, get_settings
 
 # Every kind of secret the vault holds. Part of the authenticated data, so a blob made for one
 # purpose never opens for another; a new kind is added here on purpose.
-PURPOSES = ("refresh_token", "ics_url", "host_api_key")
+PURPOSES = ("refresh_token", "ics_url", "host_api_key", "integration")
 NONCE_BYTES = 12
 KEY_BYTES = 32
 TAG_BYTES = 16

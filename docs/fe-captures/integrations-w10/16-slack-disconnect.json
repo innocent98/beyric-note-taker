@@ -1,0 +1,16 @@
+{
+  "note": "204; the stored address is deleted.",
+  "client": "dan (owner)",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/integrations/slack",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "body": null
+  }
+}
