@@ -1,0 +1,56 @@
+{
+  "note": "Current and next are 12 days each now.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/sprints",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "project_id": null,
+      "own_series": false,
+      "today": "2026-11-06",
+      "sprint_length": "custom",
+      "sprint_custom_days": 12,
+      "sprint_align_weekdays": true,
+      "sprints": [
+        {
+          "id": 1,
+          "number": 1,
+          "name": "Sprint 1",
+          "start_date": "2026-11-02",
+          "end_date": "2026-11-13",
+          "state": "current",
+          "closed_at": null,
+          "closed_early": false,
+          "tasks_total": 3,
+          "tasks_done": 0
+        },
+        {
+          "id": 2,
+          "number": 2,
+          "name": "Sprint 2",
+          "start_date": "2026-11-14",
+          "end_date": "2026-11-25",
+          "state": "next",
+          "closed_at": null,
+          "closed_early": false,
+          "tasks_total": 2,
+          "tasks_done": 0
+        }
+      ],
+      "current_id": 1,
+      "next_id": 2,
+      "can_manage": true
+    }
+  }
+}

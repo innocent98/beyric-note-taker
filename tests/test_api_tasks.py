@@ -137,6 +137,8 @@ def test_the_list_carries_tasks_people_and_the_attention_counts(api, session, te
         },
         "project_id": None,
         "milestone_id": None,
+        "sprint_id": None,
+        "carried": False,
         "check_project": False,
         "can_update": True,
         "can_edit": True,

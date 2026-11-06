@@ -989,10 +989,15 @@ def test_0026_follows_0025():
     assert script.get_revision("0026").down_revision == "0025"
 
 
-def test_0028_follows_the_previous_revision_and_is_the_only_head():
+def test_0028_follows_the_previous_revision():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0028").down_revision in {"0026", "0027"}
-    assert script.get_heads() == ["0028"]
+
+
+def test_0031_follows_the_previous_revision_and_is_the_only_head():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0031").down_revision in {"0028", "0029", "0030"}
+    assert script.get_heads() == ["0031"]
 
 
 def test_0028_projects_and_milestones_keep_tasks_when_they_go_and_downgrade_cleanly(scratch_url):
@@ -1021,6 +1026,56 @@ def test_0028_projects_and_milestones_keep_tasks_when_they_go_and_downgrade_clea
     assert _rows(engine, "select project_id, milestone_id from tasks") == [(None, None)]
     assert _rows(engine, "select count(*) from milestones") == [(0,)]  # went with its project
     command.downgrade(cfg, "0026")
+    assert _rows(engine, "select title from tasks") == [("t",)]
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0031_sprints_keep_tasks_when_they_go_and_downgrade_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0031")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (id, email) values (9001, 'a@example.test')"))
+        conn.execute(text("insert into teams (id, owner_user_id) values (9001, 9001)"))
+        conn.execute(
+            text(
+                "insert into sprints (id, team_id, number, start_date, end_date) "
+                "values (1, 9001, 1, '2026-11-02', '2026-11-06')"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into tasks (id, team_id, title, sprint_id, carried) "
+                "values (1, 9001, 't', 1, true)"
+            )
+        )
+    # The team defaults, and the sprint a task is in is the task's only claim on it.
+    defaults = "select sprint_length, sprint_custom_days, sprint_align_weekdays from teams"
+    assert _rows(engine, defaults + " where id = 9001") == [("week5", 10, True)]
+    with engine.begin() as conn:
+        conn.execute(text("delete from sprints where id = 1"))
+    assert _rows(engine, "select sprint_id, carried from tasks") == [(None, True)]
+    # One sprint number per series (a project's own series has its own numbers).
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into sprints (id, team_id, number, start_date, end_date) "
+                "values (2, 9001, 1, '2026-11-02', '2026-11-06')"
+            )
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into sprints (id, team_id, number, start_date, end_date) "
+                "values (3, 9001, 1, '2026-11-09', '2026-11-13')"
+            )
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("update teams set sprint_length = 'daily'"))
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("update teams set sprint_custom_days = 366"))
+    command.downgrade(cfg, "0028")
     assert _rows(engine, "select title from tasks") == [("t",)]
     command.upgrade(cfg, "head")
     engine.dispose()

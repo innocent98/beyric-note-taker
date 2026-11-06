@@ -24,7 +24,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app import filing, teams, titles
+from app import filing, sprints, teams, titles
 from app.extraction import CheckedAction, fingerprint, normalise
 from app.models import Meeting, Milestone, Project, Task, TeamMember, User
 from app.visibility import can_read_clause
@@ -169,6 +169,7 @@ def reconcile(
     team_projects = filing.team_projects(session, team_id)
     meeting_name = titles.meeting_name(meeting)
     series_project = filing.series_project(session, meeting)
+    placer = sprints.Placer(session, team_id)
     kept: list[Task] = []
     for key, (position, _text) in wanted.items():
         task = existing.get(key)
@@ -204,6 +205,9 @@ def reconcile(
             text=filing.filing_text(meeting_name, fields["title"], item.quote),
         )
         fields["project_id"], fields["check_project"] = placed.project_id, placed.check
+        # Filed into a sprint by its due date (spec 6.4); a task a person touched is never here.
+        fields["sprint_id"] = placer.sprint_for(placed.project_id, fields["due_date"])
+        fields["carried"] = False
         if task is None:
             task = Task(
                 team_id=team_id,
@@ -321,10 +325,12 @@ def list_tasks(
     before_id: int | None,
     project: str | None = None,
     milestone: int | None = None,
+    sprint: str | None = None,
 ) -> tuple[list[Task], bool]:
     """The tasks the caller may see, newest first. `assignee` is `me`, `none` (Needs owner) or a
-    user id; `project` is `none` (no project) or a project id; `milestone` is a milestone id.
-    Returns up to `limit` and whether there are more."""
+    user id; `project` is `none` (no project) or a project id; `milestone` is a milestone id;
+    `sprint` is `none` (Backlog), `current`, `next` or a sprint id. Returns up to `limit` and
+    whether there are more."""
     query = select(Task).where(visible(user))
     if assignee == "me":
         query = query.where(Task.assignee_user_id == user.id)
@@ -340,6 +346,11 @@ def list_tasks(
         query = query.where(Task.project_id == int(project))
     if milestone is not None:
         query = query.where(Task.milestone_id == milestone)
+    if sprint is not None:
+        member = membership(session, user)
+        query = query.where(
+            sprints.sprint_filter(session, member.team_id if member else None, sprint)
+        )
     if before_id is not None:
         query = query.where(Task.id < before_id)
     rows = list(session.scalars(query.order_by(Task.id.desc()).limit(limit + 1)))
@@ -421,6 +432,21 @@ def check_assignable(
         raise TaskInvalid("milestone_not_on_team", "That milestone is not on your team.")
 
 
+class Unset:
+    """Marks "the caller said nothing" where `None` is an answer (a task in the Backlog)."""
+
+
+UNSET = Unset()
+
+
+def check_sprint(session: Session, team_id: int, project_id: int | None, sprint_id: int) -> None:
+    """A task may only be planned into an open sprint of its own team, in the series its project
+    uses. Raises `TaskInvalid` (422) otherwise; a closed sprint or another team's is the same
+    answer, so nothing is learned about sprints that are not the caller's."""
+    if not sprints.usable(session, team_id, project_id, sprint_id):
+        raise TaskInvalid("sprint_not_on_team", "That sprint is not available for this task.")
+
+
 def _title(value: str) -> str:
     return titles.clean_title(value, MAX_TITLE_CHARS)
 
@@ -440,13 +466,21 @@ def create(
     status: str,
     today: date,
     project_id: int | None = None,
+    sprint_id: int | None | Unset = UNSET,
 ) -> Task:
-    """A manual task in the caller's team. Anyone on the team may make one. Commits."""
+    """A manual task in the caller's team. Anyone on the team may make one. Left out, the sprint
+    follows the due date (the Backlog without one); `None` is the Backlog and an id is that sprint,
+    which must be an open sprint of the team's series for the task's project. Commits."""
     team = teams.ensure_team(session, user)
     if assignee_user_id is not None:
         _assignable(session, team.id, assignee_user_id)
     check_assignable(session, team.id, project_id, None)
+    if isinstance(sprint_id, Unset):
+        sprint_id = sprints.Placer(session, team.id).sprint_for(project_id, due_date)
+    elif sprint_id is not None:
+        check_sprint(session, team.id, project_id, sprint_id)
     task = Task(
+        sprint_id=sprint_id,
         team_id=team.id,
         title=_title(title),
         assignee_user_id=assignee_user_id,
@@ -482,12 +516,23 @@ def update(session: Session, user: User, task: Task, changes: dict, now: datetim
         raise TaskForbidden
     # Filing is the owner's and admin's (spec 6.3), and the maker's of a manual task: a member given
     # a task may change its status and due date, not where it is filed.
-    if ({"project_id", "milestone_id", "check_project"} & real.keys()) and not allowed.edit:
+    if (
+        {"project_id", "milestone_id", "check_project", "sprint_id"} & real.keys()
+    ) and not allowed.edit:
         raise TaskForbidden
     if "project_id" in real or "milestone_id" in real:
         check_assignable(session, task.team_id, real.get("project_id"), real.get("milestone_id"))
     if "project_id" in real:
         real["check_project"] = False  # a person chose it: nothing left to check
+        if "sprint_id" not in real:
+            # Another project can mean another series: keep its place in time (current, next).
+            sprints.rehome(session, task, real["project_id"])
+    if "sprint_id" in real:
+        if real["sprint_id"] is not None:
+            check_sprint(
+                session, task.team_id, real.get("project_id", task.project_id), real["sprint_id"]
+            )
+        real["carried"] = False  # a person placed it: no longer "carried over"
     if "assignee_user_id" in real:
         target = real["assignee_user_id"]
         claiming = target == user.id and task.assignee_user_id is None and allowed.claim

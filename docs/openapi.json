@@ -2271,6 +2271,14 @@
             "title": "Id",
             "type": "integer"
           },
+          "in_backlog": {
+            "title": "In Backlog",
+            "type": "integer"
+          },
+          "in_current_sprint": {
+            "title": "In Current Sprint",
+            "type": "integer"
+          },
           "keywords": {
             "items": {
               "type": "string"
@@ -2295,6 +2303,25 @@
           "open_tasks": {
             "title": "Open Tasks",
             "type": "integer"
+          },
+          "sprint_length": {
+            "anyOf": [
+              {
+                "enum": [
+                  "week5",
+                  "week7",
+                  "week14",
+                  "month1",
+                  "month3",
+                  "month6"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Length"
           }
         },
         "required": [
@@ -2303,6 +2330,9 @@
           "color",
           "keywords",
           "open_tasks",
+          "sprint_length",
+          "in_current_sprint",
+          "in_backlog",
           "milestone",
           "created_at"
         ],
@@ -2351,6 +2381,25 @@
               }
             ],
             "title": "Name"
+          },
+          "sprint_length": {
+            "anyOf": [
+              {
+                "enum": [
+                  "week5",
+                  "week7",
+                  "week14",
+                  "month1",
+                  "month3",
+                  "month6"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Length"
           }
         },
         "title": "ProjectPatch",
@@ -2688,6 +2737,178 @@
         "title": "SignUp",
         "type": "object"
       },
+      "SprintClosed": {
+        "properties": {
+          "closed": {
+            "$ref": "#/components/schemas/SprintOut"
+          },
+          "current": {
+            "$ref": "#/components/schemas/SprintOut"
+          },
+          "moved": {
+            "title": "Moved",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "closed",
+          "current",
+          "moved"
+        ],
+        "title": "SprintClosed",
+        "type": "object"
+      },
+      "SprintList": {
+        "properties": {
+          "can_manage": {
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "current_id": {
+            "title": "Current Id",
+            "type": "integer"
+          },
+          "next_id": {
+            "title": "Next Id",
+            "type": "integer"
+          },
+          "own_series": {
+            "title": "Own Series",
+            "type": "boolean"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "sprint_align_weekdays": {
+            "title": "Sprint Align Weekdays",
+            "type": "boolean"
+          },
+          "sprint_custom_days": {
+            "title": "Sprint Custom Days",
+            "type": "integer"
+          },
+          "sprint_length": {
+            "enum": [
+              "week5",
+              "week7",
+              "week14",
+              "month1",
+              "month3",
+              "month6",
+              "custom"
+            ],
+            "title": "Sprint Length",
+            "type": "string"
+          },
+          "sprints": {
+            "items": {
+              "$ref": "#/components/schemas/SprintOut"
+            },
+            "title": "Sprints",
+            "type": "array"
+          },
+          "today": {
+            "format": "date",
+            "title": "Today",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "own_series",
+          "today",
+          "sprint_length",
+          "sprint_custom_days",
+          "sprint_align_weekdays",
+          "sprints",
+          "current_id",
+          "next_id",
+          "can_manage"
+        ],
+        "title": "SprintList",
+        "type": "object"
+      },
+      "SprintOut": {
+        "properties": {
+          "closed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed At"
+          },
+          "closed_early": {
+            "title": "Closed Early",
+            "type": "boolean"
+          },
+          "end_date": {
+            "format": "date",
+            "title": "End Date",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "number": {
+            "title": "Number",
+            "type": "integer"
+          },
+          "start_date": {
+            "format": "date",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "closed",
+              "current",
+              "next"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "tasks_done": {
+            "title": "Tasks Done",
+            "type": "integer"
+          },
+          "tasks_total": {
+            "title": "Tasks Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "name",
+          "start_date",
+          "end_date",
+          "state",
+          "closed_at",
+          "closed_early",
+          "tasks_total",
+          "tasks_done"
+        ],
+        "title": "SprintOut",
+        "type": "object"
+      },
       "TaskCreate": {
         "additionalProperties": false,
         "properties": {
@@ -2724,6 +2945,19 @@
               }
             ],
             "title": "Project Id"
+          },
+          "sprint_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Id"
           },
           "status": {
             "default": "todo",
@@ -2832,6 +3066,10 @@
           },
           "can_update": {
             "title": "Can Update",
+            "type": "boolean"
+          },
+          "carried": {
+            "title": "Carried",
             "type": "boolean"
           },
           "check_project": {
@@ -2952,6 +3190,17 @@
             ],
             "title": "Spoken Owner"
           },
+          "sprint_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Id"
+          },
           "status": {
             "enum": [
               "todo",
@@ -2989,6 +3238,8 @@
           "meeting",
           "project_id",
           "milestone_id",
+          "sprint_id",
+          "carried",
           "check_project",
           "can_update",
           "can_edit",
@@ -3058,6 +3309,19 @@
               }
             ],
             "title": "Project Id"
+          },
+          "sprint_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Id"
           },
           "status": {
             "anyOf": [
@@ -3379,6 +3643,27 @@
           "share_new_meetings": {
             "title": "Share New Meetings",
             "type": "boolean"
+          },
+          "sprint_align_weekdays": {
+            "title": "Sprint Align Weekdays",
+            "type": "boolean"
+          },
+          "sprint_custom_days": {
+            "title": "Sprint Custom Days",
+            "type": "integer"
+          },
+          "sprint_length": {
+            "enum": [
+              "week5",
+              "week7",
+              "week14",
+              "month1",
+              "month3",
+              "month6",
+              "custom"
+            ],
+            "title": "Sprint Length",
+            "type": "string"
           }
         },
         "required": [
@@ -3386,6 +3671,9 @@
           "name",
           "share_new_meetings",
           "my_role",
+          "sprint_length",
+          "sprint_custom_days",
+          "sprint_align_weekdays",
           "member_count",
           "pending_invites",
           "can_manage",
@@ -3420,6 +3708,50 @@
               }
             ],
             "title": "Share New Meetings"
+          },
+          "sprint_align_weekdays": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Align Weekdays"
+          },
+          "sprint_custom_days": {
+            "anyOf": [
+              {
+                "maximum": 365.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Custom Days"
+          },
+          "sprint_length": {
+            "anyOf": [
+              {
+                "enum": [
+                  "week5",
+                  "week7",
+                  "week14",
+                  "month1",
+                  "month3",
+                  "month6",
+                  "custom"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Length"
           }
         },
         "title": "TeamPatch",
@@ -9313,6 +9645,171 @@
         ]
       }
     },
+    "/api/sprints": {
+      "get": {
+        "description": "The sprints of the board: up to 20 closed ones, the current and the next. With no\n`project` it is the team's series, counting the tasks of every project; with a project it is\nthat project's series (its own when it has a sprint length of its own, else the team's)\ncounting that project's tasks. The first call for a team makes its first two sprints.",
+        "operationId": "list_sprints",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "project",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SprintList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Sprints",
+        "tags": [
+          "sprints"
+        ]
+      }
+    },
+    "/api/sprints/{sprint_id}/close": {
+      "post": {
+        "description": "Close the current sprint now (owner or admin). Its unfinished tasks move to the next\nsprint and are marked carried over; the next sprint starts today (its end date does not\nchange) and a new next is made. 409 `sprint_not_current` for a sprint that is closed or is\nstill the next one.",
+        "operationId": "close_sprint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "sprint_id",
+            "required": true,
+            "schema": {
+              "title": "Sprint Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SprintClosed"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not on the caller's team"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`sprint_not_current`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Close Sprint",
+        "tags": [
+          "sprints"
+        ]
+      }
+    },
     "/api/tasks": {
       "get": {
         "description": "The tasks the caller can see: those assigned to them, those from meetings they can read,\nand their team's manual tasks. Newest first; for the next page pass `before_id` =\n`next_before_id`. `attention` counts every open task the caller sees, whatever the filter.",
@@ -9393,6 +9890,25 @@
                 }
               ],
               "title": "Milestone"
+            }
+          },
+          {
+            "description": "`none` (Backlog), `current`, `next` or a sprint id",
+            "in": "query",
+            "name": "sprint",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^(none|current|next|\\d{1,10})$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`none` (Backlog), `current`, `next` or a sprint id",
+              "title": "Sprint"
             }
           },
           {
@@ -9803,7 +10319,7 @@
         ]
       },
       "patch": {
-        "description": "Rename the team and/or switch \"Share new meetings\" (owner or admin). The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`.",
+        "description": "Rename the team, switch \"Share new meetings\" and/or set the sprint length, custom days and\nMonday to Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other\nlength). Changing a sprint setting redraws the open sprints. The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`.",
         "operationId": "update_team",
         "requestBody": {
           "content": {

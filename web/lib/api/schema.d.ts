@@ -1305,6 +1305,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/sprints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Sprints
+         * @description The sprints of the board: up to 20 closed ones, the current and the next. With no
+         *     `project` it is the team's series, counting the tasks of every project; with a project it is
+         *     that project's series (its own when it has a sprint length of its own, else the team's)
+         *     counting that project's tasks. The first call for a team makes its first two sprints.
+         */
+        get: operations["list_sprints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sprints/{sprint_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close Sprint
+         * @description Close the current sprint now (owner or admin). Its unfinished tasks move to the next
+         *     sprint and are marked carried over; the next sprint starts today (its end date does not
+         *     change) and a new next is made. 409 `sprint_not_current` for a sprint that is closed or is
+         *     still the next one.
+         */
+        post: operations["close_sprint"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/tasks": {
         parameters: {
             query?: never;
@@ -1380,7 +1426,9 @@ export interface paths {
         head?: never;
         /**
          * Update Team
-         * @description Rename the team and/or switch "Share new meetings" (owner or admin). The default applies,
+         * @description Rename the team, switch "Share new meetings" and/or set the sprint length, custom days and
+         *     Monday to Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other
+         *     length). Changing a sprint setting redraws the open sprints. The default applies,
          *     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
          *     member's meetings are never shared by it. 403 `team_forbidden`.
          */
@@ -2511,6 +2559,10 @@ export interface components {
             created_at: string;
             /** Id */
             id: number;
+            /** In Backlog */
+            in_backlog: number;
+            /** In Current Sprint */
+            in_current_sprint: number;
             /** Keywords */
             keywords: string[];
             milestone: components["schemas"]["MilestoneLine"] | null;
@@ -2518,6 +2570,8 @@ export interface components {
             name: string;
             /** Open Tasks */
             open_tasks: number;
+            /** Sprint Length */
+            sprint_length: ("week5" | "week7" | "week14" | "month1" | "month3" | "month6") | null;
         };
         /**
          * ProjectPatch
@@ -2530,6 +2584,8 @@ export interface components {
             keywords?: string[] | null;
             /** Name */
             name?: string | null;
+            /** Sprint Length */
+            sprint_length?: ("week5" | "week7" | "week14" | "month1" | "month3" | "month6") | null;
         };
         /**
          * RecurringOut
@@ -2646,6 +2702,74 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** SprintClosed */
+        SprintClosed: {
+            closed: components["schemas"]["SprintOut"];
+            current: components["schemas"]["SprintOut"];
+            /** Moved */
+            moved: number;
+        };
+        /** SprintList */
+        SprintList: {
+            /** Can Manage */
+            can_manage: boolean;
+            /** Current Id */
+            current_id: number;
+            /** Next Id */
+            next_id: number;
+            /** Own Series */
+            own_series: boolean;
+            /** Project Id */
+            project_id: number | null;
+            /** Sprint Align Weekdays */
+            sprint_align_weekdays: boolean;
+            /** Sprint Custom Days */
+            sprint_custom_days: number;
+            /**
+             * Sprint Length
+             * @enum {string}
+             */
+            sprint_length: "week5" | "week7" | "week14" | "month1" | "month3" | "month6" | "custom";
+            /** Sprints */
+            sprints: components["schemas"]["SprintOut"][];
+            /**
+             * Today
+             * Format: date
+             */
+            today: string;
+        };
+        /** SprintOut */
+        SprintOut: {
+            /** Closed At */
+            closed_at: string | null;
+            /** Closed Early */
+            closed_early: boolean;
+            /**
+             * End Date
+             * Format: date
+             */
+            end_date: string;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Number */
+            number: number;
+            /**
+             * Start Date
+             * Format: date
+             */
+            start_date: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "closed" | "current" | "next";
+            /** Tasks Done */
+            tasks_done: number;
+            /** Tasks Total */
+            tasks_total: number;
+        };
         /** TaskCreate */
         TaskCreate: {
             /** Assignee User Id */
@@ -2654,6 +2778,8 @@ export interface components {
             due_date?: string | null;
             /** Project Id */
             project_id?: number | null;
+            /** Sprint Id */
+            sprint_id?: number | null;
             /**
              * Status
              * @default todo
@@ -2693,6 +2819,8 @@ export interface components {
             can_edit: boolean;
             /** Can Update */
             can_update: boolean;
+            /** Carried */
+            carried: boolean;
             /** Check Project */
             check_project: boolean;
             /**
@@ -2726,6 +2854,8 @@ export interface components {
             source: "ai" | "manual";
             /** Spoken Owner */
             spoken_owner: string | null;
+            /** Sprint Id */
+            sprint_id: number | null;
             /**
              * Status
              * @enum {string}
@@ -2752,6 +2882,8 @@ export interface components {
             milestone_id?: number | null;
             /** Project Id */
             project_id?: number | null;
+            /** Sprint Id */
+            sprint_id?: number | null;
             /** Status */
             status?: ("todo" | "doing" | "done") | null;
             /** Title */
@@ -2869,6 +3001,15 @@ export interface components {
             pending_invites: number;
             /** Share New Meetings */
             share_new_meetings: boolean;
+            /** Sprint Align Weekdays */
+            sprint_align_weekdays: boolean;
+            /** Sprint Custom Days */
+            sprint_custom_days: number;
+            /**
+             * Sprint Length
+             * @enum {string}
+             */
+            sprint_length: "week5" | "week7" | "week14" | "month1" | "month3" | "month6" | "custom";
         };
         /** TeamPatch */
         TeamPatch: {
@@ -2876,6 +3017,12 @@ export interface components {
             name?: string | null;
             /** Share New Meetings */
             share_new_meetings?: boolean | null;
+            /** Sprint Align Weekdays */
+            sprint_align_weekdays?: boolean | null;
+            /** Sprint Custom Days */
+            sprint_custom_days?: number | null;
+            /** Sprint Length */
+            sprint_length?: ("week5" | "week7" | "week14" | "month1" | "month3" | "month6" | "custom") | null;
         };
         /** TemplateIn */
         TemplateIn: {
@@ -7263,6 +7410,131 @@ export interface operations {
             };
         };
     };
+    list_sprints: {
+        parameters: {
+            query?: {
+                project?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SprintList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not on the caller's team */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    close_sprint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sprint_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SprintClosed"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not on the caller's team */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `sprint_not_current` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_tasks: {
         parameters: {
             query?: {
@@ -7272,6 +7544,8 @@ export interface operations {
                 /** @description `none` (No project) or a project id */
                 project?: string | null;
                 milestone?: number | null;
+                /** @description `none` (Backlog), `current`, `next` or a sprint id */
+                sprint?: string | null;
                 limit?: number;
                 before_id?: number | null;
             };

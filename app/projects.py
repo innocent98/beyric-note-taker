@@ -19,9 +19,9 @@ from datetime import UTC, date, datetime
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
 
-from app import filing, tasks, titles
+from app import filing, sprints, tasks, titles
 from app.extraction import CheckedMilestone, normalise
-from app.models import Meeting, Milestone, Project, Task, User
+from app.models import Meeting, Milestone, Project, Task, Team, User
 
 # The six swatches the Projects screen draws (the designer's PCOLORS).
 PALETTE = ("#0E6B5E", "#3C4A7A", "#8A4B00", "#8A2E5C", "#1F6FB2", "#4A524E")
@@ -123,6 +123,10 @@ def update(session: Session, project: Project, changes: dict) -> Project:
         project.color = changes["color"]
     if "keywords" in changes:
         project.keywords = clean_keywords(changes["keywords"])
+    if "sprint_length" in changes:
+        # Null follows the team's length; anything else is the project's own (W9).
+        team = session.get(Team, project.team_id)
+        sprints.set_project_length(session, team, project, changes["sprint_length"])
     session.commit()
     return project
 
@@ -133,6 +137,8 @@ def delete(session: Session, project: Project) -> None:
     session.query(Task).filter(Task.project_id == project.id).update(
         {Task.check_project: False}, synchronize_session=False
     )
+    # Its tasks stay: those planned in its own sprints follow into the team's (W9).
+    sprints.release_project(session, session.get(Team, project.team_id), project)
     session.delete(project)
     session.commit()
 
@@ -147,6 +153,27 @@ def open_task_counts(session: Session, user: User, project_ids: list[int]) -> di
         .group_by(Task.project_id)
     )
     return {pid: n for pid, n in rows}
+
+
+def sprint_counts(
+    session: Session, user: User, team_id: int, project_ids: list[int]
+) -> dict[int, tuple[int, int]]:
+    """`(in the current sprint, in the Backlog)` per project: open tasks the viewer may see. A
+    project's tasks are only ever in the series it uses, so "the current sprint" is whichever
+    series' current sprint holds them."""
+    if not project_ids:
+        return {}
+    current = sprints.role_ids(session, team_id)["current"]
+    rows = session.execute(
+        select(
+            Task.project_id,
+            func.count().filter(Task.sprint_id.in_(current)),
+            func.count().filter(Task.sprint_id.is_(None)),
+        )
+        .where(Task.project_id.in_(project_ids), Task.status != "done", tasks.visible(user))
+        .group_by(Task.project_id)
+    )
+    return {pid: (in_current, backlog) for pid, in_current, backlog in rows}
 
 
 def milestone_progress(session: Session, user: User, ids: list[int]) -> dict[int, tuple[int, int]]:

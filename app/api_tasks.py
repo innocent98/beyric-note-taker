@@ -106,6 +106,8 @@ def present(session: Session, viewer: User, rows: list[Task]) -> list[TaskOut]:
                 ),
                 project_id=task.project_id,
                 milestone_id=task.milestone_id,
+                sprint_id=task.sprint_id,
+                carried=task.carried,
                 check_project=task.check_project,
                 can_update=allowed.update,
                 can_edit=allowed.edit,
@@ -146,6 +148,11 @@ def list_tasks(
         description="`none` (No project) or a project id",
     ),
     milestone: int | None = Query(None, ge=1, le=services.MAX_ID),
+    sprint: str | None = Query(
+        None,
+        pattern=r"^(none|current|next|\d{1,10})$",
+        description="`none` (Backlog), `current`, `next` or a sprint id",
+    ),
     limit: int = Query(tasks.LIST_DEFAULT, ge=1, le=tasks.LIST_MAX),
     before_id: int | None = Query(None, ge=1, le=services.MAX_ID),
     session: Session = Depends(get_session),
@@ -163,6 +170,7 @@ def list_tasks(
         before_id=before_id,
         project=project,
         milestone=milestone,
+        sprint=sprint,
     )
     return TaskList(
         tasks=present(session, user, rows),
@@ -195,6 +203,7 @@ def create_task(
             due_date=body.due_date,
             status=body.status,
             project_id=body.project_id,
+            sprint_id=body.sprint_id if "sprint_id" in body.model_fields_set else tasks.UNSET,
             today=timezones.localise(datetime.now(UTC), zone)[0].date(),
         )
     except tasks.TaskInvalid as exc:
