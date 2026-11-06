@@ -213,7 +213,9 @@ def _tasks_rows(session: Session, user: User, found: Series, today) -> tuple[tup
     for task in rows[:MAX_TASK_ROWS]:
         assignee = people.get(task.assignee_user_id)
         who = (
-            titles.mail_line(assignee.name, 60) or assignee.email.split("@")[0]
+            titles.mail_line(assignee.name, 60)
+            or titles.mail_line(assignee.email.split("@")[0], 60)
+            or "A teammate"
             if assignee
             else "Needs owner"
         )
@@ -277,7 +279,11 @@ def _series_agenda(
     zone = _zone(session, user)
     today = timezones.localise(now, zone)[0].date()
     name = _title(found)
-    sender_name = titles.mail_line(sender.name, 60) or sender.email.split("@")[0]
+    sender_name = (
+        titles.mail_line(sender.name, 60)
+        or titles.mail_line(sender.email.split("@")[0], 60)
+        or "A teammate"
+    )
     items = [titles.mail_line(i.text, 200) for i in lines]
     items += [titles.mail_line(q.text, 200) for q, _meeting in questions]
     items = [i for i in items if i][: MAX_LISTED * 2]
