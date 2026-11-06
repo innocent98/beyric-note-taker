@@ -195,6 +195,28 @@ class TranslationBrief(BaseModel):
     stale: bool
 
 
+class SeriesRef(BaseModel):
+    """A recurring meeting as the meeting page's "Series" row links to it."""
+
+    id: int
+    # Plain text. Never render as HTML or a link target.
+    title: str
+
+
+class QuestionOut(BaseModel):
+    """One open question of a meeting. `carriable` is false for a meeting that is not in a
+    recurring meeting: draw no toggle then. The toggle's states: `resolved` (draw "Resolved"),
+    else `carry` ("On next agenda"), else "Add to next agenda"."""
+
+    id: int
+    text: str
+    carriable: bool
+    carry: bool
+    resolved: bool
+    # Only the meeting's owner and the team's owners and admins may change it.
+    can_update: bool
+
+
 class MeetingDetail(MeetingSummary):
     # Set (never null) when status is "failed", null otherwise.
     failure_reason: str | None
@@ -258,6 +280,14 @@ class MeetingDetail(MeetingSummary):
     # The meeting's action items as tasks, in the order of the notes. Empty until the extraction
     # has run (read `extraction_status`) and when the owner has tasks switched off.
     tasks: list["TaskOut"]
+    # The recurring meeting this belongs to when the caller's team has it (the "Series" row of
+    # Details links to `/series/{id}`); null otherwise.
+    series: "SeriesRef | None" = None
+    # True for the owner's meeting that is in no series when its link was used for another of their
+    # meetings: draw "Make this a recurring meeting?" (`POST /api/meetings/{id}/recurring`).
+    suggest_recurring: bool = False
+    # The meeting's open questions with their "On next agenda" state; empty unless ready.
+    open_questions: list["QuestionOut"] = []
 
 
 class MeetingList(BaseModel):
@@ -711,6 +741,10 @@ class TeamOut(BaseModel):
     # shared when their notes are first written. Off by default; members' meetings are never
     # shared by it.
     share_new_meetings: bool
+    # "Remind attendees before recurring meetings" (Settings, owners and admins): off by default.
+    # `reminder_timing` is `1h`, `30m` or `both`.
+    reminders_on: bool
+    reminder_timing: Literal["1h", "30m", "both"]
     my_role: TeamRole
     # Sprint settings (W9, Settings > Sprints; owners and admins change them): the length key,
     # the number of days when it is `custom`, and "Monday to Friday" for `week5`.
@@ -729,6 +763,8 @@ class TeamOut(BaseModel):
 class TeamPatch(Body):
     name: str | None = Field(None, min_length=1, max_length=100)
     share_new_meetings: bool | None = None
+    reminders_on: bool | None = None
+    reminder_timing: Literal["1h", "30m", "both"] | None = None
     sprint_length: SprintLength | None = None
     sprint_custom_days: int | None = Field(None, ge=1, le=365)
     # `true` is refused unless the length is `week5`.
@@ -821,6 +857,22 @@ class AcceptInviteIn(Body):
 
 
 MeetingDetail.model_rebuild()
+
+
+class SlackIn(Body):
+    # The pasted incoming-webhook address; checked and stored encrypted, never returned.
+    webhook_url: str = Field(max_length=300)
+
+
+class SlackOut(BaseModel):
+    connected: bool
+    # `connected`, or `failing` after the last post was refused; null when not connected.
+    status: str | None
+    # A fixed sentence about the last failure; null while posts work.
+    last_error: str | None
+    last_posted_at: datetime | None
+    # Whether the caller may connect or disconnect (owner or admin).
+    can_manage: bool
 
 
 # ---- Share notes by email (W6, spec section 10) ----
@@ -1032,3 +1084,33 @@ class SprintClosed(BaseModel):
     current: SprintOut
     # Unfinished tasks the caller may see that moved on ("3 unfinished tasks moved to Sprint 13").
     moved: int
+
+
+class LinearKeyIn(Body):
+    # The pasted personal API key; checked, used once, never returned.
+    api_key: str = Field(max_length=200)
+
+
+class LinearIn(Body):
+    api_key: str = Field(max_length=200)
+    team_id: str = Field(max_length=64)
+
+
+class LinearTeamOut(BaseModel):
+    id: str
+    key: str
+    name: str
+
+
+class LinearTeamsOut(BaseModel):
+    teams: list[LinearTeamOut]
+
+
+class LinearOut(BaseModel):
+    connected: bool
+    status: str | None
+    last_error: str | None
+    last_synced_at: datetime | None
+    # The Linear team the tasks go to; null when not connected.
+    team_name: str | None
+    can_manage: bool

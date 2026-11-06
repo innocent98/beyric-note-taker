@@ -1,0 +1,16 @@
+{
+  "note": "204; the stored key is deleted. Issues already created stay in Linear.",
+  "client": "dan (owner)",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/integrations/linear",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "body": null
+  }
+}

@@ -74,6 +74,15 @@ const SCREENS = {
   "app-meetings-calendar": [APP, [["Settings", "first"], ["Connect Google Calendar", "first", 1500], ["Meetings", "first"]], "/", true],
   // The notifications list shows each notice's day and time (no prototype).
   "app-notifications": [null, [], "/notifications", true],
+  // Series (W8): a Recurring card opens the Series page. The mock's page is the owner's view of the
+  // captured "Beyric Monday planning"; the designer's has the sample team's data, so the words in the
+  // lists differ and the layout, the blocks and their states are what is compared.
+  "app-series": [APP, [["Next: Mon 9 Nov, 14:00", "first"]], "/series/1", true],
+  "app-series-friday": [APP, [["Next: Fri 6 Nov, 15:00", "first"]], "/series/3", true],
+  // Lead-designed pieces (no prototype, so shot alone): the Series row's "Add to recurring meeting"
+  // dialog and the "Make this a recurring meeting?" chip (meeting 6 of the mock reuses a link).
+  "app-meeting-recurring-hint": [null, [], "/meetings/6", true],
+  "app-meeting-add-series": [null, [], "/meetings/6", true, [{ text: "Add to recurring meeting", wait: 500 }]],
   "app-detail-processing": [null, [], "/meetings/2", true],
   "app-detail-waiting": [null, [], "/meetings/3", true],
   "app-detail-failed": [null, [], "/meetings/4", true],
@@ -143,6 +152,32 @@ const SCREENS = {
     [{ fill: "e.g. company name", value: "Beyric" }, { text: "Add to vocabulary", wait: 600 }],
   ],
   "app-review-gone": [null, [], "/review", true, [{ fill: "e.g. company name", value: "Gone" }, { text: "Add to vocabulary", wait: 600 }]],
+  // Slack (W10). The design connects in one click after 1 s and shows the channel chip; ours opens the
+  // lead-designed address field first (see docs/sop/2026-11-06-w10-slack.md).
+  "app-settings-slack-form": [APP, [["Settings", "first"]], "/settings", true, [{ text: "Connect Slack", wait: 400 }]],
+  "app-settings-slack-connected": [
+    APP,
+    [["Settings", "first"], ["Connect Slack", "first", 1500]],
+    "/settings",
+    true,
+    [
+      { text: "Connect Slack", wait: 300 },
+      { fill: "https://hooks.slack.com/services/...", value: ["https://hooks.slack.com", "services", "TFAKEFAKE", "BFAKEFAKE", "FAKEFAKEFAKEFAKEFAKEFAKE"].join("/"), enter: true, wait: 800 },
+    ],
+  ],
+  // Linear (W10 part 2): the design's select + Connect connects in one click and shows "Syncing with Jira".
+  "app-settings-linear-form": [APP, [["Settings", "first"]], "/settings", true, [{ click: "Connect", exact: true, wait: 400 }]],
+  "app-settings-linear-connected": [
+    APP,
+    [["Settings", "first"], ["Connect", "first", 1500]],
+    "/settings",
+    true,
+    [
+      { click: "Connect", exact: true, wait: 300 },
+      { fill: "lin_api_...", value: ["lin_api", "FAKEFAKEFAKEFAKEFAKEFAKE"].join("_"), enter: true, wait: 800 },
+      { submit: true, wait: 800 },
+    ],
+  ],
   "app-settings-timezone": [
     APP,
     [["Settings", "first"], { select: "(UTC+9) Tokyo", design: "Tokyo", wait: 300 }],
@@ -251,6 +286,9 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
     if (!Array.isArray(step)) {
       if (step.fill) {
         await page.getByPlaceholder(step.fill).first().fill(step.value);
+        if (step.enter) await page.getByPlaceholder(step.fill).first().press("Enter");
+      } else if (step.submit) {
+        await page.locator("form.pl-slack-form").first().evaluate((form) => form.requestSubmit());
       } else if (step.select) {
         const field =
           side === "design"
@@ -258,7 +296,7 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
             : page.getByRole("combobox", { name: step.next });
         await field.first().selectOption({ label: step.select });
       } else if (step.click) {
-        await page.getByRole("button", { name: step.click }).first().evaluate((el) => el.click());
+        await page.getByRole("button", { name: step.click, exact: step.exact }).first().evaluate((el) => el.click());
       } else {
         await page.getByText(step.text, { exact: true }).first().evaluate((el) => el.click());
       }

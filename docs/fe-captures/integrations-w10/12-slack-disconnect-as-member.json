@@ -1,0 +1,21 @@
+{
+  "note": "403.",
+  "client": "chidi (member)",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/integrations/slack",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only an owner or admin of the team can do that."
+      }
+    }
+  }
+}

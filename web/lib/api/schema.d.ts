@@ -460,6 +460,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/integrations/linear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Linear
+         * @description Whether the team pushes new tasks to Linear, to which team, and how the last push went.
+         */
+        get: operations["read_linear"];
+        /**
+         * Connect Linear
+         * @description Connect Linear with a personal API key and one of its teams (owner or admin). New tasks from
+         *     shared meetings are then created as issues in that team, once each. Replaces an earlier key.
+         */
+        put: operations["connect_linear"];
+        post?: never;
+        /**
+         * Disconnect Linear
+         * @description Disconnect Linear and delete the stored key (owner or admin). Issues already created stay in
+         *     Linear. Safe to repeat.
+         */
+        delete: operations["disconnect_linear"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/linear/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Linear Teams
+         * @description The Linear teams a pasted key can reach, for the choice before connecting (owner or admin).
+         *     The key is checked with Linear and not stored.
+         */
+        post: operations["linear_teams"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/integrations/slack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Slack
+         * @description Whether the team posts new tasks to Slack, and how the last post went.
+         */
+        get: operations["read_slack"];
+        /**
+         * Connect Slack
+         * @description Connect Slack with an incoming-webhook address (owner or admin). One test message is posted
+         *     to the channel first; a webhook Slack refuses is not stored. Replaces an earlier one.
+         */
+        put: operations["connect_slack"];
+        post?: never;
+        /**
+         * Disconnect Slack
+         * @description Disconnect Slack and delete the stored address (owner or admin). Safe to repeat.
+         */
+        delete: operations["disconnect_slack"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/mail/opt-out": {
         parameters: {
             query?: never;
@@ -638,6 +718,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{meeting_id}/recurring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make Recurring
+         * @description "Make this a recurring meeting?": make a recurring meeting named after this meeting from a
+         *     link that was used before, and put this meeting and the caller's other meetings of the same
+         *     link code into it. Only the meeting's owner (404 for anyone else); 409 `not_reused` when the
+         *     link was not used before; offered by `suggest_recurring` on the meeting.
+         */
+        post: operations["make_recurring"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{meeting_id}/regenerate": {
         parameters: {
             query?: never;
@@ -674,6 +777,28 @@ export interface paths {
          *     sends a new bot instead, no sooner than 5 minutes after the failure.
          */
         post: operations["retry_meeting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{meeting_id}/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Meeting Series
+         * @description Put the caller's own meeting into one of their team's recurring meetings, or take it out
+         *     (`series_id` null). Only the meeting's owner may; a teammate reading it gets 404. Agenda
+         *     lines typed before the meeting began are taken by it.
+         */
+        put: operations["put_meeting_series"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1087,6 +1212,30 @@ export interface paths {
         patch: operations["patch_project"];
         trace?: never;
     };
+    "/api/questions/{question_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Question
+         * @description Change an open question: `carry` is "On next agenda" (only for a meeting that is in a
+         *     recurring meeting; turning it on also reopens a resolved question) and `resolved` is "Mark
+         *     resolved" (the same words in the series' other meetings you may change are resolved too).
+         *     Allowed for the meeting's owner and the team's owners and admins; a teammate who can only
+         *     read gets 403 `team_forbidden`; a question you cannot read is 404.
+         */
+        patch: operations["patch_question"];
+        trace?: never;
+    };
     "/api/review": {
         parameters: {
             query?: never;
@@ -1166,6 +1315,129 @@ export interface paths {
          */
         post: operations["add_review_term"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Series
+         * @description The Recurring cards: the caller's team's recurring meetings, soonest next meeting first
+         *     (those with no known next date last, by name). The unfinished-task and open-question counts
+         *     cover only what the caller may read. A recurring meeting appears once the calendar's event
+         *     has a join scheduled (within the hour) or its first recording has notes.
+         */
+        get: operations["list_series"];
+        put?: never;
+        /**
+         * Create Series
+         * @description Make a recurring meeting by hand (a meeting is then attached with
+         *     `PUT /api/meetings/{id}/series`). Any member of the team may. 409 `series_limit`.
+         */
+        post: operations["create_series"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{series_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Series
+         * @description The Series page: next meeting, unfinished tasks from earlier meetings, what was finished
+         *     since the last meeting, the questions carried over, the agenda lines, past meetings and
+         *     attendees. Everything inside is limited to what the caller may read: a teammate's private
+         *     meeting is not listed and its tasks and questions are not counted. 404 for another team's.
+         */
+        get: operations["get_series"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Series
+         * @description Rename a recurring meeting (its creator, or an owner or admin).
+         */
+        patch: operations["patch_series"];
+        trace?: never;
+    };
+    "/api/series/{series_id}/agenda": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Agenda
+         * @description The "Other agenda items" waiting for the next meeting, in the order they were added.
+         */
+        get: operations["list_agenda"];
+        put?: never;
+        /**
+         * Add Agenda
+         * @description Add a line (plain text, at most 200 characters, no web address; any member). 422
+         *     `invalid_agenda_item`; 409 `agenda_full` at 30 waiting lines.
+         */
+        post: operations["add_agenda"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{series_id}/agenda/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Agenda
+         * @description Email the agenda to the teammates who were in the last three meetings (not the caller):
+         *     the waiting agenda lines, the questions carried over and the unfinished tasks, each limited
+         *     to what that person may read. At most 10 people a send, 5 sends and 20 people a day per
+         *     caller. Nobody outside the team is ever mailed. The answer lists who it is going to.
+         */
+        post: operations["send_agenda"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/series/{series_id}/agenda/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Agenda
+         * @description Remove a line: its author, or an owner or admin.
+         */
+        delete: operations["remove_agenda"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1254,6 +1526,33 @@ export interface paths {
          *     when that translation already exists, otherwise it opens in the original with an offer.
          */
         put: operations["write_language_preferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Reminder Preferences
+         * @description Whether the caller is emailed the agenda a teammate sends and the reminders before the
+         *     recurring meetings they attend (on by default). The team's switch for reminders is
+         *     `PATCH /api/team`.
+         */
+        get: operations["read_reminder_preferences"];
+        /**
+         * Write Reminder Preferences
+         * @description Turn the caller's agenda and reminder mail on or off. Checked again when each mail is
+         *     sent, so turning it off also stops one already queued.
+         */
+        put: operations["write_reminder_preferences"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1484,9 +1783,10 @@ export interface paths {
         head?: never;
         /**
          * Update Team
-         * @description Rename the team, switch "Share new meetings" and/or set the sprint length, custom days and
-         *     Monday to Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other
-         *     length). Changing a sprint setting redraws the open sprints. The default applies,
+         * @description Rename the team, switch "Share new meetings", set the sprint length, custom days and Monday
+         *     to Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other length),
+         *     and/or set the reminders before recurring meetings: `reminders_on` and `reminder_timing`.
+         *     Changing a sprint setting redraws the open sprints. The default applies,
          *     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
          *     member's meetings are never shared by it. 403 `team_forbidden`.
          */
@@ -1973,6 +2273,34 @@ export interface components {
              */
             status: "waiting" | "invited" | "joined" | "removed";
         };
+        /** AgendaItemIn */
+        AgendaItemIn: {
+            /** Text */
+            text: string;
+        };
+        /** AgendaItemOut */
+        AgendaItemOut: {
+            /** Can Remove */
+            can_remove: boolean;
+            /** Id */
+            id: number;
+            /** Text */
+            text: string;
+        };
+        /** AgendaSent */
+        AgendaSent: {
+            /** Count */
+            count: number;
+            /** Names */
+            names: string[];
+        };
+        /** AttendeeOut */
+        AttendeeOut: {
+            /** Is Teammate */
+            is_teammate: boolean;
+            /** Name */
+            name: string;
+        };
         /** AttentionOut */
         AttentionOut: {
             /** Check Project */
@@ -2040,6 +2368,16 @@ export interface components {
             state_text: string;
             /** Upcoming */
             upcoming: components["schemas"]["UpcomingEvent"][];
+        };
+        /** CarriedQuestion */
+        CarriedQuestion: {
+            /** Can Update */
+            can_update: boolean;
+            /** Id */
+            id: number;
+            meeting: components["schemas"]["MeetingRef"] | null;
+            /** Text */
+            text: string;
         };
         /**
          * ConnectIn
@@ -2235,6 +2573,47 @@ export interface components {
              */
             default_language: "en" | "fr" | "es";
         };
+        /** LinearIn */
+        LinearIn: {
+            /** Api Key */
+            api_key: string;
+            /** Team Id */
+            team_id: string;
+        };
+        /** LinearKeyIn */
+        LinearKeyIn: {
+            /** Api Key */
+            api_key: string;
+        };
+        /** LinearOut */
+        LinearOut: {
+            /** Can Manage */
+            can_manage: boolean;
+            /** Connected */
+            connected: boolean;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Synced At */
+            last_synced_at: string | null;
+            /** Status */
+            status: string | null;
+            /** Team Name */
+            team_name: string | null;
+        };
+        /** LinearTeamOut */
+        LinearTeamOut: {
+            /** Id */
+            id: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+        };
+        /** LinearTeamsOut */
+        LinearTeamsOut: {
+            /** Teams */
+            teams: components["schemas"]["LinearTeamOut"][];
+        };
         /** Login */
         Login: {
             /** Email */
@@ -2285,6 +2664,11 @@ export interface components {
             notes: string | null;
             /** Notes Html */
             notes_html: string | null;
+            /**
+             * Open Questions
+             * @default []
+             */
+            open_questions: components["schemas"]["QuestionOut"][];
             /** Participants */
             participants: string[];
             /**
@@ -2300,6 +2684,7 @@ export interface components {
             retry_block_message: string | null;
             /** Review Open Count */
             review_open_count: number;
+            series?: components["schemas"]["SeriesRef"] | null;
             /** Shared By */
             shared_by: string | null;
             /** Shared With Team */
@@ -2323,6 +2708,11 @@ export interface components {
              * @enum {string}
              */
             step: "waiting" | "audio" | "transcribing" | "speakers" | "notes" | "done";
+            /**
+             * Suggest Recurring
+             * @default false
+             */
+            suggest_recurring: boolean;
             /** Tasks */
             tasks: components["schemas"]["TaskOut"][];
             /** Tasks Count */
@@ -2378,6 +2768,15 @@ export interface components {
             platform: "google_meet" | "zoom";
             /** Title */
             title: string;
+        };
+        /** MeetingSeriesIn */
+        MeetingSeriesIn: {
+            /** Series Id */
+            series_id: number | null;
+        };
+        /** MeetingSeriesOut */
+        MeetingSeriesOut: {
+            series: components["schemas"]["SeriesRef"] | null;
         };
         /** MeetingSummary */
         MeetingSummary: {
@@ -2579,6 +2978,22 @@ export interface components {
              */
             status: "password_changed";
         };
+        /** PastMeeting */
+        PastMeeting: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Duration Seconds */
+            duration_seconds: number | null;
+            /** Id */
+            id: number;
+            /** Tasks Count */
+            tasks_count: number;
+            /** Title */
+            title: string;
+        };
         /**
          * PersonOut
          * @description A member of the caller's team who can be given a task.
@@ -2662,6 +3077,33 @@ export interface components {
             sprint_length?: ("week5" | "week7" | "week14" | "month1" | "month3" | "month6") | null;
         };
         /**
+         * QuestionOut
+         * @description One open question of a meeting. `carriable` is false for a meeting that is not in a
+         *     recurring meeting: draw no toggle then. The toggle's states: `resolved` (draw "Resolved"),
+         *     else `carry` ("On next agenda"), else "Add to next agenda".
+         */
+        QuestionOut: {
+            /** Can Update */
+            can_update: boolean;
+            /** Carriable */
+            carriable: boolean;
+            /** Carry */
+            carry: boolean;
+            /** Id */
+            id: number;
+            /** Resolved */
+            resolved: boolean;
+            /** Text */
+            text: string;
+        };
+        /** QuestionPatch */
+        QuestionPatch: {
+            /** Carry */
+            carry?: boolean | null;
+            /** Resolved */
+            resolved?: boolean | null;
+        };
+        /**
          * RecurringOut
          * @description The cards, soonest next occurrence first; empty when no calendar is connected or it holds no
          *     recurring meeting (draw nothing then). `timezone` is the zone the texts are written in.
@@ -2697,6 +3139,16 @@ export interface components {
         Regenerate: {
             /** Template Id */
             template_id: number;
+        };
+        /** ReminderPreferencesIn */
+        ReminderPreferencesIn: {
+            /** Notify Reminders */
+            notify_reminders: boolean;
+        };
+        /** ReminderPreferencesOut */
+        ReminderPreferencesOut: {
+            /** Notify Reminders */
+            notify_reminders: boolean;
         };
         /** ResetIn */
         ResetIn: {
@@ -2735,6 +3187,91 @@ export interface components {
         ReviewTermOut: {
             item: components["schemas"]["ReviewItemOut"];
             term: components["schemas"]["TermOut"];
+        };
+        /**
+         * SeriesCard
+         * @description One Recurring card of the Meetings screen. The counts cover only what the caller may
+         *     read. `next_*` are null when no calendar event ahead is known (hide the chip).
+         */
+        SeriesCard: {
+            /** Cadence */
+            cadence: string;
+            /** Id */
+            id: number;
+            /** Next Starts At */
+            next_starts_at: string | null;
+            /** Next Text */
+            next_text: string | null;
+            /** Open Questions */
+            open_questions: number;
+            /** Platform */
+            platform: ("google_meet" | "zoom") | null;
+            /** Title */
+            title: string;
+            /** Unfinished Tasks */
+            unfinished_tasks: number;
+        };
+        /** SeriesCreate */
+        SeriesCreate: {
+            /** Title */
+            title: string;
+        };
+        /** SeriesList */
+        SeriesList: {
+            /** Series */
+            series: components["schemas"]["SeriesCard"][];
+            /** Timezone */
+            timezone: string;
+        };
+        /** SeriesPage */
+        SeriesPage: {
+            /** Agenda */
+            agenda: components["schemas"]["AgendaItemOut"][];
+            /** Agenda Recipients */
+            agenda_recipients: number;
+            /** Attendees */
+            attendees: components["schemas"]["AttendeeOut"][];
+            /** Cadence */
+            cadence: string;
+            /** Can Rename */
+            can_rename: boolean;
+            /** Finished */
+            finished: components["schemas"]["TaskOut"][];
+            /** Finished Since Text */
+            finished_since_text: string | null;
+            /** Id */
+            id: number;
+            /** Next Starts At */
+            next_starts_at: string | null;
+            /** Next Text */
+            next_text: string | null;
+            /** Past Meetings */
+            past_meetings: components["schemas"]["PastMeeting"][];
+            /** Platform */
+            platform: ("google_meet" | "zoom") | null;
+            /** Questions */
+            questions: components["schemas"]["CarriedQuestion"][];
+            /** Timezone */
+            timezone: string;
+            /** Title */
+            title: string;
+            /** Unfinished */
+            unfinished: components["schemas"]["TaskOut"][];
+        };
+        /** SeriesPatch */
+        SeriesPatch: {
+            /** Title */
+            title: string;
+        };
+        /**
+         * SeriesRef
+         * @description A recurring meeting as the meeting page's "Series" row links to it.
+         */
+        SeriesRef: {
+            /** Id */
+            id: number;
+            /** Title */
+            title: string;
         };
         /** SessionState */
         SessionState: {
@@ -2862,6 +3399,24 @@ export interface components {
             name: string;
             /** Password */
             password: string;
+        };
+        /** SlackIn */
+        SlackIn: {
+            /** Webhook Url */
+            webhook_url: string;
+        };
+        /** SlackOut */
+        SlackOut: {
+            /** Can Manage */
+            can_manage: boolean;
+            /** Connected */
+            connected: boolean;
+            /** Last Error */
+            last_error: string | null;
+            /** Last Posted At */
+            last_posted_at: string | null;
+            /** Status */
+            status: string | null;
         };
         /** SprintClosed */
         SprintClosed: {
@@ -3160,6 +3715,13 @@ export interface components {
             name: string;
             /** Pending Invites */
             pending_invites: number;
+            /**
+             * Reminder Timing
+             * @enum {string}
+             */
+            reminder_timing: "1h" | "30m" | "both";
+            /** Reminders On */
+            reminders_on: boolean;
             /** Share New Meetings */
             share_new_meetings: boolean;
             /** Sprint Align Weekdays */
@@ -3176,6 +3738,10 @@ export interface components {
         TeamPatch: {
             /** Name */
             name?: string | null;
+            /** Reminder Timing */
+            reminder_timing?: ("1h" | "30m" | "both") | null;
+            /** Reminders On */
+            reminders_on?: boolean | null;
             /** Share New Meetings */
             share_new_meetings?: boolean | null;
             /** Sprint Align Weekdays */
@@ -4621,6 +5187,451 @@ export interface operations {
             };
         };
     };
+    read_linear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    connect_linear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinearIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearOut"];
+                };
+            };
+            /** @description `linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `integration_rate` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `linear_unreachable` */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `integrations_unavailable` */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    disconnect_linear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    linear_teams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinearKeyIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinearTeamsOut"];
+                };
+            };
+            /** @description `linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `integration_rate` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `linear_unreachable` */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `integrations_unavailable` */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_slack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlackOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    connect_slack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SlackIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SlackOut"];
+                };
+            };
+            /** @description `slack_webhook_invalid` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `integration_rate` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `slack_unreachable` */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `integrations_unavailable` */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    disconnect_slack: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     opt_out: {
         parameters: {
             query?: never;
@@ -5241,6 +6252,73 @@ export interface operations {
             };
         };
     };
+    make_recurring: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingSeriesOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_reused` or `series_limit` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     regenerate_notes: {
         parameters: {
             query?: never;
@@ -5397,6 +6475,68 @@ export interface operations {
             };
             /** @description Bad Gateway */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    put_meeting_series: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeetingSeriesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingSeriesOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6873,6 +8013,77 @@ export interface operations {
             };
         };
     };
+    patch_question: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                question_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuestionPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuestionOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_in_series` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_review: {
         parameters: {
             query?: {
@@ -7100,6 +8311,486 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_series: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_series: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesCard"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_series: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesPage"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_series: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesCard"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_agenda: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgendaItemOut"][];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    add_agenda: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgendaItemIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgendaItemOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    send_agenda: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgendaSent"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `no_attendees` or `nothing_to_send` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `agenda_rate_limited` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `mail_unavailable` */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    remove_agenda: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: number;
+                item_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7458,6 +9149,104 @@ export interface operations {
                 };
             };
             /** @description `language_unsupported` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_reminder_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderPreferencesOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_reminder_preferences: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReminderPreferencesIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReminderPreferencesOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -1,0 +1,26 @@
+{
+  "note": "The key is sent once and never returned; `team_name` is shown on the card.",
+  "client": "dan (owner)",
+  "request": {
+    "method": "PUT",
+    "path": "/api/integrations/linear",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>"
+    },
+    "body": {
+      "api_key": "<fake-linear-api-key>",
+      "team_id": "team-0000-fake"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "connected": true,
+      "status": "connected",
+      "last_error": null,
+      "last_synced_at": null,
+      "team_name": "Engineering",
+      "can_manage": true
+    }
+  }
+}

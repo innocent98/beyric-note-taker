@@ -6,7 +6,7 @@
 The sprint screens the designer drew, on the API of #108 (`docs/fe-integration-guide-sprints.md`, no API change):
 - **Tasks:** a sprint selector (Board only), the Board / Backlog tabs, the sprint card (name, dates, time left, progress, "x of y done", the Monday to Friday note, Close sprint), the Backlog view (next sprint and Backlog cards, a Sprint select on every row), the "Carried over" badge on cards and rows.
 - **Task drawer:** the Sprint row after Project, also on the meeting page's drawer.
-- **Settings > Sprints and reminders:** Sprint length (with the current sprint and its dates under the title, and the days box for Custom) and "Open and close sprints at recurring meetings".
+- **Settings > Sprints and reminders:** Sprint length (with the current sprint and its dates under the title, and the days box for Custom) and "Open and close sprints at recurring meetings". W8's live reminders row (already on `main`) sits below them; the card has no "not available yet" line any more.
 - **Projects:** the Sprint length select ("Workspace default (...)" first) and the live "In current sprint" and "In backlog" figures.
 - The mock API (`web/scripts/mock-api.mjs`) serves the designer's sprints (Sprint 11 closed, 12 current, 13 next).
 
@@ -34,7 +34,7 @@ Spec 6.4, D10, D12. PR 1 made the data; nothing could show, plan or close a spri
 5. **Existing tasks are not backfilled.** Visible: until someone plans them or a meeting makes new ones, old tasks sit in the Backlog and the Board's current sprint is empty on day one.
 
 ## Words the designer's file does not have (added; none is a new feature)
-- Settings: for the working sprint rows, the one-line "Remind attendees before recurring meetings is not available yet." (reminders stay off, W8) replaces "These settings are not available yet."; members see "Only an owner or admin of your team can change the sprint settings." (same pattern as W4's member line).
+- Settings: members see "Only an owner or admin of your team can change the sprint settings." (same pattern as W4's member line). When the team cannot be read the whole card falls back to the old "These settings are not available yet." and drawn-off rows.
 - "Could not load sprints." with Try again.
 - The designer's week-5 sub-line says "Sprints open at **Beyric** Monday planning and close at **Beyric** Friday review." Beyric is the sample meeting's name, so it reads "Sprints open at Monday planning and close at Friday review." (the board's own note says the same).
 - A task left in a **closed** sprint (a finished task) shows that sprint as an extra option in its select, so the select does not claim "Backlog". The design's select had no case for it.
@@ -63,7 +63,7 @@ Spec 6.4, D10, D12. PR 1 made the data; nothing could show, plan or close a spri
 | Backlog | two cards, titles, sub-lines, counts, rows with badges, due, owner dot, Sprint select | rows stack at 640 px and below |
 | Close sprint | toast "Sprint 12 closed. N unfinished tasks moved to Sprint 13", selector moves to Sprint 13 | |
 | Drawer | Sprint row after Project with Backlog, current, next | closed-sprint option for a task left there |
-| Settings | Sprint length, preview line, Custom with days box, the switch and its sub-lines | reminders row still off with its own line; "Beyric" dropped from the sub-line |
+| Settings | Sprint length, preview line, Custom with days box, the switch and its sub-lines | W8's reminders row and mail row follow; "Beyric" dropped from the sub-line |
 | Projects | the two figures, Sprint length with "Workspace default (...)" | Recurring meetings still "Not available yet" (W8) |
 
 ## Operate / roll back

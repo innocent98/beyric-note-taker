@@ -36,14 +36,23 @@ vi.mock("@/lib/api/server", () => ({
         },
       },
       templates: { list: async () => (state.templates ? state.templates() : []) },
-      team: { get: async () => sprintsBody("10-team.json") },
       sprints: { list: async () => sprintsBody("09-sprints-first.json") },
       settings: {
         email: { get: async () => ({ notify_email: true }) },
         language: { get: async () => ({ default_language: "en" }) },
         timeZone: { get: async () => ({ time_zone: "UTC", is_set: false }) },
         tasks: { get: async () => ({ auto_create_tasks: true, email_assignees: true }) },
+        reminders: { get: async () => ({ notify_reminders: true }) },
       },
+      integrations: {
+        linear: {
+          get: async () => ({ connected: false, status: null, last_error: null, last_synced_at: null, team_name: null, can_manage: true }),
+        },
+        slack: {
+          get: async () => ({ connected: false, status: null, last_error: null, last_posted_at: null, can_manage: true }),
+        },
+      },
+      team: { get: async () => ({ id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", sprint_length: "week5", sprint_custom_days: 10, sprint_align_weekdays: true, my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true }) },
     };
   },
   getReviewOpen: async () => 2,

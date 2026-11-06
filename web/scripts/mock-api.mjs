@@ -20,7 +20,7 @@
 //   reset:   token "dead" -> 400 expired, password "password" -> 422 password_too_weak
 //   sign-in: password "wrong" -> 401, email "locked@x.test" -> 429, email "gateway@x.test" -> a 429 page that is not JSON
 import http from "node:http";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -118,7 +118,7 @@ const summary = ({ id, title, platform, native_id, status, step, status_text, st
 // sample team (Adebayo Tosin owner, Daniel Okoro admin, Amara Nwosu and Ojebola Grace members, Kemi
 // Adeyemi invited). `--role member` shows the screen as a member sees it. Writes change it in memory.
 const teamRole = values.role ?? "owner";
-const team = { id: 1, name: "My team", share_new_meetings: false, sprint_length: "week5", sprint_custom_days: 10, sprint_align_weekdays: true };
+const team = { id: 1, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", sprint_length: "week5", sprint_custom_days: 10, sprint_align_weekdays: true };
 const teamMembers = [
   { user_id: 2, name: "Adebayo Tosin", email: "adebayo@beyrictech.com", role: "owner", aliases: ["Tosin", "Adebayo", "s12Adebayo"], open_tasks: 3 },
   { user_id: 3, name: "Daniel Okoro", email: "daniel@beyrictech.com", role: "admin", aliases: ["Daniel", "Dan"], open_tasks: 2 },
@@ -314,6 +314,9 @@ const meetingTasks = (id) => tasks.filter((t) => t.meeting?.id === id).sort((a, 
 const tasksNew = () => tasks.filter((t) => t.is_new && t.status !== "done").length;
 const attention = () => ({ needs_owner: tasks.filter((t) => !t.assignee && t.status !== "done").length, unverified: 0, check_project: tasks.filter((t) => t.check_project && t.status !== "done").length });
 let tasksSettings = { auto_create_tasks: true, email_assignees: true };
+const integrationsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "integrations-w10", `${name}.json`), "utf8")).response.body;
+let slackConnected = false;
+let linearConnected = false;
 for (const meeting of details) {
   meeting.tasks = [];
   meeting.tasks_count = 0;
@@ -435,6 +438,31 @@ function accounts(path, method, data, res) {
   return null;
 }
 
+// Series (W8). The bodies are the captures in docs/fe-captures/series-w8/ (the owner's view): the
+// Recurring cards, the Series page of "Beyric Monday planning" (1) and "Beyric Friday review" (3).
+// Agenda lines, resolved questions and the pills change in memory; "Send agenda" answers the capture.
+// Meeting 1 is a meeting of series 1 and carries the captured open questions.
+const seriesDir = join(captureDir, "series-w8");
+const seriesCapture = (n) => {
+  const file = readdirSync(seriesDir).find((f) => f.startsWith(`${n}-`));
+  return JSON.parse(readFileSync(join(seriesDir, file), "utf8")).response.body;
+};
+const seriesPages = { 1: seriesCapture("11"), 3: seriesCapture("14") };
+let nextAgendaId = 100;
+const questionState = Object.fromEntries(seriesCapture("15").open_questions.map((q) => [q.id, { ...q }]));
+details[0].series = { id: 1, title: "Beyric Monday planning" };
+details[0].open_questions = Object.values(questionState);
+details[0].notes_html =
+  "<h2>Summary</h2><p>The team reviewed Client Portal progress ahead of the launch.</p><h2>Decisions</h2><ul><li>Use Slack for work updates.</li></ul><h2>Action items</h2><ul><li>Dan to finish payment checkout by Friday.</li></ul><h2>Open questions</h2><ul>" +
+  Object.values(questionState).map((q) => `<li>${q.text}</li>`).join("") +
+  "</ul>";
+
+// Lead-designed pieces (W8, approved 2026-11-06): meeting 6 reuses a link, so it suggests "Make this a
+// recurring meeting?"; "Add to recurring meeting" and "Make recurring" answer in memory; the
+// person's own reminder mail switch is GET/PUT /api/settings/reminders.
+details[5].suggest_recurring = true;
+let notifyReminders = true;
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const path = url.pathname.replace(/\/$/, "");
@@ -456,10 +484,12 @@ const server = http.createServer(async (req, res) => {
     shares = [];
     shareId = 0;
     armed.decisions = armed.review = true;
+    slackConnected = false;
     resetProjects();
     resetSprints();
     for (const t of tasks) t.milestone_id = [1, 3, 5, 8, 9, 10, 11, 12].includes(t.id) ? 1 : null;
     proposalOpen = true;
+    linearConnected = false;
     return json(res, 200, { reset: true });
   }
 
@@ -516,6 +546,60 @@ const server = http.createServer(async (req, res) => {
     if (data?.token !== "existing") return json(res, 400, { error: { code: "invite_invalid", message: "That invitation is not valid any more. Ask for a new one." } });
     return json(res, 200, teamOut());
   }
+  if (path === "/api/settings/reminders") {
+    if (method === "PUT" && typeof data?.notify_reminders === "boolean") notifyReminders = data.notify_reminders;
+    return json(res, 200, { notify_reminders: notifyReminders });
+  }
+  const setSeries = /^\/api\/meetings\/(\d+)\/(series|recurring)$/.exec(path);
+  if (setSeries && ["PUT", "POST"].includes(method)) {
+    const meeting = details.find((m) => m.id === Number(setSeries[1]));
+    if (!meeting) return json(res, 404, { error: { code: "not_found", message: "No such meeting" } });
+    if (setSeries[2] === "recurring") {
+      meeting.series = { id: 9, title: meeting.title };
+      meeting.suggest_recurring = false;
+      return json(res, 201, { series: meeting.series });
+    }
+    meeting.series = data?.series_id ? { id: data.series_id, title: "Beyric Monday planning" } : null;
+    return json(res, 200, { series: meeting.series });
+  }
+  if (path === "/api/series" && method === "POST") {
+    return json(res, 201, { id: 9, title: String(data?.title ?? ""), cadence: "Recurring", platform: null, next_starts_at: null, next_text: null, unfinished_tasks: 0, open_questions: 0 });
+  }
+  // Series (W8): see the block above the server.
+  if (path === "/api/series" && method === "GET") return json(res, 200, seriesCapture("08"));
+  const onePage = /^\/api\/series\/(\d+)$/.exec(path);
+  if (onePage && method === "GET") {
+    const page = seriesPages[onePage[1]];
+    return page ? json(res, 200, page) : json(res, 404, { error: { code: "not_found", message: "No such recurring meeting" } });
+  }
+  const agenda = /^\/api\/series\/(\d+)\/agenda(?:\/(\d+)|\/send)?$/.exec(path);
+  if (agenda && seriesPages[agenda[1]]) {
+    const page = seriesPages[agenda[1]];
+    if (path.endsWith("/send") && method === "POST") return json(res, 200, seriesCapture("35"));
+    if (method === "POST") {
+      const text = String(data?.text ?? "").trim();
+      if (/https?:\/\/|www\./i.test(text)) return json(res, 422, { error: { code: "invalid_agenda_item", message: "Write the item without a web address." } });
+      const item = { id: nextAgendaId++, text, can_remove: true };
+      page.agenda.push(item);
+      return json(res, 201, item);
+    }
+    if (method === "DELETE" && agenda[2]) {
+      page.agenda = page.agenda.filter((i) => i.id !== Number(agenda[2]));
+      res.writeHead(204);
+      return res.end();
+    }
+  }
+  const question = /^\/api\/questions\/(\d+)$/.exec(path);
+  if (question && method === "PATCH") {
+    const item = questionState[question[1]];
+    if (!item) return json(res, 404, { error: { code: "not_found", message: "No such question" } });
+    if (typeof data?.carry === "boolean") {
+      item.carry = data.carry;
+      if (data.carry) item.resolved = false;
+    }
+    if (typeof data?.resolved === "boolean") item.resolved = data.resolved;
+    return json(res, 200, item);
+  }
   // Team: the screen's reads and writes (in memory).
   if (path === "/api/team" && method === "GET") return json(res, 200, teamOut());
   if (path === "/api/team" && method === "PATCH") {
@@ -534,6 +618,8 @@ const server = http.createServer(async (req, res) => {
       if (data.sprint_align_weekdays && team.sprint_length !== "week5") return json(res, 422, { error: { code: "align_needs_week5", message: "Only available for 1 week, 5 working day sprints." } });
       team.sprint_align_weekdays = data.sprint_align_weekdays;
     }
+    if (typeof data?.reminders_on === "boolean") team.reminders_on = data.reminders_on;
+    if (["1h", "30m", "both"].includes(data?.reminder_timing)) team.reminder_timing = data.reminder_timing;
     return json(res, 200, teamOut());
   }
   if (path === "/api/team/members" && method === "GET") return json(res, 200, membersOut());
@@ -709,6 +795,31 @@ const server = http.createServer(async (req, res) => {
   if (ofMeeting && method === "GET") {
     const list = meetingTasks(Number(ofMeeting[1]));
     return json(res, 200, { tasks: list, assigned_people: new Set(list.filter((t) => t.assignee).map((t) => t.assignee.user_id)).size, extraction_status: "done" });
+  }
+  if (path === "/api/integrations/linear/teams") return json(res, 200, integrationsCapture("23-linear-teams"));
+  if (path === "/api/integrations/linear") {
+    if (method === "PUT") {
+      linearConnected = true;
+      return json(res, 200, integrationsCapture("25-linear-connect"));
+    }
+    if (method === "DELETE") {
+      linearConnected = false;
+      res.writeHead(204);
+      return res.end();
+    }
+    return json(res, 200, integrationsCapture(linearConnected ? "26-linear-connected" : "19-linear-not-connected"));
+  }
+  if (path === "/api/integrations/slack") {
+    if (method === "PUT") {
+      slackConnected = true;
+      return json(res, 200, integrationsCapture("10-slack-connected"));
+    }
+    if (method === "DELETE") {
+      slackConnected = false;
+      res.writeHead(204);
+      return res.end();
+    }
+    return json(res, 200, integrationsCapture(slackConnected ? "10-slack-connected" : "05-slack-not-connected"));
   }
   if (path === "/api/settings/tasks") {
     if (method === "PUT") tasksSettings = { auto_create_tasks: !!data?.auto_create_tasks, email_assignees: !!data?.email_assignees };

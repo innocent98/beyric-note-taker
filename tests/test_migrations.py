@@ -1076,10 +1076,9 @@ def test_0031_follows_the_previous_revision():
     assert script.get_revision("0031").down_revision in {"0028", "0029", "0030"}
 
 
-def test_0029_follows_0031_and_is_the_only_head():
+def test_0029_follows_0031():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0029").down_revision == "0031"
-    assert script.get_heads() == ["0029"]
 
 
 def test_0028_projects_and_milestones_keep_tasks_when_they_go_and_downgrade_cleanly(scratch_url):
@@ -1159,5 +1158,89 @@ def test_0031_sprints_keep_tasks_when_they_go_and_downgrade_cleanly(scratch_url)
         conn.execute(text("update teams set sprint_custom_days = 366"))
     command.downgrade(cfg, "0028")
     assert _rows(engine, "select title from tasks") == [("t",)]
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0030_follows_0029():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0030").down_revision == "0029"
+
+
+def test_0030_adds_series_with_defaults_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0026")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:  # 0006 made the admin account, and 0019 gave it a team
+        before = conn.execute(text("select count(*) from teams")).scalar()
+    assert before >= 1
+    command.upgrade(cfg, "0030")
+    try:
+        # existing teams keep reminders off and "both" timing; existing people keep reminders on
+        assert set(_rows(engine, "select reminders_on, reminder_timing from teams")) == {
+            (False, "both")
+        }
+        insert = (
+            "insert into series (team_id, title, calendar_recurring_id) "
+            "select min(id), :t, 'rid-1' from teams"
+        )
+        with engine.begin() as conn:
+            conn.execute(text(insert), {"t": "Weekly"})
+        with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # one per team and id
+            conn.execute(text(insert), {"t": "Again"})
+        with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+            conn.execute(text("update teams set reminder_timing = 'daily'"))
+        command.downgrade(cfg, "0029")
+        inspector = inspect(engine)
+        assert "series" not in inspector.get_table_names()
+        assert "carry" not in {c["name"] for c in inspector.get_columns("open_questions")}
+        command.upgrade(cfg, "head")
+    finally:
+        engine.dispose()
+
+
+def test_0032_follows_0030():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0032").down_revision == "0030"
+
+
+def test_0033_follows_0032_and_is_the_only_head():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0033").down_revision == "0032"
+    assert script.get_heads() == ["0033"]
+
+
+def test_0033_round_trips_and_keeps_slack_rows(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0032")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
+        conn.execute(
+            text("insert into teams (name, owner_user_id) select 'T', id from users limit 1")
+        )
+        conn.execute(
+            text(
+                "insert into integrations (team_id, kind, config_enc, key_version) "
+                "select id, 'slack_webhook', 'x', 1 from teams order by id limit 1"
+            )
+        )
+    command.upgrade(cfg, "0033")
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into integrations (team_id, kind, config_enc, key_version, label) "
+                "select id, 'linear', 'y', 1, 'Engineering' from teams order by id limit 1"
+            )
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into integrations (team_id, kind, config_enc, key_version) "
+                "select id, 'jira', 'z', 1 from teams order by id limit 1"
+            )
+        )
+    command.downgrade(cfg, "0032")
+    assert _rows(engine, "select kind from integrations") == [("slack_webhook",)]
     command.upgrade(cfg, "head")
     engine.dispose()

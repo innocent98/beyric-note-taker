@@ -1,0 +1,23 @@
+{
+  "note": "400: not a Linear key shape; Linear is not called.",
+  "client": "dan (owner)",
+  "request": {
+    "method": "POST",
+    "path": "/api/integrations/linear/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>"
+    },
+    "body": {
+      "api_key": "nope"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "linear_key_invalid",
+        "message": "That does not look like a Linear personal API key. It starts with lin_api_."
+      }
+    }
+  }
+}

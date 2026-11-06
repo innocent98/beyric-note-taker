@@ -1,0 +1,23 @@
+{
+  "note": "Slack answered 'no such webhook' (simulated): 502, nothing stored.",
+  "client": "dan (owner)",
+  "request": {
+    "method": "PUT",
+    "path": "/api/integrations/slack",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>"
+    },
+    "body": {
+      "webhook_url": "<fake-slack-webhook-url>"
+    }
+  },
+  "response": {
+    "status": 502,
+    "body": {
+      "error": {
+        "code": "slack_unreachable",
+        "message": "Slack no longer accepts this webhook. It may have been removed, so connect it again."
+      }
+    }
+  }
+}

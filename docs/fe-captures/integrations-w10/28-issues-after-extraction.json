@@ -1,0 +1,17 @@
+{
+  "note": "What would be sent to Linear for the meeting's tasks (simulated Linear), in order.",
+  "content": [
+    {
+      "team_id": "team-0000-fake",
+      "title": "send the contract",
+      "description": "Owner in the meeting: Dan Okoro\n\nFrom Third call: https://notes.beyrictech.com/meetings/3",
+      "dueDate": null
+    },
+    {
+      "team_id": "team-0000-fake",
+      "title": "Someone should book the venue",
+      "description": "Owner in the meeting: needs an owner\n\nFrom Third call: https://notes.beyrictech.com/meetings/3",
+      "dueDate": null
+    }
+  ]
+}

@@ -22,7 +22,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app import (
     api_accounts,
     api_admin,
+    api_integrations,
     api_projects,
+    api_series,
     api_settings,
     api_shares,
     api_sprints,
@@ -44,6 +46,7 @@ from app import (
     visibility,
     workspace,
 )
+from app import series as series_rules
 from app.api_schemas import (
     BadgesOut,
     ErrorResponse,
@@ -344,6 +347,9 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         decisions_count=decisions_count,
         review_open_count=review_open_count,
         tasks=api_tasks.present(session, user, task_rows),
+        series=api_series.meeting_series(session, user, meeting),
+        suggest_recurring=owner and ready and series_rules.reused_code(session, meeting),
+        open_questions=api_series.meeting_questions(session, user, meeting) if ready else [],
         translations=[
             api_translation.brief(row, meeting)
             for row in session.scalars(
@@ -785,10 +791,12 @@ def delete_term(
 router.include_router(api_accounts.router)
 router.include_router(api_admin.router)
 router.include_router(api_settings.router)
+router.include_router(api_integrations.router)
 router.include_router(calendar_api.router)
 router.include_router(calendar_recurring.router)
 router.include_router(api_workspace.router)
 router.include_router(api_tasks.router)
+router.include_router(api_series.router)
 router.include_router(api_projects.router)
 router.include_router(api_sprints.router)
 router.include_router(api_team.router)

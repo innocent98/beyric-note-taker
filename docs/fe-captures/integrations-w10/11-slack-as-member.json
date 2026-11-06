@@ -1,0 +1,20 @@
+{
+  "note": "A member sees the state, `can_manage` false.",
+  "client": "chidi (member)",
+  "request": {
+    "method": "GET",
+    "path": "/api/integrations/slack",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "connected": true,
+      "status": "connected",
+      "last_error": null,
+      "last_posted_at": null,
+      "can_manage": false
+    }
+  }
+}

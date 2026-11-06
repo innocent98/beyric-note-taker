@@ -1,0 +1,28 @@
+{
+  "note": "403: not the creator and not a manager.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/series/5",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "title": "No"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "You can't do that here. Ask an owner or admin of your team."
+      }
+    }
+  }
+}

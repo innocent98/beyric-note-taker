@@ -4,113 +4,111 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { join } from "node:path";
 import { RecurringCards } from "@/components/app/recurring-cards";
 import { ApiError } from "@/lib/api/client";
-import type { RecurringState } from "@/lib/api/types";
+import type { SeriesList } from "@/lib/api/types";
 import { REPO, read } from "./helpers";
 
 // The Recurring cards on the Meetings screen, fed the bodies captured from the running app
-// (docs/fe-captures/calendar-recurring/, cited in docs/fe-integration-guide-calendar-settings.md).
+// (docs/fe-captures/series-w8/, cited in docs/fe-integration-guide-series.md).
 
-const mocks = vi.hoisted(() => ({ recurring: vi.fn() }));
-vi.mock("@/lib/api/browser", () => ({ api: { calendar: { recurring: mocks.recurring } } }));
+const mocks = vi.hoisted(() => ({ list: vi.fn() }));
+vi.mock("@/lib/api/browser", () => ({ api: { series: { list: mocks.list } } }));
 
 const capture = (file: string) =>
-  JSON.parse(read(join(REPO, "docs/fe-captures/calendar-recurring", file))).response.body as RecurringState;
-const lagos = capture("10-series-lagos.json");
-const empty = capture("05-not-connected.json");
+  JSON.parse(read(join(REPO, "docs/fe-captures/series-w8", file))).response.body as SeriesList;
+const owner = capture("08-cards-owner.json");
+const teammate = capture("09-cards-teammate.json");
+const outsider = capture("10-cards-outsider.json");
 
 beforeEach(() => {
-  mocks.recurring.mockReset();
+  mocks.list.mockReset();
 });
 
-const show = async (answer: Promise<RecurringState> | RecurringState) => {
-  mocks.recurring.mockReturnValue(Promise.resolve(answer));
+const show = async (answer: SeriesList) => {
+  mocks.list.mockReturnValue(Promise.resolve(answer));
   const view = render(<RecurringCards />);
-  await waitFor(() => expect(mocks.recurring).toHaveBeenCalled());
+  await waitFor(() => expect(mocks.list).toHaveBeenCalled());
   return view;
 };
 const cards = () => screen.getAllByRole("listitem");
 
 describe("with recurring meetings", () => {
-  it("draws the designer's heading and one card for each series, soonest first", async () => {
-    await show(lagos);
+  it("draws the designer's heading and one card for each series, in the server's order", async () => {
+    await show(owner);
     expect(await screen.findByRole("heading", { level: 2, name: "Recurring" })).toBeTruthy();
-    expect(cards().map((c) => within(c).getByText(/^(Stand-up|Beyric|Vendor|Board)/).textContent)).toEqual([
-      "Stand-up",
+    expect(cards().map((c) => within(c).getByText(/^Beyric/).textContent)).toEqual([
       "Beyric Friday review",
       "Beyric Monday planning",
-      "Vendor sync",
-      "Board call 🚀 週次",
     ]);
   });
 
-  it("shows the name, the cadence and the Next chip exactly as the server wrote them", async () => {
-    await show(lagos);
+  it("shows the name, the cadence and the three chips exactly as the server wrote them", async () => {
+    await show(owner);
     const monday = (await screen.findByText("Beyric Monday planning")).closest("li")!;
     expect(within(monday).getByText("Weekly on Mondays, 14:00")).toBeTruthy();
     expect(within(monday).getByText("Next: Mon 9 Nov, 14:00")).toBeTruthy();
-    const vendor = screen.getByText("Vendor sync").closest("li")!;
-    expect(within(vendor).getByText("Recurring")).toBeTruthy(); // what the times cannot prove
-    expect(within(vendor).getByText("Next: Tue 10 Nov, 10:00")).toBeTruthy();
+    expect(within(monday).getByText("4 unfinished tasks")).toBeTruthy();
+    expect(within(monday).getByText("2 open questions")).toBeTruthy();
+    const friday = screen.getByText("Beyric Friday review").closest("li")!;
+    expect(within(friday).getByText("Recurring")).toBeTruthy(); // what the times cannot prove
   });
 
-  it("round-trips emoji and non-Latin titles", async () => {
-    await show(lagos);
-    expect(await screen.findByText("Board call 🚀 週次")).toBeTruthy();
+  it("counts what the viewer may read: a teammate sees fewer unfinished tasks", async () => {
+    await show(teammate);
+    const monday = (await screen.findByText("Beyric Monday planning")).closest("li")!;
+    expect(within(monday).getByText("3 unfinished tasks")).toBeTruthy();
   });
 
-  it("draws only the chip that is real: no unfinished tasks and no open questions", async () => {
-    const { container } = await show(lagos);
-    await screen.findByText("Beyric Monday planning");
-    expect(container.textContent).not.toMatch(/unfinished|open question|task/i);
-    expect(container.querySelectorAll(".rec-chip")).toHaveLength(lagos.series.length);
+  it("makes each card a link to its Series page", async () => {
+    await show(owner);
+    const monday = (await screen.findByText("Beyric Monday planning")).closest("a")!;
+    expect(monday.getAttribute("href")).toBe("/series/1");
+    expect(screen.getByText("Beyric Friday review").closest("a")!.getAttribute("href")).toBe("/series/3");
   });
 
-  it("is not a link and not pressable: no chevron, no button, nothing to focus", async () => {
-    const { container } = await show(lagos);
-    await screen.findByText("Beyric Monday planning");
-    expect(container.querySelector("a, button, [role=button], [role=link], [tabindex], svg")).toBeNull();
-    for (const card of cards()) expect(card.getAttribute("onclick")).toBeNull();
+  it("leaves out the Next chip when no next meeting is known", async () => {
+    await show({ ...owner, series: [{ ...owner.series[0], next_starts_at: null, next_text: null }] });
+    await screen.findByText("Beyric Friday review");
+    expect(screen.queryByText(/^Next:/)).toBeNull();
   });
 
-  it("asks for the texts in the browser's own time zone", async () => {
-    await show(lagos);
-    expect(mocks.recurring).toHaveBeenCalledWith(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  it("uses singular words for one", async () => {
+    await show({ ...owner, series: [{ ...owner.series[0], unfinished_tasks: 1, open_questions: 1 }] });
+    expect(await screen.findByText("1 unfinished task")).toBeTruthy();
+    expect(screen.getByText("1 open question")).toBeTruthy();
   });
 });
 
 describe("with nothing to draw", () => {
-  it("draws nothing at all when no calendar is connected or nothing recurs", async () => {
-    const { container } = await show(empty);
-    await waitFor(() => expect(mocks.recurring).toHaveBeenCalledTimes(1));
+  it("draws nothing at all when the team has no recurring meeting", async () => {
+    const { container } = await show(outsider);
+    await waitFor(() => expect(mocks.list).toHaveBeenCalledTimes(1));
     expect(container.innerHTML).toBe("");
   });
 
   it("draws nothing while waiting for the answer", () => {
-    mocks.recurring.mockReturnValue(new Promise(() => {}));
+    mocks.list.mockReturnValue(new Promise(() => {}));
     const { container } = render(<RecurringCards />);
     expect(container.innerHTML).toBe("");
   });
 
   it.each([
-    ["the calendar is off (404 calendar_unavailable)", new ApiError(404, "calendar_unavailable", "Google Calendar is not available.")],
-    ["the zone is refused (422)", new ApiError(422, "invalid_timezone", "That time zone is not known.")],
     ["the server fails (500)", new ApiError(500, "internal_error", "Something went wrong.")],
     ["the network is down", new TypeError("Failed to fetch")],
   ])("draws nothing and does not break when %s", async (_name, failure) => {
-    mocks.recurring.mockRejectedValue(failure);
+    mocks.list.mockRejectedValue(failure);
     const { container } = render(<RecurringCards />);
-    await waitFor(() => expect(mocks.recurring).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.list).toHaveBeenCalled());
     await Promise.resolve();
     expect(container.innerHTML).toBe("");
   });
 
   it("does not update after it was taken off the page", async () => {
-    let finish: (state: RecurringState) => void = () => {};
-    mocks.recurring.mockReturnValue(new Promise<RecurringState>((resolve) => (finish = resolve)));
+    let finish: (state: SeriesList) => void = () => {};
+    mocks.list.mockReturnValue(new Promise<SeriesList>((resolve) => (finish = resolve)));
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const { unmount, container } = render(<RecurringCards />);
     unmount();
-    finish(lagos);
+    finish(owner);
     await Promise.resolve();
     expect(errors).not.toHaveBeenCalled();
     expect(container.innerHTML).toBe("");

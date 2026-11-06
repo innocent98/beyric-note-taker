@@ -71,6 +71,11 @@ NOTE_LANGUAGES = ("en", "fr", "es")
 TRANSLATION_STATUSES = ("translating", "ready", "failed")
 TASK_STATUSES = ("todo", "doing", "done")
 TASK_SOURCES = ("ai", "manual")
+# When the reminder mails go before a recurring meeting (the Settings choice): one hour before,
+# 30 minutes before, or both (the designer draws two mails).
+REMINDER_TIMINGS = ("1h", "30m", "both")
+REMINDER_KINDS = ("1h", "30m")
+
 # The sprint lengths of the Settings list (W9). A project may override the team's with any of
 # them except `custom`: the designer's per-project select has no Custom entry.
 SPRINT_LENGTHS = ("week5", "week7", "week14", "month1", "month3", "month6", "custom")
@@ -236,6 +241,20 @@ class MailOutbox(Base):
             unique=True,
             postgresql_where=sa.text("template = 'tasks_assigned'"),
         ),
+        # W8: one agenda mail per person per send, one reminder mail per reminder row.
+        Index(
+            "uq_mail_outbox_series_agenda",
+            sa.text("(payload->>'send_id')"),
+            sa.text("(payload->>'user_id')"),
+            unique=True,
+            postgresql_where=sa.text("template = 'series_agenda'"),
+        ),
+        Index(
+            "uq_mail_outbox_series_reminder",
+            sa.text("(payload->>'reminder_id')"),
+            unique=True,
+            postgresql_where=sa.text("template = 'series_reminder'"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -305,6 +324,7 @@ class Team(Base):
 
     __tablename__ = "teams"
     __table_args__ = (
+        CheckConstraint(_in("reminder_timing", REMINDER_TIMINGS), name="ck_teams_reminder_timing"),
         CheckConstraint(_in("sprint_length", SPRINT_LENGTHS), name="ck_teams_sprint_length"),
         CheckConstraint("sprint_custom_days between 1 and 365", name="ck_teams_sprint_custom_days"),
     )
@@ -318,6 +338,12 @@ class Team(Base):
     share_new_meetings: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=sa.false()
     )
+    # W8: "Remind attendees before recurring meetings" (Settings, owners and admins). Off until a
+    # manager switches it on: the mail uses calendar data for a purpose the privacy policy names
+    # only once Google verification is done (spec 7, "Google data constraint").
+    reminders_on: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    reminder_timing: Mapped[str] = mapped_column(String(8), default="both", server_default="both")
+
     # W9 (spec 6.4): how long a sprint is for the whole team, the number of days when it is
     # `custom` (1 to 365), and whether 1-week-5-day sprints run Monday to Friday.
     sprint_length: Mapped[str] = mapped_column(String(8), default="week5", server_default="week5")
@@ -426,6 +452,9 @@ class UserSettings(Base):
     # whether the people they are assigned to are emailed about them.
     auto_create_tasks: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
     email_assignees: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    # W8: whether this person is emailed the agenda a teammate sends and the reminders before a
+    # recurring meeting they attend (Settings > Email).
+    notify_reminders: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
 
 
 class CalendarConnection(Base):
@@ -616,6 +645,11 @@ class Meeting(Base):
         ),
         Index("ix_meetings_owner_user_id", "owner_user_id", "id"),
         Index(
+            "ix_meetings_series_id",
+            "series_id",
+            postgresql_where=sa.text("series_id is not null"),
+        ),
+        Index(
             "ix_meetings_shared_team_id",
             "shared_team_id",
             postgresql_where=sa.text("shared_team_id is not null"),
@@ -673,6 +707,11 @@ class Meeting(Base):
     # `app/visibility.py` turns this into who may read; nothing else may compare it.
     shared_team_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
+    )
+    # The recurring meeting this one belongs to (W8, `app/series.py`). Null = not in one. Only
+    # `app/series.py` sets it, and a reader must also check the series belongs to their team.
+    series_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("series.id", ondelete="SET NULL")
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -734,6 +773,13 @@ class OpenQuestion(Base):
     position: Mapped[int] = mapped_column(Integer)
     fingerprint: Mapped[str] = mapped_column(String(64))
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # W8: who marked it resolved (null when nobody did, or the account has gone).
+    resolved_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    # W8: "On next agenda". True = the question is carried to the next meeting of the series until
+    # someone resolves it. Only a question of a series meeting is ever carried.
+    carry: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -927,6 +973,108 @@ class Milestone(Base):
     )
     quote: Mapped[str | None] = mapped_column(String(300))
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Series(Base):
+    """A recurring meeting of a team (spec 7). It comes from the calendar's recurring-event id
+    (`calendar_recurring_id`, found when a calendar meeting's notes are written, or by the hourly
+    sync of joined events) or from a person attaching a meeting by hand (then it has none). The
+    cadence and the next date are computed, never stored. Visible to the team (title and
+    settings); every list and count inside it is filtered by what the viewer may read.
+
+    `project_id` is the W4 link (a series files its tasks into one project); it has no foreign key
+    here because projects arrive in their own migration, and W4 writes it."""
+
+    __tablename__ = "series"
+    __table_args__ = (
+        Index(
+            "uq_series_team_recurring",
+            "team_id",
+            "calendar_recurring_id",
+            unique=True,
+            postgresql_where=sa.text("calendar_recurring_id is not null"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="CASCADE"), index=True
+    )
+    owner_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    title: Mapped[str] = mapped_column(String(200), default="", server_default="")
+    calendar_recurring_id: Mapped[str | None] = mapped_column(String(1024))
+    platform: Mapped[str | None] = mapped_column(String(16))
+    project_id: Mapped[int | None] = mapped_column(BigInteger)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SeriesAgendaItem(Base):
+    """One typed line of a series' "Other agenda items". Consumed (kept, no longer shown) when the
+    next meeting of the series is recorded: `consumed_at` is the truth, `consumed_by_meeting_id`
+    only says which meeting (it goes null if that meeting is deleted; the line stays consumed)."""
+
+    __tablename__ = "series_agenda_items"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    series_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("series.id", ondelete="CASCADE"), index=True
+    )
+    text: Mapped[str] = mapped_column(String(200))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    consumed_by_meeting_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("meetings.id", ondelete="SET NULL")
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SeriesAgendaSend(Base):
+    """One press of "Send agenda to attendees": the id the mail rows carry and what the daily caps
+    count. Holds no text; the agenda is read when each mail is sent."""
+
+    __tablename__ = "series_agenda_sends"
+    __table_args__ = (Index("ix_series_agenda_sends_sender", "sender_user_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    series_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("series.id", ondelete="CASCADE"), index=True
+    )
+    sender_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    recipient_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SeriesReminder(Base):
+    """One reminder mail owed to one person for one occurrence of a series. The unique key is what
+    makes it once, however many ticks or workers see the same event. Holds ids and times only; the
+    mail is written when it is sent."""
+
+    __tablename__ = "series_reminders"
+    __table_args__ = (
+        CheckConstraint(_in("kind", REMINDER_KINDS), name="ck_series_reminders_kind"),
+        UniqueConstraint(
+            "series_id", "user_id", "kind", "starts_at", name="uq_series_reminders_occurrence"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    series_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("series.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(4))
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # The occurrence the "Join meeting" button reads its link from at send time; the event row is
+    # removed two days after it ends, which only drops the button.
+    calendar_event_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("calendar_events.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -1129,3 +1277,82 @@ def _complete_the_join_with_its_meeting(session: Session, flush_context, instanc
             .values(state="completed")
             .execution_options(synchronize_session="fetch")
         )
+
+
+INTEGRATION_KINDS = ("slack_webhook", "linear")
+
+
+class Integration(Base):
+    """A team's connection to an outside service (W10). `config_enc` is the vault blob of the
+    secret (a Slack incoming-webhook URL); it is never returned by the API and never logged.
+    `status` is `connected` or `failing`; `last_error` is a short fixed sentence, never text from
+    the other service. One row per team and kind."""
+
+    __tablename__ = "integrations"
+    __table_args__ = (
+        CheckConstraint(_in("kind", INTEGRATION_KINDS), name="ck_integrations_kind"),
+        CheckConstraint("status in ('connected', 'failing')", name="ck_integrations_status"),
+        UniqueConstraint("team_id", "kind", name="uq_integrations_team_kind"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(24))
+    config_enc: Mapped[bytes] = mapped_column(LargeBinary)  # nonce || ciphertext
+    key_version: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(12), default="connected", server_default="connected")
+    # A non-secret name to show ("Engineering" for a Linear team); never the key.
+    label: Mapped[str | None] = mapped_column(String(100))
+    last_error: Mapped[str | None] = mapped_column(String(200))
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    connected_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class IntegrationPost(Base):
+    """One outbound post to an integration, written BEFORE the call is made: the unique index
+    makes "once per meeting" true even if the worker retries, and counting a team's rows in the
+    last hour is the rate cap. `meeting_id` is null for the test post made when connecting."""
+
+    __tablename__ = "integration_posts"
+    __table_args__ = (
+        Index("ix_integration_posts_team_created", "team_id", "created_at"),
+        Index(
+            "uq_integration_posts_meeting",
+            "team_id",
+            "kind",
+            "meeting_id",
+            unique=True,
+            postgresql_where=sa.text("meeting_id is not null"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(24))
+    meeting_id: Mapped[int | None] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TrackerIssue(Base):
+    """The issue a task became in the team's tracker (one way, created once). Written before the
+    call with `external_id` null as the claim, so two workers never create the same issue; a failed
+    call deletes the claim."""
+
+    __tablename__ = "tracker_issues"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    task_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("tasks.id", ondelete="CASCADE"), unique=True
+    )
+    team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(24))
+    external_id: Mapped[str | None] = mapped_column(String(64))
+    identifier: Mapped[str | None] = mapped_column(String(30))
+    url: Mapped[str | None] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    __table_args__ = (Index("ix_tracker_issues_team_created", "team_id", "created_at"),)

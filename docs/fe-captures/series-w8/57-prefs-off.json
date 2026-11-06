@@ -1,0 +1,25 @@
+{
+  "note": "Dan opts out of agenda and reminder mail.",
+  "client": "dan",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/reminders",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "notify_reminders": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "notify_reminders": false
+    }
+  }
+}

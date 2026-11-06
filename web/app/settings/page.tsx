@@ -43,9 +43,13 @@ export default async function SettingsPage({
   }
   // The Tasks card's two switches; if they cannot be read the card is drawn off, as before.
   const tasksSettings = await api.settings.tasks.get().catch(() => null);
-  // The Sprints card's length and switch (W9); if the team cannot be read the card is drawn off.
+  const slack = await api.integrations.slack.get().catch(() => null);
+  // The Sprint length, Monday to Friday and reminders rows of the Sprints and reminders card; if the
+  // team cannot be read they are drawn off. The sprints give the line under "Sprint length".
   const team = await api.team.get().catch(() => null);
   const sprints = team ? await api.sprints.list().catch(() => null) : null;
+  const reminderMail = await api.settings.reminders.get().catch(() => null);
+  const linear = await api.integrations.linear.get().catch(() => null);
   const [email, language, timeZone] = await Promise.all([
     load(api.settings.email.get()),
     load(api.settings.language.get()),
@@ -57,7 +61,7 @@ export default async function SettingsPage({
       <div className="stack-md measure">
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
         <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} templates={templates} />
-        <SettingsPlannedSections tasks={tasksSettings} team={team} sprints={sprints} />
+        <SettingsPlannedSections tasks={tasksSettings} slack={slack} linear={linear} team={team} reminderMail={reminderMail} sprints={sprints} />
         <SettingsTimeZone initial={timeZone.time_zone} />
         <SettingsLanguage initial={language.default_language} />
         <EmailSettingsSection email={email} />

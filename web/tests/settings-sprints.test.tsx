@@ -53,11 +53,9 @@ describe("Settings > Sprints and reminders", () => {
     expect(within(card()).queryByLabelText("Days per sprint")).toBeNull();
   });
 
-  it("leaves the reminders row drawn off, with its one line", () => {
+  it("has no 'not available yet' line when the team could be read", () => {
     draw();
-    expect(within(card()).getByText("Remind attendees before recurring meetings is not available yet.")).toBeTruthy();
-    expect((within(card()).getByRole("switch", { name: "Remind attendees before recurring meetings" }) as HTMLButtonElement).disabled).toBe(true);
-    expect((within(card()).getByRole("combobox", { name: "Reminder timing" }) as HTMLSelectElement).disabled).toBe(true);
+    expect(within(card()).queryAllByText(/not available yet/i)).toHaveLength(0);
   });
 
   it("saves a new length with one PATCH, shows the days box for Custom, and reads the preview again", async () => {

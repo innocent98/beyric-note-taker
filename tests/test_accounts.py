@@ -17,8 +17,10 @@ from app.models import (
     Meeting,
     Milestone,
     Notification,
+    OpenQuestion,
     Project,
     ReviewItem,
+    Series,
     Sprint,
     Task,
     TeamInvite,
@@ -592,6 +594,8 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         invited_by=owner.id,
         expires_at=datetime.now(UTC) + timedelta(days=7),
     )
+    recurring = Series(team_id=teams.ensure_team(session, owner).id, title="Weekly")
+    question = OpenQuestion(meeting_id=mine.id, text="q", position=0, fingerprint="q")
     project = Project(
         team_id=teams.ensure_team(session, owner).id, name="P", color="#0E6B5E", keywords=[]
     )
@@ -605,7 +609,19 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         team_id=project.team_id, number=1, start_date=date(2026, 11, 2), end_date=date(2026, 11, 6)
     )
     session.add_all(
-        [term, note, decision, review, task, pending_invite, project, milestone, sprint]
+        [
+            term,
+            note,
+            decision,
+            review,
+            task,
+            pending_invite,
+            recurring,
+            question,
+            project,
+            milestone,
+            sprint,
+        ]
     )
     session.commit()
     # The calendar routes answer 404 `calendar_unavailable` while the feature is off, which would
@@ -646,6 +662,8 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         "item_id": review.id,
         "task_id": task.id,
         "invite_id": pending_invite.id,
+        "series_id": recurring.id,
+        "question_id": question.id,
         "project_id": project.id,
         "milestone_id": milestone.id,
         "sprint_id": sprint.id,
@@ -667,6 +685,10 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/shares": {"recipients": [{"email": "x@example.test"}], "language": "en"},
             "/override": {"override": False},
             "/api/tasks/{task_id}": {"status": "done"},
+            "/api/series/{series_id}": {"title": "x"},
+            "/api/series/{series_id}/agenda": {"text": "x"},
+            "/api/meetings/{meeting_id}/series": {"series_id": None},
+            "/api/questions/{question_id}": {"carry": True},
             "/api/projects/{project_id}": {"name": "x"},
             "/api/milestones/{milestone_id}": {"name": "x"},
             "/api/team/members/{user_id}": {"aliases": ["x"]},

@@ -1,0 +1,17 @@
+{
+  "note": "workspace.run_extraction returned 'done'; the post(s) Slack received (simulated), in order: the test messages from connecting (one attempt Slack refused, one it accepted), then the meeting's tasks.",
+  "content": [
+    {
+      "url_is_the_fake_placeholder": true,
+      "text": "Beyric Note Taker is connected. New tasks from your team's meetings will appear here."
+    },
+    {
+      "url_is_the_fake_placeholder": true,
+      "text": "Beyric Note Taker is connected. New tasks from your team's meetings will appear here."
+    },
+    {
+      "url_is_the_fake_placeholder": true,
+      "text": "*<https://notes.beyrictech.com/meetings/1|Planning call>*: 2 new tasks\n• send the contract (Dan Okoro)\n• Someone should book the venue (needs an owner)"
+    }
+  ]
+}

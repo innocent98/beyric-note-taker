@@ -1,0 +1,142 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/3",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "title": "Beyric Friday review",
+      "cadence": "Recurring",
+      "platform": "google_meet",
+      "timezone": "UTC",
+      "next_starts_at": "2026-11-06T14:40:44.124050Z",
+      "next_text": "Fri 6 Nov, 14:40",
+      "can_rename": true,
+      "agenda_recipients": 1,
+      "unfinished": [
+        {
+          "id": 5,
+          "title": "Finish payment checkout",
+          "status": "todo",
+          "assignee": {
+            "user_id": 3,
+            "name": "Dan Okoro",
+            "is_you": false
+          },
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": null,
+          "is_new": false,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-10-30",
+          "done_at": null,
+          "created_at": "2026-11-06T13:45:44.421166Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 3,
+            "title": "Beyric Friday review",
+            "platform": "google_meet",
+            "created_at": "2026-10-30T13:45:44.124050Z"
+          },
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": false,
+          "can_delete": true
+        },
+        {
+          "id": 6,
+          "title": "Log design refinements on the tracker",
+          "status": "todo",
+          "assignee": null,
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": null,
+          "is_new": false,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-10-30",
+          "done_at": null,
+          "created_at": "2026-11-06T13:45:44.421166Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 3,
+            "title": "Beyric Friday review",
+            "platform": "google_meet",
+            "created_at": "2026-10-30T13:45:44.124050Z"
+          },
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": true,
+          "can_delete": true
+        }
+      ],
+      "finished_since_text": "Fri 30 Oct",
+      "finished": [],
+      "questions": [
+        {
+          "id": 5,
+          "text": "Which pricing model will the team choose?",
+          "meeting": {
+            "id": 3,
+            "title": "Beyric Friday review",
+            "platform": "google_meet",
+            "created_at": "2026-10-30T13:45:44.124050Z"
+          },
+          "can_update": true
+        },
+        {
+          "id": 6,
+          "text": "Who covers support in December?",
+          "meeting": {
+            "id": 3,
+            "title": "Beyric Friday review",
+            "platform": "google_meet",
+            "created_at": "2026-10-30T13:45:44.124050Z"
+          },
+          "can_update": true
+        }
+      ],
+      "agenda": [],
+      "past_meetings": [
+        {
+          "id": 3,
+          "title": "Beyric Friday review",
+          "created_at": "2026-10-30T13:45:44.124050Z",
+          "duration_seconds": 2760,
+          "tasks_count": 2
+        }
+      ],
+      "attendees": [
+        {
+          "name": "Ada Lovelace",
+          "is_teammate": true
+        },
+        {
+          "name": "Dan Okoro",
+          "is_teammate": true
+        },
+        {
+          "name": "Guest Visitor",
+          "is_teammate": false
+        }
+      ]
+    }
+  }
+}
