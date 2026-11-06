@@ -1064,3 +1064,40 @@ def test_0027_renames_the_identity_columns_keeps_the_data_and_downgrades_cleanly
 def test_0027_follows_0026():
     script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
     assert script.get_revision("0027").down_revision == "0026"
+
+
+def test_0028_follows_the_previous_revision_and_is_the_only_head():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0028").down_revision == "0027"
+    assert script.get_heads() == ["0028"]
+
+
+def test_0028_projects_and_milestones_keep_tasks_when_they_go_and_downgrade_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0028")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (id, email) values (9001, 'a@example.test')"))
+        conn.execute(text("insert into teams (id, owner_user_id) values (9001, 9001)"))
+        conn.execute(
+            text("insert into projects (id, team_id, name, color) values (1, 9001, 'P', '#0E6B5E')")
+        )
+        conn.execute(
+            text(
+                "insert into milestones (id, team_id, project_id, name, due_date, confirmed_at) "
+                "values (1, 9001, 1, 'M', '2026-12-08', now())"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into tasks (id, team_id, title, project_id, milestone_id, check_project) "
+                "values (1, 9001, 't', 1, 1, true)"
+            )
+        )
+        conn.execute(text("delete from projects where id = 1"))
+    assert _rows(engine, "select project_id, milestone_id from tasks") == [(None, None)]
+    assert _rows(engine, "select count(*) from milestones") == [(0,)]  # went with its project
+    command.downgrade(cfg, "0027")
+    assert _rows(engine, "select title from tasks") == [("t",)]
+    command.upgrade(cfg, "head")
+    engine.dispose()

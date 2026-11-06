@@ -13,6 +13,7 @@ from app.models import (
     MailOutbox,
     Meeting,
     Notification,
+    TeamMember,
     Template,
     UsageEntry,
     User,
@@ -1232,3 +1233,33 @@ def test_the_script_checks_for_the_last_admin_under_the_admin_lock_after_confirm
     )  # the decisive check comes after the lock
     session.expire_all()
     assert session.get(User, keeper.id) is not None
+
+
+def test_purging_an_account_removes_the_proposals_from_its_meetings_but_keeps_a_confirmed_one(
+    session, audio_dir
+):
+    """Opus review: a proposal must not outlive the private meeting it came from."""
+    from app import teams
+    from app.models import Milestone
+
+    user, running, done = full_account(session, audio_dir)
+    team = teams.ensure_team(session, user)
+    colleague = make_user(session, "colleague@example.test")
+    session.add(TeamMember(team_id=team.id, user_id=colleague.id, role="admin"))
+    stated = datetime(2026, 12, 8).date()
+    session.add_all(
+        [
+            Milestone(team_id=team.id, name="Proposed", due_date=stated, source_meeting_id=done.id),
+            Milestone(
+                team_id=team.id,
+                name="Confirmed",
+                due_date=stated,
+                source_meeting_id=done.id,
+                confirmed_at=datetime(2026, 11, 3, tzinfo=UTC),
+            ),
+        ]
+    )
+    session.commit()
+    deletion.purge_user(session, user, FakeVexa())
+    session.expire_all()
+    assert [m.name for m in session.scalars(select(Milestone))] == ["Confirmed"]

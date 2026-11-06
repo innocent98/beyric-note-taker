@@ -601,8 +601,15 @@ class TaskOut(BaseModel):
     # else (spec 8.2), so for them `from_meeting` is true and `meeting` is null.
     from_meeting: bool
     meeting: MeetingRef | None
+    # The project and milestone it is filed under (ids of `GET /api/projects` and
+    # `GET /api/milestones`), null for none.
+    project_id: int | None
+    milestone_id: int | None
+    # Filing was a guess (one keyword hit, or a tie): show "Check project" until someone confirms
+    # (`PATCH` with `check_project: false`) or picks a project.
+    check_project: bool
     # What the caller may do with it, so the screen shows only what will work.
-    can_update: bool  # status and due date
+    can_update: bool  # status, due date, project, milestone
     can_edit: bool  # the title
     can_assign: bool  # give it to someone else, or to nobody
     can_claim: bool  # take a task that has no owner yet
@@ -614,6 +621,8 @@ class AttentionOut(BaseModel):
     needs_owner: int
     # Open tasks whose quote could not be found in the transcript.
     unverified: int
+    # Open tasks filed into a project by a guess ("1 needs its project checked").
+    check_project: int
 
 
 class TaskList(BaseModel):
@@ -640,6 +649,8 @@ class TaskCreate(Body):
     # YYYY-MM-DD.
     due_date: date | None = Field(None, strict=False)
     status: TaskStatus = "todo"
+    # A project of the caller's team (the Tasks screen files a new task under the open tab).
+    project_id: int | None = None
 
 
 class TaskPatch(Body):
@@ -650,6 +661,12 @@ class TaskPatch(Body):
     status: TaskStatus | None = None
     assignee_user_id: int | None = None
     due_date: date | None = Field(None, strict=False)
+    # A project of the task's team, or null for none; choosing one clears `check_project`.
+    project_id: int | None = None
+    # A confirmed milestone of the task's team, or null for none.
+    milestone_id: int | None = None
+    # `false` is "this project is right"; the server sets it, `true` is refused.
+    check_project: bool | None = None
 
 
 class TasksSettingsOut(BaseModel):
@@ -782,3 +799,96 @@ class AcceptInviteIn(Body):
 
 
 MeetingDetail.model_rebuild()
+
+
+# ---- projects and milestones (W4) ----
+
+
+class ProjectIn(Body):
+    # Empty is allowed: "New project" opens a blank one and the name is typed in (autosave).
+    name: str = Field("", max_length=100)
+    # One of the six swatches, `#RRGGBB`; left out, the next in turn.
+    color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    keywords: list[str] = Field(default_factory=list, max_length=20)
+
+
+class ProjectPatch(Body):
+    """A partial change: send only what changes (the screen saves one field at a time)."""
+
+    name: str | None = Field(None, max_length=100)
+    color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    # Replaces the list; at most 20, each at most 40 characters, duplicates ignored.
+    keywords: list[str] | None = Field(None, max_length=20)
+
+
+class MilestoneLine(BaseModel):
+    """The one milestone line a project shows."""
+
+    id: int
+    name: str
+    due_date: date
+
+
+class ProjectOut(BaseModel):
+    id: int
+    # Plain text; empty until typed ("Untitled project").
+    name: str
+    color: str
+    keywords: list[str]
+    # Open tasks in it that the caller may see.
+    open_tasks: int
+    # The next milestone still ahead, else the latest that passed; null is "None yet".
+    milestone: MilestoneLine | None
+    created_at: UtcDatetime
+
+
+class ProjectList(BaseModel):
+    projects: list[ProjectOut]
+    # True for an owner or admin of the team: the only people who may create, change or delete.
+    can_manage: bool
+
+
+class MilestoneIn(Body):
+    name: str = Field(min_length=1, max_length=200)
+    due_date: date = Field(strict=False)
+    project_id: int | None = None
+
+
+class MilestonePatch(Body):
+    name: str | None = Field(None, min_length=1, max_length=200)
+    due_date: date | None = Field(None, strict=False)
+    project_id: int | None = None
+
+
+class MilestoneConfirm(Body):
+    # Left out, the project the milestone was filed under when it was proposed stays.
+    project_id: int | None = None
+
+
+class MilestoneOut(BaseModel):
+    id: int
+    name: str
+    due_date: date
+    project_id: int | None
+    # The meeting it was proposed from, when the caller may read that meeting.
+    source_meeting: MeetingRef | None
+    # Plain text, at most 300 characters: the words said in the meeting (proposals only).
+    quote: str | None
+    # Null is a proposal: not a milestone yet, nothing can be filed under it.
+    confirmed_at: UtcDatetime | None
+    # Tasks filed under it that the caller may see, and how many are done (confirmed ones).
+    task_count: int
+    done_count: int
+    can_confirm: bool
+    can_edit: bool
+
+
+class MilestoneList(BaseModel):
+    milestones: list[MilestoneOut]
+
+
+class MeetingMilestones(BaseModel):
+    """What a meeting's page shows: dates proposed from it ("Set milestone: <name>, <date>?") and
+    the ones already confirmed."""
+
+    milestones: list[MilestoneOut]

@@ -106,7 +106,11 @@ def test_the_list_carries_tasks_people_and_the_attention_counts(api, session, te
     body = api.get("/api/tasks").json()
     assert [t["id"] for t in body["tasks"]] == [done.id, nobody.id, mine.id]
     assert body["people"] == [{"user_id": owner.id, "name": "owner", "is_you": True}]
-    assert body["attention"] == {"needs_owner": 1, "unverified": 1}  # open tasks only
+    assert body["attention"] == {
+        "needs_owner": 1,
+        "unverified": 1,
+        "check_project": 0,
+    }  # open tasks only
     assert body["has_more"] is False and body["next_before_id"] is None
     task = next(t for t in body["tasks"] if t["id"] == mine.id)
     assert task == {
@@ -131,6 +135,9 @@ def test_the_list_carries_tasks_people_and_the_attention_counts(api, session, te
             "platform": "google_meet",
             "created_at": task["meeting"]["created_at"],
         },
+        "project_id": None,
+        "milestone_id": None,
+        "check_project": False,
         "can_update": True,
         "can_edit": True,
         "can_assign": True,

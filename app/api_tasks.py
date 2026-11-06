@@ -104,6 +104,9 @@ def present(session: Session, viewer: User, rows: list[Task]) -> list[TaskOut]:
                     if meeting
                     else None
                 ),
+                project_id=task.project_id,
+                milestone_id=task.milestone_id,
+                check_project=task.check_project,
                 can_update=allowed.update,
                 can_edit=allowed.edit,
                 can_assign=allowed.assign,
@@ -137,6 +140,12 @@ def list_tasks(
         description="`me`, `none` (Needs owner) or a user id",
     ),
     status: Literal["todo", "doing", "done"] | None = None,
+    project: str | None = Query(
+        None,
+        pattern=r"^(none|\d{1,10})$",
+        description="`none` (No project) or a project id",
+    ),
+    milestone: int | None = Query(None, ge=1, le=services.MAX_ID),
     limit: int = Query(tasks.LIST_DEFAULT, ge=1, le=tasks.LIST_MAX),
     before_id: int | None = Query(None, ge=1, le=services.MAX_ID),
     session: Session = Depends(get_session),
@@ -146,7 +155,14 @@ def list_tasks(
     and their team's manual tasks. Newest first; for the next page pass `before_id` =
     `next_before_id`. `attention` counts every open task the caller sees, whatever the filter."""
     rows, more = tasks.list_tasks(
-        session, user, assignee=assignee, status=status, limit=limit, before_id=before_id
+        session,
+        user,
+        assignee=assignee,
+        status=status,
+        limit=limit,
+        before_id=before_id,
+        project=project,
+        milestone=milestone,
     )
     return TaskList(
         tasks=present(session, user, rows),
@@ -178,6 +194,7 @@ def create_task(
             assignee_user_id=body.assignee_user_id,
             due_date=body.due_date,
             status=body.status,
+            project_id=body.project_id,
             today=timezones.localise(datetime.now(UTC), zone)[0].date(),
         )
     except tasks.TaskInvalid as exc:
@@ -217,6 +234,8 @@ def patch_task(
     changes = {k: getattr(body, k) for k in body.model_fields_set}
     if changes.get("status", "") is None or changes.get("title", "") is None:
         raise services.Refused(422, "validation_error", "Status and title cannot be null.")
+    if "check_project" in changes and changes["check_project"] is not False:
+        raise services.Refused(422, "validation_error", "check_project can only be set to false.")
     try:
         tasks.update(session, user, task, changes, datetime.now(UTC))
     except tasks.TaskForbidden:

@@ -48,6 +48,7 @@ KEPT = {
     "usage_entries": "the recorded hours stay spent",
     "ai_runs": "cost per hour and the daily translation limit; holds no meeting text",
     "scheduled_joins": "the calendar event stays joined, so no bot is sent to it twice",
+    "milestones": "a confirmed milestone stays; delete_meeting removes the meeting's proposals",
 }
 
 
