@@ -436,7 +436,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] FE guide from live captures (`scripts/capture_team_api.py`)
   - [ ] Opus review fixes (see the SOP)
   - [x] PR 2 screens (`feature/w3-team-screens`, open, not merged; SOP `docs/sop/2026-11-05-w3-team-ui.md`): Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, lead-designed Share with team switch, optional name in the invite dialog and alias editing (designer to confirm); privacy "Teams" paragraph and terms pilot rows; parity shots in `docs/ui/parity/after/`
-  - [ ] "Add email" beside a non-member participant (waits for W6) (W6 PR 2, lead-designed)
+  - [x] "Add email" beside a non-member participant (W6 PR 2, lead-designed)
   - [ ] PR 2 screens: Team page (D7), invite dialog, Invited/Resend rows, accept page, teammate chips on Tasks, "Invite them to the team" in the drawer, and the four lead-designed pieces (Share with team switch, optional name in the invite dialog, alias editing, "Add email" which may wait for W6); privacy "Teams" paragraph and terms pilot row; parity shots
 - [ ] W4 Projects and milestones. Backend PR 1 `feature/w4-projects-backend` (open, not merged, 2026-11-05) and screens PR 2 `feature/w4-projects-screens` (not started). SOP `docs/sop/2026-11-05-w4-projects-backend.md`; FE guide `docs/fe-integration-guide-projects.md` with `docs/fe-captures/projects-w4/`
   - [x] Migration 0028 (`projects`, `milestones`, `tasks.project_id/milestone_id/check_project`); down_revision 0026, re-point if 0027 (#96) merges first
@@ -465,7 +465,9 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Opt-out token and `POST /api/mail/opt-out` (nginx zone added); translation first then mail (hook + hourly sweep)
   - [x] Privacy and terms rows (spec 13.1), "Last updated" unchanged; Opus review done
   - [ ] Merged
-- [ ] PR 2 screens `feature/w6-share-screens`: Share dialog, "Shared with ...", toast, `/unsubscribe` page, lead-designed "Add email" (starts after PR 1 merges)
+- [ ] PR 2 screens `feature/w6-share-screens` (stacked on PR 1): open
+  - [x] Share dialog, toast, "Shared with ..." note, Share notes button, `/unsubscribe` page, lead-designed "Add email"; parity shots at 1440/768/390 in `docs/ui/parity/after/`
+  - [ ] CI green; merged after PR 1
 
 - [ ] W5 Export (merged), W6 Share, W8 Series and reminders, W9 Sprints, W10 Integrations (spec section 15)
 - [x] W7 Translate (merged 2026-11-04 as #71 `e0386cd`, branch `feature/w7-translate`): see `docs/sop/2026-11-04-w7-translate.md`

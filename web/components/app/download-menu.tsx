@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
@@ -47,6 +47,7 @@ export function DownloadMenu({
   hasTranscript,
   language = "en",
   onNotReady,
+  trailing,
 }: {
   meetingId: number;
   title: string;
@@ -56,6 +57,8 @@ export function DownloadMenu({
   language?: NoteLanguage;
   // The server said the notes are not ready (409): the page's own state is stale, so refetch it.
   onNotReady: () => void;
+  // Sits after the Download button in the same row (the designer's "Share notes" button).
+  trailing?: ReactNode;
 }) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const [transcript, setTranscript] = useState(false);
@@ -136,6 +139,7 @@ export function DownloadMenu({
           </span>
         </>
       )}
+      {trailing}
       </div>
       {state.kind === "working" ? (
         <div className="dl-status">

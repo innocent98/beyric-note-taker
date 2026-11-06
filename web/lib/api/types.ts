@@ -40,6 +40,11 @@ export type ProjectChanges = Partial<Schemas["ProjectPatch"]>;
 export type Milestone = Schemas["MilestoneOut"];
 export type MilestoneList = Schemas["MilestoneList"];
 export type MeetingMilestones = Schemas["MeetingMilestones"];
+export type Share = Schemas["ShareOut"];
+export type ShareList = Schemas["ShareList"];
+export type ShareCreated = Schemas["ShareCreated"];
+export type ShareBody = Schemas["ShareIn"];
+export type ShareRecipient = Schemas["ShareRecipientOut"];
 
 export type Team = Schemas["TeamOut"];
 export type TeamRole = Team["my_role"];

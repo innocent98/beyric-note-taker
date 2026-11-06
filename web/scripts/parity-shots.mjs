@@ -97,6 +97,20 @@ const SCREENS = {
     true,
     [LANG("French", 3800), { text: "Download", wait: 300 }],
   ],
+  // Share notes (W6). The designer's dialog opens from the "Share notes" button of the meeting page; the
+  // toast and "Shared with ..." follow Send. "Add email" and the unsubscribe page have no prototype
+  // (lead-designed): Next alone. Meeting 9 is the sample with a participant who is not on the team.
+  "app-share-dialog": [APP, [OPEN_ZOOM, ["Share notes", "first", 300]], "/meetings/8", true, [{ text: "Share notes", wait: 300 }]],
+  "app-share-sent": [
+    APP,
+    [OPEN_ZOOM, ["Share notes", "first", 300], ["Send notes", "first", 300]],
+    "/meetings/8",
+    true,
+    [{ text: "Share notes", wait: 300 }, { text: "Send notes", wait: 600 }],
+  ],
+  "app-share-add-email": [null, [], "/meetings/9", true, [{ text: "Share notes", wait: 300 }, { text: "Add email", wait: 200 }]],
+  "app-unsubscribe": [null, [], "/unsubscribe?token=tok", false],
+  "app-unsubscribe-done": [null, [], "/unsubscribe?token=tok", false, [{ text: "Stop these emails", wait: 600 }]],
   // Decisions and Review (the designer's states: run the mock with --decisions/--review failed|empty|loading
   // and the design copy with its "Preview states" default changed, see the SOP). Live list, the
   // inline remove ask and its toast, the rewrite offer, the row errors, the checked rows.
