@@ -5,15 +5,15 @@ import { Alert, Button, Icon, PageHead, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
-import type { Project, ProjectChanges, ProjectList } from "@/lib/api/types";
+import type { Project, ProjectChanges, ProjectList, Team } from "@/lib/api/types";
 import { PROJECT_COLOURS } from "@/lib/brand";
+import { lengthLabel, SPRINT_LENGTHS } from "@/lib/sprints";
 import { longDay, swatchClass } from "@/lib/tasks";
 
 const COLOURS = PROJECT_COLOURS;
 const SAVE_AFTER_MS = 600;
-// The designer's Sprint length list (Workspace default first); the select is switched off until
-// sprints exist (W9).
-const SPRINT_LENGTHS = ["1 week, 5 working days", "1 week, 7 days", "2 weeks", "1 month, 30 days", "3 months", "6 months"] as const;
+// The Sprint length list of a project: the designer's, Workspace default first, without Custom.
+const PROJECT_LENGTHS = SPRINT_LENGTHS.filter(([value]) => value !== "custom");
 
 // The Projects screen (the designer's `isProjects`): the list on the left, and on the right the
 // stats, Name, Colour, Recurring meetings, Keywords, Sprint length, Milestone and Delete project.
@@ -22,11 +22,13 @@ const SPRINT_LENGTHS = ["1 week, 5 working days", "1 week, 7 days", "2 weeks", "
 // admin of the team may change anything (`can_manage`); a member sees the same screen with the
 // fields switched off and no New project or Delete.
 //
-// Switched off with one "Not available yet" line each, because their features are not built (the
-// same pattern as the Settings sections): Recurring meetings (W8), Sprint length (W9) and the two
-// sprint figures ("In current sprint", "In backlog"). Not in the designer's file, added here: the
-// "Only an owner or admin..." line for a member, and the empty list text.
-export function ProjectsView({ initial }: { initial: ProjectList | null }) {
+// W9: the two sprint figures ("In current sprint", "In backlog") and the Sprint length select are
+// live; "Workspace default (...)" names the team's length (`team`, left plain when it could not be
+// read). Setting a length gives the project its own sprints and moves its tasks into them.
+// Switched off with one "Not available yet" line, because its feature is not built (the same
+// pattern as the Settings sections): Recurring meetings (W8). Not in the designer's file, added here:
+// the "Only an owner or admin..." line for a member, and the empty list text.
+export function ProjectsView({ initial, team = null }: { initial: ProjectList | null; team?: Team | null }) {
   const [data, setData] = useState<ProjectList | null>(initial);
   const [failed, setFailed] = useState(initial === null);
   const [selected, setSelected] = useState<number | null>(initial?.projects[0]?.id ?? null);
@@ -180,16 +182,15 @@ export function ProjectsView({ initial }: { initial: ProjectList | null }) {
                 <div className="pj-stat-value">{current.open_tasks}</div>
                 <div className="pj-stat-label">Open tasks</div>
               </div>
-              <div className="pj-stat pj-stat-off">
-                <div className="pj-stat-value">–</div>
+              <div className="pj-stat">
+                <div className="pj-stat-value">{current.in_current_sprint}</div>
                 <div className="pj-stat-label">In current sprint</div>
               </div>
-              <div className="pj-stat pj-stat-off">
-                <div className="pj-stat-value">–</div>
+              <div className="pj-stat">
+                <div className="pj-stat-value">{current.in_backlog}</div>
                 <div className="pj-stat-label">In backlog</div>
               </div>
             </div>
-            <p className="meta pj-soon">The sprint figures are not available yet.</p>
             {!can ? <p className="meta pj-soon">Only an owner or admin of your team can change projects.</p> : null}
             {error ? <Alert kind="error">{error}</Alert> : null}
             <label className="pj-field">
@@ -276,13 +277,22 @@ export function ProjectsView({ initial }: { initial: ProjectList | null }) {
                 <label className="pj-label" htmlFor="pj-sprint">
                   Sprint length
                 </label>
-                <select id="pj-sprint" className="select" disabled defaultValue="">
-                  <option value="">Workspace default</option>
-                  {SPRINT_LENGTHS.map((label) => (
-                    <option key={label}>{label}</option>
+                <select
+                  id="pj-sprint"
+                  className="select"
+                  value={current.sprint_length ?? ""}
+                  disabled={!can}
+                  onChange={(event) => void save(current, { sprint_length: (event.target.value || null) as Project["sprint_length"] })}
+                >
+                  <option value="">
+                    {team ? `Workspace default (${lengthLabel(team.sprint_length, team.sprint_custom_days)})` : "Workspace default"}
+                  </option>
+                  {PROJECT_LENGTHS.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
                   ))}
                 </select>
-                <p className="meta pj-off-line">Not available yet.</p>
               </div>
               <div className="pj-field pj-half">
                 <span className="pj-label">Milestone</span>

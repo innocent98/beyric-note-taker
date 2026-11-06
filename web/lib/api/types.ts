@@ -49,6 +49,11 @@ export type ShareCreated = Schemas["ShareCreated"];
 export type ShareBody = Schemas["ShareIn"];
 export type ShareRecipient = Schemas["ShareRecipientOut"];
 
+export type Sprint = Schemas["SprintOut"];
+export type SprintList = Schemas["SprintList"];
+export type SprintClosed = Schemas["SprintClosed"];
+export type SprintLength = SprintList["sprint_length"];
+
 export type Team = Schemas["TeamOut"];
 export type TeamRole = Team["my_role"];
 export type TeamMember = Schemas["TeamMemberOut"];

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SettingsSlack } from "@/components/app/settings-slack";
+import { SettingsSprintRows } from "@/components/app/settings-sprints";
 import { SettingsTracker } from "@/components/app/settings-tracker";
 import { SettingsTasksRows } from "@/components/app/settings-tasks";
 import { SettingsRemindersRow } from "@/components/app/settings-reminders";
@@ -8,6 +9,7 @@ import type {
   LinearState,
   ReminderPreferences,
   SlackState,
+  SprintList,
   TasksSettings,
   Team,
 } from "@/lib/api/types";
@@ -76,20 +78,23 @@ function Text({ title, children }: { title: string; children?: ReactNode }) {
 
 // `tasks` makes the first two rows of the Tasks card live (Create tasks, Email assignees); without it
 // (the settings could not be read) they are drawn off like the rest.
-// `team` makes the reminders row live (owners and admins change it); without it (the team could not
-// be read) the row is drawn off like the sprint rows.
+// `team` makes the Sprint length and Monday to Friday rows (W9, with `sprints` giving the line under
+// "Sprint length") and the reminders row (W8) live (owners and admins change them); without it (the
+// team could not be read) the rows are drawn off.
 export function SettingsPlannedSections({
   tasks = null,
   slack = null,
   linear = null,
   team = null,
   reminderMail = null,
+  sprints = null,
 }: {
   tasks?: TasksSettings | null;
   slack?: SlackState | null;
   linear?: LinearState | null;
   team?: Team | null;
   reminderMail?: ReminderPreferences | null;
+  sprints?: SprintList | null;
 }) {
   // The Tasks card's rows that are still drawn off, named in its one "not available yet" line.
   const pending = [...(linear ? [] : ["Sync with your project tool"]), ...(slack ? [] : ["Post tasks to Slack"])];
@@ -102,22 +107,29 @@ export function SettingsPlannedSections({
               Sprints and reminders
             </h2>
             <p className="pl-sub">Workspace defaults. Projects can use their own sprint length.</p>
-            <p className="meta pl-soon">
-              {team ? "Sprint settings are not available yet." : "These settings are not available yet."}
-            </p>
+            {team ? null : <p className="meta pl-soon">These settings are not available yet.</p>}
+            {team && !team.can_manage ? (
+              <p className="meta pl-soon">Only an owner or admin of your team can change the sprint settings.</p>
+            ) : null}
           </div>
           <span className="pl-pill">Owners and admins</span>
         </div>
-        <div className="pl-row pl-row-center">
-          <Text title="Sprint length" />
-          <div className="pl-controls">
-            <Select label="Sprint length" size="pl-s36" defaultValue="week5" options={SPRINT_LENGTHS} />
-          </div>
-        </div>
-        <div className="pl-row">
-          <Text title="Open and close sprints at recurring meetings">Available for 1 week, 5 working day sprints.</Text>
-          <Switch label="Open and close sprints at recurring meetings" />
-        </div>
+        {team ? (
+          <SettingsSprintRows team={team} list={sprints} />
+        ) : (
+          <>
+            <div className="pl-row pl-row-center">
+              <Text title="Sprint length" />
+              <div className="pl-controls">
+                <Select label="Sprint length" size="pl-s36" defaultValue="week5" options={SPRINT_LENGTHS} />
+              </div>
+            </div>
+            <div className="pl-row">
+              <Text title="Open and close sprints at recurring meetings">Available for 1 week, 5 working day sprints.</Text>
+              <Switch label="Open and close sprints at recurring meetings" />
+            </div>
+          </>
+        )}
         {team ? (
           <SettingsRemindersRow team={team} />
         ) : (

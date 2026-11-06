@@ -5,6 +5,7 @@ import { Alert, AppLink, Button, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
 import type { Milestone, Project, Task, TaskChanges, TaskPerson } from "@/lib/api/types";
+import { type SprintBook, sprintChoices } from "@/lib/sprints";
 import { assignedLabel, COLUMNS, dueOptions, milestoneTitle, sourceLabel } from "@/lib/tasks";
 
 // The task drawer (the designer's `drawerOpen` panel): a side panel with the task's title, the
@@ -16,8 +17,9 @@ import { assignedLabel, COLUMNS, dueOptions, milestoneTitle, sourceLabel } from 
 //
 // Milestone and Project (W4) are drawn when the lists are given: a milestone is one of the team's
 // confirmed ones, a project one of its projects, and the "Check project" line, with its Confirm
-// button, shows while the filing was a guess. Choosing a project is the confirmation. Not drawn
-// here, because the data behind it does not exist yet: Sprint (W9). "Invite them to the team" opens the Team page
+// button, shows while the filing was a guess. Choosing a project is the confirmation. Sprint (W9) is
+// drawn when the sprints are given: Backlog, the current and the next sprint of the task's project
+// (planning is filing, so it is off unless `can_edit`). "Invite them to the team" opens the Team page
 // with its invite dialog filled in (W3); a member, who may not invite, is told to ask.
 export function TaskDrawer({
   task,
@@ -25,6 +27,7 @@ export function TaskDrawer({
   today,
   projects = null,
   milestones = [],
+  sprints = null,
   canInvite = false,
   onInvite,
   onChange,
@@ -38,6 +41,9 @@ export function TaskDrawer({
   // are then left out rather than drawn empty).
   projects?: Project[] | null;
   milestones?: Milestone[];
+  // The team's sprints and those of projects with their own length; `null` when they could not be
+  // read (the Sprint row is then left out).
+  sprints?: SprintBook | null;
   // An owner or admin of the team may invite the person a meeting named (`GET /api/team` `can_manage`).
   canInvite?: boolean;
   onInvite?: (spokenName: string) => void;
@@ -232,6 +238,24 @@ export function TaskDrawer({
                   {projects.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name || "Untitled project"}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
+            {sprints ? (
+              <>
+                <label htmlFor="td-sprint">Sprint</label>
+                <select
+                  id="td-sprint"
+                  className="select td-select"
+                  value={task.sprint_id === null ? "" : String(task.sprint_id)}
+                  disabled={!task.can_edit || busy}
+                  onChange={(event) => void save({ sprint_id: event.target.value ? Number(event.target.value) : null })}
+                >
+                  {sprintChoices(sprints, task).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
                     </option>
                   ))}
                 </select>

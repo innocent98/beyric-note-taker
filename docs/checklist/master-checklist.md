@@ -424,7 +424,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Opus review of the injection path and the mail (outcome in the SOP)
   - [ ] Server steps after merge: migrate (deploy does), then `docker compose exec web python scripts/backfill_extraction.py` once
   - [x] PR 2 (open, not merged): Tasks screen (D5), task drawer, meeting page Action items as tasks, meetings list task count, Settings Tasks card toggles live, parity shots under `docs/ui/parity/after/`
-  - [ ] Waits for W3: teammate filter chips, "Invite them to the team" in the drawer. Waits for W4: project tabs, project badge, "Check project", milestone select and card. Waits for W9: sprint selector, sprint header and Close sprint, Backlog view, Carried over. Waits for W8: the unfinished-tasks chip on Recurring cards
+  - [ ] Waits for W3: teammate filter chips, "Invite them to the team" in the drawer. Waits for W4: project tabs, project badge, "Check project", milestone select and card. W9 built (screens PR 2, 2026-11-06): sprint selector, sprint header and Close sprint, Backlog view, Carried over. Waits for W8: the unfinished-tasks chip on Recurring cards
 - [ ] W3 Team (Opus: permissions, invites, slot reservation). Backend PR 1 #97 (merged 2026-11-05, `d0b60b6`, migration 0026) and screens PR 2 #98 `feature/w3-team-screens` (open). SOP `docs/sop/2026-11-05-w3-team-backend.md`; FE guide `docs/fe-integration-guide-team.md` with `docs/fe-captures/team-w3/`
   - [x] Migration 0026 (`team_invites`, `teams.share_new_meetings`); sits on 0025, check `alembic heads` at merge
   - [x] Invitations: hashed single-use token (7 days), resend (a minute apart), revoke, caps (10 open, 20 a day); "Team invite" mail as drawn (`Emails.dc.html`); public `GET /api/team/invites/preview` for the link page
@@ -446,8 +446,8 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] Tasks API: `project`/`milestone` filters, `project_id`/`milestone_id`/`check_project` on a task and in PATCH, `attention.check_project`
   - [x] Route enumeration extended; FE guide from live captures (`scripts/capture_projects_api.py`)
   - [x] PR 2 screens (#102; SOP `docs/sop/2026-11-06-w4-projects-ui.md`): Projects (D6), project tabs, milestone card, drawer Project and Milestone and "Check project", meeting page Milestone row and lead-designed "Set milestone" with Confirm; parity shots under `docs/ui/parity/after/`
-  - [ ] Waits for W8: Recurring meetings list on a project and the series filing rule. Waits for W9: Sprint length on a project and the "In current sprint" and "In backlog" stats
-- [ ] W9 Sprints (2026-11-06). Backend PR 1 `feature/w9-sprints-backend` (stacked on `feature/w4-projects-backend`; not merged) and screens PR 2 `feature/w9-sprints-screens` (not started). SOP `docs/sop/2026-11-06-w9-sprints-backend.md`; FE guide `docs/fe-integration-guide-sprints.md` with `docs/fe-captures/sprints-w9/`
+  - [ ] Waits for W8: Recurring meetings list on a project and the series filing rule. W9 built (screens PR 2, 2026-11-06): Sprint length on a project and the "In current sprint" and "In backlog" stats
+- [ ] W9 Sprints (2026-11-06). Backend PR 1 `feature/w9-sprints-backend` (#108, merged) and screens PR 2 `feature/w9-sprints-screens` (built 2026-11-06; SOP `docs/sop/2026-11-06-w9-sprints-ui.md`). SOP `docs/sop/2026-11-06-w9-sprints-backend.md`; FE guide `docs/fe-integration-guide-sprints.md` with `docs/fe-captures/sprints-w9/`
   - [x] Migration 0031 (`sprints`, `teams.sprint_length/sprint_custom_days/sprint_align_weekdays`, `projects.sprint_length`, `tasks.sprint_id/carried`); down_revision 0028, re-point when 0029/0030 merge first
   - [x] `app/sprints.py`: windows for every length of the Settings list, a current and a next sprint per series (team's, and a project's own), advisory lock per team
   - [x] Hourly scheduler job `rollover_sprints` closes ended sprints in the team's zone and carries unfinished tasks; "Close sprint" does the same early (next starts today, end date unchanged)
@@ -455,7 +455,7 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [x] API: `GET /api/sprints?project=`, `POST /api/sprints/{id}/close` (owner/admin; member 403; other team 404; not current 409), `sprint_id`/`carried` on tasks, `?sprint=none|current|next|<id>` filter, sprint fields on `GET`/`PATCH /api/team` and `PATCH /api/projects/{id}`, project stats `in_current_sprint`/`in_backlog`
   - [x] Cross-team ids refused everywhere (`sprint_not_on_team` 422 on tasks, 404 on sprint and project ids); joining a team or leaving one puts tasks in the Backlog
   - [ ] Opus review of the permission checks (see the SOP)
-  - [ ] PR 2 screens: sprint selector, sprint header and Close sprint, Backlog view, Carried over badge, drawer Sprint select, Settings sprints card (D12), project Sprint length and the two stats
+  - [x] PR 2 screens (2026-11-06): sprint selector, sprint header and Close sprint, Board / Backlog tabs, Backlog view with a Sprint select per row, Carried over badge, drawer Sprint select (also on the meeting page's drawer), Settings sprint length and Monday to Friday switch (D12; the reminders row stays off for W8), project Sprint length and the two stats. Parity table in the SOP; nothing lead-designed except as listed there
   - [ ] Waits for W8 merging: the sprint line under "Next meeting" and its sprint rows on the series page (small follow-up once #104 and #105 are in main)
 
 ### W6 Share notes by email (2026-11-05)

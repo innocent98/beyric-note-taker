@@ -73,10 +73,11 @@ describe("for everyone else", () => {
 });
 
 describe("the sprint rows", () => {
-  it("stay off, with one 'not available yet' line that is about sprints", () => {
-    render(<SettingsPlannedSections team={team} />);
-    expect(within(card()).getAllByText(/not available yet/i)).toHaveLength(1);
-    expect(within(card()).getByText("Sprint settings are not available yet.")).toBeTruthy();
-    expect((within(card()).getByRole("combobox", { name: "Sprint length" }) as HTMLSelectElement).disabled).toBe(true);
+  // W9 made them live: Sprint length and the Monday to Friday switch answer for the owner and admin,
+  // and the card no longer carries a "not available yet" line (docs/sop/2026-11-06-w9-sprints-ui.md).
+  it("are live, with no 'not available yet' line", () => {
+    render(<SettingsPlannedSections team={{ ...team, sprint_length: "week5", sprint_custom_days: 10, sprint_align_weekdays: true }} />);
+    expect(within(card()).queryAllByText(/not available yet/i)).toHaveLength(0);
+    expect((within(card()).getByRole("combobox", { name: "Sprint length" }) as HTMLSelectElement).disabled).toBe(false);
   });
 });

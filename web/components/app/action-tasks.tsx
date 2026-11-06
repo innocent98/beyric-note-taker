@@ -5,6 +5,7 @@ import { TaskDrawer } from "@/components/app/task-drawer";
 import { useToday } from "@/components/app/use-today";
 import { AppLink, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
+import { loadSprintBook, type SprintBook } from "@/lib/sprints";
 import type { Milestone, Project, Task, TaskPerson } from "@/lib/api/types";
 import { actionSummary, avatarTone, dueLabel, personInitials } from "@/lib/tasks";
 
@@ -19,6 +20,7 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
   const [people, setPeople] = useState<TaskPerson[]>([]);
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [sprints, setSprints] = useState<SprintBook | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
   const [failed, setFailed] = useState<number | null>(null);
 
@@ -31,8 +33,11 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
         // the drawer still opens; the assignee list is just short
       }
       try {
-        setProjects((await api.projects.list()).projects);
+        const read = (await api.projects.list()).projects;
+        setProjects(read);
         setMilestones((await api.milestones.list()).milestones);
+        // The Sprint row (W9); left out when the sprints cannot be read.
+        setSprints(await loadSprintBook(api, read));
       } catch {
         // the Project and Milestone rows are then left out of the drawer
       }
@@ -119,6 +124,7 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
           today={today}
           projects={projects}
           milestones={milestones}
+          sprints={sprints}
           onChange={(next) => setTasks((all) => all.map((t) => (t.id === next.id ? next : t)))}
           onDelete={(id) => {
             setTasks((all) => all.filter((t) => t.id !== id));

@@ -4,10 +4,38 @@ import { Icon } from "@/components/ui";
 import type { Task } from "@/lib/api/types";
 import { avatarTone, dueLabel, personInitials, sourceLabel, swatchClass } from "@/lib/tasks";
 
+// The badges row, on a card and on a Backlog row: the project (dot and name, or "No project") while
+// the board shows every project, "Carried over" and "Check project". Nothing when there is none.
+export function TaskBadges({
+  task,
+  project = null,
+  showProject = false,
+}: {
+  task: Task;
+  project?: { name: string; color: string } | null;
+  showProject?: boolean;
+}) {
+  const carried = task.carried && task.status !== "done";
+  if (!showProject && !carried && !task.check_project) return null;
+  return (
+    <div className="tk-badges">
+      {showProject ? (
+        <span className="tk-proj">
+          <span className={`tk-proj-dot ${swatchClass(project?.color)}`} />
+          {project ? project.name || "Untitled project" : "No project"}
+        </span>
+      ) : null}
+      {carried ? <span className="tk-carried">Carried over</span> : null}
+      {task.check_project ? <span className="tk-check">Check project</span> : null}
+    </div>
+  );
+}
+
 // A task as the board draws it (the designer's card): the title, a "New" pill, the meeting it came
 // from, the due day and who has it, or "Needs owner". Titles and sources are plain text, always.
 // The badges row: the project (dot and name, or "No project") while the board shows every project,
-// and "Check project" when the filing was a guess. "Carried over" waits for sprints (W9).
+// "Carried over" when a closed sprint left it unfinished (W9), and "Check project" when the filing
+// was a guess, in that order.
 export function TaskCard({
   task,
   today,
@@ -53,17 +81,7 @@ export function TaskCard({
         <Icon name="video" size={12} />
         <span>{sourceLabel(task)}</span>
       </div>
-      {showProject || task.check_project ? (
-        <div className="tk-badges">
-          {showProject ? (
-            <span className="tk-proj">
-              <span className={`tk-proj-dot ${swatchClass(project?.color)}`} />
-              {project ? project.name || "Untitled project" : "No project"}
-            </span>
-          ) : null}
-          {task.check_project ? <span className="tk-check">Check project</span> : null}
-        </div>
-      ) : null}
+      <TaskBadges task={task} project={project} showProject={showProject} />
       <div className="tk-card-foot">
         <span className={`tk-due${done ? " tk-due-done" : task.due_date === today ? " tk-due-today" : ""}`}>
           <Icon name="calendar" size={12} />

@@ -170,6 +170,12 @@ export function projectsBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/projects-w4", file))).response.body as T;
 }
 
+// The body of a capture from the running API for the sprint routes
+// (docs/fe-captures/sprints-w9/<file>, `python scripts/capture_sprints_api.py`).
+export function sprintsBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/sprints-w9", file))).response.body as T;
+}
+
 // A capture from the running API for the Share routes (docs/fe-captures/share/<file>,
 // `python scripts/capture_share_api.py`).
 export function shareCapture(file: string): { request: { body: unknown }; response: { status: number; body: unknown } } {

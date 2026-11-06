@@ -5,7 +5,7 @@ import { AppShell } from "@/components/app/shell";
 import { ApiError } from "@/lib/api/client";
 import { APP_PATHS, NEXT_PAGES, isNextPage } from "@/lib/routes";
 import type { CalendarState } from "@/lib/api/types";
-import { calendarBody, read, WEB } from "./helpers";
+import { calendarBody, read, sprintsBody, WEB } from "./helpers";
 import { join } from "node:path";
 
 // The server half of /settings/calendar, and where it sits in the app's routes and sidebar.
@@ -36,6 +36,7 @@ vi.mock("@/lib/api/server", () => ({
         },
       },
       templates: { list: async () => (state.templates ? state.templates() : []) },
+      sprints: { list: async () => sprintsBody("09-sprints-first.json") },
       settings: {
         email: { get: async () => ({ notify_email: true }) },
         language: { get: async () => ({ default_language: "en" }) },
@@ -51,7 +52,7 @@ vi.mock("@/lib/api/server", () => ({
           get: async () => ({ connected: false, status: null, last_error: null, last_posted_at: null, can_manage: true }),
         },
       },
-      team: { get: async () => ({ id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true }) },
+      team: { get: async () => ({ id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", sprint_length: "week5", sprint_custom_days: 10, sprint_align_weekdays: true, my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true }) },
     };
   },
   getReviewOpen: async () => 2,

@@ -47,6 +47,10 @@ const { values } = parseArgs({
 // Team: `--role owner|admin|member` is the caller's role on the sample team (default owner). Invitation links:
 // token "new" is for an address with no account, "existing" for owner@example.test, "onteam" is refused with
 // 409 already_on_team, anything else answers 400 invite_invalid.
+// Sprints (W9): the designer's own, Sprint 11 closed (Mon 26 Oct to Fri 30 Oct), Sprint 12 current (Mon 2 to
+// Fri 6 Nov), Sprint 13 next, tasks filed as in the prototype. `GET /api/sprints`, Close sprint, the sprint fields
+// of tasks, projects and `PATCH /api/team` behave as docs/fe-captures/sprints-w9/ shows (in memory); dates are
+// fixed to the prototype's week, so run the page with a clock of 2026-11-02 (parity-shots `--now`).
 // Decisions and Review: `--decisions live|loading|failed|empty|retry-loading` and `--review ...` (same words)
 // pick what those lists answer (the captures in docs/fe-captures/ai-workspace-w1/; `loading` answers
 // after 4 s, `failed` is a 500, `empty` has no item). Removing, checking and adding a term answer the
@@ -114,7 +118,7 @@ const summary = ({ id, title, platform, native_id, status, step, status_text, st
 // sample team (Adebayo Tosin owner, Daniel Okoro admin, Amara Nwosu and Ojebola Grace members, Kemi
 // Adeyemi invited). `--role member` shows the screen as a member sees it. Writes change it in memory.
 const teamRole = values.role ?? "owner";
-const team = { id: 1, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both" };
+const team = { id: 1, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", sprint_length: "week5", sprint_custom_days: 10, sprint_align_weekdays: true };
 const teamMembers = [
   { user_id: 2, name: "Adebayo Tosin", email: "adebayo@beyrictech.com", role: "owner", aliases: ["Tosin", "Adebayo", "s12Adebayo"], open_tasks: 3 },
   { user_id: 3, name: "Daniel Okoro", email: "daniel@beyrictech.com", role: "admin", aliases: ["Daniel", "Dan"], open_tasks: 2 },
@@ -196,9 +200,106 @@ tasks.push(
 for (const t of tasks) if ([1, 3, 5, 8, 9, 10, 11, 12].includes(t.id)) t.milestone_id = 1;
 tasks.find((t) => t.id === 6).check_project = true;
 const proposal = { id: 2, name: "Beta release", due_date: "2026-11-20", project_id: 2, source_meeting: refOf(8, "Zoom 88205679674", "2026-11-02"), quote: "We want the beta out by the twentieth of November.", confirmed_at: null, task_count: 0, done_count: 0 };
+
+// Sprints (W9). The shapes are the ones in docs/fe-captures/sprints-w9/; the values are the designer's:
+// Sprint 11 closed, Sprint 12 current (Mon 2 to Fri 6 Nov 2026), Sprint 13 next. A series is the team's, or a
+// project's own when it has a sprint length of its own; its ids are the sprint number (team) or 1000 x project id
+// plus the number (own). Dates follow the designer's `spInfo` from the number, so they never drift.
+const TODAY = "2026-11-02";
+const LENGTHS = { week5: { days: 5, step: 7 }, week7: { days: 7, step: 7 }, week14: { days: 14, step: 14 }, month1: { days: 30, step: 30 }, month3: { months: 3 }, month6: { months: 6 } };
+const dayIso = (d) => d.toISOString().slice(0, 10);
+const plusDays = (day, n) => dayIso(new Date(Date.parse(`${day}T00:00:00Z`) + n * 864e5));
+const plusMonths = (day, n) => {
+  const d = new Date(`${day}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + n);
+  return dayIso(d);
+};
+let seriesList = [];
+function resetSprints() {
+  team.sprint_length = "week5";
+  team.sprint_custom_days = 10;
+  team.sprint_align_weekdays = true;
+  seriesList = [{ pid: null, base: 12, current: 12, closed: [{ number: 11, early: false }] }];
+  for (const t of tasks) {
+    t.sprint_id = { 1: 12, 2: 12, 5: 12, 6: 12, 8: 12, 9: 12, 10: 12, 11: 11, 12: 11, 4: 13, 13: 12 }[t.id] ?? null;
+    t.carried = [9, 10].includes(t.id);
+  }
+  for (const p of projects) p.sprint_length = null;
+}
+const lengthOf = (pid) => (pid === null ? team.sprint_length : (projects.find((p) => p.id === pid)?.sprint_length ?? team.sprint_length));
+const sprintId = (series, number) => (series.pid === null ? number : series.pid * 1000 + number);
+function windowOf(series, number) {
+  const length = lengthOf(series.pid);
+  const days = length === "custom" ? team.sprint_custom_days : LENGTHS[length].days;
+  const step = length === "custom" ? team.sprint_custom_days : LENGTHS[length].step;
+  const offset = number - series.base;
+  if (LENGTHS[length]?.months) {
+    const start = plusMonths(TODAY, offset * LENGTHS[length].months);
+    return { start_date: start, end_date: plusDays(plusMonths(start, LENGTHS[length].months), -1) };
+  }
+  const start = plusDays(TODAY, offset * step);
+  return { start_date: start, end_date: plusDays(start, days - 1) };
+}
+const seriesOf = (pid) => {
+  const owned = pid !== null && projects.find((p) => p.id === pid)?.sprint_length;
+  const want = owned ? pid : null;
+  let found = seriesList.find((x) => x.pid === want);
+  if (!found) seriesList.push((found = { pid: want, base: 1, current: 1, closed: [] }));
+  return found;
+};
+const roleIds = (role) => seriesList.map((x) => sprintId(x, role === "current" ? x.current : x.current + 1));
+function sprintOut(series, number, state, project) {
+  const id = sprintId(series, number);
+  const closed = series.closed.find((c) => c.number === number);
+  const window = windowOf(series, number);
+  const ids = state === "closed" || series.pid !== null ? [id] : roleIds(state);
+  const mine = tasks.filter((t) => ids.includes(t.sprint_id) && (project === undefined || project === null || t.project_id === project));
+  return {
+    id, number, name: `Sprint ${number}`, ...window, state,
+    closed_at: closed ? "2026-10-30T17:00:00Z" : null, closed_early: closed?.early ?? false,
+    tasks_total: mine.length, tasks_done: mine.filter((t) => t.status === "done").length,
+  };
+}
+function sprintList(pid) {
+  const series = seriesOf(pid);
+  const counting = pid !== null && series.pid === null ? pid : undefined;
+  const sprints = [
+    ...series.closed.slice(-20).map((c) => sprintOut(series, c.number, "closed", counting)),
+    sprintOut(series, series.current, "current", counting),
+    sprintOut(series, series.current + 1, "next", counting),
+  ];
+  return {
+    project_id: pid, own_series: series.pid !== null, today: TODAY, sprint_length: lengthOf(series.pid),
+    sprint_custom_days: team.sprint_custom_days, sprint_align_weekdays: team.sprint_align_weekdays,
+    sprints, current_id: sprintId(series, series.current), next_id: sprintId(series, series.current + 1), can_manage: manager(),
+  };
+}
+const notOnTeam = { error: { code: "sprint_not_on_team", message: "That sprint is not available for this task." } };
+// A task's own series' open sprints (what its select offers), and where a due date files it.
+const openIdsFor = (pid) => {
+  const series = seriesOf(pid);
+  return [sprintId(series, series.current), sprintId(series, series.current + 1)];
+};
+const fileByDue = (due, pid) => {
+  if (!due) return null;
+  const series = seriesOf(pid);
+  return due <= windowOf(series, series.current).end_date ? sprintId(series, series.current) : sprintId(series, series.current + 1);
+};
+// A task that changes project keeps its place in time (current stays current, next stays next).
+function rehome(task, fromPid, toPid) {
+  const from = seriesOf(fromPid);
+  const to = seriesOf(toPid);
+  if (from === to) return;
+  if (task.sprint_id === sprintId(from, from.current)) task.sprint_id = sprintId(to, to.current);
+  else if (task.sprint_id === sprintId(from, from.current + 1)) task.sprint_id = sprintId(to, to.current + 1);
+}
+resetSprints();
 const projectOut = (p) => ({
   ...p,
   open_tasks: tasks.filter((t) => t.project_id === p.id && t.status !== "done").length,
+  sprint_length: p.sprint_length ?? null,
+  in_current_sprint: tasks.filter((t) => t.project_id === p.id && t.status !== "done" && t.sprint_id === openIdsFor(p.id)[0]).length,
+  in_backlog: tasks.filter((t) => t.project_id === p.id && t.status !== "done" && t.sprint_id === null).length,
   milestone: (() => {
     const m = milestones.filter((x) => x.project_id === p.id && x.confirmed_at).sort((a, b) => (a.due_date < b.due_date ? -1 : 1))[0];
     return m ? { id: m.id, name: m.name, due_date: m.due_date } : null;
@@ -385,6 +486,7 @@ const server = http.createServer(async (req, res) => {
     armed.decisions = armed.review = true;
     slackConnected = false;
     resetProjects();
+    resetSprints();
     for (const t of tasks) t.milestone_id = [1, 3, 5, 8, 9, 10, 11, 12].includes(t.id) ? 1 : null;
     proposalOpen = true;
     linearConnected = false;
@@ -504,6 +606,18 @@ const server = http.createServer(async (req, res) => {
     if (!manager()) return json(res, 403, forbidden);
     if (typeof data?.share_new_meetings === "boolean") team.share_new_meetings = data.share_new_meetings;
     if (typeof data?.name === "string") team.name = data.name;
+    if ("sprint_length" in (data ?? {}) && data.sprint_length !== null) {
+      if (!Object.keys(LENGTHS).includes(data.sprint_length) && data.sprint_length !== "custom") return json(res, 422, { error: { code: "validation_error", message: "Some fields need attention.", fields: [{ field: "sprint_length", message: "Input should be a valid sprint length" }] } });
+      team.sprint_length = data.sprint_length;
+    }
+    if ("sprint_custom_days" in (data ?? {}) && data.sprint_custom_days !== null) {
+      if (!Number.isInteger(data.sprint_custom_days) || data.sprint_custom_days < 1 || data.sprint_custom_days > 365) return json(res, 422, { error: { code: "validation_error", message: "Some fields need attention.", fields: [{ field: "sprint_custom_days", message: "Input should be between 1 and 365" }] } });
+      team.sprint_custom_days = data.sprint_custom_days;
+    }
+    if (typeof data?.sprint_align_weekdays === "boolean") {
+      if (data.sprint_align_weekdays && team.sprint_length !== "week5") return json(res, 422, { error: { code: "align_needs_week5", message: "Only available for 1 week, 5 working day sprints." } });
+      team.sprint_align_weekdays = data.sprint_align_weekdays;
+    }
     if (typeof data?.reminders_on === "boolean") team.reminders_on = data.reminders_on;
     if (["1h", "30m", "both"].includes(data?.reminder_timing)) team.reminder_timing = data.reminder_timing;
     return json(res, 200, teamOut());
@@ -552,6 +666,33 @@ const server = http.createServer(async (req, res) => {
     found.shared_with_team = method === "POST";
     return json(res, 200, found);
   }
+  // Sprints (in memory): the board's list, and Close sprint.
+  if (path === "/api/sprints" && method === "GET") {
+    const asked = url.searchParams.get("project");
+    if (asked === null) return json(res, 200, sprintList(null));
+    const project = projects.find((p) => p.id === Number(asked));
+    if (!/^\d+$/.test(asked) || !project) return json(res, 404, { error: { code: "not_found", message: "No such project." } });
+    return json(res, 200, sprintList(project.id));
+  }
+  const closing = /^\/api\/sprints\/(\d+)\/close$/.exec(path);
+  if (closing && method === "POST") {
+    const id = Number(closing[1]);
+    const series = seriesList.find((x) => [...Array(40).keys()].some((n) => sprintId(x, x.current - 30 + n) === id));
+    if (!series) return json(res, 404, { error: { code: "not_found", message: "No such sprint." } });
+    if (!manager()) return json(res, 403, forbidden);
+    if (id !== sprintId(series, series.current)) return json(res, 409, { error: { code: "sprint_not_current", message: "Only the current sprint can be closed." } });
+    const moving = tasks.filter((t) => t.sprint_id === id && t.status !== "done");
+    const number = series.current;
+    const next = sprintId(series, number + 1);
+    for (const t of moving) Object.assign(t, { sprint_id: next, carried: true });
+    series.closed.push({ number, early: windowOf(series, number).end_date > TODAY });
+    series.current += 1;
+    return json(res, 200, {
+      closed: sprintOut(series, number, "closed"),
+      current: sprintOut(series, series.current, "current"),
+      moved: moving.length,
+    });
+  }
   // Projects and milestones (in memory).
   if (path === "/api/projects" && method === "GET") return json(res, 200, { projects: projects.map(projectOut), can_manage: teamRole !== "member" });
   if (path === "/api/projects" && method === "POST") {
@@ -573,7 +714,22 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(204);
       return res.end();
     }
-    if (method === "PATCH") Object.assign(project, data ?? {});
+    if (method === "PATCH") {
+      const { sprint_length: length, ...rest } = data ?? {};
+      Object.assign(project, rest);
+      if ("sprint_length" in (data ?? {})) {
+        if (length !== null && !Object.keys(LENGTHS).includes(length)) return json(res, 422, { error: { code: "validation_error", message: "Some fields need attention.", fields: [{ field: "sprint_length", message: "Input should be a valid sprint length" }] } });
+        // Its own pair, or back to the team's: its tasks keep their place in time.
+        const before = project.sprint_length ?? null;
+        const mine = tasks.filter((t) => t.project_id === project.id);
+        const from = seriesOf(before === null ? null : project.id);
+        const had = mine.map((t) => [t, t.sprint_id === sprintId(from, from.current) ? "current" : t.sprint_id === sprintId(from, from.current + 1) ? "next" : null]);
+        project.sprint_length = length;
+        if (length === null) seriesList = seriesList.filter((x) => x.pid !== project.id);
+        const to = seriesOf(length === null ? null : project.id);
+        for (const [t, place] of had) if (place) t.sprint_id = sprintId(to, to.current + (place === "next" ? 1 : 0));
+      }
+    }
     return json(res, 200, projectOut(project));
   }
   if (path === "/api/milestones" && method === "GET") return json(res, 200, { milestones: milestones.filter((m) => m.confirmed_at).map(milestoneOut) });
@@ -595,11 +751,19 @@ const server = http.createServer(async (req, res) => {
   // Tasks: the list, one task, the changes and the meeting's own list (in memory).
   if (path === "/api/tasks" && method === "GET") {
     const who = url.searchParams.get("assignee");
-    const list = tasks.filter((t) => (who === "me" ? t.assignee?.is_you : who === "none" ? !t.assignee : true));
+    const sprint = url.searchParams.get("sprint");
+    if (sprint !== null && !["none", "current", "next"].includes(sprint) && !/^\d+$/.test(sprint)) return json(res, 422, { error: { code: "validation_error", message: "Some fields need attention.", fields: [{ field: "sprint", message: "Use none, current, next or a sprint id" }] } });
+    const inSprint = (t) => (sprint === null ? true : sprint === "none" ? t.sprint_id === null : ["current", "next"].includes(sprint) ? roleIds(sprint).includes(t.sprint_id) : t.sprint_id === Number(sprint));
+    const list = tasks.filter((t) => (who === "me" ? t.assignee?.is_you : who === "none" ? !t.assignee : true) && inSprint(t));
     return json(res, 200, { tasks: list, people, attention: attention(), has_more: false, next_before_id: null });
   }
   if (path === "/api/tasks" && method === "POST") {
-    const made = makeTask(++nextTaskId, data?.title ?? "", data?.assignee_user_id ?? null, data?.due_date ?? null, data?.status ?? "todo", null, { created_at: new Date().toISOString() });
+    const pid = data?.project_id ?? null;
+    if (data && "sprint_id" in data && data.sprint_id !== null && !openIdsFor(pid).includes(data.sprint_id)) return json(res, 422, notOnTeam);
+    const made = makeTask(++nextTaskId, data?.title ?? "", data?.assignee_user_id ?? null, data?.due_date ?? null, data?.status ?? "todo", null, { created_at: new Date().toISOString(), project_id: pid });
+    // Left out: filed by the due date; null is the Backlog (the FE guide's field-nesting trap).
+    made.sprint_id = data && "sprint_id" in data ? data.sprint_id : fileByDue(made.due_date, pid);
+    made.carried = false;
     tasks.unshift(made);
     return json(res, 201, made);
   }
@@ -615,8 +779,13 @@ const server = http.createServer(async (req, res) => {
     if (method === "PATCH") {
       for (const [key, value] of Object.entries(data ?? {})) {
         if (key === "assignee_user_id") task.assignee = personOf(value);
-        else if (key === "project_id") Object.assign(task, { project_id: value, check_project: false });
-        else task[key] = value;
+        else if (key === "project_id") {
+          rehome(task, task.project_id, value);
+          Object.assign(task, { project_id: value, check_project: false });
+        } else if (key === "sprint_id") {
+          if (value !== null && !openIdsFor(task.project_id).includes(value)) return json(res, 422, notOnTeam);
+          Object.assign(task, { sprint_id: value, carried: false });
+        } else task[key] = value;
       }
       if (data?.status) task.is_new = false;
     }

@@ -18,6 +18,8 @@ export default async function ProjectsPage() {
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect("/login");
   }
+  // "Workspace default (...)" in the Sprint length select; without it the select says "Workspace default".
+  const team = await api.team.get().catch(() => null);
   return (
     <AppShell
       current="projects"
@@ -26,7 +28,7 @@ export default async function ProjectsPage() {
       unread={await getUnreadNotifications()}
       timeZone={await getTimeZone()}
     >
-      <ProjectsView initial={initial} />
+      <ProjectsView initial={initial} team={team} />
     </AppShell>
   );
 }
