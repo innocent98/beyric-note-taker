@@ -468,6 +468,30 @@ def _agreed_line(decisions: list[str]) -> str:
     return f"Last time the team agreed: {' '.join(sentences)}" if sentences else ""
 
 
+def _opens_text(
+    session: Session, user: User, found: Series, starts_at: datetime, zone: str | None
+) -> str | None:
+    opening = mail_summary.opening_sprint(session, user, found, starts_at, zone)
+    return f"{sprints.name_of(opening)} opens" if opening is not None else None
+
+
+def _extra(session: Session, found: Series, what: str, build, fallback):
+    """One of the one-hour mail's extras (the "Sprint N opens" text, the grey box). It is a nicety:
+    whatever goes wrong while working it out, the reminder is sent without it. This matters
+    because `mail.deliver_pending` ends a build that raises `ValueError` as a permanent "invalid
+    message" (no retry), so an extra that raised would cost the person the whole reminder. The
+    read runs in a savepoint, so a database error inside it leaves the rest of the mail's
+    queries a working transaction. Only the error's type is logged, as for any mail build."""
+    try:
+        with session.begin_nested():
+            return build()
+    except Exception as exc:
+        logger.warning(
+            "series %s: reminder sent without its %s (%s)", found.id, what, type(exc).__name__
+        )
+        return fallback
+
+
 @notes_template("series_reminder")
 def _series_reminder(
     session: Session, payload: dict, to: str, settings: Settings, now: datetime
@@ -503,9 +527,15 @@ def _series_reminder(
     when = _when(reminder.starts_at, ends, zone)
     meta = [when, platform]
     if one_hour:
-        opening = mail_summary.opening_sprint(session, user, found, reminder.starts_at, zone)
-        if opening is not None:
-            meta.append(f"{sprints.name_of(opening)} opens")
+        opening_text = _extra(
+            session,
+            found,
+            "sprint line",
+            lambda: _opens_text(session, user, found, reminder.starts_at, zone),
+            None,
+        )
+        if opening_text:
+            meta.append(opening_text)
     blocks: list[Block] = [
         Pill(pill),
         Heading(name, after=4),
@@ -584,8 +614,14 @@ def _series_reminder(
     if len(blocks) <= header:
         return Skip("nothing_to_say")
     if one_hour:
-        sentences = mail_summary.summary_sentences(
-            session, user, found, reminder.starts_at, today, settings, now
+        sentences = _extra(
+            session,
+            found,
+            "summary box",
+            lambda: mail_summary.summary_sentences(
+                session, user, found, reminder.starts_at, today, settings, now
+            ),
+            [],
         )
         if sentences:
             blocks.append(SummaryBox(" ".join(sentences)))
