@@ -227,6 +227,11 @@ NOT_JOINED = "meeting_not_joined"
 # sends the note taker again; None draws no button, because the backend for it does not exist yet
 # (no dead buttons). Nothing else in the mail changes.
 SEND_AGAIN_PATH: str | None = None
+# The designer's words, shared with the bell entry that goes with the mail (`app/pipeline.py`).
+NOT_JOINED_TITLE = "The note taker could not join your meeting"
+NOT_JOINED_REASON = (
+    "This usually happens when the host does not let the note taker in from the waiting room."
+)
 
 
 def not_joined_payload(
@@ -253,11 +258,11 @@ OWN_PAYLOAD_TEMPLATES = frozenset({NOT_JOINED})
 
 
 def _not_joined(payload: dict, to: str, settings: Settings) -> Message:
-    """The designer's "Could not join" (`Emails.dc.html:137-149`): sent when the note taker could
-    not get into a meeting before the deadline. Account-style (the payload is text, scrubbed once
-    sent). Queued by `app/join_runner.py` through `alerts.notify_user`, which has already checked
-    the account's email switch and the suppression list, so it follows the same opt-out as the
-    alert it replaces; the footer's Email preferences link goes to the switch."""
+    """The designer's "Could not join" (`Emails.dc.html:137-149`): sent when a bot was sent to a
+    meeting and not admitted. Account-style (the payload is text, scrubbed once sent). Queued by
+    `app/pipeline.py` (`_tell_not_admitted`) through `alerts.notify_user`, which has already
+    checked the account's email switch and the suppression list, so it follows the same opt-out
+    as the alert it replaces; the footer's Email preferences link goes to the switch."""
     meeting, at = payload["meeting"], payload["at"]
     if not isinstance(meeting, str) or not isinstance(at, str):
         raise ValueError("a not-joined mail's meeting and time are text")
@@ -265,10 +270,9 @@ def _not_joined(payload: dict, to: str, settings: Settings) -> Message:
     base = settings.public_base_url.rstrip("/")
     subject = "Meeting not recorded"  # the bell's title, as the alert mail it replaces had
     blocks: list[Block] = [
-        Heading("The note taker could not join your meeting", after=10),
+        Heading(NOT_JOINED_TITLE, after=10),
         Para(
-            f"We tried to join {meeting} at {at} but were not admitted. This usually happens "
-            "when the host does not let the note taker in from the waiting room.",
+            f"We tried to join {meeting} at {at} but were not admitted. {NOT_JOINED_REASON}",
             after=16,
             strong=meeting,
         ),

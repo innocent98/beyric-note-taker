@@ -1,7 +1,7 @@
 # SOP: mails to the designer's file (UI parity batch 2, mails)
 
 ## What shipped
-> The designer's 'Could not join' mail is built and tested but not yet sent: wiring it to the pipeline's not-let-in failure (`bot_failure_reason` awaiting_admission_rejected/timeout, `app/pipeline.py` ~545-554) is a new notification (new bell kind, dedupe per meeting, also for manual sends) and needs Adebayo's OK and its own review. Follow-up.
+> The designer's 'Could not join' mail is now sent (2026-11-07, branch `feature/could-not-join-wiring`): see `docs/sop/2026-11-07-could-not-join-wiring.md`. Below, "not sent by anything yet" describes this PR as it merged.
 
 The reminder mails (1 hour and 30 minutes before), a new **"Could not join"** mail (template built; **not sent by anything yet**, see "Could not join: cause mapping"), and the wording of the verify, reset and notes-shared mails now follow `docs/ui/Beyric Note Taker redesign/Emails.dc.html`. Python only: no migration, no API shape, no screen. Branch `feature/mails-parity`, PR to `main` (number on the PR page; not merged by the author). Source of the differences: `docs/ui/audit-2026-11-07-pages-emails.md` rows E01 to E09 and E13.
 
@@ -32,7 +32,7 @@ The mail's words ("were not admitted ... the host does not let the note taker in
 
 | Cause | Where it is known | Gets the "Could not join" mail? |
 |---|---|---|
-| Waiting room not admitted (timeout) or host declined | The **meeting** fails in `app/pipeline.py` (`bot_failure_reason`: Vexa `completion_reason` `awaiting_admission_timeout` / `awaiting_admission_rejected`, `REASON_NOT_LET_IN`); Google refusing the bot's ask to join (`MEET_REFUSED`, `REASON_JOIN_REFUSED`) is the same family | **Yes, when wired** (nothing sends it today: this path sends no bell and no mail) |
+| Waiting room not admitted (timeout) or host declined | The **meeting** fails in `app/pipeline.py` (`bot_failure_reason`: Vexa `completion_reason` `awaiting_admission_timeout` / `awaiting_admission_rejected`, `REASON_NOT_LET_IN`); Google refusing the bot's ask to join (`MEET_REFUSED`, `REASON_JOIN_REFUSED`) is the same family | **Yes, wired** (`docs/sop/2026-11-07-could-not-join-wiring.md`: bell kind `meeting.not_admitted`, one per meeting) |
 | Host full, own bot limit, a note taker already on the code, send failed, event ended early, scheduler down | The **join row** in `app/join_runner.py` `_expire` (`skip_reason` `user_limit`, `code_in_use`, `not_recorded` after `no_capacity` or send failures; `ended`) | **No**: plain alert as before. None of these means "not admitted" |
 | Zoom blocked the bot, bot failed, recording failed, needs help | Pipeline (`REASON_*`) | No (different wording needed; not designed) |
 
@@ -101,7 +101,7 @@ Decisions and tradeoffs:
 - Opus review of #121 (head 49683ec; the PR merged as `08b9f78` before the fixes), two Medium findings and one Low, all three verified against the code and fixed in the follow-up PR (branch `fix/mail-summary-join-and-guard`) (see Shipped: "The join sentence follows the scheduler", "A failing extra never costs the reminder", "reads only the recipient's own calendar rows"). A `skipped/hours_cap` row within its deadline still gets the sentence because the runner retries it (`RETRYABLE_SKIPS`); drop `hours_cap` from the check if Adebayo reads "capped" as "will not join".
 - Decide whether the rebuilt closed-sprint total is good enough or needs a stored per-task record (see Shipped).
 - Not verified for the box and Sprint line: Gmail, Outlook and Apple Mail rendering, a real send, the live site. Checked in one desktop browser at 640px against the designer's card (all 13 compared properties identical on the box and on the meta line).
-- **Wire the Could-not-join mail** into the pipeline's not-let-in failure (see the cause mapping): needs the lead's and Adebayo's OK for the new bell entry and mail. The time to show is the moment the failure was seen.
+- ~~Wire the Could-not-join mail~~ done: `docs/sop/2026-11-07-could-not-join-wiring.md`.
 - C15b (send now), then flip `SEND_AGAIN_PATH`. Until then the mail says "you can send it again" with no button (the sentence is in the file; if he prefers, drop it until C15b).
 - Not designed by the designer, left as built: "Also on the agenda" (1-hour mail, typed agenda lines) uses the same capitals style; a future due date in the reminder rows uses the amber of "New tasks".
 - Opus review of #117 (head fb64015), "merge after fixes", and what was done: (1) payload built outside a guard in `_expire` and (2) the mail sent for causes that are not a refusal: both removed by reverting the wiring (`_expire` now has no payload code at all, so no guard is needed there; build the payload inside the guard when wiring); (3) a Teams join read "Google Meet": `titles._fallback` now names Microsoft Teams; (4) the time shown was the deadline: the helper takes the moment the news arrived, from the caller; (5) `mail.ALERT_LIKE`, above; (6) a payload-less queue of the template now sends the plain alert with a log line. Tests added for each (`tests/test_alerts.py`, `tests/test_mail_upgrade.py`, `tests/test_join_runner.py`). Not added, because the code path no longer exists: "payload builder raises, bell and state still written" (nothing in `_expire` builds a payload now; add it with the wiring).

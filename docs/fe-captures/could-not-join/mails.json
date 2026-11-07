@@ -1,0 +1,20 @@
+[
+  {
+    "template": "meeting_not_joined",
+    "payload": {
+      "at": "12:58 GMT+1",
+      "meeting": "Google Meet btp-tkio-gtb"
+    },
+    "subject": "Meeting not recorded",
+    "text": "The note taker could not join your meeting\n\nWe tried to join Google Meet btp-tkio-gtb at 12:58 GMT+1 but were not admitted. This usually happens when the host does not let the note taker in from the waiting room.\n\nIf the meeting is still running, you can send it again.\n\nYou received this because you sent the note taker to this meeting.\nEmail preferences: https://notes.example.test/settings#email-preferences"
+  },
+  {
+    "template": "meeting_not_joined",
+    "payload": {
+      "at": "12:58 GMT+1",
+      "meeting": "Google Meet ddd-eeee-fff"
+    },
+    "subject": "Meeting not recorded",
+    "text": "The note taker could not join your meeting\n\nWe tried to join Google Meet ddd-eeee-fff at 12:58 GMT+1 but were not admitted. This usually happens when the host does not let the note taker in from the waiting room.\n\nIf the meeting is still running, you can send it again.\n\nYou received this because you sent the note taker to this meeting.\nEmail preferences: https://notes.example.test/settings#email-preferences"
+  }
+]
