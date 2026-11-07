@@ -19,8 +19,8 @@ from tools.bakeoff.bakeoff import UTC, Context, Request, Response
 MEET = "https://meet.google.com/abc-defg-hij"
 START = datetime(2026, 11, 7, 10, 45, 0, tzinfo=UTC)
 BASE = datetime(2026, 11, 7, 10, 45, 1, tzinfo=UTC)
-SECRET_SKRIBBY = "sk_live_SKRIBBY_SECRET_0001"
-SECRET_RECALL = "RECALL_SECRET_KEY_0002"
+SECRET_SKRIBBY = "FAKE-KEY-FOR-TESTS-ONLY-SKRIBBY"
+SECRET_RECALL = "FAKE-KEY-FOR-TESTS-ONLY-RECALL"
 
 
 class FakeClock:
