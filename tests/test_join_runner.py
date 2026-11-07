@@ -336,6 +336,7 @@ def test_no_capacity_keeps_trying_until_the_deadline_then_ends_not_recorded(
     assert session.get(ScheduledJoin, waiting.id).last_error == NOT_RECORDED_TEXT
     assert [o.result for o in outcomes] == ["failed"]
     assert host.bots_sent == 1
+    assert "meeting_not_joined" not in [m.template for m in outbox(session)]  # host full
 
 
 def test_no_capacity_alerts_owner_and_admin_once_per_bucket(session, host, cal, ada):
@@ -407,6 +408,27 @@ def test_deadline_makes_failed_row_with_not_recorded_text(session, host, cal, ad
     [told] = notes(session, "calendar.not_recorded")
     assert told.user_id == ada.user.id and "not recorded" in told.body
     assert any(m.to_email == "ada@example.test" for m in outbox(session))  # and an email
+
+
+def test_the_not_recorded_mail_is_the_plain_alert_never_the_waiting_room_mail(
+    session, host, cal, ada
+):
+    """Every cause that ends a row here (host full, limits, send failures, an ended event, a
+    scheduler that was down) is not the waiting-room refusal the designed mail names."""
+    from app import mail_templates
+
+    join = materialise(session, ada, cal)
+    run(session, host, cal, at(15, 30))
+    run(session, host, cal, at(15, 31))  # and again: the row is closed, nothing more is queued
+    mails = [m for m in outbox(session) if m.to_email == "ada@example.test"]
+    assert [m.template for m in mails] == ["alert"]
+    assert mails[0].payload["title"] == "Meeting not recorded"
+    assert mail_templates.NOT_JOINED not in [m.template for m in outbox(session)]
+    [bell] = notes(session, "calendar.not_recorded")
+    assert (bell.title, bell.dedupe_key) == (
+        "Meeting not recorded",
+        f"calendar.not_recorded:{join.id}",
+    )
 
 
 def test_a_row_that_missed_its_deadline_long_ago_is_closed_without_telling_anyone(

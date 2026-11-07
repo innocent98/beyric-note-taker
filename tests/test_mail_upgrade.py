@@ -878,3 +878,73 @@ def test_only_the_opt_out_headers_are_allowed_in_any_case():
         ),
     )
     assert len(message.headers) == 2
+
+
+def test_could_not_join_mail_draws_send_it_again_only_when_c15b_turns_it_on(monkeypatch):
+    payload = {"meeting": "Google Meet btp-tkio-gtb", "at": "11:58 UTC"}
+    settings = make_settings()
+    plain = mail_templates.render_link(
+        mail_templates.NOT_JOINED, payload, "a@example.test", settings
+    )
+    assert "Google Meet btp-tkio-gtb" in plain.html and "11:58 UTC" in plain.text
+    assert "Send it again" not in plain.html and "Send it again" not in plain.text
+    monkeypatch.setattr(mail_templates, "SEND_AGAIN_PATH", "/send-again")
+    button = mail_templates.render_link(
+        mail_templates.NOT_JOINED, payload, "a@example.test", settings
+    )
+    assert (
+        "Send it again" in button.html and f"{settings.public_base_url}/send-again" in button.html
+    )
+
+
+def test_could_not_join_mail_escapes_what_it_is_given():
+    payload = {"meeting": "Zoom <b>1</b>", "at": "11:58 UTC"}
+    message = mail_templates.render_link(
+        mail_templates.NOT_JOINED, payload, "a@example.test", make_settings()
+    )
+    assert "<b>1" not in message.html and "&lt;b&gt;1" in message.html
+
+
+def test_could_not_join_payload_uses_the_stored_zone_utc_when_unset_or_unknown(session):
+    from tests.test_web import make_user
+
+    moment = datetime(2026, 11, 4, 11, 58, tzinfo=UTC)
+    user = make_user(session, "z@example.test")
+
+    def at(zone):
+        row = session.get(UserSettings, user.id) or UserSettings(user_id=user.id)
+        row.time_zone = zone
+        session.add(row)
+        session.commit()
+        return mail_templates.not_joined_payload(
+            session, user.id, "google_meet", "btp-tkio-gtb", moment
+        )
+
+    assert at(None) == {"meeting": "Google Meet btp-tkio-gtb", "at": "11:58 UTC"}
+    assert at("Africa/Lagos")["at"] == "12:58 GMT+1"
+    assert at("Not/AZone")["at"] == "11:58 UTC"  # a stored name the server does not know
+
+
+def test_a_teams_meeting_is_named_microsoft_teams_not_google_meet(session):
+    from tests.test_web import make_user
+
+    user = make_user(session, "t@example.test")
+    payload = mail_templates.not_joined_payload(
+        session, user.id, "teams", "1234", datetime(2026, 11, 4, 11, 58, tzinfo=UTC)
+    )
+    assert payload["meeting"] == "Microsoft Teams 1234"
+
+
+def test_a_could_not_join_row_with_no_fields_fails_safely_and_is_not_sent(session):
+    row = mail.enqueue(session, "a@example.test", mail_templates.NOT_JOINED, {})
+    session.commit()
+    mailer = FakeMailer()
+    mail.deliver_pending(session, mailer, make_settings(), datetime.now(UTC))
+    session.expire_all()
+    assert mailer.sent == []
+    assert session.get(MailOutbox, row.id).status == "failed"
+
+
+def test_could_not_join_is_loaded_and_held_like_the_alert_it_replaces():
+    assert mail.ALERT_LIKE == (mail.ALERT_TEMPLATE, mail_templates.NOT_JOINED)
+    assert mail_templates.NOT_JOINED in mail_templates.OWN_PAYLOAD_TEMPLATES

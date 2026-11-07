@@ -53,6 +53,7 @@ from tests.test_series import (  # noqa: F401  (fixtures and helpers used by nam
 from tests.test_web import make_settings
 
 SETTINGS = make_settings()
+OWNER_EMAIL = "owner@example.test"
 
 
 def queued(session, template_name=None):
@@ -347,8 +348,50 @@ def test_the_thirty_minute_mail_is_the_short_agenda(session, owner, daniel, week
     message = build(session, row, when)
     assert message.subject == "Starts in 30 minutes: Monday planning"
     assert "Which pricing model?" in message.text and "Budget review" in message.text
-    assert "Check on 2 unfinished tasks." in message.text
-    assert "Ship on Friday." not in message.text  # decisions belong to the longer mail
+    assert "Check on 2 unfinished tasks, including " in message.text
+    assert "to 11:55" not in message.text and "UTC" in message.text  # the start only, as drawn
+    # the one decision appears only in the closing sentence, with the link to the notes page
+    assert "Last time the team agreed: Ship on Friday." in message.text
+    assert message.text.count("Ship on Friday.") == 1
+    assert f"/meetings/{busy.id}" in message.html and "Read the full notes" in message.html
+
+
+def test_the_thirty_minute_mail_has_no_closing_sentence_without_a_readable_decision(
+    session, owner, daniel, weekly, busy, due
+):
+    add_line(session, weekly, owner, "Budget review")  # busy stays private to the owner
+    when = NOW + timedelta(minutes=26)
+    series_mail.queue_due_reminders(session, when)
+    row = next(r for r in queued(session, "series_reminder") if r.to_email == DANIEL_EMAIL)
+    text = build(session, row, when).text
+    assert "Last time the team agreed" not in text and "Read the full notes" not in text
+    assert "Ship on Friday." not in text
+    session.execute(Decision.__table__.update().values(hidden_at=NOW))  # nothing decided at all
+    session.commit()
+    owner_row = next(r for r in queued(session, "series_reminder") if r.to_email == OWNER_EMAIL)
+    assert "Read the full notes" not in build(session, owner_row, when).text
+
+
+def test_the_reminders_are_drawn_as_the_designer_drew_them(
+    session, owner, daniel, weekly, busy, due
+):
+    series_mail.queue_due_reminders(session, NOW)
+    row = next(r for r in queued(session, "series_reminder") if r.to_email == OWNER_EMAIL)
+    html = build(session, row).html
+    assert "background:#E6F1EE" in html and ">Starts in 1 hour</span>" in html
+    for label in (
+        "DECISIONS MADE",
+        "OPEN QUESTIONS TO SETTLE",
+        "STILL OPEN FROM LAST TIME",
+    ):
+        assert f'letter-spacing:0.04em;margin:0 0 8px">{label}</div>' in html, label
+    assert "LAST TIME, " in html
+    # the owner (or "Needs owner") sits under the title, the due text at the right
+    assert (
+        'Unassigned secret task<div style="font-size:12px;color:#6E7772">Needs owner</div>' in html
+    )
+    assert ">No due date</td>" in html
+    assert "Sprint 12 closed" not in html  # the grey summary box waits for the owner's OK
 
 
 def test_a_reminder_shows_the_last_meeting_only_to_someone_who_may_read_it(

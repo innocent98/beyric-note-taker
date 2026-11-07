@@ -411,3 +411,40 @@ def test_admin_mail_failure_never_raises_and_the_bell_still_has_it(session, admi
     monkeypatch.setattr(alerts.mail, "enqueue", boom)
     admin_notify(session)  # must not raise
     assert len(rows(session)) == 2
+
+
+def _own(**extra):
+    return {
+        "email_template": "meeting_not_joined",
+        "email_payload": {"meeting": "Google Meet btp-tkio-gtb", "at": "11:58 UTC"},
+        **extra,
+    }
+
+
+def test_a_template_with_its_own_fields_queues_them_once_and_the_bell_rings(session, user):
+    notify(session, user, **_own())
+    notify(session, user, **_own())  # same key: no second bell row and no second mail
+    [row] = outbox(session)
+    assert row.template == "meeting_not_joined"
+    assert row.payload == {"meeting": "Google Meet btp-tkio-gtb", "at": "11:58 UTC"}
+    assert len(rows(session, user)) == 1
+
+
+def test_a_template_with_its_own_fields_given_none_sends_the_plain_alert(session, user, caplog):
+    with caplog.at_level(logging.WARNING, logger="app.alerts"):
+        notify(session, user, email_template="meeting_not_joined")
+    [row] = outbox(session)
+    assert row.template == "alert" and row.payload["title"] == "Your calendar was disconnected"
+    assert "sent as a plain alert" in caplog.text
+
+
+def test_email_off_or_a_suppressed_address_gets_the_bell_but_no_such_mail(session, user):
+    session.add(UserSettings(user_id=user.id, notify_email=False))
+    session.commit()
+    notify(session, user, **_own())
+    assert outbox(session) == [] and len(rows(session, user)) == 1
+    other = make_user(session, "bo@example.test")
+    mail.suppress(session, "bo@example.test", "unsubscribed")
+    session.commit()
+    notify(session, other, **_own(dedupe_key="k2"))
+    assert outbox(session) == [] and len(rows(session, other)) == 1

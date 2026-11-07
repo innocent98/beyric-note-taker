@@ -304,7 +304,7 @@ def test_the_mail_is_the_designers_and_says_who_sent_it(api, session, meeting, o
     assert message.to == OUTSIDE and message.reply_to == owner.email
     assert message.subject.startswith("Adebayo Tosin shared meeting notes: ")
     assert "Adebayo shared meeting notes with you" in message.html
-    assert f"Sent by Adebayo Tosin ({owner.email}) using Beyric Note Taker." in message.html
+    assert f"Sent by {owner.email} using Beyric Note Taker." in message.html
     assert "The team agreed to ship on Friday." in message.html
     assert "Ship on Friday." in message.html and "Who pays for the pilot?" in message.html
     assert "Not in the mail" not in message.html  # abridged: four sections only

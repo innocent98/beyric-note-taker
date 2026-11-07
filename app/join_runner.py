@@ -488,6 +488,10 @@ def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) ->
             body=f'The note taker could not join "{name}" before the 15 minutes were up, '
             "so this meeting was not recorded.",
             dedupe_key=f"calendar.not_recorded:{join.id}",
+            # Plain alert mail. Every cause that ends a row here (host full, own limit, a note
+            # taker already on the code, a send that failed, an event that ended, a scheduler that
+            # was down) is NOT the waiting-room refusal the designed "Could not join" mail
+            # (`mail_templates.NOT_JOINED`) says, so that mail is not sent from here.
             email_template=alerts.ALERT_TEMPLATE,
         )
         alerts.notify_admins(

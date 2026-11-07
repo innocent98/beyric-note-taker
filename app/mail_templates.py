@@ -96,11 +96,13 @@ def _link_mail(
     payload: dict,
     to: str,
 ) -> Message:
+    # Spacing as drawn: 10 under the heading, 24 under the sentence, and the note 24 under the
+    # button (the button's own 4 px margin collapses into it, so the note carries all 24).
     blocks: list[Block] = [
-        Heading(heading),
-        Para(_with_greeting(payload, body)),
+        Heading(heading, after=10),
+        Para(_with_greeting(payload, body), after=24),
         Button(button, payload["link"]),
-        Para(f"{note}", muted=True),
+        Para(f"{note}", muted=True, before=24, after=0),
     ]
     return Message(
         to=to,
@@ -114,10 +116,10 @@ def _verify(payload: dict, to: str, settings: Settings) -> Message:
     return _link_mail(
         "Confirm your email for Beyric Note Taker",
         "Confirm your email address",
-        "Confirm this is your email to finish creating your Beyric Note Taker account.",
+        "Confirm this is your email to finish setting up your Beyric Note Taker account.",
         "Confirm email",
-        "The link works once and expires in 24 hours. If you did not create an account, "
-        "you can ignore this email.",
+        "This link expires in 24 hours. If you did not create an account, you can ignore this "
+        "email.",
         payload,
         to,
     )
@@ -130,8 +132,8 @@ def _reset(payload: dict, to: str, settings: Settings) -> Message:
         f"We received a request to reset the password for {to}. Use the button below to choose "
         "a new one.",
         "Choose a new password",
-        "The link works once and expires in 30 minutes. If you did not ask for this, ignore "
-        "this email: your password has not changed.",
+        "This link expires in 30 minutes. If you did not ask for this, your password will stay "
+        "the same.",
         payload,
         to,
     )
@@ -220,6 +222,74 @@ def _alert(payload: dict, to: str, settings: Settings) -> Message:
     )
 
 
+NOT_JOINED = "meeting_not_joined"
+# C15b (send now) turns the designer's "Send it again" button on by giving this the page path that
+# sends the note taker again; None draws no button, because the backend for it does not exist yet
+# (no dead buttons). Nothing else in the mail changes.
+SEND_AGAIN_PATH: str | None = None
+
+
+def not_joined_payload(
+    session: Session, user_id: int, platform: str, native_id: str, at: datetime
+) -> dict:
+    """What `_not_joined` reads: the meeting as the alerts name it ("Google Meet btp-tkio-gtb",
+    "Zoom 88205679674", "Microsoft Teams ...": platform and code only) and the moment the note
+    taker was refused, written in the owner's stored time zone ("11:58 GMT+1"; UTC when none is
+    stored or the stored name is not one the server knows). The caller passes the moment the news
+    arrived, never a later deadline. It reads the database, so a caller builds it inside the guard
+    that keeps a mail problem away from what it is really doing."""
+    zone = session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user_id))
+    local, label = timezones.localise(at, zone)
+    return {
+        "meeting": titles.alert_name(None, platform, native_id),
+        "at": f"{local:%H:%M} {label}",
+    }
+
+
+# Templates whose payload is their own fields, not the alert's title and body: queued without
+# that payload (a caller bug) they would fail as unknown at send time, so `alerts` sends the plain
+# alert instead and logs it.
+OWN_PAYLOAD_TEMPLATES = frozenset({NOT_JOINED})
+
+
+def _not_joined(payload: dict, to: str, settings: Settings) -> Message:
+    """The designer's "Could not join" (`Emails.dc.html:137-149`): sent when the note taker could
+    not get into a meeting before the deadline. Account-style (the payload is text, scrubbed once
+    sent). Queued by `app/join_runner.py` through `alerts.notify_user`, which has already checked
+    the account's email switch and the suppression list, so it follows the same opt-out as the
+    alert it replaces; the footer's Email preferences link goes to the switch."""
+    meeting, at = payload["meeting"], payload["at"]
+    if not isinstance(meeting, str) or not isinstance(at, str):
+        raise ValueError("a not-joined mail's meeting and time are text")
+    meeting, at = clean_line(meeting, 120), clean_line(at, 40)
+    base = settings.public_base_url.rstrip("/")
+    subject = "Meeting not recorded"  # the bell's title, as the alert mail it replaces had
+    blocks: list[Block] = [
+        Heading("The note taker could not join your meeting", after=10),
+        Para(
+            f"We tried to join {meeting} at {at} but were not admitted. This usually happens "
+            "when the host does not let the note taker in from the waiting room.",
+            after=16,
+            strong=meeting,
+        ),
+        # 24 above the button as drawn; with no button the card's own padding closes it
+        Para(
+            "If the meeting is still running, you can send it again.",
+            after=24 if SEND_AGAIN_PATH is not None else 0,
+        ),
+    ]
+    if SEND_AGAIN_PATH is not None:
+        blocks.append(Button("Send it again", f"{base}{SEND_AGAIN_PATH}"))
+    footer = "You received this because you sent the note taker to this meeting."
+    prefs = ("Email preferences", f"{base}/settings#email-preferences")
+    return Message(
+        to=to,
+        subject=subject,
+        text=render_text(blocks, footer, prefs),
+        html=render_html(subject, blocks, footer, prefs),
+    )
+
+
 CALENDAR_DISCONNECTED = "calendar_disconnected"
 
 
@@ -252,6 +322,7 @@ def _calendar_disconnected(payload: dict, to: str, settings: Settings) -> Messag
 
 LINK_TEMPLATES: dict[str, Callable[[dict, str, Settings], Message]] = {
     "alert": _alert,
+    NOT_JOINED: _not_joined,
     CALENDAR_DISCONNECTED: _calendar_disconnected,
     "verify_email": _verify,
     "reset_password": _reset,
@@ -683,7 +754,8 @@ def _notes_shared(
         transcript=None,
         generated_at=now,
     )
-    blocks: list[Block] = [Meta(meta), Heading(heading)]
+    # As drawn: the heading first (6 px under it), then the meeting's line with 20 under it.
+    blocks: list[Block] = [Heading(heading, after=6), Meta(meta, after=20)]
     if share.message:
         blocks.append(Quote(share.message))
     blocks += abridged_blocks(doc.sections, _mail_section_names(language))
@@ -729,7 +801,7 @@ def _notes_shared(
         now=now,
         ttl=OPT_OUT_TTL,
     )
-    footer = f"Sent by {sender_name} ({owner.email}) using Beyric Note Taker."
+    footer = f"Sent by {owner.email} using Beyric Note Taker."  # as drawn: the address only
     opt_out = (
         "Don't want these? Stop mail from Beyric Note Taker",
         f"{base}/unsubscribe?token={raw}",
