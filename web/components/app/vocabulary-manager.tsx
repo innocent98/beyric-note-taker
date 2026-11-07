@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Alert, Button, Card, EmptyState, Field, IconButton, PageHead } from "@/components/ui";
+import { Alert, Button, Card, Field, IconButton, PageHead } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { Term } from "@/lib/api/types";
@@ -68,27 +68,22 @@ export function VocabularyManager({ initial }: { initial: Term[] }) {
           />
           <Button disabled={adding}>{adding ? "Adding..." : "Add term"}</Button>
         </form>
-        {terms.length > 0 ? (
-          <>
-            <div className="count-line">{plural(terms.length, "term")}</div>
-            <ul className="list">
-              {terms.map((t) => (
-                <li className="term-row" key={t.id}>
-                  <span className="term-name">{t.term}</span>
-                  <IconButton
-                    icon="trash"
-                    tone="danger"
-                    label={`Delete ${t.term}`}
-                    disabled={removing !== null}
-                    onClick={() => void remove(t.id)}
-                  />
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <EmptyState title="No terms yet.">Add names and terms above and they will be spelled your way.</EmptyState>
-        )}
+        <div className="count-line">{plural(terms.length, "term")}</div>
+        <ul className="list">
+          {terms.map((t) => (
+            <li className="term-row" key={t.id}>
+              <span className="term-name">{t.term}</span>
+              <IconButton
+                icon="trash"
+                tone="danger"
+                label={`Remove ${t.term}`}
+                tooltip="Remove"
+                disabled={removing !== null}
+                onClick={() => void remove(t.id)}
+              />
+            </li>
+          ))}
+        </ul>
       </Card>
     </div>
   );

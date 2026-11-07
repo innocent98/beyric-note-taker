@@ -239,6 +239,7 @@
 .set-actions { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 22px 22px; }
 .set-body { display: flex; flex-direction: column; gap: 20px; padding: 20px 22px 22px; }
 .set-note { margin: 0; padding: 0 22px 14px; }
+.set-off-line { align-self: center; }
 .set-note-after { padding-top: 0; }
 .set-stack { display: flex; flex-direction: column; gap: var(--space-3); padding: 0 22px 22px; }
 .cal-account { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; margin: 0 22px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); }

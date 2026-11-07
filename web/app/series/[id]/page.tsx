@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { cache } from "react";
 import { AppShell } from "@/components/app/shell";
 import { SeriesView } from "@/components/app/series-view";
-import { getReviewOpen, getTasksNew, getTimeZone, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -31,7 +31,7 @@ export default async function SeriesPage({ params }: Props) {
       current="meetings"
       reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()}
-      unread={await getUnreadNotifications()}
+      unread={await getUnreadNotifications()} user={await getShellUser()}
       timeZone={await getTimeZone()}
     >
       <SeriesView initial={series} />

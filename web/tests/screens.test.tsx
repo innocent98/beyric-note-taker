@@ -283,7 +283,7 @@ describe("templates", () => {
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe("");
     await userEvent.type(screen.getByLabelText("Name"), "Standup");
     await userEvent.type(screen.getByLabelText("Instructions"), "One line per person.");
-    await userEvent.click(screen.getAllByRole("button", { name: "Add template" }).pop()!);
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(mocks.tplCreate).toHaveBeenCalledWith({ name: "Standup", instructions: "One line per person." });
     expect(await screen.findByRole("button", { name: /Standup/ })).toBeTruthy();
   });
@@ -294,7 +294,7 @@ describe("templates", () => {
     await userEvent.click(screen.getAllByRole("button", { name: "Add template" })[0]);
     await userEvent.type(screen.getByLabelText("Name"), "General");
     await userEvent.type(screen.getByLabelText("Instructions"), "x");
-    const submit = screen.getAllByRole("button", { name: "Add template" }).pop()!;
+    const submit = screen.getByRole("button", { name: "Save" });
     await userEvent.click(submit);
     expect((await screen.findByRole("alert")).textContent).toBe("A template with that name already exists.");
   });
@@ -400,11 +400,11 @@ describe("deleting a template", () => {
   it("discards an unsaved new template without asking or calling the server", async () => {
     render(<TemplatesEditor initial={templates} />);
     await userEvent.click(screen.getAllByRole("button", { name: "Add template" })[0]);
-    expect(names()).toContain("New template");
+    expect(names()).toContain("Untitled");
     await userEvent.click(deleteButton());
     expect(screen.queryByRole("group", { name: "Delete this template?" })).toBeNull();
     expect(mocks.tplRemove).not.toHaveBeenCalled();
-    expect(names()).not.toContain("New template");
+    expect(names()).not.toContain("Untitled");
     expect((screen.getByLabelText("Name") as HTMLInputElement).value).toBe(
       templates.slice().sort((a, b) => a.name.localeCompare(b.name))[0].name,
     );
@@ -437,12 +437,13 @@ describe("vocabulary", () => {
   it("deletes a term, and treats a 404 (already gone) as success", async () => {
     mocks.termRemove.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new ApiError(404, "not_found", "No such term"));
     render(<VocabularyManager initial={terms} />);
-    await userEvent.click(screen.getByRole("button", { name: "Delete Beyric" }));
+    await userEvent.click(screen.getByRole("button", { name: "Remove Beyric" }));
     expect(mocks.termRemove).toHaveBeenCalledWith(1);
     await act(async () => undefined);
     expect(screen.queryByText("Beyric")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Delete Acme Example" }));
+    await userEvent.click(screen.getByRole("button", { name: "Remove Acme Example" }));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.getByText("No terms yet.")).toBeTruthy();
+    expect(screen.getByText("0 terms")).toBeTruthy();
+    expect(screen.queryByText("No terms yet.")).toBeNull();
   });
 });

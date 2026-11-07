@@ -67,6 +67,12 @@ const SCREENS = {
   "app-vocabulary": [APP, [["Vocabulary", "first"]], "/vocabulary", true],
   // The two-step ask the design does not have (it deletes at once): Next alone, after pressing the button.
   "app-templates-ask": [null, [], "/templates", true, [{ text: "Delete template" }]],
+  // A new, unsaved row: the design's "Untitled" / "No instructions yet" and the plain Save button.
+  "app-templates-new": [APP, [["Templates", "first"], ["Add template", "first"]], "/templates", true, [{ text: "Add template" }]],
+  // The phone and tablet navigation (lead-designed, no prototype, so shot alone): the slim top bar
+  // with the drawer closed, and the drawer open. At 1440 both show the unchanged desktop sidebar.
+  "app-nav-closed": [null, [], "/tasks", true],
+  "app-nav-drawer": [null, [], "/tasks", true, [{ click: "Open menu", wait: 700, optional: true, viewport: true }]],
   // The calendar: the design's cal state is set by pressing "Connect Google Calendar" (it answers
   // after 1 s), so those clicks wait. The Next side shows what the mock's --calendar flag says.
   "app-settings": [APP, [["Settings", "first"]], "/settings", true],
@@ -301,7 +307,9 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
             : page.getByRole("combobox", { name: step.next });
         await field.first().selectOption({ label: step.select });
       } else if (step.click) {
-        await page.getByRole("button", { name: step.click, exact: step.exact }).first().evaluate((el) => el.click());
+        // `optional`: the button is not there at this width (the menu button is hidden on desktop).
+        const target = page.getByRole("button", { name: step.click, exact: step.exact }).first();
+        if (!step.optional || (await target.count()) > 0) await target.evaluate((el) => el.click());
       } else {
         await page.getByText(step.text, { exact: true }).first().evaluate((el) => el.click());
       }
@@ -314,7 +322,9 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
     await (which === "last" ? match.last() : match.first()).evaluate((el) => el.click());
     await page.waitForTimeout(wait ?? 400);
   }
-  const png = await page.screenshot({ fullPage: true });
+  // `viewport: true` on a step: shoot the window only (a fixed drawer is as tall as the window,
+  // not as the page).
+  const png = await page.screenshot({ fullPage: !clicks.some((step) => !Array.isArray(step) && step.viewport) });
   await context.close();
   return png;
 }
