@@ -1,17 +1,18 @@
 # Beyric Note Taker: master handoff
 
-**Written:** 2026-11-06, about 23:50 WAT, by the twelfth lead session, for the thirteenth lead (Adebayo starts it himself). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6, #11, #12, #22, #24, #39, #42, #50, #74, #78, #79, #93, #101, #110, and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail.
+**Written:** 2026-11-07, about 12:00 WAT, by the twelfth lead session (a second handoff in this session, after the first at 23:50 WAT on 2026-11-06), for the thirteenth lead (the twelfth starts it itself and then caps; Adebayo may also start it). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6, #11, #12, #22, #24, #39, #42, #50, #74, #78, #79, #93, #101, #110, #112, and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail.
 
 ## 00. Read this first
 
-- **No PR is open. Every W phase (W0 to W10) is built and live.** The twelfth lead merged the whole queue on 2026-11-06 (SOP `docs/sop/2026-11-06-merge-queue-w-phases.md`). The next job is the **bot-reliability decision** (section 2 and 6, step 1), then Phase C's remainder.
-- **Sessions:** the only session the twelfth lead started, `w9-sprint-screens` (`local_6163e9c5-70b3-4b24-9726-403bcd40e412`), is done. The earlier W-phase sessions from the eleventh lead (ids in the previous handoff) were **not found** on this machine: treat them as gone and start fresh sessions with a full brief when needed.
+- **Every W phase (W0 to W10) is built and live** (merge-queue SOP `docs/sop/2026-11-06-merge-queue-w-phases.md`). Today's work (2026-11-07) was research and a UI audit; the open items are in section 6.
+- **Open PRs when this was written:** **#113** (docs: UI audit, vendor and Recall research, checklist reconciliation, this handoff), waiting for Adebayo's "Merge #N" plus a clear meeting count. The UI session below will open one or two more.
+- **Running session (started by the twelfth lead):** `ui-parity-batch-2` = `local_c723bc11-cea3-42bc-99ff-ab0bbb934d1e` (Sonnet; PR A: mobile and tablet side drawer, sidebar identity, wording, Outlook switched-off row; PR B: "Set up your workspace", "Join your team", sign-in errors, landing buttons; branches `feature/ui-parity-batch-2a` and `-2b`). Its end-of-turn notes go to the twelfth lead, not to you: **find it with `mcp__ccd_session_mgmt__get_session` / `list_events` and message it with `SendMessage` to that id**. Done: `w9-sprint-screens` (`local_6163e9c5-70b3-4b24-9726-403bcd40e412`). The earlier W-phase sessions are gone from this machine.
 - **The auto-mode safety checker refuses:**
   - **any production read** (database queries, `docker compose logs`, the bot's log files): Adebayo runs these and pastes the result; for long output, give him a command that writes to a file in your scratchpad, then read the file;
-  - **a merge**, unless his "Merge #N" was said in YOUR chat (this session was given "merge all open PRs" plus "no meeting for 2 hours" and that worked);
+  - **a merge**, unless his "Merge #N" was said in YOUR chat; his earlier "no meeting for N hours" window must still be open (the twelfth lead asked again when it had lapsed);
   - **a force push** to a sub-session's branch;
-  - **a command that combines a local file read with the ssh line**: run each of `ssh haven-respite '...'` and `curl .../health` as its own command.
-- Adebayo likes plain words: purpose first, exact steps, an offer to do it for him. When he asks "where are we", answer from live commands, not memory.
+  - **a command that combines a local file read with the ssh line**: run each `ssh haven-respite '...'` and `curl .../health` as its own command.
+- Adebayo likes plain words: purpose first, exact steps, an offer to do it for him. **He challenges where facts come from**: before telling him a vendor or price fact, read the primary page yourself and say which pages you read (sub-agent summaries and the fetch tool's extracts are second-hand). When he asks "where are we", answer from live commands, not memory.
 
 ## 0. Mode and standing rules
 
@@ -27,9 +28,9 @@
 
 | Thing | State |
 |---|---|
-| Live app | https://notes.beyrictech.com healthy. **Server head `e0ad10b`** (#111, the last merge of the queue; deploy verified: 8 containers up, `/health` 200). Alembic head **0033** |
+| Live app | https://notes.beyrictech.com healthy. **Server head `4159b74`** (#112, docs), 8 containers up, `/health` 200 (verified 2026-11-06 23:43 WAT). Alembic head **0033** |
 | Migration chain on `main` | 0026, 0027, 0028, 0031, 0029, 0030, 0032, 0033 (merged out of order, one head). Next free number **0034** |
-| Open PRs | **None.** The queue merged: #96, #100, #102, #108, #99, #103, #104, #105, #107, #109, #111 (merge commits in the SOP) |
+| Open PRs | The docs PR (see section 00) and, soon, the UI session's PR A and PR B |
 | Auto-join | Live, his rule "All meetings with a video link". Today's real joins: the 14:00 meeting failed (our worker withdrew the knock, fixed by #106); the 16:00 calendar meeting (MYWAY PRODUCT & DEVELOPMENT STANDUP) was **refused by Google twice** ("Google would not let the bot ask to join", then Failed after "attempt 2 of 2"); a manual link a few minutes later was refused once and admitted on the second send; a later manual meeting worked fully (notes, summary) |
 | Server `.env` | Unchanged today. Microsoft variables exist since 2026-11-05 (`MICROSOFT_CALENDAR_ENABLED=false`). W6, W8 (reminders off per team until switched on), W9, W10 added no required variable. The server must reach `hooks.slack.com:443` and `api.linear.app:443` for W10 |
 | nginx | #99's opt-out line was run by him on 2026-11-06 (count 1, `nginx -t` ok) |
@@ -53,6 +54,16 @@
 - Vexa's signed-in mode is still blocked upstream (issue #1725 open; fix PR #1873 unmerged and now has conflicts) and unsupported on Lite.
 - **Proposed next step (awaiting his yes):** a one-week bake-off on real meetings, Skribby's free tier (5 bot hours a month) and Recall's 5 free hours, guest joins first (their IPs may do better than ours; no accounts needed) then a signed-in bot invited to the event; count joins, knocks and 403s ourselves. He signs up and pastes keys (the lead cannot create accounts); the lead writes a small script that runs from his Mac and logs outcomes, nothing deployed to the server.
 
+**Decisions and answers 2026-11-07** (Adebayo, in this chat):
+
+| Decision or answer | Why |
+|---|---|
+| Audit every designed screen against the live app; then fix the quick items and merge the audit as docs ("Yes, audit", "Yes, both") | The checklist was stale; he asked whether any UI build is pending (answer: no whole screen missing, but items remain, see section 6) |
+| **Mobile and tablet navigation becomes a professional side drawer** (hamburger, slide-over); today it is stacked at the top | His request. The designer drew desktop only, so this is **lead-designed**: label it so in the SOP. Inside the UI session's PR A |
+| Pasted answer claiming Recall needs no Workspace was checked and corrected | Recall bills no seats, but a **signed-in** Meet bot needs a dedicated Google Workspace with Legacy SSO that we create (Recall guide, read 2026-11-07); the pasted text mixed the calendar OAuth with the bot's own sign-in. Details in `docs/spike/meeting-bot-vendors.md` ("Lead verification") |
+| **Lead's recommendation on the bot (NOT yet his decision):** stay on Vexa as the engine for the pilot; make the bot layer swappable and add ONE hosted vendor as a second backend chosen by a one-week bake-off (Skribby free tier, Recall 5 free hours, guest first, then signed-in); move to hosted-first when any trigger fires: a vendor's measured join rate is materially better than ours, we need more than 2 concurrent bots (each Vexa bot uses about 1.4 cores on a shared VPS: Phase D, a bigger server), or server work keeps costing time | Cash is about equal at pilot size (50 recorded hours a month: self-hosted USD 22 to 40, hosted USD 25 to 41, plus the bot's Google account); hosting alone does not fix Google refusing anonymous guests; concurrency is where self-hosting gets costly. "Retry better" alone was rejected by him |
+| Bot account without a paid Workspace: three routes, none yet tried | (a) Workspace on `beyrictech.com` (hello@ becomes a Workspace user; about EUR 6.80 per user a month; works for Recall's SSO). (b) A free Google Account created with `hello@beyrictech.com` as its sign-in address ("use my existing email"; the lead's general knowledge, NOT verified on a page): a consumer account, no seat cost; Skribby accepts typed Gmail/Workspace logins (ask Skribby that this kind works) and Vexa's signed-in mode would too once #1725 is fixed and we leave Lite; **Recall cannot use it** (needs Workspace SSO). (c) A plain Gmail. Risks for (b) and (c): Google's terms on automated use of a consumer account are unverified; sign-ins from a datacenter may be challenged |
+
 ## 3. Designs, specs, plans
 
 - AI workspace spec `docs/superpowers/specs/2026-11-03-ai-workspace-design.md`; pilot spec `docs/superpowers/specs/2026-11-03-pilot-accounts-calendar-design.md`; plan `docs/superpowers/plans/2026-11-03-pilot-accounts-calendar.md`; Outlook spec `docs/superpowers/specs/2026-11-04-outlook-oauth-design.md`.
@@ -66,24 +77,28 @@ Built and live: modules 0 to 2b, accounts, Phase C up to C14, C15a, **W0 to W10 
 
 ## 5. Needs Adebayo
 
-- **The bot decision:** yes or no to the one-week bake-off (section 2), and sign-ups for Skribby and Recall (keys pasted into the chat, or put on the server by him). Also: does he accept recordings leaving our server (a vendor becomes a sub-processor in the privacy policy)?
-- **GitGuardian:** mark 39721275 (#96) and the repeats on #100, #102, #103, #104, #105, #107, #109, #111 as false positives (almost certainly Microsoft's public consumer-tenant GUID `9188040d-6c67-4c5b-b112-36a304b66dad`; GitHub does not show the location).
-- **W9's five backend choices** (still unconfirmed): Mon-Fri switch only affects "1 week, 5 working days"; a sprint closed early keeps its planned end date; the team zone is the owner's Settings zone; settings go through `PATCH /api/team`; existing tasks are not backfilled. **W9's three undrawn pieces** wait for the designer.
-- **Two Medium findings from the automated security review of W8** (his call): the agenda recipient count includes attendees of meetings the caller cannot read; series visibility from calendar rows. Details in the checklist's "Deferred follow-ups".
-- **Real-service checks not done:** a real Slack webhook and a real Linear key (W10); a real Resend send for W6; W8 reminders stay off until an owner or admin switches them on (the session suggests the Google policy wording lands first).
-- **Outlook M0 run** (about 20 minutes, at the keyboard): steps in `docs/spike/outlook-m0/README.md`; Partner Center verification for Beyrichq LTD.
-- **Transcription price:** confirm USD 0.0045 per audio minute on OpenAI's pricing page (it decides the comparison with a vendor's bundled transcript).
+- **Merge the docs PR** (his "Merge #N", with a stated clear window: a merge deploys and restarts the worker).
+- **The bot decision:** the lead's recommendation is in section 2; he has not said yes to the bake-off. It needs his sign-ups (Skribby, Recall; keys pasted or put on the server by him) and a choice of the bot's Google account (section 2, last row). Also: does he accept recordings leaving our server (a vendor becomes a sub-processor)?
+- **Read the UI audit** (`docs/ui/audit-2026-11-07-app.md`, `...-pages-emails.md`) and the designer items: the three undrawn W9 pieces, every lead-designed piece (including the new side drawer) to confirm or redraw, and "Join your team" (the built page differs from the file).
+- **GitGuardian:** mark 39721275 (#96) and the repeats on #100 to #111 as false positives (Microsoft's public consumer-tenant GUID; inferred).
+- **W9's five backend choices** (still unconfirmed): Mon-Fri switch only affects "1 week, 5 working days"; a sprint closed early keeps its planned end date; the team zone is the owner's Settings zone; settings go through `PATCH /api/team`; existing tasks are not backfilled.
+- **Two Medium findings from the automated security review of W8:** agenda recipient count; series visibility from calendar rows (checklist "Deferred follow-ups").
+- **Real-service checks not done:** a real Slack webhook and a real Linear key (W10); a real Resend send for W6; W8 reminders stay off until switched on.
+- **The landing line "at rest with AES-256"** conflicts with an SOP saying no disk encryption was set up: decide before Google verification.
+- **Outlook M0 run** (about 20 minutes): `docs/spike/outlook-m0/README.md`; Partner Center verification for Beyrichq LTD.
+- **Transcription price:** USD 0.0045 per audio minute is confirmed on OpenAI's pricing page (read by a research agent 2026-11-06).
 - **Google verification (Phase V):** demo video, scope justification, landing trim.
-- **For the designer:** confirm or redraw every lead-designed piece; each SOP lists them.
 - Older items: "Forgot password" real test, Android share-target test, backup cron (privacy promises 14-day deletion), keep a copy of `TOKEN_ENC_KEY`, Cloudflare proxy, hosting country/DPO/lawyer read, the mailboxes `privacy@`/`legal@`/`security@`, Search Console TXT, a Teams meeting for the Teams spike, the Resend plan (Free is 100 mails a day).
 
 ## 6. Incoming work, in order
 
-1. **Bot reliability.** On his yes: the bake-off script (a small, local, non-deployed tool; Skribby and Recall APIs; logs time, guest or signed-in, result, seconds to the lobby, reason). Then a decision, then an adapter behind `VexaClient` (`app/vexa.py`) for the chosen vendor, with Vexa kept as the fallback. Also still true: check the next meetings someone else hosts (the waiting-room fix is unverified when a host admits after the 12-minute warning) and a longer lobby budget if hosts admit after 15 minutes (`VEXA_LOBBY_BUDGET_S`).
-2. **Phase C remainder:** C15b ("Send now" and "Not recorded"), C16 (deploy gate: a deploy waits while a join is due), C18 (recording notice), then C17 (close-out with a phase Opus review), then ICS C19 to C24.
-3. **W8's sprint lines** (the sprint line under "Next meeting" and sprint rows on the series page): small follow-up, now unblocked.
-4. Outlook M2 to M8 (ships dark until Teams works); Teams T1 to T3; pre-sign-up PR 3; Phases D, I, V. Backlog: fail fast when Google refuses the bot, speaker name-order merge, keep `botlog.txt` for failed joins.
-5. **Housekeeping:** stale unticked or "open, not merged" lines still sit in older checklist sections (Phase A, Phase C C1 to C4, W2, W0.3); old worktrees under `.claude/worktrees/` can go with `mcp__ccd_host__clean_up_worktrees` (the lead's own `lead-w4` is one; it has a `node_modules` symlink to another worktree).
+1. **Follow the UI session `ui-parity-batch-2`** (section 00): check each PR (base `main`, CI green, no attribution, no `claude/` branch, the drawer labelled lead-designed, parity table and shots at 1440/768/390), then ask Adebayo for "Merge #N" and a clear window. Opus review only if he allows the spend (PR B touches auth screens: logic must be unchanged).
+2. **Mails parity session** (not started; brief it, Sonnet, Opus review of mail on his OK): reminder mails (teal pill, uppercase small grey labels, "Sprint 13 opens" and grey summary box, "Read the full notes" in the 30-minute mail), verify and reset wording ("finish setting up", "This link expires in...", "your password will stay the same"), the notes-shared footer, and the **"Could not join" email** (`Emails.dc.html:137-149`; its "Send it again" button needs C15b). Audit rows are in `docs/ui/audit-2026-11-07-pages-emails.md`.
+3. **Backend gaps found by the audit:** wire `filing.series_project()` and an endpoint that writes `Series.project_id`, then the Projects "Recurring meetings" list and "· M recurring meetings"; the sprint line under "Next meeting" (needs an API field and a rule); transcript turn times (not stored).
+4. **Bot reliability:** on his yes, the bake-off script (a small local tool run from his Mac, nothing deployed; Skribby and Recall APIs; logs time, guest or signed-in, result, seconds to the lobby, reason). Facts you need are in `docs/spike/recall-api-reference-read.md` (create bot, statuses and Google Meet fatal codes, transcript JSON, BYO transcription providers, retention, chat message for the recording notice, `join_at` at least 10 minutes ahead), `docs/spike/hosted-pivot-gladia-recall-cost.md` (cost table, Gladia is speech-to-text only) and `docs/spike/meeting-bot-vendors.md`. Still true: check the next meetings someone else hosts and a longer lobby budget (`VEXA_LOBBY_BUDGET_S`).
+5. **Phase C remainder:** C15b ("Send now" and "Not recorded"), C16 (deploy gate), C18 (recording notice; Recall's bot can post a Meet chat message), C17 (close-out with a phase Opus review), then ICS C19 to C24.
+6. Outlook M2 to M8 (ships dark until Teams works); Teams T1 to T3; pre-sign-up PR 3; Phases D, I, V. Backlog: fail fast when Google refuses the bot, speaker name-order merge, keep `botlog.txt` for failed joins.
+7. **Housekeeping:** older checklist sections still hold stale lines (Phase A, Phase C C1 to C4, W2, W0.3); old worktrees under `.claude/worktrees/` can go with `mcp__ccd_host__clean_up_worktrees` (the twelfth lead's `lead-audit` worktree is one); the parity shots need a reshoot after the W-phase merges.
 
 ## 7. How we work here
 
@@ -107,3 +122,8 @@ Built and live: modules 0 to 2b, accounts, Phase C up to C14, C15a, **W0 to W10 
   - merging a stacked base with `--delete-branch` closes its stacked PR unless it was retargeted first;
   - after a squash merge, every branch built on the old commits conflicts again: plan the order so each branch is updated once, and update the shared-file branches last;
   - an automated post-push security review can flag already-merged code: judge it, record it in the checklist, and do not patch mid-queue unless it is a real hole.
+  - **Copy research into the repo at once.** Scratchpad files (including two research reports) vanished during the session; one was recovered from the sub-agent's recorded transcript at `~/.claude/projects/<project>/<session>/subagents/agent-<id>.jsonl` (parse the `Write` tool_use inputs with Python; never print the transcript). The fetch tool returns a small model's extract of a page, not the raw page: say so.
+  - **Lead worktrees can be cleaned up by the app after merges**: recreate with `git worktree add --detach .claude/worktrees/<name> origin/main`.
+  - A combined `cat <file>; ssh ...` command is refused by the safety checker: one command, one purpose.
+  - The designer's main file is committed (#80); the main checkout's modified copy was identical to `origin/main`. It has no `@media` rules: phone and tablet layouts are ours.
+

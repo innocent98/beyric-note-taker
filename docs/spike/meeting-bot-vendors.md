@@ -182,3 +182,16 @@ I could not open Recall's trust/security pages (404), so its SOC 2 Type 2 report
 - Meet2Notes: https://api.github.com/repos/estebanstifli/Meet2Notes, https://github.com/estebanstifli/Meet2Notes (read)
 - Prismical: https://api.github.com/repos/amicalhq/prismical, https://github.com/amicalhq/prismical (read)
 - Platypus: https://api.github.com/repos/pixelsmasher13/platypus, https://github.com/pixelsmasher13/platypus (read)
+
+---
+
+## Lead verification, 2026-11-07
+
+The lead read these Recall pages himself (WebFetch summaries, not raw pages): pricing, home, customers, Meeting Bot API, getting-started, build-with-AI-agents, Calendar V2 guide, Calendar FAQ, the Google Meet product page and the Google Meet login guide, plus Google's Workspace pricing page. Results and corrections:
+
+- **Workspace seats.** Recall bills only per recorded hour; no seats. The Google Workspace requirement applies only to a **signed-in** Google Meet bot: the guide says "This setup requires administrative control of a dedicated bot Workspace", bot users must not be admins, Legacy SSO and a certificate are needed, and "Creating Recall resources does not create Google users". The seats are paid to Google. The default guest join needs none. Business Starter is EUR 6.80 per user per month on a one-year plan (EUR 6.12 for new customers' first 20 users from 2026-11-20); the earlier "USD 15.50 for two seats" used an unconfirmed exchange rate: say EUR 13.60.
+- **Calendar V2 is developer-driven.** We run the OAuth and call Recall's "Schedule Bot For Calendar Event"; the page does not say Recall joins by itself, and does not name scopes, price or limits. The Calendar API is free per the pricing page. Using it would make Recall hold customers' calendar refresh tokens: keep our own sync and call create-bot at join time (the lead's inference).
+- **Signed-in field name.** The earlier note's `google_meet.login_required` is not in the endpoint docs: see `docs/spike/recall-api-reference-read.md` (login group `login_mode`).
+- **No Recall page gives a join-success rate**; the home page's "99.9% vs 95%" graphic is unexplained.
+- Recall also sells a **Desktop Recording SDK** (records on the user's computer, no bot in the call, same USD 0.50 per hour) and Meeting Direct Connect (Zoom RTMS, Google Meet Media API).
+- Not read: the endpoint-level docs were read by a separate agent on 2026-11-07 (`docs/spike/recall-api-reference-read.md`); the cost model is in `docs/spike/hosted-pivot-gladia-recall-cost.md`.
