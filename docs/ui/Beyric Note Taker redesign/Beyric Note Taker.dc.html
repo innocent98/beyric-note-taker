@@ -259,6 +259,7 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
                                 <div style="color:{{ a.titleFg }};text-decoration:{{ a.strike }};line-height:1.45">{{ a.titleShown }}</div>
                                 <div style="font-size:12px;color:{{ a.dueFg }};display:flex;align-items:center;gap:5px;margin-top:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>{{ a.dueLabel }}</div>
                               </div>
+                              <sc-if value="{{ a.suggested }}"><span style="font-size:11px;font-weight:600;color:#9A5B00;background:#FFF4E0;padding:2px 8px;border-radius:999px;white-space:nowrap">To confirm</span></sc-if>
                               <sc-if value="{{ a.assigned }}"><span style="display:flex;align-items:center;gap:6px;font-size:12px;color:#2E3532;white-space:nowrap"><span style="width:22px;height:22px;border-radius:50%;background:{{ a.avBg }};color:{{ a.avFg }};font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ a.initials }}</span>{{ a.assigneeName }}</span></sc-if>
                               <sc-if value="{{ a.unassigned }}"><span style="font-size:11px;font-weight:600;color:#9A5B00;background:#FFF4E0;padding:2px 8px;border-radius:999px;white-space:nowrap">Needs owner</span></sc-if>
                             </div>
@@ -283,7 +284,7 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
                 <sc-if value="{{ onTranscript }}" hint-placeholder-val="{{ false }}">
                   <div style="padding:8px 20px 20px;display:flex;flex-direction:column">
                     <sc-for list="{{ transcript }}" as="l" hint-placeholder-count="8">
-                      <div style="display:grid;grid-template-columns:32px minmax(0,1fr);gap:12px;padding:12px 0;border-bottom:1px solid #F0F2F1">
+                      <div id="tl-{{ l.time }}" style="display:grid;grid-template-columns:32px minmax(0,1fr);gap:12px;padding:12px 10px;margin:0 -10px;border-bottom:1px solid #F0F2F1;border-radius:8px;background:{{ l.hlBg }}">
                         <div style="width:32px;height:32px;border-radius:50%;background:{{ l.avBg }};color:{{ l.avFg }};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600">{{ l.initials }}</div>
                         <div>
                           <div style="display:flex;gap:10px;align-items:baseline"><span style="font-weight:600;font-size:13px">{{ l.name }}</span><span style="font-family:'Geist Mono',monospace;font-size:12px;color:#8A928E">{{ l.time }}</span></div>
@@ -508,6 +509,10 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
             <div onClick="{{ toggleAutoTasks }}" style="width:36px;height:20px;border-radius:999px;background:{{ autoTasks.track }};position:relative;flex:none;cursor:pointer;margin-top:2px"><div style="position:absolute;top:2px;left:{{ autoTasks.knob }};width:16px;height:16px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(20,25,23,0.25)"></div></div>
           </div>
           <div style="display:flex;gap:16px;justify-content:space-between;padding:14px 22px;border-bottom:1px solid #F0F2F1">
+            <div><div style="font-size:14px;font-weight:550">Ask before adding unclear tasks</div><div style="font-size:12px;color:#6E7772">Clear commitments like "I'll take checkout" are added straight away. Vague or conditional ones wait under Suggested tasks.</div></div>
+            <div onClick="{{ toggleAskUnclear }}" style="width:36px;height:20px;border-radius:999px;background:{{ askUnclearTg.track }};position:relative;flex:none;cursor:pointer;margin-top:2px"><div style="position:absolute;top:2px;left:{{ askUnclearTg.knob }};width:16px;height:16px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(20,25,23,0.25)"></div></div>
+          </div>
+          <div style="display:flex;gap:16px;justify-content:space-between;padding:14px 22px;border-bottom:1px solid #F0F2F1">
             <div><div style="font-size:14px;font-weight:550">Email assignees</div><div style="font-size:12px;color:#6E7772">Send each person a list of their new tasks after the meeting.</div></div>
             <div onClick="{{ toggleEmailAssignees }}" style="width:36px;height:20px;border-radius:999px;background:{{ emailAssignees.track }};position:relative;flex:none;cursor:pointer;margin-top:2px"><div style="position:absolute;top:2px;left:{{ emailAssignees.knob }};width:16px;height:16px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 2px rgba(20,25,23,0.25)"></div></div>
           </div>
@@ -556,6 +561,51 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
         </section>
       </div>
     </sc-if>
+    <sc-if value="{{ isAsk }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:18px;max-width:840px" data-screen-label="Ask Beyric">
+        <div>
+          <h1 style="margin:0;font-size:24px;font-weight:650;letter-spacing:-0.02em">Ask Beyric</h1>
+          <p style="margin:4px 0 0;color:#5B6460">Ask about anything said, decided or assigned in your meetings. Every answer links to the moment it came from.</p>
+        </div>
+        <div style="background:#FFFFFF;border:1px solid #D5DBD8;border-radius:14px;padding:6px 6px 6px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 1px 2px rgba(20,25,23,0.04)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A928E" stroke-width="2" stroke-linecap="round" style="flex:none"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input value="{{ askInput }}" onChange="{{ onAskInput }}" onKeyDown="{{ onAskKey }}" placeholder="e.g. What did we decide about pricing?" style="flex:1;min-width:0;height:44px;border:0;outline:none;font-size:15px;background:transparent;color:#141917">
+          <button onClick="{{ askNow }}" style="height:40px;padding:0 18px;border:0;border-radius:9px;background:#0E6B5E;color:#FFFFFF;font-size:14px;font-weight:550;cursor:pointer" style-hover="background:#0A5248">Ask</button>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <sc-for list="{{ askSuggestions }}" as="q"><button onClick="{{ q.go }}" style="height:32px;padding:0 12px;border:1px solid #D5DBD8;border-radius:999px;background:#FFFFFF;color:#2E3532;font-size:13px;cursor:pointer" style-hover="border-color:#0E6B5E;color:#0A5248">{{ q.text }}</button></sc-for>
+        </div>
+        <div style="font-size:12px;color:#6E7772">{{ askScope }}</div>
+        <sc-for list="{{ askThread }}" as="x">
+          <section style="background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;overflow:hidden">
+            <div style="padding:14px 18px;border-bottom:1px solid #EDF0EE;display:flex;align-items:center;gap:10px"><span style="width:26px;height:26px;border-radius:50%;background:#E6F1EE;color:#0E6B5E;font-size:10px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">AT</span><span style="font-weight:600">{{ x.q }}</span></div>
+            <div style="padding:16px 18px 18px">
+              <sc-if value="{{ x.loading }}"><div style="color:#5B6460;font-size:14px;display:flex;gap:10px;align-items:center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A8AFAB" stroke-width="2.2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"></path></svg>Searching your meetings...</div></sc-if>
+              <sc-if value="{{ x.ready }}">
+                <div style="display:flex;flex-direction:column;gap:14px">
+                  <p style="margin:0;font-size:15px;line-height:1.65;color:#141917;text-wrap:pretty">{{ x.lead }}</p>
+                  <sc-if value="{{ x.hasPoints }}">
+                    <div style="display:flex;flex-direction:column;gap:12px">
+                      <sc-for list="{{ x.points }}" as="p">
+                        <div style="display:flex;gap:12px;align-items:flex-start">
+                          <span style="flex:none;width:5px;height:5px;border-radius:50%;background:#0E6B5E;margin-top:10px"></span>
+                          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+                            <span style="line-height:1.55;color:#2E3532">{{ p.text }}</span>
+                            <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ p.cites }}" as="c"><button onClick="{{ c.open }}" style="display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border:1px solid #DCEAE6;border-radius:999px;background:#F3F9F7;color:#0A5248;font-size:12px;font-weight:550;cursor:pointer" style-hover="border-color:#0E6B5E"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="m16 10.5 5-3v9l-5-3"></path></svg>{{ c.label }}</button></sc-for></div>
+                          </div>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ x.none }}"><div style="font-size:13px;color:#6E7772">Try asking about a person, a project, a decision or a date.</div></sc-if>
+                </div>
+              </sc-if>
+            </div>
+          </section>
+        </sc-for>
+      </div>
+    </sc-if>
+
     <sc-if value="{{ isProjects }}" hint-placeholder-val="{{ false }}">
       <div style="display:flex;flex-direction:column;gap:24px" data-screen-label="Projects">
         <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap">
@@ -642,6 +692,36 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
               <button onClick="{{ shareAgenda }}" style="height:34px;padding:0 14px;border:0;border-radius:8px;background:#0E6B5E;color:#FFFFFF;font-size:13px;font-weight:550;cursor:pointer" style-hover="background:#0A5248">Send agenda to attendees</button>
             </div>
             <div style="padding:20px;display:flex;flex-direction:column;gap:24px">
+              <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">
+                <sc-for list="{{ srScore }}" as="x"><div style="background:#F6F7F6;border-radius:10px;padding:12px 14px"><div style="font-size:22px;font-weight:650;letter-spacing:-0.02em;color:{{ x.fg }}">{{ x.v }}</div><div style="font-size:12px;color:#5B6460">{{ x.label }}</div></div></sc-for>
+              </div>
+              <sc-if value="{{ srHasTopics }}">
+                <div>
+                  <h2 style="margin:0 0 4px;font-size:15px;font-weight:600">Keeps coming up</h2>
+                  <div style="font-size:12px;color:#6E7772;margin-bottom:10px">Topics discussed in more than one meeting without a decision.</div>
+                  <div style="display:flex;flex-direction:column;gap:8px">
+                    <sc-for list="{{ srTopics }}" as="x">
+                      <div style="display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border:1px solid #F3DDB0;background:#FFFBF2;border-radius:10px">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A5B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:3px"><path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5"></path></svg>
+                        <div style="flex:1;min-width:0"><div style="font-weight:550">{{ x.t }}</div><div style="font-size:12px;color:#7A4A00">{{ x.d }}</div><div style="font-size:12px;color:#6E7772">{{ x.when }}</div></div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+              </sc-if>
+              <div>
+                <h2 style="margin:0 0 4px;font-size:15px;font-weight:600">Suggested agenda</h2>
+                <div style="font-size:12px;color:#6E7772;margin-bottom:10px">Built from repeat topics, overdue work, open questions and tasks to confirm.</div>
+                <div style="border:1px solid #E3E7E5;border-radius:10px;overflow:hidden">
+                  <sc-for list="{{ srSuggest }}" as="x">
+                    <div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid #F0F2F1">
+                      <span style="width:22px;height:22px;border-radius:6px;background:#EEF1F0;color:#4A524E;font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">{{ x.n }}</span>
+                      <span style="flex:1;min-width:0">{{ x.text }}</span>
+                      <button onClick="{{ x.add }}" style="flex:none;height:28px;padding:0 10px;border:1px solid {{ x.border }};border-radius:7px;background:{{ x.bg }};color:{{ x.fg }};font-size:12px;font-weight:550;cursor:pointer;white-space:nowrap">{{ x.label }}</button>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
               <div>
                 <h2 style="margin:0 0 4px;font-size:15px;font-weight:600">Unfinished from last time</h2>
                 <div style="font-size:12px;color:#6E7772;margin-bottom:10px">Tasks from earlier meetings in this series that are not done yet.</div>
@@ -719,41 +799,72 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
     </sc-if>
 
     <sc-if value="{{ isDecisions }}" hint-placeholder-val="{{ false }}">
-      <div style="display:flex;flex-direction:column;gap:20px;max-width:820px" data-screen-label="Decisions">
+      <div style="display:flex;flex-direction:column;gap:20px;max-width:880px" data-screen-label="Decisions">
         <div>
           <h1 style="margin:0;font-size:24px;font-weight:650;letter-spacing:-0.02em">Decisions</h1>
-          <p style="margin:4px 0 0;color:#5B6460">Decisions made in your meetings, newest first.</p>
+          <p style="margin:4px 0 0;color:#5B6460">Decisions made in your meetings, with their status and the tasks that carry them out.</p>
         </div>
         <sc-if value="{{ decLoading }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:10px;padding:16px 18px;background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;color:#5B6460;font-size:14px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A8AFAB" stroke-width="2.2" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"></path></svg>Loading decisions...</div></sc-if>
         <sc-if value="{{ decFailed }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 18px;background:#FDF3F2;border:1px solid #F5D0CC;border-radius:12px;color:#7A271A;font-size:14px"><span style="display:flex;align-items:center;gap:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#B42318" stroke-width="2" stroke-linecap="round" style="flex:none"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5M12 16h.01"></path></svg>Could not load decisions. Check your connection and try again.</span><button onClick="{{ retryDecisions }}" style="height:32px;padding:0 12px;border:1px solid #E9B8B2;border-radius:7px;background:#FFFFFF;color:#7A271A;font-size:13px;font-weight:550;cursor:pointer">Try again</button></div></sc-if>
         <sc-if value="{{ decEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:36px 24px;text-align:center;border:1px dashed #D5DBD8;border-radius:12px;display:flex;flex-direction:column;gap:4px;align-items:center"><div style="font-weight:600">No decisions yet.</div><div style="font-size:13px;color:#6E7772;max-width:420px">Decisions made in your meetings will appear here after each meeting ends.</div></div></sc-if>
         <sc-if value="{{ decReady }}" hint-placeholder-val="{{ true }}">
-        <div style="display:flex;flex-direction:column;gap:20px">
-        <div style="display:flex;align-items:center;gap:8px;height:40px;padding:0 12px;border:1px solid #D5DBD8;border-radius:8px;background:#FFFFFF">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A928E" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
-          <input value="{{ decisionQuery }}" onChange="{{ onDecisionQuery }}" placeholder="Search decisions" style="flex:1;min-width:0;border:0;outline:none;font-size:14px;background:transparent">
-        </div>
-        <sc-for list="{{ decisionGroups }}" as="g" hint-placeholder-count="3">
-          <section style="background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;overflow:hidden">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid #EDF0EE;background:#FAFBFA">
-              <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:13px;font-weight:600">{{ g.date }}</span><span style="font-size:13px;color:#5B6460">{{ g.title }}</span></div>
-              <sc-if value="{{ g.canOpen }}"><button onClick="{{ g.open }}" style="border:0;background:transparent;padding:0;color:#0E6B5E;font-size:13px;font-weight:550;cursor:pointer;white-space:nowrap">Open notes</button></sc-if>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+            <div style="display:flex;padding:2px;background:#EEF1F0;border-radius:8px;flex-wrap:wrap">
+              <sc-for list="{{ decTabs }}" as="t"><button onClick="{{ t.pick }}" style="height:30px;padding:0 12px;border:0;border-radius:6px;background:{{ t.bg }};color:{{ t.fg }};font-size:13px;font-weight:550;cursor:pointer;box-shadow:{{ t.shadow }};display:flex;align-items:center;gap:6px">{{ t.label }}<span style="font-size:11px;color:#6E7772">{{ t.count }}</span></button></sc-for>
             </div>
-            <div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+            <div style="flex:0 1 280px;display:flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid #D5DBD8;border-radius:8px;background:#FFFFFF">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8A928E" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+              <input value="{{ decisionQuery }}" onChange="{{ onDecisionQuery }}" placeholder="Search decisions" style="flex:1;min-width:0;border:0;outline:none;font-size:13px;background:transparent">
+            </div>
+          </div>
+          <sc-if value="{{ hasRevisitDue }}"><div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#FFF8EB;border:1px solid #F3DDB0;border-radius:10px;font-size:13px;color:#7A4A00"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9A5B00" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M3 10h18M8 3v4M16 3v4"></path></svg>{{ revisitDueText }}</div></sc-if>
+          <sc-for list="{{ decisionGroups }}" as="g" hint-placeholder-count="3">
+            <section style="background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;overflow:hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid #EDF0EE;background:#FAFBFA">
+                <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><span style="font-size:13px;font-weight:600">{{ g.date }}</span><span style="font-size:13px;color:#5B6460">{{ g.title }}</span></div>
+                <sc-if value="{{ g.canOpen }}"><button onClick="{{ g.open }}" style="border:0;background:transparent;padding:0;color:#0E6B5E;font-size:13px;font-weight:550;cursor:pointer;white-space:nowrap">Open notes</button></sc-if>
+              </div>
               <sc-for list="{{ g.items }}" as="d">
-                <sc-if value="{{ d.normal }}"><div style="display:flex;gap:10px;align-items:flex-start;line-height:1.55;color:#2E3532"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0E6B5E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;margin-top:3px"><path d="m5 12 5 5 9-10"></path></svg><span style="flex:1">{{ d.text }}</span><button onClick="{{ d.askRemove }}" style="flex:none;border:0;background:transparent;padding:2px 0;color:#6E7772;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap" style-hover="color:#B42318">Remove from log</button></div></sc-if>
-                <sc-if value="{{ d.confirming }}"><div style="display:flex;flex-direction:column;gap:10px;padding:12px 14px;background:#FDF3F2;border:1px solid #F5D0CC;border-radius:10px">
-                  <div style="font-size:13px;color:#2E3532;line-height:1.55">{{ d.text }}</div>
-                  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-                    <span style="font-size:13px;color:#7A271A;font-weight:550">Remove this decision from the log? It stays in the meeting notes.</span>
-                    <div style="display:flex;gap:8px"><button onClick="{{ d.cancel }}" style="height:32px;padding:0 12px;border:1px solid #D5DBD8;border-radius:7px;background:#FFFFFF;color:#141917;font-size:13px;font-weight:550;cursor:pointer">Cancel</button><button onClick="{{ d.remove }}" style="height:32px;padding:0 12px;border:0;border-radius:7px;background:#B42318;color:#FFFFFF;font-size:13px;font-weight:550;cursor:pointer">Remove</button></div>
+                <div style="border-bottom:1px solid #F0F2F1">
+                  <div onClick="{{ d.toggle }}" style="display:grid;grid-template-columns:88px minmax(0,1fr) 16px;gap:14px;align-items:start;padding:14px 18px;cursor:pointer" style-hover="background:#F8FAF9">
+                    <span style="justify-self:start;font-size:11px;font-weight:600;color:{{ d.stFg }};background:{{ d.stBg }};padding:2px 9px;border-radius:999px;margin-top:2px">{{ d.stLabel }}</span>
+                    <div style="min-width:0"><div style="line-height:1.5;color:{{ d.textFg }}">{{ d.text }}</div><div style="font-size:12px;color:#6E7772;margin-top:2px">{{ d.meta }}</div></div>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A928E" stroke-width="2" style="margin-top:3px;transform:rotate({{ d.chev }});transition:transform 150ms"><path d="m6 9 6 6 6-6"></path></svg>
                   </div>
-                </div></sc-if>
+                  <sc-if value="{{ d.expanded }}">
+                    <div style="margin:0 18px 16px;padding:14px;background:#FAFBFA;border:1px solid #EDF0EE;border-radius:10px;display:flex;flex-direction:column;gap:14px">
+                      <div style="display:flex;gap:12px;flex-wrap:wrap">
+                        <label style="display:flex;flex-direction:column;gap:6px;flex:1 1 180px"><span style="font-size:12px;font-weight:550;color:#2E3532">Status</span><select value="{{ d.statusVal }}" onChange="{{ d.onStatus }}" style="height:34px;padding:0 30px 0 10px;border:1px solid #D5DBD8;border-radius:7px;background:#FFFFFF url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238A928E' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E&quot;) no-repeat right 10px center;appearance:none;font-size:13px;color:#141917;cursor:pointer"><sc-for list="{{ decStatusOpts }}" as="o"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></label>
+                        <label style="display:flex;flex-direction:column;gap:6px;flex:1 1 180px"><span style="font-size:12px;font-weight:550;color:#2E3532">Revisit on</span><select value="{{ d.revisitVal }}" onChange="{{ d.onRevisit }}" style="height:34px;padding:0 30px 0 10px;border:1px solid #D5DBD8;border-radius:7px;background:#FFFFFF url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238A928E' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E&quot;) no-repeat right 10px center;appearance:none;font-size:13px;color:#141917;cursor:pointer"><sc-for list="{{ revisitOpts }}" as="o"><option value="{{ o.v }}">{{ o.l }}</option></sc-for></select></label>
+                        <div style="display:flex;flex-direction:column;gap:6px;flex:1 1 180px"><span style="font-size:12px;font-weight:550;color:#2E3532">Decided by</span><span style="height:34px;display:flex;align-items:center;font-size:13px">{{ d.by }}</span></div>
+                      </div>
+                      <sc-if value="{{ d.hasEv }}"><div style="background:#F6F7F6;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:22px;height:22px;border-radius:50%;background:{{ d.evAvBg }};color:{{ d.evAvFg }};font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">{{ d.evInitials }}</span><span style="font-weight:600;color:#141917">{{ d.evWho }}</span><span style="font-family:'Geist Mono',monospace;color:#8A928E">{{ d.evTime }}</span></div>
+                <div style="font-size:13px;line-height:1.6;color:#2E3532">“{{ d.evText }}”</div>
+                <button onClick="{{ d.showSource }}" style="align-self:flex-start;border:0;background:transparent;padding:0;color:#0E6B5E;font-size:12px;font-weight:550;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="m16 10.5 5-3v9l-5-3"></path></svg>Show in transcript</button>
+              </div></sc-if>
+                      <sc-if value="{{ d.noEv }}"><div style="font-size:12px;color:#6E7772">No transcript is available for this meeting.</div></sc-if>
+                      <sc-if value="{{ d.hasRelated }}">
+                        <div style="display:flex;flex-direction:column;gap:6px">
+                          <span style="font-size:12px;font-weight:550;color:#2E3532">Related tasks</span>
+                          <sc-for list="{{ d.relatedList }}" as="r"><button onClick="{{ r.open }}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #E3E7E5;border-radius:8px;background:#FFFFFF;cursor:pointer;text-align:left;font-size:13px;color:#141917" style-hover="border-color:#B9C2BE"><span style="display:flex;align-items:center;gap:8px;min-width:0"><span style="width:7px;height:7px;border-radius:50%;background:{{ r.dot }};flex:none"></span>{{ r.title }}</span><span style="font-size:12px;color:#6E7772;white-space:nowrap">{{ r.stText }}</span></button></sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ d.hasReplacedBy }}"><div style="font-size:13px;color:#4A524E">Replaced by: <button onClick="{{ d.goReplacedBy }}" style="border:0;background:transparent;padding:0;color:#0E6B5E;font-size:12px;font-weight:550;cursor:pointer;font-size:13px">{{ d.replacedByText }}</button></div></sc-if>
+                      <sc-if value="{{ d.hasReplaces }}"><div style="font-size:13px;color:#4A524E">Replaces: <button onClick="{{ d.goReplaces }}" style="border:0;background:transparent;padding:0;color:#0E6B5E;font-size:12px;font-weight:550;cursor:pointer;font-size:13px">{{ d.replacesText }}</button></div></sc-if>
+                      <sc-if value="{{ d.notConfirming }}"><button onClick="{{ d.askRemove }}" style="align-self:flex-start;border:0;background:transparent;padding:0;color:#6E7772;font-size:12px;font-weight:500;cursor:pointer" style-hover="color:#B42318">Remove from log</button></sc-if>
+                      <sc-if value="{{ d.confirming }}"><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 12px;background:#FDF3F2;border:1px solid #F5D0CC;border-radius:8px">
+                        <span style="font-size:13px;color:#7A271A;font-weight:550">Remove this decision from the log? It stays in the meeting notes.</span>
+                        <div style="display:flex;gap:8px"><button onClick="{{ d.cancel }}" style="height:32px;padding:0 12px;border:1px solid #D5DBD8;border-radius:7px;background:#FFFFFF;color:#141917;font-size:13px;font-weight:550;cursor:pointer">Cancel</button><button onClick="{{ d.remove }}" style="height:32px;padding:0 12px;border:0;border-radius:7px;background:#B42318;color:#FFFFFF;font-size:13px;font-weight:550;cursor:pointer">Remove</button></div>
+                      </div></sc-if>
+                    </div>
+                  </sc-if>
+                </div>
               </sc-for>
-            </div>
-          </section>
-        </sc-for>
-        <sc-if value="{{ noDecisions }}"><div style="padding:24px;text-align:center;color:#6E7772;border:1px dashed #D5DBD8;border-radius:12px">No decisions match your search.</div></sc-if>
+            </section>
+          </sc-for>
+          <sc-if value="{{ noDecisions }}"><div style="padding:24px;text-align:center;color:#6E7772;border:1px dashed #D5DBD8;border-radius:12px">No decisions match.</div></sc-if>
         </div>
         </sc-if>
       </div>
@@ -882,6 +993,31 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
             <div style="flex:1 1 280px"><div style="font-size:14px;font-weight:600;color:#7A4A00">{{ unassignedText }}</div><div style="font-size:13px;color:#7A4A00">{{ attentionSub }}</div></div>
             <button onClick="{{ reviewUnassigned }}" style="height:32px;padding:0 12px;border:1px solid #E8C98A;border-radius:7px;background:#FFFFFF;color:#7A4A00;font-size:13px;font-weight:550;cursor:pointer">Review</button>
           </div>
+        </sc-if>
+        <sc-if value="{{ hasSuggested }}" hint-placeholder-val="{{ false }}">
+          <section style="background:#FFFFFF;border:1px solid #E3E7E5;border-radius:12px;overflow:hidden">
+            <div style="padding:14px 18px;border-bottom:1px solid #EDF0EE">
+              <div style="display:flex;align-items:baseline;gap:8px"><span style="font-weight:600">Suggested tasks</span><span style="font-size:12px;color:#9A5B00;font-weight:550">{{ suggestedCount }}</span></div>
+              <div style="font-size:12px;color:#6E7772">These action items were not clear enough to add on their own. Check where each one came from, then accept or dismiss it.</div>
+            </div>
+            <sc-for list="{{ suggestedList }}" as="t">
+              <div style="display:flex;gap:16px;align-items:flex-start;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #F0F2F1;flex-wrap:wrap">
+                <div style="flex:1 1 360px;min-width:0;display:flex;flex-direction:column;gap:8px">
+                  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-weight:550">{{ t.titleShown }}</span><span style="font-size:11px;font-weight:600;color:{{ t.confFg }};background:{{ t.confBg }};padding:2px 8px;border-radius:999px">{{ t.confLabel }}</span></div>
+                  <sc-if value="{{ t.hasEv }}"><div style="font-size:13px;color:#2E3532;background:#F6F7F6;border-radius:8px;padding:8px 10px;line-height:1.55;display:flex;flex-direction:column;gap:2px"><span style="font-size:12px"><span style="font-weight:600">{{ t.evWho }}</span> <span style="font-family:'Geist Mono',monospace;color:#8A928E">{{ t.evTime }}</span></span><span>“{{ t.evText }}”</span></div></sc-if>
+                  <div style="font-size:12px;color:#9A5B00">{{ t.reason }}</div>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <sc-if value="{{ t.assigned }}"><span style="display:flex;align-items:center;gap:6px;font-size:12px;color:#2E3532;white-space:nowrap;margin-right:4px"><span style="width:22px;height:22px;border-radius:50%;background:{{ t.avBg }};color:{{ t.avFg }};font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center">{{ t.initials }}</span>{{ t.assigneeName }}</span></sc-if>
+                  <sc-if value="{{ t.noOwner }}"><span style="font-size:12px;color:#6E7772;margin-right:4px">No owner</span></sc-if>
+                  <button onClick="{{ t.showSource }}" style="height:32px;padding:0 12px;border:1px solid #D5DBD8;border-radius:7px;background:#FFFFFF;color:#141917;font-size:13px;font-weight:550;cursor:pointer" style-hover="background:#F6F7F6">Show source</button>
+                  <button onClick="{{ t.open }}" style="height:32px;padding:0 12px;border:1px solid #D5DBD8;border-radius:7px;background:#FFFFFF;color:#141917;font-size:13px;font-weight:550;cursor:pointer" style-hover="background:#F6F7F6">Edit</button>
+                  <button onClick="{{ t.dismiss }}" style="height:32px;padding:0 12px;border:1px solid #D5DBD8;border-radius:7px;background:#FFFFFF;color:#141917;font-size:13px;font-weight:550;cursor:pointer" style-hover="background:#F6F7F6">Dismiss</button>
+                  <button onClick="{{ t.accept }}" style="height:32px;padding:0 12px;border:0;border-radius:7px;background:#0E6B5E;color:#FFFFFF;font-size:13px;font-weight:550;cursor:pointer" style-hover="background:#0A5248">Accept</button>
+                </div>
+              </div>
+            </sc-for>
+          </section>
         </sc-if>
         <sc-if value="{{ isBoard }}" hint-placeholder-val="{{ true }}">
         <div style="display:grid;grid-template-columns:repeat(3,minmax(260px,1fr));gap:14px;overflow-x:auto;padding-bottom:6px">
@@ -1016,6 +1152,12 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
               <button onClick="{{ inviteFromTask }}" style="align-self:flex-start;border:0;background:transparent;padding:0;color:#7A4A00;font-size:13px;font-weight:600;cursor:pointer;text-decoration:underline">Invite them to the team</button>
             </div>
           </sc-if>
+          <sc-if value="{{ dt.suggested }}">
+            <div style="padding:12px 14px;background:#FFF8EB;border:1px solid #F3DDB0;border-radius:10px;font-size:13px;color:#7A4A00;display:flex;flex-direction:column;gap:8px">
+              <span><span style="font-weight:600">Suggested task, {{ dt.confLower }}.</span> {{ dt.reason }}</span>
+              <div style="display:flex;gap:8px"><button onClick="{{ dt.accept }}" style="height:28px;padding:0 10px;border:0;border-radius:7px;background:#0E6B5E;color:#FFFFFF;font-size:12px;font-weight:600;cursor:pointer">Accept</button><button onClick="{{ dt.dismiss }}" style="height:28px;padding:0 10px;border:1px solid #E8C98A;border-radius:7px;background:#FFFFFF;color:#7A4A00;font-size:12px;font-weight:600;cursor:pointer">Dismiss</button></div>
+            </div>
+          </sc-if>
           <sc-if value="{{ dt.checkProject }}">
             <div style="padding:12px 14px;background:#FFF8EB;border:1px solid #F3DDB0;border-radius:10px;font-size:13px;color:#7A4A00;display:flex;flex-direction:column;gap:8px">
               <span>Filed under {{ dt.projectName }} from the meeting it came from, but it could belong elsewhere. Confirm or pick another project below.</span>
@@ -1041,7 +1183,12 @@ input::placeholder,textarea::placeholder{color:#9AA19D}
           <sc-if value="{{ dtHasMeeting }}">
             <div style="border:1px solid #E3E7E5;border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px">
               <div style="font-size:12px;font-weight:600;color:#6E7772">FROM THE MEETING</div>
-              <sc-if value="{{ dtHasQuote }}"><div style="font-size:13px;color:#2E3532;line-height:1.6;padding-left:12px;border-left:2px solid #D5DBD8">{{ dt.quote }}</div></sc-if>
+              <sc-if value="{{ dt.hasEv }}"><div style="background:#F6F7F6;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:22px;height:22px;border-radius:50%;background:{{ dt.evAvBg }};color:{{ dt.evAvFg }};font-size:9px;font-weight:600;display:flex;align-items:center;justify-content:center;flex:none">{{ dt.evInitials }}</span><span style="font-weight:600;color:#141917">{{ dt.evWho }}</span><span style="font-family:'Geist Mono',monospace;color:#8A928E">{{ dt.evTime }}</span></div>
+                <div style="font-size:13px;line-height:1.6;color:#2E3532">“{{ dt.evText }}”</div>
+                <button onClick="{{ dt.showSource }}" style="align-self:flex-start;border:0;background:transparent;padding:0;color:#0E6B5E;font-size:12px;font-weight:550;cursor:pointer;display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="m16 10.5 5-3v9l-5-3"></path></svg>Show in transcript</button>
+              </div></sc-if>
+              <sc-if value="{{ dtHasQuote }}"><div style="font-size:12px;color:#6E7772;line-height:1.55">{{ dt.quote }}</div></sc-if>
               <button onClick="{{ openTaskMeeting }}" style="align-self:flex-start;border:0;background:transparent;padding:0;color:#0E6B5E;font-size:13px;font-weight:550;cursor:pointer;display:flex;align-items:center;gap:6px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="m16 10.5 5-3v9l-5-3"></path></svg>{{ dt.sourceLabel }}</button>
             </div>
           </sc-if>
@@ -1290,7 +1437,7 @@ const PARTS = { m0: ['Adebayo Tosin', 'Daniel Okoro', 'Amara Nwosu', 'Kemi Adeye
 const AV = [['#E6F1EE', '#0E6B5E'], ['#EEF0F7', '#3C4A7A'], ['#FFF1E0', '#8A4B00'], ['#F7ECF2', '#8A2E5C'], ['#EEF1F0', '#4A524E']];
 const ini = (n) => n.split(/[\s@.]+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 const COLS = [['todo', 'To do', '#A8AFAB'], ['doing', 'In progress', '#C98A1B'], ['done', 'Done', '#0E6B5E']];
-const DUE_OPTS = ['No due date', 'Today', 'Tomorrow', 'Wed 4 Nov', 'Thu 5 Nov', 'Fri 6 Nov', 'Mon 9 Nov'];
+const DUE_OPTS = ['No due date', 'Fri 30 Oct', 'Today', 'Tomorrow', 'Wed 4 Nov', 'Thu 5 Nov', 'Fri 6 Nov', 'Mon 9 Nov'];
 const PLANNING = {
   summary: "The team reviewed progress on the Client Portal ahead of the December 8 launch. Topics included onboarding testing, payment checkout, the pricing model, moving work updates from WhatsApp to Slack, and hiring a customer success lead. No pricing model was chosen.",
   keyPoints: [
@@ -1321,12 +1468,18 @@ const PLANNING = {
     ['Kemi Adeyemi', '00:41', "We'll run customer interviews once onboarding is stable."],
     ['Daniel Okoro', '02:05', 'I updated the onboarding screens. Email verification worked in my test.'],
     ['Daniel Okoro', '02:31', 'I still need to check that data syncs between web and mobile. I can finish the test this evening.'],
+    ['Daniel Okoro', '02:58', "After testing, I'll post this week's tasks in Slack by the end of today."],
     ['Adebayo Tosin', '04:10', 'Role-based permissions are done, and admins can manage billing separately.'],
     ['Adebayo Tosin', '04:38', "I'll take payment checkout this week. It should be ready before Friday."],
+    ['Adebayo Tosin', '05:02', 'Daniel, I can support you with testing this week if you need it.'],
+    ['Adebayo Tosin', '05:20', "I'll also share the summary with the wider team."],
     ['Amara Nwosu', '06:02', "I'm refining the phase one and phase two onboarding journeys and the empty states. I'll log the specific items on the tracker."],
     ['Amara Nwosu', '06:40', 'I also need clarity on some of the phase two product decisions.'],
+    ['Amara Nwosu', '07:10', 'At some point we should move the Figma file into the team workspace.'],
     ['Kemi Adeyemi', '08:15', 'From today, official work goes on Slack, not WhatsApp, so we can track discussions and tasks.'],
     ['Kemi Adeyemi', '09:02', 'We are still interviewing for a customer success lead. The person should start on or before Friday. Launch is December 8.'],
+    ['Kemi Adeyemi', '09:30', "Pricing came up again. Let's decide it at next week's planning."],
+    ['Daniel Okoro', '09:48', 'Someone should look at the Metrika analytics setup.'],
   ],
 };
 const MW = 'Beyric Monday planning';
@@ -1355,7 +1508,8 @@ const TODAY = '2026-11-02';
 const ASSIGNED = { '2026-11-02': 'Today, Mon 2 Nov', '2026-10-30': 'Fri 30 Oct', '2026-10-26': 'Mon 26 Oct' };
 TASKS.forEach((t) => { t.assignedOn = t.meeting === 'm0' ? TODAY : /30 Oct/.test(t.meetingTitle || '') ? '2026-10-30' : '2026-10-26'; });
 ['t1', 't3', 't5', 't8', 't9', 't10', 't11', 't12'].forEach((id) => { TASKS.find((t) => t.id === id).milestone = 'ms1'; });
-const DUE_ORDER = ['Today', 'Tomorrow', 'Wed 4 Nov', 'Thu 5 Nov', 'Fri 6 Nov', 'Mon 9 Nov', ''];
+const OVERDUE = ['Fri 30 Oct'];
+const DUE_ORDER = ['Fri 30 Oct', 'Today', 'Tomorrow', 'Wed 4 Nov', 'Thu 5 Nov', 'Fri 6 Nov', 'Mon 9 Nov', ''];
 const DONE_LABEL = { '2026-11-02': 'Today, Mon 2 Nov', '2026-10-31': 'Sat 31 Oct', '2026-10-30': 'Fri 30 Oct', '2026-10-29': 'Thu 29 Oct' };
 ['t11', 't12'].forEach((id) => { TASKS.find((t) => t.id === id).doneOn = TODAY; });
 const PROJECTS = [
@@ -1391,17 +1545,75 @@ TASKS.push(
   { id: 't13', title: 'Measure transcript accuracy against the September 12 meeting', assignee: 'u4', due: 'Thu 5 Nov', status: 'todo', meetingTitle: 'Zoom 88205679674, 2 Nov', project: 'p2', sprint: 's12', assignedOn: TODAY },
   { id: 't14', title: 'Decide how sending the note taker can be automated', assignee: 'u1', due: '', status: 'todo', meetingTitle: 'Zoom 88205679674, 2 Nov', project: 'p2', sprint: null, assignedOn: TODAY },
 );
+const EVT = { t1: '02:31', t2: '02:58', t3: '06:02', t4: '07:10', t5: '04:38', t6: '05:02', t7: '05:20', t8: '09:02' };
+TASKS.forEach((t) => { if (EVT[t.id]) t.ev = EVT[t.id]; });
+Object.assign(TASKS.find((t) => t.id === 't4'), { suggested: true, conf: 'medium', reason: 'Raised as something to do "at some point", with no commitment or date.' });
+Object.assign(TASKS.find((t) => t.id === 't6'), { suggested: true, conf: 'low', checkProject: false, reason: 'Offered on a condition: "if you need it".' });
+TASKS.find((t) => t.id === 't7').checkProject = true;
+TASKS.find((t) => t.id === 't10').due = 'Fri 30 Oct';
+TASKS.push({ id: 't15', title: 'Look into the Metrika analytics setup', assignee: null, due: '', status: 'todo', meeting: 'm0', isNew: true, ev: '09:48', suggested: true, conf: 'low', reason: 'No one took this on. It was said as "someone should".', project: 'p1', sprint: null, assignedOn: '2026-11-02' });
+const evLine = (m, time) => { const src = m === 'm0' ? PLANNING.transcript : m === 'm2' ? TRANSCRIPT : []; const r = src.find((x) => x[1] === time); if (!r) return null; const p = PEOPLE[r[0]] || {}; return { who: r[0], text: r[2], initials: p.initials || '', avBg: p.avBg || '#EEF1F0', avFg: p.avFg || '#4A524E' }; };
+const CONF = { medium: ['Medium confidence', '#FFF4E0', '#9A5B00'], low: ['Low confidence', '#FDECEA', '#B42318'], high: ['High confidence', '#E8F5EC', '#166534'] };
+const DSTATUS = { approved: { l: 'Approved', bg: '#E8F5EC', fg: '#166534' }, proposed: { l: 'Proposed', bg: '#FFF4E0', fg: '#9A5B00' }, replaced: { l: 'Replaced', bg: '#F0F2F1', fg: '#4A524E' }, rejected: { l: 'Rejected', bg: '#FDECEA', fg: '#B42318' } };
+const REVISIT = ['', 'Fri 6 Nov 2026', 'Mon 9 Nov 2026', 'Mon 16 Nov 2026', 'Mon 30 Nov 2026'];
+const TOPICS = {
+  s1: [
+    { t: 'Pricing model', d: 'Discussed in 3 meetings without a decision', when: 'Mon 26 Oct, Fri 30 Oct and Mon 2 Nov 2026', agenda: 'Decide the pricing model' },
+    { t: 'Figma file organisation', d: 'Raised in 2 meetings, still no owner or date', when: 'Fri 30 Oct and Mon 2 Nov 2026', agenda: 'Agree who organises the Figma file, and by when' },
+  ],
+  s2: [{ t: 'Workspace approvals', d: 'Discussed in 2 meetings, approval rules not final', when: 'Fri 23 Oct and Fri 30 Oct 2026', agenda: 'Finalise the workspace approval rules' }],
+};
+const ASK_SUGGEST = ['What did we decide about pricing?', 'What did I commit to last week?', 'What did Daniel say?', 'When is the launch?', 'Which decisions were made on Monday?'];
+const ASK = [
+  [/commit|promis|i (say|said)|assigned to me|my tasks/i, { lead: 'You made 3 commitments in Beyric Monday planning on Mon 2 Nov 2026. None of them are done yet.', points: [
+    ['Finish payment checkout before Friday.', ['m0', '04:38']],
+    ['Support Daniel Okoro with testing, if he needs it. This is waiting for you to confirm under Suggested tasks.', ['m0', '05:02']],
+    ['Share the meeting summary with the wider team.', ['m0', '05:20']]] }],
+  [/pric/i, { lead: 'No pricing model has been chosen yet. It is planned for the next Monday planning on Mon 9 Nov 2026, and it has come up in 3 meetings.', points: [
+    ['Kemi Adeyemi listed three options: per seat, per workspace, or usage based.', ['m0', '00:12']],
+    ['Customer interviews will happen once onboarding is stable.', ['m0', '00:41']],
+    ['Kemi proposed deciding it next week. It is logged as a proposed decision.', ['m0', '09:30']]] }],
+  [/daniel/i, { lead: 'Daniel Okoro spoke about onboarding testing and took on two tasks.', points: [
+    ['He updated the onboarding screens, and email verification worked in his test.', ['m0', '02:05']],
+    ['He still needs to check web and mobile data sync, and expected to finish that evening.', ['m0', '02:31']],
+    ["He will post this week's tasks in Slack after testing.", ['m0', '02:58']],
+    ['He suggested someone look at the Metrika analytics setup. No one took it on yet.', ['m0', '09:48']]] }],
+  [/launch|december|release/i, { lead: 'The Client Portal launch is set for Tue 8 Dec 2026. An earlier date of Mon 30 Nov 2026 was replaced.', points: [
+    ['Kemi Adeyemi confirmed the December 8 date.', ['m0', '09:02']],
+    ['Payment checkout needs to be ready before Friday.', ['m0', '04:38']],
+    ['Web and mobile data sync is still being tested.', ['m0', '02:31']]] }],
+  [/slack|whatsapp/i, { lead: 'The team agreed to move official work updates from WhatsApp to Slack.', points: [
+    ['Kemi Adeyemi made the decision so discussions and tasks can be tracked.', ['m0', '08:15']],
+    ["Daniel Okoro will post this week's tasks in Slack after testing.", ['m0', '02:58']]] }],
+  [/decid|decision|agree/i, { lead: 'Beyric Monday planning on Mon 2 Nov 2026 approved 4 decisions and left 1 proposed.', points: [
+    ['Use Slack for official work updates.', ['m0', '08:15']],
+    ['Finish payment checkout this week, owned by Tosin.', ['m0', '04:38']],
+    ['Prepare for the December 8 launch.', ['m0', '09:02']],
+    ['Proposed: decide the pricing model next week.', ['m0', '09:30']]] }],
+  [/automat|internal|note taker/i, { lead: 'In the Zoom test call on Mon 2 Nov 2026, Adebayo said the app is for internal use and he is still working out how to automate it.', points: [
+    ['The app is intended for internal use.', ['m2', '02:22']],
+    ['How to automate it is still open.', ['m2', '02:27']]] }],
+];
+const answerFor = (q) => { const hit = ASK.find(([re]) => re.test(q)); return hit ? hit[1] : { lead: 'I could not find that in your meetings.', points: [], none: true }; };
 const SERIES = [
   { id: 's1', last: '2026-11-02', lastLabel: 'Mon 2 Nov', name: 'Beyric Monday planning', cadence: 'Weekly on Mondays, 14:00', platform: 'Google Meet', next: 'Mon 9 Nov, 14:00', people: ['Adebayo Tosin', 'Daniel Okoro', 'Amara Nwosu', 'Kemi Adeyemi'], re: /Monday planning/ },
   { id: 's2', last: '2026-10-30', lastLabel: 'Fri 30 Oct', name: 'Beyric Friday review', cadence: 'Weekly on Fridays, 15:00', platform: 'Google Meet', next: 'Fri 6 Nov, 15:00', people: ['Adebayo Tosin', 'Daniel Okoro', 'Amara Nwosu', 'Kemi Adeyemi'], re: /Friday review/ },
 ];
-const DECISIONS_LOG = [
-  { meeting: 'm0', date: 'Mon 2 Nov 2026', title: 'Beyric Monday planning', items: PLANNING.decisions },
-  { meeting: 'm2', date: 'Mon 2 Nov 2026', title: 'Zoom 88205679674', items: EN.decisions },
-  { meeting: null, date: 'Fri 30 Oct 2026', title: 'Beyric Friday review', items: ['Launch to existing customers first, then open public signups.', 'Workspace approvals for large teams will be reviewed manually during the pilot.'] },
-  { meeting: null, date: 'Mon 26 Oct 2026', title: 'Beyric Monday planning', items: ['Role-based permissions are required before launch.', 'Use email verification for every new account.'] },
+const DECISIONS_INIT = [
+  { id: 'd1', meeting: 'm0', date: 'Mon 2 Nov 2026', title: 'Beyric Monday planning', text: PLANNING.decisions[0], status: 'approved', by: 'Kemi Adeyemi', ev: '08:15', related: ['t2', 't9'], revisit: '' },
+  { id: 'd2', meeting: 'm0', date: 'Mon 2 Nov 2026', title: 'Beyric Monday planning', text: PLANNING.decisions[1], status: 'approved', by: 'Kemi Adeyemi', ev: '', related: [], revisit: '' },
+  { id: 'd3', meeting: 'm0', date: 'Mon 2 Nov 2026', title: 'Beyric Monday planning', text: PLANNING.decisions[2], status: 'approved', by: 'Adebayo Tosin', ev: '04:38', related: ['t5'], revisit: 'Fri 6 Nov 2026' },
+  { id: 'd4', meeting: 'm0', date: 'Mon 2 Nov 2026', title: 'Beyric Monday planning', text: PLANNING.decisions[3], status: 'approved', by: 'Kemi Adeyemi', ev: '09:02', related: ['t1', 't3', 't5'], revisit: 'Mon 30 Nov 2026', replaces: 'd9' },
+  { id: 'd5', meeting: 'm0', date: 'Mon 2 Nov 2026', title: 'Beyric Monday planning', text: 'Decide the pricing model at next week\'s planning.', status: 'proposed', by: 'Kemi Adeyemi', ev: '09:30', related: [], revisit: 'Mon 9 Nov 2026' },
+  { id: 'd6', meeting: 'm2', date: 'Mon 2 Nov 2026', title: 'Zoom 88205679674', text: EN.decisions[0], status: 'approved', by: 'Adebayo', ev: '02:22', related: ['t13', 't14'], revisit: '' },
+  { id: 'd7', meeting: 'm2', date: 'Mon 2 Nov 2026', title: 'Zoom 88205679674', text: EN.decisions[1], status: 'approved', by: 'Adebayo', ev: '02:36', related: ['t13'], revisit: '' },
+  { id: 'd8', meeting: null, date: 'Fri 30 Oct 2026', title: 'Beyric Friday review', text: 'Launch to existing customers first, then open public signups.', status: 'approved', by: 'Kemi Adeyemi', ev: '', related: [], revisit: 'Mon 16 Nov 2026' },
+  { id: 'd10', meeting: null, date: 'Fri 30 Oct 2026', title: 'Beyric Friday review', text: 'Workspace approvals for large teams will be reviewed manually during the pilot.', status: 'approved', by: 'Adebayo Tosin', ev: '', related: [], revisit: '' },
+  { id: 'd11', meeting: null, date: 'Fri 30 Oct 2026', title: 'Beyric Friday review', text: 'Offer a lifetime deal at launch.', status: 'rejected', by: 'Kemi Adeyemi', ev: '', related: [], revisit: '' },
+  { id: 'd9', meeting: null, date: 'Mon 26 Oct 2026', title: 'Beyric Monday planning', text: 'Launch the Client Portal on Mon 30 Nov 2026.', status: 'replaced', by: 'Kemi Adeyemi', ev: '', related: [], revisit: '', replacedBy: 'd4' },
+  { id: 'd12', meeting: null, date: 'Mon 26 Oct 2026', title: 'Beyric Monday planning', text: 'Role-based permissions are required before launch.', status: 'approved', by: 'Adebayo Tosin', ev: '', related: ['t11'], revisit: '' },
+  { id: 'd13', meeting: null, date: 'Mon 26 Oct 2026', title: 'Beyric Monday planning', text: 'Use email verification for every new account.', status: 'approved', by: 'Daniel Okoro', ev: '', related: ['t12'], revisit: '' },
 ];
-const DECISIONS_INIT = DECISIONS_LOG.flatMap((g, gi) => g.items.map((text, i) => ({ id: 'd' + gi + '-' + i, meeting: g.meeting, date: g.date, title: g.title, text })));
 const dayOf = (m) => { if (!m || !m.date) return ''; const p = m.date.match(/(\d+) (\w{3}) (\d{4})/); if (!p) return ''; const d = new Date(+p[3], MO.indexOf(p[2]), +p[1]); return WD[d.getDay()] + ' ' + d.getDate() + ' ' + MO[d.getMonth()] + ' ' + d.getFullYear(); };
 const LANGS = [{ code: 'en', label: 'English (original)' }, { code: 'fr', label: 'French' }, { code: 'es', label: 'Spanish' }];
 const NOTES_TEXT = `Summary
@@ -1445,7 +1657,7 @@ class Component extends DCLogic {
       { id: 'r5', meeting: 'm2', text: EN.check, checked: false },
       { id: 'r6', meeting: 'm9', meetingTitle: 'Zoom 88205679674', day: 'Sun 1 Nov 2026', text: 'A product name is transcribed as \u201cLumen Desk\u201d and later as \u201cLoomin desk.\u201d Please confirm the intended name.', checked: false },
     ],
-    decisions: DECISIONS_INIT, confirmRemove: null, loading: {}, reviewErr: {}, rewriteOffer: null,
+    decisions: DECISIONS_INIT, confirmRemove: null, decStatus: 'all', decOpen: null, hl: null, askInput: '', askThread: [], askUnclear: true, loading: {}, reviewErr: {}, rewriteOffer: null,
     tasks: TASKS, members: MEMBERS, taskFilter: 'all', taskOpen: null, dragOver: null,
     inviteOpen: false, inviteEmails: [], inviteInput: '', inviteRole: 'Member',
     autoTasks: true, emailAssignees: true, slack: false, slackConnecting: false,
@@ -1476,6 +1688,24 @@ class Component extends DCLogic {
   };
 
   go = (screen) => () => { this.setState({ screen }); if (screen === 'decisions' || screen === 'review') this.simLoad(screen); };
+  hlBg = (time) => (this.state.hl && this.state.hl.m === this.state.cur && this.state.hl.time === time ? '#FFF4D6' : 'transparent');
+  openAt = (m, time) => {
+    if (!this.state.meetings.some((x) => x.id === m)) return this.flash('That meeting is no longer available');
+    this.setState({ screen: 'detail', cur: m, tab: 'transcript', hl: { m, time }, taskOpen: null, lang: 'en', shownLang: 'en' });
+    clearTimeout(this._hlT);
+    this._hlT = setTimeout(() => { const el = document.getElementById('tl-' + time); if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 140, behavior: 'smooth' }); }, 300);
+  };
+  evFields = (m, time) => {
+    const e = m && time ? evLine(m, time) : null;
+    return { hasEv: !!e, noEv: !e, evWho: e ? e.who : '', evTime: time || '', evText: e ? e.text : '', evInitials: e ? e.initials : '', evAvBg: e ? e.avBg : '#EEF1F0', evAvFg: e ? e.avFg : '#4A524E', showSource: () => (e ? this.openAt(m, time) : null) };
+  };
+  ask = (text) => {
+    const q = (text != null ? text : this.state.askInput).trim();
+    if (!q) return;
+    const id = 'a' + Date.now();
+    this.setState((st) => ({ askInput: '', askThread: [{ id, q, status: 'loading' }, ...st.askThread] }));
+    setTimeout(() => this.setState((st) => ({ askThread: st.askThread.map((x) => (x.id === id ? { ...x, status: 'ready', ans: answerFor(q) } : x)) })), 1100);
+  };
   simLoad = (key) => { clearTimeout(this['_ld' + key]); this.setState((st) => ({ loading: { ...st.loading, [key]: true } })); this['_ld' + key] = setTimeout(() => this.setState((st) => ({ loading: { ...st.loading, [key]: false } })), 700); };
   status = (key, prop) => { const p = (this.props && this.props[prop]) || 'Live'; if (this.state.loading[key] || p === 'Loading') return 'loading'; if (p === 'Failed') return 'failed'; return p === 'Empty' ? 'empty' : 'ready'; };
   selectTpl = (i) => { const t = this.state.templates[i]; this.setState({ sel: i, draftName: t ? t.name : '', draftInstr: t ? t.instr : '', saved: false }); };
@@ -1546,13 +1776,13 @@ class Component extends DCLogic {
     const key = (t) => (by === 'due' ? t.due || '' : t.assignedOn || TODAY);
     const keys = [...new Set(list.map(key))];
     keys.sort((a, b) => (by === 'due' ? DUE_ORDER.indexOf(a) - DUE_ORDER.indexOf(b) : a < b ? 1 : -1));
-    return keys.map((k) => ({ label: by === 'due' ? (k === '' ? 'No due date' : k === 'Today' ? 'Due today' : 'Due ' + k) : 'Assigned ' + (ASSIGNED[k] || k), items: list.filter((t) => key(t) === k) }));
+    return keys.map((k) => ({ label: by === 'due' ? (k === '' ? 'No due date' : k === 'Today' ? 'Due today' : OVERDUE.includes(k) ? 'Overdue, was due ' + k : 'Due ' + k) : 'Assigned ' + (ASSIGNED[k] || k), items: list.filter((t) => key(t) === k) }));
   }
   moreVals(s) {
     const tv = (t) => this.taskVals(s).srTasksView(t);
     const sr = SERIES.find((x) => x.id === s.seriesId) || SERIES[0];
     const inSeries = (t, x) => (t.meeting ? (s.meetings.find((m) => m.id === t.meeting) || {}).series === x.id : x.re.test(t.meetingTitle || ''));
-    const unfinished = (x) => s.tasks.filter((t) => t.status !== 'done' && inSeries(t, x));
+    const unfinished = (x) => s.tasks.filter((t) => t.status !== 'done' && !t.suggested && inSeries(t, x));
     const carried = (x) => s.oq.filter((q) => q.series === x.id && q.carry && !q.resolved);
     const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
     const q = s.decisionQuery.trim().toLowerCase();
@@ -1560,7 +1790,7 @@ const decSt = this.status('decisions', 'decisionsState');
     const decAll = decSt === 'empty' ? [] : s.decisions;
     const gmap = [];
     decAll.forEach((d) => { const k = d.date + '|' + d.title + '|' + d.meeting; let g = gmap.find((x) => x.k === k); if (!g) { g = { k, date: d.date, title: d.title, meeting: d.meeting, all: [] }; gmap.push(g); } g.all.push(d); });
-    const groups = gmap.map((g) => ({ ...g, items: g.all.filter((d) => !q || d.text.toLowerCase().includes(q) || g.title.toLowerCase().includes(q)) })).filter((g) => g.items.length);
+    const groups = gmap.map((g) => ({ ...g, items: g.all.filter((d) => (s.decStatus === 'all' || d.status === s.decStatus) && (!q || d.text.toLowerCase().includes(q) || g.title.toLowerCase().includes(q))) })).filter((g) => g.items.length);
     const revSt = this.status('review', 'reviewState');
     const revAll = revSt === 'empty' ? [] : s.reviews;
     const setErr = (id, v) => this.setState((st) => ({ reviewErr: { ...st.reviewErr, [id]: v } }));
@@ -1595,7 +1825,7 @@ const decSt = this.status('decisions', 'decisionsState');
       ...(() => {
         const pj = s.projects.find((p) => p.id === s.projSel) || s.projects[0] || { id: '', name: '', dot: PCOLORS[0], series: [], keywords: [], sprintLen: '' };
         const upd = (patch) => this.setState((st) => ({ projects: st.projects.map((p) => (p.id === pj.id ? { ...p, ...patch } : p)) }));
-        const openOf = (id) => s.tasks.filter((t) => t.project === id && t.status !== 'done');
+        const openOf = (id) => s.tasks.filter((t) => t.project === id && t.status !== 'done' && !t.suggested);
         const addKw = () => { const v = this.state.kwInput.trim(); if (!v || pj.keywords.includes(v)) return this.setState({ kwInput: '' }); this.setState((st) => ({ kwInput: '', projects: st.projects.map((p) => (p.id === pj.id ? { ...p, keywords: [...p.keywords, v] } : p)) })); };
         const wsLabel = s.sprintCfg.len === 'custom' ? (s.sprintCfg.custom || 1) + ' days' : LEN[s.sprintCfg.len].label;
         const lenOpts = Object.keys(LEN).filter((k) => k !== 'custom').map((k) => ({ v: k, l: LEN[k].label }));
@@ -1653,6 +1883,36 @@ const decSt = this.status('decisions', 'decisionsState');
       srQuestions: carried(sr).map((x) => ({ text: x.text, source: x.meeting ? 'From ' + mtTitle(x.meeting) : 'From ' + x.src, resolve: () => this.setState((st) => ({ oq: st.oq.map((y) => (y.id === x.id ? { ...y, resolved: true } : y)) })) })),
       srNoQuestions: carried(sr).length === 0,
       ...(() => {
+        const open = unfinished(sr);
+        const over = open.filter((t) => OVERDUE.includes(t.due));
+        const doneN = s.tasks.filter((t) => t.status === 'done' && t.doneOn && t.doneOn >= sr.last && inSeries(t, sr)).length;
+        const sugg = s.tasks.filter((t) => t.suggested && inSeries(t, sr)).length;
+        const topics = TOPICS[sr.id] || [];
+        const nq = carried(sr).length;
+        const items = [...topics.map((x) => x.agenda)];
+        if (over.length) items.push('Review the ' + (over.length === 1 ? 'overdue task' : over.length + ' overdue tasks'));
+        if (nq) items.push('Settle ' + (nq === 1 ? '1 open question' : nq + ' open questions') + ' carried over');
+        if (sugg) items.push('Confirm ' + (sugg === 1 ? '1 suggested task' : sugg + ' suggested tasks') + ' from last time');
+        const cur = s.agenda[sr.id] || [];
+        return {
+          srScore: [
+            { v: doneN, label: 'Done since last meeting', fg: '#0E6B5E' },
+            { v: open.length - over.length, label: 'Still open', fg: '#141917' },
+            { v: over.length, label: 'Overdue', fg: over.length ? '#B42318' : '#141917' },
+          ],
+          srHasTopics: topics.length > 0, srTopics: topics,
+          srSuggest: items.map((text, i) => { const added = cur.includes(text); return { n: i + 1, text, label: added ? 'Added' : 'Add to agenda', bg: added ? '#E6F1EE' : '#FFFFFF', fg: added ? '#0A5248' : '#141917', border: added ? '#BFDCD5' : '#D5DBD8',
+            add: () => this.setState((st) => { const list = st.agenda[sr.id] || []; return { agenda: { ...st.agenda, [sr.id]: list.includes(text) ? list.filter((x) => x !== text) : [...list, text] } }; }) }; }),
+        };
+      })(),
+      isAsk: s.screen === 'ask',
+      askInput: s.askInput, onAskInput: (e) => this.setState({ askInput: e.target.value }),
+      onAskKey: (e) => { if (e.key === 'Enter') this.ask(); }, askNow: () => this.ask(),
+      askSuggestions: ASK_SUGGEST.map((text) => ({ text, go: () => this.ask(text) })),
+      askScope: 'Searches ' + s.meetings.filter((m) => m.status === 'Ready').length + ' meetings, ' + s.decisions.length + ' decisions and ' + s.tasks.length + ' tasks',
+      askThread: s.askThread.map((x) => { const a = x.ans || {}; return { q: x.q, loading: x.status === 'loading', ready: x.status === 'ready', lead: a.lead || '', hasPoints: !!(a.points && a.points.length), none: !!a.none,
+        points: (a.points || []).map((p) => ({ text: p[0], cites: p.slice(1).map((c) => { const m = s.meetings.find((y) => y.id === c[0]); return { label: (m ? m.title : 'Meeting') + ' · ' + c[1], open: () => this.openAt(c[0], c[1]) }; }) })) }; }),
+      ...(() => {
         const done = s.tasks.filter((t) => t.status === 'done' && t.doneOn && t.doneOn >= sr.last && inSeries(t, sr));
         return {
           srDone: done.map((t) => ({ ...tv(t), doneLabel: 'Done ' + (DONE_LABEL[t.doneOn] || t.doneOn) })),
@@ -1672,10 +1932,37 @@ const decSt = this.status('decisions', 'decisionsState');
       decisionQuery: s.decisionQuery, onDecisionQuery: (e) => this.setState({ decisionQuery: e.target.value }),
       decLoading: decSt === 'loading', decFailed: decSt === 'failed', decEmpty: decSt === 'empty' || (decSt === 'ready' && s.decisions.length === 0), decReady: decSt === 'ready' && s.decisions.length > 0,
       retryDecisions: () => this.simLoad('decisions'),
+      decTabs: [['all', 'All'], ['approved', 'Approved'], ['proposed', 'Proposed'], ['replaced', 'Replaced'], ['rejected', 'Rejected']].map(([k, label]) => ({ label, count: k === 'all' ? decAll.length : decAll.filter((d) => d.status === k).length, pick: () => this.setState({ decStatus: k }), bg: s.decStatus === k ? '#FFFFFF' : 'transparent', fg: s.decStatus === k ? '#141917' : '#5B6460', shadow: s.decStatus === k ? '0 1px 2px rgba(20,25,23,0.12)' : 'none' })),
+      decStatusOpts: Object.keys(DSTATUS).map((v) => ({ v, l: DSTATUS[v].l })),
+      revisitOpts: REVISIT.map((v) => ({ v, l: v || 'No date' })),
+      ...(() => { const due = decAll.filter((d) => d.revisit === 'Fri 6 Nov 2026' && (d.status === 'approved' || d.status === 'proposed')); return { hasRevisitDue: due.length > 0, revisitDueText: due.length + (due.length === 1 ? ' decision is' : ' decisions are') + ' due to be revisited this week.' }; })(),
       decisionGroups: groups.map((g) => ({ ...g, canOpen: !!g.meeting, open: () => this.setState({ screen: 'detail', cur: g.meeting, tab: 'notes' }),
-        items: g.items.map((d) => ({ ...d, confirming: s.confirmRemove === d.id, normal: s.confirmRemove !== d.id,
-          askRemove: () => this.setState({ confirmRemove: d.id }), cancel: () => this.setState({ confirmRemove: null }),
-          remove: () => { this.setState((st) => ({ confirmRemove: null, decisions: st.decisions.filter((x) => x.id !== d.id) })); flashT('Decision removed from the log'); } })) })),
+        items: g.items.map((d) => {
+          const st = DSTATUS[d.status] || DSTATUS.approved;
+          const ex = s.decOpen === d.id;
+          const rel = (d.related || []).map((id) => s.tasks.find((t) => t.id === id)).filter(Boolean);
+          const rb = d.replacedBy && s.decisions.find((x) => x.id === d.replacedBy);
+          const rp = d.replaces && s.decisions.find((x) => x.id === d.replaces);
+          const meta = ['Decided by ' + d.by];
+          if (rel.length) meta.push(rel.length + (rel.length === 1 ? ' related task' : ' related tasks'));
+          if (d.revisit) meta.push('Revisit ' + d.revisit);
+          const upd = (p) => this.setState((s2) => ({ decisions: s2.decisions.map((x) => (x.id === d.id ? { ...x, ...p } : x)) }));
+          return {
+            ...d, ...this.evFields(d.meeting, d.ev), stLabel: st.l, stBg: st.bg, stFg: st.fg,
+            textFg: d.status === 'replaced' || d.status === 'rejected' ? '#6E7772' : '#141917',
+            meta: meta.join(' · '), expanded: ex, chev: ex ? '180deg' : '0deg',
+            toggle: () => this.setState({ decOpen: ex ? null : d.id, confirmRemove: null }),
+            statusVal: d.status, onStatus: (e) => { const v = e.target.value; upd({ status: v }); flashT('Status changed to ' + DSTATUS[v].l); },
+            revisitVal: d.revisit || '', onRevisit: (e) => upd({ revisit: e.target.value }),
+            hasRelated: rel.length > 0,
+            relatedList: rel.map((t) => ({ title: t.title, dot: t.status === 'done' ? '#0E6B5E' : t.status === 'doing' ? '#C98A1B' : '#A8AFAB', stText: t.status === 'done' ? 'Done' : t.status === 'doing' ? 'In progress' : 'To do', open: () => this.setState({ taskOpen: t.id }) })),
+            hasReplacedBy: !!rb, replacedByText: rb ? rb.text : '', goReplacedBy: () => rb && this.setState({ decOpen: rb.id, decStatus: 'all', decisionQuery: '' }),
+            hasReplaces: !!rp, replacesText: rp ? rp.text : '', goReplaces: () => rp && this.setState({ decOpen: rp.id, decStatus: 'all', decisionQuery: '' }),
+            confirming: s.confirmRemove === d.id, notConfirming: s.confirmRemove !== d.id,
+            askRemove: () => this.setState({ confirmRemove: d.id }), cancel: () => this.setState({ confirmRemove: null }),
+            remove: () => { this.setState((s2) => ({ confirmRemove: null, decOpen: null, decisions: s2.decisions.filter((x) => x.id !== d.id) })); flashT('Decision removed from the log'); },
+          };
+        }) })),
       noDecisions: groups.length === 0,
       revLoading: revSt === 'loading', revFailed: revSt === 'failed', revNone: revSt === 'empty' || (revSt === 'ready' && s.reviews.length === 0), revReady: revSt === 'ready' && s.reviews.length > 0,
       retryReview: () => this.simLoad('review'),
@@ -1738,14 +2025,18 @@ const decSt = this.status('decisions', 'decisionsState');
     const mtTitle = (t) => (t.meeting === 'm0' ? MW + ', 2 Nov' : t.meetingTitle || 'Added manually');
     const view = (t) => ({
       ...t, ...av(mem(t.assignee)), ...this.box(t.status === 'done'),
-      titleShown: t.title || 'Untitled task', assigned: !!t.assignee, unassigned: !t.assignee,
+      titleShown: t.title || 'Untitled task', assigned: !!t.assignee, unassigned: !t.assignee && !t.suggested, noOwner: !t.assignee,
+      ...this.evFields(t.meeting, t.ev),
+      suggested: !!t.suggested, confLabel: t.conf ? CONF[t.conf][0] : '', confLower: t.conf ? CONF[t.conf][0].toLowerCase() : '', confBg: t.conf ? CONF[t.conf][1] : 'transparent', confFg: t.conf ? CONF[t.conf][2] : '#4A524E', reason: t.reason || '',
+      accept: () => { this.patchTask(t.id, { suggested: false }); this.flash('Task added to the board'); },
+      dismiss: () => { this.setState((st) => ({ tasks: st.tasks.filter((x) => x.id !== t.id), taskOpen: st.taskOpen === t.id ? null : st.taskOpen })); this.flash('Suggestion dismissed'); },
       assigneeVal: t.assignee || '', dueVal: t.due || '', milestoneVal: t.milestone || '', projectVal: t.project || '', sprintVal: t.sprint || '',
       projectName: (s.projects.find((p) => p.id === t.project) || { name: 'No project' }).name, projectDot: (s.projects.find((p) => p.id === t.project) || { dot: '#A8AFAB' }).dot,
       showProject: s.projectFilter === 'all', carried: !!t.carried && t.status !== 'done', checkProject: !!t.checkProject,
       hasBadges: s.projectFilter === 'all' || (!!t.carried && t.status !== 'done') || !!t.checkProject,
       onSprint: (e) => this.patchTask(t.id, { sprint: e.target.value || null }), assignedLabel: ASSIGNED[t.assignedOn || TODAY] || '',
       stLabel: t.status === 'doing' ? 'In progress' : t.status === 'done' ? 'Done' : 'To do', stBg: t.status === 'doing' ? '#FFF4E0' : '#F0F2F1', stFg: t.status === 'doing' ? '#9A5B00' : '#4A524E',
-      dueLabel: t.due || 'No due date', dueFg: t.status === 'done' ? '#8A928E' : t.due === 'Today' ? '#9A5B00' : '#5B6460',
+      dueLabel: OVERDUE.includes(t.due) && t.status !== 'done' ? 'Overdue, ' + t.due : t.due || 'No due date', dueFg: t.status === 'done' ? '#8A928E' : OVERDUE.includes(t.due) ? '#B42318' : t.due === 'Today' ? '#9A5B00' : '#5B6460',
       showNew: !!t.isNew && t.status !== 'done', titleFg: t.status === 'done' ? '#6E7772' : '#141917', strike: t.status === 'done' ? 'line-through' : 'none',
       sourceLabel: mtTitle(t),
       open: () => this.setState({ taskOpen: t.id }),
@@ -1753,17 +2044,17 @@ const decSt = this.status('decisions', 'decisionsState');
       toggleDone: (e) => { e.stopPropagation(); this.patchTask(t.id, { status: t.status === 'done' ? 'todo' : 'done', isNew: false }); },
     });
     const f = s.taskFilter;
-    const base = s.tasks.filter((t) => (f === 'all' || (f === 'none' ? !t.assignee : f === 'ms1' ? t.milestone === 'ms1' : t.assignee === f)) && (s.projectFilter === 'all' || t.project === s.projectFilter));
+    const base = s.tasks.filter((t) => !t.suggested && (f === 'all' || (f === 'none' ? !t.assignee : f === 'ms1' ? t.milestone === 'ms1' : t.assignee === f)) && (s.projectFilter === 'all' || t.project === s.projectFilter));
     const shown = base.filter((t) => t.sprint === s.sprintView);
     const curIdx = SPRINTS.findIndex((x) => x.id === s.currentSprint);
     const nextSp = SPRINTS[curIdx + 1] || SPRINTS[curIdx];
     const active = s.members.filter((m) => m.status === 'Active');
-    const unassigned = s.tasks.filter((t) => !t.assignee && t.status !== 'done');
+    const unassigned = s.tasks.filter((t) => !t.assignee && t.status !== 'done' && !t.suggested);
     const ct = s.tasks.find((t) => t.id === s.taskOpen);
     const dt = ct ? view(ct) : null;
     const mt = s.tasks.filter((t) => t.meeting === s.cur);
     const owners = new Set(mt.filter((t) => t.assignee).map((t) => t.assignee));
-    const openCount = (id) => s.tasks.filter((t) => t.assignee === id && t.status !== 'done').length;
+    const openCount = (id) => s.tasks.filter((t) => t.assignee === id && t.status !== 'done' && !t.suggested).length;
     const chips = [['all', 'All tasks'], ['u1', 'My tasks'], ...active.filter((m) => !m.you).map((m) => [m.id, m.name.split(' ')[0]]), ['none', 'Needs owner']];
     return {
       isTasks: s.screen === 'tasks', isTeam: s.screen === 'team',
@@ -1780,7 +2071,7 @@ const decSt = this.status('decisions', 'decisionsState');
       }),
       dragEnd: () => this.setState({ dragOver: null }),
       ...(() => {
-        const checks = s.tasks.filter((t) => t.checkProject && t.status !== 'done');
+        const checks = s.tasks.filter((t) => t.checkProject && t.status !== 'done' && !t.suggested);
         const parts = [];
         if (unassigned.length) parts.push(unassigned.length === 1 ? '1 needs an owner' : unassigned.length + ' need an owner');
         if (checks.length) parts.push(checks.length === 1 ? '1 needs its project checked' : checks.length + ' need their project checked');
@@ -1802,7 +2093,7 @@ const decSt = this.status('decisions', 'decisionsState');
       sp: (() => {
         const x = SPRINTS.find((y) => y.id === s.sprintView) || SPRINTS[1];
         const idx = SPRINTS.indexOf(x);
-        const all = s.tasks.filter((t) => t.sprint === x.id && (s.projectFilter === 'all' || t.project === s.projectFilter));
+        const all = s.tasks.filter((t) => !t.suggested && t.sprint === x.id && (s.projectFilter === 'all' || t.project === s.projectFilter));
         const done = all.filter((t) => t.status === 'done').length;
         const isCur = idx === curIdx;
         const inf = this.spInfo(x.id);
@@ -1845,8 +2136,10 @@ const decSt = this.status('decisions', 'decisionsState');
       openTaskMeeting: () => dt && dt.meeting && this.setState({ taskOpen: null, screen: 'detail', cur: dt.meeting, tab: 'notes' }),
       inviteFromTask: () => this.setState({ taskOpen: null, screen: 'team', inviteOpen: true, inviteEmails: [], inviteInput: '' }),
       deleteTask: () => this.setState((st) => ({ tasks: st.tasks.filter((t) => t.id !== st.taskOpen), taskOpen: null })),
+      ...(() => { const sl = s.tasks.filter((t) => t.suggested); return { hasSuggested: sl.length > 0, suggestedCount: sl.length + ' to confirm', suggestedList: sl.map(view) }; })(),
+      askUnclearTg: this.tg(s.askUnclear), toggleAskUnclear: () => this.setState((st) => ({ askUnclear: !st.askUnclear })),
       hasActionTasks: mt.length > 0, noActionTasks: mt.length === 0,
-      actionSummary: mt.length + ' tasks created, assigned to ' + owners.size + (owners.size === 1 ? ' person' : ' people'),
+      actionSummary: (() => { const sg = mt.filter((t) => t.suggested).length; const made = mt.length - sg; return made + (made === 1 ? ' task' : ' tasks') + ' created, assigned to ' + owners.size + (owners.size === 1 ? ' person' : ' people') + (sg ? ', ' + sg + ' to confirm' : ''); })(),
       actionTasks: mt.map(view),
       goTasks: () => this.setState({ screen: 'tasks', taskFilter: 'all' }),
       teamRows: s.members.map((m) => ({
@@ -1889,7 +2182,7 @@ const decSt = this.status('decisions', 'decisionsState');
     const badges = { review: s.reviews.filter((r) => !r.checked).length, tasks: s.tasks.filter((t) => t.isNew && t.status !== 'done').length };
     const mk = ([label, key]) => ({ label, go: this.go(key), bg: active === key ? '#EEF1F0' : 'transparent', fg: active === key ? '#141917' : '#4A524E', badge: badges[key] || 0, hasBadge: !!badges[key], badgeBg: key === 'review' ? '#FFF4E0' : '#E6F1EE', badgeFg: key === 'review' ? '#9A5B00' : '#0E6B5E' });
     return {
-      navMain: [['Meetings', 'meetings'], ['Tasks', 'tasks'], ['Projects', 'projects'], ['Decisions', 'decisions'], ['Review', 'review'], ['Team', 'team']].map(mk),
+      navMain: [['Meetings', 'meetings'], ['Ask Beyric', 'ask'], ['Tasks', 'tasks'], ['Projects', 'projects'], ['Decisions', 'decisions'], ['Review', 'review'], ['Team', 'team']].map(mk),
       navConfig: [['Templates', 'templates'], ['Vocabulary', 'vocab'], ['Settings', 'settings']].map(mk),
       ...this.moreVals(s),
       goMeetings: this.go('meetings'),
@@ -1964,13 +2257,13 @@ const decSt = this.status('decisions', 'decisionsState');
       ...(() => {
         if (s.cur === 'm0') return {
           L: EN.L, summary: PLANNING.summary, keyPoints: PLANNING.keyPoints, decisions: PLANNING.decisions, questions: s.oq.filter((q) => q.meeting === 'm0').map((q) => ({ text: q.text, carriable: true, carryLabel: q.resolved ? 'Resolved' : q.carry ? 'On next agenda' : 'Add to next agenda', bg: q.carry && !q.resolved ? '#E6F1EE' : '#FFFFFF', fg: q.carry && !q.resolved ? '#0A5248' : '#2E3532', border: q.carry && !q.resolved ? '#BFDCD5' : '#D5DBD8', toggle: () => this.setState((st) => ({ oq: st.oq.map((x) => (x.id === q.id ? { ...x, carry: !x.carry, resolved: false } : x)) })) })), checks: PLANNING.check,
-          transcript: PLANNING.transcript.map(([name, time, text]) => ({ name, time, text, ...PEOPLE[name] })),
+          transcript: PLANNING.transcript.map(([name, time, text]) => ({ name, time, text, ...PEOPLE[name], hlBg: this.hlBg(time) })),
         };
         const D = (s.shownLang !== 'en' && TR[s.shownLang]) || EN;
         const tr = D.transcript;
         return {
           L: D.L, summary: D.summary, keyPoints: D.keyPoints, decisions: D.decisions, questions: D.questions.map((text) => ({ text, carriable: false })), checks: [D.check],
-          transcript: TRANSCRIPT.map(([name, time, text], i) => ({ name, time, text: tr ? tr[i] : text, ...PEOPLE[name] })),
+          transcript: TRANSCRIPT.map(([name, time, text], i) => ({ name, time, text: tr ? tr[i] : text, ...PEOPLE[name], hlBg: this.hlBg(time) })),
         };
       })(),
       langs: LANGS, lang: s.lang,

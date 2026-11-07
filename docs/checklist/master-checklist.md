@@ -1,6 +1,6 @@
 # Beyric Note Taker: master checklist
 
-**Status (2026-11-06, about 23:45 WAT):** MVP live at notes.beyrictech.com; migrations at **0033** (server head `e0ad10b`, chain 0026, 0027, 0028, 0031, 0029, 0030, 0032, 0033). **All ten PRs of the 2026-11-06 queue are merged and deployed, one at a time:** #96 Outlook M1 (0027, `b239e12`), W4 #100 (0028, `a1488fa`) + #102 (`964e5b9`), W9 backend #108 (0031, `32dee7c`), W6 #99 (0029, `6319dbe`) + #103 (`5ba2305`), W8 #104 (0030, `9471c2c`) + #105 (`4b1e26d`), W10 Slack #107 (0032, `e3b7324`) + Linear #109 (0033, `ee3ec88`), W9 screens #111 (`e0ad10b`). Earlier today: #106 waiting-room fix. **All W phases (W0 to W10) are built.** **Not built:** W8's sprint lines, C15b to C18, ICS (C19 to C24), Teams T1 to T3, Outlook M0 run and M2 to M8, pre-sign-up PR 3, Phases I, D, V; the bot-reliability decision (vendor bake-off, `docs/spike/meeting-bot-vendors.md`). Some older lines below are stale (merged PRs still marked open): reconcile as you touch them. Merge order and his queued items: `docs/HANDOFF-master.md`.
+**Status update (2026-11-07, 20:00 WAT, thirteenth lead handover):** server head `70c855e`; open PR #121 (summary box); the designer delivered a NEW main UI file with new features (see "UI parity batch 3 and the Ask Beyric scope" below; audited 2026-11-07, `docs/ui/audit-2026-11-07-main-v2.md`); bake-off blocked on the Skribby Google sign-in; the handoff `docs/HANDOFF-master.md` was rewritten (sections 00, 1, 4, 5, 6 current). **Earlier status update (2026-11-07, 14:10 WAT):** server head `f9ed40b`; merged today: #113 docs, #114 vendor research, #115 and #116 (UI parity batch 2 A and B), #118 (bake-off tool), #117 (mails parity). Open: CI fix PR #119, and the summary-box session (branch `feature/mails-summary-box`). No migration today (next free **0034**). Bake-off waits for his sign-ups. See `docs/HANDOFF-master.md` (Update block) for decisions and next steps. **Status (2026-11-06, about 23:45 WAT):** MVP live at notes.beyrictech.com; migrations at **0033** (server head `e0ad10b`, chain 0026, 0027, 0028, 0031, 0029, 0030, 0032, 0033). **All ten PRs of the 2026-11-06 queue are merged and deployed, one at a time:** #96 Outlook M1 (0027, `b239e12`), W4 #100 (0028, `a1488fa`) + #102 (`964e5b9`), W9 backend #108 (0031, `32dee7c`), W6 #99 (0029, `6319dbe`) + #103 (`5ba2305`), W8 #104 (0030, `9471c2c`) + #105 (`4b1e26d`), W10 Slack #107 (0032, `e3b7324`) + Linear #109 (0033, `ee3ec88`), W9 screens #111 (`e0ad10b`). Earlier today: #106 waiting-room fix. **All W phases (W0 to W10) are built.** **Not built:** W8's sprint lines, C15b to C18, ICS (C19 to C24), Teams T1 to T3, Outlook M0 run and M2 to M8, pre-sign-up PR 3, Phases I, D, V; the bot-reliability decision (vendor bake-off, `docs/spike/meeting-bot-vendors.md`). Some older lines below are stale (merged PRs still marked open): reconcile as you touch them. Merge order and his queued items: `docs/HANDOFF-master.md`.
 
 Legend: `[x]` done and verified, `[ ]` not done.
 
@@ -495,6 +495,61 @@ Each phase ends with its policy rows, SOP, checklist and FE guide with live capt
   - [ ] TR1 run with a real model (no `OPENAI_API_KEY` where this was built): French and Spanish quality, real cost per hour
   - [ ] Privacy and terms rows for translation (sentences in the SOP; the legal pages are another session's)
 
+## UI parity batch 3 and the Ask Beyric scope (the designer's new main file, final per Adebayo 2026-11-07; audit `docs/ui/audit-2026-11-07-main-v2.md`, rows B1 to B34 and U1 to U14)
+
+The new file (2321 lines against 2028) is about evidence and trust: a source line from the transcript on everything, and "Show in transcript". **Corrections to the first look:** the Review screen and the Settings Time zone card did **not** change and are built; "Suggested tasks", "Show source" and "Accept" are on the **Tasks** screen, not on Review. Nothing in this module is built yet. Order of the three new features is Adebayo's call (audit, "Questions for the Ask Beyric spec", item 11).
+- [x] Audit the new file screen by screen against the old file and the app (read-only), `docs/ui/audit-2026-11-07-main-v2.md` (2026-11-07)
+- [x] Adebayo confirmed the file is final (2026-11-07, relayed by the lead)
+- [x] Already built, unchanged in the new file (nothing to do; proof: no diff hunk, audit rows A38, A48 to A51, SOP `docs/sop/2026-11-05-decisions-review-states-and-time-zone.md`): Review in full (Not now, Rewrite notes, Dismiss, Remove from list, All caught up, row errors); Time zone "Use my device"; Decisions loading, failed with Try again, empty, search, Open notes, the remove ask words and toast
+- [ ] Decisions needed from Adebayo before the build: (a) the order of Suggested tasks, Decisions record, Keeps coming up and Suggested agenda, Ask Beyric; (b) how "Show in transcript" finds a row: store the time of each turn (backend change) or find the verified quote in the text (no time shown, differs from the file); (c) the AI cost of a model call per Ask question; (d) who may change a decision's status and accept a suggested task (owner of the meeting, team owner or admin, the assignee); (e) whether a suggested task mails its assignee before it is accepted (our default: no)
+
+### 3A: Front end only (the API already gives the data; no migration)
+- [ ] Series score tiles "Done since last meeting", "Still open", "Overdue" (B10): from `GET /api/series/{id}` (`finished`, `unfinished[].due_date`, today in the person's zone)
+- [ ] Overdue wording (B11): card "Overdue, Fri 30 Oct" in red, Group-by-due heading "Overdue, was due Fri 30 Oct" (`web/components/app/task-card.tsx`, `web/lib/tasks.ts`)
+- [ ] Suggested agenda, the lines that need no new data (B20 part): "Review the N overdue tasks", "Settle N open questions carried over", each with Add to agenda / Added, using `POST` and `DELETE /api/series/{id}/agenda`
+- [ ] Decisions wording and shell (B26, B34): "No decisions match." and "Remove from log" inside the row's expanded panel (change the subtitle only when 3D ships, or the line promises a status that is not shown)
+- [ ] Sidebar "Ask Beyric" item between Meetings and Tasks (B9): only with 3F, or the page behind it says "Not available yet"
+- [ ] Parity shots for each, 1440 / 768 / 390, design beside page, into `docs/ui/parity/after/`
+
+### 3B: Show in transcript (foundation for 3C, 3D and 3F)
+- [ ] Decision (a): address a transcript row by time or by the verified quote (`app/extraction.py:236` already checks every task quote against the transcript)
+- [ ] Check whether Vexa's `segments` or the audio chunk offsets give a time per turn (`app/vexa.py:274`, `app/notes.py:159`, `app/audio.py`); if so, store it with a migration and show the time on each transcript row (also closes A18)
+- [ ] Transcript rows get an anchor and a highlight (D:287: pale yellow `#FFF4D6`, smooth scroll), and a deep link such as `/meetings/{id}?tab=transcript&at=...` (B18b, B25)
+- [ ] Toast "That meeting is no longer available" for a deleted or unreadable meeting; the "still processing" case is undrawn (U13)
+
+### 3C: Suggested tasks and "Ask before adding unclear tasks" (spec first: B12, B13, B21 to B24; needs an Opus review: touches task counts, mail and visibility)
+- [ ] Short spec (brainstorming): the rule for "unclear" (confidence from the model, `ModelAction.confidence` is already returned and thrown away, `app/extraction.py:176,204,335,468,506`), the reason text (not asked today: prompt change, bump `app/ai_versions.py`), what Accept and Dismiss do, who may do them (U9), mail (U5), what Edit does (U11)
+- [ ] Migration (next free **0034**): `tasks.suggested`, `tasks.confidence`, `tasks.reason`; `user_settings.ask_before_unclear` (default on, as drawn)
+- [ ] Extraction: persist confidence and reason; send unclear tasks to suggested when the setting is on (`app/workspace.py`, `app/extraction.py`); a re-run must not bring back a dismissed suggestion (tombstone, as for deleted tasks)
+- [ ] API: accept (clear the flag), dismiss (delete with tombstone), `suggested`, `confidence`, `reason` on `TaskOut`; the setting on `GET` / `PUT /api/settings/tasks`; regenerate `docs/openapi.json` and `web/lib/api/schema.d.ts`
+- [ ] Leave suggested tasks out of the seven places the design leaves them out (D:1793, 1828, 2047, 2052, 2057, 2074, 2096): series "Unfinished", project open counts, the "needs owner" banner, per-person counts, sprint progress, the "check project" banner, Board and Backlog; and out of server counts (`AttentionOut`, `SeriesCard.unfinished_tasks`, the sidebar Tasks badge) and mail
+- [ ] Screens: Tasks "Suggested tasks" section (heading, "N to confirm", confidence pill, evidence box, reason, Show source, Edit, Dismiss, Accept, toasts "Task added to the board" and "Suggestion dismissed"); drawer box "Suggested task, medium confidence." with Accept and Dismiss; meeting Action items "To confirm" pill and the ", K to confirm" tail; Settings "Ask before adding unclear tasks" (until the backend exists, show it off with "Not available yet")
+- [ ] SOP, FE integration guide from a real capture, parity shots
+
+### 3D: Decisions as a record (spec first: B27 to B33)
+- [ ] Short spec: where status comes from (model reads the notes, or the person sets it), "Decided by" (a model must name the speaker), Replaces / Replaced by (how two decisions get linked), related tasks (no link exists), "Revisit on" (a real date field is undrawn, U8), the banner's "this week" rule, mail or notification (U6)
+- [ ] Migration: `decisions.status`, `decided_by`, `revisit_on`, `replaces_id`, evidence (quote and, with 3B, a time), a decision-to-task link
+- [ ] Extraction step for decisions (today they are parsed by code with no model call, `app/workspace.py`; the AI workspace spec's rule "no second opinion" needs a decision); `PATCH /api/decisions/{id}` for status and revisit date; `GET /api/decisions` returns the new fields and related tasks
+- [ ] Screen: status tabs with counts, status pill, expandable rows (Status, Revisit on, Decided by, evidence with "Show in transcript", Related tasks, Replaced by / Replaces), revisit banner, "Remove from log" inside the panel (3A), subtitle "Decisions made in your meetings, with their status and the tasks that carry them out."
+- [ ] Phone and tablet layouts for the tab strip and the expanded panel (the file has no `@media`, U7: lead-designed, needs his OK)
+- [ ] SOP, FE guide, parity shots
+
+### 3E: Keeps coming up and Suggested agenda topics (spec first: B19, B20 rest)
+- [ ] Short spec: the unit of a topic, scope (one series, as drawn on the Series page), how "without a decision" is judged (with 3D: no Approved decision), the threshold (2 meetings?), model call or code, when it is computed (in the worker after each meeting, not on page load)
+- [ ] Backend computation and a field on `GET /api/series/{id}`; the three sample reasons ("without a decision", "still no owner or date", "approval rules not final") are three kinds, not one count
+- [ ] Screen: "Keeps coming up" (hidden when empty) and the topic and "Confirm N suggested tasks from last time" lines of "Suggested agenda"
+- [ ] SOP, FE guide, parity shots
+
+### 3F: Ask Beyric (spec first, through brainstorming with Adebayo: B14 to B18, B9)
+- [ ] Spec: the open questions are listed in the audit ("Questions for the Ask Beyric spec", 11 items): what is searched (notes, transcripts, decisions, tasks, open questions), retrieval method (Postgres full-text, embeddings, or send recent text to the model), model and cost per question, a cap per person and per workspace, a new `ai_runs` kind `ask`, visibility (`app/visibility.py`: own and team-shared meetings only; a citation to an unreadable meeting must not exist), grounding (every citation checked in code, like `Task.quote`), history and deletion (`app/deletion.py`), privacy and terms lines, prompt-injection handling
+- [ ] Backend: question endpoint, retrieval, answer with citations, rate limit, cost ledger, tests for visibility
+- [ ] Screen to the file: title, subtitle, input and "Ask", five chips, scope line "Searches N meetings, N decisions and N tasks", answer card ("Searching your meetings...", lead, points, citation chips, "I could not find that in your meetings.", "Try asking about a person, a project, a decision or a date.")
+- [ ] The states the designer left out (U1 to U4): before the first question, error and rate limit, history, answer feedback or an "AI can be wrong" line: ask the designer, or build with his OK labelled lead-designed
+- [ ] SOP, FE guide, parity shots, privacy copy check
+
+### 3G: To put to the designer (undrawn, audit section 4)
+- [ ] Mobile and tablet for every new screen (U7); empty, error and history states of Ask Beyric (U1 to U4); suggested-task mail rule and edit behaviour (U5, U11); decision statuses, who sets them, how a decision becomes Replaced or Rejected (U9, U12); real date field for "Revisit on" (U8); which quote the drawer shows (U10); loading state of the Series tiles and topics (U14)
+
 ## UI parity batch 2 (from the 2026-11-07 UI audit; reports `docs/ui/audit-2026-11-07-app.md` and `docs/ui/audit-2026-11-07-pages-emails.md`)
 
 No whole designed screen is missing. The designer's main file draws one desktop layout only (no `@media`): tablet and phone layouts are ours.
@@ -529,6 +584,11 @@ No whole designed screen is missing. The designer's main file draws one desktop 
   - [ ] Adebayo: make a Skribby account (Free), an API key, the bot Google account under Authenticated Accounts, and a Recall account and key; put them in `~/.config/beyric-bakeoff/keys.env` (never in chat)
   - [ ] First live check (README step 4, about 5 minutes), then tune the Skribby knock threshold and poll gap; find out whether Skribby's Free plan allows Authenticated Accounts (the pages do not say)
   - [ ] 10 or more trials per arm (one bot per meeting), `report`, then the decision on a signed-in bot
+- [ ] CI: apt cache key follows the runner image (PR #119, SOP `docs/sop/2026-11-07-ci-apt-cache-key.md`): until it merges a new runner image can break every test shard again; check that the second CI run shows a cache hit
+- [ ] **"Could not join" mail wiring:** built and tested, sent by nothing; needs his OK and an Opus review (new bell kind, per-meeting dedupe, manual sends; `app/pipeline.py` about 545-554)
+- [ ] Bake-off: his sign-ups (free Gmail for the bot, Skribby, Recall), keys file, first live check (`tools/bakeoff/README.md`); then 10 trials per arm and the decision rule (signed-in, invited bot near 95% vs Vexa)
+- [ ] Mails: summary box and "Sprint N opens" in the 1-hour reminder (rules approved 2026-11-07; session `mails-reminder-summary-b`)
+- [ ] GitGuardian: also mark the #118 finding (fake `sk_live_` test value, in the branch history only)
 
 ## CI speed (2026-11-04, PR #70, SOP `docs/sop/2026-11-04-ci-sharding.md`)
 
