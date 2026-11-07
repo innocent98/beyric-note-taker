@@ -17,7 +17,7 @@ export default async function SignupPage({ searchParams }: { searchParams: Promi
   const hasInvite = Boolean(Array.isArray(invite) ? invite[0] : invite);
   const pilot = await getPilot();
   return (
-    <AuthShell action={{ text: "Already have an account?", label: "Sign in", href: "/login" }}>
+    <AuthShell action={{ text: hasInvite ? "Have an account?" : "Already have an account?", label: "Sign in", href: "/login" }}>
       <SignupFlow
         pilot={pilot?.state ?? null}
         google={pilot?.google_signin === true}

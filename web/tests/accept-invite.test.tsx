@@ -26,12 +26,15 @@ function open(token = "tok") {
 beforeEach(() => Object.values(mocks).forEach((fn) => fn.mockReset()));
 afterEach(cleanup);
 
-describe("the invitation link page (lead-designed)", () => {
+describe("the invitation link page (the designer's Join your team)", () => {
   it("takes the token out of the address and says who invited you", async () => {
     mocks.preview.mockResolvedValue(existing);
     mocks.session.mockResolvedValue(visitor);
     open("abc123");
-    await screen.findByRole("heading", { name: `${existing.inviter_name} invited you to join ${existing.team_name}` });
+    await screen.findByRole("heading", { name: "Join your team" });
+    expect(screen.getByText(existing.inviter_name!).closest(".invite-banner-text")?.textContent).toBe(
+      `${existing.inviter_name} invited you to the ${existing.team_name} workspace`,
+    );
     expect(window.location.search).toBe("");
     expect(mocks.preview).toHaveBeenCalledWith("abc123");
   });
@@ -42,7 +45,9 @@ describe("the invitation link page (lead-designed)", () => {
     open("abc123");
     const link = await screen.findByRole("link", { name: "Create your account" });
     expect(link.getAttribute("href")).toBe("/signup?invite=abc123");
-    expect(screen.getByText(new RegExp(brandNew.email))).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Join your team" })).toBeTruthy();
+    // The invited address, locked (a lock beside it, not an input).
+    expect(screen.getByRole("textbox", { name: "Email" }).textContent).toBe(brandNew.email);
   });
 
   it("asks a visitor with an account to sign in first", async () => {
@@ -50,7 +55,7 @@ describe("the invitation link page (lead-designed)", () => {
     mocks.session.mockResolvedValue(visitor);
     open();
     expect(await screen.findByRole("link", { name: "Go to sign in" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Accept invitation" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Join Beyric" })).toBeNull();
   });
 
   it("tells someone signed in as another address which address the invitation is for", async () => {
@@ -67,7 +72,7 @@ describe("the invitation link page (lead-designed)", () => {
     mocks.accept.mockResolvedValue(team);
     open("abc123");
     expect(await screen.findByText(/Your own team will be replaced by this one/)).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "Accept invitation" }));
+    await userEvent.click(screen.getByRole("button", { name: "Join Beyric" }));
     expect(mocks.accept).toHaveBeenCalledWith("abc123");
     await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/team"));
   });
@@ -77,7 +82,7 @@ describe("the invitation link page (lead-designed)", () => {
     mocks.session.mockResolvedValue(signedIn(existing.email));
     mocks.accept.mockRejectedValue(new ApiError(409, "already_on_team", "You are on another team. Leave it first, then accept this invitation."));
     open();
-    await userEvent.click(await screen.findByRole("button", { name: "Accept invitation" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Join Beyric" }));
     expect(await screen.findByText("You are on another team. Leave it first, then accept this invitation.")).toBeTruthy();
     expect(mocks.push).not.toHaveBeenCalled();
   });

@@ -92,7 +92,7 @@ Checked in a real Chromium-based browser pane at 375 and 1280 px against `web/sc
 | Forgot password and "check your email" (`/forgot-password`) | Reset your password; Check your email with Open Gmail / Outlook and "resend in 0:30" | As drawn, with the 30-minute expiry in the text and a 60 s resend wait | Resend waits 60 s, not 30 |
 | New password and "Password updated" (`/reset-password?token=`) | New password with the 3-rule meter, confirm, "Update password", "Password updated" | As drawn; one rule instead of three (see sign-up); the sub line says "You will be signed out on every device" (the API signs the user out everywhere); "For {email}" is dropped because the link carries only a token; a dead link shows "Ask for a new link" | |
 
-**Not built, no backend:** "Set up your workspace" (workspace name, calendar connect), "Join your team" (team invite acceptance), the Microsoft buttons, "Keep me signed in", the 6-digit email code.
+**Built 2026-11-07 (batch 2, PR B):** "Set up your workspace" (`/setup`) and the "Join your team" presentation. **Not built, no backend:** the Microsoft buttons, "Keep me signed in", the 6-digit email code.
 
 **Two small layout fixes made on the way:** the sign-in header no longer wraps the logo and the link on a 375 px screen (the sentence before the link hides below 480 px), and the Show / Hide button fills the field's height on a touch screen (it sat low).
 

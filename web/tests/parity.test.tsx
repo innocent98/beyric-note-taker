@@ -111,11 +111,19 @@ describe("landing page", () => {
     expect(html).toContain("Your meetings, turned into finished work.");
   });
 
-  it("links only to places that exist: no sign-up and no prototype file", () => {
+  it("links only to places that exist, with the sign-up buttons on /signup and no prototype file", () => {
     const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
     expect(hrefs.filter((h) => !h.startsWith("#"))).toEqual(
-      expect.arrayContaining(["/login", "/privacy", "/terms", "mailto:privacy@beyrictech.com"]),
+      expect.arrayContaining(["/login", "/signup", "/privacy", "/terms", "mailto:privacy@beyrictech.com"]),
     );
-    expect(hrefs.some((h) => /signup|sign-up|\.dc\.html|register/i.test(h))).toBe(false);
+    expect(hrefs.some((h) => /\.dc\.html|register/i.test(h))).toBe(false);
+  });
+
+  it("has the designer's three sign-up buttons: Get started, Get started free, Create your account", () => {
+    for (const label of ["Get started", "Get started free", "Create your account"]) {
+      const link = [...html.matchAll(/<a [^>]*href="\/signup"[^>]*>(.*?)<\/a>/g)].map((m) => m[1].replace(/<[^>]*>/g, "").trim());
+      expect(link, label).toContain(label);
+    }
+    expect(html).not.toContain("See the app");
   });
 });

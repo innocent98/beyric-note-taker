@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { Alert, AppLink, Button } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { accountError, isCode } from "@/lib/accounts";
+import { markSetupPending } from "@/lib/setup-pending";
 import { AuthHead } from "./auth-head";
 import { PasswordField } from "./password-field";
 import { PilotScreen } from "./pilot-screen";
@@ -37,6 +38,7 @@ export function VerifyEmailForm() {
     setPending(true);
     try {
       await api.verifyEmail(token, password);
+      markSetupPending();
       setScreen("done");
     } catch (caught) {
       if (isCode(caught, "password_mismatch")) setError(accountError(caught));
