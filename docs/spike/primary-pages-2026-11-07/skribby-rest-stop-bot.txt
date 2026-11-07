@@ -1,0 +1,38 @@
+SOURCE: https://skribby.io/docs/rest-api/bot-operations/stopbot
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Stop Bot
+
+POST/bot/{id}/stopCopy URL
+https://platform.skribby.io/api/v1/bot/{id}/stop
+
+Stop a running meeting bot. This will cause the bot to leave the meeting
+and begin processing the recording.
+
+Path Parameters
+
+NameTypeDescription
+idrequired
+string<uuid>Bot ID
+
+Responses
+
+200Bot stopped successfullymessagestring
+Example: "Meeting bot is shutting down."
+
+401Unauthorized - Invalid API key
+403Bot cannot be stopped
+404Bot not found
+
+Request
+cURLJavaScriptPython
+Copycurl -X POST \
+  "https://platform.skribby.io/api/v1/bot/{id}/stop" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json"
+
+Response
+200 OKapplication/json
+Copy{
+  "message": "Meeting bot is shutting down."
+}

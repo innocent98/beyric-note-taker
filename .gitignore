@@ -15,3 +15,9 @@ __pycache__/
 # Outlook M0 spike: the local registration's secret and the unredacted raw answers
 docs/spike/outlook-m0/.env.m0
 docs/spike/outlook-m0/out/
+
+# Bot bake-off tool: the trial log and any local keys file (the real keys live outside the repo,
+# in ~/.config/beyric-bakeoff/keys.env)
+tools/bakeoff/logs/
+tools/bakeoff/keys.env
+tools/bakeoff/*.env

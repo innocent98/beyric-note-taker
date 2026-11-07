@@ -1,0 +1,48 @@
+SOURCE: https://skribby.io/docs/guides/platforms
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Platforms
+
+Skribby supports the three major meeting platforms. While we strive for feature parity, some functionality depends on the underlying meeting service.
+
+FeatureGoogle MeetZoomMS Teams
+Join as Guest✅✅✅
+Join as Authenticated✅✅✅
+Real-time Transcription✅✅✅
+Video Recording✅✅✅
+In-meeting Chat✅✅✅
+Chat Threads❌✅❌
+Webinars❌✅✅
+Wait in Lobby✅✅✅
+Participant List✅✅✅
+Real-time Audio✅✅✅
+
+Platform Specifics
+
+Google Meet
+
+Authentication: Supports Google Workspace and personal Gmail accounts linked via the Skribby Dashboard. Google Authenticator-compatible 2-Step Verification is supported; see Bot Authentication.
+
+Chat: Bots can read and send messages to the public chat.
+
+Entry: Bots usually wait for an organizer to admit them unless the meeting is set to "Open".
+
+Zoom
+
+Authentication: Uses ZAK tokens for joining as a specific user.
+
+Webinars: Supported for both panelists and attendees. See the Zoom Chat Guide for webinar-specific chat behaviors.
+
+Security: Zoom often requires a meeting passcode. This must be included in the meeting URL (e.g., ?pwd=...) for the bot to join successfully.
+
+Chat Threads: Supported via realtime chat events with id and parent_id. Use reply_to_message when sending chat replies.
+
+Microsoft Teams
+
+Authentication: Requires an Azure AD account linked via the Skribby dashboard.
+
+Webinars: Supported for both presenters and attendees.
+
+Chat: Bots can send and receive messages.
+
+Entry: Reliability for guest joins can vary based on the host organization's external access policies.

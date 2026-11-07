@@ -1,0 +1,50 @@
+SOURCE: https://skribby.io/docs/guides/meeting-urls
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Meeting Urls
+
+To join a meeting, Skribby bots require a valid meeting URL. We support all major platforms and automatically handle redirect links from security software.
+
+Supported Formats
+
+Google Meet
+
+Standard: https://meet.google.com/abc-defg-hij
+
+Redirects: We automatically unwrap google.com/url?q=... links.
+
+Zoom
+
+Standard: https://zoom.us/j/123456789
+
+With Passcode: https://zoom.us/j/123456789?pwd=...
+
+Webinars: https://zoom.us/w/123456789 or standard Zoom webinar links.
+
+⚠️ Important: If a Zoom meeting requires a passcode, it must be included in the URL via the pwd parameter. If missing, the bot will fail with a not_admitted status.
+
+Microsoft Teams
+
+Standard: https://teams.microsoft.com/l/meetup-join/...
+
+Webinars: Uses the same meetup-join format as standard Teams meetings.
+
+Short Links: https://teams.live.com/...
+
+Link Unwrapping (Safe Links)
+
+In corporate environments, meeting links are often wrapped by security tools like Microsoft Safe Links or Google Workspace protection.
+
+Skribby automatically detects and "unwraps" these URLs to find the actual meeting destination. You can provide the protected link directly to our API without any manual processing:
+
+Microsoft: https://*.safelinks.protection.outlook.com/?url=...
+
+Google: https://www.google.com/url?q=...
+
+Common Mistakes
+
+Missing Zoom Passcodes: Ensure the URL you copy from your calendar includes the ?pwd= or ?password= segment.
+
+Expired Links: If a meeting link has expired, the bot will return an invalid_meeting_url stop reason.
+
+Invalid Service: Ensure the service parameter in your API request matches the URL (e.g., don't send a Zoom URL with service: "gmeet").

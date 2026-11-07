@@ -1,0 +1,51 @@
+SOURCE: https://skribby.io/docs/rest-api
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Skribby REST API
+
+Base URL
+https://platform.skribby.io/api/v1Copy
+Europe (EU) Region
+
+Base URL
+https://platform-jp.skribby.io/api/v1Copy
+Japan (JP) Region
+
+Authentication
+
+All API requests require authentication using a Bearer token in the Authorization header.
+Authorization: Bearer YOUR_API_KEY
+
+You can obtain your API key from the Skribby Platform.
+
+Bot Operations
+Create and manage meeting bots
+
+POSTCreate Bot
+/bot
+POSTValidate Bot Configuration
+/bot/validate
+GETGet Bot
+/bot/{id}
+PATCHUpdate Bot
+/bot/{id}
+DELETEDelete Bot Data
+/bot/{id}
+GETGet Bot Pricing
+/bot/{id}/pricing
+POSTSend Chat MessageDeprecated
+/bot/{id}/chat-message
+POSTStop Bot
+/bot/{id}/stop
+GETGet Scheduled Bots
+/bot/scheduled
+
+Recording Operations
+Upload and transcribe recordings
+
+POSTCreate Recording
+/recording
+GETGet Recording
+/recording/{id}
+DELETEDelete Recording Data
+/recording/{id}

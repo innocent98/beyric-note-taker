@@ -1,0 +1,133 @@
+SOURCE: https://skribby.io/docs/guides/bot-authentication
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Bot Authentication
+
+By default, Skribby bots join meetings as Guests. When a meeting requires a signed-in participant, you can authenticate the bot with a stored account. Authentication does not override the meeting host's admission or organization policies.
+
+Authentication Methods
+
+MethodPlatformsDescription
+Authenticated AccountsGoogle Meet, MS TeamsLink a real account (email/password) via the Skribby Dashboard.
+ZAK TokensZoomProvide a short-lived token generated via the Zoom API.
+
+Google Meet & Microsoft Teams
+
+For these platforms, you manage accounts directly in the Skribby Dashboard.
+
+Adding an Account
+
+Navigate to Settings → Authenticated Accounts
+
+Click Add Account
+
+Select the service (Google Meet or Microsoft Teams)
+
+Enter the account email and password
+
+For Google Meet accounts with Google 2-Step Verification, add the authenticator setup key—not a current six-digit code
+
+Save and copy the account_id
+
+Using in API Requests
+
+Copy{
+    "authentication": {
+        "account_id": "uuid-here",
+        "always_authenticate": true
+    }
+}
+
+💡 Guest-First Logic: By default, bots try to join as guests first (to use your custom bot_name). If the meeting requires login, it then uses the account. Set always_authenticate: true to skip the guest attempt.
+
+Provider Requirements
+
+Google Meet
+
+RequirementDetails
+Account TypeGoogle Workspace or personal Gmail
+2-Step VerificationKeep it enabled and store a Google Authenticator-compatible TOTP setup key with the authenticated account
+App PasswordsNot supported; use the main account password
+Meeting AccessSkribby does not require the account to be in the meeting host's Workspace; Google admission and admin policies still apply
+
+Google Meet uses Open, Trusted, and Restricted meeting access. Open meetings allow anyone with the link to join without knocking. Trusted meetings allow people in the host's organization and invited external Google accounts to join without knocking; other participants must knock. Restricted meetings admit invited accounts and require others to knock. The host's meeting-access setting and Workspace admin policies determine whether an external account joins automatically, must knock or be invited, or cannot join. See Google's meeting access documentation.
+
+You can use existing production Workspace users, users in a separate dedicated Workspace, or personal Gmail accounts. A separate Workspace can provide administrative isolation, but Skribby does not require one. We recommend dedicated, non-admin bot users instead of personal employee accounts.
+
+Microsoft Teams
+
+RequirementDetails
+Account TypeMicrosoft 365 account
+MFAMust be disabled
+LicenseNeeds Teams access (most M365 plans include this)
+Tenant RestrictionsAccount must be in the same tenant as meetings
+
+Authenticated Bot Capacity
+
+Concurrency is enforced across your entire Skribby organisation (workspace), not per API key or authenticated account. Every API key and stored authenticated account shares the same plan limit:
+
+PlanConcurrent bots
+Free3
+PAYG25
+PAYG+Custom, negotiated
+
+Bots in booting, joining, waiting_to_record, recording, breakout_waiting_room, leaving, processing, or transcribing count toward the limit. Scheduled and terminal bots do not count.
+
+When the organisation is at its limit, bot creation fails immediately with HTTP 403 and You have reached the limit of concurrent meeting bots for your plan. No bot is created or queued, and Skribby does not retry the request automatically.
+
+Each authenticated bot request selects one stored account through authentication.account_id. Skribby does not pool accounts, choose one automatically, round-robin between accounts, fail over to another account, or retry with a different account. Your application owns that assignment logic.
+
+Skribby does not enforce a separate per-authenticated-account concurrency limit, and Google does not publish a fixed limit for simultaneous Meet logins. The same Google account can be used in separate meetings at the same time; you do not need one account per meeting. For capacity planning, treat about 30 active bots per Google account as a conservative operating threshold rather than a guaranteed limit. Google can apply changing account-security and session controls before that threshold.
+
+For a workload of 30 separate concurrent Google Meet meetings, one account fits that planning threshold, but it creates a single point of failure. For production, provision at least two dedicated accounts, assign them explicitly through authentication.account_id, and keep enough spare capacity to move new bots away from an account that encounters a login challenge. Three or four accounts provide more resilience and support cases where multiple bots must join the same meeting. Bots using the same Google account in the same meeting can merge into one participant, so those bots need different accounts.
+
+When a Google Calendar event should admit the bot without knocking, invite the assigned account to the event. If you manage several bot accounts in one Workspace, a Google Group containing those accounts can simplify invitations, but your application must still choose the account_id for each bot request.
+
+Thirty concurrent bots exceed PAYG's limit of 25, so this workload requires PAYG+ with a negotiated custom concurrency limit. Set the limit above the expected meeting peak because bots that are still leaving, processing, or transcribing continue to consume concurrency.
+
+Zoom (ZAK Tokens)
+
+Zoom authentication is ephemeral. You must generate a ZAK Token via the Zoom API for the specific user the bot should represent.
+
+For production Zoom authentication, send a ZAK token in authentication.zoom_zak_token. Skribby does not accept an OBF token in this field.
+
+How to get a ZAK Token
+
+Get OAuth access: Use user-managed OAuth for the authorized user, or Server-to-Server OAuth for a user in the app owner's Zoom account.
+
+Get the user ID: Call GET /users to find the user's id or email address.
+
+Generate the token: Call GET /users/{userId}/token?type=zak.
+
+Pass it to Skribby: Send the returned token string in authentication.zoom_zak_token.
+
+Copy{
+    "authentication": {
+        "zoom_zak_token": "zak-token-string"
+    }
+}
+
+⚠️ Expiration: Tokens from GET /users/{userId}/token?type=zak expire after 2 hours for regular users and 90 days for API users created with custCreate. Generate a fresh token immediately before creating the bot.
+
+Zoom OAuth Scope Workaround
+
+ZAK tokens generated with the granular user:read:zak scope can cause Zoom joins to remain in joining and eventually fail as not_admitted.
+
+While this Zoom compatibility issue exists, use the classic Zoom OAuth scopes available from the Zoom Marketplace app defaults, such as user:read and meeting:read, when generating ZAK tokens. Avoid explicitly forcing a granular scope= value that includes user:read:zak.
+
+Important Constraints
+
+Microsoft Teams MFA: Multi-factor authentication must be disabled for Teams accounts because Skribby cannot complete Teams MFA challenges.
+
+Bot Naming: When authenticated, the bot appears with the account name. The bot_name parameter is ignored once authentication is active.
+
+Troubleshooting
+
+IssueCauseResolution
+Bot stuck at auth_requiredMeeting requires login, no account providedAdd authentication.account_id to your request
+Google requests an authenticator codeThe setup key is missing or outdatedAdd or replace the authenticator setup key in the Dashboard; do not enter a current six-digit code
+Google requests another verification methodGoogle selected an unsupported challengeSign in to the Google account outside Skribby, resolve the verification request, then retry; Skribby supports authenticator-generated TOTP codes only
+Teams login fails at MFAThe account requires an unsupported Teams MFA challengeDisable MFA for the dedicated Teams account
+Bot appears as guest despite authGuest attempt succeeded firstSet always_authenticate: true
+Works for some meetings, not othersThe host's meeting access or organization policy differsCheck the meeting invitation, access type, and admin restrictions
+Zoom bot stays in joining, then fails as not_admittedZAK token generated with granular user:read:zak scopeUse classic Zoom OAuth scopes such as user:read and meeting:read; do not force granular scope=user:read:zak while this compatibility issue exists

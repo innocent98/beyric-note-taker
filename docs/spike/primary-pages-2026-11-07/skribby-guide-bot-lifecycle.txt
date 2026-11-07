@@ -1,0 +1,130 @@
+SOURCE: https://skribby.io/docs/guides/bot-lifecycle
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Bot Lifecycle
+
+A meeting bot is an ephemeral worker that moves through a well-defined set of states. Understanding these states and why they transition is the key to building a robust integration.
+
+State Machine Overview
+
+The recording start mode determines the path after the bot joins.
+
+Automatic Recording Start
+
+This is the default flow:
+
+scheduled → booting → joining → recording → leaving → processing → transcribing → finished
+
+Manual Recording Start
+
+With recording_start_mode: "manual", the bot waits inside the meeting until your application sends the start-recording WebSocket action:
+
+scheduled → booting → joining → waiting_to_record → recording → leaving → processing → transcribing → finished
+
+While waiting_to_record, the bot provides realtime participant, chat, and status context but does not capture meeting media or start transcription. If no start action arrives within stop_options.recording_start_timeout, the bot leaves without creating a recording.
+
+Microsoft Teams Breakout Rooms
+
+Each bot follows one host-assigned breakout room; use separate bots for multiple rooms. Re-admission may be required when entering or returning. Recording and billing continue while waiting.
+
+Standard Statuses
+
+StatusDescription
+scheduledThe bot has been created with a scheduled_start_time in the future. You can force a scheduled bot to join immediately by updating its scheduled_start_time to null.
+bootingSkribby is spinning up a dedicated worker instance and initializing the browser environment.
+joiningThe bot is navigating to the meeting URL and attempting to enter. This includes the "Waiting Room" phase.
+waiting_to_recordA manual-start bot is inside the meeting and publishing realtime context, but is waiting for the start-recording action before capturing media or transcribing.
+breakout_waiting_roomWaiting for re-admission during a breakout-room transition.
+recordingThe bot is inside the meeting, capturing audio/video and streaming transcription (if enabled).
+leavingThe bot is exiting the meeting (brief transitional state).
+processingThe meeting has ended. The bot is uploading raw assets and preparing for transcription.
+transcribingThe audio is being processed by the selected AI model (e.g., Whisper, Deepgram).
+finishedAll data is ready. Transcript and Recording URLs are available.
+
+Terminal "Failed" Statuses
+
+If a bot cannot reach the finished state, it will land in one of these terminal error states:
+
+StatusDescription
+not_admittedThe bot reached the meeting but was never allowed inside. See Stop Reasons for details.
+bot_detectedThe platform blocked the bot. Note: This is not always terminal. Skribby automatically retries up to 3 times with new credentials/IPs. You may see the status toggle between bot_detected and booting during this process.
+auth_requiredThe meeting is locked to specific users and the bot was not provided with Authentication.
+invalid_credentialsAuthentication was provided, but the platform rejected the email/password or ZAK token.
+invalid_api_keyTranscription credentials (BYOK) were provided, but the transcription provider rejected the API key. See Transcription Credentials.
+failedA rare internal error occurred. Our team is automatically notified of these.
+
+Stop Reasons
+
+When a bot's status becomes finished or not_admitted, the stop_reason field provides the "Why."
+
+Configuring Stop Timers
+
+Stop timers are configured when you create a bot with the stop_options object. All durations are in minutes.
+
+OptionDefaultDisable with 0?Description
+stop_options.empty_meeting_timeout10YesHow long the bot waits after it joins an empty meeting and no other participants arrive.
+stop_options.last_person_detection2YesHow long the bot waits after it becomes the only participant after other participants were present.
+stop_options.waiting_room_timeout10NoHow long the bot waits to be admitted before stopping as not_admitted. Values above 10 minutes can add waiting-room charges.
+stop_options.recording_start_timeout15NoHow long a manual-start bot waits in waiting_to_record for the start-recording action before leaving without a recording.
+stop_options.breakout_room_timeout10NoHow long the bot waits for re-admission during a breakout/return transition (1–60 minutes).
+stop_options.time_limit720NoThe hard ceiling for how long the bot may stay active. The maximum is 720 minutes (12 hours).
+stop_options.silence_detection15YesHow long the bot waits without hearing speech before leaving. This helps when other bots remain in the call and last-person detection cannot trigger.
+
+Copy{
+  "transcription_model": "groq/whisper-large-v3-turbo",
+  "meeting_url": "https://meet.google.com/osk-sbwe-nff",
+  "service": "gmeet",
+  "bot_name": "Alex from Acme",
+  "stop_options": {
+    "empty_meeting_timeout": 10,
+    "last_person_detection": 5,
+    "waiting_room_timeout": 10,
+    "time_limit": 120,
+    "silence_detection": 0
+  }
+}
+
+Stop option fields must be nested under stop_options. Fields such as empty_meeting_timeout, last_person_detected, last_person_detection, waiting_room_timeout, recording_start_timeout, time_limit, or silence_detection at the top level of the create-bot payload are ignored, except for the deprecated top-level time_limit field kept for backwards compatibility.
+
+Reasons for not_admitted
+
+invalid_meeting_url: The URL provided doesn't point to a valid meeting.
+
+call_already_finished: The meeting had already ended before the bot could join.
+
+waiting_room_timeout: No one admitted the bot within the configured timeout (see waiting_room_timeout in stop_options).
+
+request_denied: A human in the meeting explicitly clicked "Deny" when the bot asked to join.
+
+host_in_another_meeting: The host is currently in another meeting and has not started this one yet (common in Zoom).
+
+manually_stopped: You called the POST /bot/{id}/stop endpoint while the bot was in the waiting room.
+
+Reasons for finished
+
+kicked: A participant explicitly removed the bot from the active meeting.
+
+meeting_ended: The host ended the meeting or everyone left.
+
+empty_meeting_timeout: The bot left because it joined the meeting, but no other participants arrived within the configured empty_meeting_timeout duration.
+
+last_person_detected: The bot left because it was the only participant remaining after other participants had been present (configured with last_person_detection).
+
+manually_stopped: You called the POST /bot/{id}/stop endpoint while the bot was in the meeting.
+
+recording_start_timeout: A manual-start bot did not receive the start-recording action within the configured recording_start_timeout.
+
+breakout_room_timeout: The bot timed out waiting for re-admission and finishes normally with its existing recording.
+
+breakout_room_denied: Admission was denied during a breakout transition, including return to the main room.
+
+silence_detection_triggered: No one spoke for the configured duration.
+
+Handling State Changes
+
+We recommend using Webhooks to react to these changes. Specifically, listen for the status_update event to drive your UI:
+
+Copy// Example: Nudge user if bot is waiting
+if (webhook.type === 'status_update' && webhook.data.new_status === 'joining') {
+    sendUserPushNotification('Your bot is waiting to be admitted!');
+}

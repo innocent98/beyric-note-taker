@@ -1,0 +1,89 @@
+SOURCE: https://skribby.io/docs/guides/quickstart
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Quickstart
+
+Get your first Skribby bot into a meeting in under 5 minutes.
+
+1. Get your API Key
+
+Log in to the Skribby Dashboard.
+
+Navigate to the API Keys section.
+
+Generate a new API key and keep it secure.
+
+2. Create your first bot
+
+The most basic way to interact with Skribby is via our REST API. You can send a bot to any Google Meet, Zoom, or Microsoft Teams meeting with a single POST request.
+
+Replace YOUR_API_KEY with the key from step 1 and MEETING_URL with a valid meeting link.
+
+Copycurl -X POST 'https://platform.skribby.io/api/v1/bot' \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "transcription_model": "groq/whisper-large-v3-turbo",
+    "meeting_url": "MEETING_URL",
+    "service": "gmeet",
+    "bot_name": "Alex from Acme"
+  }'
+
+Regions
+If your account is located in the Japan region, replace platform.skribby.io with platform-jp.skribby.io. See Regions for more details.
+
+What happens next?
+
+Skribby spawns a bot instance.
+
+The bot attempts to join the meeting URL provided.
+
+Once admitted, the bot starts recording and transcribing.
+
+When the meeting ends (or you stop the bot), the data is processed and stored.
+
+3. Using the TypeScript SDK
+
+If you are building with Node.js or TypeScript, our SDK provides a much better developer experience with full type safety.
+
+Install
+
+Copynpm install @skribby/sdk
+
+Basic Usage
+
+Copyimport { createClient } from '@skribby/sdk';
+
+const skribby = createClient({
+    api_key: 'YOUR_API_KEY',
+    // region: 'jp', // Uncomment if your account is in the Japan region
+});
+
+async function main() {
+    const bot = await skribby.createBot({
+        transcription_model: 'groq/whisper-large-v3-turbo',
+        meeting_url: 'https://meet.google.com/abc-defg-hij',
+        service: 'gmeet',
+        bot_name: 'Alex from Acme',
+    });
+
+    console.log(`Bot created with ID: ${bot.id}`);
+
+    // Refresh to get the latest status from the server
+    await bot.refresh();
+    console.log(`Current status: ${bot.data.status}`);
+}
+
+main();
+
+4. Next Steps
+
+Now that you've successfully deployed a bot, explore the more advanced features:
+
+Webhooks: Learn how to receive real-time updates when the bot joins or transcription arrives.
+
+Real-time Transcription: Stream text live as people speak.
+
+Participant Timelines: Track participant discovery, speaking, presence, and meeting-state changes.
+
+Bot Lifecycle: Understand the different states a bot goes through.

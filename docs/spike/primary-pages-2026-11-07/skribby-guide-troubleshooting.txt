@@ -1,0 +1,101 @@
+SOURCE: https://skribby.io/docs/guides/troubleshooting
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Troubleshooting
+
+Meeting bots operate in a complex environment where platform security, network conditions, and host settings all interact. This guide helps you diagnose and resolve common integration issues.
+
+Bot Connection Issues
+
+Why is my bot stuck in joining?
+
+The joining status means the bot has navigated to the meeting URL and is attempting to enter.
+
+Waiting for Admission: Most meetings require a host to click "Admit." If the host is distracted or not in the meeting yet, the bot will stay in joining while it "knocks" on the door.
+
+Host Not Present: Some meetings (especially Zoom) prevent anyone from entering including the bot until the host has officially started the session. In these cases, the bot may eventually time out or return a host_in_another_meeting stop reason.
+
+Zoom ZAK Scope Compatibility: If an authenticated Zoom join remains in joining and then fails as not_admitted, follow the ZAK scope workaround.
+
+💡 Note on Passcodes: If a meeting requires a passcode and it is missing from the URL, the bot will immediately fail with a not_admitted status rather than hanging in joining.
+
+Recording & Transcription Issues
+
+Bot status is invalid_api_key
+
+This occurs when using your own transcription credentials (BYOK) and the provider rejects the API key.
+
+Common causes:
+
+API key is incorrect or expired
+
+Insufficient credits in your provider account
+
+API key doesn't have required permissions
+
+Wrong region configured (for ElevenLabs/Soniox)
+
+Resolution:
+
+Verify your API key works directly with the provider
+
+Check your provider account has sufficient credits
+
+Update the credential in Transcription Credentials
+
+Retry with a new bot
+
+⚠️ No Fallback: Skribby does not fall back to managed transcription if your BYOK credentials fail. The bot will end with invalid_api_key status.
+
+Why don't I see real-time transcripts?
+
+It is important to distinguish between Post-call and Real-time models:
+
+Standard Models: If you use a model like groq/whisper-large-v3-turbo or assemblyai/universal-2, transcripts are generated after the bot leaves the meeting. You will see them in the bot object once the status reaches finished.
+
+Real-time Models: To see transcripts while the meeting is happening, you must use a real-time model (e.g., deepgram/nova-2-realtime) and connect via WebSockets.
+
+My bot is in the meeting but no transcription was generated
+
+Silence: If no one is speaking or if everyone is muted for the entire duration, no transcript segments will be created.
+
+Model Selection: Ensure transcription_model was not set to none.
+
+speaker_name is generic (e.g., "Speaker 1")
+
+Initial Latency: It takes a few sentences for Skribby to correlate the audio stream with the platform's participant list.
+
+Platform Limitations: If a participant joins via a method that doesn't expose their display name (like certain phone dial-ins), they will remain as a generic "Speaker" label.
+
+Webhook & API Issues
+
+I missed a webhook!
+
+Check Logs: Verify in the Skribby Dashboard if the webhook was sent and what status code your server returned.
+
+Idempotency: Always design your webhook handler to handle duplicate events or events arriving out of order.
+
+Polling Fallback: If a critical webhook (like finished) is missing, use the GET /bot/{id} endpoint to fetch the final state of the bot.
+
+API returns 403 Forbidden (Concurrency Limit)
+
+Concurrency limits apply based on your plan. If you see a 403 error with the message:
+"You have reached the limit of concurrent meeting bots for your plan."
+
+This means you have too many active bots running simultaneously.
+
+Check active bots: The limit includes bots in booting, joining, waiting_to_record, recording, breakout_waiting_room, leaving, processing, or transcribing.
+
+Retry deliberately: The rejected request does not create or queue a bot, so retry only after capacity is available.
+
+Upgrade: If you need more than 25 concurrent bots, contact [email protected] for a custom PAYG+ limit.
+
+See Authenticated Bot Capacity for the organisation-wide limit and account-assignment guidance.
+
+Getting Help
+
+If you've checked the above and are still stuck:
+
+Discord: Join our community for quick answers from other devs.
+
+Technical Support: Email [email protected] with the bot_id and a description of the issue.
