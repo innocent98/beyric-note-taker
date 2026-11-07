@@ -43,8 +43,9 @@ Real response (`03-notifications.json`; two meetings: a waiting-room timeout and
   (`Emails.dc.html:137-149`) minus "at {time}": the row already shows its own time.
 - `meeting_id` is **always set** for this kind (present, not null): link to the meeting. The bell page
   already does this for any entry with a `meeting_id` ("Open the meeting").
-- **At most one entry per meeting, ever.** A retry that is refused again adds nothing. Do not
-  build a counter or expect a second entry.
+- **At most one entry per attempt.** A meeting normally has one. If the owner sends the bot again
+  and it is refused again, that is a second entry for the same `meeting_id` (the server's key holds
+  the attempt number; the API does not expose it). Do not collapse entries by `meeting_id`.
 - The meeting name in `body` is the platform and code ("Google Meet ddd-eeee-fff"), never a calendar
   title or a link.
 - `severity` is `error`. The current bell page marks unread entries with a "New" badge in the brand

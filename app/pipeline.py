@@ -60,7 +60,10 @@ REASON_NOT_LET_IN = (
     "timed out."
 )
 
-# The bell entry's kind for a bot that was sent and not let in; its dedupe key adds the meeting id.
+# The bell entry's kind for a bot that was sent and not let in. Its dedupe key adds the meeting id
+# and `join_attempts` (1 for the first bot, +1 for every bot sent again, by the worker or by the
+# owner's retry): a deliberate retry that is refused again is news, the same attempt is never told
+# twice.
 NOT_ADMITTED_KIND = "meeting.not_admitted"
 
 REASON_JOIN_REFUSED = (
@@ -204,7 +207,6 @@ def _tell_not_admitted(session: Session, meeting: Meeting, at: datetime) -> None
     because `mail.deliver_pending` fails a row whose build raises `ValueError` for good, with no
     retry: a payload that cannot be built falls back to the plain alert mail (the bell's own
     words) instead. The bell is written either way. The caller commits."""
-    name = titles.alert_name(None, meeting.platform, meeting.native_id)
     template, payload = mail_templates.NOT_JOINED, None
     try:
         with session.begin_nested():
@@ -217,6 +219,7 @@ def _tell_not_admitted(session: Session, meeting: Meeting, at: datetime) -> None
         )
         template = alerts.ALERT_TEMPLATE
     try:
+        name = titles.alert_name(None, meeting.platform, meeting.native_id)
         alerts.notify_user(
             session,
             meeting.owner_user_id,
@@ -225,7 +228,7 @@ def _tell_not_admitted(session: Session, meeting: Meeting, at: datetime) -> None
             title=mail_templates.NOT_JOINED_TITLE,
             body=f"We tried to join {name} but were not admitted. "
             f"{mail_templates.NOT_JOINED_REASON}",
-            dedupe_key=f"{NOT_ADMITTED_KIND}:{meeting.id}",
+            dedupe_key=f"{NOT_ADMITTED_KIND}:{meeting.id}:{meeting.join_attempts}",
             meeting_id=meeting.id,
             email_template=template,
             email_payload=payload,
@@ -379,12 +382,21 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     return True
 
 
-def _resend(session: Session, meeting: Meeting, vexa, *, failed_reason: str) -> None:
-    """Send a fresh bot after a refusal, or fail the meeting with `failed_reason`."""
+def _resend(
+    session: Session,
+    meeting: Meeting,
+    vexa,
+    *,
+    failed_reason: str,
+    not_admitted_at: datetime | None = None,
+) -> None:
+    """Send a fresh bot after a refusal, or fail the meeting with `failed_reason`. When the
+    refusal that led here was Google's (`not_admitted_at`: the moment it was seen), the owner is
+    told even though the new bot could not be sent: the first bot really was not admitted."""
     if send_again(meeting, vexa):
         session.commit()
     else:
-        _fail(session, meeting, failed_reason)
+        _fail(session, meeting, failed_reason, not_admitted_at=not_admitted_at)
 
 
 def refusal_retry_gap(meeting: Meeting) -> timedelta:
@@ -589,6 +601,7 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
                 meeting,
                 vexa,
                 failed_reason=f"{REASON_JOIN_REFUSED} A new bot could not be sent.",
+                not_admitted_at=meeting.terminal_seen_at,
             )
             return False
     else:

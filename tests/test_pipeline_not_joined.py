@@ -61,7 +61,7 @@ def test_a_bot_that_was_not_admitted_tells_the_owner_once(session, meeting, owne
     assert meeting.status == "failed" and meeting.failure_reason == pipeline.REASON_NOT_LET_IN
     (bell,) = bells(session)
     assert (bell.user_id, bell.kind, bell.severity) == (owner.id, KIND, "error")
-    assert bell.meeting_id == meeting.id and bell.dedupe_key == f"{KIND}:{meeting.id}"
+    assert bell.meeting_id == meeting.id and bell.dedupe_key == f"{KIND}:{meeting.id}:1"
     assert bell.title == "The note taker could not join your meeting"
     assert bell.body.startswith("We tried to join Google Meet abc-defg-hij but were not admitted.")
     (sent,) = mails(session)
@@ -78,6 +78,34 @@ def test_google_refusing_the_bot_tells_the_owner_once(session, meeting, owner):
     assert bell.kind == KIND and bell.meeting_id == meeting.id
     (sent,) = mails(session)
     assert sent.template == mail_templates.NOT_JOINED and sent.payload["at"] == "12:07 UTC"
+
+
+def test_a_google_refusal_then_a_send_that_fails_is_still_a_refusal_the_owner_hears_of(
+    session, meeting
+):
+    """The first bot was really refused; the second could not be sent. The owner is told once,
+    with the time the refusal was seen (not the later poll that failed the send)."""
+    meeting.vexa_meeting_id = "1"
+    session.commit()
+    vexa = FakeVexa(REFUSED_29)
+    run(session, meeting, vexa, now=NOW)  # refused: stops the bot and pauses
+    vexa.send_error = VexaError("connection refused")
+    run(session, meeting, vexa, now=NOW + 5 * pipeline.REFUSAL_RETRY_GAP)
+    assert meeting.status == "failed"
+    assert "A new bot could not be sent." in meeting.failure_reason
+    (bell,) = bells(session)
+    assert bell.kind == KIND and bell.dedupe_key == f"{KIND}:{meeting.id}:1"
+    (sent,) = mails(session)
+    assert sent.template == mail_templates.NOT_JOINED and sent.payload["at"] == "12:00 UTC"
+
+
+def test_zoom_blocking_then_a_send_that_fails_sends_neither(session, zoom_meeting):
+    vexa = FakeVexa(ZOOM_REFUSED)
+    vexa.send_error = VexaError("connection refused")
+    run(session, zoom_meeting, vexa, now=SEEN)
+    assert zoom_meeting.status == "failed"
+    assert zoom_meeting.failure_reason.startswith("Zoom blocked the bot")
+    told_nothing(session)
 
 
 def test_the_first_google_refusal_only_pauses_and_tells_nobody(session, meeting):
@@ -114,16 +142,6 @@ def _stopped_by_the_owner(session, meeting):
     return meeting, FakeVexa(TIMED_OUT)
 
 
-def _send_failed_after_a_refusal(session, meeting):
-    meeting.vexa_meeting_id = "1"
-    meeting.join_attempts = 1
-    meeting.completion_reason, meeting.terminal_seen_at = pipeline.MEET_REFUSED, NOW
-    session.commit()
-    vexa = FakeVexa(REFUSED_29)
-    vexa.send_error = VexaError("connection refused")
-    return meeting, vexa
-
-
 def _needs_help(session, meeting):
     meeting.vexa_meeting_id = "1"
     session.commit()
@@ -137,7 +155,6 @@ def _needs_help(session, meeting):
         _unknown_failure,
         _recording_failed,
         _stopped_by_the_owner,
-        _send_failed_after_a_refusal,
         _needs_help,
     ],
     ids=lambda f: f.__name__.strip("_"),
@@ -169,13 +186,29 @@ def test_a_recording_that_never_appears_sends_neither(session, meeting):
 # ---- once per meeting ----
 
 
-def test_a_second_failure_of_the_same_meeting_is_not_told_again(session, meeting):
+def test_the_same_attempt_failing_twice_is_not_told_twice(session, meeting):
     run(session, meeting, FakeVexa(TIMED_OUT), now=SEEN)
     meeting.status, meeting.step = "bot_sent", "waiting"  # sent again by hand, refused again
     session.commit()
     run(session, meeting, FakeVexa(TIMED_OUT), now=SEEN + timedelta(minutes=30))
     assert meeting.status == "failed"
     assert len(bells(session)) == 1 and len(mails(session)) == 1
+
+
+def test_a_retry_that_is_refused_again_is_heard_once_per_attempt(session, meeting):
+    """A deliberate retry sends a new bot (join_attempts counts it): its refusal is news again,
+    but the same attempt failing twice is not."""
+    run(session, meeting, FakeVexa(TIMED_OUT), now=SEEN)
+    assert pipeline.send_again(meeting, FakeVexa(TIMED_OUT)) is True  # the owner's retry
+    session.commit()
+    assert meeting.join_attempts == 2
+    run(session, meeting, FakeVexa(TIMED_OUT), now=SEEN + timedelta(minutes=30))
+    assert [b.dedupe_key for b in bells(session)] == [f"{KIND}:{meeting.id}:{n}" for n in (1, 2)]
+    assert len(mails(session)) == 2
+    meeting.status, meeting.step = "bot_sent", "waiting"  # the same attempt seen failing again
+    session.commit()
+    run(session, meeting, FakeVexa(TIMED_OUT), now=SEEN + timedelta(minutes=31))
+    assert len(bells(session)) == 2 and len(mails(session)) == 2
 
 
 def test_two_meetings_each_get_their_own(session, meeting, owner):
@@ -239,6 +272,15 @@ def test_a_mail_that_cannot_be_queued_still_leaves_the_bell(session, meeting, mo
     run(session, meeting, FakeVexa(TIMED_OUT), now=SEEN)
     assert meeting.status == "failed"
     assert len(bells(session)) == 1 and mails(session) == []
+
+
+def test_a_name_that_cannot_be_built_still_fails_the_meeting(session, meeting, monkeypatch):
+    def boom(*args, **kwargs):
+        raise RuntimeError("no name")
+
+    monkeypatch.setattr(pipeline.titles, "alert_name", boom)
+    run(session, meeting, FakeVexa(TIMED_OUT), now=SEEN)
+    assert meeting.status == "failed" and meeting.failure_reason == pipeline.REASON_NOT_LET_IN
 
 
 def test_even_the_alert_call_failing_leaves_the_meeting_failed(
