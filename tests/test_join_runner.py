@@ -409,6 +409,36 @@ def test_deadline_makes_failed_row_with_not_recorded_text(session, host, cal, ad
     assert any(m.to_email == "ada@example.test" for m in outbox(session))  # and an email
 
 
+def test_the_not_recorded_email_is_the_designed_could_not_join_mail(session, host, cal, ada):
+    from app import mail_templates
+    from app.models import UserSettings
+
+    join = materialise(session, ada, cal)
+    settings_row = session.get(UserSettings, ada.user.id)
+    if settings_row is None:
+        settings_row = UserSettings(user_id=ada.user.id)
+        session.add(settings_row)
+    settings_row.time_zone = "Africa/Lagos"
+    session.commit()
+    run(session, host, cal, at(15, 30))
+    [row] = [m for m in outbox(session) if m.to_email == "ada@example.test"]
+    assert row.template == mail_templates.NOT_JOINED
+    session.expire_all()
+    stored = session.get(ScheduledJoin, join.id)
+    assert row.payload["meeting"].endswith(stored.native_id)
+    assert (
+        row.payload["at"]
+        == f"{stored.deadline_at.astimezone(UTC) + timedelta(hours=1):%H:%M} GMT+1"
+    )
+    message = mail_templates.render_link(row.template, row.payload, row.to_email, make_settings())
+    assert "The note taker could not join your meeting" in message.html
+    assert "were not admitted" in message.text and row.payload["at"] in message.text
+    assert "Email preferences" in message.html and "#email-preferences" in message.html
+    assert "Send it again" not in message.html  # no button until C15b (no dead buttons)
+    [bell] = notes(session, "calendar.not_recorded")  # the bell keeps its words
+    assert bell.title == "Meeting not recorded"
+
+
 def test_a_row_that_missed_its_deadline_long_ago_is_closed_without_telling_anyone(
     session, host, cal, ada
 ):

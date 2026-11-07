@@ -878,3 +878,28 @@ def test_only_the_opt_out_headers_are_allowed_in_any_case():
         ),
     )
     assert len(message.headers) == 2
+
+
+def test_could_not_join_mail_draws_send_it_again_only_when_c15b_turns_it_on(monkeypatch):
+    payload = mail_templates.not_joined_payload("Google Meet btp-tkio-gtb", "11:58 UTC")
+    settings = make_settings()
+    plain = mail_templates.render_link(
+        mail_templates.NOT_JOINED, payload, "a@example.test", settings
+    )
+    assert "Google Meet btp-tkio-gtb" in plain.html and "11:58 UTC" in plain.text
+    assert "Send it again" not in plain.html and "Send it again" not in plain.text
+    monkeypatch.setattr(mail_templates, "SEND_AGAIN_PATH", "/send-again")
+    button = mail_templates.render_link(
+        mail_templates.NOT_JOINED, payload, "a@example.test", settings
+    )
+    assert (
+        "Send it again" in button.html and f"{settings.public_base_url}/send-again" in button.html
+    )
+
+
+def test_could_not_join_mail_escapes_what_it_is_given():
+    payload = mail_templates.not_joined_payload("Zoom <b>1</b>", "11:58 UTC")
+    message = mail_templates.render_link(
+        mail_templates.NOT_JOINED, payload, "a@example.test", make_settings()
+    )
+    assert "<b>1" not in message.html and "&lt;b&gt;1" in message.html

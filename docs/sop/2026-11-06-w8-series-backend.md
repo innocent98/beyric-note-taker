@@ -46,6 +46,11 @@ Fast checks locally (ruff, format, the touched test files, the whole `tests/test
 ## Addendum (2026-11-06): the reused-link chip
 Adebayo approved lead-designing "Make this a recurring meeting?" (spec D12). Backend: `MeetingDetail.suggest_recurring` (owner's ready meeting, in no series, whose link code the owner used for another meeting) and `POST /api/meetings/{id}/recurring` (owner only, 201, 409 `not_reused`). It makes a hand-made series named after the meeting and puts the owner's meetings with that code (in no series) into it, without consuming agenda lines. Tests in `tests/test_series.py`; route classified in `test_team_visibility.py`.
 
+## Addendum (2026-11-07): mails and the designer's file
+- **Lead-designed, not in the designer's file:** the agenda mail `series_agenda` ("Agenda for the next meeting", "View the agenda"; the designer drew only the "View agenda" button inside the reminder). The lines above that say "the designer drew one button" refer to this. Also labelled in `docs/sop/2026-11-04-w03-mail-upgrade.md`: already_registered, waitlist_invite, the generic alert.
+- **Reminders now follow the designer's cards** (teal pill, capital section labels, owner under the task title, "Read the full notes" in the 30-minute mail, ", including ..." on the agenda line): `docs/sop/2026-11-07-mails-parity.md`.
+- **Differences that remain in the reminders:** (1) no grey summary box ("Sprint 12 closed with 7 of 11 tasks done. ...") and no "· Sprint 13 opens" in the meta line: they need data rules Adebayo has not approved (proposed rules are in the 2026-11-07 SOP; the sprint line was already a W9 follow-up below); (2) the 30-minute closing sentence is "Last time the team agreed: " plus the first two decisions as written, not the designer's paraphrase (nothing in these mails is generated); (3) the agenda tail names the first unfinished task's own title; (4) the 1-hour mail also lists typed agenda lines under "ALSO ON THE AGENDA" (not drawn); (5) a future due date in "Still open" rows is amber, as in "New tasks" (not drawn).
+
 ## Follow-ups
 - Screens (PR 2). "Add to recurring meeting" and "Make this a recurring meeting?" are not drawn: lead decision needed.
 - W8b "possibly resolved" suggestions (spec 7, optional), the sprint line and milestone countdown in the mails (W9, W4), typed outside recipients for the agenda (needs W6's opt-out).

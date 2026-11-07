@@ -40,11 +40,17 @@ from app.mail_layout import (
     Block,
     Bullets,
     Button,
+    ButtonRow,
     Heading,
     Label,
     Meta,
     Para,
+    Pill,
     Rows,
+    Section,
+    Subline,
+    TaskRow,
+    TaskRows,
     check_url,
     render_html,
     render_text,
@@ -199,7 +205,8 @@ def _title(found: Series) -> str:
     return titles.mail_line(found.title or series.UNTITLED, 80) or series.UNTITLED
 
 
-def _tasks_rows(session: Session, user: User, found: Series, today) -> tuple[tuple, int]:
+def _task_rows(session: Session, user: User, found: Series, today) -> tuple[list[TaskRow], int]:
+    """The unfinished tasks the viewer may see (at most MAX_TASK_ROWS) and how many there are."""
     rows = series.unfinished_tasks(session, user, found)
     people = {
         u.id: u
@@ -226,8 +233,14 @@ def _tasks_rows(session: Session, user: User, found: Series, today) -> tuple[tup
             else due_note(task.due_date, today) or "No due date"
         )
         label = titles.mail_line(task.title, 120) or "Untitled task"
-        shown.append((f"{label} · {who}", due))
-    return tuple(shown), len(rows)
+        shown.append(TaskRow(label, who, due, overdue=late, dated=task.due_date is not None))
+    return shown, len(rows)
+
+
+def _tasks_rows(session: Session, user: User, found: Series, today) -> tuple[tuple, int]:
+    """`_task_rows` as the agenda mail shows them: "title · owner" and the due text."""
+    shown, total = _task_rows(session, user, found, today)
+    return tuple((f"{r.title} · {r.owner}", r.due) for r in shown), total
 
 
 def _link(path: str, settings: Settings) -> str:
@@ -442,6 +455,18 @@ def _summary_line(meeting: Meeting, now: datetime) -> str:
     return ""
 
 
+def _agreed_line(decisions: list[str]) -> str:
+    """The 30-minute mail's closing sentence, from the last meeting's own decisions (the first two,
+    as they were written): "Last time the team agreed: <decision> <decision>". Empty when there is
+    no decision, so the paragraph is left out."""
+    sentences = []
+    for text in decisions[:2]:
+        text = text.strip()
+        if text:
+            sentences.append(text if text[-1] in ".!?" else f"{text}.")
+    return f"Last time the team agreed: {' '.join(sentences)}" if sentences else ""
+
+
 @notes_template("series_reminder")
 def _series_reminder(
     session: Session, payload: dict, to: str, settings: Settings, now: datetime
@@ -472,65 +497,85 @@ def _series_reminder(
     one_hour = reminder.kind == "1h"
     pill = "Starts in 1 hour" if one_hour else "Starts in 30 minutes"
     platform = {"google_meet": "Google Meet", "zoom": "Zoom"}.get(found.platform or "", "")
-    ends = event.ends_at if event is not None else None
+    # The one-hour mail names the end ("14:00 to 14:45 UTC"); the 30-minute one only the start.
+    ends = event.ends_at if event is not None and one_hour else None
     when = _when(reminder.starts_at, ends, zone)
     blocks: list[Block] = [
-        Meta(pill),
-        Heading(name),
-        Para(f"{when} · {platform}" if platform else when, muted=True),
+        Pill(pill),
+        Heading(name, after=4),
+        Subline(f"{when} · {platform}" if platform else when),
     ]
+    header = len(blocks)
     buttons = []
     join = _join_url(event)
     if join:
         buttons.append(Button("Join meeting", join))
     if one_hour:
-        buttons.append(Button("View agenda", _link(f"/series/{found.id}", settings)))
-    blocks += buttons
+        buttons.append(
+            Button("View agenda", _link(f"/series/{found.id}", settings), secondary=True)
+        )
+    if buttons:
+        # Two buttons sit in a row 28 px above the first section; a lone one has 26 (the design).
+        blocks.append(ButtonRow(tuple(buttons), after=28 if one_hour else 26))
+        header += 1
     last = next(iter(series.meetings_of(session, found, user, limit=1)), None)
     lines = series.agenda_items(session, found)
     questions = series.carried_questions(session, user, found)
-    rows, total = _tasks_rows(session, user, found, today)
+    rows, total = _task_rows(session, user, found, today)
+    decisions: list[str] = []
+    if last is not None:
+        decisions = [
+            titles.mail_line(d.text, 200)
+            for d in session.scalars(
+                select(Decision)
+                .where(Decision.meeting_id == last.id, Decision.hidden_at.is_(None))
+                .order_by(Decision.position)
+                .limit(MAX_LISTED)
+            )
+        ]
+        decisions = [d for d in decisions if d]
     if one_hour:
         if last is not None:
             local_day = timezones.localise(last.created_at, zone)[0]
-            blocks.append(Label(f"Last time, {local_day:%a} {local_day.day} {local_day:%b}"))
+            blocks.append(Section(f"Last time, {local_day:%a} {local_day.day} {local_day:%b}"))
             summary = _summary_line(last, now)
             if summary:
-                blocks.append(Para(summary))
-            decisions = [
-                titles.mail_line(d.text, 200)
-                for d in session.scalars(
-                    select(Decision)
-                    .where(Decision.meeting_id == last.id, Decision.hidden_at.is_(None))
-                    .order_by(Decision.position)
-                    .limit(MAX_LISTED)
-                )
-            ]
-            decisions = [d for d in decisions if d]
+                blocks.append(Para(summary, after=22))
             if decisions:
-                blocks += [Label("Decisions made"), Bullets(tuple(decisions))]
+                blocks += [Section("Decisions made"), Bullets(tuple(decisions), after=22, gap=6)]
         shown = [titles.mail_line(q.text, 200) for q, _m in questions[:MAX_LISTED]]
         shown = [q for q in shown if q]
         if shown:
-            blocks += [Label("Open questions to settle"), Bullets(tuple(shown))]
+            blocks += [Section("Open questions to settle"), Bullets(tuple(shown), 22, 6)]
         if lines:
             blocks += [
-                Label("Also on the agenda"),
-                Bullets(tuple(titles.mail_line(i.text, 200) for i in lines[:MAX_LISTED])),
+                Section("Also on the agenda"),
+                Bullets(tuple(titles.mail_line(i.text, 200) for i in lines[:MAX_LISTED]), 22, 6),
             ]
         if rows:
-            blocks += [Label("Still open from last time"), Rows(rows)]
+            blocks += [Section("Still open from last time"), TaskRows(tuple(rows))]
             if total > len(rows):
                 blocks.append(Para(f"and {total - len(rows)} more in the series", muted=True))
     else:
         agenda = [titles.mail_line(q.text, 200) for q, _m in questions[:MAX_LISTED]]
         agenda += [titles.mail_line(i.text, 200) for i in lines[:MAX_LISTED]]
         if total:
-            agenda.append(f"Check on {total} unfinished task{'s' if total != 1 else ''}.")
+            tail = f", including {rows[0].title}" if rows and rows[0].title else ""
+            agenda.append(f"Check on {total} unfinished task{'s' if total != 1 else ''}{tail}.")
         agenda = [a for a in agenda if a]
         if agenda:
-            blocks += [Label("On the agenda"), Bullets(tuple(agenda))]
-    if len(blocks) <= 3 + len(buttons):
+            blocks += [Section("On the agenda"), Bullets(tuple(agenda), 20, 6)]
+        recap = _agreed_line(decisions)
+        if last is not None and recap:
+            blocks.append(
+                Para(
+                    recap,
+                    muted=True,
+                    after=0,
+                    link=("Read the full notes", _link(f"/meetings/{last.id}", settings)),
+                )
+            )
+    if len(blocks) <= header:
         return Skip("nothing_to_say")
     footer = f"You are getting this because you attend {name}."
     return _send_message(to, f"{pill}: {name}", blocks, footer, _prefs(settings))

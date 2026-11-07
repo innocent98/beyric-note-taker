@@ -120,11 +120,19 @@ def _wants_email(session: Session, user: User) -> bool:
     return (value is None or bool(value)) and _mail_wanted(session, user.email)
 
 
-def _queue_mail(session: Session, address: str, title: str, body: str, template: str) -> None:
-    """Queue the email in a savepoint; a failure is logged by type and undoes only the mail."""
+def _queue_mail(
+    session: Session,
+    address: str,
+    title: str,
+    body: str,
+    template: str,
+    payload: dict | None = None,
+) -> None:
+    """Queue the email in a savepoint; a failure is logged by type and undoes only the mail. The
+    payload is the title and body unless the caller gives the template its own."""
     try:
         with session.begin_nested():
-            mail.enqueue(session, address, template, {"title": title, "body": body})
+            mail.enqueue(session, address, template, payload or {"title": title, "body": body})
     except Exception as exc:
         logger.warning("alert mail not queued (%s)", type(exc).__name__)
 
@@ -140,9 +148,11 @@ def notify_user(
     dedupe_key: str,
     meeting_id: int | None = None,
     email_template: str | None = None,
+    email_payload: dict | None = None,
 ) -> None:
     """Tell one user: a bell entry, and an email when `email_template` names one (the `alert`
-    template for plain text). A repeated `dedupe_key` for the same user does nothing at all.
+    template for plain text; `email_payload` is for a template that reads fields of its own, the
+    title and body otherwise). A repeated `dedupe_key` for the same user does nothing at all.
     Raises ValueError for a caller bug (an unknown severity, a key that is empty or too long); never
     for a mail problem or a user who no longer exists."""
     _check(severity=severity, dedupe_key=dedupe_key)
@@ -161,7 +171,7 @@ def notify_user(
     try:
         user = session.get(User, user_id)
         if user is not None and _wants_email(session, user):
-            _queue_mail(session, user.email, title, body, email_template)
+            _queue_mail(session, user.email, title, body, email_template, email_payload)
     except Exception as exc:  # reading the account or its settings must not reach the caller either
         logger.warning("alert mail not queued (%s)", type(exc).__name__)
 
