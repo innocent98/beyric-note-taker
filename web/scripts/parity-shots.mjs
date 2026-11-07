@@ -130,13 +130,36 @@ const SCREENS = {
   // and the design copy with its "Preview states" default changed, see the SOP). Live list, the
   // inline remove ask and its toast, the rewrite offer, the row errors, the checked rows.
   "app-decisions": [APP, [["Decisions", "first", 1200]], "/decisions", true],
-  "app-decisions-confirm": [APP, [["Decisions", "first", 1200], ["Remove from log", "first"]], "/decisions", true, [{ text: "Remove from log" }]],
-  "app-decisions-removed": [
+  // "Remove from log" lives inside the open row (batch 3): open a row, then the button. The design's first
+  // decision and the capture's first differ in words, so each side names its own.
+  "app-decisions-open": [
     APP,
-    [["Decisions", "first", 1200], ["Remove from log", "first"], ["Remove", "first", 300]],
+    [["Decisions", "first", 1200], ["Beyric Note Taker is intended for internal use.", "first", 300]],
     "/decisions",
     true,
-    [{ text: "Remove from log" }, { text: "Remove", wait: 500 }],
+    [{ text: "Keep the data export in CSV for version one; Excel can wait.", wait: 300 }],
+  ],
+  "app-decisions-confirm": [
+    APP,
+    [["Decisions", "first", 1200], ["Beyric Note Taker is intended for internal use.", "first", 300], ["Remove from log", "first"]],
+    "/decisions",
+    true,
+    [{ text: "Keep the data export in CSV for version one; Excel can wait.", wait: 300 }, { text: "Remove from log" }],
+  ],
+  "app-decisions-removed": [
+    APP,
+    [["Decisions", "first", 1200], ["Beyric Note Taker is intended for internal use.", "first", 300], ["Remove from log", "first"], ["Remove", "first", 300]],
+    "/decisions",
+    true,
+    [{ text: "Keep the data export in CSV for version one; Excel can wait.", wait: 300 }, { text: "Remove from log" }, { text: "Remove", wait: 500 }],
+  ],
+  // The empty search line, "No decisions match." (the mock answers a search with the capture of no match).
+  "app-decisions-nomatch": [
+    APP,
+    [["Decisions", "first", 1200], { fill: "Search decisions", value: "zebra", wait: 600 }],
+    "/decisions",
+    true,
+    [{ fill: "Search decisions", value: "zebra", wait: 1500 }],
   ],
   // Decisions/Review loading: the mock's `retry-loading` fails the page load, then answers slowly.
   "app-decisions-loading": [APP, [["Decisions", "first", 300]], "/decisions", true, [{ text: "Try again", wait: 600 }]],

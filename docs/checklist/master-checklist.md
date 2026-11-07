@@ -504,10 +504,11 @@ The new file (2321 lines against 2028) is about evidence and trust: a source lin
 - [ ] Decisions needed from Adebayo before the build: (a) the order of Suggested tasks, Decisions record, Keeps coming up and Suggested agenda, Ask Beyric; (b) how "Show in transcript" finds a row: store the time of each turn (backend change) or find the verified quote in the text (no time shown, differs from the file); (c) the AI cost of a model call per Ask question; (d) who may change a decision's status and accept a suggested task (owner of the meeting, team owner or admin, the assignee); (e) whether a suggested task mails its assignee before it is accepted (our default: no)
 
 ### 3A: Front end only (the API already gives the data; no migration)
-- [ ] Series score tiles "Done since last meeting", "Still open", "Overdue" (B10): from `GET /api/series/{id}` (`finished`, `unfinished[].due_date`, today in the person's zone)
-- [ ] Overdue wording (B11): card "Overdue, Fri 30 Oct" in red, Group-by-due heading "Overdue, was due Fri 30 Oct" (`web/components/app/task-card.tsx`, `web/lib/tasks.ts`)
+- [x] Series score tiles "Done since last meeting", "Still open", "Overdue" (B10): from `GET /api/series/{id}` (`finished`, `unfinished[].due_date`, today in the person's zone). Built 2026-11-07: `docs/sop/2026-11-07-ui-parity-batch-3-fe.md`, styles identical to the design (`docs/ui/parity/after/batch-3-fe-styles.json`)
+- [x] Overdue wording (B11): card "Overdue, Fri 30 Oct" in red, Group-by-due heading "Overdue, was due Fri 30 Oct" (`web/components/app/task-card.tsx`, `web/lib/tasks.ts`; also the Backlog row, Series row and meeting Action items, as the design does). Built 2026-11-07, same SOP. The past day in the Due select stays unbuilt (sample data, designer question U8)
 - [ ] Suggested agenda, the lines that need no new data (B20 part): "Review the N overdue tasks", "Settle N open questions carried over", each with Add to agenda / Added, using `POST` and `DELETE /api/series/{id}/agenda`
-- [ ] Decisions wording and shell (B26, B34): "No decisions match." and "Remove from log" inside the row's expanded panel (change the subtitle only when 3D ships, or the line promises a status that is not shown)
+- [x] Decisions B34: "No decisions match." and "Remove from log" inside the row's expanded panel. Built 2026-11-07, same SOP
+- [ ] Decisions B26: the subtitle "Decisions made in your meetings, with their status and the tasks that carry them out." (change only when 3D ships, or the line promises a status that is not shown)
 - [ ] Sidebar "Ask Beyric" item between Meetings and Tasks (B9): only with 3F, or the page behind it says "Not available yet"
 - [ ] Parity shots for each, 1440 / 768 / 390, design beside page, into `docs/ui/parity/after/`
 

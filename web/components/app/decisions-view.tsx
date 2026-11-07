@@ -14,7 +14,7 @@ const SEARCH_DELAY_MS = 300;
 type Paging = { hasMore: boolean; before: number | null };
 type Load = "idle" | "searching" | "failed";
 
-// The Decisions screen (the designer's, plus "Remove from log"): every decision of the owner's
+// The Decisions screen (the designer's, plus "Remove from log", which lives inside the open row): every decision of the owner's
 // meetings grouped by meeting, newest meeting first. The first page is the server render. A search
 // asks the API again (`q` matches the decision's words, or the meeting's title and code: a title
 // match lists every decision of that meeting), and older meetings come with before_id
@@ -37,6 +37,9 @@ export function DecisionsView({ initial }: { initial: DecisionList | null }) {
   const [toast, flash] = useToast();
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreFailed, setMoreFailed] = useState(false);
+  // The decision whose row is open (one at a time, as the designer's list does) and the one whose
+  // "Remove from log" is being asked about inside it.
+  const [expanded, setExpanded] = useState<number | null>(null);
   const [confirming, setConfirming] = useState<number | null>(null);
   const [removing, setRemoving] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -108,12 +111,14 @@ export function DecisionsView({ initial }: { initial: DecisionList | null }) {
       await api.decisions.hide(id);
       dropDecision(id);
       setConfirming(null);
+      setExpanded(null);
       flash("Decision removed from the log");
     } catch (caught) {
       if (caught instanceof ApiError && caught.status === 404) {
         // Already gone (a rewrite replaced it, or another tab removed it): gone either way.
         dropDecision(id);
         setConfirming(null);
+        setExpanded(null);
       } else {
         setError(errorMessage(caught));
       }
@@ -172,53 +177,63 @@ export function DecisionsView({ initial }: { initial: DecisionList | null }) {
                 </AppLink>
               </div>
               <ul className="dec-list">
-                {group.decisions.map((decision) =>
-                  confirming === decision.id ? (
-                    <li className="dec-item dec-item-confirm" key={decision.id}>
-                      <p className="dec-text">{decision.text}</p>
-                      <div className="dec-ask" role="group" aria-label="Remove this decision from the log?">
-                        <span className="dec-ask-text">Remove this decision from the log? It stays in the meeting notes.</span>
-                        <div className="dec-ask-actions">
-                          <Button kind="secondary" size="sm" type="button" disabled={removing !== null} onClick={() => setConfirming(null)}>
-                            Cancel
-                          </Button>
-                          <Button kind="danger" size="sm" type="button" disabled={removing !== null} onClick={() => void remove(decision.id)}>
-                            {removing === decision.id ? "Removing..." : "Remove"}
-                          </Button>
-                        </div>
-                      </div>
-                    </li>
-                  ) : (
-                    <li className="dec-item" key={decision.id}>
-                      <Icon name="check" />
-                      <div className="dec-body">
-                        <p className="dec-text">{decision.text}</p>
-                      </div>
-                      <Button
-                        kind="quiet"
+                {group.decisions.map((decision) => {
+                  const open = expanded === decision.id;
+                  return (
+                    <li className="dec-row" key={decision.id}>
+                      <button
                         type="button"
-                        aria-label={`Remove from log: ${decision.text}`}
-                        onClick={() => setConfirming(decision.id)}
+                        className="dec-toggle"
+                        aria-expanded={open}
+                        onClick={() => {
+                          setExpanded(open ? null : decision.id);
+                          setConfirming(null);
+                        }}
                       >
-                        Remove from log
-                      </Button>
+                        <Icon name="check" />
+                        <span className="dec-text">{decision.text}</span>
+                        <span className={open ? "dec-chev dec-chev-open" : "dec-chev"}>
+                          <Icon name="down" />
+                        </span>
+                      </button>
+                      {open ? (
+                        <div className="dec-panel">
+                          {confirming === decision.id ? (
+                            <div className="dec-ask" role="group" aria-label="Remove this decision from the log?">
+                              <span className="dec-ask-text">Remove this decision from the log? It stays in the meeting notes.</span>
+                              <div className="dec-ask-actions">
+                                <Button kind="secondary" size="sm" type="button" disabled={removing !== null} onClick={() => setConfirming(null)}>
+                                  Cancel
+                                </Button>
+                                <Button kind="danger" size="sm" type="button" disabled={removing !== null} onClick={() => void remove(decision.id)}>
+                                  {removing === decision.id ? "Removing..." : "Remove"}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" className="dec-remove" onClick={() => setConfirming(decision.id)}>
+                              Remove from log
+                            </button>
+                          )}
+                        </div>
+                      ) : null}
                     </li>
-                  ),
-                )}
+                  );
+                })}
               </ul>
             </section>
           ))}
 
           {empty ? (
-            <div className="empty-box">
-              {shownQuery ? (
-                <EmptyState title="No decisions match your search." />
-              ) : (
+            shownQuery ? (
+              <div className="empty-box dec-nomatch">No decisions match.</div>
+            ) : (
+              <div className="empty-box">
                 <EmptyState title="No decisions yet.">
                   Decisions made in your meetings will appear here after each meeting ends.
                 </EmptyState>
-              )}
-            </div>
+              </div>
+            )
           ) : null}
 
           {paging.hasMore ? (

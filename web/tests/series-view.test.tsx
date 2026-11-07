@@ -56,6 +56,35 @@ describe("the page the designer drew", () => {
     expect(screen.getByRole("link", { name: "All meetings" }).getAttribute("href")).toBe("/");
   });
 
+  it("draws the three score tiles, Overdue plain while nothing is late", () => {
+    render(<SeriesView initial={owner} />);
+    const tile = (label: string) => screen.getByText(label).parentElement as HTMLElement;
+    expect(within(tile("Done since last meeting")).getByText(String(owner.finished.length)).className).toContain("sr-tile-done");
+    expect(within(tile("Still open")).getByText(String(owner.unfinished.length))).toBeTruthy();
+    const late = within(tile("Overdue")).getByText("0");
+    expect(late.className).not.toContain("sr-tile-late");
+    expect(screen.getByText("Done since last meeting").closest(".sr-score")?.nextElementSibling?.querySelector("h2")?.textContent).toBe(
+      "Unfinished from last time",
+    ); // the tiles sit above the first block
+  });
+
+  it("counts open tasks whose day has passed as Overdue, in red, and not as Still open", () => {
+    const past = { ...owner, unfinished: owner.unfinished.map((t, i) => (i < 2 ? { ...t, due_date: "2020-01-02" } : t)) };
+    render(<SeriesView initial={past} />);
+    const tile = (label: string) => screen.getByText(label).parentElement as HTMLElement;
+    const late = within(tile("Overdue")).getByText("2");
+    expect(late.className).toContain("sr-tile-late");
+    expect(within(tile("Still open")).getByText(String(owner.unfinished.length - 2))).toBeTruthy();
+    expect(screen.getAllByText("Overdue, Thu 2 Jan").length).toBe(2); // the rows say it too
+  });
+
+  it("does not count a task due today or later as Overdue", () => {
+    const future = { ...owner, unfinished: owner.unfinished.map((t) => ({ ...t, due_date: "2999-01-01" })) };
+    render(<SeriesView initial={future} />);
+    expect(within(screen.getByText("Overdue").parentElement as HTMLElement).getByText("0")).toBeTruthy();
+    expect(within(screen.getByText("Still open").parentElement as HTMLElement).getByText(String(owner.unfinished.length))).toBeTruthy();
+  });
+
   it("draws every unfinished task with its status and owner, and 'Needs owner' when it has none", () => {
     render(<SeriesView initial={owner} />);
     expect(screen.getAllByText("Finish payment checkout").length).toBeGreaterThan(0);
@@ -68,7 +97,7 @@ describe("the page the designer drew", () => {
     render(<SeriesView initial={owner} />);
     expect(screen.getByText("1 done")).toBeTruthy();
     expect(screen.getByText("Send the pricing draft")).toBeTruthy();
-    expect(screen.getByText(/^Done /)).toBeTruthy();
+    expect(screen.getByText(/^Done (Today|[A-Z][a-z]{2} \d)/)).toBeTruthy();
     expect(screen.getByText(/Tasks from this series completed since/)).toBeTruthy();
   });
 

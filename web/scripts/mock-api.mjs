@@ -41,6 +41,7 @@ const { values } = parseArgs({
     review: { type: "string", default: "live" },
     "time-zone": { type: "string" },
     role: { type: "string", default: "owner" },
+    overdue: { type: "boolean", default: false },
   },
 });
 
@@ -58,6 +59,8 @@ const { values } = parseArgs({
 // `--time-zone Africa/Lagos` starts the account with that zone chosen (without it GET
 // /api/settings/time-zone answers UTC, not set); PUT keeps what it is given, in memory.
 
+// `--overdue` puts two open tasks and two of the Series page's unfinished tasks on Fri 30 Oct, before the
+// mock's Mon 2 Nov, as the designer's sample does ("Overdue, Fri 30 Oct": docs/ui/audit-2026-11-07-main-v2.md B10, B11).
 // Translation (W7): `--language fr|es|en` is the account's default notes language to start with.
 // Meeting 8 is the designer's sample meeting ("Zoom 88205679674", the notes and transcript of
 // docs/fe-captures/translate/); it is not in the list. Asking for French or Spanish on it answers
@@ -448,6 +451,10 @@ const seriesCapture = (n) => {
   return JSON.parse(readFileSync(join(seriesDir, file), "utf8")).response.body;
 };
 const seriesPages = { 1: seriesCapture("11"), 3: seriesCapture("14") };
+if (values.overdue) {
+  seriesPages[1].unfinished.slice(0, 2).forEach((t) => (t.due_date = "2026-10-30"));
+  [tasks.find((t) => t.id === 5), tasks.find((t) => t.id === 6)].forEach((t) => (t.due_date = "2026-10-30"));
+}
 let nextAgendaId = 100;
 const questionState = Object.fromEntries(seriesCapture("15").open_questions.map((q) => [q.id, { ...q }]));
 details[0].series = { id: 1, title: "Beyric Monday planning" };
@@ -928,6 +935,8 @@ const server = http.createServer(async (req, res) => {
     if (values.decisions === "failed") return json(res, 500, { error: { code: "server_error", message: "Something went wrong on our side." } });
     if (values.decisions === "loading" || values.decisions === "retry-loading") await wait(4000);
     if (values.decisions === "empty") return json(res, 200, { groups: [], has_more: false, next_before_id: null });
+    // The search "zebra" answers the captured no-match list (docs/fe-captures/ai-workspace-w1/16-...).
+    if (url.searchParams.get("q") === "zebra") return json(res, 200, wsCapture("16-decisions-search-none"));
     return json(res, 200, wsCapture("13-decisions"));
   }
   if (/^\/api\/decisions\/\d+\/hide$/.test(path) && method === "POST") {
