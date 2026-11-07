@@ -1,5 +1,5 @@
 SOURCE: https://developers.zoom.us/blog/transition-to-obf-token-meetingsdk-apps/
-Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script; two example tokens in the sample JSON response were replaced by <REDACTED-EXAMPLE-TOKEN-from-Zoom-docs> because a secret scanner flagged them: they are Zoom's truncated documentation placeholders, not real credentials)
 
 Transitioning to On Behalf Of (OBF) tokens in Meeting SDK apps - Zoom Developer Blog 
  Now Available: Zoom AI Services Summarizer & Translator APIs. 
@@ -72,9 +72,9 @@ Content-Type: application/x-www-form-urlencoded
  Example response 
  If the previous example request is successful, you'll receive a JSON response containing your tokens.
  {
- "access_token": "eyJzdiI6IjAwMDAwMiIsImFsZyI6IkhTNTEyIiwidiI6IjIuMCIsImtpZCI6IlpPT01fS0lEIn0...",
+ "access_token": "<REDACTED-EXAMPLE-TOKEN-from-Zoom-docs>",
  "token_type": "bearer",
- "refresh_token": "eyJzdiI6IjAwMDAwMiIsImFsZyI6IkhTNTEyIiwidiI6IjIuMCIsImtpZCI6IlpPT01fS0lEIn0...",
+ "refresh_token": "<REDACTED-EXAMPLE-TOKEN-from-Zoom-docs>",
  "expires_in": 3600,
  "scope": "user:read:token,user:read:token:admin",
  "api_url": "https://api.zoom.us"
