@@ -181,13 +181,17 @@ const tasks = [
 // Projects and milestones (W4). The shapes are the ones in docs/fe-captures/projects-w4/; the values
 // are the designer's: Client Portal (teal) and Beyric Note Taker (blue), the milestone "Client Portal
 // launch, Tue 8 Dec 2026" set in the Monday planning, eight launch tasks and one task to check. The
-// designer's recurring-meeting links and sprint lengths have no feature yet and are not mocked.
+// designer's recurring-meeting links are the designer's own (Client Portal has both recurring meetings,
+// Beyric Note Taker none): `PUT /api/series/{id}/project` changes them in memory, the answers have the
+// shapes in docs/fe-captures/series-project-link/.
 // `--role member` shows the screens as a member sees them. Writes change them in memory.
 let proposalOpen = true; // meeting 8 carries one unconfirmed proposal until it is confirmed
 let projects = [];
+let seriesProject = {}; // series id -> project id (the link `PUT /api/series/{id}/project` writes)
 let milestones = [];
 let nextProjectId = 10;
 function resetProjects() {
+  seriesProject = { 1: 1, 3: 1 };
   projects = [
     { id: 1, name: "Client Portal", color: "#0E6B5E", keywords: ["portal", "onboarding", "checkout", "pricing"], created_at: "2026-11-01T09:00:00Z" },
     { id: 2, name: "Beyric Note Taker", color: "#3C4A7A", keywords: ["Beyric", "note taker", "transcript"], created_at: "2026-11-01T09:01:00Z" },
@@ -303,6 +307,7 @@ const projectOut = (p) => ({
   sprint_length: p.sprint_length ?? null,
   in_current_sprint: tasks.filter((t) => t.project_id === p.id && t.status !== "done" && t.sprint_id === openIdsFor(p.id)[0]).length,
   in_backlog: tasks.filter((t) => t.project_id === p.id && t.status !== "done" && t.sprint_id === null).length,
+  recurring_meetings: Object.values(seriesProject).filter((id) => id === p.id).length,
   milestone: (() => {
     const m = milestones.filter((x) => x.project_id === p.id && x.confirmed_at).sort((a, b) => (a.due_date < b.due_date ? -1 : 1))[0];
     return m ? { id: m.id, name: m.name, due_date: m.due_date } : null;
@@ -451,6 +456,19 @@ const seriesCapture = (n) => {
   return JSON.parse(readFileSync(join(seriesDir, file), "utf8")).response.body;
 };
 const seriesPages = { 1: seriesCapture("11"), 3: seriesCapture("14") };
+// Captures 08, 11 and 14 are older than the link and the sprint line: `project` is added from the in-memory
+// links (see "Projects"), and Monday planning's next meeting (Mon 9 Nov) is the day Sprint 13 starts in
+// the sprints mock, so the real rule gives "Opens Sprint 13"; Friday review has no line (no rule for "Closes").
+seriesPages[1].sprint_note = "Opens Sprint 13";
+seriesPages[3].sprint_note = null;
+const projectLink = (id) => {
+  const project = projects.find((p) => p.id === seriesProject[id]);
+  return project ? { id: project.id, name: project.name } : null;
+};
+const seriesCards = () => {
+  const body = seriesCapture("08");
+  return { ...body, series: body.series.map((card) => ({ ...card, project: projectLink(card.id) })) };
+};
 if (values.overdue) {
   seriesPages[1].unfinished.slice(0, 2).forEach((t) => (t.due_date = "2026-10-30"));
   [tasks.find((t) => t.id === 5), tasks.find((t) => t.id === 6)].forEach((t) => (t.due_date = "2026-10-30"));
@@ -570,10 +588,20 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { series: meeting.series });
   }
   if (path === "/api/series" && method === "POST") {
-    return json(res, 201, { id: 9, title: String(data?.title ?? ""), cadence: "Recurring", platform: null, next_starts_at: null, next_text: null, unfinished_tasks: 0, open_questions: 0 });
+    return json(res, 201, { id: 9, title: String(data?.title ?? ""), cadence: "Recurring", platform: null, next_starts_at: null, next_text: null, unfinished_tasks: 0, open_questions: 0, project: null });
   }
   // Series (W8): see the block above the server.
-  if (path === "/api/series" && method === "GET") return json(res, 200, seriesCapture("08"));
+  if (path === "/api/series" && method === "GET") return json(res, 200, seriesCards());
+  const linking = /^\/api\/series\/(\d+)\/project$/.exec(path);
+  if (linking && method === "PUT") {
+    const card = seriesCards().series.find((c) => c.id === Number(linking[1]));
+    if (!card) return json(res, 404, { error: { code: "not_found", message: "No such recurring meeting" } });
+    if (teamRole === "member") return json(res, 403, { error: { code: "team_forbidden", message: "You can't do that here. Ask an owner or admin of your team." } });
+    if (data?.project_id === null) delete seriesProject[card.id];
+    else if (projects.some((p) => p.id === data?.project_id)) seriesProject[card.id] = data.project_id;
+    else return json(res, 404, { error: { code: "not_found", message: "No such project." } });
+    return json(res, 200, seriesCards().series.find((c) => c.id === card.id));
+  }
   const onePage = /^\/api\/series\/(\d+)$/.exec(path);
   if (onePage && method === "GET") {
     const page = seriesPages[onePage[1]];
@@ -716,6 +744,7 @@ const server = http.createServer(async (req, res) => {
     if (teamRole === "member") return json(res, 403, { error: { code: "team_forbidden", message: "Only an owner or admin of the team can do that." } });
     if (method === "DELETE") {
       projects.splice(projects.indexOf(project), 1);
+      for (const [id, pid] of Object.entries(seriesProject)) if (pid === project.id) delete seriesProject[id];
       milestones = milestones.filter((m) => m.project_id !== project.id);
       for (const t of tasks) if (t.project_id === project.id) Object.assign(t, { project_id: null, milestone_id: null, check_project: false });
       res.writeHead(204);

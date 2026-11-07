@@ -1,0 +1,28 @@
+{
+  "note": "Eve is on another team: 404 for the series.",
+  "client": "eve",
+  "request": {
+    "method": "PUT",
+    "path": "/api/series/1/project",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "project_id": 3
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such recurring meeting"
+      }
+    }
+  }
+}

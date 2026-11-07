@@ -2639,6 +2639,25 @@
         "title": "ProjectIn",
         "type": "object"
       },
+      "ProjectLink": {
+        "description": "The project a recurring meeting is linked to (its tasks are filed there).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "ProjectLink",
+        "type": "object"
+      },
       "ProjectList": {
         "properties": {
           "can_manage": {
@@ -2708,6 +2727,10 @@
             "title": "Open Tasks",
             "type": "integer"
           },
+          "recurring_meetings": {
+            "title": "Recurring Meetings",
+            "type": "integer"
+          },
           "sprint_length": {
             "anyOf": [
               {
@@ -2737,6 +2760,7 @@
           "sprint_length",
           "in_current_sprint",
           "in_backlog",
+          "recurring_meetings",
           "milestone",
           "created_at"
         ],
@@ -3147,6 +3171,16 @@
             ],
             "title": "Platform"
           },
+          "project": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectLink"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -3164,7 +3198,8 @@
           "next_starts_at",
           "next_text",
           "unfinished_tasks",
-          "open_questions"
+          "open_questions",
+          "project"
         ],
         "title": "SeriesCard",
         "type": "object"
@@ -3308,6 +3343,17 @@
             "title": "Questions",
             "type": "array"
           },
+          "sprint_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sprint Note"
+          },
           "timezone": {
             "title": "Timezone",
             "type": "string"
@@ -3332,6 +3378,7 @@
           "timezone",
           "next_starts_at",
           "next_text",
+          "sprint_note",
           "can_rename",
           "agenda_recipients",
           "unfinished",
@@ -3359,6 +3406,29 @@
           "title"
         ],
         "title": "SeriesPatch",
+        "type": "object"
+      },
+      "SeriesProjectIn": {
+        "additionalProperties": false,
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "maximum": 9007199254740992.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "title": "SeriesProjectIn",
         "type": "object"
       },
       "SeriesRef": {
@@ -11650,6 +11720,89 @@
           }
         },
         "summary": "Remove Agenda",
+        "tags": [
+          "series"
+        ]
+      }
+    },
+    "/api/series/{series_id}/project": {
+      "put": {
+        "description": "Link a recurring meeting to a project (`project_id`), or unlink it (null): the tasks taken\nfrom its meetings are filed into that project, first in the filing rule. One project per\nrecurring meeting: linking it to another project moves it. Owner or admin of the team only\n(403 `team_forbidden`); a recurring meeting the caller cannot see, or a project that is not\non the team, is 404. The same call again changes nothing.",
+        "operationId": "put_series_project",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "series_id",
+            "required": true,
+            "schema": {
+              "title": "Series Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SeriesProjectIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeriesCard"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Put Series Project",
         "tags": [
           "series"
         ]

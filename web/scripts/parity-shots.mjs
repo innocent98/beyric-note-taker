@@ -251,7 +251,7 @@ const SCREENS = {
     [{ text: "Finish payment checkout", wait: 400 }],
   ],
   "app-tasks-review": [APP, [["Tasks", "first", 800], ["Review", "first", 400]], "/tasks", true, [{ text: "Review", wait: 400 }]],
-  // Projects (W4). Recurring meetings is drawn off with a "Not available yet" line (W8); the Sprint length
+  // Projects (W4). Recurring meetings is the checklist (the designer's links); the Sprint length
   // select and the two sprint figures are live (W9); the project tab on the board and the Check project line are the designer's.
   "app-projects": [APP, [["Projects", "first", 800]], "/projects", true],
   "app-projects-second": [APP, [["Projects", "first", 800], ["Beyric Note Taker", "last", 400]], "/projects", true, [{ click: "Beyric Note Taker", wait: 400 }]],

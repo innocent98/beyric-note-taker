@@ -25,7 +25,8 @@ const AVATAR_TONES = ["avatar-a", "avatar-b", "avatar-c", "avatar-d", "avatar-e"
 // viewer may read, so two teammates see different tasks, questions and past meetings: that is the
 // server's rule, not a bug to correct here.
 //
-// Not drawn, because nothing real backs it: the sprint line under "Next meeting" (Sprints, W9).
+// The sprint line under "Next meeting" ("Opens Sprint 13") is `sprint_note`: written by the server with
+// the rule of the one-hour reminder mail, null (nothing drawn) when the next meeting opens no sprint.
 // "Send agenda to attendees" is switched off, with a title saying why, when no teammate would
 // receive it (`agenda_recipients` 0). Titles, questions and agenda lines are plain text.
 function TaskRow({
@@ -186,6 +187,7 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
                 <>
                   <div className="sr-next-label">Next meeting</div>
                   <div className="sr-next-value">{page.next_text}</div>
+                  {page.sprint_note ? <div className="sr-next-sprint">{page.sprint_note}</div> : null}
                 </>
               ) : null}
             </div>

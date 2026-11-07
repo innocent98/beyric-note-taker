@@ -594,7 +594,9 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
         invited_by=owner.id,
         expires_at=datetime.now(UTC) + timedelta(days=7),
     )
-    recurring = Series(team_id=teams.ensure_team(session, owner).id, title="Weekly")
+    recurring = Series(
+        team_id=teams.ensure_team(session, owner).id, owner_user_id=owner.id, title="Weekly"
+    )
     question = OpenQuestion(meeting_id=mine.id, text="q", position=0, fingerprint="q")
     project = Project(
         team_id=teams.ensure_team(session, owner).id, name="P", color="#0E6B5E", keywords=[]
@@ -687,6 +689,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/api/tasks/{task_id}": {"status": "done"},
             "/api/series/{series_id}": {"title": "x"},
             "/api/series/{series_id}/agenda": {"text": "x"},
+            "/api/series/{series_id}/project": {"project_id": project.id},
             "/api/meetings/{meeting_id}/series": {"series_id": None},
             "/api/questions/{question_id}": {"carry": True},
             "/api/projects/{project_id}": {"name": "x"},
@@ -705,9 +708,13 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     # stranger's attempt changed nothing.
     session.expire_all()
     assert session.get(CalendarEvent, event.id).override is None
+    assert session.get(Series, recurring.id).project_id is None  # nor did the stranger's link
     # the stranger's DELETE of the owner's template was refused, not carried out
     assert session.get(Template, template.id).deleted_at is None
     anon.log_in(email=OWNER_EMAIL)
+    # and the owner's own link call works (an owner of the team, who made the series)
+    linked = anon.put(f"/api/series/{recurring.id}/project", {"project_id": project.id})
+    assert linked.status_code == 200 and linked.json()["project"]["id"] == project.id
     assert (
         anon.put(f"/api/calendar/events/{event.id}/override", {"override": False}).status_code
         == 200

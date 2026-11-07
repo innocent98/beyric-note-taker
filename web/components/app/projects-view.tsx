@@ -5,7 +5,7 @@ import { Alert, Button, Icon, PageHead, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
-import type { Project, ProjectChanges, ProjectList, Team } from "@/lib/api/types";
+import type { Project, ProjectChanges, ProjectList, SeriesCard, SeriesList, Team } from "@/lib/api/types";
 import { PROJECT_COLOURS } from "@/lib/brand";
 import { lengthLabel, SPRINT_LENGTHS } from "@/lib/sprints";
 import { longDay, swatchClass } from "@/lib/tasks";
@@ -22,14 +22,31 @@ const PROJECT_LENGTHS = SPRINT_LENGTHS.filter(([value]) => value !== "custom");
 // admin of the team may change anything (`can_manage`); a member sees the same screen with the
 // fields switched off and no New project or Delete.
 //
+// Recurring meetings: the checklist of the team's recurring meetings (`GET /api/series`); ticking one
+// links it to this project (`PUT /api/series/{id}/project`, which moves it when another project had it,
+// and the row then says "Linked to {project}" on that other project), unticking unlinks it. Owner or
+// admin only, as for every change here; a member sees the ticks and no pointer. The count in the list
+// ("N open tasks · M recurring meetings") is counted from the same rows. Nothing is drawn when there
+// is no recurring meeting yet (the designer drew none for that case).
+//
 // W9: the two sprint figures ("In current sprint", "In backlog") and the Sprint length select are
 // live; "Workspace default (...)" names the team's length (`team`, left plain when it could not be
 // read). Setting a length gives the project its own sprints and moves its tasks into them.
 // Switched off with one "Not available yet" line, because its feature is not built (the same
-// pattern as the Settings sections): Recurring meetings (W8). Not in the designer's file, added here:
-// the "Only an owner or admin..." line for a member, and the empty list text.
-export function ProjectsView({ initial, team = null }: { initial: ProjectList | null; team?: Team | null }) {
+// pattern as the Settings sections): nothing is switched off any more. Not in the designer's file,
+// added here: the "Only an owner or admin..." line for a member, and the empty list text.
+export function ProjectsView({
+  initial,
+  series = null,
+  team = null,
+}: {
+  initial: ProjectList | null;
+  series?: SeriesList | null;
+  team?: Team | null;
+}) {
   const [data, setData] = useState<ProjectList | null>(initial);
+  const [meetings, setMeetings] = useState<SeriesCard[]>(series?.series ?? []);
+  const [linking, setLinking] = useState<number | null>(null);
   const [failed, setFailed] = useState(initial === null);
   const [selected, setSelected] = useState<number | null>(initial?.projects[0]?.id ?? null);
   const [drafts, setDrafts] = useState<Record<number, string>>({});
@@ -46,6 +63,9 @@ export function ProjectsView({ initial, team = null }: { initial: ProjectList | 
   const projects = data?.projects ?? [];
   const can = data?.can_manage ?? false;
   const current = projects.find((p) => p.id === selected) ?? projects[0] ?? null;
+  const linkedCount = (id: number) => meetings.filter((c) => c.project?.id === id).length;
+  // "Linked to {name}": the other project's name as it is on screen now (a rename is not reloaded).
+  const projectName = (id: number, fallback: string) => drafts[id] ?? (projects.find((p) => p.id === id)?.name || fallback);
 
   // The answer replaces the project; a name typed since is still shown (`drafts` wins on screen).
   function merge(next: Project) {
@@ -55,8 +75,9 @@ export function ProjectsView({ initial, team = null }: { initial: ProjectList | 
   async function reload() {
     setFailed(false);
     try {
-      const next = await api.projects.list();
+      const [next, list] = await Promise.all([api.projects.list(), api.series.list()]);
       setData(next);
+      setMeetings(list.series);
       setSelected((s) => (next.projects.some((p) => p.id === s) ? s : (next.projects[0]?.id ?? null)));
     } catch {
       setFailed(true);
@@ -89,6 +110,20 @@ export function ProjectsView({ initial, team = null }: { initial: ProjectList | 
       if (rest[project.id] === value) delete rest[project.id];
       return rest;
     });
+  }
+
+  // Tick or untick one recurring meeting for the open project; the answer is that meeting's card.
+  async function toggleMeeting(card: SeriesCard, project: Project) {
+    if (!can || linking !== null) return;
+    setLinking(card.id);
+    setError(null);
+    try {
+      const next = await api.series.linkProject(card.id, card.project?.id === project.id ? null : project.id);
+      setMeetings((list) => list.map((c) => (c.id === next.id ? next : c)));
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
+    setLinking(null);
   }
 
   async function addProject() {
@@ -170,7 +205,9 @@ export function ProjectsView({ initial, team = null }: { initial: ProjectList | 
               <span className={`pj-swatch ${swatchClass(p.color)}`} />
               <span className="pj-item-text">
                 <span className="pj-item-name">{drafts[p.id] ?? (p.name || "Untitled project")}</span>
-                <span className="pj-item-sub">{p.open_tasks} open tasks</span>
+                <span className="pj-item-sub">
+                  {p.open_tasks} open tasks · {linkedCount(p.id)} recurring {linkedCount(p.id) === 1 ? "meeting" : "meetings"}
+                </span>
               </span>
             </button>
           ))}
@@ -229,7 +266,40 @@ export function ProjectsView({ initial, team = null }: { initial: ProjectList | 
                 <div className="pj-label">Recurring meetings</div>
                 <div className="pj-help">Action items from these meetings go into this project.</div>
               </div>
-              <p className="meta pj-off-line">Not available yet.</p>
+              {meetings.length > 0 ? (
+                <div className="pj-series" role="group" aria-label="Recurring meetings">
+                  {meetings.map((card) => {
+                    const on = card.project?.id === current.id;
+                    const other = !on && card.project ? `Linked to ${projectName(card.project.id, card.project.name) || "Untitled project"}` : "";
+                    return (
+                      <div
+                        key={card.id}
+                        className={`pj-series-row${can ? " pj-series-row-live" : ""}`}
+                        role="checkbox"
+                        aria-checked={on}
+                        aria-disabled={!can}
+                        tabIndex={can ? 0 : -1}
+                        onClick={() => void toggleMeeting(card, current)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            void toggleMeeting(card, current);
+                          }
+                        }}
+                      >
+                        <span className={`pj-box${on ? " pj-box-on" : ""}`} aria-hidden="true">
+                          <Icon name="check" size={12} stroke={3.2} />
+                        </span>
+                        <span className="pj-series-main">
+                          <span className="pj-series-name">{card.title}</span>
+                          <span className="pj-series-cadence">{card.cadence}</span>
+                        </span>
+                        <span className="pj-series-other">{other}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
             <div className="pj-field">
               <div>

@@ -1,0 +1,17 @@
+{
+  "note": "queue_due_reminders at Mon 09 Nov 13:05 UTC returned 2: the one-hour reminders for the Monday planning occurrence (and nothing for Friday). Ids only.",
+  "content": [
+    {
+      "to": "ada@example.test",
+      "payload": {
+        "reminder_id": 1
+      }
+    },
+    {
+      "to": "dan@example.test",
+      "payload": {
+        "reminder_id": 2
+      }
+    }
+  ]
+}

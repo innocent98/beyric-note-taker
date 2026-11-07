@@ -1,0 +1,33 @@
+{
+  "note": "Unlink: `project` null.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/series/1/project",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "project_id": null
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "title": "Beyric Monday planning",
+      "cadence": "Weekly on Mondays, 14:00",
+      "platform": "google_meet",
+      "next_starts_at": "2026-11-09T14:00:00Z",
+      "next_text": "Mon 9 Nov, 14:00",
+      "unfinished_tasks": 0,
+      "open_questions": 0,
+      "project": null
+    }
+  }
+}

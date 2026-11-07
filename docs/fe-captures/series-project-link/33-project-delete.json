@@ -1,0 +1,20 @@
+{
+  "note": "Deleting a project unlinks its recurring meetings (Friday review was linked to it).",
+  "client": "ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/projects/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "cache-control": "no-store"
+    },
+    "body": null
+  }
+}

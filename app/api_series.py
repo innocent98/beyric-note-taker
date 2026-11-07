@@ -6,6 +6,7 @@ A series of another team, a meeting or a question the caller may not read, is 40
 `app/series.py` holds the rules and `app/series_mail.py` the mail; no model is called here.
 """
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -14,7 +15,18 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import api_tasks, auth, mail, series, series_mail, services, tasks, timezones
+from app import (
+    api_tasks,
+    auth,
+    mail,
+    mail_summary,
+    series,
+    series_mail,
+    services,
+    sprints,
+    tasks,
+    timezones,
+)
 from app.api_schemas import ErrorResponse, MeetingRef, QuestionOut, SeriesRef
 from app.calendar_recurring import describe_cadence, next_text
 from app.db import get_session
@@ -22,6 +34,7 @@ from app.models import (
     CalendarEvent,
     Meeting,
     OpenQuestion,
+    Project,
     ScheduledJoin,
     Series,
     Task,
@@ -38,6 +51,7 @@ from app.series_schemas import (
     MeetingSeriesIn,
     MeetingSeriesOut,
     PastMeeting,
+    ProjectLink,
     QuestionPatch,
     ReminderPreferencesIn,
     ReminderPreferencesOut,
@@ -46,9 +60,11 @@ from app.series_schemas import (
     SeriesList,
     SeriesPage,
     SeriesPatch,
+    SeriesProjectIn,
 )
 from app.visibility import can_read_clause
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 FORBIDDEN = {403: {"model": ErrorResponse, "description": "`team_forbidden`"}}
@@ -129,6 +145,18 @@ def _platform(found: Series) -> str | None:
     return found.platform if found.platform in ("google_meet", "zoom") else None
 
 
+def _project_names(session: Session, team_id: int) -> dict[int, str]:
+    rows = session.execute(select(Project.id, Project.name).where(Project.team_id == team_id))
+    return {project_id: name for project_id, name in rows}
+
+
+def _project_link(found: Series, names: dict[int, str]) -> ProjectLink | None:
+    """The link, only when the project is still on the team (`project_id` has no foreign key)."""
+    if found.project_id is None or found.project_id not in names:
+        return None
+    return ProjectLink(id=found.project_id, name=names[found.project_id])
+
+
 def _initial_title(found: Series) -> str:
     return found.title or series.UNTITLED
 
@@ -176,6 +204,7 @@ def list_series(
     zone_name = _zone_name(session, user)
     rows = series.list_for(session, user)
     counts = series.counts_for(session, user, [s.id for s in rows])
+    names = _project_names(session, rows[0].team_id) if rows else {}
     cards = []
     for found in rows:
         cadence, upcoming, upcoming_text = _timing(session, found, zone_name, now, user)
@@ -190,6 +219,7 @@ def list_series(
                 next_text=upcoming_text,
                 unfinished_tasks=tasks_open,
                 open_questions=questions_open,
+                project=_project_link(found, names),
             )
         )
     far = datetime.max.replace(tzinfo=UTC)
@@ -222,7 +252,30 @@ def create_series(
         next_text=upcoming_text,
         unfinished_tasks=0,
         open_questions=0,
+        project=None,
     )
+
+
+def _sprint_note(
+    session: Session, user: User, found: Series, upcoming: datetime | None, zone_name: str | None
+) -> str | None:
+    """ "Opens Sprint 13" under "Next meeting": the very rule the one-hour reminder mail uses for
+    its "Sprint 13 opens" (`mail_summary.opening_sprint`), fed the same input as the mail: the
+    start of the occurrence (`series_mail.queue_due_reminders` stores the earliest team member's
+    event start in every recipient's reminder, as `_timing` does for `next_starts_at`) and the
+    caller's zone. It is a nicety: if the read fails the page is served without it, as the mail
+    is sent without its extras."""
+    if upcoming is None:
+        return None
+    try:
+        with session.begin_nested():
+            opening = mail_summary.opening_sprint(session, user, found, upcoming, zone_name)
+    except Exception as exc:
+        logger.warning(
+            "series %s: page served without its sprint line (%s)", found.id, type(exc).__name__
+        )
+        return None
+    return f"Opens {sprints.name_of(opening)}" if opening is not None else None
 
 
 def _page(session: Session, user: User, found: Series) -> SeriesPage:
@@ -256,6 +309,7 @@ def _page(session: Session, user: User, found: Series) -> SeriesPage:
         timezone=timezones.zone(zone_name).key,
         next_starts_at=upcoming,
         next_text=upcoming_text,
+        sprint_note=_sprint_note(session, user, found, upcoming, zone_name),
         can_rename=found.owner_user_id == user.id
         or series.is_manager(session, user, found.team_id),
         agenda_recipients=len(recipients),
@@ -344,6 +398,47 @@ def patch_series(
         next_text=upcoming_text,
         unfinished_tasks=counts[0],
         open_questions=counts[1],
+        project=_project_link(found, _project_names(session, found.team_id)),
+    )
+
+
+@router.put(
+    "/series/{series_id:id}/project",
+    tags=["series"],
+    responses={**NOT_FOUND, **FORBIDDEN},
+)
+def put_series_project(
+    series_id: int,
+    body: SeriesProjectIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> SeriesCard:
+    """Link a recurring meeting to a project (`project_id`), or unlink it (null): the tasks taken
+    from its meetings are filed into that project, first in the filing rule. One project per
+    recurring meeting: linking it to another project moves it. Owner or admin of the team only
+    (403 `team_forbidden`); a recurring meeting the caller cannot see, or a project that is not
+    on the team, is 404. The same call again changes nothing."""
+    found = _series_or_404(session, user, series_id)
+    try:
+        series.link_project(session, user, found, body.project_id)
+    except series.SeriesRefused as exc:
+        session.rollback()
+        raise _refuse(exc) from None
+    session.commit()
+    cadence, upcoming, upcoming_text = _timing(
+        session, found, _zone_name(session, user), _now(), user
+    )
+    counts = series.counts_for(session, user, [found.id])[found.id]
+    return SeriesCard(
+        id=found.id,
+        title=_initial_title(found),
+        cadence=cadence,
+        platform=_platform(found),
+        next_starts_at=upcoming,
+        next_text=upcoming_text,
+        unfinished_tasks=counts[0],
+        open_questions=counts[1],
+        project=_project_link(found, _project_names(session, found.team_id)),
     )
 
 

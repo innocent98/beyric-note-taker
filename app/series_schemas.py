@@ -6,6 +6,14 @@ from pydantic import BaseModel, Field
 from app.api_schemas import Body, MeetingRef, Platform, SeriesRef, TaskOut, UtcDatetime
 
 
+class ProjectLink(BaseModel):
+    """The project a recurring meeting is linked to (its tasks are filed there)."""
+
+    id: int
+    # Plain text; empty until typed (show "Untitled project").
+    name: str
+
+
 class SeriesCard(BaseModel):
     """One Recurring card of the Meetings screen. The counts cover only what the caller may
     read. `next_*` are null when no calendar event ahead is known (hide the chip)."""
@@ -18,6 +26,8 @@ class SeriesCard(BaseModel):
     next_text: str | None
     unfinished_tasks: int
     open_questions: int
+    # The project its tasks are filed into; null when not linked (`PUT /api/series/{id}/project`).
+    project: ProjectLink | None
 
 
 class SeriesList(BaseModel):
@@ -64,6 +74,10 @@ class SeriesPage(BaseModel):
     timezone: str
     next_starts_at: UtcDatetime | None
     next_text: str | None
+    # "Opens Sprint 13" under "Next meeting", when the next meeting is the one that opens that
+    # sprint for the caller: the rule of the one-hour reminder mail's "Sprint 13 opens". null (no
+    # line) otherwise. Nothing is ever sent for "Closes ...": no rule for it exists yet.
+    sprint_note: str | None
     # The caller may rename the series (its creator, or an owner or admin).
     can_rename: bool
     # Teammates who attended the last three meetings, other than the caller, who the agenda would
@@ -85,6 +99,11 @@ class SeriesCreate(Body):
 
 class SeriesPatch(Body):
     title: str = Field(min_length=1, max_length=200)
+
+
+class SeriesProjectIn(Body):
+    # null unlinks the recurring meeting from its project.
+    project_id: int | None = Field(ge=1, le=2**53)
 
 
 class MeetingSeriesIn(Body):

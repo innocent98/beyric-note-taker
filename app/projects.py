@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app import filing, sprints, tasks, titles
 from app.extraction import CheckedMilestone, normalise
-from app.models import Meeting, Milestone, Project, Task, Team, User
+from app.models import Meeting, Milestone, Project, Series, Task, Team, User
 
 # The six swatches the Projects screen draws (the designer's PCOLORS).
 PALETTE = ("#0E6B5E", "#3C4A7A", "#8A4B00", "#8A2E5C", "#1F6FB2", "#4A524E")
@@ -133,9 +133,20 @@ def update(session: Session, project: Project, changes: dict) -> Project:
 
 def delete(session: Session, project: Project) -> None:
     """The project and its milestones go; its tasks stay with no project (the foreign keys are
-    SET NULL). A task that was waiting for a project check no longer needs one."""
+    SET NULL). A task that was waiting for a project check no longer needs one.
+
+    Locks in the order `series.link_project` does: the project row first (FOR UPDATE here, FOR
+    SHARE there), then the series rows. A link and a delete of the same project therefore queue
+    behind each other instead of crossing (which would abort one of them with a deadlock), and a
+    link that waited finds the project gone (404) or is cleared by the delete that follows it."""
+    session.scalars(select(Project.id).where(Project.id == project.id).with_for_update()).first()
     session.query(Task).filter(Task.project_id == project.id).update(
         {Task.check_project: False}, synchronize_session=False
+    )
+    # The recurring meetings linked to it stay and are no longer linked (`series.project_id` has no
+    # foreign key to cascade).
+    session.query(Series).filter(Series.project_id == project.id).update(
+        {Series.project_id: None}, synchronize_session=False
     )
     # Its tasks stay: those planned in its own sprints follow into the team's (W9).
     sprints.release_project(session, session.get(Team, project.team_id), project)

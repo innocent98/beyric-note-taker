@@ -1,5 +1,7 @@
 # FE integration guide: Projects and milestones (W4 backend)
 
+> **Update 2026-11-08:** every project in the list now has `recurring_meetings`, and a recurring meeting can be linked to a project: see `docs/fe-integration-guide-series-project-link.md` (real captures). The captures below predate it.
+
 Every body below is copied from `docs/fe-captures/projects-w4/NN-*.json`, captured against the running app by `scripts/capture_projects_api.py` (real HTTP, real database, real task filing and proposal code). Re-run the script to re-derive any of it. Names, emails and ids are placeholders. Anything not exercised live is marked **NOT LIVE** with where its shape came from.
 
 All routes are under `/api`, need the session cookie, and take `X-CSRF-Token` on writes (same as the other routes). Errors have the usual shape `{"error": {"code", "message", "fields"?}}`.

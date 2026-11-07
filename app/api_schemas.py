@@ -983,6 +983,9 @@ class ProjectOut(BaseModel):
     # Open tasks it has in the current sprint and in the Backlog (the caller's view).
     in_current_sprint: int
     in_backlog: int
+    # Recurring meetings linked to it that the caller may see ("N open tasks . M recurring
+    # meetings" in the list); the Recurring meetings checklist is `GET /api/series` (`project`).
+    recurring_meetings: int
     # The next milestone still ahead, else the latest that passed; null is "None yet".
     milestone: MilestoneLine | None
     created_at: UtcDatetime

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { SeriesView } from "@/components/app/series-view";
 import { ApiError } from "@/lib/api/client";
 import type { SeriesPage } from "@/lib/api/types";
-import { REPO, read } from "./helpers";
+import { REPO, linkBody, read } from "./helpers";
 
 // The Series page, fed the bodies captured from the running app (docs/fe-captures/series-w8/).
 
@@ -135,6 +135,21 @@ describe("the page the designer drew", () => {
     expect(screen.getByText("Nothing finished yet. Completed tasks will show here.")).toBeTruthy();
     expect(screen.getByText("No open questions.")).toBeTruthy();
     expect(screen.getByText("No meetings recorded in this series yet.")).toBeTruthy();
+  });
+
+  it("draws the sprint line under the next meeting when the server sends one, and nothing when it does not", () => {
+    // Captures of the running app: Monday planning's next meeting opens Sprint 2; Friday review's opens none.
+    const opens = linkBody<SeriesPage>("35-page-planning.json");
+    const none = linkBody<SeriesPage>("37-page-review.json");
+    const { unmount } = render(<SeriesView initial={opens} />);
+    expect(opens.sprint_note).toBe("Opens Sprint 2");
+    const line = screen.getByText("Opens Sprint 2");
+    expect(line.previousElementSibling?.textContent).toBe(opens.next_text);
+    unmount();
+    render(<SeriesView initial={none} />);
+    expect(none.sprint_note).toBeNull();
+    expect(screen.getByText("Next meeting")).toBeTruthy();
+    expect(screen.queryByText(/opens|closes/i)).toBeNull();
   });
 
   it("leaves out the Next meeting block when no date is known, and draws no sprint line", () => {
