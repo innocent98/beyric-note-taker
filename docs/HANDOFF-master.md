@@ -5,7 +5,7 @@
 ## 00. Read this first
 
 - **Every W phase (W0 to W10) is built and live** (merge-queue SOP `docs/sop/2026-11-06-merge-queue-w-phases.md`). Today's work (2026-11-07) was research and a UI audit; the open items are in section 6.
-- **Open PRs when this was written:** the docs PR "UI audit, research, checklist reconciliation and this handoff" (number in the tool results of the twelfth lead; find it with `gh pr list`), waiting for Adebayo's "Merge #N" plus a clear meeting count. The UI session below will open one or two more.
+- **Open PRs when this was written:** **#113** (docs: UI audit, vendor and Recall research, checklist reconciliation, this handoff), waiting for Adebayo's "Merge #N" plus a clear meeting count. The UI session below will open one or two more.
 - **Running session (started by the twelfth lead):** `ui-parity-batch-2` = `local_c723bc11-cea3-42bc-99ff-ab0bbb934d1e` (Sonnet; PR A: mobile and tablet side drawer, sidebar identity, wording, Outlook switched-off row; PR B: "Set up your workspace", "Join your team", sign-in errors, landing buttons; branches `feature/ui-parity-batch-2a` and `-2b`). Its end-of-turn notes go to the twelfth lead, not to you: **find it with `mcp__ccd_session_mgmt__get_session` / `list_events` and message it with `SendMessage` to that id**. Done: `w9-sprint-screens` (`local_6163e9c5-70b3-4b24-9726-403bcd40e412`). The earlier W-phase sessions are gone from this machine.
 - **The auto-mode safety checker refuses:**
   - **any production read** (database queries, `docker compose logs`, the bot's log files): Adebayo runs these and pastes the result; for long output, give him a command that writes to a file in your scratchpad, then read the file;
