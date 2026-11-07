@@ -1,0 +1,78 @@
+SOURCE: https://vexa.ai/privacy
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Privacy Policy | Vexa 
+ vexa version unknown 
+ Product Finance For finance Developers For developers Docs Pricing Roadmap Blog Toggle theme 
+ Sign in Book a demo 
+ Privacy Notice 
+ Last updated: October 21, 2026
+ Controller
+ Vexa.ai Inc. (for account, billing, website & analytics). Processor. Vexa.ai Inc. (for meeting/transcript data on your instructions).
+ Contact
+ info@vexa.ai .
+ EU contacts & authority
+ If Vexa has an EU establishment (e.g., main establishment in Portugal), the lead supervisory authority is CNPD (Portugal) under GDPR's one-stop-shop. If Vexa has no EU establishment , the one-stop-shop does not apply; we will appoint an EU Article 27 representative (with address listed here), and relevant EU/EEA authorities remain competent.
+ What we process
+ Account
+ name, email, company, billing info, plan, usage metrics.
+ Meetings (processor)
+ meeting metadata, transcript text, speaker labels (if provided), timestamps, and meeting audio recordings . Recording is on by default ; send recording_enabled: false on the bot request to run a meeting without one.
+ Meeting audio is sent to Cloudflare Workers AI to produce the transcript — see /legal/subprocessors .
+ Calendar (processor)
+ If you connect a calendar, the event title, start and end time, organiser and attendee email addresses, and meeting join link for events in the calendars you select. We read only; we never write to, modify, or delete anything in your calendar.
+ Diagnostics
+ service logs and identifiers.
+ Website/analytics
+ cookie identifiers, pages, device, referrers; for signed-in users, linked to your account by an internal ID (never your email) so we can see which pages lead to sign-ups and usage.
+ Account milestones
+ our servers record when your account reaches a milestone: sign-up, API key created, first bot requested and joined, meeting completed, concurrency limit reached, and checkout, top-up or subscription changes, with details such as plan, amount and currency, and meeting platform and duration. Each record carries your internal account ID and whether your email is on a business or a personal mail domain; for a business domain, the domain itself (never your email). The records are sent to PostHog. They do not use cookies, and they are separate from your cookie choice: declining cookies does not stop them, objecting does (below).
+ Google user data
+ Vexa's use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy , including the Limited Use requirements.
+ We use Google Calendar data for one purpose: to show your upcoming meetings and to send the meeting bot to the ones you have asked it to join. We do not transfer Google user data to third parties except as necessary to provide that feature, and we do not use it for advertising, for training generalised AI models, or for human review except with your explicit consent, to comply with law, or for security. You can disconnect a calendar at any time from the Meetings panel, and doing so deletes the stored authorisation.
+ Purposes & Legal Bases
+ Provide Service & support
+ ( contract ).
+ Security/fraud prevention
+ ( legitimate interests ).
+ Billing & compliance
+ ( legal obligation/contract ).
+ Account milestones (to understand how the service is adopted and to contact you if you get stuck)
+ ( legitimate interests ). You can object at any time by emailing info@vexa.ai ; we then stop recording milestones for your account and delete those already recorded within 30 days. Any email we send about this includes an opt-out.
+ Analytics cookies
+ Google Analytics 4 and PostHog measure page views without analytics cookies before you choose and after you decline. This limited measurement does not attach your account ID; the services receive network information and PostHog uses a temporary server-generated identifier. Accepting enables analytics cookies and links subsequent activity to your account when you sign in, using an internal ID, never your email. You can withdraw cookie consent at any time. See /legal/cookies for what this means and how to opt out. We run no marketing or advertising cookies.
+ Retention
+ Transcripts & recordings
+ retained until deleted; not backed up for your restoration ; we may delete for safety/abuse/space.
+ You can delete any meeting yourself , including a completed one with its transcript and recording, through the API ( DELETE /meetings/… ); copies in backups expire under our retention policy. To erase your whole account, email info@vexa.ai and we complete it within 30 days.
+ Account & billing
+ as long as you have an account + statutory periods.
+ Logs
+ short operational windows or as required by law.
+ Analytics and account milestones
+ kept in PostHog for up to 1 year; deleted earlier when you object or erase your account.
+ Children
+ Service is 18+ . We do not knowingly process children's data.
+ International Transfers
+ Hosting is in Seattle, Washington, USA (Akamai Connected Cloud / Linode, region us-sea ). We do not currently offer EEA or UK hosting , so meeting data, transcripts, recordings and account data are stored in the United States. Speech-to-text is performed by Cloudflare Workers AI on Cloudflare's global network. Where vendors are outside the EEA/UK, we rely on SCCs and supplementary measures.
+ Your Rights (EEA/UK)
+ Access, rectify, erase, restrict, object, portability, and withdraw consent. Contact: info@vexa.ai . You may lodge a complaint with a supervisory authority.
+ Processors/Sub-processors
+ See /legal/subprocessors .
+ Do Not Sell/Share (US)
+ We do not sell personal information. State privacy rights honored as applicable.
+ Data Security
+ See /legal/security .
+ Product
+ Meeting capture Workspace (early) Agents (early) Self-host Pricing Roadmap 
+ For finance
+ Vexa for finance Fund distribution Credit and diligence Security review Work with us 
+ For developers
+ Google Meet API Microsoft Teams API Zoom API Claude and MCP n8n Webhooks Sales call transcription Docs 
+ Compare
+ vs Recall.ai vs Meetily vs Meeting BaaS vs Otter.ai vs Fireflies 
+ Company
+ Blog GitHub Book a demo Contact Report a bug 
+ vexa version unknown 
+ Vexa is open-source AI that turns your company’s meetings into knowledge it owns, on your own servers, with your own model. It starts with your Zoom, Microsoft Teams and Google Meet calls. The code is open source under Apache-2.0, with an open core approved by FINOS.
+ © 2026 Vexa.ai Inc. All rights reserved. Terms Privacy Cookies DPA Security

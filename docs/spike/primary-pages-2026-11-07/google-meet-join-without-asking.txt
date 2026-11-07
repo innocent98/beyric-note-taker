@@ -1,0 +1,425 @@
+SOURCE: https://support.google.com/a/users/answer/12172260
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Tips to set up business meetings - Google Workspace Learning Center Skip to main content 
+ Google Workspace Learning Center 
+ Sign in 
+ Google Help 
+ Help Center
+ Get started
+ Learn by product
+ Learn by role & industry
+ Hybrid workplace tips
+ Gen AI tips
+ Productivity tips
+ Business tutorials
+ Switch from Microsoft & others
+ Support & accessibility
+ Google Workspace
+ Privacy Policy
+ Terms of Service
+ Submit feedback
+ Send feedback on...
+This help content & information 
+General Help Center experience 
+ Close Next 
+ Help Center 
+ Highlights 
+ Google Workspace 
+ Get started Welcome Get ready to switch What to do on your first day Your first week & beyond Cheat sheets & reference guides Open Google Workspace apps 
+ Learn by product Calendar Chat Chrome browser Docs Drive Gemini Gmail Meet Pics Sheets Slides Vids Workspace Studio Managed teams Mobile & device setup All products 
+ Learn by role & industry Administrative assistants Digital marketing Finance Healthcare Human resources Law practices Manufacturing Media & entertainment Nonprofits Professional services Project management Research & development Retail Sales & marketing Technical support UX design Visual design Web development 
+ Hybrid workplace tips Hybrid work training & help Use Meet Companion mode Stay connected when working remotely Work from home Work with remote teams Plan & hold meetings from anywhere Hold large remote events Work with non-Google Workspace users 
+ Gen AI tips Generative AI training & help Get started with Gemini Use the Gemini side panel Gemini cheat sheet Role-specific prompts & use cases Tips for writing prompts for Gemini Learn about generative AI 
+ Productivity tips Set up business meetings Discuss topics with your team Brainstorm with colleagues Improve communication Make video conference calls Create great presentations Create strong proposals Onboard team members Optimize your inbox Analyze data Clean up data Go paperless 
+ Business tutorials Use generative AI at work Plan & manage a project Plan & hold meetings from anywhere Hold large remote events Stay connected when working remotely Collaborate with decision makers Share a final document Free up storage space Plan a project with external clients Delegate work when you're OOO Get up to speed after time off Additional training resources 
+ Switch from Microsoft & others Switch from Microsoft Switch from Slack Switch from Zoom, Skype, or Webex Switch from Box, Dropbox, or C:\ drive 
+ Support & accessibility Support for users Support for administrators Accessibility Save or customize Learning Center guides 
+ Notification
+ Bring your best ideas to life with Google Workspace with Gemini. Get tips & real-life use cases for using gen AI at work .
+ Tips to set up business meetings
+ Google Workspace productivity guide
+ Some Google Meet features discussed here, such as adding co-hosts and live streaming, require specific Google Workspace editions. Learn more about Google Meet feature availability . 
+ On this page
+ Choose how to create your meeting 
+ Find the meeting access settings 
+ Manage meeting access settings 
+ Use Host management settings 
+ Set up meetings with internal & external guests 
+ Join a meeting on a second screen 
+ ​Enhance your Meet experience with Gemini​ 
+ Join and participate from your mobile device  
+ Choose how to create your video meeting
+ You can create a meeting from Google Calendar, the Meet landing page ( meet.google.com ), mobile apps, a chat window, meeting room hardware devices, and other meeting entry points. Here are guidelines to help you choose.
+ Schedule in Calendar to…
+ Place the event on your guests’ calendars from where they can easily join the meeting
+ Assume host privileges
+ Set up security controls and add co-hosts  before the meeting (in Calendar settings)  
+ Let external guests join without having to knock (they must be signed in to a Google Account)
+ Start an instant meeting to...
+ Enter the meeting now and get a meeting URL and phone dial-in number to send to others
+ Assume host privileges
+ You can set up security controls and add co-hosts after the meeting.
+ From meet.google.com , click New meeting Start an instant meeting .
+ Use a nickname
+ Not recommended if it matters who owns or hosts the meeting 
+ Make up any name for your meeting, such as quick- sync , and share it with others. Anyone in your organization can go to a meeting entry point like meet.google.com , enter that name, and join the same meeting.
+ Note that external guests can’t join the meeting with the nickname. The host must instead send them a link with the meeting code, or a dial-in number and PIN.
+ Warning:  With a nickname meeting, the first person to enter the nickname and go to the meeting entry page (green room) becomes the host and can set up host controls. They also own any meeting artifacts such as recordings, transcriptions, and attendance reports.
+ Find the meeting access settings
+ As the meeting organizer or a host, you can set host management and meeting access controls as follows:
+ Creating or editing a Calendar event —Click Video call options  .
+ In a meeting —At the bottom right, click Host controls  .
+ Manage meeting access settings 
+ In the meeting access settings, you can choose when guests can join the meeting, and who can join a meeting without having to knock.
+ Host must join before anyone else 
+ On 
+ A host must join the meeting first 
+ Off 
+ Guests can join the meeting before any host 
+ Meeting access type 
+ Who can join without knocking 
+ Open 
+ Anyone with a meeting link
+ Trusted 
+ Anyone in the host's organization with a meeting link
+ External guests invited via a Calendar link
+ Restricted 
+ Guests invited via a Calendar link
+ People invited from within the meeting by a host
+ Notes:  
+ For Trusted and Restricted meetings, you can disable knocking and have all other guests automatically declined by unchecking Anyone with the meeting link can ask to join .
+ Meeting access settings apply only for the current meeting. Settings for a recurring meeting apply to all future occurrences of the meeting, until you update the settings.
+ These settings replace Quick Access settings:
+ The settings above ( Open , Trusted , Restricted ) replace an older version of Google Meet that had Quick Access settings. Meetings scheduled before this change are set as follows: 
+ Quick Access on --meetings default to Trusted and your guests can join before you.
+ Quick Access off --meetings default to Restricted and your guests won’t be able to join until you join.
+ Use Host management settings 
+ Your Google admin sets the default Host management setting for your organization. 
+ As the meeting organizer or host, you can turn on Host management to moderate the meeting and control participation. You can also make other participants co-hosts to share moderation privileges. Note that turning on Host management removes certain privileges from other participants. See the table for details.
+ Host management On 
+ Off 
+ Who can... 
+ Only (co)-hosts 
+ Any internal participant 
+ Eject or mute a participant 
+ ✔ 
+ ✔ 
+ Accept knocks to join the meeting 
+ ✔ 
+ ✔ 
+ Dial out to a phone caller to join 
+ ✔ 
+ ✔ 
+ Start a recording or live stream 
+ ✔ 
+ ✔ 
+ Add / remove other co-hosts* 
+ ✔ 
+ NA 
+ Apply locks so only hosts can:
+ Send chat messages in the meeting
+ Share their screen 
+ Turn on microphone
+ Turn on video
+ ✔ 
+ NA 
+ Mute everyone with one click 
+ ✔ 
+ NA 
+ End the meeting for all participants
+ (instead of just leaving) 
+ ✔ 
+ NA 
+ * A co-host can't remove the original host. Learn more about adding co-hosts .
+ Meetings with internal users
+ Here are some common scenarios for meeting with people inside your Google Workspace organization.
+ Expand section   |   Collapse all 
+ Open the meeting to anyone in your organization 
+ Create:
+ Schedule in Calendar or start an instant meeting
+ Optionally invite guests
+ Settings:
+ Meeting access type: Trusted 
+ Anyone with the meeting link can ask to join: Checked 
+ Host must join before anyone else:  Off 
+ Results:
+ Any internal user can join automatically
+ People can join before you
+ You have host management controls
+ Restrict the meeting to guests you invite or accept 
+ Create:
+ Schedule in Calendar
+ Place trusted guests on the Calendar invite
+ Settings:
+ Meeting access type : Restricted 
+ Anyone with the meeting link can ask to join: Checked 
+ Host must join before anyone else : On 
+ Co-hosts : None
+ Results:
+ No one can join before you
+ Guests on the Calendar invite join automatically
+ Uninvited users must knock to be accepted
+ Only you can accept the knock
+ Restrict the meeting to invited guests only 
+ Create:
+ Schedule in Calendar
+ Place trusted guests on the Calendar invite
+ Settings:
+ Meeting access type : Restricted 
+ Anyone with the meeting link can ask to join:  Unchecked 
+ Host must join before anyone else : On 
+ Co-hosts : None
+ Results:
+ No one can join before you
+ Guests on the Calendar invite join automatically
+ Uninvited users are not allowed to join and are automatically declined
+ Organize a meeting someone else moderates (you won't be there) 
+ Create:
+ Schedule in Calendar
+ Place trusted guests on the Calendar invite
+ Co-hosts: Add at least one guest as co-host while setting up the meeting in Calendar
+ Settings: 
+ Meeting access type : Restricted 
+ Anyone with the meeting link can ask to join: Checked 
+ Host must join before anyone else : On 
+ Results: 
+ No one can join before your co-host
+ Guests on the invite join automatically
+ Any uninvited user has to knock to be accepted
+ Only your co-host can accept the knock
+ Delegated users:   If you manage someone else’s calendar as a delegated user and schedule a meeting on that person’s primary calendar, they are the meeting host. In that case you don’t have to make them a co-host.
+ Moderate a large meeting with a panel of presenters 
+ During the meeting, limit screen sharing to your presenters. Manage unwanted background noise with the Mute all option.
+ Create:
+ Schedule in Calendar
+ Place trusted guests on the Calendar invite
+ Co-hosts: Add the presenters as co-hosts while setting up the meeting in Google Calendar
+ Settings: 
+ Meeting access type : Restricted 
+ Anyone with the meeting link can ask to join: Checked 
+ Host must join before anyone else : On 
+ Host management :   Turn off everyone’s ability to share their screen 
+ Results: 
+ During the presentations:
+ Guests on the invite join automatically
+ You or any co-host can accept knocks from uninvited users
+ Only you and co-hosts can share your screen 
+ Tip:  If there’s distracting background noise from any guest, use the  Mute all option to quickly mute everyone in the meeting. Participants who need to speak can then unmute themselves. At the bottom right, click People     Mute all  .
+ Live stream a discussion panel 
+ To view a live stream, a viewer must be in either your organization or a trusted domain added by your Google admin. 
+ Create:
+ Schedule a meeting in Calendar and add the option to live stream. Add guests to the invite who will present or participate in the live stream. Co-hosts are optional.
+ Choose the option to create a duplicate, view-only event, and invite groups or individuals who should view the live stream.
+ Distribute the live-stream link to any other guests who should attend.
+ For specific steps: Set up a live stream 
+ Settings: 
+ For the event with participants:
+ Meeting access type : Trusted 
+ Anyone with the meeting link can ask to join: Checked 
+ Host must join before anyone else : On 
+ Results: 
+ Only guests on the participant invite can be seen or heard, or can present their screen
+ No one can join the meeting before you or any co-hosts you add
+ Only invited participants can join automatically 
+ Only you or a co-host can start the live stream
+ Invited viewers see the event on their calendar and can join via the live stream link. They are view-only throughout the event. They can’t switch to the live event or be included in any discussion afterwards.
+ Include external users in your meeting 
+ You can have people outside your Google Workspace organization join meetings, too, even if they can't sign in to a Google Account.
+ Expand section   |   Collapse all 
+ Let external users join the meeting automatically 
+ They must be signed in to a Google Account. 
+ Create:
+ Schedule in Calendar or start an instant meeting
+ Place on the Calendar invite, trusted external guests who have a Google Account
+ Settings: 
+ Meeting access type : Open 
+ Host must join before anyone else : Off 
+ Results: 
+ External guests who are signed in to their Google Account can join the meeting automatically
+ They can join before you
+ Invite external users but require non-invited users to knock 
+ Create:
+ Schedule in Calendar
+ Place external guests on the Calendar invite
+ Settings: 
+ Meeting access type: Trusted 
+ Anyone with the meeting link can ask to join: Checked 
+ Results: 
+ Internal or external guests on the invite can join automatically
+ External guests not on the invite must knock to join
+ Any internal participant can accept the knock
+ Allow signed-out users to join the meeting 
+ If your guest can’t currently sign in to a Google Account, you can still have a video meeting with them.
+ Create:
+ Schedule in Calendar or start an instant meeting
+ Send your guest the link and meeting code for the meeting (available in the Calendar invite or from the instant meeting)
+ Settings: 
+ Meeting access : Open 
+ Host management : On or off 
+ Results: 
+ Anyone with the meeting link can join your meeting. No one has to knock. 
+ Add as co-host: Even if a participant isn’t signed in to a Google Account, you can still make them a co-host. After they join the meeting, add them as a co-host in the People panel. A co-host who isn’t signed in has all privileges of other co-hosts except they can’t send email invitations to additional guests.
+ Join a meeting on a second screen
+ The best way to join a meeting on a second screen without creating audio feedback is to join using Companion mode .
+ In Companion mode:
+ Your microphone is always off to reduce the risk of audio feedback from the second screen
+ You don’t see the participant grid, making it easier to see presentations
+ You can click Present now to share your screen
+ Your participant tile doesn’t show to other participants unless you turn on your camera or raise your hand
+ When to use Companion mode
+ If you're in a room that has Meet audio and video, you can join in Companion mode from your laptop. Do this to:
+ Present your screen without risking audio feedback
+ Raise your hand: Your participant tile appears in the participant grid so others in the meeting know you have something to say
+ Use the meeting chat, or participate in polls or Q&A activities
+ Turn host controls on or off
+ Join a meeting in Companion mode
+ Go to the meeting from a Calendar event or using the meeting link. From the meeting entry page (green room), do one of the following:
+ Click Use Companion mode . If you are in a conference room, check in so that your name and the room name appear on your participant tile.
+ Click Present to join in Companion mode while also sharing your screen.
+ Learn more about Companion mode .
+ Enhance your Meet experience with Gemini 
+ If your organization has Google Workspace with Gemini, you can use it in Meet to generate unique backgrounds, enhance your audio and video for a studio-like experience, provide real-time captions in multiple languages, and take meeting notes. 
+ Use AI to create a background image
+ Learn more about how to change backgrounds and apply visual effects in Google Meet .
+ Create a background image before a meeting
+ On a computer, open meet.google.com .
+ Select a meeting.
+ At the bottom right of your self view, click Apply visual effects Generate a background .
+ Enter a prompt. For example:
+ "Luxurious living room interior"
+ "A magical sunny forest glade"
+ Tip: For better results, try including reference to a style or mood, a setting, and objects in the environment. For example: "A cozy coffee shop with flowers."
+ (Optional) You can select a style to customize the background image you create.
+ Click Create samples to see several suggested background images.
+ (Optional) After you click Create samples , you can:
+ Edit your prompt: At the top of the panel on the right, click the prompt. Edit your prompt and click Create other samples.
+ See more suggested background images: Click Create other samples.
+ Click one of the generated images to use as your background in your meeting.
+ Click Close to exit "Generate a background" setup.
+ Create a background image in a meeting
+ On a computer, open meet.google.com .
+ Join a meeting.
+ On the bottom, click More options Apply visual effects Generate a background .
+ Enter a prompt. For example:
+ "Luxurious living room interior"
+ "A magical sunny forest glade"
+ Tip: For better results, try including reference to a style or mood, a setting, and objects in the environment. For example: "A cozy coffee shop with flowers."
+ (Optional) You can select a style to customize the background image you create.
+ Click Create samples to see several suggested background images.
+ (Optional) After you click Create samples , you can:
+ Edit your prompt: At the top of the panel on the right, click the prompt. Edit your prompt and click Create other samples.
+ See more suggested background images: Click Create other samples.
+ Click one of the generated images to use as your background in your meeting.
+ Click Close to exit "Generate a background" setup.
+ Give feedback on generated background images
+ Gemini for Google Workspace is constantly learning and may not be able to support your request.
+ If you get an inaccurate or unsafe suggestion, you can submit feedback to us.
+ Hover over the desired image.
+ On the bottom of the image, click Good suggestion or Bad suggestion .
+ If you click Bad suggestion , you can select the issue you found and enter additional feedback.
+ Click Submit .
+ Turn on studio look
+ To help improve your Google Meet video quality, studio look uses artificial intelligence to fix issues caused by low light or low quality webcams. This process automatically happens in the cloud to enhance video quality without any impact to device performance.
+ On your computer, open meet.google.com .
+ Select a video meeting.
+ In the green room before you join or during the meeting, navigate to the Effects panel.
+ In the green room, click Apply visual effects  on the bottom right of your self view. During a meeting, hover over your self view and click in the center.
+ Alternatively click More options Apply visual effects.
+ Under “Appearance,” turn on "Studio look."
+ Turn on studio lighting
+ Important: In order to view and use this feature, you must have a processor that is equivalent or more performant than Intel Core i9-9880H (8C/16T), Intel Core i5-1235U (2P8E/12T), AMD Ryzen 5 5500U (6C/12T), and Apple M1 (4P4E/8T).
+ Studio lighting can be used to simulate studio-quality lighting. You’ll be able to adjust the lighting position, brightness, and color to look your best.
+ On your computer, open meet.google.com .
+ Select a video meeting.
+ In the green room before you join or during the meeting, navigate to the Effects panel .
+ Click More options Settings .
+ In the green room, Click on the bottom right of your self view. During a meeting, hover over your self view and click in the center.
+ Alternatively click More options Apply Visual Effects.
+ Under “Appearance,” turn on "Studio lighting."
+ To have Google Meet automatically brighten your self view, select Auto .
+ To customize your lighting sources, select Custom .
+ The light intensity can be adjusted using the slider from the panel.
+ The light color can be changed from the panel by selecting the different colored circles.
+ The light position can be changed by dragging the Light 1 and Light 2 circles in your self view.
+ Turn on studio sound
+ Studio sound will automatically improve poor audio quality from typical bluetooth headsets and dial-in participants by using AI to recreate higher audio frequencies. Currently, this feature is available for meetings on the computer and dialing-in into a meeting by phone .
+ In order to use studio sound, you must meet all device requirements for Noise cancellation. Studio sound is automatically applied when noise cancellation is enabled.
+ Before a meeting
+ Go to meet.google.com select a meeting.
+ Before you join, in the top right-hand corner, click More options Settings .
+ Click Audio .
+ Turn on Noise cancellation .
+ Click Join now .
+ In a meeting
+ At the bottom, click More options Settings .
+ Click Audio .
+ Turn on Noise cancellation .
+ Join and participate from your mobile device
+ Participate from your phone’s mobile app
+ You can join and participate in a video meeting from your phone’s mobile Meet or Gmail app. You then use your phone’s audio and video, and you have the same access and participation rights as if you joined from your computer.
+ Use a phone for audio & your computer for video
+ If you have a poor network connection, try to improve performance by using your phone for audio instead of your computer. You still use your computer for video.
+ On your computer, do one of the following:
+ In the meeting —Click More Use a phone for audio 
+ On the meeting entry page —Click Join and use a phone for audio .
+ Follow instructions to enter your number and be called. You keep participating with video from your computer, but you speak and listen through your phone.
+ Learn more: Use a phone for audio in a meeting 
+ Dial in with audio only
+ If you can’t join with video, such as when driving, dial in with a phone number.
+ Dial in from your phone —Use the meeting’s phone number and PIN. This information is on the Calendar invite and also available to people in the meeting.
+ Have someone in the meeting dial out —A participant with dial-out privileges can call you from the meeting. From the People panel, they click Add people Call .
+ Learn more: Use a phone to dial in to a meeting 
+ Back to top 
+ Google, Google Workspace, and related marks and logos are trademarks of Google LLC. All other company and product names are trademarks of the companies with which they are associated. 
+ Was this helpful?
+ How can we improve it?
+ Yes No 
+ Submit 
+ true
+ Meet 
+ 1 of 11
+ Google Meet training and help 
+ 2 of 11
+ Get started with Meet for Google Workspace 
+ 3 of 11
+ Switch to Google Meet 
+ 4 of 11
+ Google Meet cheat sheets 
+ 5 of 11
+ Tips to collaborate during video meetings 
+ 6 of 11
+ Tips to manage your audio & video 
+ 7 of 11
+ Tips to share content in a video meeting 
+ 8 of 11
+ Tips to set up business meetings 
+ 9 of 11
+ Tips to control meeting access and participation 
+ 10 of 11
+ Use Companion mode for collaboration equity in hybrid meetings 
+ 11 of 11
+ Troubleshoot Google Meet issues 
+ Print, save, or customize Learning Center guides Learn how to print Learning Center guides, save them as PDFs, or customize them for your organization.
+ ©2026 Google Privacy Policy 
+ Terms of Service 
+ Language Deutsch‎ español‎ français‎ Indonesia‎ italiano‎ Nederlands‎ polski‎ português (Brasil)‎ svenska‎ Türkçe‎ русский‎ ‏ العربية ไทย‎ 中文（简体）‎ 中文（繁體）‎ 日本語‎ 한국어‎ English‎ Enable Dark Mode
+ Send feedback on...
+ This help content & information General Help Center experience 
+ Search
+ Clear search
+ Close search
+ Google apps
+ Main menu
+ 3081626149707883037
+ true
+ Search Help Center
+ false
+ true
+ true
+ true
+ false
+ false
+ false
+ false
+ false

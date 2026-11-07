@@ -1,0 +1,61 @@
+SOURCE: https://skribby.io/docs/guides/transcription-privacy
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Transcription Privacy | Skribby Docs 
+ Skribby An Alianza Company Guides API Reference TypeScript SDK Search docs Ctrl+K Get Started Toggle navigation 
+ Documentation Quickstart Getting Started
+ Platforms Regions Meeting Urls Bot Naming Bot Authentication Bot Lifecycle Bot Detection Billing 
+ Features
+ Realtime Transcription Zoom Chat Participant Events Bot Language Recordings Upload 
+ Configuration
+ Transcription Models Transcription Privacy and Retention Transcription Credentials Team Management 
+ Webhooks
+ Webhook Events Webhook Security 
+ Troubleshooting
+ Troubleshooting Best Practices Api Debugging Webhook Debugging 
+ Guides Updated 3 months ago 
+ Copy Open .md 
+ Transcription Privacy
+ Skribby only supports transcription providers that do not train on Skribby customer audio or transcripts.
+ For provider-side retention, Skribby uses the strongest retention control available for each provider:
+ Zero Data Retention (ZDR) or zero-retention mode.
+ Deletion after processing when the provider creates a stored job or artifact.
+ Realtime streaming paths where audio is processed ephemerally instead of stored as a transcription job.
+ This page covers transcription-provider processing. Skribby's own recording and transcript retention is controlled separately by bot settings, workspace retention settings, storage add-ons, and delete requests.
+ Standard Providers
+ These providers meet Skribby's no-training and low-retention requirements without a provider-specific caveat:
+ Groq
+ Soniox
+ AssemblyAI
+ Deepgram
+ Speechmatics
+ Rev AI
+ Gladia
+ Mistral/Voxtral
+ OpenAI
+ none 
+ Realtime Transcription
+ Realtime transcription is part of Skribby's standard privacy posture. For realtime models, ephemeral streaming is the intended low-retention path: audio is processed live instead of being stored as a batch transcription job.
+ Realtime providers covered by this posture include:
+ Soniox realtime
+ AssemblyAI streaming
+ AssemblyAI Universal-3 Pro streaming through the EU endpoint
+ Deepgram realtime
+ Speechmatics realtime
+ Gladia realtime
+ Mistral/Voxtral realtime
+ Important Caveats
+ Most supported providers meet the standard posture above. The following providers or models have additional caveats:
+ Google Cloud Speech-to-Text : Google Chirp 3 uses EU routing and data logging is off by default. Skribby deletes batch GCS input and result objects; the accepted GCS-output path keeps transcripts out of completed long-running-operation records, but that operation metadata cannot be deleted. It is standard handling, not strict ZDR.
+ AWS Transcribe : AWS Transcribe uses Frankfurt ( eu-central-1 ) with the account's Organizations training opt-out. Skribby deletes transient batch artifacts; streaming is ephemeral. It is standard handling, not strict ZDR.
+ OpenAI GPT-4o Transcribe Diarize : routed through Skribby's approved ZDR-backed OpenAI org and project and treated as global processing. Skribby does not present this model as EU regional processing.
+ ElevenLabs : no-training is in place, but ElevenLabs transcription does not currently have a standard ZDR or deletion path.
+ xAI : xAI speech-to-text retains API inputs and outputs for up to 30 days before automatic deletion. Treat it as low-retention with automatic deletion, not strict ZDR or immediate deletion after use.
+ For strict zero-retention requirements, choose one of the standard providers above or ask Skribby to restrict provider availability for your workspace.
+ © 2026 Alianza. All rights reserved.
+ Code samples are licensed under the Apache License, Version 2.0 .
+ Terms of Service Privacy Policy 
+ On this page
+ Standard Providers 
+ Realtime Transcription 
+ Important Caveats

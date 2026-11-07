@@ -1,0 +1,88 @@
+SOURCE: https://developers.zoom.us/docs/rtms/
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Realtime Media Streams - RTMS - Zoom Developer Docs 
+ Now Available: Zoom AI Services Summarizer & Translator APIs. 
+ Docs 
+ APIs MCP Blog Changelog Agent Skills Help 
+ Docs 
+ APIs MCP Blog Changelog Agent Skills Help Theme 
+ Realtime Media Streams
+ Introduction 
+ Contact Center 
+ Meetings and webinars 
+ Video SDK 
+ Sample apps 
+ Troubleshooting 
+ Reference 
+ SDKs 
+ Changelog 
+ Realtime Media Streams 
+ Realtime Media Streams
+ Copy for LLM 
+ View as Markdown 
+ Realtime Media Streams (RTMS) is a data pipeline that gives your app access to live audio, video, and transcript data from Zoom meetings. Instead of having participant bots or automated clients in meetings, use RTMS apps to collect the media data from the meeting.
+ Once you've collected this data, you can then use AI or machine learning applications to parse the resulting data to meet your needs. For example, you could use the data collected through RTMS to create detailed transcripts that meet regulatory requirements or you could create recordings of meetings to be shared with people who missed the meeting without having to depend on a user remembering to record the meeting.
+ Note 
+ To use RTMS, you'll need credits on your account. For plan options and concurrent stream limits, see Developer pricing   . For volume discounts or commitments above 500 credits, contact sales   .
+ RTMS is available to be used with Zoom Contact Center, Zoom Meetings, and the Zoom Video SDK. For more information, see
+ Overview of RTMS for Contact Center 
+ Overview of RTMS for Meetings 
+ Overview of RTMS for the Zoom Video SDK 
+ From the developer blog:
+ RTMS 
+ Announcement 
+ Zoom Apps 
+ New RTMS permissions and controls for auto-start to boost app adoption 
+ MH
+ Michael Harrington
+ · Oct 19, 2026
+ · 5 min read
+ RTMS 
+ AI 
+ Real-time 
+ Conversational-ai 
+ Zoom-apps 
+ Conversations are becoming programmable 
+ JB
+ Jen Brissman
+ · Sep 14, 2026
+ · 6 min read
+ RTMS 
+ Guide 
+ Getting started 
+ RTMS on AWS: Capture Participant Photos in Real Time 
+ MM
+ Max Mansfield
+ · Aug 31, 2026
+ · 7 min read
+ Next Overview 
+ Resources
+ Getting started with Realtime Media Streams 
+ Event reference 
+ Webhook reference 
+ Getting started with Realtime Media Streams with the RTMS SDK for NodeJS (video)   
+ RTMS SDK   
+ Resources
+ Getting started with Realtime Media Streams 
+ Event reference 
+ Webhook reference 
+ Getting started with Realtime Media Streams with the RTMS SDK for NodeJS (video)   
+ RTMS SDK   
+ Resources
+ API References 
+ SDK References 
+ Read llms.txt 
+ Updates
+ Changelog 
+ Developer blog 
+ Community
+ MVP program 
+ Github 
+ Developer forum 
+ YouTube 
+ Support
+ Premier Developer Support 
+ Zoom Support 
+ Copyright © 2026 Zoom Communications, Inc. All rights reserved.
+ Terms · Privacy Policy · API Terms of Use · Marketplace Developer Agreement · Do Not Sell My Personal Information · Cookie Preferences

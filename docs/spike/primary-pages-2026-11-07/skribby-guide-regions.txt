@@ -1,0 +1,48 @@
+SOURCE: https://skribby.io/docs/guides/regions
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Regions | Skribby Docs 
+ Skribby An Alianza Company Guides API Reference TypeScript SDK Search docs Ctrl+K Get Started Toggle navigation 
+ Documentation Quickstart Getting Started
+ Platforms Regions Meeting Urls Bot Naming Bot Authentication Bot Lifecycle Bot Detection Billing 
+ Features
+ Realtime Transcription Zoom Chat Participant Events Bot Language Recordings Upload 
+ Configuration
+ Transcription Models Transcription Privacy and Retention Transcription Credentials Team Management 
+ Webhooks
+ Webhook Events Webhook Security 
+ Troubleshooting
+ Troubleshooting Best Practices Api Debugging Webhook Debugging 
+ Guides Updated 3 months ago 
+ Copy Open .md 
+ Regions
+ Skribby provides multiple isolated regions to host your data, enabling compliance with local data residency requirements and improving latency.
+ Skribby operates in the following regions:
+ Europe (EU) : The default region.
+ Japan (JP) : An isolated region for customers requiring data residency in Japan.
+ Data Isolation
+ Each region operates as a completely independent environment. The codebase and features are identical across regions, but data is strictly isolated .
+ This means:
+ Accounts created in the EU region do not exist in the JP region, and vice versa.
+ Meeting bots, transcripts, recordings, and API keys are confined to the region where they were created.
+ You must log in to the specific platform URL for your region to access your dashboard and data.
+ Platform URLs
+ When interacting with Skribby via the dashboard or API, you must use the correct base URL for your region:
+ Region Dashboard URL REST API Base URL 
+ Europe (EU) https://platform.skribby.io https://platform.skribby.io/api/v1 
+ Japan (JP) https://platform-jp.skribby.io https://platform-jp.skribby.io/api/v1 
+ Connecting via the SDK
+ If you are using the Skribby TypeScript SDK, you can specify your region when initializing the client. The SDK will automatically route requests to the correct base URL.
+ Copy import { SkribbyClient } from '@skribby/sdk' ;
+ const client = new SkribbyClient ({
+ api_key : 'YOUR_API_KEY' ,
+ region : 'jp' , // Use 'eu' or 'jp'. Defaults to 'eu'. 
+});
+ For advanced use cases, you can also override the base URL directly using the base_url option.
+ © 2026 Alianza. All rights reserved.
+ Code samples are licensed under the Apache License, Version 2.0 .
+ Terms of Service Privacy Policy 
+ On this page
+ Data Isolation 
+ Platform URLs 
+ Connecting via the SDK

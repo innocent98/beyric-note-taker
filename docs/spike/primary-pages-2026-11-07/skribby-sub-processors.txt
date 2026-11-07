@@ -1,0 +1,40 @@
+SOURCE: https://skribby.io/sub-processors
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Sub-Processors 
+ Skribby An Alianza Company Pricing Blog Docs Contact Sign Up 
+ Skribby An Alianza Company 
+ Page 
+ Sub-Processors
+ Last updated on August 12, 2026
+ As part of providing our services, we use a number of trusted third-party providers (“sub-processors”) to process data on our behalf. Below is a list of our current sub-processors, their purpose, and the country where data is processed or stored.
+ Sub-processor Purpose Location 
+ Hetzner Hosting Europe, Germany 
+ Linode (Akamai) Hosting Japan (Tokyo) 
+ AWS Hosting / Storage / Backups Europe, Ireland; United States & Japan (bot instances, by meeting region) 
+ Cloudflare DNS / Load Balancing / Security Global (edge network) 
+ Sentry Error-reporting Europe, Germany 
+ Stripe Payment Processing Global / Undisclosed 
+ Resend Email Service United States 
+ Groq Transcription United States 
+ Assembly AI Transcription Europe, Ireland & United States (realtime) 
+ Deepgram Transcription Europe 
+ Speechmatics Transcription Global (Azure) 
+ Rev AI Transcription Europe, Germany 
+ ElevenLabs Transcription United States 
+ Gladia Transcription Europe, France 
+ Soniox Transcription United States 
+ OpenAI Transcription United States 
+ Mistral / Voxtral Transcription Europe, France 
+ xAI Transcription United States 
+ Google Cloud Speech-to-Text Transcription Europe (EU multi-region) 
+ AWS Transcribe Transcription Europe, Germany (Frankfurt) 
+ Mailcoach Email Service Europe 
+ For non-EU sub-processors, appropriate safeguards (e.g., Standard Contractual Clauses) are in place where required by law.
+ Skribby An Alianza Company 
+ The straightforward Meeting Bot API for Zoom, Teams, and Google Meet. Built for developers who ship fast.
+ Loading status... 
+ Product Pricing Blog Contact 
+ Documentation REST API Realtime Transcription Participant Timelines Quickstart 
+ Legal Terms of Service Privacy Policy 
+ © 2026 Alianza, All rights reserved

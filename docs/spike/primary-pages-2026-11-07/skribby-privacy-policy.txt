@@ -1,0 +1,287 @@
+SOURCE: https://skribby.io/privacy-policy
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Privacy Policy 
+ Skribby An Alianza Company Pricing Blog Docs Contact Sign Up 
+ Skribby An Alianza Company 
+ Page 
+ Privacy Policy
+ Last updated on October 12, 2026
+ This Privacy Notice for Skribby, an Alianza Company ("we," "us," or "our"), describes how and why we might access, collect, store, use, and/or share ("process") your personal information when you use our services ("Services"), including when you:
+ Visit our website at https://skribby.io , or any website of ours that links to this Privacy Notice
+ Use Meeting Bot API — The Skribby Meeting Bot API deploys automated bots to Zoom, Google Meet, and Microsoft Teams meetings to provide real-time and post-call transcription services via API
+ Engage with us in other related ways, including any sales, marketing, or events
+ Questions or concerns? 
+ Reading this Privacy Notice will help you understand your privacy rights and choices. If you do not agree with our policies and practices, please do not use our Services. If you still have any questions or concerns, please contact us at [email protected] .
+ SUMMARY OF KEY POINTS
+ This summary provides key points from our Privacy Notice. You can read more details by following each link or using the table of contents below.
+ What personal information do we process? When you use our Services, we may process personal information depending on how you interact with us, the choices you make, and the features you use.
+ Do we process any sensitive personal information? We do not process sensitive personal information.
+ Do we collect any information from third parties? We do not collect any information from third parties.
+ How do we process your information? We process your information to provide, improve, and administer our Services, communicate with you, prevent fraud, and comply with laws.
+ In what situations and with which types of parties do we share personal information? We may share information in specific situations with specific third parties.
+ How do we keep your information safe? We use technical and organizational safeguards to protect your data, but no system is 100% secure.
+ What are your rights? Depending on your location, you may have rights regarding your personal information.
+ How do you exercise your rights? Contact us directly.
+ TABLE OF CONTENTS
+ What information do we collect?
+ How Do We Process Your Information?
+ What Legal Bases Do We Rely On to Process Your Personal Information?
+ When and With Whom Do We Share Your Personal Information?
+ Do We Offer Artificial Intelligence-Based Products?
+ How Do We Handle Your Social Logins?
+ How Long Do We Keep Your Information?
+ How Do We Keep Your Information Safe?
+ Do We Collect Information From Minors?
+ What Are Your Privacy Rights?
+ Controls for Do-Not-Track Features
+ Do United States Residents Have Specific Privacy Rights?
+ Do Other Regions Have Specific Privacy Rights?
+ Do We Make Updates to This Notice?
+ How Can You Contact Us About This Notice?
+ How Can You Review, Update, or Delete the Data We Collect From You?
+ 1. WHAT INFORMATION DO WE COLLECT?
+ Personal information you disclose to us
+ In Short : We collect personal information that you provide to us.
+ We collect personal information that you voluntarily provide when you register on the Services, express interest in our products, participate in activities, or contact us.
+ Personal Information Provided by You:
+ The personal information we collect depends on your interaction with us, your choices, and the features you use. It may include the following:
+ Names
+ Email addresses
+ Usernames
+ Passwords
+ Contact preferences
+ Avatar
+ Meeting audio/video recordings
+ Meeting transcripts
+ Meeting metadata (participants, timestamps, etc.)
+ Sensitive Information. We do not process sensitive information of minors (under 18 years). Processing audio or data containing sensitive personal information of minors is prohibited under our Terms of Service.
+ Payment Data. We may collect data necessary to process your payment if you choose to make purchases, such as your payment instrument number, and the security code associated with your payment instrument. All payment data is handled and stored by Stripe. You may find their privacy notice link(s) here: https://stripe.com/en-be/privacy .
+ Social Media Login Data. We may provide you with the option to register with us using your existing social media account details, like your Facebook, X, or other social media account. If you choose to register in this way, we will collect certain profile information about you from the social media provider, as described in the section called "HOW DO WE HANDLE YOUR SOCIAL LOGINS?" below.
+ All personal information that you provide to us must be true, complete, and accurate, and you must notify us of any changes to such personal information.
+ Information automatically collected
+ In Short : Some information — such as your Internet Protocol (IP) address and/or browser and device characteristics — is collected automatically when you visit our Services.
+ We automatically collect certain information when you visit, use, or navigate the Services. This information does not reveal your specific identity (like your name or contact information) but may include device and usage information, such as your IP address, browser and device characteristics, operating system, language preferences, referring URLs, device name, country, location, information about how and when you use our Services, and other technical information. This information is primarily needed to maintain the security and operation of our Services, and for our internal analytics and reporting purposes.
+ The information we collect includes:
+ Log and Usage Data. Log and usage data is service-related, diagnostic, usage, and performance information our servers automatically collect when you access or use our Services and which we record in log files. Depending on how you interact with us, this log data may include your IP address, device information, browser type, and settings and information about your activity in the Services (such as the date/time stamps associated with your usage, pages and files viewed, searches, and other actions you take such as which features you use), device event information (such as system activity, error reports (sometimes called "crash dumps"), and hardware settings).
+ Device Data. We collect device data such as information about your computer, phone, tablet, or other device you use to access the Services. Depending on the device used, this device data may include information such as your IP address (or proxy server), device and application identification numbers, location, browser type, hardware model, Internet service provider and/or mobile carrier, operating system, and system configuration information.
+ Location Data. We collect location data such as information about your device's location, which can be either precise or imprecise. How much information we collect depends on the type and settings of the device you use to access the Services. For example, we may use GPS and other technologies to collect geolocation data that tells us your current location (based on your IP address). You can opt out of allowing us to collect this information either by refusing access to the information or by disabling your Location setting on your device. However, if you choose to opt out, you may not be able to use certain aspects of the Services.
+ Google API
+ Our use of information received from Google APIs will adhere to Google API Services User Data Policy, including the Limited Use requirements.
+ 2. HOW DO WE PROCESS YOUR INFORMATION?
+ In Short : We process your information to provide, improve, and administer our Services, communicate with you, for security and fraud prevention, and to comply with law.
+ We process your personal information for a variety of reasons, depending on how you interact with our Services, including:
+ To facilitate account creation and authentication and otherwise manage user accounts. We may process your information so you can create and log in to your account, as well as keep your account in working order.
+ To provide meeting transcription services. We process audio/video recordings and related data to generate transcripts and provide our core transcription functionality.
+ To request feedback. We may process your information when necessary to request feedback and to contact you about your use of our Services.
+ To send you marketing and promotional communications. We may process the personal information you send to us for our marketing purposes, if this is in accordance with your marketing preferences. You can opt out of our marketing emails at any time. For more information, see "WHAT ARE YOUR PRIVACY RIGHTS?" below.
+ To protect our Services. We may process your information as part of our efforts to keep our Services safe and secure, including fraud monitoring and prevention.
+ To save or protect an individual's vital interest. We may process your information when necessary to save or protect an individual's vital interest, such as to prevent harm.
+ 3. WHAT LEGAL BASES DO WE RELY ON TO PROCESS YOUR PERSONAL INFORMATION?
+ In Short : We only process your personal information when we believe it is necessary and we have a valid legal reason (i.e., legal basis) to do so under applicable law, like with your consent, to comply with laws, to provide you with services to enter into or fulfill our contractual obligations, to protect your rights, or to fulfill our legitimate business interests.
+ If you are located in the EU or UK, this section applies to you. 
+ The General Data Protection Regulation (GDPR) and UK GDPR require us to explain the valid legal bases we rely on in order to process your personal information. As such, we may rely on the following legal bases to process your personal information:
+ Consent. We may process your information if you have given us permission (i.e., consent) to use your personal information for a specific purpose. You can withdraw your consent at any time.
+ Performance of a Contract. We may process your personal information when we believe it is necessary to fulfill our contractual obligations to you, including providing our transcription services.
+ Legitimate Interests. We may process your information when we believe it is reasonably necessary to achieve our legitimate business interests and those interests do not outweigh your interests and fundamental rights and freedoms. For example, we may process your personal information for some of the purposes described in order to:
+ Send users information about special offers and discounts on our products and services
+ Diagnose problems and/or prevent fraudulent activities
+ Understand how our users use our products and services so we can improve user experience
+ Legal Obligations. We may process your information where we believe it is necessary for compliance with our legal obligations, such as to cooperate with a law enforcement body or regulatory agency, exercise or defend our legal rights, or disclose your information as evidence in litigation in which we are involved.
+ Vital Interests. We may process your information where we believe it is necessary to protect your vital interests or the vital interests of a third party, such as situations involving potential threats to the safety of any person.
+ If you are located in Canada, this section applies to you. 
+ We may process your information if you have given us specific permission (i.e., express consent) to use your personal information for a specific purpose, or in situations where your permission can be inferred (i.e., implied consent). You can withdraw your consent at any time.
+ In some exceptional cases, we may be legally permitted under applicable law to process your information without your consent, including, for example:
+ If collection is clearly in the interests of an individual and consent cannot be obtained in a timely way
+ For investigations and fraud detection and prevention
+ For business transactions provided certain conditions are met
+ If it is contained in a witness statement and the collection is necessary to assess, process, or settle an insurance claim
+ For identifying injured, ill, or deceased persons and communicating with next of kin
+ If we have reasonable grounds to believe an individual has been, is, or may be victim of financial abuse
+ If it is reasonable to expect collection and use with consent would compromise the availability or the accuracy of the information and the collection is reasonable for purposes related to investigating a breach of an agreement or a contravention of the laws of Canada or a province
+ If disclosure is required to comply with a subpoena, warrant, court order, or rules of the court relating to the production of records
+ If it was produced by an individual in the course of their employment, business, or profession and the collection is consistent with the purposes for which the information was produced
+ If the collection is solely for journalistic, artistic, or literary purposes
+ If the information is publicly available and is specified by the regulations
+ 4. WHEN AND WITH WHOM DO WE SHARE YOUR PERSONAL INFORMATION?
+ In Short : We may share information in specific situations described in this section and/or with the following categories of third parties.
+ Vendors, Consultants, and Other Third-Party Service Providers. We may share your data with third-party vendors, service providers, contractors, or agents ("third parties") who perform services for us or on our behalf and require access to such information to do that work. We have contracts in place with our third parties, which are designed to help safeguard your personal information. This means that they cannot do anything with your personal information unless we have instructed them to do it. They will also not share your personal information with any organization apart from us. They also commit to protect the data they hold on our behalf and to retain it for the period we instruct.
+ For a complete list of our current sub-processors, including their purposes and data processing locations, please see our Sub-processor List .
+ For non-EU sub-processors, appropriate safeguards (e.g., Standard Contractual Clauses) are in place where required by law.
+ The categories of third parties we may share personal information with are as follows:
+ Payment Processors
+ Data Analytics Services
+ Performance Monitoring Tools
+ Sales & Marketing Tools
+ Communication & Collaboration Tools
+ AI Transcription Services
+ We also may need to share your personal information in the following situations:
+ Business Transfers. We may share or transfer your information in connection with, or during negotiations of, any merger, sale of company assets, financing, or acquisition of all or a portion of our business to another company.
+ 5. DO WE OFFER ARTIFICIAL INTELLIGENCE-BASED PRODUCTS?
+ In Short : We offer products, features, or tools powered by artificial intelligence, machine learning, or similar technologies.
+ As part of our Services, we offer products, features, or tools powered by artificial intelligence, machine learning, or similar technologies (collectively, "AI Products"). These tools are designed to enhance your experience and provide you with innovative solutions. The terms in this Privacy Notice govern your use of the AI Products within our Services.
+ Use of AI Technologies
+ We provide the AI Products through third-party service providers ("AI Service Providers"), including Deepgram, Gladia, AssemblyAI, Groq, Soniox, ElevenLabs, Speechmatics, Rev AI, Amazon Web Services (AWS) AI and Google Cloud AI. As outlined in this Privacy Notice, your input, output, and personal information will be shared with and processed by these AI Service Providers to enable your use of our AI Products for purposes outlined in "WHAT LEGAL BASES DO WE RELY ON TO PROCESS YOUR PERSONAL INFORMATION?" You must not use the AI Products in any way that violates the terms or policies of any AI Service Provider.
+ Our AI Products
+ Our AI Products are designed for the following functions:
+ Natural language processing
+ Text analysis
+ Audio transcription
+ Real-time meeting transcription
+ How We Process Your Data Using AI
+ All personal information processed using our AI Products is handled in line with our Privacy Notice and our agreement with third parties. This ensures high security and safeguards your personal information throughout the process, giving you peace of mind about your data's safety.
+ 6. HOW DO WE HANDLE YOUR SOCIAL LOGINS?
+ In Short : If you choose to register or log in to our Services using a social media account, we may have access to certain information about you.
+ Our Services offer you the ability to register and log in using your third-party social media account details (like your Facebook or X logins). Where you choose to do this, we will receive certain profile information about you from your social media provider. The profile information we receive may vary depending on the social media provider concerned, but will often include your name, email address, friends list, and profile picture, as well as other information you choose to make public on such a social media platform.
+ We will use the information we receive only for the purposes that are described in this Privacy Notice or that are otherwise made clear to you on the relevant Services. Please note that we do not control, and are not responsible for, other uses of your personal information by your third-party social media provider. We recommend that you review their privacy notice to understand how they collect, use, and share your personal information, and how you can set your privacy preferences on their sites and apps.
+ 7. HOW LONG DO WE KEEP YOUR INFORMATION?
+ In Short : We keep your information for as long as necessary to fulfill the purposes outlined in this Privacy Notice unless otherwise required by law.
+ We will only keep your personal information for as long as it is necessary for the purposes set out in this Privacy Notice, unless a longer retention period is required or permitted by law (such as for tax, accounting, or other legal reasons).
+ Specific retention periods:
+ Account data: As long as you have an account with us
+ Audio recordings: Default retention is one week, with an option for one year (as specified in your service agreement)
+ Meeting transcripts: As long as you have an account with us, unless you request deletion
+ Debugging data (including screenshots): 30 days, retained for operational purposes regardless of other deletion requests
+ When we no longer have a legitimate business need to process your personal information, we will either delete or anonymize it. If that's not possible (for example, because it is stored in backup archives), we will securely store your personal information and isolate it from further processing until deletion is possible.
+ 8. HOW DO WE KEEP YOUR INFORMATION SAFE?
+ In Short : We aim to protect your personal information through a system of organizational and technical security measures.
+ We have implemented appropriate and reasonable technical and organizational security measures designed to protect the security of any personal information we process. Our security measures include:
+ Data Encryption
+ All data is encrypted in transit using TLS 1.2 or higher
+ Sensitive data is encrypted at rest using AWS-managed encryption algorithms
+ Access Controls
+ Access to production systems and customer data is restricted to solely the 2 founders
+ Role-based access controls (RBAC) are enforced
+ Multi-factor authentication (MFA) is required for all administrative access
+ Data Segregation
+ Customer data is logically separated to prevent unauthorized access between accounts
+ Monitoring and Logging
+ Systems are continuously monitored for unauthorized access and unusual activity
+ Security logs are retained and regularly reviewed
+ Vulnerability Management
+ Regular vulnerability scans and security assessments are conducted
+ Critical security patches are applied promptly
+ Data Backup and Recovery
+ Regular backups are performed and securely stored
+ Disaster recovery and business continuity plans are in place and tested periodically
+ Sub-processor Security
+ We assess the security practices of all sub-processors before engagement
+ Sub-processors are required to meet or exceed our security standards
+ Incident Response
+ A documented incident response plan is in place
+ Customers are notified without undue delay in the event of a data breach affecting their data
+ However, despite our safeguards and efforts to secure your information, no electronic transmission over the Internet or information storage technology can be guaranteed to be 100% secure. Therefore, we cannot promise or guarantee that hackers, cybercriminals, or other unauthorized third parties will not be able to defeat our security and improperly collect, access, steal, or modify your information.
+ Although we will do our best to protect your personal information, transmission of personal information to and from our Services is at your own risk. You should only access the Services within a secure environment.
+ 9. DO WE COLLECT INFORMATION FROM MINORS?
+ In Short: We do not knowingly collect data from or market to children under 18 years of age.
+ We do not knowingly collect, solicit data from, or market to children under 18 years of age. We also do not knowingly sell such personal information. By using the Services, you confirm that you are at least 18 (or the legal age in your jurisdiction), or that you are the parent or guardian of a minor and consent to their use of the Services.
+ Our Terms of Service explicitly prohibit the use of our Services to process audio or data containing sensitive personal information of minors (under 18 years).
+ If we learn that we have collected personal data from a user under 18, we will deactivate the account and delete the data as soon as reasonably possible. If you become aware of any data we may have collected from a minor, please contact us at [email protected] .
+ 10. WHAT ARE YOUR PRIVACY RIGHTS?
+ In Short : Depending on your location, you may have rights that give you greater access to and control over your personal information.
+ You may review, change, or terminate your account at any time, depending on your local laws.
+ If you are located in certain regions, you have the following rights under applicable data protection laws:
+ To request access to and receive a copy of your personal data
+ To request correction or deletion of your data
+ To restrict how your data is processed
+ To request data portability, where applicable
+ To not be subject to decisions made solely through automated processing that have legal or similarly significant effects
+ If an automated decision is made, we will explain how it was made and provide a way to request human review.
+ We will consider and respond to your requests in accordance with applicable data protection laws.
+ If you are located in the EEA or UK and believe we are unlawfully processing your personal data, you have the right to lodge a complaint with your local data protection authority.
+ If you're located in Switzerland, you may contact the Federal Data Protection and Information Commissioner.
+ Withdrawing your consent
+ If we rely on your consent to process your personal information, you can withdraw that consent at any time by contacting us using the details found in the "How can you contact us about this notice?" section.
+ Please note that withdrawing your consent does not affect the lawfulness of any processing we conducted before your withdrawal, and where allowed by law, it will not affect processing based on other legal grounds.
+ Opting out of marketing communications
+ You can unsubscribe from our marketing emails at any time by clicking the "unsubscribe" link in those emails, or by contacting us using the details provided in the "How can you contact us about this notice?" section.
+ Even after opting out, we may still send you non-promotional messages such as service-related notifications, responses to support requests, or important updates about your account.
+ Account Information
+ If you would at any time like to review or change the information in your account or terminate your account, you can:
+ Contact us via email at [email protected] 
+ Upon your request to terminate your account, we will deactivate or delete your account and information from our active databases. However, we may retain some information in our files to prevent fraud, troubleshoot problems, assist with investigations, enforce our legal terms, or comply with applicable legal requirements.
+ If you have questions or comments about your privacy rights, you may email us at [email protected] .
+ 11. CONTROLS FOR DO-NOT-TRACK FEATURES
+ Most web browsers and some mobile operating systems and apps include a Do-Not-Track ("DNT") feature you can enable to indicate that you don't want your online activity monitored. However, because there is no universal standard for recognizing and responding to DNT signals, we do not currently respond to them.
+ If such a standard is adopted in the future, we will update this Privacy Notice accordingly.
+ Under California law, we are required to let you know that we do not respond to DNT signals at this time.
+ 12. DO UNITED STATES RESIDENTS HAVE SPECIFIC PRIVACY RIGHTS?
+ In Short : If you are a resident of California, Colorado, Connecticut, Delaware, Florida, Indiana, Iowa, Kentucky, Maryland, Minnesota, Montana, Nebraska, New Hampshire, New Jersey, Oregon, Rhode Island, Tennessee, Texas, Utah, or Virginia, you may have rights related to your personal information.
+ These rights may include:
+ The right to request access to and details about the personal data we have collected
+ The right to correct inaccuracies
+ The right to receive a copy of your data
+ The right to delete your data
+ The right to withdraw your consent, where applicable
+ These rights may be subject to limitations under applicable laws.
+ Categories of Personal Information We Collect
+ The table below shows the categories of personal information we have collected in the past twelve (12) months:
+ Category Examples Collected 
+ A. Identifiers Real name, alias, postal address, telephone or mobile number, unique personal identifier, online identifier, IP address, email address, and account name Yes 
+ B. Personal information as defined in the California Customer Records statute Name, contact information, education, employment, employment history, and financial information Yes 
+ C. Protected classification characteristics under state or federal law Gender, age, date of birth, race and ethnicity, national origin, marital status, and other demographic data No 
+ D. Commercial information Transaction information, purchase history, financial details, and payment information No 
+ E. Biometric information Fingerprints and voiceprints No 
+ F. Internet or other similar network activity Browsing history, search history, online behavior, interest data, and interactions with websites, apps, or ads No 
+ G. Geolocation data Device location No 
+ H. Audio, electronic, sensory, or similar information Images and audio, video, or call recordings created in connection with our business activities Yes 
+ I. Professional or employment-related information Business contact details in order to provide our services, job title, work history, and professional qualifications No 
+ J. Education Information Student records and directory information No 
+ K. Inferences drawn from personal information Profiles or summaries based on personal data, such as preferences or characteristics No 
+ L. Sensitive personal information — No 
+ Retention Periods
+ We will use and retain the collected personal information as needed to provide the Services or for:
+ Category A – As long as the user has an account with us
+ Category B – As long as the user has an account with us
+ Category H – Default retention is one week, with an option for one year
+ Your Rights
+ You have rights under certain US state data protection laws. However, these rights are not absolute, and in certain cases, we may decline your request as permitted by law. These rights include:
+ Right to know whether or not we are processing your personal data
+ Right to access your personal data
+ Right to correct inaccuracies in your personal data
+ Right to request the deletion of your personal data
+ Right to obtain a copy of the personal data you previously shared with us
+ Right to non-discrimination for exercising your rights
+ Right to opt out of the processing of your personal data if it is used for targeted advertising, the sale of personal data, or profiling in furtherance of decisions that produce legal or similarly significant effects
+ How to Exercise Your Rights
+ To exercise these rights, you can contact us by emailing us at [email protected] , or by referring to the contact details at the bottom of this document.
+ Under certain US state data protection laws, you can designate an authorized agent to make a request on your behalf. We may deny a request from an authorized agent that does not submit proof that they have been validly authorized to act on your behalf in accordance with applicable laws.
+ Request Verification
+ Upon receiving your request, we will need to verify your identity to determine you are the same person about whom we have the information in our system. We will only use personal information provided in your request to verify your identity or authority to make the request.
+ Appeals
+ Under certain US state data protection laws, if we decline to take action regarding your request, you may appeal our decision by emailing us at [email protected] . We will inform you in writing of any action taken or not taken in response to the appeal, including a written explanation of the reasons for the decisions.
+ 13. DO OTHER REGIONS HAVE SPECIFIC PRIVACY RIGHTS?
+ In Short : You may have additional rights based on the country you reside in.
+ Australia
+ We collect and process your personal information under the obligations and conditions set by Australia's Privacy Act 1988 (Privacy Act).
+ This Privacy Notice satisfies the notice requirements defined in the Privacy Act, in particular: what personal information we collect from you, from which sources, for which purposes, and other recipients of your personal information.
+ If you do not wish to provide the personal information necessary to fulfill their applicable purpose, it may affect our ability to provide our services, in particular:
+ Offer you the products or services that you want
+ Respond to or help with your requests
+ Manage your account with us
+ Confirm your identity and protect your account
+ At any time, you have the right to request access to or correction of your personal information. You can make such a request by contacting us by using the contact details provided in the section "HOW CAN YOU REVIEW, UPDATE, OR DELETE THE DATA WE COLLECT FROM YOU?"
+ If you believe we are unlawfully processing your personal information, you have the right to submit a complaint about a breach of the Australian Privacy Principles to the Office of the Australian Information Commissioner.
+ 14. DO WE MAKE UPDATES TO THIS NOTICE?
+ In Short : Yes, we will update this notice as necessary to stay compliant with relevant laws.
+ We may update this Privacy Notice from time to time. The updated version will be indicated by an updated "Last updated" date at the top of this Privacy Notice. If we make material changes to this Privacy Notice, we may notify you either by prominently posting a notice of such changes or by directly sending you a notification. We encourage you to review this Privacy Notice frequently to be informed of how we are protecting your information.
+ 15. HOW CAN YOU CONTACT US ABOUT THIS NOTICE?
+ If you have questions or comments about this notice, you may contact our Data Protection Officer (DPO) by email at [email protected] , or contact us by post at:
+ Alianza
+ 1064 S North County Blvd.
+ Ste. 500
+ Pleasant Grove, UT 84062
+ United States of America
+ 16. HOW CAN YOU REVIEW, UPDATE, OR DELETE THE DATA WE COLLECT FROM YOU?
+ Based on the applicable laws of your country or state of residence in the US, you may have the right to request access to the personal information we collect from you, details about how we have processed it, correct inaccuracies, or delete your personal information. You may also have the right to withdraw your consent to our processing of your personal information. These rights may be limited in some circumstances by applicable law.
+ To request to review, update, or delete your personal information, please contact us at [email protected] .
+ For business customers, a Data Processing Agreement (DPA) is available to govern the processing of personal data through our Services. Our DPA outlines the specific terms under which we process personal data on your behalf and ensures compliance with applicable data protection laws.
+ Skribby - Meeting Bot API: Affordable, Reliable, Built To Ship Fast
+ This privacy policy is hosted at https://skribby.io and incorporated into our Terms of Service. By using our Services, you acknowledge that you have read and understood this Privacy Policy. 
+ Skribby An Alianza Company 
+ The straightforward Meeting Bot API for Zoom, Teams, and Google Meet. Built for developers who ship fast.
+ Loading status... 
+ Product Pricing Blog Contact 
+ Documentation REST API Realtime Transcription Participant Timelines Quickstart 
+ Legal Terms of Service Privacy Policy 
+ © 2026 Alianza, All rights reserved

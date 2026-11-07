@@ -1,0 +1,45 @@
+SOURCE: https://developers.zoom.us/changelog/meeting-sdk/requiring-authorization-for-meetings-joined-outside-of-an-apps-account/
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Requiring authorization for meetings joined outside of an app's account - Zoom Developer Changelog 
+ Now Available: Zoom AI Services Summarizer & Translator APIs. 
+ Docs 
+ APIs MCP Blog Changelog Agent Skills Help 
+ Docs 
+ APIs MCP Blog Changelog Agent Skills Help Theme 
+ Product updates Developer Changelog
+ Keep track of changes and upgrades to the Zoom Developer platform. You can also subscribe to our Changelog RSS feed below.
+ All changelogs Meeting SDK 
+ Meeting SDK 
+ Nov 10, 2025 
+ Requiring authorization for meetings joined outside of an app's account
+ Action required 
+ Summary: Starting February 23, 2026, apps that access meeting content, including Meeting SDK apps that join as participants, will need to attribute to a user when joining meetings outside their own Zoom account.
+ Starting February 23, 2026 , apps that access meeting content, including Meeting SDK apps that join as participants, will need to attribute to a user when joining meetings outside their own Zoom account. After this date, the Meeting SDK will no longer be able to join meetings outside its own account anonymously.
+ This means that apps will no longer be able to join meetings outside their own account anonymously. This move toward user attribution is designed to solve a common point of confusion. Today, apps that join without signing in as their user can make it difficult for account admins to manage their organization's policies and for participants to understand why apps are in their meetings.
+ If you are using the Meeting SDK to join meetings on your own account, no change is needed. 
+ The Meeting SDK will not require an authentication method to join meetings hosted by users on the same account as its client ID.
+ Meeting SDK apps that join meetings outside their own account have a few options.
+ The Meeting SDK's new On Behalf Token : For applications that need to appear in the participant list on behalf of a user. This attributes the application participant to its owner, giving context to participants and controls to hosts.
+ The Meeting SDK's ZAK token : To join the meeting as the user.
+ Realtime Media Streams (RTMS) : A purpose-built pipeline and user experience framework for apps to access meeting content with simple host controls for trust and adoption. In addition to the dedicated host controls, the apps name is displayed on the user's meeting tile instead of as a separate entry in the participant list.
+ We're confident this is an important evolution. It clarifies app usage for participants and admins and gives apps a better framework to operate within an organization's meetings.
+ For more information, see Meeting SDK authorization
+ in the Meeting SDK documentation and our thread   on the Developer Forum.
+ Resources
+ API References 
+ SDK References 
+ Read llms.txt 
+ Updates
+ Changelog 
+ Developer blog 
+ Community
+ MVP program 
+ Github 
+ Developer forum 
+ YouTube 
+ Support
+ Premier Developer Support 
+ Zoom Support 
+ Copyright © 2026 Zoom Communications, Inc. All rights reserved.
+ Terms · Privacy Policy · API Terms of Use · Marketplace Developer Agreement · Do Not Sell My Personal Information · Cookie Preferences

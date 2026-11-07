@@ -1,0 +1,165 @@
+SOURCE: https://developers.zoom.us/docs/meeting-sdk/auth/
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Meeting SDK authorization - Meeting SDK - Zoom Developer Docs 
+ Now Available: Zoom AI Services Summarizer & Translator APIs. 
+ Docs 
+ APIs MCP Blog Changelog Agent Skills Help 
+ Docs 
+ APIs MCP Blog Changelog Agent Skills Help Theme 
+ Meeting SDK
+ Introduction 
+ Get credentials 
+ Authorize 
+ Overview 
+ Internal (JWT) 
+ People (ZAK) 
+ Bot (OBF) 
+ Guest 
+ Upgrade guide 
+ SDK key migration 
+ Key concepts 
+ API references 
+ Changelog 
+ Platforms
+ Android
+ iOS
+ macOS
+ Web
+ Windows
+ Electron
+ Linux
+ Unreal
+ React Native
+ Meeting SDK 
+ Authorize 
+ Meeting SDK authorization
+ Copy for LLM 
+ View as Markdown 
+ On this page
+ The Zoom Meeting SDK uses JSON Web Tokens (JWT)   for authorization along with other tokens designed to support various use cases:
+ Starting or joining internal meetings (Internal only or ISV)
+ Starting or joining external meetings (ZAK)
+ Joining external meetings as a bot (OBF)
+ Joining external meetings as a guest (Exception)
+ The Meeting SDK respects all Zoom meeting and webinar security settings. To support starting/joining meetings/webinars that require registration   or user authentication   , see instructions in the platform-specific Meeting SDK documentation .
+ Generate a Meeting SDK JWT # 
+ After getting your Meeting SDK credentials , generate a JWT for authorizing each request to start or join a Zoom meeting or webinar. You should generate this where you can securely store your Meeting SDK credentials, such as through a backend (server-side) function.
+ Meeting SDK JWT credentials 
+ To generate the Meeting SDK JWT, use either development or production credentials and your Client ID and Client Secret app credentials.
+ JWTs consist of three core parts: Header , Payload , and Signature .
+ Header # 
+ The header includes the specification of the signing algorithm and the type of token.
+ Key Value 
+ alg HS256 
+ typ JWT 
+ Sample header 
+ {
+ "alg": "HS256",
+ "typ": "JWT"
+}
+ Payload # 
+ A JWT's payload contains the token's claims, pieces of information about the user, and any required metadata. The necessity of these keys depend on whether you are using Meeting SDK for native platforms (such as Android, iOS, Linux, macOS, Windows) or web. The asterisks in the necessity column indicate that the value column contains more details. 
+ Key Necessity Value 
+ appKey Required Your Client ID (from your app credentials). 
+ mn Required (web)* Optional for native. The Zoom meeting or webinar number. 
+ role Required (web)* Optional for native. The user role. 0 to specify participant, 1 to specify host. 
+ iat Required The token issue timestamp. 
+ exp Required The JWT expiration timestamp. Mininum = 1800 seconds greater than the iat value, maximum recommended = 48 hours greater than the iat value. In epoch format. 
+ tokenExp Required SDK authenticated token expiration timestamp. Minimum = 1800 seconds greater than the iat value, maximum recommended = 48 hours greater than iat value. In epoch format. 
+ video_webrtc_mode Optional* Web only. 0 to disable WebRTC video. 1 to enable WebRTC video. If you do not define this value in the JWT, Zoom determines whether to enable WebRTC video based on various factors determined by Zoom at the time.
+*On browsers that do not support WebRTC video, even if you set this value to 1 , Zoom will use WebAssembly video. 
+ Sample payload 
+ {
+ "appKey": ZOOM_CLIENT_ID,
+ "mn": MEETING_NUMBER,
+ "role": ROLE,
+ "iat": 1646937553,
+ "exp": 1646944753,
+ "tokenExp": 1646944753,
+ "video_webrtc_mode": 0
+}
+ Cross‑platform Meeting SDK JWT properties 
+ For a Meeting SDK JWT that works across the Meeting SDKs for web, native, and wrappers such as Ionic and Electron, include the appKey , exp , tokenExp , mn , and role properties. The values for exp and tokenExp will be the same.
+ Signature # 
+ To create a signature for the JWT, you must encrypt the header and payload with the Client Secret through an HMAC SHA256 algorithm.
+ Value Description 
+ ZOOM_CLIENT_SECRET Your app's Client Secret. Required. 
+ Sample signature 
+ HMACSHA256(
+ base64UrlEncode(header) + '.' + base64UrlEncode(payload),
+ ZOOM_CLIENT_SECRET,
+);
+ Sample Meeting SDK JWT 
+ <JWT_TOKEN>
+ Sample code # 
+ The Node.js sample code below shows how to generate a Meeting SDK JWT using jsrsasign   , an open source cryptographic JavaScript library. For additional JWT libraries and code samples in more languages, see JWT.io   .
+ Commented out properties are optional for all platforms.
+ const KJUR = require('jsrsasign');
+// https://www.npmjs.com/package/jsrsasign
+const iat = Math.round(new Date().getTime() / 1000) - 30;
+const exp = iat + 60 * 60 * 2;
+const oHeader = { alg: 'HS256', typ: 'JWT' };
+const oPayload = {
+ appKey: process.env.ZOOM_CLIENT_ID,
+ mn: 'ZOOM_MEETING_NUMBER',
+ role: 0,
+ iat: iat,
+ exp: exp,
+ tokenExp: exp,
+ // video_webrtc_mode: 0
+};
+const sHeader = JSON.stringify(oHeader);
+const sPayload = JSON.stringify(oPayload);
+const MEETING_SDK_JWT = KJUR.jws.JWS.sign(
+ 'HS256',
+ sHeader,
+ sPayload,
+ process.env.ZOOM_CLIENT_SECRET,
+);
+console.log(MEETING_SDK_JWT);
+ Test SDK JWT generator # 
+ Test SDK JWT generator
+ Meeting SDK auth endpoint sample
+ Use for testing purposes only. A temporary JWT is generated in your browser and expires in one hour.
+ Generated JWT Token
+ Copy 
+ Client ID 
+ Client Secret 
+ Meeting Number 
+ Role Type 
+ Host/Co-Host
+ Use the Meeting SDK auth endpoint sample   to quickly, easily, and securely generate a Meeting SDK JWT.
+ Auth sample (Node.js)
+ Troubleshooting SDK JWTs # 
+ If you have issues generating or using your SDK JWT, make sure that:
+ Your developer account is a valid account that allows using Meeting SDK.
+ You're using the credentials from your app details page on the Zoom App Marketplace.
+ Your JWT is signed with the correct Client Secret shown on the Marketplace.
+ The JWT's exp value is not greater than 48 hours after the iat .
+ The expiry is 1800 seconds or greater than current time.
+ Previous Get credentials Next Internal (JWT) 
+ Resources
+ Choosing the right attribution path for your Zoom app 
+ Transitioning to On Behalf Of (OBF) tokens in Meeting SDK apps 
+ On this page
+ Resources
+ Choosing the right attribution path for your Zoom app 
+ Transitioning to On Behalf Of (OBF) tokens in Meeting SDK apps 
+ Resources
+ API References 
+ SDK References 
+ Read llms.txt 
+ Updates
+ Changelog 
+ Developer blog 
+ Community
+ MVP program 
+ Github 
+ Developer forum 
+ YouTube 
+ Support
+ Premier Developer Support 
+ Zoom Support 
+ Copyright © 2026 Zoom Communications, Inc. All rights reserved.
+ Terms · Privacy Policy · API Terms of Use · Marketplace Developer Agreement · Do Not Sell My Personal Information · Cookie Preferences

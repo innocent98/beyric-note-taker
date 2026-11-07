@@ -1,0 +1,124 @@
+SOURCE: https://skribby.io/pricing
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Pricing - Usage-Based Meeting Bots | Skribby 
+ Skribby An Alianza Company Pricing Blog Docs Contact Sign Up 
+ Skribby An Alianza Company 
+ Transparent Pricing 
+ Simple, Usage-Based Pricing
+ No contracts, no minimums, no surprises. Pay only for what you use.
+ Base Rate
+ Core Meeting Bot Service
+ Includes meeting bot deployment, raw audio recording, and live webhook notifications. Billed per minute.
+ $0.35 per hour 
+ That's just $0.00583 per minute 
+ Get Started Free 
+ Meeting bot deployment
+ Instant bot joining on Zoom, Teams, and Google Meet
+ Raw audio recording
+ High-quality audio capture in multiple formats
+ Real-time webhooks
+ Event notifications for bot lifecycle and recordings
+ 1 week recording storage
+ Included storage for recordings and transcripts
+ Choose Your Model
+ Transcription Models
+ All prices include base service ($0.35/hour) + transcription. Click to select.
+ Provider Model Price Capabilities 
+ Groq 
+ Whisper Large v3 Turbo $0.39/hour Custom Vocab 
+ xAI 
+ Speech-to-Text $0.45/hour Diarization 
+ Soniox 
+ v5 Async $0.45/hour Diarization Custom Vocab 
+ Groq 
+ Whisper Large v3 $0.47/hour Custom Vocab 
+ Soniox 
+ v5 Realtime $0.52/hour Realtime Diarization 
+ OpenAI 
+ GPT-4o Mini Transcribe $0.53/hour 
+ Mistral 
+ Voxtral Mini 2 $0.53/hour Diarization Custom Vocab 
+ AssemblyAI 
+ Universal-Realtime $0.55/hour Realtime 
+ AssemblyAI 
+ Universal $0.55/hour Diarization Custom Vocab Profanity Filter 
+ AssemblyAI 
+ Universal-3.5 Pro $0.58/hour Diarization 
+ Deepgram 
+ Nova-2 $0.61/hour Diarization Custom Vocab Profanity Filter 
+ Speechmatics 
+ Speech-to-Text $0.65/hour Diarization Profanity Filter 
+ Rev AI 
+ Speech-to-Text $0.65/hour Diarization 
+ Deepgram 
+ Nova-3 $0.67/hour Diarization Custom Vocab Profanity Filter 
+ ElevenLabs 
+ Scribe V1 $0.70/hour Diarization 
+ ElevenLabs 
+ Scribe V2 $0.70/hour Diarization 
+ OpenAI 
+ GPT-4o Transcribe $0.71/hour 
+ OpenAI 
+ GPT-4o Transcribe Diarize $0.71/hour Diarization 
+ AWS 
+ Transcribe $0.71/hour Diarization 
+ Deepgram 
+ Nova 2-Realtime $0.75/hour Realtime Diarization Custom Vocab 
+ Mistral 
+ Voxtral Mini Transcribe Realtime $0.76/hour Realtime 
+ Speechmatics 
+ Speech-to-Text Realtime $0.80/hour Realtime Diarization 
+ ElevenLabs 
+ Scribe V2 Realtime $0.86/hour Realtime 
+ Deepgram 
+ Nova 3-Realtime $0.87/hour Realtime Diarization Custom Vocab 
+ AssemblyAI 
+ Universal-3 Pro Streaming $0.97/hour Realtime Diarization 
+ Gladia 
+ Speech-to-Text $0.97/hour Diarization Custom Vocab Profanity Filter 
+ AWS 
+ Transcribe Streaming $1.00/hour Realtime Diarization 
+ Gladia 
+ Speech-to-Text Realtime $1.16/hour Realtime 
+ Google Cloud 
+ Chirp 3 $1.31/hour Diarization 
+ Google Cloud 
+ Chirp 3 Realtime $1.36/hour Realtime 
+ Bring Your Own Key: Use your own API keys for any provider to manage billing directly
+ Optional Addons
+ Enhance Your Experience
+ Add realtime capabilities, video recording, and extended storage to get even more value from your meeting bots. Click to select.
+ Realtime Features
+ Realtime meeting events, control actions, and raw audio in one bundle. Enabled by default without surcharge on realtime models.
+ + $0.05/hour 
+ Video Addon
+ Video will be recorded alongside audio and made available to you.
+ + $0.05/hour 
+ 1 Year Storage
+ Recordings are stored for 1 week by default. This addon extends the storage period to 1 year.
+ + $0.05/hour 
+ Cost Calculator
+ See how affordable meeting bots can be for your use case
+ 60-minute meeting 1 hour 
+ Base service (meeting bot + audio) $ 0.35 
+ Transcription ( None ) 
+ $ 0.00 
+ Realtime features 
+ $0.00 
+ Video addon 
+ $ 0.00 
+ 1 Year Storage 
+ $ 0.00 
+ Total Cost $ 0.35 
+ Audio-only 1-hour meeting
+ Ready to get started?
+ Create your account and deploy your first meeting bot in under 5 minutes. No credit card required to start.
+ Get Started Free View Documentation 
+ Skribby An Alianza Company 
+ The straightforward Meeting Bot API for Zoom, Teams, and Google Meet. Built for developers who ship fast.
+ Loading status... 
+ Product Pricing Blog Contact 
+ Documentation REST API Realtime Transcription Participant Timelines Quickstart 
+ Legal Terms of Service Privacy Policy 
+ © 2026 Alianza, All rights reserved
