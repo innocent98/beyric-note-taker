@@ -18,7 +18,19 @@ from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, object_session
 
-from app import ai_runs, audio, mail, placement, series, teams, usage, workspace
+from app import (
+    ai_runs,
+    alerts,
+    audio,
+    mail,
+    mail_templates,
+    placement,
+    series,
+    teams,
+    titles,
+    usage,
+    workspace,
+)
 from app.audio import AudioError, NoSpeechError
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
@@ -47,6 +59,12 @@ REASON_NOT_LET_IN = (
     "The bot was not let into the meeting. The host may have declined it, or the waiting room "
     "timed out."
 )
+
+# The bell entry's kind for a bot that was sent and not let in. Its dedupe key adds the meeting id
+# and `join_attempts` (1 for the first bot, +1 for every bot sent again, by the worker or by the
+# owner's retry): a deliberate retry that is refused again is news, the same attempt is never told
+# twice.
+NOT_ADMITTED_KIND = "meeting.not_admitted"
 
 REASON_JOIN_REFUSED = (
     "Google would not let the bot ask to join this meeting. This sometimes happens; try sending "
@@ -179,11 +197,58 @@ def _lock(session: Session, meeting_id: int) -> Meeting | None:
     ).first()
 
 
-def _fail(session: Session, meeting: Meeting, reason: str) -> None:
+def _tell_not_admitted(session: Session, meeting: Meeting, at: datetime) -> None:
+    """Tell the owner the bot was sent and NOT admitted (the waiting room timed out, the host
+    declined it, or Google refused its ask to join): a bell entry, once per meeting, and the
+    designed "Could not join" mail. `at` is the moment the failure was seen.
+
+    Nothing here may stop the meeting failing, so each step is guarded and logged by exception
+    type only (a message can hold an address). The mail's payload is built first, in a savepoint,
+    because `mail.deliver_pending` fails a row whose build raises `ValueError` for good, with no
+    retry: a payload that cannot be built falls back to the plain alert mail (the bell's own
+    words) instead. The bell is written either way. The caller commits."""
+    template, payload = mail_templates.NOT_JOINED, None
+    try:
+        with session.begin_nested():
+            payload = mail_templates.not_joined_payload(
+                session, meeting.owner_user_id, meeting.platform, meeting.native_id, at
+            )
+    except Exception as exc:
+        logger.warning(
+            "meeting %s: not-joined mail payload failed (%s)", meeting.id, type(exc).__name__
+        )
+        template = alerts.ALERT_TEMPLATE
+    try:
+        name = titles.alert_name(None, meeting.platform, meeting.native_id)
+        alerts.notify_user(
+            session,
+            meeting.owner_user_id,
+            kind=NOT_ADMITTED_KIND,
+            severity="error",
+            title=mail_templates.NOT_JOINED_TITLE,
+            body=f"We tried to join {name} but were not admitted. "
+            f"{mail_templates.NOT_JOINED_REASON}",
+            dedupe_key=f"{NOT_ADMITTED_KIND}:{meeting.id}:{meeting.join_attempts}",
+            meeting_id=meeting.id,
+            email_template=template,
+            email_payload=payload,
+        )
+    except Exception as exc:
+        logger.warning("meeting %s: not-joined alert failed (%s)", meeting.id, type(exc).__name__)
+
+
+def _fail(
+    session: Session, meeting: Meeting, reason: str, *, not_admitted_at: datetime | None = None
+) -> None:
+    """Fail the meeting. `not_admitted_at` (the moment the failure was seen) is given only for the
+    causes that mean "the bot was sent and not let in": the owner is then told in the same
+    commit."""
     meeting.status = "failed"
     meeting.failure_reason = reason
     _no_audio_polls.pop(meeting.id, None)
     _lookup_misses.pop(meeting.id, None)
+    if not_admitted_at is not None:
+        _tell_not_admitted(session, meeting, not_admitted_at)
     session.commit()
 
 
@@ -317,12 +382,21 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     return True
 
 
-def _resend(session: Session, meeting: Meeting, vexa, *, failed_reason: str) -> None:
-    """Send a fresh bot after a refusal, or fail the meeting with `failed_reason`."""
+def _resend(
+    session: Session,
+    meeting: Meeting,
+    vexa,
+    *,
+    failed_reason: str,
+    not_admitted_at: datetime | None = None,
+) -> None:
+    """Send a fresh bot after a refusal, or fail the meeting with `failed_reason`. When the
+    refusal that led here was Google's (`not_admitted_at`: the moment it was seen), the owner is
+    told even though the new bot could not be sent: the first bot really was not admitted."""
     if send_again(meeting, vexa):
         session.commit()
     else:
-        _fail(session, meeting, failed_reason)
+        _fail(session, meeting, failed_reason, not_admitted_at=not_admitted_at)
 
 
 def refusal_retry_gap(meeting: Meeting) -> timedelta:
@@ -449,7 +523,13 @@ def _on_join_problem(session: Session, meeting: Meeting, vexa, mark: str, now: d
         logger.info("meeting %s: Google refused the bot; pausing before one retry", meeting.id)
         return False
     logger.info("meeting %s: join ended by the worker (%s)", meeting.id, mark)
-    _fail(session, meeting, REASON_JOIN_REFUSED if mark == MEET_REFUSED else REASON_NEEDS_HELP)
+    refused = mark == MEET_REFUSED
+    _fail(
+        session,
+        meeting,
+        REASON_JOIN_REFUSED if refused else REASON_NEEDS_HELP,
+        not_admitted_at=now if refused else None,
+    )
     return True
 
 
@@ -521,6 +601,7 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
                 meeting,
                 vexa,
                 failed_reason=f"{REASON_JOIN_REFUSED} A new bot could not be sent.",
+                not_admitted_at=meeting.terminal_seen_at,
             )
             return False
     else:
@@ -551,7 +632,13 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
                 failed_reason=_zoom_blocked_reason(meeting.join_attempts, resend_failed=True),
             )
         else:
-            _fail(session, meeting, bot_failure_reason(meeting, info))
+            reason = bot_failure_reason(meeting, info)
+            _fail(
+                session,
+                meeting,
+                reason,
+                not_admitted_at=now if reason == REASON_NOT_LET_IN else None,
+            )
         return False
     elif info.status == "completed":
         if info.recording_status == "failed":
