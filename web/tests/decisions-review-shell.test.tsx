@@ -13,6 +13,7 @@ import type { DecisionList, ReviewList } from "@/lib/api/types";
 
 const state = vi.hoisted(() => ({ calls: [] as string[], reviewOpen: 3 as number | null, authenticated: true, fail: null as null | number }));
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
   redirect: (to: string) => {
     throw new Error(`redirect:${to}`);
   },
@@ -44,6 +45,7 @@ vi.mock("@/lib/api/server", () => ({
   getReviewOpen: async () => state.reviewOpen,
   getTasksNew: async () => 0,
   getUnreadNotifications: async () => null,
+  getShellUser: async () => null,
   getTimeZone: async () => null,
   load: <T,>(call: Promise<T>) => call,
 }));

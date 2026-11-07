@@ -31,7 +31,16 @@ for (const [kind, names] of Object.entries({
   for (const name of names) SECTION_CLASS[name] = kind;
 }
 
-export function wrapSections(html: string): string {
+// The designer writes an empty part as "None noted." with a full stop; the model's prompt says
+// "None noted" and the extraction code compares against that word (app/notes.py), so the words
+// stay as they are in the data and the full stop is added when the page is drawn. Only a part
+// whose whole body is that one line is touched.
+export function fullStopNoneNoted(html: string): string {
+  return html.replace(/<(p|li)>\s*None noted\s*<\/\1>/g, "<$1>None noted.</$1>");
+}
+
+export function wrapSections(rawHtml: string): string {
+  const html = fullStopNoneNoted(rawHtml);
   return html
     .split(/(?=<h2[ >])/)
     .map((part) => {
@@ -50,7 +59,8 @@ export function wrapSections(html: string): string {
 // from it (components/app/action-tasks.tsx). Each other part is still the API's HTML, in a section
 // of its own with the same classes as `wrapSections` gives it.
 // `questions`, likewise, is drawn in place of the "Open questions" part (components/app/open-questions.tsx).
-export function NotesHtml({ html, actions, questions }: { html: string; actions?: ReactNode; questions?: ReactNode }) {
+export function NotesHtml({ html: rawHtml, actions, questions }: { html: string; actions?: ReactNode; questions?: ReactNode }) {
+  const html = fullStopNoneNoted(rawHtml);
   if (!actions && !questions) return <div className="notes-body notes" dangerouslySetInnerHTML={{ __html: wrapSections(html) }} />;
   return (
     <div className="notes-body notes">

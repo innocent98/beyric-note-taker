@@ -78,6 +78,13 @@ export async function getTimeZone(): Promise<string | null> {
   return (await getSession())?.user?.time_zone ?? null;
 }
 
+// Who the sidebar names: the person's name and email from the session this request already read.
+// null when it is not known; the shell then draws no name.
+export async function getShellUser(): Promise<{ name: string | null; email: string } | null> {
+  const user = (await getSession())?.user;
+  return user ? { name: user.name, email: user.email } : null;
+}
+
 // For pages that are only for the owner. Anyone else goes to /login.
 export async function requireOwner() {
   const session = await getSession();

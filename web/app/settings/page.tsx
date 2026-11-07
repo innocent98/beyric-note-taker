@@ -8,7 +8,7 @@ import { SettingsTimeZone } from "@/components/app/settings-time-zone";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 import { PageHead } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
-import { getReviewOpen, getTasksNew, getTimeZone, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
 import { calendarNotice } from "@/lib/calendar-notice";
 import type { CalendarState, Template } from "@/lib/api/types";
 
@@ -57,7 +57,7 @@ export default async function SettingsPage({
   ]);
   return (
     <AppShell current="settings" reviewOpen={await getReviewOpen()}
-      tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} timeZone={await getTimeZone()}>
+      tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()} timeZone={await getTimeZone()}>
       <div className="stack-md measure">
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
         <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} templates={templates} />

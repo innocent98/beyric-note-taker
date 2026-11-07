@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   templates: null as null | (() => Promise<unknown>),
 }));
 vi.mock("next/navigation", () => ({
+  usePathname: () => "/",
   redirect: (to: string) => {
     throw new Error(`redirect:${to}`);
   },
@@ -58,6 +59,7 @@ vi.mock("@/lib/api/server", () => ({
   getReviewOpen: async () => 2,
   getTasksNew: async () => 0,
   getUnreadNotifications: async () => null,
+  getShellUser: async () => null,
   getTimeZone: async () => null,
   load: <T,>(call: Promise<T>) => call,
 }));

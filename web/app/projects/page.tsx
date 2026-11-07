@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app/shell";
 import { ProjectsView } from "@/components/app/projects-view";
 import { ApiError } from "@/lib/api/client";
 import type { ProjectList } from "@/lib/api/types";
-import { getReviewOpen, getTasksNew, getTimeZone, getUnreadNotifications, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireOwner } from "@/lib/api/server";
 
 export const metadata: Metadata = { title: "Projects", robots: { index: false, follow: false } };
 
@@ -25,7 +25,7 @@ export default async function ProjectsPage() {
       current="projects"
       reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()}
-      unread={await getUnreadNotifications()}
+      unread={await getUnreadNotifications()} user={await getShellUser()}
       timeZone={await getTimeZone()}
     >
       <ProjectsView initial={initial} team={team} />

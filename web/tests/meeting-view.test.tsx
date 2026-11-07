@@ -123,7 +123,7 @@ describe("ready meeting", () => {
     await userEvent.selectOptions(screen.getByLabelText("Rewrite the notes with a template"), "2");
     await userEvent.click(screen.getByRole("button", { name: "Rewrite notes" }));
     expect(mocks.regenerate).toHaveBeenCalledWith(7, 2);
-    const busy = screen.getByRole("button", { name: "Rewriting..." }) as HTMLButtonElement;
+    const busy = screen.getByRole("button", { name: "Rewriting notes..." }) as HTMLButtonElement;
     expect(busy.disabled).toBe(true);
     expect(screen.getByText(/can take a few minutes/).getAttribute("role")).toBe("status");
     await act(async () => finish({ ...m, template_id: 2, notes_html: "<h2>New</h2>" }));

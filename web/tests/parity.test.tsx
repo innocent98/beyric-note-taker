@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { metadata } from "@/app/layout";
-import { wrapSections } from "@/components/app/notes-html";
+import { fullStopNoneNoted, wrapSections } from "@/components/app/notes-html";
 import { Landing, LandingFooter, LandingHeader } from "@/components/landing/landing";
 import { PrivacyContent } from "@/components/legal/privacy-content";
 import { TermsContent } from "@/components/legal/terms-content";
@@ -29,6 +29,14 @@ describe("notes sections", () => {
     expect(out).toContain('<section class="notes-sec notes-sec-check"><h2>Please check</h2>');
     expect(out.match(/<section/g)).toHaveLength(4);
     expect(out.match(/<\/section>/g)).toHaveLength(4);
+  });
+
+  it("draws an empty part as \"None noted.\" with the designer's full stop, and leaves other text alone", () => {
+    const out = wrapSections(html + "<h2>Action items</h2>\n<p>None noted</p>\n<h2>Key points</h2>\n<p>None noted yet, see below</p>\n");
+    expect(out.match(/<p>None noted\.<\/p>/g)).toHaveLength(3);
+    expect(out).toContain("<p>None noted yet, see below</p>");
+    expect(fullStopNoneNoted("<p>None noted.</p>")).toBe("<p>None noted.</p>");
+    expect(fullStopNoneNoted("<ul><li>None noted</li></ul>")).toBe("<ul><li>None noted.</li></ul>");
   });
 
   it("keeps every word of the notes and puts nothing from them into an attribute", () => {
