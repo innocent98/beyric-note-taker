@@ -1,21 +1,32 @@
 import type { ReactNode } from "react";
 import { TimeZoneProvider } from "@/components/app/time-zone-context";
-import { IconButton, Logo, NavLink } from "@/components/ui";
+import { ShellNav } from "@/components/app/shell-nav";
+import { IconButton, NavLink } from "@/components/ui";
+import { initials } from "@/lib/format";
 
 export type NavSection = "meetings" | "tasks" | "projects" | "decisions" | "review" | "team" | "notifications" | "templates" | "vocabulary" | "settings";
 
-// The owner app's frame: a sidebar on desktop, a top bar on phones (components.css). Log out is a
-// `tasksNew` is `badges.tasks_new`: the count beside Tasks.
-// plain form post to /logout (app/logout/route.ts), so it works without JavaScript. `reviewOpen` is
-// `badges.review_open` from GET /api/session (null when unknown): the count beside Review.
-// `timeZone` is `user.time_zone` of the same answer: the zone every time on the page is written in
-// (null = the browser's own).
+export type ShellUser = { name: string | null; email: string };
+
+// The name the sidebar shows: the profile name, else the part of the email before the "@".
+function shownName(user: ShellUser): string {
+  return user.name?.trim() || user.email.split("@")[0] || user.email;
+}
+
+// The owner app's frame: the designer's sidebar on desktop; below 860px the same sidebar is a
+// drawer opened from a slim top bar (shell-nav.tsx, lead-designed). `tasksNew` is
+// `badges.tasks_new`: the count beside Tasks. Log out is a plain form post to /logout
+// (app/logout/route.ts), so it works without JavaScript. `reviewOpen` is `badges.review_open` from
+// GET /api/session (null when unknown): the count beside Review. `timeZone` is `user.time_zone` of
+// the same answer: the zone every time on the page is written in (null = the browser's own).
+// `user` is `user` of the same answer: the name, initials and email at the foot of the sidebar.
 export function AppShell({
   current,
   reviewOpen = null,
   tasksNew = null,
   unread = null,
   timeZone = null,
+  user = null,
   children,
 }: {
   current: NavSection;
@@ -23,6 +34,7 @@ export function AppShell({
   tasksNew?: number | null;
   unread?: number | null;
   timeZone?: string | null;
+  user?: ShellUser | null;
   children: ReactNode;
 }) {
   return (
@@ -30,10 +42,7 @@ export function AppShell({
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <Logo />
-        </div>
+      <ShellNav>
         <nav className="nav" aria-label="Main">
           <NavLink href="/" label="Meetings" current={current === "meetings"} />
           <NavLink href="/tasks" label="Tasks" current={current === "tasks"} badge={tasksNew ?? 0} />
@@ -50,17 +59,24 @@ export function AppShell({
           <NavLink href="/settings" label="Settings" current={current === "settings"} />
         </nav>
         <div className="sidebar-user">
-          <div className="avatar" aria-hidden="true">
-            O
-          </div>
-          <div className="sidebar-user-text">
-            <div className="sidebar-user-name">Owner</div>
-          </div>
+          {user ? (
+            <>
+              <div className="avatar" aria-hidden="true">
+                {initials(shownName(user))}
+              </div>
+              <div className="sidebar-user-text">
+                <div className="sidebar-user-name">{shownName(user)}</div>
+                <div className="sidebar-user-email">{user.email}</div>
+              </div>
+            </>
+          ) : (
+            <div className="sidebar-user-text" />
+          )}
           <form method="post" action="/logout" className="inline">
             <IconButton icon="logout" label="Log out" type="submit" />
           </form>
         </div>
-      </aside>
+      </ShellNav>
       <div className="shell-main">
         <main id="main" className="page">
           <TimeZoneProvider value={timeZone}>{children}</TimeZoneProvider>

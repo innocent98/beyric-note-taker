@@ -121,14 +121,14 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
               aria-current={selected === t.id}
               onClick={() => choose(t.id)}
             >
-              <span className="pick-name">{t.name}</span>
-              <span className="pick-preview">{t.instructions}</span>
+              <span className="pick-name">{t.name || "Untitled"}</span>
+              <span className="pick-preview">{t.instructions || "No instructions yet"}</span>
             </button>
           ))}
           {selected === "new" ? (
             <button type="button" className="pick" aria-current="true">
-              <span className="pick-name">{name.trim() || "New template"}</span>
-              <span className="pick-preview">Not saved yet</span>
+              <span className="pick-name">{name.trim() || "Untitled"}</span>
+              <span className="pick-preview">{instructions.trim() || "No instructions yet"}</span>
             </button>
           ) : null}
         </section>
@@ -178,7 +178,7 @@ export function TemplatesEditor({ initial }: { initial: Template[] }) {
                   {saved ? "Saved" : ""}
                 </span>
                 <Button size="md" wide disabled={pending || deleting}>
-                  {pending ? "Saving..." : selected === "new" ? "Add template" : "Save"}
+                  {pending ? "Saving..." : "Save"}
                 </Button>
               </div>
             </div>

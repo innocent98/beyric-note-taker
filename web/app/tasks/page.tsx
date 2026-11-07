@@ -5,7 +5,7 @@ import { TasksView } from "@/components/app/tasks-view";
 import { ApiError } from "@/lib/api/client";
 import type { TaskList } from "@/lib/api/types";
 import { loadSprintBook } from "@/lib/sprints";
-import { getReviewOpen, getTasksNew, getTimeZone, getUnreadNotifications, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireOwner } from "@/lib/api/server";
 
 export const metadata: Metadata = { title: "Tasks", robots: { index: false, follow: false } };
 
@@ -31,7 +31,7 @@ export default async function TasksPage() {
       current="tasks"
       reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()}
-      unread={await getUnreadNotifications()}
+      unread={await getUnreadNotifications()} user={await getShellUser()}
       timeZone={await getTimeZone()}
     >
       <TasksView initial={initial} projects={projects} milestones={milestones} sprints={sprints} canInviteToTeam={canInvite} />

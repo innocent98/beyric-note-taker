@@ -372,7 +372,7 @@ function json(res, status, payload, headers = {}) {
 
 let notifyEmail = true;
 let timeZone = values["time-zone"] ?? null;
-const mockUser = () => ({ email: "owner@example.test", name: null, is_admin: false, email_verified: true, time_zone: timeZone });
+const mockUser = () => ({ email: "owner@example.test", name: "Adebayo Tosin", is_admin: false, email_verified: true, time_zone: timeZone });
 const wsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "ai-workspace-w1", `${name}.json`), "utf8")).response.body;
 const armed = { decisions: true, review: true }; // `retry-loading` fails once after each reset
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

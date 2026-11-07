@@ -179,8 +179,7 @@ export function SettingsCalendar({
             Calendar
           </h2>
           <p className="set-sub">
-            The note taker reads your calendar and joins meetings that have a Google Meet, Microsoft Teams or Zoom
-            link.
+            The note taker reads your calendar and joins meetings that have a Google Meet or Zoom link.
           </p>
         </div>
 
@@ -198,6 +197,14 @@ export function SettingsCalendar({
                   <Icon name="calendar" />
                   {connectLabel}
                 </Button>
+                {/* Drawn in the designer's file, no backend yet (Outlook M2 to M6): switched off with one line. */}
+                <Button kind="secondary" size="tight" type="button" disabled aria-describedby="outlook-off">
+                  <Icon name="calendar" />
+                  Connect Microsoft Outlook
+                </Button>
+                <span id="outlook-off" className="meta set-off-line">
+                  Not available yet.
+                </span>
               </div>
             )}
             <p className="meta set-note set-note-after">
