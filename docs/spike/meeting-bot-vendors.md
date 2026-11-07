@@ -227,3 +227,21 @@ About 10 to 15 real meetings over a week. For each: send Vexa guest, Skribby gue
 
 ### Questions to send Skribby in writing
 1. Does a Google account made with a non-Gmail address work? 2. The Google Meet join success rate. 3. DPA and SOC 2. 4. What the Alianza acquisition changes. 5. Data region for each transcription model.
+
+## Lead 13 primary read, 2026-11-07 (raw pages, not summaries)
+
+The thirteenth lead downloaded these pages with `curl` and read their text (files in `docs/spike/primary-pages-2026-11-07/`; method and limits in its README). This **confirms or corrects** the second-hand rows above.
+
+| Claim | Result |
+|---|---|
+| Skribby Free plan has 5 bot hours a month | **Confirmed** on https://skribby.io/docs/guides/billing ("Monthly bot hours 5 hours", 3 concurrent bots, Audio Only and Groq Whisper Large v3 Turbo only, no recordings upload). The pricing page itself states no hours. Whether an authenticated Google account can be used on the Free plan is **not stated** |
+| Recall first 5 hours free | **Confirmed** on https://www.recall.ai/pricing (Pay As You Go, "your first 5 hours of recording are free", USD 0.50 per hour of recording; built-in transcription USD 0.15 per hour; 7 days free storage). Whether a card is needed to sign up: not stated |
+| Skribby price | Base USD 0.35 per hour; Groq Whisper Turbo +0.04 (0.39 all in); GPT-4o Mini Transcribe +0.18 (0.53); Gladia +0.62 (0.97); video +0.05; 1-year storage +0.05; bring-your-own key means base rate only |
+| Skribby signed-in bot | Dashboard: Settings, Authenticated Accounts, Add Account (email, password, authenticator setup key; never a six-digit code). API: `authentication: {account_id, always_authenticate}`. **By default the bot tries as a guest first and only uses the account if the meeting requires login; set `always_authenticate: true` to force the account.** When authenticated, `bot_name` is ignored and the bot shows the account's name |
+| Account type | "Google Workspace or personal Gmail"; app passwords unsupported; Skribby does not need the account in the host's Workspace; Google admission still applies. A Google account on a non-Gmail address is **still not stated** |
+| Invite to skip the knock | "When a Google Calendar event should admit the bot without knocking, invite the assigned account to the event" |
+| Same account twice | "Bots using the same Google account in the same meeting can merge into one participant, so those bots need different accounts" |
+| Create a bot | `POST https://platform.skribby.io/api/v1/bot`, header `Authorization: Bearer <key>`, body `transcription_model`, `meeting_url`, `service: "gmeet"`, `bot_name` (the Japan region uses `platform-jp.skribby.io`) |
+| Concurrency | Per organisation: Free 3, Pay As You Go 25; over the limit the create call fails at once with HTTP 403 |
+
+**Design consequence for the bake-off (from the vendor's own docs, as read second-hand in `docs/spike/recall-api-reference-read.md` for Recall):** Recall's bot-detection leave rule matches participant names such as "notetaker", "recorder", "assistant" by default, and two note-taker bots in one meeting can make each leave. So the bake-off must **not put several vendors' bots in the same meeting**; run one arm per meeting or per short test call, and give each bot a different, ordinary name.

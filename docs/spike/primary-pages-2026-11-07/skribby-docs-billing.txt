@@ -1,0 +1,495 @@
+Billing | Skribby Docs
+Skribby
+An Alianza Company
+Guides
+API Reference
+TypeScript SDK
+Search docs
+Ctrl+K
+Get Started
+Toggle navigation
+Documentation
+Quickstart
+Getting Started
+Platforms
+Regions
+Meeting Urls
+Bot Naming
+Bot Authentication
+Bot Lifecycle
+Bot Detection
+Billing
+Features
+Realtime Transcription
+Zoom Chat
+Participant Events
+Bot Language
+Recordings Upload
+Configuration
+Transcription Models
+Transcription Privacy and Retention
+Transcription Credentials
+Team Management
+Webhooks
+Webhook Events
+Webhook Security
+Troubleshooting
+Troubleshooting
+Best Practices
+Api Debugging
+Webhook Debugging
+Guides
+Updated
+3 months ago
+Copy
+Open .md
+Billing
+Complete reference for Skribby pricing, plan limits, and billing.
+Plans Overview
+Plan
+Base Cost
+Bot Pricing
+Concurrency
+Transcription Models
+Free
+$0/month
+Free
+3 bots
+Audio Only, Groq Whisper Large v3 Turbo
+Pay As You Go
+$0/month
+$0.35/hour
+25 bots
+All models
+Pay As You Go+
+Custom
+$0.35/hour
+Custom
+All models
+Base Pricing
+Meeting Bots
+Component
+Cost
+Notes
+Base bot time
+$0.35/hour
+Billed per minute
+Transcription
+Varies
+Added based on model (see below)
+Addons
+$0.05/hour
+Per addon, billed on bot duration
+Recordings (Upload)
+Component
+Cost
+Notes
+Base processing
+$0.10/hour
+Billed per minute of audio
+Transcription
+Varies
+Added based on model (see below)
+Transcription Model Pricing
+Per-hour costs added to base pricing:
+Standard Models
+Model
+Cost/Hour
+Features
+Audio Only
+$0.00
+No transcription
+Groq Whisper Large v3 Turbo
+$0.04
+Custom vocabulary
+Soniox
+$0.10
+Speaker diarization, custom vocab
+xAI Speech-to-Text
+$0.10
+Speaker diarization
+Groq Whisper Large v3
+$0.12
+Custom vocabulary
+AssemblyAI
+$0.15
+Speaker diarization, profanity filter
+Mistral Voxtral Mini 2
+$0.18
+Speaker diarization, custom vocab
+OpenAI GPT-4o Mini Transcribe
+$0.18
+Plain transcription
+AssemblyAI Universal-3.5 Pro
+$0.23
+Speaker diarization
+Deepgram v2
+$0.26
+Speaker diarization, profanity filter
+Rev AI
+$0.30
+Speaker diarization
+Speechmatics
+$0.30
+Speaker diarization, custom vocab
+Deepgram v3
+$0.32
+Speaker diarization, profanity filter
+ElevenLabs
+$0.35
+Speaker diarization
+ElevenLabs v2
+$0.35
+Speaker diarization
+OpenAI GPT-4o Transcribe
+$0.36
+Plain transcription
+OpenAI GPT-4o Transcribe Diarize
+$0.36
+Speaker-attributed segment timing
+AWS Transcribe
+$0.36
+Speaker diarization
+Gladia
+$0.62
+Speaker diarization, profanity filter
+Google Cloud Chirp 3
+$0.96
+Speaker diarization
+Realtime Models
+Realtime models include streaming transcription via WebSocket:
+Model
+Cost/Hour
+Features
+Soniox Realtime
+$0.17
+Speaker diarization
+AssemblyAI Realtime
+$0.20
+Speaker diarization
+Mistral Voxtral Realtime
+$0.41
+Realtime transcription
+Deepgram Realtime v2
+$0.40
+Speaker diarization
+Speechmatics Realtime
+$0.45
+Speaker diarization, custom vocab
+ElevenLabs Realtime v2
+$0.51
+Speaker diarization
+Deepgram Realtime v3
+$0.52
+Speaker diarization
+AssemblyAI Universal-3 Pro Streaming
+$0.62
+Speaker diarization, word-derived timing
+AWS Transcribe Streaming
+$0.65012
+Realtime transcription, speaker diarization
+Gladia Realtime
+$0.81
+Speaker diarization
+Google Cloud Chirp 3 Realtime
+$1.01
+Realtime transcription
+Addons
+Per-hour charges added to base pricing:
+Addon
+Cost/Hour
+Description
+Video Recording
+$0.05
+Record video alongside audio
+1-Year Storage
+$0.05
+Extend retention to 1 year (from 7 days for meeting bots or 1 day for uploads)
+Realtime Features
+$0.05
+Meeting events, control actions, and raw audio over WebSockets (auto-enabled with realtime models)
+Bring Your Own Keys (BYOK)
+When using your own transcription provider API keys:
+Scenario
+You Pay
+Skribby Charges
+Standard model + BYOK
+Transcription to your provider
+Base bot rate only
+Realtime model + BYOK
+Transcription to your provider
+Base bot rate + $0.05/hr
+The realtime surcharge covers the additional infrastructure for low-latency streaming.
+Plan Limits
+Concurrency is shared across the entire Skribby organisation, including all API keys and authenticated accounts. See
+Authenticated Bot Capacity
+for the statuses that count and account-assignment guidance.
+Free Plan
+Limit
+Value
+Monthly bot hours
+5 hours
+Concurrent bots
+3
+Available models
+Audio Only, Groq Whisper Large v3 Turbo
+Recordings upload
+Not available
+Pay As You Go
+Limit
+Value
+Monthly bot hours
+Unlimited
+Concurrent bots
+25
+Available models
+All
+Recordings upload
+Available
+Pay As You Go Plus
+Limit
+Value
+Monthly bot hours
+Unlimited
+Concurrent bots
+Custom (negotiated)
+Available models
+All
+Recordings upload
+Available
+Contact sales to negotiate PAYG+ pricing and a custom concurrency limit.
+What Counts as Billable Time
+Meeting Bot Billable Time
+Billable time =
+created_at
+to terminal status
+Billable scenarios:
+Bot joins meeting and records → Full duration
+Bot admitted then meeting ends → Full duration including lobby wait
+Bot waits 5 minutes, admitted, records 30 minutes → 35 minutes
+Free scenarios:
+Bot not admitted within 10 minutes → Free (first 10 min grace period)
+Bot cancelled before joining → No charge
+Bot fails during boot → No charge
+Lobby Wait Grace Period
+The first
+10 minutes
+of lobby waiting is free if the bot is never admitted:
+Waiting Time
+Admitted?
+Billable Time
+5 min
+No
+0 minutes
+10 min
+No
+0 minutes
+15 min
+No
+5 minutes
+5 min
+Yes
+Full duration
+10 min
+Yes
+Full duration
+Recordings
+Billable time = audio file duration (only charged on successful transcription).
+Billing Cycle
+Billing period
+: Monthly, starting from subscription date
+Payment
+: Charged on the 1st of each month for previous month's usage
+Currency
+: USD
+Payment methods
+: Credit card via Stripe
+Usage Tracking
+Monitor your usage in the
+Skribby Dashboard
+:
+Dashboard home
+: Current month's usage summary
+Billing page
+: Detailed breakdown by bot/recording
+Individual bots
+: Per-bot cost breakdown
+Programmatic Pricing Access
+Use the
+Get Bot Pricing endpoint
+to fetch the full pricing breakdown for a bot in your own systems.
+During a meeting,
+total.amount
+is
+null
+while usage is still in progress.
+After the bot reaches
+finished
+,
+total.amount
+returns the final billable amount.
+If a bot is not billable (for example, never admitted within the grace period),
+total.amount
+returns
+0.00
+.
+Cost Examples
+Example 1: Simple Meeting
+45-minute Google Meet with Groq Whisper Large v3 Turbo transcription, no addons.
+Component
+Calculation
+Cost
+Base
+0.75 hr × $0.35
+$0.26
+Transcription
+0.75 hr × $0.04
+$0.03
+Total
+$0.29
+Example 2: Realtime with Video
+60-minute Zoom meeting with Deepgram Realtime v3 and video addon.
+Component
+Calculation
+Cost
+Base
+1 hr × $0.35
+$0.35
+Transcription
+1 hr × $0.52
+$0.52
+Video addon
+1 hr × $0.05
+$0.05
+Total
+$0.92
+Example 3: BYOK Realtime
+30-minute Teams meeting with AssemblyAI Realtime using your own API key.
+Component
+Calculation
+Cost
+Base
+0.5 hr × $0.35
+$0.18
+Realtime surcharge
+0.5 hr × $0.05
+$0.03
+Total
+$0.21
+You pay AssemblyAI separately for transcription.
+Example 4: Recording Upload
+2-hour audio file with Deepgram v3 transcription and 1-year storage.
+Component
+Calculation
+Cost
+Base
+2 hr × $0.10
+$0.20
+Transcription
+2 hr × $0.32
+$0.64
+Storage addon
+2 hr × $0.05
+$0.10
+Total
+$0.94
+Example 5: Not Admitted (No Charge)
+Bot waits 10 minutes, never admitted. Within grace period.
+Component
+Cost
+Total
+$0.00
+Example 6: Not Admitted (Partial Charge)
+Bot configured to wait 20 minutes, never admitted. 10 minutes over grace period.
+Component
+Calculation
+Cost
+Overage
+20 - 10 = 10 min
+Base
+(10/60) hr × $0.35
+$0.06
+Total
+$0.06
+Exceeding Limits
+Concurrent Bot Limit
+If you try to create a bot when your organisation is at its concurrency limit, the API returns HTTP
+403
+:
+Copy
+{
+"message"
+:
+"You have reached the limit of concurrent meeting bots for your plan."
+}
+The request fails immediately: no bot is created or queued, and Skribby does not retry it automatically.
+Resolution:
+Wait for active bots to finish processing
+Upgrade to PAYG+ and negotiate a custom limit above your expected peak
+See
+Authenticated Bot Capacity
+for capacity-planning details
+Monthly Hour Limit (Free Plan)
+If you exceed 5 hours on the Free plan:
+Copy
+{
+"message"
+:
+"You have exceeded your monthly bot hours limit."
+}
+Resolution:
+Wait for the next billing cycle
+Upgrade to Pay As You Go
+Invoices
+Invoices are available in the
+Billing page
+:
+View past invoices
+Download PDF receipts
+See line-item breakdown
+Invoices include:
+Date range
+Total bot minutes
+Transcription breakdown by model
+Addon charges
+Total amount
+©
+2026
+Alianza. All rights reserved.
+Code samples are licensed under the
+Apache License, Version 2.0
+.
+Terms of Service
+Privacy Policy
+On this page
+Plans Overview
+Base Pricing
+Meeting Bots
+Recordings Upload
+Transcription Model Pricing
+Standard Models
+Realtime Models
+Addons
+Bring Your Own Keys BYOK
+Plan Limits
+Free Plan
+Pay As You Go
+Pay As You Go Plus
+What Counts as Billable Time
+Meeting Bot Billable Time
+Lobby Wait Grace Period
+Recordings
+Billing Cycle
+Usage Tracking
+Programmatic Pricing Access
+Cost Examples
+Example 1: Simple Meeting
+Example 2: Realtime with Video
+Example 3: BYOK Realtime
+Example 4: Recording Upload
+Example 5: Not Admitted No Charge
+Example 6: Not Admitted Partial Charge
+Exceeding Limits
+Concurrent Bot Limit
+Monthly Hour Limit Free Plan
+Invoices

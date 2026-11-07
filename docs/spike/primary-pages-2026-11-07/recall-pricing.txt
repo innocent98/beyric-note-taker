@@ -1,0 +1,270 @@
+Pricing
+Recall.ai has raised a $38M series B!
+Products
+4
+Case Studies
+API Docs
+Pricing
+Blog
+About
+Log In
+Start for free
+Meeting
+Bot API
+An API to build meeting bots that record video calls
+Meeting
+Bot API
+An API to build meeting bots that record video calls
+Desktop Recording SDK
+An SDK to build on-device recording with no bots
+Desktop Recording SDK
+An SDK to build on-device recording with no bots
+Calendar API
+Enrich meeting recordings with calendar data
+Calendar API
+Enrich meeting recordings with calendar data
+Mobile Recording SDK
+An SDK to record phone calls and in-person meetings
+Mobile Recording SDK
+An SDK to record phone calls and in-person meetings
+See all products
+The all-in-one platform for accessing conversation data
+See all products
+The all-in-one platform for accessing conversation data
+See all products
+Case Studies
+API Docs
+Pricing
+Blog
+About
+Log In
+Start for free
+Recall.ai Pricing
+Usage-based pricing for the
+Meeting Bot API
+and the
+Desktop Recording SDK
+.
+Pay As You Go
+For early-stage startups that want to build a proof of concept.
+$0.50/hr of recording
+Start for Free
+Launch
+For companies launching their product.
+Custom Pricing
+Talk to Sales
+Enterprise
+For large companies that want white-glove security, support, and infrastructure.
+Custom Pricing
+Talk to Sales
+Meeting Bot API
+Desktop Recording SDK
+Google Calendar and Microsoft Calendar integration
+Video recordings
+(async & real-time)
+Audio recordings
+(async & real-time)
+Participant names and other metadata
+Send and receive meeting chat messages
+Display video and play audio in the meeting
+(eg. for building an AI avatar that joins the meeting)
+Zoom, Google Meet, Microsoft Teams, Webex, GoTo Meeting and Slack Huddles integrations
+Choose between US, EU or JP data residency
+Whiteglove support over Slack
+-
+SSO
+-
+-
+Uptime guarantees
+-
+-
+Custom contract redlining
+-
+-
+BAA for HIPAA Compliance
+-
+-
+Transcription
+(async & real-time)
+We integrate with a number of third-party transcription providers.
+Or, use our built-in transcription for $0.15/h
+We integrate with a number of third-party transcription providers.
+Or, use our built-in transcription for $0.15/h
+We integrate with a number of third-party transcription providers.
+Or, use our built-in transcription for $0.15/h
+Recording Storage
+7 days of free storage for every recording. Afterwards, $0.05 per hour of recording retained for 30 days.
+7 days of free storage for every recording. Afterwards, $0.05 per hour of recording retained for 30 days.
+7 days of free storage for every recording. Afterwards, $0.05 per hour of recording retained for 30 days.
+Frequently Asked Questions
+Can I try Recall.ai for free?
+Yes! When you sign up on the Pay As You Go plan, your first 5 hours of recording are free.
+Does the number of participants in a meeting affect billing?
+No. It doesn't matter how many participants there are in a meeting. The only thing we charge on is how long the meeting is.
+For example, a 1 hour meeting with 10 participants is billed at the same rate as a 1 hour meeting with 1 participant.
+How does pricing work with the Meeting Bot API vs Desktop Recording SDK?
+The
+Meeting Bot API
+and
+Desktop Recording SDK
+are different form factors to record meetings. The price of using them is the same. That means on the Pay As You Go plan, 1 hour of recording with the Meeting Bot API and 1 hour of recording with the Desktop Recording SDK are both $0.50.
+Is pricing prorated if a recording is not a full hour long?
+Yes, Recall.ai prorates billing to the second. For example, if you have a 30 minute meeting on the Pay As You Go plan, you are only charged $0.25, instead of $0.50.
+How do you calculate the length of time a bot is recording?
+https://docs.recall.ai/docs/bot-usage
+Do you offer volume discounts?
+Yes! We offer volume discounts and custom pricing. If you're interested in learning more about this, please
+book a call with our sales team.
+How much is the Calendar API?
+The Calendar API is free to use. There are two separate implementations to support basic and more custom scheduling. Read
+the docs
+to learn more about Recall.ai's calendar API.
+Does Recall.ai have a startup program?
+Yes. Early-stage startups with meeting data built into their product can apply for an introductory rate of $0.25 per hour for their first 10,000 hours. Fill out the
+application form
+to apply for the
+startup program
+.
+‍
+Are all bot types priced the same?
+All standard bots incur the same cost. However, if you need 4-core bots for your use case, there is an additional $0.10/hr charge due to the cost of running larger machines and if you need GPU bots there is an additional $1/hr charge. These bots are typically only used for output media use cases in which you plan to have your bot output audio/video into the call. Feel free to
+reach out to our team
+for help understanding which bot type is best for your use case.
+‍
+How can I get help using the product?
+If you're on the Pay As You Go plan, you can contact our support team by emailing support@recall.ai, using the chat bubble in the dashboard, or using the "Ask AI" feature in our API docs. If you're on the Launch or Enterprise plan, you can contact our team by messaging in our shared Slack channel.
+The API to get transcripts, recordings, and metadata from meetings.
+Start for free
+Get a demo
+Need help? Email us at
+support@recall.ai
+Get transcripts, recordings and metadata from meetings
+Start for free
+Product
+Meeting Bot API
+example
+Desktop Recording SDK
+example
+Mobile Recording SDK
+example
+Calendar API
+example
+Storage and Playback
+example
+Case Studies
+ClickUp
+example
+Apollo.io
+example
+Incident.io
+example
+BrightHire
+example
+Security
+Security Portal
+example
+SOC 2
+example
+ISO 27001
+example
+HIPAA
+example
+GDPR
+example
+CCPA
+example
+Resources
+API Docs
+example
+Pricing
+example
+Startup Program
+example
+Notetaker API
+example
+Speaker Diarization API
+example
+AI Agent API
+example
+Local Recording API
+example
+Solutions
+Automate Meeting Notes
+example
+Notetaker for Advisors
+example
+Build Tools for 1:1 Meetings
+example
+Automate Interview Scorecards
+example
+Sales Conversation Intelligence
+example
+Build an AI Scribe
+example
+Automatically Create Tickets
+example
+Record Virtual Depositions
+example
+Company
+Careers
+We're hiring!
+Blog
+example
+About
+example
+Case Studies
+example
+Legal
+Terms of Use
+We're hiring!
+Data Processing Agreement
+We're hiring!
+Privacy
+We're hiring!
+More
+Meeting Bots
+Google Meet Bot API
+example
+Microsoft Teams Bot API
+example
+Zoom Meeting Bot API
+example
+Conversational Agent API
+example
+Compare
+Recall.ai vs Attendee
+example
+Recall.ai vs Meeting BaaS
+example
+Recall.ai vs Nylas Notetaker
+example
+Recall.ai vs Skribby
+example
+Recall.ai Competitor Benchmark
+example
+Recording
+Google Meet Recording API
+example
+Microsoft Teams Recording API
+example
+Zoom Meeting Recording API
+example
+Desktop Recorder From Scratch
+example
+Compliance Recording API
+example
+Meeting Recording API
+example
+Slack Huddles API
+example
+Transcription
+Meeting Transcription API
+example
+Google Meet Transcription API
+example
+Microsoft Teams Transcription API
+example
+Zoom Meeting Transcription API
+example
+Action Items API
+example
