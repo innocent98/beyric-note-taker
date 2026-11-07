@@ -30,7 +30,11 @@ are made the first time a task is filed or the board is opened) has nothing to s
    past, an unconfirmed one, and a series with no project give nothing.
 3. `auto_join_sentence`: "The note taker will join this meeting automatically." Only when the
    recipient's own calendar event for this occurrence passes `gcal_rules.will_join` with their
-   own rule and their calendar connection is up (`connected`, or `degraded`: joins carry on).
+   own rule, their calendar connection is up (`connected`, or `degraded`: joins carry on) **and**
+   the scheduler really has the join (`_join_is_live`): a `scheduled_joins` row for that event
+   that is `scheduled`, `dispatching` or `no_capacity`, or `skipped` for a reason the runner
+   retries (`hours_cap`, `user_limit`, `code_in_use`), and not past its deadline. No row (no usable
+   link) or a final skip means no sentence: the box never promises a bot the runner will not send.
 """
 
 from datetime import date, datetime, timedelta
@@ -42,20 +46,24 @@ from app import series as series_module
 from app import sprints, tasks, timezones, titles
 from app.config import Settings
 from app.gcal_rules import JoinSettings, will_join
+from app.join_runner import RETRYABLE_SKIPS
 from app.models import (
     CalendarConnection,
     CalendarEvent,
     Milestone,
+    ScheduledJoin,
     Series,
     Sprint,
     Task,
-    TeamMember,
     User,
     UserSettings,
 )
 
 SUMMARY_DAYS = 14  # a closed sprint is mentioned for this many days (14 x 24 hours)
 LIVE_CONNECTIONS = ("connected", "degraded")  # `degraded` still joins on what is stored
+# A join row the runner has yet to send, or is still retrying: `scheduled` (waiting for its time),
+# `dispatching` (being sent now) and `no_capacity` (retried). `joined` is not one: that bot is in.
+WAITING_JOIN_STATES = ("scheduled", "dispatching", "no_capacity")
 OPENS_LOOKBACK_DAYS = 2  # a sprint that starts on a Saturday opens on Monday
 
 
@@ -84,16 +92,17 @@ def _opens_on(sprint: Sprint, previous: Sprint | None, day: date) -> bool:
 def _earlier_meeting_in_sprint(
     session: Session, user: User, found: Series, sprint: Sprint, starts_at: datetime, zone
 ) -> bool:
-    """True when an earlier meeting of the series already happened, or is on the calendar, since
-    the sprint started. Calendar events are kept two days after they end, so this reaches back as
-    far as the data does; the date test above does the rest."""
+    """True when an earlier meeting of the series already happened, or is on the recipient's own
+    calendar, since the sprint started. Only the recipient's own calendar rows and the meetings
+    they may read (`series.meetings_of`) are looked at, never a teammate's calendar. Calendar
+    events are kept two days after they end, so this reaches back as far as the data does; the
+    date test above does the rest."""
     window = starts_at - timedelta(days=OPENS_LOOKBACK_DAYS + 2)
     if found.calendar_recurring_id:
-        team_members = select(TeamMember.user_id).where(TeamMember.team_id == found.team_id)
         events = session.scalars(
             select(CalendarEvent.starts_at).where(
                 CalendarEvent.recurring_event_id == found.calendar_recurring_id,
-                CalendarEvent.user_id.in_(team_members),
+                CalendarEvent.user_id == user.id,
                 CalendarEvent.status != "cancelled",
                 CalendarEvent.all_day.is_(False),
                 CalendarEvent.starts_at >= window,
@@ -219,9 +228,30 @@ def auto_join_sentence(
         connection = session.get(CalendarConnection, event.connection_id)
         if connection is None or connection.status not in LIVE_CONNECTIONS:
             continue
-        if will_join(event, event.override, join_settings, now=now).join:
+        if will_join(event, event.override, join_settings, now=now).join and _join_is_live(
+            session, user, event, now
+        ):
             return "The note taker will join this meeting automatically."
     return None
+
+
+def _join_is_live(session: Session, user: User, event: CalendarEvent, now: datetime) -> bool:
+    """The scheduler really has this meeting to join: a `ScheduledJoin` of the recipient's for the
+    event that is waiting (or retrying) and not past its deadline. The rule saying yes is not
+    enough: no row exists for an event with no usable link (`gcal_sync._reconcile` schedules none),
+    and the runner can end a row with `needs_reconnect`, `duplicate_meeting`, `account_suspended`
+    or `meeting_has_note_taker`, which are final. A `skipped` row counts only while the runner is
+    still retrying it (`join_runner.RETRYABLE_SKIPS`: `hours_cap`, `user_limit`, `code_in_use`)."""
+    join = session.scalars(
+        select(ScheduledJoin).where(
+            ScheduledJoin.user_id == user.id, ScheduledJoin.calendar_event_id == event.id
+        )
+    ).first()
+    if join is None or now > join.deadline_at:
+        return False
+    if join.state == "skipped":
+        return join.skip_reason in RETRYABLE_SKIPS
+    return join.state in WAITING_JOIN_STATES
 
 
 def summary_sentences(
