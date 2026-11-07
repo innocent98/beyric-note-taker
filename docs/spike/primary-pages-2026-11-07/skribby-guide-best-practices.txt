@@ -1,0 +1,64 @@
+SOURCE: https://skribby.io/docs/guides/best-practices
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Best Practices | Skribby Docs 
+ Skribby An Alianza Company Guides API Reference TypeScript SDK Search docs Ctrl+K Get Started Toggle navigation 
+ Documentation Quickstart Getting Started
+ Platforms Regions Meeting Urls Bot Naming Bot Authentication Bot Lifecycle Bot Detection Billing 
+ Features
+ Realtime Transcription Zoom Chat Participant Events Bot Language Recordings Upload 
+ Configuration
+ Transcription Models Transcription Privacy and Retention Transcription Credentials Team Management 
+ Webhooks
+ Webhook Events Webhook Security 
+ Troubleshooting
+ Troubleshooting Best Practices Api Debugging Webhook Debugging 
+ Guides Updated 2 months ago 
+ Copy Open .md 
+ Best Practices
+ Building a production-ready meeting bot integration requires more than calling an API. This guide covers practical architectural and operational patterns.
+ 1. Handling "Ghost" Bots
+ A common issue is the "Ghost Bot," a bot that stays in a meeting long after everyone else has left, wasting credits and recording silence.
+ Automatic Stop Options
+ Skribby provides default stop_options that ensure your bot leaves gracefully. You only need to adjust these if you want to customize the behavior:
+ empty_meeting_timeout (Default: 10 mins): The bot will leave if it joins an empty meeting and no other participants arrive. Set to 0 to disable the initial empty-meeting wait.
+ last_person_detection (Default: 2 mins): The bot will leave if it is the only participant left after other participants were present. Set to 0 to disable the post-meeting last-participant wait.
+ silence_detection (Default: 15 mins): Essential if you expect other bots to be in the call. The bot will leave if no one is speaking for the configured duration.
+ time_limit (Default: 720 mins): A hard ceiling (12 hours) to prevent run-away sessions.
+ waiting_room_timeout (Default: 10 mins): How long the bot waits for admission before giving up. This only applies before the bot is admitted, not after it has joined an empty meeting.
+ For example, you can let the bot wait longer for a meeting to start while still leaving quickly after everyone has left:
+ Copy { 
+ "stop_options" : { 
+ "empty_meeting_timeout" : 10 , 
+ "last_person_detection" : 2 
+ } 
+ } 
+ Microsoft Teams Breakout Rooms
+ For Teams breakout rooms, see Bot Lifecycle .
+ 2. Webhook Reliability
+ Plan for an occasional webhook delivery to be missed due to network failures or deployments.
+ Idempotency : Process webhooks based on bot_id and type to ensure you don't double-count events.
+ Fallback Polling : If you haven't received a status_update to finished within 30 minutes of the expected meeting end, use the GET /bot/{id} endpoint to check the current state.
+ Security : Always verify webhook signatures to prevent spoofing.
+ 3. Concurrency & Scalability
+ Concurrency limits apply to the entire Skribby organisation, including all API keys and authenticated accounts. Plan for post-meeting processing overlap as well as the meeting peak. See Authenticated Bot Capacity for plan limits, counted statuses, account assignment, and the 30-meeting example.
+ 4. User Experience (UX)
+ The "Admit" button is the #1 point of failure for meeting bots.
+ Show Status : In your UI, show the bot's status (e.g., booting , joining , recording ).
+ Help the User : If the status is joining , show a message: "The bot is waiting to be admitted. Please check your meeting window." 
+ Custom Metadata : Use the custom_metadata field to store your internal meeting_id or user_id . This makes it trivial to route webhook events back to the right part of your application.
+ 5. Privacy & Compliance
+ Transparency : Use the initial_chat_message to announce the bot's presence and purpose (e.g., "Hi! I'm the [App] bot here to take notes. Recording is in progress." )
+ Data Retention : By default, Skribby stores recordings for 7 days. If your app requires longer storage, enable the store_recording_for_1_year addon.
+ Custom Retention : You can manage your own data retention by using the Delete Bot endpoint. Once you have downloaded the recording and transcript to your own storage, call the delete endpoint to permanently remove the data from Skribby's servers.
+ © 2026 Alianza. All rights reserved.
+ Code samples are licensed under the Apache License, Version 2.0 .
+ Terms of Service Privacy Policy 
+ On this page
+ 1. Handling "Ghost" Bots 
+ Automatic Stop Options 
+ Microsoft Teams Breakout Rooms 
+ 2. Webhook Reliability 
+ 3. Concurrency & Scalability 
+ 4. User Experience UX 
+ 5. Privacy & Compliance

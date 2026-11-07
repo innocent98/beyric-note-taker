@@ -1,0 +1,122 @@
+SOURCE: https://skribby.io/docs/guides/team-management
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Team Management | Skribby Docs 
+ Skribby An Alianza Company Guides API Reference TypeScript SDK Search docs Ctrl+K Get Started Toggle navigation 
+ Documentation Quickstart Getting Started
+ Platforms Regions Meeting Urls Bot Naming Bot Authentication Bot Lifecycle Bot Detection Billing 
+ Features
+ Realtime Transcription Zoom Chat Participant Events Bot Language Recordings Upload 
+ Configuration
+ Transcription Models Transcription Privacy and Retention Transcription Credentials Team Management 
+ Webhooks
+ Webhook Events Webhook Security 
+ Troubleshooting
+ Troubleshooting Best Practices Api Debugging Webhook Debugging 
+ Guides Updated 6 months ago 
+ Copy Open .md 
+ Team Management
+ Skribby organisations allow multiple team members to collaborate on bot deployments, share API access, and manage resources together. This guide covers roles, permissions, and team administration.
+ Organisation Basics
+ An organisation is your Skribby account container. It owns:
+ API keys
+ Meeting bots
+ Recordings
+ Authenticated accounts
+ Transcription credentials
+ Billing and subscription
+ Users can belong to multiple organisations and switch between them.
+ Roles
+ Skribby supports two roles:
+ Admin
+ Full access to all organisation features:
+ Capability Admin 
+ Create/manage bots ✓ 
+ View bots and recordings ✓ 
+ Create/manage API keys ✓ 
+ Manage authenticated accounts ✓ 
+ Manage transcription credentials ✓ 
+ View API and webhook logs ✓ 
+ Invite team members ✓ 
+ Remove team members ✓ 
+ Change member roles ✓ 
+ Access billing ✓ 
+ Modify subscription ✓ 
+ Delete organisation ✓ 
+ Developer
+ Integration-focused access without administrative privileges:
+ Capability Developer 
+ Create/manage bots ✓ 
+ View bots and recordings ✓ 
+ Create/manage API keys ✓ 
+ Manage authenticated accounts ✓ 
+ Manage transcription credentials ✓ 
+ View API and webhook logs ✓ 
+ Invite team members ✗ 
+ Remove team members ✗ 
+ Change member roles ✗ 
+ Access billing ✗ 
+ Modify subscription ✗ 
+ Delete organisation ✗ 
+ The Developer role is ideal for team members who need to build and maintain integrations but shouldn't have access to billing or user management.
+ Inviting Team Members
+ Navigate to Users in your organisation settings
+ Click Invite User 
+ Enter their email address
+ Select their role (Admin or Developer)
+ Send the invitation
+ The invitee receives an email with a link to join. They can:
+ Create a new Skribby account, or
+ Use their existing account
+ Once accepted, they appear in your user list with their assigned role.
+ Managing Users
+ Changing Roles
+ Admins can change any user's role:
+ Go to Users 
+ Find the user
+ Click their current role
+ Select the new role
+ Role changes take effect immediately.
+ Removing Users
+ Admins can remove users:
+ Go to Users 
+ Find the user
+ Click Remove 
+ Confirm removal
+ Removed users:
+ Lose access to the organisation immediately
+ Keep their Skribby account (for other organisations)
+ Cannot access bots, recordings, or settings they previously saw
+ API Keys and Access
+ Key Ownership
+ API keys belong to the organisation, not individual users:
+ Any admin or developer can create keys
+ All keys have the same access level
+ Keys don't track which user made requests
+ Key Management Best Practices
+ Create separate keys for different integrations
+ Name keys descriptively (e.g., "Production API", "Staging")
+ Rotate keys periodically
+ Revoke keys for departed team members' integrations
+ Revoking Access
+ When a team member leaves:
+ Remove them from the organisation
+ Review API keys they may have created
+ Rotate keys if they had access to key values
+ Check authenticated accounts for personal credentials
+ © 2026 Alianza. All rights reserved.
+ Code samples are licensed under the Apache License, Version 2.0 .
+ Terms of Service Privacy Policy 
+ On this page
+ Organisation Basics 
+ Roles 
+ Admin 
+ Developer 
+ Inviting Team Members 
+ Managing Users 
+ Changing Roles 
+ Removing Users 
+ API Keys and Access 
+ Key Ownership 
+ Key Management Best Practices 
+ Revoking Access

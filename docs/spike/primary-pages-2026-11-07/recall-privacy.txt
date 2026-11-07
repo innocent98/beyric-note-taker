@@ -1,0 +1,276 @@
+SOURCE: https://www.recall.ai/privacy
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Privacy 
+ Recall.ai has raised a $38M series B!
+ Products
+ 4
+ Case Studies API Docs
+ Pricing
+ Blog About 
+ Log In
+ Start for free
+ Meeting
+Bot API
+ An API to build meeting bots that record video calls
+ Meeting
+Bot API
+ An API to build meeting bots that record video calls
+ Desktop Recording SDK
+ An SDK to build on-device recording with no bots
+ Desktop Recording SDK
+ An SDK to build on-device recording with no bots
+ Calendar API
+ Enrich meeting recordings with calendar data
+ Calendar API
+ Enrich meeting recordings with calendar data
+ Mobile Recording SDK
+ An SDK to record phone calls and in-person meetings
+ Mobile Recording SDK
+ An SDK to record phone calls and in-person meetings
+ See all products
+ The all-in-one platform for accessing conversation data
+ See all products
+ The all-in-one platform for accessing conversation data
+ See all products
+ Case Studies
+ API Docs
+ Pricing
+ Blog
+ About
+ Log In
+ Start for free
+ Privacy Policy 
+ ‍
+ Effective Date: February 1st 2023
+ ‍
+ Table of Contents: 
+ Introduction
+ Data Protection Officer
+ How we collect and use (process) your personal information
+ Use of the Hyperdoc Inc. website
+ Cookies and tracking technologies
+ Use of Hyperdoc Inc’s services
+ When and how we share information with third parties
+ Transferring personal data to the U.S.
+ Data Subject rights
+ Security of your information
+ Data storage and retention
+ Questions, concerns, or complaints  
+ ‍
+ Introduction 
+ We understand that you are aware of and care about your own personal privacy interests, and we take that seriously. This Privacy Notice describes Hyperdoc Inc’s policies and practices regarding its collection and use of your personal data, and sets forth your privacy rights. We recognize that information privacy is an ongoing responsibility, and so we will from time to time update this Privacy Notice as we undertake new personal data practices or adopt new privacy policies.
+ ‍
+ Data Protection Officer 
+ Hyperdoc Inc. is headquartered in 2261 Market Street #4339 San Francisco, CA 94114, in the United States. Hyperdoc Inc. has appointed an internal data protection officer for you to contact if you have any questions or concerns about Hyperdoc Inc.’s personal data policies or practices. If you would like to exercise your privacy rights, please direct your query to Hyperdoc Inc.’s data protection officer. Hyperdoc Inc.’s data protection officer’s name and contact information are as follows:
+ David Gu
+ Hyperdoc Inc.
+ david@recall.ai
+ +1-628-267-2887
+ ‍
+ EU GDPR Representative 
+ For individuals in the European Union, Hyperdoc Inc. has appointed Instant EU GDPR Representative Ltd as its EU GDPR Article 27 representative.
+Name: Adam Brogden
+Email: contact@gdprlocal.com
+Address: Instant EU GDPR Representative Ltd, Office 12A Lower Main Street, Lucan, Co. Dublin K78 X5P8, Ireland
+Website: www.gdprlocal.com
+ ‍
+ How we collect and use (process) your personal information 
+ Hyperdoc Inc. collects personal information about its website visitors and customers. With a few exceptions, this information is generally limited to:
+ name 
+ job title 
+ employer name 
+ work address 
+ work email 
+ work phone number 
+ We use this information to provide prospects and customers with services. 
+ We do not sell personal information to anyone and only share it with third parties who are facilitating the delivery of our services.
+ From time to time, Hyperdoc Inc. receives personal information about individuals from third parties. Typically, information collected from third parties will include further details on your employer or industry. We may also collect your personal data from a third party website (e.g. LinkedIn) 
+ ‍
+ Use of the Hyperdoc Inc. Website 
+ As is true of most other websites, Hyperdoc Inc.’s website collects certain information automatically and stores it in log files. The information may include internet protocol (IP) addresses, the region or general location where your computer or device is accessing the internet, browser type, operating system and other usage information about the use of Hyperdoc Inc.’s website, including a history of the pages you view. We use this information to help us design our site to better suit our users’ needs. We may also use your IP address to help diagnose problems with our server and to administer our website, analyze trends, track visitor movements, and gather broad demographic information that assists us in identifying visitor preferences.
+ Hyperdoc Inc. has a legitimate interest in understanding how members, customers and potential customers use its website. This assists Hyperdoc Inc. with providing more relevant products and services, with communicating value to our sponsors and corporate members, and with providing appropriate staffing to meet member and customer needs.
+ ‍
+ Cookies and tracking technologies 
+Hyperdoc Inc. makes available a comprehensive cookie notice that describes the cookies and tracking technologies used on Hyperdoc Inc. website and provides information on how users can accept or reject them. To view the notice, please see Hyperdoc Inc.’s Cookie Policy .
+ ‍
+ Sharing information with third parties 
+ The personal information Hyperdoc Inc. collects from you is stored in one or more databases hosted by third parties located in the United States. These third parties do not use or have access to your personal information for any purpose other than cloud storage and retrieval. On occasion, Hyperdoc Inc. engages third parties to send information to you, including information about our products, services, and events.
+ ‍
+ A list of our third party sub processors can be found here in our list of Hyperdoc Inc. Subprocessors .
+ ‍
+ We do not otherwise reveal your personal data to non-Hyperdoc Inc. persons or businesses for their independent use unless: (1) you request or authorize it; (2) it’s in connection with Hyperdoc Inc.-hosted and Hyperdoc Inc. co-sponsored conferences as described above; (3) the information is provided to comply with the law (for example, compelled by law enforcement to comply with a search warrant, subpoena, or court order), enforce an agreement we have with you, or to protect our rights, property or safety, or the rights, property or safety of our employees or others; (4) the information is provided to our agents, vendors or service providers who perform functions on our behalf; (5) to address emergencies or acts of God; or (6) to address disputes, claims, or to persons demonstrating legal authority to act on your behalf. We may also gather aggregated data about our services and website visitors and disclose the results of such aggregated (but not personally identifiable) information to our partners, service providers, advertisers, and/or other third parties for marketing or promotional purposes.
+ The Hyperdoc Inc. website connects with third party services such as Facebook, LinkedIn, Twitter and others. If you choose to share information from the Hyperdoc Inc. website through these services, you should review the privacy policy of that service. If you are a member of a third party service, the aforementioned connections may allow that service to connect your visit to our site to your personal data.
+ ‍
+ Transferring personal data to the U.S. 
+ Hyperdoc Inc. has its headquarters in the United States. Information we collect about you will be processed in the United States. By using Hyperdoc Inc.’s services, you acknowledge that your personal information will be processed in the United States. The United States has not sought nor received a finding of “adequacy” from the European Union under Article 45 of the GDPR. Pursuant to Article 46 of the GDPR, Hyperdoc Inc. is providing for appropriate safeguards by entering binding, standard data protection clauses, enforceable by data subjects in the EEA and the UK. These clauses have been enhanced based on the guidance of the European Data Protection Board and will be updated when the new draft model clauses are approved.
+ Depending on the circumstance, Hyperdoc Inc. also collects and transfers to the U.S. personal data with consent; to perform a contract with you; or to fulfill a compelling legitimate interest of Hyperdoc Inc. in a manner that does not outweigh your rights and freedoms. Hyperdoc Inc. endeavors to apply suitable safeguards to protect the privacy and security of your personal data and to use it only consistent with your relationship with Hyperdoc Inc. and the practices described in this Privacy Statement. Hyperdoc Inc. also enters into data processing agreements and model clauses with its vendors whenever feasible and appropriate. Since it was founded, Hyperdoc Inc. has received zero government requests for information.
+ For more information or if you have any questions, please contact us at hello@recall.ai
+ ‍
+ Data Subject rights 
+ The European Union’s General Data Protection Regulation (GDPR) and other countries’ privacy laws provide certain rights for data subjects. Data Subject rights under GDPR include the following:
+ Right to be informed
+ Right of access
+ Right to rectification
+ Right to erasure
+ Right to restrict processing
+ Right of data portability
+ Right to object
+ Rights related to automated decision making including profiling
+ ‍
+ This Privacy Notice is intended to provide you with information about what personal data Hyperdoc Inc. collects about you and how it is used. 
+ If you wish to confirm that Hyperdoc Inc. is processing your personal data, or to have access to the personal data Hyperdoc Inc. may have about you, please contact us.
+ You may also request information about: the purpose of the processing; the categories of personal data concerned; who else outside Hyperdoc Inc. might have received the data from Hyperdoc Inc.; what the source of the information was (if you didn’t provide it directly to Hyperdoc Inc.); and how long it will be stored. You have a right to correct (rectify) the record of your personal data maintained by Hyperdoc Inc. if it is inaccurate. You may request that Hyperdoc Inc. erase that data or cease processing it, subject to certain exceptions. You may also request that Hyperdoc Inc. cease using your data for direct marketing purposes. In many countries, you have a right to lodge a complaint with the appropriate data protection authority if you have concerns about how Hyperdoc Inc. processes your personal data. When technically feasible, Hyperdoc Inc. will—at your request—provide your personal data to you.
+ Reasonable access to your personal data will be provided at no cost. If access cannot be provided within a reasonable time frame, Hyperdoc Inc. will provide you with a date when the information will be provided. If for some reason access is denied, Hyperdoc Inc. will provide an explanation as to why access has been denied.
+ For questions or complaints concerning the processing of your personal data, you can email us at hello@recall.ai. Alternatively, if you are located in the European Union, you can also have recourse to the European Data Protection Supervisor or with your nation’s data protection authority.
+ ‍
+ Data storage and retention 
+ Your personal data is stored by the Hyperdoc Inc. on its servers, and on the servers of the cloud-based database management services the Hyperdoc Inc. engages, located in the United States. The Hyperdoc Inc. retains service data for the duration of the customer’s business relationship with the Hyperdoc Inc. and for a period of time thereafter, to analyze the data for Hyperdoc Inc.’s own operations, and for historical and archiving purposes associated with Hyperdoc Inc.’s services. Hyperdoc Inc. retains prospect data until such time as it no longer has business value and is purged from Hyperdoc Inc. systems. 
+ Hyperdoc Inc. retains personal data and usage data only for as long as is necessary for the purposes set out in this Privacy Policy. We will retain and use your personal data to the extent necessary to comply with our legal obligations (for example, if we are required to retain your data to comply with applicable laws), resolve disputes, and enforce our legal agreements and policies.
+By default, all media associated with a recording is retained indefinitely. You can configure your workspace to support zero-data retention, or any other data retention configuration through our API .
+ ‍
+ Children’s data 
+ We do not knowingly attempt to solicit or receive information from children.
+ ‍
+ Questions, concerns or complaints 
+ If you have questions, concerns, complaints, or would like to exercise your rights, please contact us at:
+ Hyperdoc Inc.
+ David Gu
+ 2261 Market Street #4339, San Francisco, CA 94114
+ hello@recall.ai
+ +1-628-267-2887
+ ‍
+ The API to get transcripts, recordings, and metadata from meetings.
+ Start for free
+ Get a demo
+ Need help? Email us at support@recall.ai 
+ Get transcripts, recordings and metadata from meetings
+ Start for free
+ Product 
+ Meeting Bot API
+ example
+ Desktop Recording SDK
+ example
+ Mobile Recording SDK
+ example
+ Calendar API
+ example
+ Storage and Playback
+ example
+ Case Studies 
+ ClickUp
+ example
+ Apollo.io
+ example
+ Incident.io
+ example
+ BrightHire
+ example
+ Security 
+ Security Portal
+ example
+ SOC 2
+ example
+ ISO 27001
+ example
+ HIPAA
+ example
+ GDPR
+ example
+ CCPA
+ example
+ Resources 
+ API Docs
+ example
+ Pricing
+ example
+ Startup Program
+ example
+ Notetaker API
+ example
+ Speaker Diarization API
+ example
+ AI Agent API
+ example
+ Local Recording API
+ example
+ Solutions 
+ Automate Meeting Notes
+ example
+ Notetaker for Advisors
+ example
+ Build Tools for 1:1 Meetings
+ example
+ Automate Interview Scorecards
+ example
+ Sales Conversation Intelligence
+ example
+ Build an AI Scribe
+ example
+ Automatically Create Tickets
+ example
+ Record Virtual Depositions
+ example
+ Company 
+ Careers
+ We're hiring!
+ Blog
+ example
+ About
+ example
+ Case Studies
+ example
+ Legal 
+ Terms of Use
+ We're hiring!
+ Data Processing Agreement
+ We're hiring!
+ Privacy
+ We're hiring!
+ More
+ Meeting Bots 
+ Google Meet Bot API
+ example
+ Microsoft Teams Bot API
+ example
+ Zoom Meeting Bot API
+ example
+ Conversational Agent API
+ example
+ Compare 
+ Recall.ai vs Attendee
+ example
+ Recall.ai vs Meeting BaaS
+ example
+ Recall.ai vs Nylas Notetaker
+ example
+ Recall.ai vs Skribby
+ example
+ Recall.ai Competitor Benchmark
+ example
+ Recording 
+ Google Meet Recording API
+ example
+ Microsoft Teams Recording API
+ example
+ Zoom Meeting Recording API
+ example
+ Desktop Recorder From Scratch
+ example
+ Compliance Recording API
+ example
+ Meeting Recording API
+ example
+ Slack Huddles API
+ example
+ Transcription 
+ Meeting Transcription API
+ example
+ Google Meet Transcription API
+ example
+ Microsoft Teams Transcription API
+ example
+ Zoom Meeting Transcription API
+ example
+ Action Items API
+ example

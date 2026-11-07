@@ -1,0 +1,117 @@
+SOURCE: https://developers.zoom.us/blog/transition-to-obf-token-meetingsdk-apps/
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script; two example tokens in the sample JSON response were replaced by <REDACTED-EXAMPLE-TOKEN-from-Zoom-docs> because a secret scanner flagged them: they are Zoom's truncated documentation placeholders, not real credentials)
+
+Transitioning to On Behalf Of (OBF) tokens in Meeting SDK apps - Zoom Developer Blog 
+ Now Available: Zoom AI Services Summarizer & Translator APIs. 
+ Docs 
+ APIs MCP Blog Changelog Agent Skills Help 
+ Docs 
+ APIs MCP Blog Changelog Agent Skills Help Theme 
+ From the team Developer Blog
+ Product announcements, technical deep dives, and behind-the-scenes looks at what we are building for the Zoom Developer platform.
+ All posts Meeting SDK 
+ Meeting SDK
+ Transitioning to On Behalf Of (OBF) tokens in Meeting SDK apps
+ JS Joan Sirma · 11-04-2025 · 5 min read 
+ meeting SDK
+ Summary: Zoom is introducing a new authorization requirement for Meeting SDK apps joining meetings outside their account. This update enhances user trust by requiring apps to join on behalf of a user using an OAuth-based OBF token.
+ On this page
+ As part of Zoom's efforts to enhance user experience for meeting apps and strengthen user accountability and transparency, we're introducing a new requirement for apps that join meetings outside their own account. We understand that changes to authorization and implementation take engineering effort and product decisions. We don't ask you to make these changes lightly. Furthermore, we see this as an important user expectation that builds trust in a world that increasingly expects AI apps in meetings.
+ Beginning March 2, 2026, apps joining meetings outside their account must be authorized. Meet this requirement by using either OBF or ZAK tokens, or RTMS 
+ Learn more, here .
+ Note: this is only required to join meetings outside the user's Zoom account. Meeting SDK apps that join meetings on a user's same account can (but are not required to) use the On Behalf Of token.
+ SDK apps must now be attributed to the users who use them in meetings. This will require Meeting SDK apps to authorize either with the ZAK token (to join as the user) or through a new token, the OBF token to join as a user's assistant app will now need to join meetings on behalf of a user using a user's OBF token.
+ The OBF token is a short-lived, single-use token retrieved with a REST API and authorized with the user's OAuth access token. It allows third-party apps to join a meeting and associate to a specific user in the meeting's participant list.
+ In this blog, we'll review different scenarios we see for apps on the App Marketplace and provide a course to implement the new token.
+ How these changes affect your app # 
+ Accessing a user's OBF token requires the user:read:token scope.
+ Your app may require adding new scopes and prompting users to authorize if the scope needs to be added. Here are a few scenarios your app may be in given the scopes it uses today:
+ App type Previous requirements New requirements Needs Marketplace review 
+ Meeting SDK apps using OAuth with the user:read:token scope App could join meetings using only its SDK credentials. Must request a user's OBF token using the existing user:read:token scope and pass it to the Meeting SDK. No – scope already granted 
+ Meeting SDK apps using OAuth without the user:read:token scope App could join meetings without needing additional user-level authorization. Must add the user:read:token scope in the App Marketplace and reauthorize the app to receive the OBF token. Yes – Add the new scope and submit a review request. 
+ Meeting SDK apps without user authorization App joined meetings without any user association or OAuth flow. Must implement OAuth user authorization, add the user:read:token scope, and request user authorization to obtain a user's access token for joining on their behalf. Yes – Add the new scope, submit a review request, and request user authorization. 
+ Marketplace Review Priority: We encourage you to implement the required user:read:token scope as soon as possible in order to prioritize your app's review.
+ OAuth Implementation: If your app does not yet implement user authorization (OAuth), you will need to add this flow. Implementing OAuth is the necessary first step to enable users to authorize the app in order to bring it with them into meetings. This allows users to best manage the permissions of the apps they use in their meetings.
+ Backend Service: Your app will need a backend service that can securely call the REST API, handle user authorization, and manage refreshing of access tokens for each user.
+ Request and use an OBF token # 
+ Request a user access token when the app is installed using the OAuth 2.0 flow.
+ Store and refresh the user's access token.
+ Use the user's access token to authorize a request for an OBF token via the REST API.
+ GET https://api.zoom.us/v2/users/me/token?type=onbehalf&meeting_id={meeting}
+ Provide the retrieved OBF token when joining a meeting using the Meeting SDK.
+ Web SDK version 4.1.0.
+ Linux SDK Reference - onBehalfToken   .
+ Windows SDK - onBehalfToken   .
+ Refresh the user's access token when expired to maintain authorization. For a functional starting point, see User-level OAuth starter app   on GitHub.
+ Handling Join Failures # 
+ When your SDK application attempts to join a meeting and encounters a failure, you must implement the following retry logic:
+ Failure Condition: If the SDK app receives a join failure error, it indicates that the authorizing user has not yet entered the meeting
+ Required Action: Your app must automatically retry the join attempt after 1-5 second waiting period
+ Error Handling: Starting with SDK version 6.6.10 (released November 8, 2025), a specific error code will be available for this scenario: MEETING_FAIL_AUTHORIZED_USER_NOT_INMEETING 
+ Implement user level authorization (OAuth 2.0 ) # 
+ Follow these steps to implement the OAuth 2.0 flow and authenticate your app with Zoom's APIs.
+ Configure your app
+ Find your app in the Zoom App Marketplace   , set the redirect URL, and add the required scopes. You'll use these values to generate access tokens that authenticate your API requests.
+ Authorize your app
+ You can authorize your app in either of two ways.
+ Option 1: From the app's Local Test page, click Add App Now.
+ Option 2: Open the authorization URL in your browser:
+ https://zoom.us/oauth/authorize?response_type=code&client_id={client_id}&redirect_uri={redirect_uri}
+ Note: Replace {client_id} and {redirect_uri} with your app's credentials.
+ After the user authorizes, Zoom redirects to your redirect_uri with an authorization_code.
+ Exchange the authorization code for an access token
+ Send a POST request to the Zoom token endpoint.
+ POST https://zoom.us/oauth/token?grant_type=authorization_code&code={authorization_code}&redirect_uri={redirect_uri}
+ Include your client_id and client_secret as a Basic Authorization header, Base64-encoded.
+ Authorization: Basic {BASE64_ENCODED_CLIENT_ID:CLIENT_SECRET}
+Content-Type: application/x-www-form-urlencoded
+ Example request 
+ curl --request POST \
+ --url "https://zoom.us/oauth/token?grant_type=authorization_code&code=Wk9PTV9BVVRIT1JJWkFUSU9OX0NPREU&redirect_uri=https://example.com" \
+ --header "Authorization: Basic Wk9PTV9DTElFTlRfSUQ6Wk9PTV9DTElFTlRfU0VDUkVU"
+ Example response 
+ If the previous example request is successful, you'll receive a JSON response containing your tokens.
+ {
+ "access_token": "<REDACTED-EXAMPLE-TOKEN-from-Zoom-docs>",
+ "token_type": "bearer",
+ "refresh_token": "<REDACTED-EXAMPLE-TOKEN-from-Zoom-docs>",
+ "expires_in": 3600,
+ "scope": "user:read:token,user:read:token:admin",
+ "api_url": "https://api.zoom.us"
+}
+ Note: access tokens expire after one hour. Use the refresh_token to get a new access token without reauthorization.
+ Once that's done, you can generate access tokens to authenticate your API requests.
+ Get OBF Token
+ Once you have an access token, you can start making authenticated API calls.
+ curl --request GET \
+ --url "https://api.zoom.us/v2/users/{user_id}/token?type=onbehalf" \
+ --header "Authorization: Bearer {access_token}" \
+ --header "Content-Type: application/json"
+ Replace {user_id} and {access_token} with your actual values.
+ Submit and verify your app
+ Once you have completed all the required testing and confirm all app details are correct, you need to prepare your app for production and submit your app to Zoom for review .
+ If you are developing an internal-only app that will only be used by users on your own Zoom account, then you don't need to submit your app to the Zoom Marketplace.
+ Alternative option: Realtime Media Streams (RTMS) # 
+ Additional options for attribution, improved user experience, and robust data access come with our purpose-built solution, Realtime Media Streams . This provides valuable improvements to user experience with meeting assistants when paired with an embedded web app in the meeting.
+ With RTMS, apps automatically join meetings alongside their users and provides your application to direct access to live audio, video and transcript streams from your Zoom meetings.
+ Explore our developer blog post on Announcing Realtime Media Streams .
+ If you have remaining questions, check out the FAQ   for deeper guidance.
+ Visit the Zoom Developer Forum to discuss with Developer Advocates and community developers. For prioritized assistance, take advantage of Premier Developer Support plans .
+ On this page
+ Resources
+ API References 
+ SDK References 
+ Read llms.txt 
+ Updates
+ Changelog 
+ Developer blog 
+ Community
+ MVP program 
+ Github 
+ Developer forum 
+ YouTube 
+ Support
+ Premier Developer Support 
+ Zoom Support 
+ Copyright © 2026 Zoom Communications, Inc. All rights reserved.
+ Terms · Privacy Policy · API Terms of Use · Marketplace Developer Agreement · Do Not Sell My Personal Information · Cookie Preferences
