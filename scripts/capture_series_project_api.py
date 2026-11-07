@@ -85,6 +85,9 @@ from app.services import get_vexa  # noqa: E402
 
 
 def hide_tokens(value):
+    """Passwords never reach a capture: the sign-in body shows a placeholder."""
+    if isinstance(value, dict) and "password" in value:
+        return {**value, "password": "<password placeholder>"}
     return value
 
 

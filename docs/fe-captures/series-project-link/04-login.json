@@ -10,7 +10,7 @@
     },
     "body": {
       "email": "dan@example.test",
-      "password": "dan-chosen-password-2"
+      "password": "<password placeholder>"
     }
   },
   "response": {

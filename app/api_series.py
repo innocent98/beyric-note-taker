@@ -260,9 +260,11 @@ def _sprint_note(
     session: Session, user: User, found: Series, upcoming: datetime | None, zone_name: str | None
 ) -> str | None:
     """ "Opens Sprint 13" under "Next meeting": the very rule the one-hour reminder mail uses for
-    its "Sprint 13 opens" (`mail_summary.opening_sprint`, given the next meeting's start and the
-    caller's zone), so the page and the mail cannot disagree. It is a nicety: if the read fails the
-    page is served without it, as the mail is sent without its extras."""
+    its "Sprint 13 opens" (`mail_summary.opening_sprint`), fed the same input as the mail: the
+    start of the occurrence (`series_mail.queue_due_reminders` stores the earliest team member's
+    event start in every recipient's reminder, as `_timing` does for `next_starts_at`) and the
+    caller's zone. It is a nicety: if the read fails the page is served without it, as the mail
+    is sent without its extras."""
     if upcoming is None:
         return None
     try:

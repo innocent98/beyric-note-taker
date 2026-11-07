@@ -8,13 +8,16 @@ The cast is `tests/test_series.py`'s: `owner` (owner of the team), `daniel` (a p
 
 # ruff: noqa: F811  (fixtures are imported by name and used as arguments)
 
+import threading
+import time
 from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from app import api_series, mail_summary, teams
-from app.models import Project, Series, TeamMember
+from app import api_series, mail_summary, projects, series, teams
+from app.models import Project, Series, TeamMember, User
 from tests.test_api import error_of  # noqa: F401
 from tests.test_mail_summary import mail_of, make_sprint
 from tests.test_projects_api import make_project
@@ -156,6 +159,40 @@ def test_a_stray_project_id_on_a_series_is_no_link(api, session, outsider, weekl
     )  # no foreign key: whatever was written must not file across teams
     session.commit()
     assert card_of(api, weekly.id)["project"] is None
+
+
+def test_a_link_and_a_delete_of_the_same_project_queue_up_and_leave_no_link(
+    engine, session, owner, weekly
+):
+    """Two connections: the link holds the project (FOR SHARE) and the series row, uncommitted; the
+    delete must wait for it (not clear the links first and cross it, which deadlocks), and then
+    clear the link it finds. Nothing is left pointing at the deleted project."""
+    project = Project(team_id=weekly.team_id, name="Portal", color="#0E6B5E", keywords=[])
+    session.add(project)
+    session.commit()
+    project_id = project.id
+    with Session(engine) as linker, Session(engine) as deleter:
+        series.link_project(
+            linker, linker.get(User, owner.id), linker.get(Series, weekly.id), project.id
+        )
+        errors = []
+
+        def delete():
+            try:
+                projects.delete(deleter, deleter.get(Project, project.id))
+            except Exception as exc:  # noqa: BLE001 (reported below)
+                errors.append(exc)
+
+        worker = threading.Thread(target=delete)
+        worker.start()
+        time.sleep(0.5)
+        assert worker.is_alive(), "the delete waits for the link instead of crossing it"
+        linker.commit()
+        worker.join(10)
+    assert not worker.is_alive() and errors == []
+    session.expire_all()
+    assert session.get(Project, project_id) is None
+    assert session.get(Series, weekly.id).project_id is None
 
 
 # ---- the project list ----

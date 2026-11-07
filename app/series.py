@@ -334,7 +334,9 @@ def link_project(
     project (`api_projects`): linking decides where the whole team's tasks are filed, so it is not
     left to the series' creator, nor to every member who can read it. The caller has already seen
     the series (`get`); a project that is not on the series' team is 404. The project row is
-    locked against a concurrent delete, so a link never points at a project that just went."""
+    locked FOR SHARE before the series is written, and `projects.delete` locks it FOR UPDATE
+    before it clears the links, so a link either lands first and is cleared by the delete, or
+    waits and finds the project gone: no link survives a delete."""
     if not is_manager(session, user, series.team_id):
         raise _forbidden()
     if project_id is None:

@@ -10,7 +10,7 @@
     },
     "body": {
       "email": "eve@example.test",
-      "password": "eve-chosen-password-3"
+      "password": "<password placeholder>"
     }
   },
   "response": {

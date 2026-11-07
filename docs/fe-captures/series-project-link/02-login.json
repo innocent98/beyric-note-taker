@@ -10,7 +10,7 @@
     },
     "body": {
       "email": "ada@example.test",
-      "password": "ada-chosen-password-1"
+      "password": "<password placeholder>"
     }
   },
   "response": {
