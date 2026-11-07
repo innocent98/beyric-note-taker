@@ -122,7 +122,7 @@ The words are in one file (`web/components/landing/content.ts`) plus the two pre
 | ~~Forgot password, check email, new password, "password updated"~~ | `Auth.dc.html` | built in stream D |
 | Microsoft sign-in button (Google is built) | `Auth.dc.html` | Microsoft OAuth |
 | "Keep me signed in" on sign-in (the email field is built) | `Auth.dc.html` | A session lifetime option |
-| Sidebar name and email ("Adebayo Tosin") | App shell | Identity on `GET /api/session` (the sidebar says "Owner") |
+| ~~Sidebar name and email ("Adebayo Tosin")~~ | App shell | Done 2026-11-07 (batch 2, PR A): the session already carries `user.name` and `user.email` |
 | Sidebar: Tasks (with count), Projects, Team, Settings (**Decisions and Review, with the Review count, are built**: `docs/sop/2026-11-03-stream-d-decisions-review.md`) | App shell | Tasks, projects, team and settings APIs |
 | "Join meetings automatically" card, Connect calendar, Upcoming list and toggles | Meetings | Calendar connection and auto-join (pilot design, PR #20) |
 | Recurring (series) cards, the Series screen | Meetings, meeting page | Series model and API |

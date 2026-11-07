@@ -467,7 +467,7 @@ export function MeetingView({
                     onChange={(event) => setRewriteId(event.target.value)}
                   />
                   <Button kind="secondary" size="md" disabled={busy !== null}>
-                    {busy === "rewrite" ? "Rewriting..." : "Rewrite notes"}
+                    {busy === "rewrite" ? "Rewriting notes..." : "Rewrite notes"}
                   </Button>
                   {busy === "rewrite" ? (
                     <p className="side-sub" role="status">

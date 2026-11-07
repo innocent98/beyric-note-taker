@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app/shell";
 import { TeamView } from "@/components/app/team-view";
 import { ApiError } from "@/lib/api/client";
 import type { Team, TeamMembers } from "@/lib/api/types";
-import { getReviewOpen, getTasksNew, getTimeZone, getUnreadNotifications, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireOwner } from "@/lib/api/server";
 
 export const metadata: Metadata = { title: "Team", robots: { index: false, follow: false } };
 
@@ -24,7 +24,7 @@ export default async function TeamPage() {
       current="team"
       reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()}
-      unread={await getUnreadNotifications()}
+      unread={await getUnreadNotifications()} user={await getShellUser()}
       timeZone={await getTimeZone()}
     >
       <TeamView initialTeam={team} initialMembers={members} />
