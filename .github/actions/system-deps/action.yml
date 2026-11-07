@@ -7,14 +7,22 @@ description: >-
 runs:
   using: composite
   steps:
-    # The key holds the runner image version: a new image may already ship some of these
-    # libraries at other versions, so it must get a fresh set of .debs. Bump the trailing number
-    # to force a refresh by hand.
+    # The key holds the Ubuntu release and the runner image version: a new image may ship some of
+    # these libraries at other versions (2026-11-07: ubuntu-latest moved to a newer release and
+    # the old cached .debs failed to install on it), so it must get a fresh set of .debs. The
+    # image version is read from the runner's own environment here: `env.ImageVersion` in an
+    # expression is empty, which is why the old key never changed. Bump the trailing number to
+    # force a refresh by hand.
+    - id: image
+      shell: bash
+      run: |
+        . /etc/os-release
+        echo "id=${VERSION_ID}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
     - id: cache
       uses: actions/cache@v4
       with:
         path: ~/apt-debs
-        key: apt-debs-${{ runner.os }}-${{ env.ImageVersion }}-ffmpeg-pango-v1
+        key: apt-debs-${{ runner.os }}-${{ steps.image.outputs.id }}-ffmpeg-pango-v2
     - shell: bash
       env:
         CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
@@ -26,6 +34,9 @@ runs:
           ffmpeg -version | head -n 1
           exit 0
         fi
+        # A failed `dpkg -i` above can leave packages unpacked but not configured, which makes the
+        # next apt call stop with "Unmet dependencies": repair that first.
+        sudo apt-get install -f -y --no-install-recommends || true
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends --download-only $pkgs
         rm -rf "$HOME/apt-debs" && mkdir -p "$HOME/apt-debs"
