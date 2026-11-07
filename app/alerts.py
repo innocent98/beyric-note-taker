@@ -33,7 +33,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import mail, titles
+from app import mail, mail_templates, titles
 from app.config import get_settings
 from app.mail_message import valid_address
 from app.models import SEVERITIES, Notification, User, UserSettings
@@ -130,6 +130,11 @@ def _queue_mail(
 ) -> None:
     """Queue the email in a savepoint; a failure is logged by type and undoes only the mail. The
     payload is the title and body unless the caller gives the template its own."""
+    if template in mail_templates.OWN_PAYLOAD_TEMPLATES and not payload:
+        # A template with fields of its own and none given: send the plain alert rather than a
+        # row that would fail as unknown at send time (and say so in the log).
+        logger.warning("alert mail %s given no payload: sent as a plain alert", template)
+        template, payload = ALERT_TEMPLATE, None
     try:
         with session.begin_nested():
             mail.enqueue(session, address, template, payload or {"title": title, "body": body})

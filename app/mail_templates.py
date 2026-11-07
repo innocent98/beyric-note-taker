@@ -229,10 +229,27 @@ NOT_JOINED = "meeting_not_joined"
 SEND_AGAIN_PATH: str | None = None
 
 
-def not_joined_payload(meeting: str, at: str) -> dict:
-    """What `_not_joined` reads: the meeting as the alerts name it ("Google Meet btp-tkio-gtb") and
-    the time the note taker gave up, already written in the owner's time zone ("11:58 GMT+1")."""
-    return {"meeting": meeting, "at": at}
+def not_joined_payload(
+    session: Session, user_id: int, platform: str, native_id: str, at: datetime
+) -> dict:
+    """What `_not_joined` reads: the meeting as the alerts name it ("Google Meet btp-tkio-gtb",
+    "Zoom 88205679674", "Microsoft Teams ...": platform and code only) and the moment the note
+    taker was refused, written in the owner's stored time zone ("11:58 GMT+1"; UTC when none is
+    stored or the stored name is not one the server knows). The caller passes the moment the news
+    arrived, never a later deadline. It reads the database, so a caller builds it inside the guard
+    that keeps a mail problem away from what it is really doing."""
+    zone = session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user_id))
+    local, label = timezones.localise(at, zone)
+    return {
+        "meeting": titles.alert_name(None, platform, native_id),
+        "at": f"{local:%H:%M} {label}",
+    }
+
+
+# Templates whose payload is their own fields, not the alert's title and body: queued without
+# that payload (a caller bug) they would fail as unknown at send time, so `alerts` sends the plain
+# alert instead and logs it.
+OWN_PAYLOAD_TEMPLATES = frozenset({NOT_JOINED})
 
 
 def _not_joined(payload: dict, to: str, settings: Settings) -> Message:

@@ -84,7 +84,7 @@ def fallback_name(meeting: Meeting) -> str:
 
 
 def _fallback(platform: str | None, native_id: str | None) -> str:
-    label = "Zoom" if platform == "zoom" else "Google Meet"
+    label = {"zoom": "Zoom", "teams": "Microsoft Teams"}.get(platform or "", "Google Meet")
     return f"{label} {native_id}"
 
 

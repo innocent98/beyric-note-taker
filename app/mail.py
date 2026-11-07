@@ -70,6 +70,9 @@ BATCH = 25  # rows one pass sends, so a backlog cannot hold the worker for long
 HOUR = timedelta(hours=1)
 BUDGET_LOCK = (7002, 1)  # advisory lock (two-int form): the hourly budget's count and the send
 ALERT_TEMPLATE = "alert"  # an admin alert (`app/alerts.py`): never held by the budget
+# The "Could not join" mail takes the place of the alert a person got for a meeting that was not
+# recorded, so it is loaded and held exactly as that alert was.
+ALERT_LIKE = (ALERT_TEMPLATE, mail_templates.NOT_JOINED)
 # Mail the budget's reserve is for. Everything else (the verification and "already registered"
 # mail anyone can make the site send by filling in the sign-up form, and notes mail) may not use
 # it, so a flood of sign-ups cannot keep a real person from a reset link or an invitation.
@@ -409,11 +412,11 @@ def deliver_pending(
     # "already registered" mail a flood can pile up past a whole batch, which is held and stays
     # pending; of that mail, rows never held come first, so a real person's new verification mail
     # is not stuck behind the held backlog.
-    privileged = [ALERT_TEMPLATE, *PROTECTED_TEMPLATES]
+    privileged = [*ALERT_LIKE, *PROTECTED_TEMPLATES]
     ids = pending_ids(
         MailOutbox.template.in_(privileged),
         first=(
-            case((MailOutbox.template == ALERT_TEMPLATE, 0), else_=1),
+            case((MailOutbox.template.in_(ALERT_LIKE), 0), else_=1),
             case((MailOutbox.last_error == OVER_BUDGET, 1), else_=0),
         ),
     )
@@ -571,7 +574,7 @@ def _is_admin_alert(session: Session, row: MailOutbox, settings: Settings) -> bo
     """An alert to an admin (a user who is one, or the `ADMIN_ALERT_EMAIL` mailbox): the only mail
     the budget never holds, so the admins can still be told. An alert to anyone else is held like
     other mail."""
-    if row.template != ALERT_TEMPLATE:
+    if row.template not in ALERT_LIKE:
         return False
     if row.to_email == settings.admin_alert_email.strip().lower() != "":
         return True

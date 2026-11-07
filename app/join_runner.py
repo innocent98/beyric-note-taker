@@ -50,7 +50,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from app import alerts, calendar_providers, calendar_states, mail_templates, timezones, titles
+from app import alerts, calendar_providers, calendar_states, titles
 from app.calendar_source import AuthRevoked, CalendarSource, CalendarSourceError, SyncBatch
 from app.config import Settings, get_settings
 from app.gcal_rules import JoinSettings, will_join
@@ -488,9 +488,11 @@ def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) ->
             body=f'The note taker could not join "{name}" before the 15 minutes were up, '
             "so this meeting was not recorded.",
             dedupe_key=f"calendar.not_recorded:{join.id}",
-            # The designer's "Could not join" mail (the bell above keeps its words and key).
-            email_template=mail_templates.NOT_JOINED,
-            email_payload=_not_joined_payload(session, join),
+            # Plain alert mail. Every cause that ends a row here (host full, own limit, a note
+            # taker already on the code, a send that failed, an event that ended, a scheduler that
+            # was down) is NOT the waiting-room refusal the designed "Could not join" mail
+            # (`mail_templates.NOT_JOINED`) says, so that mail is not sent from here.
+            email_template=alerts.ALERT_TEMPLATE,
         )
         alerts.notify_admins(
             session,
@@ -502,19 +504,6 @@ def _expire(session: Session, join: ScheduledJoin, user: User, now: datetime) ->
         )
     session.commit()
     return JoinOutcome(join.id, "failed", "not_recorded")
-
-
-def _not_joined_payload(session: Session, join: ScheduledJoin) -> dict:
-    """What the "Could not join" mail says: the meeting as "Google Meet btp-tkio-gtb" (or Zoom and
-    its number) and the time the note taker gave up (the deadline), in the owner's stored time
-    zone like every other mail."""
-    zone = session.scalar(
-        select(UserSettings.time_zone).where(UserSettings.user_id == join.user_id)
-    )
-    local, label = timezones.localise(join.deadline_at, zone)
-    return mail_templates.not_joined_payload(
-        titles.alert_name(None, join.platform, join.native_id), f"{local:%H:%M} {label}"
-    )
 
 
 def _name(session: Session, join: ScheduledJoin) -> str:
