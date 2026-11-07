@@ -1,0 +1,675 @@
+SOURCE: https://www.hetzner.com/cloud/general-purpose/
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+High-performance dedicated cloud server for business 
+ THIS WEBSITE USES COOKIES
+ We want you to have the best possible user experience on our website. We use cookies to analyze how visitors like you use our website, so we can make improvements. And we use cookies to make sure that the website functions normally. For more info, see our 
+ privacy policy . You can edit your cookie settings there at any time. 
+ Allow all cookies
+ Allow necessary cookies
+ × 
+ Choose your location settings
+ Language
+ Deutsch 
+ English 
+ Français 
+ Español 
+ Currency
+ € EUR 
+ $ USD 
+ Country (VAT)
+ Country (VAT) 
+ All others
+ Australia
+ Austria
+ Belgium
+ Bulgaria
+ Croatia
+ Cyprus
+ Czech Republic
+ Denmark
+ Estonia
+ Finland
+ France
+ Germany
+ Greece
+ Hungary
+ Ireland
+ Italy
+ Latvia
+ Lithuania
+ Luxembourg
+ Malta
+ Netherlands
+ Norway
+ Poland
+ Portugal
+ Romania
+ Singapore
+ Slovakia
+ Slovenia
+ South Africa
+ Spain
+ Sweden
+ Switzerland
+ Ukraine
+ United Kingdom
+ USA
+ Save settings 
+ Automatically translated by AI. Discrepancies or errors may occur.
+ Ask AI
+ Console
+ Robot
+ konsoleH
+ Dedicated 
+ Server Finder
+ Find the right server for you 
+ AX-Line
+ AMD based performance 
+ EX-Line
+ Intel based performance 
+ GPU-Line
+ Maximum workloads & ai 
+ SX-Line
+ For large amounts of data 
+ DX-Line
+ Dell server for heavy computing 
+ Server Auction
+ Refurbished dedicated deals 
+ Server Auction 
+ Save money and do good for the planet with refurbished servers 
+ from 
+ € 61.70 per month, excl. VAT 
+ Cloud 
+ Cloud Overview
+ Affordable Cloud Hosting 
+ Cost-Optimized
+ Perfect for test environments 
+ Regular Performance
+ Best price-performance ratio 
+ General Purpose
+ Ideal for business applications 
+ European Cloud 
+ Lower costs, more data sovereignty – with Hetzner Cloud 
+ Storage 
+ Object Storage
+ S3-compatible storage 
+ Storage Box
+ Cheap backup servers 
+ Sovereignty starts with hosting it yourself 
+ Start self-hosting with Hetzner 
+ Managed 
+ Web & Mail
+ Webhosting
+ Simple & cheap web hosting 
+ Domain Check
+ Search for domains 
+ Registration Robot
+ Domain registration 
+ Servers
+ Managed Server
+ Fully managed servers 
+ Cloud Storage
+ Storage Share
+ GDPR-compliant storage 
+ Need help? 
+ Find self service guides, technical details and helpful information in our Docs 
+ Services 
+ Domain & Security
+ DNS Management
+ Manage DNS entries and zones 
+ SSL-Certificate
+ For any usecase 
+ Network
+ Load Balancer
+ Automatically distributing traffic 
+ For Business
+ Custom Solutions
+ Customized IT infrastructure 
+ Need help? 
+ Find self service guides, technical details and helpful information in our Docs 
+ Resources 
+ New 
+ Blog
+ Inspiration, usecases & insights 
+ Newsletter
+ Product news & updates 
+ Docs
+ Self service and technical docs 
+ Tutorials
+ Guides and how-tos 
+ Forum
+ Community support & discussion 
+ Status
+ System and service status 
+ API
+ Automate via REST API 
+ Downloads
+ Documents and forms 
+ Current topics 
+ Engineering 
+ Inference Experiment 
+ Engineering 
+ One-click self-hosting with coolify 
+ Engineering 
+ Your own vpn server with wireguard 
+ We noticed you're browsing from a different part of the world.
+ Switch to settings tailored to your location?
+ yes
+ no
+ Cloud
+ General Purpose: 
+For business applications 
+ Constantly high CPU usage
+ Predictable performance
+ Dedicated vCPUs
+ Create cloud instance
+ For workloads 
+with high CPU usage
+ With General Purpose instances, you get dedicated vCPUs that offer predictable and consistently high processor performance. This is perfect for typical business applications that rely on a predictable infrastructure. 
+ Classic areas of use include ERP and inventory management systems, multi-user environments, public game servers, microservices, and large databases. Billing is hourly, transparent, and without hidden costs. 
+ Global availability. European data security. 
+ Over 1,000,000 happy customers
+ VCPU
+ RAM
+ Drives
+ Your server's bill will never exceed its monthly price cap. If you delete your cloud server before the end of the billing month, we will only bill you for the hourly rate. We will bill you for each cloud server until you choose to delete them.
+ Price
+ CCX13
+ 2
+ AMD
+ 8 GB
+ 80 GB
+ NVMe
+ from 
+ /month
+ € 43.49 per month, excl. VAT 
+ from /month
+ /hour
+ € 0.0697 per hour, excl. VAT 
+ /hour
+ Your server's bill will never exceed its monthly price cap. If you delete your cloud server before the end of the billing month, we will only bill you for the hourly rate. We will bill you for each cloud server until you choose to delete them.
+ Create
+ This product is currently unavailable. Please check back later.
+ Details 
+ eu-central
+ NBG1 
+ HEL1 
+ Traffic inclusive
+ 20
+ TB
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 43.49 per month, excl. VAT 
+ /month
+ us-west
+ HIL1 
+ Traffic inclusive
+ 1
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 43.99 per month, excl. VAT 
+ /month
+ us-east
+ ASH1 
+ Traffic inclusive
+ 1
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 43.99 per month, excl. VAT 
+ /month
+ ap-southeast
+ SIN1 
+ Traffic inclusive
+ 1
+ TB
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ /month
+ € 54.49 per month, excl. VAT 
+ /month
+ CCX23
+ 4
+ AMD
+ 16 GB
+ 160 GB
+ NVMe
+ from 
+ /month
+ € 86.49 per month, excl. VAT 
+ from /month
+ /hour
+ € 0.1386 per hour, excl. VAT 
+ /hour
+ Your server's bill will never exceed its monthly price cap. If you delete your cloud server before the end of the billing month, we will only bill you for the hourly rate. We will bill you for each cloud server until you choose to delete them.
+ Create
+ This product is currently unavailable. Please check back later.
+ Details 
+ eu-central
+ NBG1 
+ HEL1 
+ Traffic inclusive
+ 20
+ TB
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 86.49 per month, excl. VAT 
+ /month
+ us-west
+ HIL1 
+ Traffic inclusive
+ 2
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 87.99 per month, excl. VAT 
+ /month
+ us-east
+ ASH1 
+ Traffic inclusive
+ 2
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 87.99 per month, excl. VAT 
+ /month
+ ap-southeast
+ SIN1 
+ Traffic inclusive
+ 2
+ TB
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ /month
+ € 108.99 per month, excl. VAT 
+ /month
+ CCX33
+ 8
+ AMD
+ 32 GB
+ 240 GB
+ NVMe
+ from 
+ /month
+ € 138.99 per month, excl. VAT 
+ from /month
+ /hour
+ € 0.2227 per hour, excl. VAT 
+ /hour
+ Your server's bill will never exceed its monthly price cap. If you delete your cloud server before the end of the billing month, we will only bill you for the hourly rate. We will bill you for each cloud server until you choose to delete them.
+ Create
+ This product is currently unavailable. Please check back later.
+ Details 
+ eu-central
+ NBG1 
+ HEL1 
+ Traffic inclusive
+ 30
+ TB
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 138.99 per month, excl. VAT 
+ /month
+ us-west
+ HIL1 
+ Traffic inclusive
+ 3
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 141.49 per month, excl. VAT 
+ /month
+ us-east
+ ASH1 
+ Traffic inclusive
+ 3
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 141.49 per month, excl. VAT 
+ /month
+ ap-southeast
+ SIN1 
+ Traffic inclusive
+ 3
+ TB
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ /month
+ € 174.99 per month, excl. VAT 
+ /month
+ CCX43
+ 16
+ AMD
+ 64 GB
+ 360 GB
+ NVMe
+ from 
+ /month
+ € 276.49 per month, excl. VAT 
+ from /month
+ /hour
+ € 0.4431 per hour, excl. VAT 
+ /hour
+ Your server's bill will never exceed its monthly price cap. If you delete your cloud server before the end of the billing month, we will only bill you for the hourly rate. We will bill you for each cloud server until you choose to delete them.
+ Create
+ This product is currently unavailable. Please check back later.
+ Details 
+ eu-central
+ NBG1 
+ HEL1 
+ Traffic inclusive
+ 40
+ TB
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 276.49 per month, excl. VAT 
+ /month
+ us-west
+ HIL1 
+ Traffic inclusive
+ 4
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 279.99 per month, excl. VAT 
+ /month
+ us-east
+ ASH1 
+ Traffic inclusive
+ 4
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 279.99 per month, excl. VAT 
+ /month
+ ap-southeast
+ SIN1 
+ Traffic inclusive
+ 4
+ TB
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ /month
+ € 341.49 per month, excl. VAT 
+ /month
+ CCX53
+ 32
+ AMD
+ 128 GB
+ 600 GB
+ NVMe
+ from 
+ /month
+ € 533.99 per month, excl. VAT 
+ from /month
+ /hour
+ € 0.8558 per hour, excl. VAT 
+ /hour
+ Your server's bill will never exceed its monthly price cap. If you delete your cloud server before the end of the billing month, we will only bill you for the hourly rate. We will bill you for each cloud server until you choose to delete them.
+ Create
+ This product is currently unavailable. Please check back later.
+ Details 
+ eu-central
+ NBG1 
+ HEL1 
+ Traffic inclusive
+ 50
+ TB
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 533.99 per month, excl. VAT 
+ /month
+ us-west
+ HIL1 
+ Traffic inclusive
+ 6
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 538.99 per month, excl. VAT 
+ /month
+ us-east
+ ASH1 
+ Traffic inclusive
+ 6
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 538.99 per month, excl. VAT 
+ /month
+ ap-southeast
+ SIN1 
+ Traffic inclusive
+ 6
+ TB
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ /month
+ € 652.49 per month, excl. VAT 
+ /month
+ CCX63
+ 48
+ AMD
+ 192 GB
+ 960 GB
+ NVMe
+ from 
+ /month
+ € 853.99 per month, excl. VAT 
+ from /month
+ /hour
+ € 1.3686 per hour, excl. VAT 
+ /hour
+ Your server's bill will never exceed its monthly price cap. If you delete your cloud server before the end of the billing month, we will only bill you for the hourly rate. We will bill you for each cloud server until you choose to delete them.
+ Create
+ This product is currently unavailable. Please check back later.
+ Details 
+ eu-central
+ NBG1 
+ HEL1 
+ Traffic inclusive
+ 60
+ TB
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the EU include at least 20 TB of included traffic. For each additional TB at EU-Central locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 853.99 per month, excl. VAT 
+ /month
+ us-west
+ HIL1 
+ Traffic inclusive
+ 8
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 860.49 per month, excl. VAT 
+ /month
+ us-east
+ ASH1 
+ Traffic inclusive
+ 8
+ TB
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ Cloud servers located in the U.S. include at least 1 TB of included traffic. For each additional TB at U.S. locations we charge € 1.00 per hour, excl. VAT . 
+ /month
+ € 860.49 per month, excl. VAT 
+ /month
+ ap-southeast
+ SIN1 
+ Traffic inclusive
+ 8
+ TB
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ Cloud servers at AP locations include at least 0.5 TB of included traffic. For each additional TB at AP locations we charge € 7.40 per hour, excl. VAT . 
+ /month
+ € 1,036.99 per month, excl. VAT 
+ /month
+ Show more products 
+ Show less products 
+ Price incl. IPv4 
+ ▪ 
+ Available Locations
+ eu-central
+ FSN 
+ NBG 
+ HEL 
+ us-east
+ ASH 
+ us-west
+ HIL 
+ ap-southeast
+ SIN 
+ Business applications
+ For workloads with consistently high utilization, such as data analysis or web shops. 
+ Stability and security
+ Consistent and predictable performance for good planning and continuous availability. 
+ High CPU performance
+ Based on the latest available processor generations from Intel® and AMD. 
+ Dedicated vCPUs
+ Dedicated resources that give you independence from the workload of other clients and projects. 
+ Create cloud instance
+ Everything you need, included.
+ API
+ All essential functions for automatic management of the cloud infrastructure are also available via a developer-friendly REST API and a CLI tool. 
+ Integrations
+ Integrations for various programming languages (e.g., Python and Go) and management frameworks (e.g., Ansible, Terraform, or Kubernetes) allow for a high degree of automation and integration of the cloud infrastructure, for example, in CI/CD pipelines. 
+ Networks
+ Networks enable servers to communicate via a private network. They also allow complex network topologies to be created. Typical use cases include operating a Kubernetes cluster or a database that is not publicly accessible. 
+ Firewalls
+ Our stateful firewalls enable easy infrastructure security without additional costs. Unwanted incoming and outgoing data traffic is blocked based on defined rules. Once configured, you can assign them to as many cloud servers as you like. 
+ Images
+ Ubuntu, Debian, Fedora, and many other Linux distributions are available as operating systems. So whether you are looking for a particularly beginner-friendly solution or want to operate long-term, predictable enterprise servers, the right option is available. 
+ Cloud comparison: save on your cloud expenses
+ Hetzner Cloud is the winner in terms of price-performance ratio
+ The independent price-performance check shows that Hetzner offers significantly more computing power per dollar compared to its competitors. The analysis is based on objective benchmark data from sparecores.com and highlights how efficiently our cloud servers operate in relation to their costs. 
+ Create cloud instance
+ Is a dedicated cloud server 
+the right choice for your project?
+ Dedicated Resources
+ With our dedicated plans, you get vCPUs that are assigned only to you. This means you have no “noisy neighbors.” Performance remains consistent, predictable, and independent. This makes the plan particularly attractive for business applications. 
+ These can include large database servers, data analysis and rendering, CI/CD pipelines, multi-user environments, or services with a high number of parallel sessions, such as web shops or public game servers. 
+ Dedicated resources are the right choice for high workloads that require stable computing power. 
+ Big databases
+ MySQL, PostgreSQL, or MongoDB: Dedicated cloud servers provide a reliable foundation for this. 
+ Container & Microservices
+ Kubernetes clusters and Docker environments benefit from predictable performance. 
+ Productive workloads
+ SaaS applications, APIs, or web shops that need to be stable and respond quickly around the clock. 
+ Enterprise software
+ ERP, CRM, or BI systems based on high-performance and secure infrastructure. 
+ Enhance your cloud with add-ons: Floating IPs
+ Floating IPs are flexible public IPv4 and IPv6 addresses that you can dynamically assign to servers within a project and change at any time. Ideal for failover, load balancing or quick IP replacement without restarting the server.
+Further add-ons that can be booked optionally are backups and snapshots.
+ Create cloud instance
+ Snapshots
+ per GB per month
+ € 0.0143, excl. VAT 
+ Backups
+ mo. price related to instance, starting at: 
+ € 1.1980, excl. VAT 
+ Floating IPs
+ per IPv6 per month
+ € 1.00, excl. VAT 
+ Scale your cloud with powerful add-ons
+ Block Storage
+ Learn more
+ Object Storage
+ Learn more
+ Load Balancer
+ Learn more
+ For me, Hetzner is the best European cloud hoster and offers you everything you need. Super cheap and reliable VPS, load balancer, firewalls and VPNs.
+ Manuel Schöbel
+ , Digitale Kumpel
+ Web Development
+ Our performance promise: 99.9% uptime and 24/7 support
+ Our performance promises for professional requirements: An SLA with 99.9% guaranteed uptime and clearly defined credits in the event of a malfunction offers you predictable operational reliability. The new 24/7 support by email ensures that you receive rapid assistance at any time in exceptional cases. In addition, C5 certification according to BSI ensures tested transparency and confirms our high security standards – a key factor for business-critical workloads. 
+ Start your first cloud project now
+ As always, we keep it simple - from setup to use. If questions come up, though, our docs and tutorials are ready to help. 
+ € 4.49, excl. VAT 
+ Create cloud instance
+ Frequently asked questions
+ What is your billing model? 
+ Cloud products are billed on an hourly basis using a postpaid billing model. This means that usage costs are not charged immediately when a resource is created. Instead, the accumulated usage is recorded and invoiced in the following billing cycle. Even if a Cloud Server or other resources have already been deleted, charges for the time they were active may still remain on the account until the next invoice is generated. As long as there are outstanding charges that have not yet been invoiced, the account cannot be permanently deleted. Account deletion is only possible once all invoices have been issued and fully paid. 
+ Is there any way to get a custom configuration? 
+ Customized virtual servers (additional RAM, additional/larger drives etc.) are not currently available. 
+ What is the bandwidth of your Cloud Servers? 
+ The host systems for our Cloud instances all have a redundant 10 Gbits connection. This connection is shared by all instances on the host. We do not offer bandwidth guarantees for our Cloud servers, but you can expect about 300-500 Mbits. 
+ Is there a library to access Hetzner Cloud from my programming language? 
+ We currently maintain official open source libraries for Go and Python . You can find libraries for other languages created by the community in our Awesome Hetzner Cloud List . You are also welcome to develop something yourself! Take a look at our API documentation at docs.hetzner.cloud . 
+ Do you plan to add x feature?/Will you add more features? 
+ We want to keep adding new features and services and are always interested in hearing from you on how we can improve our product! There are several ways you can provide us with product feedback or feature requests: 
+ Via our forum: please post your request in the Hetzner Cloud Board 
+ Via email: send us your ideas to product-feedback@hetzner.com 
+ Unfortunately, we cannot give you a detailed roadmap of what we are working on. However, you can keep up to date by following us on our social media channels. 
+ Can I install Windows? 
+ Right now we are focusing on support for Linux as an operating system. If you wish, you may install Windows on your own, and we have seen successful installations done. However, we will not provide any support for Windows. 
+ What linux distributions do you support? 
+ Hetzner supports a range of common Linux distributions: Ubuntu, Fedora, Debian, CentOS, Rocky Linux and AlmaLinux. You can choose these when creating Cloud Servers or have them preinstalled on Dedicated Servers; you can also install any other OS manually via KVM/ISO. 
+ Does Hetzner have an SLA? 
+ Yes, we have an SLA that guarantees 99.9% uptime. In the event of a clearly defined malfunction, you will receive a credit note. You can find all the important information about this in our SLA . 
+ More FAQs
+ Start your project now
+ Our tutorials will help you, whether you need assistance with installing Ubuntu or WordPress or are looking for a solution for managed Kubernetes.
+ Initial Server Setup with Ubuntu
+ Tutorial
+ Run WordPress in a container using Docker Compose
+ Tutorial
+ Deploy production-ready Kubernetes on Hetzner with Edka
+ Tutorial
+ Share your knowledge and write a tutorial for our community. As a thank you, you will receive Hetzner credits that you can redeem for our products.
+ Not the right one? 
+Discover our other offers
+ Shared: Cost Optimized
+ starting from 
+ max/mo.
+ € 5.99 per month, excl. VAT 
+ Explore this plan
+ Shared: Regular Performance
+ starting from 
+ max/mo.
+ € 6.49 per month, excl. VAT 
+ Explore this plan
+ Subscribe to our Newsletter 
+ Hetzner
+ Company
+ Our Customers
+ Sustainability
+ new 
+ Blog
+ Career
+ Pressroom
+ Support
+ Support Center
+ Contact
+ Downloads
+ Hetzner Docs
+ Status
+ Legal
+ Legal notice
+ Data privacy
+ System policies
+ Terms and conditions
+ Digital Services Act
+ Abuse form
+ © 2026
+ Hetzner Online GmbH. All Rights Reserved.
+ Prices

@@ -1,0 +1,76 @@
+SOURCE: https://vexa.ai/pricing
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Pricing | Vexa — Meeting Bot API 
+ vexa version unknown 
+ Product Finance For finance Developers For developers Docs Pricing Roadmap Blog Toggle theme 
+ Sign in Book a demo 
+ Pricing 
+ Self-host with no licence fee, or let us run it: a seat to work with agents, an hour to build on the API.
+ Open source
+ $0 
+ Apache 2.0 licensed open source · self-host forever
+ Best for teams who need full control
+ View on GitHub Full platform on your infrastructure 
+ Google Meet + Teams + Zoom 
+ Real-time transcription, self-hosted 
+ Your storage, your data 
+ MCP + REST API + WebSockets + Dashboard 
+ Community support 
+ Individual
+ $12 /seat/mo 
+ Real-time meeting data, directly in your agent (MCP)
+ Connect agent Your agent, via MCP 
+ Google Meet + Teams + Zoom 
+ Real-time transcription included 
+ 12-month audio storage 
+ MCP 
+ —
+ Build on Vexa
+ $0.30 /bot-hr 
+ The API · +$0.20/hr transcription · $0.50/hr all-in
+ Best for builders — pay as you go
+ Get API keys 
+ Your product, via the API — unlimited bots 
+ Google Meet + Teams + Zoom 
+ Real-time transcription +$0.20/hr 
+ 12-month audio storage 
+ REST API + WebSockets + webhooks + Dashboard 
+ —
+ Enterprise
+ Let’s talk 
+ Self-hosted in your own cloud, with us beside you
+ Best for teams running Vexa in production
+ Book a demo 
+ Self-hosted on your own servers 
+ Google Meet + Teams + Zoom 
+ Real-time transcription included 
+ Your storage, your data 
+ Everything, plus security & data-residency review 
+ Dedicated support · Volume pricing 
+ Frequently asked questions
+ What's included in Build on Vexa?
+ The base rate covers bot infrastructure: audio capture, webhooks, and 12 months of audio storage. Add real-time transcription for +$0.20/hr, so $0.50/hr all-in.
+ Which plan is right for me?
+ Individual is for one person and their agents. Build on Vexa is for products built on the API. Self-host from GitHub with no licence fee, and talk to us for Enterprise.
+ How does the free credit work?
+ Every new account gets $2 in free bot credit—no credit card required. That covers ~4 hours of transcribed meetings at $0.50/hr all-in. Top-ups start at $10; automatic top-ups follow the same minimum. All features are available.
+ Can I self-host Vexa?
+ Yes. Vexa is Apache 2.0. Deploy it with Docker Compose, Kubernetes or OpenShift on your own servers. Run your own transcription unit and model, and the audio stays inside your network.
+ How does Vexa compare to Recall.ai?
+ Recall.ai is a hosted API, so its bots run on its infrastructure. Vexa is open source under Apache-2.0 and can run on yours, with the recordings, the transcripts and the model under your control. See our detailed comparison .
+ What's the Individual plan for?
+ Individual is the seat: $12 per seat per month for one person and the agents they connect over MCP. One concurrent bot, unlimited meetings, the REST API, WebSockets, and the UI Dashboard.
+ Product
+ Meeting capture Workspace (early) Agents (early) Self-host Pricing Roadmap 
+ For finance
+ Vexa for finance Fund distribution Credit and diligence Security review Work with us 
+ For developers
+ Google Meet API Microsoft Teams API Zoom API Claude and MCP n8n Webhooks Sales call transcription Docs 
+ Compare
+ vs Recall.ai vs Meetily vs Meeting BaaS vs Otter.ai vs Fireflies 
+ Company
+ Blog GitHub Book a demo Contact Report a bug 
+ vexa version unknown 
+ Vexa is open-source AI that turns your company’s meetings into knowledge it owns, on your own servers, with your own model. It starts with your Zoom, Microsoft Teams and Google Meet calls. The code is open source under Apache-2.0, with an open core approved by FINOS.
+ © 2026 Vexa.ai Inc. All rights reserved. Terms Privacy Cookies DPA Security

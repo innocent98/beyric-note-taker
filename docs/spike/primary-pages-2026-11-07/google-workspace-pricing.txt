@@ -1,0 +1,1950 @@
+SOURCE: https://workspace.google.com/pricing
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Compare Flexible Pricing Plan Options | Google Workspace 
+ close menu 
+ Solutions 
+ Products 
+ Industries 
+ AI 
+ Pricing 
+ Resources 
+ Admin console 
+ Contact sales 
+ Try now 
+ Solutions 
+ Products 
+ Industries 
+ AI 
+ Pricing 
+ Resources 
+ Try Google Workspace for 14 days
+Try Google Workspace for 14 days
+ Users
+ Increment
+ Decrement
+ info 
+ Adjust users to estimate monthly cost. Add more users after signing up.
+ groups Small business 
+ domain Enterprise 
+ Annual ( Save 16% with 1 year commitment) 
+ Starter
+ 10% off for 12 months help 
+ 10% off for 12 months help 
+ Price details
+ Nov 21, 2026 – Nov 21, 2027
+ 10% off 10% Introductory 
+ Limited to 20 users
+ €6.80 €6.12 
+ Nov 21, 2027 - Onwards
+ For all users
+ €6.80 
+ • Price is per user/month and does not include tax
+ €6.12 €6.80 ** / user per month 
+ 1 user = €6.12 / mo. (EUR) 
+ Try now 
+ No cost for 14 days
+ Starter includes:
+ 30 GB 
+pooled storage per person* 
+ Secure custom business email 
+you@your-company.com 
+ Gemini AI assistant in Gmail 
+ Chat with AI in Gemini, your company data is not used to train models 
+ Video meetings, 100 participants 
+ Google Vids AI-powered video creator and editor 
+ Security and management controls 
+ Standard
+ 10% off for 12 months help 
+ 10% off for 12 months help 
+ Price details
+ Nov 21, 2026 – Nov 21, 2027
+ 10% off 10% Introductory 
+ Limited to 20 users
+ €13.60 €12.24 
+ Nov 21, 2027 - Onwards
+ For all users
+ €13.60 
+ • Price is per user/month and does not include tax
+ €12.24 €13.60 ** / user per month 
+ 1 user = €12.24 / mo. (EUR) 
+ Try now 
+ No cost for 14 days
+ All of Starter, and:
+ 2 TB 
+65x more than Starter* 
+ Secure custom business email 
++ custom layouts and mail merge 
+ Gemini AI assistant in Gmail, Docs, Meet, and more 
+ Gemini Notebook AI research and thinking partner with expanded access 
+ Video meetings with recording, noise cancellation, 150 participants 
+ Appointment booking pages 
+ eSignature with Docs and PDFs 
+ Google Workspace Migrate tool for data migration 
+ Plus
+ €21.10 / user per month 
+ 1 user = €21.10 / mo. (EUR) 
+ Try now 
+ No cost for 14 days
+ All of Standard, and:
+ 5 TB 
+2.5x more than Standard* 
+ Secure custom business email 
++ eDiscovery 
+ Video meetings with attendance tracking, 500 participants 
+ Vault to retain, archive, and search data 
+ Secure LDAP 
+ Advanced endpoint management 
+ Enhanced security and management controls 
+ All plans billed monthly
+ All prices €EUR
+ Starter, Standard, and Plus plans can be purchased for a maximum of 300 users. There is no minimum or maximum user limit for Enterprise plans. Google Workspace customers may have access to additional features for a limited promotional period.
+ *Google Workspace provides flexible pooled storage per user that is shared across the organization. Business Starter includes 30 GB pooled storage per user, Business Standard includes 2 TB, Business Plus and Enterprise Plus include 5 TB. Visit our Help Center to learn more about getting additional storage for your organization.
+ **Offer available to new Google Workspace customers only. This introductory price is only available for the first 20 users added, for 12 months. Standard pricing will apply to all users after 12 months. Actual price per user may vary by up to ~0.01% due to rounding. Final price will be shown before completing sign-up.
+ Annual ( Save 16% with 1 year commitment) All plans billed monthly, all prices €EUR
+ Starter
+ 10% off for 12 months help 
+ 10% off for 12 months help 
+ Price details
+ Nov 21, 2026 – Nov 21, 2027
+ 10% off 10% Introductory 
+ Limited to 20 users
+ €6.80 €6.12 
+ Nov 21, 2027 - Onwards
+ For all users
+ €6.80 
+ • Price is per user/month and does not include tax
+ €6.12 €6.80 ** / user per month 
+ 1 user = €6.12 / mo. (EUR) 
+ Try now 
+ No cost for 14 days
+ Starter includes:
+ 30 GB 
+pooled storage per person* 
+ Secure custom business email 
+you@your-company.com 
+ Gemini AI assistant in Gmail 
+ Compare Starter features arrow_downward 
+ Standard
+ 10% off for 12 months help 
+ 10% off for 12 months help 
+ Price details
+ Nov 21, 2026 – Nov 21, 2027
+ 10% off 10% Introductory 
+ Limited to 20 users
+ €13.60 €12.24 
+ Nov 21, 2027 - Onwards
+ For all users
+ €13.60 
+ • Price is per user/month and does not include tax
+ €12.24 €13.60 ** / user per month 
+ 1 user = €12.24 / mo. (EUR) 
+ Try now 
+ No cost for 14 days
+ All of Starter, and:
+ 2 TB 
+65x more than Starter* 
+ Secure custom business email 
++ custom layouts and mail merge 
+ Gemini AI assistant in Gmail, Docs, Meet, and more 
+ Compare Standard features arrow_downward 
+ Plus
+ €21.10 / user per month 
+ 1 user = €21.10 / mo. (EUR) 
+ Try now 
+ No cost for 14 days
+ All of Standard, and:
+ 5 TB 
+2.5x more than Standard* 
+ Secure custom business email 
++ eDiscovery 
+ Video meetings with attendance tracking, 500 participants 
+ Compare Plus features arrow_downward 
+ Enterprise
+ Let's talk
+ Contact sales 
+ All features mentioned, and:
+ 5 TB 
+or upgrade for more* 
+ Secure custom business email 
++ S/MIME encryption 
+ Video meetings with in-domain live streaming, 1000 participants 
+ Compare Enterprise features arrow_downward 
+ Compare all Workspace features
+ unfold_more Expand all 
+ Jump to product
+ Gmail Gemini Meet Drive Chat Calendar Docs, Sheets, Slides Security 
+ Try now 
+ Starter
+ Starter
+ Try now 
+ most popular
+ Standard
+ Standard
+ Try now 
+ Plus
+ Plus
+ Try now 
+ Enterprise
+ Enterprise
+ Contact sales 
+ Enterprise Standard
+ Enterprise Standard
+ Contact sales 
+ Enterprise Plus
+ Enterprise Plus
+ Contact sales 
+ Productivity & Collaboration
+ Gmail
+ Business email
+ keyboard_arrow_down 
+ Custom email for your business
+ Custom email for your business
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Phishing and spam protection that blocks more than 99.9% of attacks
+ Phishing and spam protection that blocks more than 99.9% of attacks
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Ad-free email experience
+ Ad-free email experience
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gmail 
+Business email
+ Gmail 
+Business email
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Custom email for your business
+ Custom email for your business
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Phishing and spam protection that blocks more than 99.9% of attacks
+ Phishing and spam protection that blocks more than 99.9% of attacks
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Ad-free email experience
+ Ad-free email experience
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Workspace apps
+ keyboard_arrow_down 
+ Enterprise-grade security and privacy
+ Enterprise-grade security and privacy
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Gmail 
+ find, summarize, and write emails faster with AI
+ Gemini in Gmail 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Docs 
+ tackle the blank page or polish draft documents with AI
+ Gemini in Docs 
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Sheets 
+ visualize data and surface insights faster with AI
+ Gemini in Sheets 
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Slides 
+ make presentations shine with AI images
+ Gemini in Slides 
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Vids 
+ tell engaging stories at work with AI-powered video creation
+ Gemini in Vids 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Drive 
+ find, summarize, and analyze files with AI
+ Gemini in Drive 
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Meet 
+ let AI summarize, translate, and take notes in meetings
+ Gemini in Meet 
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Chat 
+ find, summarize, and translate chats with AI
+ Gemini in Chat 
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Workspace apps 
+ Gemini in Workspace apps 
+ Limited
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Enterprise-grade security and privacy
+ Enterprise-grade security and privacy
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Gmail - find, summarize, and write emails faster with AI
+ Gemini in Gmail - find, summarize, and write emails faster with AI
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Docs - tackle the blank page or polish draft documents with AI
+ Gemini in Docs - tackle the blank page or polish draft documents with AI
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Sheets - visualize data and surface insights faster with AI
+ Gemini in Sheets - visualize data and surface insights faster with AI
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Slides - make presentations shine with AI images
+ Gemini in Slides - make presentations shine with AI images
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Vids - tell engaging stories at work with AI-powered video creation
+ Gemini in Vids - tell engaging stories at work with AI-powered video creation
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Drive - find, summarize, and analyze files with AI
+ Gemini in Drive - find, summarize, and analyze files with AI
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Meet - let AI summarize, translate, and take notes in meetings
+ Gemini in Meet - let AI summarize, translate, and take notes in meetings
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini in Chat - find, summarize, and translate chats with AI
+ Gemini in Chat - find, summarize, and translate chats with AI
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini
+ keyboard_arrow_down 
+ AI assistant from Google
+ AI assistant from Google
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Enterprise-grade security and privacy for core Workspace services 
+ Enterprise-grade security and privacy for core Workspace services 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Chat with Gemini on web or mobile
+ Chat with Gemini on web or mobile
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Google’s most capable AI models for complex tasks
+ Google’s most capable AI models for complex tasks
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Customize AI with skills
+ Customize AI with skills
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini 
+AI assistant from Google
+ Gemini 
+AI assistant from Google
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Enterprise-grade security and privacy for core Workspace services 
+ Enterprise-grade security and privacy for core Workspace services 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Chat with Gemini on web or mobile
+ Chat with Gemini on web or mobile
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Google’s most capable AI models for complex tasks
+ Google’s most capable AI models for complex tasks
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Customize AI with skills
+ Customize AI with skills
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Google Meet
+ Video and voice conferencing
+ keyboard_arrow_down 
+ Number of meeting participants
+ Number of meeting participants
+ 100
+ 150
+ 500
+ 1,000
+ 500
+ 1,000
+ Meeting length (maximum)
+ Meeting length (maximum)
+ 24 hours
+ 24 hours
+ 24 hours
+ 24 hours
+ 24 hours
+ 24 hours
+ US or international dial-in phone numbers
+ US or international dial-in phone numbers
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Studio Sound noise cancellation
+ Studio Sound noise cancellation
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Adaptive Audio
+ Adaptive Audio
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Meeting recordings saved to Google Drive
+ Meeting recordings saved to Google Drive
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Polling and Q&A
+ Polling and Q&A
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Moderation controls
+ Moderation controls
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Hand raising
+ Hand raising
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Breakout rooms
+ Breakout rooms
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Attendance tracking
+ Attendance tracking
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ In-domain live streaming
+ In-domain live streaming
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Meet 
+Video and voice conferencing
+ Meet 
+Video and voice conferencing
+ 100 participants
+ 100 group 
+ 150 participants
+ 150 group 
+ 500 participants
+ 500 group 
+ 1000 participants
+ 1000 group 
+ 1000 participants
+ 1000 group 
+ 1000 participants
+ 1000 group 
+ Meeting length (maximum)
+ Meeting length (maximum)
+ 24 hours
+ 24 hours
+ 24 hours
+ 24 hours
+ 24 hours
+ 24 hours
+ US or international dial-in phone numbers
+ US or international dial-in phone numbers
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Studio Sound noise cancellation
+ Studio Sound noise cancellation
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Adaptive Audio
+ Adaptive Audio
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Meeting recordings saved to Google Drive
+ Meeting recordings saved to Google Drive
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ keyboard_arrow_down See more features 
+ Google Drive
+ Secure cloud storage
+ keyboard_arrow_down 
+ Cloud storage amount
+ Cloud storage amount
+ 30 GB / user
+ 2 TB / user
+ 5 TB / user
+ 5 TB / user
+ 5 TB / user info 
+ This plan includes 5 TB of pooled storage per user, shared across your organization. Admins can upgrade for additional storage.
+ 5 TB / user info 
+ This plan includes 5 TB of pooled storage per user, shared across your organization. Admins can upgrade for additional storage.
+ Drive for desktop
+ Drive for desktop
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Support for over 100 file types
+ Support for over 100 file types
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Shared drives for your team
+ Shared drives for your team
+ Fundamental
+ Advanced
+ Advanced
+ Advanced
+ Advanced
+ Advanced
+ Target audience sharing
+ Target audience sharing
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ eSignature with Docs and PDFs
+ eSignature with Docs and PDFs
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Drive 
+Secure cloud storage
+ Drive 
+Secure cloud storage
+ 30 GB per user
+ 30 GB / user
+ 2 TB per user
+ 2 TB / user
+ 5 TB per user
+ 5 TB / user
+ 5 TB per user with ability to request more
+ 5 TB per user + more
+ 5 TB per user with ability to request more
+ 5 TB per user + more
+ 5 TB per user with ability to request more
+ 5 TB per user + more
+ Drive for desktop
+ Drive for desktop
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ keyboard_arrow_down See more features 
+ Google Chat
+ keyboard_arrow_down 
+ Team messaging
+ Team messaging
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Turn history on or off by default
+ Turn history on or off by default
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Auto-accept invitations
+ Auto-accept invitations
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ One-to-one external chat
+ One-to-one external chat
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Advanced chat rooms, including threaded rooms and guest access
+ Advanced chat rooms, including threaded rooms and guest access
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Chat 
+Team messaging
+ Chat 
+Team messaging
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Turn history on or off by default
+ Turn history on or off by default
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Auto-accept invitations
+ Auto-accept invitations
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ keyboard_arrow_down See more features 
+ Google Calendar
+ keyboard_arrow_down 
+ Shared calendars
+ Shared calendars
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Appointment booking pages
+ Appointment booking pages
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Browse and reserve conference rooms
+ Browse and reserve conference rooms
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Calendar 
+Shared calendars
+ Calendar 
+Shared calendars
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Appointment booking pages
+ Appointment booking pages
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Browse and reserve conference rooms
+ Browse and reserve conference rooms
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Docs, Sheets, Slides, and Vids
+ keyboard_arrow_down 
+ Collaborative content creation
+ Collaborative content creation
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Vids AI-powered video creation
+ Vids AI-powered video creation
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Keep Shared Notes
+ Keep Shared Notes
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ eSignature with Docs and PDFs
+ eSignature with Docs and PDFs
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Sites website builder
+ Sites website builder
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Forms survey builder
+ Forms survey builder
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Interoperability with Office files
+ Interoperability with Office files
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Easier analysis with Smart Fill, Smart Cleanup, and Answers
+ Easier analysis with Smart Fill, Smart Cleanup, and Answers
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Proofread to help with writing style
+ Proofread to help with writing style
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Writing assistance with Smart Compose, grammar suggestions, and spelling autocorrect
+ Writing assistance with Smart Compose, grammar suggestions, and spelling autocorrect
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Connected Sheets
+ Connected Sheets
+ Fundamental
+ Fundamental
+ Fundamental
+ Enterprise
+ Enterprise
+ Enterprise
+ Custom branding for document and form templates
+ Custom branding for document and form templates
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Docs, Sheets, Slides, and Vids 
+Collaborative content creation
+ Docs, Sheets, Slides, and Vids 
+Collaborative content creation
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Vids AI-powered video creation
+ Vids AI-powered video creation
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Keep Shared Notes
+ Keep Shared Notes
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ eSignature with Docs and PDFs
+ eSignature with Docs and PDFs
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Sites website builder
+ Sites website builder
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Forms survey builder
+ Forms survey builder
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Interoperability with Office files
+ Interoperability with Office files
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Easier analysis with Smart Fill, Smart Cleanup, and Answers
+ Easier analysis with Smart Fill, Smart Cleanup, and Answers
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Proofread to help with writing style
+ Proofread to help with writing style
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ keyboard_arrow_down See more features 
+ Gemini Notebook
+ keyboard_arrow_down 
+ AI thinking and research partner
+ AI thinking and research partner
+ Basic access
+ Expanded access
+ Expanded access
+ Expanded access
+ Expanded access
+ Expanded access
+ Generate interactive Audio Overviews with two AI hosts
+ Generate interactive Audio Overviews with two AI hosts
+ Up to 3 per day
+ Up to 20 per day
+ Up to 20 per day
+ Up to 20 per day
+ Up to 20 per day
+ Up to 20 per day
+ Get 5x more notebooks, chat queries and sources per notebook
+ Get 5x more notebooks, chat queries and sources per notebook
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Chat modes to customize style and length
+ Chat modes to customize style and length
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Gemini Notebook 
+AI thinking and research partner
+ Gemini Notebook 
+AI thinking and research partner
+ Basic access
+ Expanded access
+ Expanded access
+ Expanded access
+ Expanded access
+ Expanded access
+ Generate interactive Audio Overviews with two AI hosts
+ Generate interactive Audio Overviews with two AI hosts
+ Up to 3 per day
+ Up to 20 per day
+ Up to 20 per day
+ Up to 20 per day
+ Up to 20 per day
+ Up to 20 per day
+ Get 5x more notebooks, chat queries and sources per notebook
+ Get 5x more notebooks, chat queries and sources per notebook
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Chat modes to customize style and length
+ Chat modes to customize style and length
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ AppSheet
+ keyboard_arrow_down 
+ Build apps without code
+ Build apps without code
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ AppSheet 
+Build apps without code
+ AppSheet 
+Build apps without code
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Workspace Studio
+ keyboard_arrow_down 
+ Automate your workday with intelligent AI agents
+ Automate your workday with intelligent AI agents
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Workspace Studio 
+Automate your workday with intelligent AI agents
+ Workspace Studio 
+Automate your workday with intelligent AI agents
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Security & Management
+ Security & Management
+ keyboard_arrow_down 
+ 2-step verification
+ 2-step verification
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Group-based policy controls
+ Group-based policy controls
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Advanced Protection Program
+ Advanced Protection Program
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Endpoint management
+ Endpoint management
+ Fundamental
+ Fundamental
+ Advanced
+ Enterprise
+ Enterprise
+ Enterprise
+ Google Workspace Migrate tool
+ Google Workspace Migrate tool
+ This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Vault - Retain, archive, and search data
+ Vault - Retain, archive, and search data
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Secure LDAP
+ Secure LDAP
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Data loss prevention (DLP)
+ Data loss prevention (DLP)
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Cloud Identity Premium
+ Cloud Identity Premium
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Context-aware access
+ Context-aware access
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Security center
+ Security center
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ S/MIME encryption
+ S/MIME encryption
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ Data regions
+ Data regions
+ This feature is not supported by this SKU horizontal_rule Fundamental
+ Fundamental
+ Enterprise
+ Fundamental
+ Enterprise
+ Access transparency
+ Access transparency
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ Assured Controls (includes Access Management)
+ Assured Controls (includes Access Management)
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule Add-on
+ This feature is not supported by this SKU horizontal_rule Add-on
+ AI Classification
+ AI Classification
+ This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check This feature is not supported by this SKU horizontal_rule This feature is available for the SKU check 
+ check 
+ 2-step verification
+ 2-step verification
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Group-based policy controls
+ Group-based policy controls
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Advanced Protection Program
+ Advanced Protection Program
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check This feature is available for the SKU check 
+ check 
+ This feature is available for the SKU check 
+ check 
+ Endpoint management
+ Endpoint management
+ Fundamental
+ Fundamental
+ Advanced
+ Enterprise
+ Enterprise
+ Enterprise
+ keyboard_arrow_down See more features 
+ Business Starter, Business Standard, and Business Plus plans can be purchased for a maximum of 300 users. There is no minimum or maximum user limit for Enterprise plans.
+ Google Workspace customers may have access to additional features for a limited promotional period.
+ Offer available to new Google Workspace customers only. This introductory price is only available for the first 20 users added, for 12 months. Standard pricing will apply to all users after 12 months. Actual price per user may vary by up to ~0.01% due to rounding. Final price will be shown before completing sign-up.
+ Google Workspace provides flexible pooled storage per user that is shared across the organization. Visit our Help Center to learn more about getting additional storage for your organization.
+ Paid upgrade available from Standard to Enhanced Support, or from Enhanced to Premium Support on Enterprise plans
+ Try Google Workspace for free
+ See why millions of businesses love and rely on Google Workspace for their business needs.
+ Try now 
+ Top questions about Google Workspace pricing
+ What is a user? keyboard_arrow_down 
+ How do I buy and pay? keyboard_arrow_down 
+ What is the payment plan? keyboard_arrow_down 
+ Add-ons sold separately.
+ AI
+ AI Expanded Access
+ Get higher access to advanced AI capabilities in Workspace, such as more Workspace Studio automations, image and video generations, real-time speech translation, and more.
+ Learn more 
+ Hardware
+ Google Meet Hardware
+ Fast, reliable, easy-to-join web meetings and video conferencing services for any size meeting room.
+ Learn more 
+ Chrome Enterprise
+ Unlock the business capabilities of Chrome OS, Chrome Browser, and Chrome devices, freeing IT to power your cloud workforce.
+ Learn more 
+ Applications
+ Voice
+ An affordable, easy-to-use business telephone solution for organizations of any size.
+ Get Google Workspace with Voice Learn more 
+ AppSheet
+ A no-code app development platform with advanced integrations and secure governance policies.
+ Learn more 
+ Sign up for the Google Workspace newsletter
+ Enter your email Enter your email 
+ Please enter a valid email address
+ Please enter a valid email address 
+ Region Region Region Nigeria 
+ Afghanistan 
+ Albania 
+ American Samoa 
+ Andorra 
+ Anguilla 
+ Antarctica 
+ Antigua and Barbuda 
+ Argentina 
+ Armenia 
+ Aruba 
+ Australia 
+ Austria 
+ Azerbaijan 
+ Bahamas 
+ Bahrain 
+ Bangladesh 
+ Barbados 
+ Belarus 
+ Belgium 
+ Belize 
+ Benin 
+ Bermuda 
+ Bhutan 
+ Bolivia 
+ Bosnia and Herzegovina 
+ Botswana 
+ Bouvet Island 
+ Brazil 
+ British Indian Ocean Territory 
+ British Virgin Islands 
+ Brunei 
+ Bulgaria 
+ Burkina Faso 
+ Burundi 
+ Cambodia 
+ Cameroon 
+ Canada 
+ Cape Verde 
+ Cayman Islands 
+ Central African Republic 
+ Chad 
+ Chile 
+ China 
+ Christmas Island 
+ Cocos [Keeling] Islands 
+ Colombia 
+ Comoros 
+ Congo [DRC] 
+ Congo [Republic] 
+ Cook Islands 
+ Costa Rica 
+ Côte d'Ivoire 
+ Croatia 
+ Cyprus 
+ Czech Republic 
+ Denmark 
+ Djibouti 
+ Dominica 
+ Dominican Republic 
+ Ecuador 
+ Egypt 
+ El Salvador 
+ Equatorial Guinea 
+ Eritrea 
+ Estonia 
+ Ethiopia 
+ Falkland Islands [Islas Malvinas] 
+ Faroe Islands 
+ Fiji 
+ Finland 
+ France 
+ French Guiana 
+ French Polynesia 
+ French Southern Territories 
+ Gabon 
+ Gambia 
+ Georgia 
+ Germany 
+ Ghana 
+ Gibraltar 
+ Greece 
+ Greenland 
+ Grenada 
+ Guadeloupe 
+ Guam 
+ Guatemala 
+ Guinea 
+ Guinea-Bissau 
+ Guyana 
+ Haiti 
+ Heard Island and McDonald Islands 
+ Honduras 
+ Hong Kong 
+ Hungary 
+ Iceland 
+ India 
+ Indonesia 
+ Iraq 
+ Ireland 
+ Israel 
+ Italy 
+ Jamaica 
+ Japan 
+ Jordan 
+ Kazakhstan 
+ Kenya 
+ Kiribati 
+ Kuwait 
+ Kyrgyzstan 
+ Laos 
+ Latvia 
+ Lebanon 
+ Lesotho 
+ Liberia 
+ Libya 
+ Liechtenstein 
+ Lithuania 
+ Luxembourg 
+ Macau 
+ Macedonia [FYROM] 
+ Madagascar 
+ Malawi 
+ Malaysia 
+ Maldives 
+ Mali 
+ Malta 
+ Marshall Islands 
+ Martinique 
+ Mauritania 
+ Mauritius 
+ Mayotte 
+ Mexico 
+ Micronesia 
+ Moldova 
+ Monaco 
+ Mongolia 
+ Montserrat 
+ Morocco 
+ Mozambique 
+ Namibia 
+ Nauru 
+ Nepal 
+ Netherlands 
+ Netherlands Antilles 
+ New Caledonia 
+ New Zealand 
+ Nicaragua 
+ Niger 
+ Nigeria 
+ Niue 
+ Norfolk Island 
+ Northern Mariana Islands 
+ Norway 
+ Oman 
+ Pakistan 
+ Palau 
+ Palestine 
+ Panama 
+ Papua New Guinea 
+ Paraguay 
+ Peru 
+ Philippines 
+ Pitcairn Islands 
+ Poland 
+ Portugal 
+ Puerto Rico 
+ Qatar 
+ Réunion 
+ Romania 
+ Russia 
+ Rwanda 
+ Saint Helena 
+ Saint Kitts and Nevis 
+ Saint Lucia 
+ Saint Pierre and Miquelon 
+ Saint Vincent and the Grenadines 
+ Samoa 
+ San Marino 
+ São Tomé and Príncipe 
+ Saudi Arabia 
+ Senegal 
+ Seychelles 
+ Sierra Leone 
+ Singapore 
+ Slovakia 
+ Slovenia 
+ Solomon Islands 
+ Somalia 
+ South Africa 
+ South Georgia and the South Sandwich Islands 
+ South Korea 
+ Spain 
+ Sri Lanka 
+ Suriname 
+ Svalbard and Jan Mayen 
+ Swaziland 
+ Sweden 
+ Switzerland 
+ Taiwan 
+ Tajikistan 
+ Tanzania 
+ Thailand 
+ Timor-Leste 
+ Togo 
+ Tokelau 
+ Tonga 
+ Trinidad and Tobago 
+ Tunisia 
+ Turkey 
+ Turkmenistan 
+ Turks and Caicos Islands 
+ Tuvalu 
+ U.S. Outlying Islands 
+ U.S. Virgin Islands 
+ Uganda 
+ Ukraine 
+ United Arab Emirates 
+ United Kingdom 
+ United States 
+ Uruguay 
+ Uzbekistan 
+ Vanuatu 
+ Vatican City 
+ Venezuela 
+ Vietnam 
+ Wallis and Futuna 
+ Western Sahara 
+ Yemen 
+ Zambia 
+ Zimbabwe 
+ Also sign me up for Google Cloud emails with news, product updates, event information, special offers, and more. (Optional and you can unsubscribe at a later time). 
+ I understand my personal data will be processed in accordance with Google’s Privacy Policy .
+ Sign up 
+ Follow our Blog 
+ Search this site Search this site search 
+ Included applications Gmail 
+ Meet 
+ Chat 
+ Calendar 
+ Drive 
+ Docs 
+ Sheets 
+ Slides 
+ Forms 
+ Sites 
+ Keep 
+ Apps Script 
+ Included applications keyboard_arrow_down 
+ Security and management Admin 
+ Endpoint 
+ Vault 
+ Work Insights 
+ Security and management keyboard_arrow_down 
+ Solutions
+ New Business 
+ Small Business 
+ Enterprise 
+ Retail 
+ Manufacturing 
+ Professional Services 
+ Technology 
+ Healthcare 
+ Government 
+ Education 
+ Nonprofits 
+ Artificial Intelligence 
+ Solutions keyboard_arrow_down 
+ Pricing Compare pricing plans 
+ Pricing keyboard_arrow_down 
+ Add-ons
+ Meet hardware 
+ Google Voice 
+ AppSheet 
+ Add-ons keyboard_arrow_down 
+ Resources Working remotely 
+ Security 
+ Customer Stories 
+ FAQs 
+ Partners 
+ Marketplace 
+ Integrations 
+ Training & Certification 
+ Refer Google Workspace 
+ Resources keyboard_arrow_down 
+ Learning and support Admin Help 
+ Setup and Deployment Center 
+ Learning Center for Users 
+ Forums for Admins 
+ Google Workspace Dashboard 
+ What's New in Google Workspace 
+ Find a Google Workspace Partner 
+ Join the community of IT Admins 
+ Press 
+ Learning and support keyboard_arrow_down 
+ More from Google
+ Google Cloud 
+ Google Domains 
+ Chrome Enterprise 
+ Google Business Solutions 
+ Google Ads 
+ Business Messages 
+ Join User Studies 
+ More from Google keyboard_arrow_down 
+ Google About Google Google Products Privacy Terms 
+ language Change Language 
+ Privacy Policy 
+ Terms 
+ Cookies management controls

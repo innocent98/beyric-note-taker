@@ -1,0 +1,53 @@
+SOURCE: https://vexa.ai/legal/subprocessors
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Sub-processors | Vexa 
+ vexa version unknown 
+ Product Finance For finance Developers For developers Docs Pricing Roadmap Blog Toggle theme 
+ Sign in Book a demo 
+ Sub-processors 
+ Last updated: October 21, 2026
+ These are the third parties that process personal data on our behalf when you use the hosted Vexa service. This page is the sub-processor list referenced by our DPA and the recipient disclosure referenced by our Privacy Notice .
+ All Vexa-operated infrastructure runs in one region: Seattle, Washington, USA — Akamai Connected Cloud (Linode) region us-sea . We do not currently offer EEA or UK hosting.
+ Meeting data
+ Processors that handle your meeting content — audio, transcripts and meeting metadata.
+ Vendor Purpose Data processed Location 
+ Cloudflare, Inc. — Workers AI Speech-to-text (model @cf/openai/whisper-large-v3-turbo ) Meeting audio. Audio from every transcribed meeting is sent to Cloudflare Workers AI to produce the transcript. This is the production transcription path, not a fallback. Cloudflare global network 
+ Akamai Connected Cloud (Linode) — Kubernetes (LKE) Compute for all Vexa services and meeting bots Meeting audio and transcripts in processing, service logs Seattle, WA, USA ( us-sea ) 
+ Akamai Connected Cloud (Linode) — Managed PostgreSQL Primary database Transcript text, speaker labels, meeting metadata, account records Seattle, WA, USA ( us-sea ) 
+ Akamai Connected Cloud (Linode) — Object Storage Recording storage and database backups Meeting audio recordings at rest, database backups Seattle, WA, USA ( us-sea ) 
+ Account, billing and sign-in
+ Vendor Purpose Data processed Location 
+ Stripe, Inc. Payments, subscriptions, invoicing, usage metering Billing contact details, payment tokens, usage counts US / EU 
+ Google LLC — Sign in with Google Optional sign-in method Email address, name, Google account ID Global 
+ Microsoft Corporation — Entra ID Optional sign-in method Email address, name, Microsoft account ID Global 
+ PostHog Product analytics (website) 
+Consent-based; loads only after Accept 
+Account milestones (server-side, no cookies) cookie/device IDs, page and click events; internal account ID for signed-in users (no email); account milestone events with internal account ID, mail-domain kind and, for business domains, the domain (no email). No meeting content US (Virginia) 
+PostHog DPA + SCCs 
+ Website
+ These apply to visitors of vexa.ai. They do not receive meeting content.
+ Vendor Purpose Data processed Location 
+ Google LLC — Google Analytics 4 Website analytics (property G-45M7REZYT1 ); we also pull aggregate reports back via the GA4 Data API Cookie/device identifiers, IP address, page events. Loaded on all visits — see /legal/cookies Global 
+ Cloudflare, Inc. — authoritative DNS DNS for vexa.ai DNS query metadata only. Records are not proxied, so site traffic does not pass through Cloudflare's network Global 
+ Pravatar ( i.pravatar.cc ) Placeholder avatar images on marketing pages Visitor IP address and user agent, by virtue of the image request Global 
+ Not in use
+ We are naming these because earlier versions of this page listed them or left them as placeholders. None of them process any Vexa data today: we operate no transactional email provider , no third-party error-monitoring or crash-reporting service (monitoring is self-hosted Prometheus and Grafana inside our own cluster), and no Umami analytics . Vultr — named as our host on earlier versions of this page — is not a vendor we use and has never held Vexa data.
+ Vendors that receive no personal data are not listed above: our container registry (Docker Hub) and the source of our blog articles (GitHub).
+ Change procedure
+ We will post updates here ≥14 days before adding/replacing a sub-processor (except urgent replacements for security/legal reasons, where we'll notify as soon as practicable). You may object on reasonable grounds; if unresolved, you may terminate affected services.
+ Contact
+ For questions about our sub-processors, please contact us at: info@vexa.ai 
+ Product
+ Meeting capture Workspace (early) Agents (early) Self-host Pricing Roadmap 
+ For finance
+ Vexa for finance Fund distribution Credit and diligence Security review Work with us 
+ For developers
+ Google Meet API Microsoft Teams API Zoom API Claude and MCP n8n Webhooks Sales call transcription Docs 
+ Compare
+ vs Recall.ai vs Meetily vs Meeting BaaS vs Otter.ai vs Fireflies 
+ Company
+ Blog GitHub Book a demo Contact Report a bug 
+ vexa version unknown 
+ Vexa is open-source AI that turns your company’s meetings into knowledge it owns, on your own servers, with your own model. It starts with your Zoom, Microsoft Teams and Google Meet calls. The code is open source under Apache-2.0, with an open core approved by FINOS.
+ © 2026 Vexa.ai Inc. All rights reserved. Terms Privacy Cookies DPA Security

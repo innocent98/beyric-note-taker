@@ -1,0 +1,108 @@
+SOURCE: https://developers.zoom.us/docs/meeting-sdk/
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0' (then tags stripped by a script)
+
+Zoom Meeting SDK - Meeting SDK - Zoom Developer Docs 
+ Now Available: Zoom AI Services Summarizer & Translator APIs. 
+ Docs 
+ APIs MCP Blog Changelog Agent Skills Help 
+ Docs 
+ APIs MCP Blog Changelog Agent Skills Help Theme 
+ Meeting SDK
+ Introduction 
+ Get credentials 
+ Authorize 
+ Upgrade guide 
+ SDK key migration 
+ MSDK authorization updates 
+ Key concepts 
+ API references 
+ Changelog 
+ Platforms
+ Android
+ iOS
+ macOS
+ Web
+ Windows
+ Electron
+ Linux
+ Unreal
+ React Native
+ Meeting SDK 
+ Zoom Meeting SDK
+ Copy for LLM 
+ View as Markdown 
+ On this page
+ Meeting SDK usage policy 
+ The Meeting SDK is designed for human use cases and does not support bots or AI notetakers. To build an AI notetaker application or access realtime media, use Zoom RTMS (Real-time media streams) .
+ Build with AI 
+ Speed up development by using your coding agent to build on Zoom. See Announcing Agent Skills and get the skills on GitHub   .
+ Embed the Zoom meeting and webinar experience in an app or website.
+ The Zoom Meeting SDK lets you display the familiar Zoom meeting and webinar experience in your app or website. The Meeting SDK interface resembles the Zoom client, except that it lives inside your own app or website.
+ Press arrow keys to move. Press arrow keys to move. Press arrow keys to move. Press arrow keys to move. Press arrow keys to move. Press arrow keys to move. 
+ Platforms # 
+ Android
+ iOS
+ macOS
+ Windows
+ Web
+ Electron
+ Linux
+ Unreal
+ React Native
+ Enhance the users' experience # 
+ Native platforms for mobile and desktop offer a default UI , which looks similar to the Zoom client, and a custom UI , which offers the ability to completely customize the user interface.
+ The web SDK offers a client view , which looks similar to the Zoom client, and a modular component view , which displays the Meeting SDK in components on your website.
+ Meeting and webinar authorization # 
+ Each time you use the SDK to join a meeting or webinar, generate an SDK JWT to let you securely transmit your SDK credentials to Zoom's auth servers.
+Start meetings on behalf of other users using a ZAK (Zoom Access Key) token or OBF (On Behalf Of) token .
+ The Meeting SDK is also compatible with Zoom OAuth , allowing existing Zoom
+users to connect their accounts to your Meeting SDK .
+ Access to raw data # 
+ Direct access to raw video and audio data on native platforms enables improved interaction between users and the app video stream. Imagine a gaming video streaming app with direct interaction between the player and viewers based on in-game events or prompts from the community. Or an AR streaming platform with direct viewer access to on-screen video. Raw data is also useful for building custom live transcription, video analysis, or audio analysis.
+ Implementation requirements # 
+ We enforce a required minimum version of the Meeting SDK. See our SDK minimum version policy for details.
+ The Meeting SDK follows the Zoom license model. See Zoom Meetings   , Zoom Webinars   , and the Zoom ISV Partner Program   for details.
+ The Meeting SDK uses the same global infrastructure as other Zoom products. If you experience connection issues, be sure your products follow the Zoom network firewall and proxy server settings connection requirements. See the Zoom Connection Process   whitepaper and Zoom network firewall or proxy server settings   for details.
+ From the developer blog:
+ Meeting SDK 
+ Integrating Zoom Meeting SDK into Blazor 
+ DS
+ David Stowell
+ · Apr 8, 2026
+ · 8 min read
+ Meeting SDK 
+ Transitioning to On Behalf Of (OBF) tokens in Meeting SDK apps 
+ JS
+ Joan Sirma
+ · Nov 4, 2025
+ · 5 min read
+ Meeting SDK 
+ Tutorial 
+ Upgrade 
+ Distribute 
+ Guide 
+ macOS 
+ Upgrading and distributing Zoom Meeting SDK apps for macOS 
+ RY
+ Richard Yeh
+ · Mar 18, 2025
+ · 12 min read
+ Next Get credentials 
+ On this page
+ Resources
+ API References 
+ SDK References 
+ Read llms.txt 
+ Updates
+ Changelog 
+ Developer blog 
+ Community
+ MVP program 
+ Github 
+ Developer forum 
+ YouTube 
+ Support
+ Premier Developer Support 
+ Zoom Support 
+ Copyright © 2026 Zoom Communications, Inc. All rights reserved.
+ Terms · Privacy Policy · API Terms of Use · Marketplace Developer Agreement · Do Not Sell My Personal Information · Cookie Preferences
