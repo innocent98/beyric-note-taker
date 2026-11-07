@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { markSetupPending, takeSetupPending } from "@/lib/setup-pending";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -54,10 +55,18 @@ describe("login", () => {
     await userEvent.click(screen.getByRole("button", { name: "Hide" }));
     expect(field).toHaveProperty("type", "password");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    expect(screen.getByRole("alert").textContent).toContain("Enter your email.");
+    // The designer's field-level lines under the inputs, not one alert above the form.
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByLabelText("Work email").closest(".field")?.textContent).toContain("Enter your email.");
+    expect(screen.getByLabelText("Password").closest(".field")?.textContent).toContain("Enter your password.");
+    await userEvent.type(screen.getByLabelText("Work email"), "owner");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(screen.getByLabelText("Work email").closest(".field")?.textContent).toContain("Enter a valid email, like you@company.com.");
+    await userEvent.clear(screen.getByLabelText("Work email"));
     await userEvent.type(screen.getByLabelText("Work email"), "owner@example.test");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
-    expect(screen.getByRole("alert").textContent).toContain("Enter your password.");
+    expect(screen.getByLabelText("Work email").closest(".field")?.textContent).not.toContain("Enter");
+    expect(screen.getByLabelText("Password").closest(".field")?.textContent).toContain("Enter your password.");
     expect(mocks.login).not.toHaveBeenCalled();
   });
 
@@ -69,6 +78,17 @@ describe("login", () => {
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(mocks.login).toHaveBeenCalledWith("owner@example.test", "hunter2");
     expect(mocks.replace).toHaveBeenCalledWith("/");
+  });
+
+  it("sends a new account's first sign-in to the workspace step, once", async () => {
+    mocks.login.mockResolvedValue({ authenticated: true, csrf_token: "x", user: null, usage: null });
+    markSetupPending();
+    render(<LoginForm />);
+    await userEvent.type(screen.getByLabelText("Work email"), "owner@example.test");
+    await userEvent.type(screen.getByLabelText("Password"), "hunter2");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(mocks.replace).toHaveBeenCalledWith("/setup");
+    expect(takeSetupPending()).toBe(false);
   });
 
   it("shows the captured wrong-credentials message and lets the user try again", async () => {

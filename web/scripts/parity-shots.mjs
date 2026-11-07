@@ -255,7 +255,12 @@ const SCREENS = {
   "invite-signin": [null, [], "/accept-invite?token=existing", false],
   "invite-accept": [null, [], "/accept-invite?token=existing", true],
   "invite-dead": [null, [], "/accept-invite?token=dead", false],
-  "signup-team-invite": [null, [], "/signup?invite=new", false],
+  "signup-team-invite": [`${DESIGN}/Auth.dc.html#invite`, [], "/signup?invite=new", false],
+  // The designer's "Join your team" is one form; ours is two pages, so the first (no account yet) is shot too.
+  "invite-new-person": [`${DESIGN}/Auth.dc.html#invite`, [], "/accept-invite?token=new", false],
+  // Sign-in field errors under the inputs (an empty submit), and the workspace step after the first sign-in.
+  "signin-errors": [`${DESIGN}/Auth.dc.html#sign-in`, [["Sign in", "last"]], "/login", false, [{ click: "Sign in", exact: true }]],
+  "setup-workspace": [`${DESIGN}/Auth.dc.html#setup`, [], "/setup", true],
   "app-settings-language": [APP, [["Settings", "first"], DEFAULT_LANG("French", 300)], "/settings", true, [DEFAULT_LANG("French", 400)]],
 };
 

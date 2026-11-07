@@ -14,6 +14,7 @@ import {
 import type { PilotState } from "@/lib/api/types";
 import { AuthHead } from "./auth-head";
 import { GoogleButton } from "./google-button";
+import { InviteBanner, LockedEmail } from "./invite-banner";
 import { MailLinks } from "./mail-links";
 import { PasswordField, PasswordRules } from "./password-field";
 import { PilotScreen } from "./pilot-screen";
@@ -188,15 +189,74 @@ export function SignupFlow({
     );
   }
 
+  // A team's invitation is the designer's "Join your team" screen (Auth.dc.html:171-208): banner,
+  // locked email, name, password, "Join Beyric". The same state and the same sign-up call as the
+  // form below; the terms box stays because the API needs `accept_terms`, and the Google button is
+  // not drawn (that sign-up does not carry the invitation).
+  if (teamInvite) {
+    return (
+      <form className="auth-form" method="post" onSubmit={submit} noValidate data-screen="join-team">
+        <InviteBanner by={teamInvite.by} team={teamInvite.team} />
+        <AuthHead title="Join your team">You will see shared meeting notes and the tasks assigned to you.</AuthHead>
+        {formError ? <Alert kind="error">{formError}</Alert> : null}
+        <div className="auth-fields">
+          <LockedEmail email={teamInvite.email} />
+          <Field
+            id="name"
+            label="Full name"
+            large
+            autoComplete="name"
+            placeholder="Your name"
+            value={name}
+            error={errors.name}
+            onChange={(event) => setName(event.target.value)}
+          />
+          <div className="stack-xs">
+            <PasswordField
+              id="password"
+              label="Password"
+              autoComplete="new-password"
+              placeholder="Create a password"
+              value={password}
+              show={show}
+              onToggle={() => setShow((value) => !value)}
+              error={errors.password}
+              onChange={setPassword}
+            />
+            <PasswordRules password={password} />
+          </div>
+          {errors.email ? <Alert kind="error">{errors.email}</Alert> : null}
+        </div>
+        <div className="auth-stack-sm">
+          <Checkbox
+            id="accept_terms"
+            ref={termsRef}
+            checked={accepted}
+            error={errors.terms}
+            onChange={(event) => setAccepted(event.target.checked)}
+          >
+            I agree to the{" "}
+            <AppLink href="/terms" target="_blank">
+              Terms
+            </AppLink>{" "}
+            and the{" "}
+            <AppLink href="/privacy" target="_blank">
+              Privacy Policy
+            </AppLink>
+            .
+          </Checkbox>
+          <Button size="field" block disabled={pending}>
+            {pending ? "Joining..." : "Join Beyric"}
+          </Button>
+        </div>
+      </form>
+    );
+  }
+
   return (
     <form className="auth-form" method="post" onSubmit={submit} noValidate>
       <AuthHead title="Create your account">Send the note taker to your next meeting in a few minutes.</AuthHead>
-      {teamInvite ? (
-        <Alert kind="info" role="status">
-          {teamInvite.by ? `${teamInvite.by} invited you to join ${teamInvite.team}.` : `You are invited to join ${teamInvite.team}.`}{" "}
-          Create your account with {teamInvite.email} to join; the invitation works for that address only.
-        </Alert>
-      ) : invited ? (
+      {invited ? (
         <Alert kind="info" role="status">
           You have an invitation to the pilot. Use the email address it was sent to: the invitation works for that
           address only.
@@ -228,7 +288,6 @@ export function SignupFlow({
           autoComplete="email"
           placeholder="you@company.com"
           value={email}
-          readOnly={teamInvite !== null}
           error={errors.email}
           onChange={(event) => setEmail(event.target.value)}
         />

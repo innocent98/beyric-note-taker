@@ -353,7 +353,7 @@ function disconnectedFrom(current: CalendarState): CalendarState {
 
 // Shown after the connect call answered with `show_unverified_notice`, before Google's screen.
 // Not seen live: the wording of Google's own warning is described, not quoted.
-function UnverifiedNotice({ onContinue }: { onContinue: () => void }) {
+export function UnverifiedNotice({ onContinue }: { onContinue: () => void }) {
   return (
     <Alert kind="notice">
       <p className="alert-text">

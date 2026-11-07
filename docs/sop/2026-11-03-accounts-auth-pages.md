@@ -1,5 +1,7 @@
 # SOP: accounts pages in Next.js (stream D, auth screens)
 
+> **Labels, 2026-11-07 (UI parity batch 2):** these screens are **lead-designed, not in the designer's file**: the closed and full sign-up screens and the waiting-list form (`pilot-screen.tsx`, `waitlist-form.tsx`; `Auth.dc.html` draws neither), the "Check your email" screen after sign-up (the file draws a 6-digit code screen; ours follows the link mail), the confirm-email page `/verify-email`, "Send a new link" (`resend-link-form.tsx`) and the `/login?error=` messages. Built from the account screens' own frame and head.
+
 ## What shipped
 The Next.js pages for the accounts flows the API already had: `/signup` (with `?invite=`), `/verify-email`, `/forgot-password`, `/reset-password`, `/pilot-full`, and the sign-in form with "Forgot password?", the Google button and the `/login?error=<code>` messages. Branch `feature/stream-d-auth-pages`, one PR (see the PR list). No backend, nginx or compose change. **Sign-up stays closed** (`signups_open` is false): the pages render the `closed` and `pilot_full` states from `GET /api/pilot`, and nothing here opens the pilot.
 

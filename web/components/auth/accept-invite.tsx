@@ -7,6 +7,7 @@ import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { InvitePreview } from "@/lib/api/types";
 import { AuthHead } from "./auth-head";
+import { InviteBanner, LockedEmail } from "./invite-banner";
 import { useUrlToken } from "./use-url-token";
 
 type Who = { signedIn: boolean; email: string | null };
@@ -15,9 +16,12 @@ type Screen =
   | { kind: "dead" }
   | { kind: "ready"; preview: InvitePreview; who: Who };
 
-// /accept-invite?token=...: where the "Team invite" mail's button goes. LEAD-DESIGNED, not in the
-// designer's file (it drew the mail, not this page): built from the account screens' own frame and
-// head (docs/fe-integration-guide-team.md, "The invitation link page"). It asks the public preview
+// /accept-invite?token=...: where the "Team invite" mail's button goes. Its presentation is the
+// designer's "Join your team" screen (Auth.dc.html:171-208): the banner "{name} invited you to the
+// {team} workspace", the title, the locked email. The design is one form (name and password) for a
+// new person; here that form is the sign-up page (`/signup?invite=`, signup-flow.tsx), so this
+// page's button leads there and says so. The logic and error states are unchanged
+// (docs/fe-integration-guide-team.md, "The invitation link page"). It asks the public preview
 // what the link is for, then:
 //  * an address with no account is sent to sign up with the link (`/signup?invite=`), where the
 //    email is filled in and locked;
@@ -97,16 +101,16 @@ export function AcceptInvite() {
   }
 
   const { preview, who } = screen;
-  const heading = preview.inviter_name
-    ? `${preview.inviter_name} invited you to join ${preview.team_name}`
-    : `You are invited to join ${preview.team_name}`;
+  const banner = <InviteBanner by={preview.inviter_name} team={preview.team_name} />;
 
   if (!preview.has_account) {
     return (
       <div className="auth-form" data-screen="invite-new">
-        <AuthHead tile="mail" title={heading}>
+        {banner}
+        <AuthHead title="Join your team">
           Create your Beyric Note Taker account with {preview.email} to join. You will confirm that address by email.
         </AuthHead>
+        <LockedEmail email={preview.email} />
         <Button href={`/signup?invite=${encodeURIComponent(token ?? "")}`} size="field" block>
           Create your account
         </Button>
@@ -121,9 +125,11 @@ export function AcceptInvite() {
   if (!who.signedIn) {
     return (
       <div className="auth-form" data-screen="invite-signin">
-        <AuthHead tile="mail" title={heading}>
+        {banner}
+        <AuthHead title="Join your team">
           Sign in as {preview.email} to accept, then open the link in your email again.
         </AuthHead>
+        <LockedEmail email={preview.email} />
         <Button href="/login" size="field" block>
           Go to sign in
         </Button>
@@ -149,17 +155,19 @@ export function AcceptInvite() {
 
   return (
     <div className="auth-form" data-screen="invite-accept">
-      <AuthHead tile="mail" title={heading}>
-        Join as {preview.role === "admin" ? "an admin" : "a member"} to see shared meeting notes and the tasks assigned to
-        you.
+      {banner}
+      <AuthHead title="Join your team">
+        You will see shared meeting notes and the tasks assigned to you.
+        {preview.role === "admin" ? " You will join as an admin." : ""}
       </AuthHead>
+      <LockedEmail email={preview.email} />
       <Alert kind="notice">
         Your own team will be replaced by this one. Your tasks move to it. Your meetings stay yours and private, and
         nothing of yours is shared until you choose to.
       </Alert>
       {error ? <Alert kind="error">{error}</Alert> : null}
       <Button type="button" size="field" block disabled={busy} onClick={() => void accept()}>
-        {busy ? "Joining..." : "Accept invitation"}
+        {busy ? "Joining..." : "Join Beyric"}
       </Button>
     </div>
   );

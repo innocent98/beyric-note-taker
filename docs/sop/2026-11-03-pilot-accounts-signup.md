@@ -1,5 +1,7 @@
 # SOP: pilot accounts, sign-up (Phase A, tasks A3 and A10 to A20)
 
+> **Labels, 2026-11-07 (UI parity batch 2):** the sign-up pages, confirm-email and resend pages, the pilot-closed / pilot-full screens and the waiting-list form listed here are **lead-designed, not in the designer's file** (see `2026-11-03-accounts-auth-pages.md`).
+
 ## What shipped
 The second half of Phase A: sign-up with a password or with Google, email verification, password reset, the waitlist and invitations, the admin API, deleting an account for good, the notifications API, the mailer, nginx limits for the public routes, and the privacy and terms wording for accounts. Branch `feature/pilot-accounts-signup` (PR: see the PR list), one PR (about 2,860 changed lines of app and deploy code, plus a 956-line capture script; tests, captures and generated files not counted). Also from the Opus review of the accounts core: `bot_already_active` is per user with a neutral `bot_busy` for a full note taker, usage is committed before transcription, and the Jinja IDOR tests exist.
 

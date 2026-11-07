@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { takeSetupPending } from "@/lib/setup-pending";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import userEvent from "@testing-library/user-event";
@@ -245,6 +246,8 @@ describe("confirm email", () => {
     expect(await screen.findByRole("heading", { name: "Email confirmed" })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Go to sign in" }).getAttribute("href")).toBe("/login");
     expect(mocks.replace).not.toHaveBeenCalled();
+    // The tab is marked so the first sign-in offers "Set up your workspace" (lib/setup-pending.ts).
+    expect(takeSetupPending()).toBe(true);
   });
 
   it("asks for the password before calling the API", async () => {
@@ -540,14 +543,18 @@ describe("sign-up with a team's invitation link (docs/fe-captures/team-w3/)", ()
     mocks.signup.mockResolvedValue(accountBody("18-signup-ok.json"));
     window.history.replaceState(null, "", "/signup?invite=team-token");
     render(<SignupFlow pilot="closed" google hasInvite />);
-    expect(await screen.findByText(/Dan Okoro invited you to join Product team/)).toBeTruthy();
-    const email = screen.getByLabelText("Work email") as HTMLInputElement;
-    expect(email.value).toBe("ada@example.test");
-    expect(email.readOnly).toBe(true);
+    // The designer's "Join your team": banner, locked email, name, password, "Join Beyric".
+    expect((await screen.findByText("Dan Okoro")).closest(".invite-banner-text")?.textContent).toBe(
+      "Dan Okoro invited you to the Product team workspace",
+    );
+    expect(screen.getByRole("heading", { name: "Join your team" })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Email" }).textContent).toBe("ada@example.test");
+    expect(screen.queryByLabelText("Work email")).toBeNull();
+    expect(screen.queryByText("or use your email")).toBeNull();
     await userEvent.type(screen.getByLabelText("Full name"), "Ada Lovelace");
     await userEvent.type(screen.getByLabelText("Password"), "a-long-enough-pass-9");
     await userEvent.click(screen.getByRole("checkbox"));
-    await userEvent.click(screen.getByRole("button", { name: /Create account/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Join Beyric" }));
     await waitFor(() => expect(mocks.signup).toHaveBeenCalled());
     expect(mocks.signup.mock.calls[0][0]).toMatchObject({ email: "ada@example.test", invite_token: "team-token" });
   });
