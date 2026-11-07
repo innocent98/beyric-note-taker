@@ -1,0 +1,36 @@
+{
+  "note": "Friday review too.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/series/3/project",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "project_id": 1
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "title": "Beyric Friday review",
+      "cadence": "Weekly on Fridays, 14:00",
+      "platform": "google_meet",
+      "next_starts_at": "2026-11-13T14:00:00Z",
+      "next_text": "Fri 13 Nov, 14:00",
+      "unfinished_tasks": 0,
+      "open_questions": 0,
+      "project": {
+        "id": 1,
+        "name": "Client Portal"
+      }
+    }
+  }
+}

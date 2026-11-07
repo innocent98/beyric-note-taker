@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import auth, filing, projects, services, team_admin, timezones, titles
+from app import auth, filing, projects, series, services, team_admin, timezones, titles
 from app.api_schemas import (
     ErrorResponse,
     MeetingMilestones,
@@ -86,6 +86,7 @@ def _project_out(
     counts: dict[int, int],
     headline: dict[int, Milestone],
     sprint_counts: dict[int, tuple[int, int]],
+    linked: dict[int, int],
 ) -> list[ProjectOut]:
     return [
         ProjectOut(
@@ -97,6 +98,7 @@ def _project_out(
             sprint_length=p.sprint_length,
             in_current_sprint=sprint_counts.get(p.id, (0, 0))[0],
             in_backlog=sprint_counts.get(p.id, (0, 0))[1],
+            recurring_meetings=linked.get(p.id, 0),
             milestone=(
                 MilestoneLine(
                     id=headline[p.id].id, name=headline[p.id].name, due_date=headline[p.id].due_date
@@ -125,7 +127,12 @@ def present_projects(
         if (line := projects.headline_milestone(items, today)) is not None
     }
     sprint_counts = projects.sprint_counts(session, user, team_id, [p.id for p in rows])
-    return _project_out(rows, counts, headline, sprint_counts)
+    # Only the recurring meetings the caller may see are counted, as the checklist lists them.
+    linked: dict[int, int] = {}
+    for found in series.list_for(session, user):
+        if found.project_id is not None:
+            linked[found.project_id] = linked.get(found.project_id, 0) + 1
+    return _project_out(rows, counts, headline, sprint_counts, linked)
 
 
 @router.get("/projects", tags=["projects"])

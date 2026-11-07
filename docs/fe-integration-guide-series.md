@@ -1,5 +1,7 @@
 # Frontend integration guide: Series, agenda, carry-over and reminders (W8)
 
+> **Update 2026-11-08:** every card in `GET /api/series` now also has `project` (`{id, name}` or null) and `GET /api/series/{id}` has `sprint_note` ("Opens Sprint N" or null). The captures below predate them. See `docs/fe-integration-guide-series-project-link.md` (real captures).
+
 Everything the **Recurring cards** on Meetings, the **Series page**, the meeting page's **Series row** and **"On next agenda"** toggles, **Send agenda to attendees** and the **Sprints and reminders** card need. **Every payload, status code and error string below is pasted from a real response** captured by `scripts/capture_series_api.py` against the running app (real HTTP, real sessions and CSRF, real database and migrations, the real linking and reminder code, the real mail builders). The files are in `docs/fe-captures/series-w8/`; run the script again to re-derive any of it. Long lists are shortened with an explicit `<… omitted>` marker; nothing is tidied or invented. What could not be run live is marked **NOT LIVE** and listed in the verification table at the end. Names and addresses are placeholders. Times in the captures are "now" on the day they were captured, so dates differ from the ones in the examples you will see in a later run.
 
 Field-by-field shapes are in `docs/openapi.json` (generated into `web/lib/api/schema.d.ts`). This guide is for behaviour.

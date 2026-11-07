@@ -170,6 +170,13 @@ export function projectsBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/projects-w4", file))).response.body as T;
 }
 
+// The body of a capture from the running API for linking a recurring meeting to a project and the
+// Series page's sprint line (docs/fe-captures/series-project-link/<file>,
+// `python scripts/capture_series_project_api.py`).
+export function linkBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/series-project-link", file))).response.body as T;
+}
+
 // The body of a capture from the running API for the sprint routes
 // (docs/fe-captures/sprints-w9/<file>, `python scripts/capture_sprints_api.py`).
 export function sprintsBody<T>(file: string): T {

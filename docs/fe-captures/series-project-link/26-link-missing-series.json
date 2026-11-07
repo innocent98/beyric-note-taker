@@ -1,0 +1,28 @@
+{
+  "note": "404.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/series/999999/project",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "project_id": 1
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such recurring meeting"
+      }
+    }
+  }
+}

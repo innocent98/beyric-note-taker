@@ -37,6 +37,7 @@ from app.models import (
     CalendarEvent,
     Meeting,
     OpenQuestion,
+    Project,
     ScheduledJoin,
     Series,
     SeriesAgendaItem,
@@ -319,6 +320,37 @@ def rename(session: Session, user: User, series: Series, title: str) -> None:
     if series.owner_user_id != user.id and not is_manager(session, user, series.team_id):
         raise _forbidden()
     series.title = clean
+
+
+def link_project(
+    session: Session, user: User, series: Series, project_id: int | None
+) -> Project | None:
+    """Link the series to one of its team's projects, or unlink it (`None`): the tasks of its
+    meetings are then filed into that project (`filing.series_project`, step 1 of the rule). A
+    series is in at most one project, so linking it to a second moves it (the designer's checklist
+    shows "Linked to {other project}" on a row that belongs to another project).
+
+    Who may: an owner or admin of the series' team, as for creating, changing and deleting a
+    project (`api_projects`): linking decides where the whole team's tasks are filed, so it is not
+    left to the series' creator, nor to every member who can read it. The caller has already seen
+    the series (`get`); a project that is not on the series' team is 404. The project row is
+    locked against a concurrent delete, so a link never points at a project that just went."""
+    if not is_manager(session, user, series.team_id):
+        raise _forbidden()
+    if project_id is None:
+        series.project_id = None
+        session.flush()
+        return None
+    project = session.scalars(
+        select(Project)
+        .where(Project.id == project_id, Project.team_id == series.team_id)
+        .with_for_update(read=True)
+    ).first()
+    if project is None:
+        raise SeriesRefused(404, "not_found", "No such project.")
+    series.project_id = project.id
+    session.flush()
+    return project
 
 
 def attach(session: Session, user: User, meeting: Meeting, series_id: int | None) -> Series | None:

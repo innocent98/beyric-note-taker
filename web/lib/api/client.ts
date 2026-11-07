@@ -425,6 +425,10 @@ export function createApi(options: ApiOptions = {}) {
       list: () => request<SeriesList>("GET", "/api/series"),
       create: (title: string) => request<SeriesCard>("POST", "/api/series", { body: { title }, write: true }),
       get: (id: number) => request<SeriesPage>("GET", `/api/series/${id}`),
+      // Link a recurring meeting to a project, or unlink it (`null`): the Projects screen's Recurring
+      // meetings checklist (docs/fe-integration-guide-series-project-link.md). Owner or admin only.
+      linkProject: (id: number, projectId: number | null) =>
+        request<SeriesCard>("PUT", `/api/series/${id}/project`, { body: { project_id: projectId }, write: true }),
       addAgenda: (id: number, text: string) =>
         request<AgendaItem>("POST", `/api/series/${id}/agenda`, { body: { text }, write: true }),
       removeAgenda: (id: number, itemId: number) =>

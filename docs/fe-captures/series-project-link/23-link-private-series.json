@@ -1,0 +1,28 @@
+{
+  "note": "Ada is the team owner but cannot see Dan's private 1:1: 404, as for reading it.",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/series/5/project",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "project_id": 1
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such recurring meeting"
+      }
+    }
+  }
+}

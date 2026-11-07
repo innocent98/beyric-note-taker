@@ -1,0 +1,42 @@
+{
+  "note": "",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/projects",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Client Portal",
+      "keywords": [
+        "portal",
+        "checkout"
+      ]
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "name": "Client Portal",
+      "color": "#0E6B5E",
+      "keywords": [
+        "portal",
+        "checkout"
+      ],
+      "open_tasks": 0,
+      "sprint_length": null,
+      "in_current_sprint": 0,
+      "in_backlog": 0,
+      "recurring_meetings": 0,
+      "milestone": null,
+      "created_at": "2026-11-07T22:20:37.554432Z"
+    }
+  }
+}

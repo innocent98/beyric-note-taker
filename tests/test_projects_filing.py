@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import select
 
 from app import filing, projects
-from app.models import Milestone, Project, Task
+from app.models import Milestone, Project, Series, Task, Team
 from tests.test_tasks import (  # noqa: F401  (fixtures used by name)
     GOOD,
     NOW,
@@ -263,3 +263,52 @@ def test_a_task_that_moved_team_during_the_model_call_is_not_filed_into_the_old_
     )
     session.expire_all()
     assert all(t.project_id is None for t in all_tasks(session, meeting))
+
+
+# ---- a series linked to a project (spec 6.2 step 1) ----
+
+
+def make_series(session, team, owner, **fields):
+    row = Series(team_id=team.id, owner_user_id=owner.id, title="Monday planning", **fields)
+    session.add(row)
+    session.commit()
+    return row
+
+
+def test_a_meeting_of_a_linked_series_files_every_task_into_that_project(session, owner, team):
+    project(session, team, "Portal", "checkout", "payment")  # the words say Portal
+    ops = project(session, team, "Ops", "demo")
+    linked = make_series(session, team, owner, project_id=ops.id)
+    meeting = make_meeting(session, owner, series_id=linked.id)
+    run(session, meeting)
+    tasks = all_tasks(session, meeting)
+    assert tasks and {(t.project_id, t.check_project) for t in tasks} == {(ops.id, False)}
+
+
+def test_an_unlinked_series_is_filed_by_keywords_as_before(session, owner, team):
+    portal = project(session, team, "Portal", "checkout", "payment")
+    project(session, team, "Ops", "demo")
+    meeting = make_meeting(session, owner, series_id=make_series(session, team, owner).id)
+    run(session, meeting)
+    by_title = {t.title: t for t in all_tasks(session, meeting)}
+    assert by_title["Finish payment checkout"].project_id == portal.id
+
+
+def test_a_series_project_of_another_team_or_a_gone_one_is_no_link(session, owner, team):
+    assert filing.series_project(session, make_meeting(session, owner)) is None  # no series
+    other = Team(name="Other", owner_user_id=owner.id)
+    session.add(other)
+    session.commit()
+    foreign = project(session, other, "Theirs")
+    linked = make_series(
+        session, team, owner, project_id=foreign.id
+    )  # no foreign key: written by hand
+    meeting = make_meeting(session, owner, series_id=linked.id)
+    assert filing.series_project(session, meeting) is None
+    linked.project_id = 987_654
+    session.commit()
+    assert filing.series_project(session, meeting) is None
+    mine = project(session, team, "Mine")
+    linked.project_id = mine.id
+    session.commit()
+    assert filing.series_project(session, meeting) == mine.id

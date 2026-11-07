@@ -1443,6 +1443,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/series/{series_id}/project": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Series Project
+         * @description Link a recurring meeting to a project (`project_id`), or unlink it (null): the tasks taken
+         *     from its meetings are filed into that project, first in the filing rule. One project per
+         *     recurring meeting: linking it to another project moves it. Owner or admin of the team only
+         *     (403 `team_forbidden`); a recurring meeting the caller cannot see, or a project that is not
+         *     on the team, is 404. The same call again changes nothing.
+         */
+        put: operations["put_series_project"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/session": {
         parameters: {
             query?: never;
@@ -3030,6 +3054,16 @@ export interface components {
              */
             name: string;
         };
+        /**
+         * ProjectLink
+         * @description The project a recurring meeting is linked to (its tasks are filed there).
+         */
+        ProjectLink: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
         /** ProjectList */
         ProjectList: {
             /** Can Manage */
@@ -3059,6 +3093,8 @@ export interface components {
             name: string;
             /** Open Tasks */
             open_tasks: number;
+            /** Recurring Meetings */
+            recurring_meetings: number;
             /** Sprint Length */
             sprint_length: ("week5" | "week7" | "week14" | "month1" | "month3" | "month6") | null;
         };
@@ -3206,6 +3242,7 @@ export interface components {
             open_questions: number;
             /** Platform */
             platform: ("google_meet" | "zoom") | null;
+            project: components["schemas"]["ProjectLink"] | null;
             /** Title */
             title: string;
             /** Unfinished Tasks */
@@ -3251,6 +3288,8 @@ export interface components {
             platform: ("google_meet" | "zoom") | null;
             /** Questions */
             questions: components["schemas"]["CarriedQuestion"][];
+            /** Sprint Note */
+            sprint_note: string | null;
             /** Timezone */
             timezone: string;
             /** Title */
@@ -3262,6 +3301,11 @@ export interface components {
         SeriesPatch: {
             /** Title */
             title: string;
+        };
+        /** SeriesProjectIn */
+        SeriesProjectIn: {
+            /** Project Id */
+            project_id: number | null;
         };
         /**
          * SeriesRef
@@ -8770,6 +8814,68 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    put_series_project: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeriesProjectIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesCard"];
+                };
             };
             /** @description Not logged in */
             401: {

@@ -1,0 +1,27 @@
+{
+  "note": "No CSRF token: 403 `csrf_rejected` (the same rule as every write).",
+  "client": "ada",
+  "request": {
+    "method": "PUT",
+    "path": "/api/series/1/project",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "project_id": null
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

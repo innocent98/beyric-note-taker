@@ -1,0 +1,15 @@
+{
+  "note": "The one-hour reminder for the same occurrence as built (CAPTURING MAILER): its meta line says \"Sprint 2 opens\", what the page says as \"Opens Sprint 2\".",
+  "content": [
+    {
+      "to": "ada@example.test",
+      "subject": "Starts in 1 hour: Beyric Monday planning",
+      "text": "Starts in 1 hour\n\nBeyric Monday planning\n\nMon 9 Nov, 14:00 to 14:45 UTC · Google Meet · Sprint 2 opens\n\nJoin meeting:\nhttps://meet.google.com/abc-defg-hij\n\nView agenda:\nhttps://notes.example.test/series/1\n\nLast time, Mon 2 Nov\n\nThe team reviewed Client Portal progress ahead of the launch. Payment checkout is the main risk. A second sentence that makes the summary a little longer.\n\nYou are getting this because you attend Beyric Monday planning.\nReminder settings: https://notes.example.test/settings#reminders"
+    },
+    {
+      "to": "dan@example.test",
+      "subject": "Starts in 1 hour: Beyric Monday planning",
+      "text": "Starts in 1 hour\n\nBeyric Monday planning\n\nMon 9 Nov, 14:00 to 14:45 UTC · Google Meet · Sprint 2 opens\n\nJoin meeting:\nhttps://meet.google.com/abc-defg-hij\n\nView agenda:\nhttps://notes.example.test/series/1\n\nLast time, Mon 2 Nov\n\nThe team reviewed Client Portal progress ahead of the launch. Payment checkout is the main risk. A second sentence that makes the summary a little longer.\n\nYou are getting this because you attend Beyric Monday planning.\nReminder settings: https://notes.example.test/settings#reminders"
+    }
+  ]
+}

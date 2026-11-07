@@ -1,0 +1,53 @@
+{
+  "note": "`recurring_meetings` is 0 everywhere.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/projects",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "projects": [
+        {
+          "id": 1,
+          "name": "Client Portal",
+          "color": "#0E6B5E",
+          "keywords": [
+            "portal",
+            "checkout"
+          ],
+          "open_tasks": 0,
+          "sprint_length": null,
+          "in_current_sprint": 0,
+          "in_backlog": 0,
+          "recurring_meetings": 0,
+          "milestone": null,
+          "created_at": "2026-11-07T22:20:37.554432Z"
+        },
+        {
+          "id": 2,
+          "name": "Beyric Note Taker",
+          "color": "#3C4A7A",
+          "keywords": [],
+          "open_tasks": 0,
+          "sprint_length": null,
+          "in_current_sprint": 0,
+          "in_backlog": 0,
+          "recurring_meetings": 0,
+          "milestone": null,
+          "created_at": "2026-11-07T22:20:37.688788Z"
+        }
+      ],
+      "can_manage": true
+    }
+  }
+}

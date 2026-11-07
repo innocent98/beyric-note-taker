@@ -3,9 +3,9 @@
 Keyword hits in the meeting title, the task title and the quote. A clear winner files quietly; a
 weak or tied match files to the best project and sets `check_project`; a team with one project
 files there unflagged; no hit means no project. The rule for a meeting that belongs to a series
-linked to a project (step 1) waits for W8: `series_project` is the seam, it returns None until
-series exist. Kept apart from `app/projects.py` so that `app/tasks.py` can file a task without
-importing the module that counts tasks.
+linked to a project (step 1): `series_project` reads `series.project_id` (set by
+`PUT /api/series/{id}/project`). Kept apart from `app/projects.py` so that `app/tasks.py` can file
+a task without importing the module that counts tasks.
 """
 
 import re
@@ -15,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.extraction import normalise
-from app.models import Meeting, Project
+from app.models import Meeting, Project, Series
 
 CONFIDENT_HITS = 2
 
@@ -27,10 +27,16 @@ class Filing:
 
 
 def series_project(session: Session, meeting: Meeting) -> int | None:
-    """The project the meeting's series is linked to, when it has one (spec 6.2 step 1). Series
-    arrive with W8; until then no meeting has one. W8 returns `series.project_id` here and
-    nothing else in the filing changes."""
-    return None
+    """The project the meeting's series is linked to, when it has one (spec 6.2 step 1). A link to
+    a project of another team than the meeting's, or to one that is gone, is no link (`project_id`
+    has no foreign key: the team check keeps a stray id from filing a task across teams)."""
+    if meeting.series_id is None:
+        return None
+    return session.scalar(
+        select(Project.id)
+        .join(Series, Series.project_id == Project.id)
+        .where(Series.id == meeting.series_id, Project.team_id == Series.team_id)
+    )
 
 
 def hits(keywords: list[str], text: str) -> int:
