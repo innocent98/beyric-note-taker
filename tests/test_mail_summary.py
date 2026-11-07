@@ -8,16 +8,21 @@ tasks assigned to him.
 
 # ruff: noqa: F811  (fixtures are imported by name and used as arguments)
 
+import subprocess
+import sys
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
+from sqlalchemy import text as sql
 
-from app import mail_layout, series_mail
+from app import mail_layout, mail_summary, series_mail
 from app.models import (
     CalendarConnection,
     Milestone,
     Project,
+    ScheduledJoin,
     SeriesReminder,
     Sprint,
     Team,
@@ -36,6 +41,7 @@ from tests.test_series import (  # noqa: F401  (fixtures and helpers used by nam
     fake_openai,
     fake_vexa,
     fixed_clock,
+    join_for,
     meeting_in,
     outsider,
     owner,
@@ -93,6 +99,11 @@ def preferences(session, user, **fields):
         setattr(row, key, value)
     session.commit()
     return row
+
+
+def live_join(session, user, event, **fields):
+    """The scheduler's row for the event: waiting for its time, as `gcal_sync` makes it."""
+    return join_for(session, user, event, **fields)
 
 
 def mail_of(session, to, starts=None, *, minutes=55):
@@ -209,6 +220,14 @@ def test_no_sprint_line_when_an_earlier_meeting_already_opened_the_sprint(
     assert "opens" not in mail_of(session, OWNER_EMAIL).text
 
 
+def test_a_teammates_calendar_does_not_decide_the_recipients_sprint_line(
+    session, owner, daniel, weekly, busy, due, sprints_on
+):
+    """Only the recipient's own calendar rows are read, never a teammate's."""
+    calendar_event(session, daniel, "rid-1", NOW - timedelta(hours=4))  # Daniel's earlier event
+    assert "Sprint 13 opens" in mail_of(session, OWNER_EMAIL).text
+
+
 def test_no_sprint_line_when_a_meeting_of_the_series_was_held_since_the_sprint_began(
     session, owner, daniel, weekly, busy, due, sprints_on, template
 ):
@@ -259,6 +278,7 @@ def test_the_box_says_how_the_last_closed_sprint_went(
 ):
     closed, opening = sprints_on
     fill_sprint(session, weekly, busy, closed, opening, daniel, done=3, carried=1)
+    live_join(session, owner, due)
     message = mail_of(session, OWNER_EMAIL)
     assert box(message) == f"Sprint 12 closed with 3 of 4 tasks done. {JOIN}"
     assert f"\nSprint 12 closed with 3 of 4 tasks done. {JOIN}\n" in message.text
@@ -418,6 +438,7 @@ def test_a_series_with_no_project_has_no_milestone_sentence(
 def test_the_days_are_counted_from_the_recipients_own_today(
     session, owner, daniel, weekly, busy, due, project
 ):
+    live_join(session, owner, due)
     milestone(session, project, "Beta", date(2026, 11, 5))  # tomorrow in UTC
     preferences(session, daniel, time_zone="Pacific/Kiritimati")  # UTC+14: already Thu 5 Nov
     assert box(mail_of(session, OWNER_EMAIL)) == f"Beta is in 1 day. {JOIN}"
@@ -443,7 +464,8 @@ def test_a_milestone_name_is_cleaned_and_escaped(
 def test_the_join_sentence_is_for_a_person_the_note_taker_will_join(
     session, owner, daniel, weekly, busy, due
 ):
-    message = mail_of(session, OWNER_EMAIL)  # connected, rule "all", their own event
+    live_join(session, owner, due)
+    message = mail_of(session, OWNER_EMAIL)  # connected, rule "all", their own event, a join row
     assert box(message) == JOIN and f"\n{JOIN}\n" in message.text
 
 
@@ -477,6 +499,7 @@ def test_not_when_their_own_rule_would_not_join(
 def test_the_organiser_rule_and_an_override_that_switches_it_on(
     session, owner, daniel, weekly, busy, due
 ):
+    live_join(session, owner, due)
     preferences(session, owner, auto_join_rule="organizer")
     due.organizer_self = True
     session.commit()
@@ -502,6 +525,7 @@ def test_only_while_their_calendar_is_connected(
         select(CalendarConnection).where(CalendarConnection.user_id == owner.id)
     ).one()
     conn.status = status
+    live_join(session, owner, due)
     session.commit()
     assert (box(mail_of(session, OWNER_EMAIL)) == JOIN) is shown
 
@@ -509,11 +533,141 @@ def test_only_while_their_calendar_is_connected(
 def test_a_teammate_whose_bot_will_not_join_never_hears_it(
     session, owner, daniel, weekly, busy, due
 ):
-    calendar_event(session, daniel, "rid-1", due.starts_at)  # Daniel has the event too
+    theirs = calendar_event(session, daniel, "rid-1", due.starts_at)  # Daniel has the event too
+    live_join(session, daniel, theirs)
     assert box(mail_of(session, DANIEL_EMAIL)) == JOIN
     preferences(session, daniel, auto_join_rule="none")
+    live_join(session, owner, due)
     assert box(mail_of(session, DANIEL_EMAIL)) is None
     assert box(mail_of(session, OWNER_EMAIL)) == JOIN  # the owner's own rule is theirs alone
+
+
+SKIPS_THE_RUNNER_RETRIES = ("hours_cap", "user_limit", "code_in_use")
+FINAL_SKIPS = (
+    "needs_reconnect",
+    "duplicate_meeting",
+    "account_suspended",
+    "meeting_has_note_taker",
+)
+
+
+@pytest.mark.parametrize(
+    ("state", "reason", "shown"),
+    [
+        *[("scheduled", None, True), ("dispatching", None, True), ("no_capacity", None, True)],
+        *[("skipped", r, True) for r in SKIPS_THE_RUNNER_RETRIES],
+        *[("skipped", r, False) for r in FINAL_SKIPS],
+        ("skipped", None, False),
+        *[(s, None, False) for s in ("joined", "completed", "failed", "cancelled")],
+    ],
+    ids=lambda v: str(v),
+)
+def test_only_while_the_scheduler_really_has_the_join(
+    session, owner, daniel, weekly, busy, due, state, reason, shown
+):
+    live_join(session, owner, due, state=state, skip_reason=reason)
+    assert (box(mail_of(session, OWNER_EMAIL)) == JOIN) is shown
+
+
+def test_not_when_the_scheduler_has_no_join_for_the_event(
+    session, owner, daniel, weekly, busy, due
+):
+    """The rule says yes, but `gcal_sync` makes no row for an event without a usable link."""
+    due.native_id = None
+    session.commit()
+    assert box(mail_of(session, OWNER_EMAIL)) is None
+    assert session.scalars(select(ScheduledJoin)).first() is None
+
+
+def test_not_when_the_join_belongs_to_another_event_or_person(
+    session, owner, daniel, weekly, busy, due
+):
+    other = calendar_event(session, owner, "rid-other", due.starts_at + timedelta(days=1))
+    live_join(session, owner, other)  # their join for a different event
+    mine = calendar_event(session, daniel, "rid-1", due.starts_at)
+    live_join(session, daniel, mine)  # Daniel's join, for his own event
+    assert box(mail_of(session, OWNER_EMAIL)) is None
+
+
+@pytest.mark.parametrize(("state", "reason"), [("scheduled", None), ("skipped", "code_in_use")])
+def test_not_after_the_joins_deadline(session, owner, daniel, weekly, busy, due, state, reason):
+    row = live_join(session, owner, due, state=state, skip_reason=reason)
+    row.deadline_at = NOW  # the mail is made at NOW: the deadline is not yet past
+    session.commit()
+    assert box(mail_of(session, OWNER_EMAIL)) == JOIN
+    row.deadline_at = NOW - timedelta(seconds=1)
+    session.commit()
+    assert box(mail_of(session, OWNER_EMAIL)) is None
+
+
+@pytest.mark.parametrize(
+    "first", ["app.pipeline", "app.mail", "app.mail_summary", "app.join_runner"]
+)
+def test_importing_any_of_the_mail_modules_first_does_not_cycle(first):
+    """`mail_summary` reads `join_runner`'s retry list; a top-level import of it made a cycle
+    through gcal_sync, services, deletion and pipeline when the app started from `pipeline`."""
+    root = Path(__file__).resolve().parents[1]  # this checkout, not whichever `app` is installed
+    done = subprocess.run(
+        [sys.executable, "-c", f"import sys; sys.path.insert(0, {str(root)!r}); import {first}"],
+        capture_output=True,
+        text=True,
+        cwd=root,
+    )
+    assert done.returncode == 0, done.stderr[-600:]
+
+
+# ---- a failing extra never costs the reminder ----
+
+
+def test_a_failing_sprint_line_still_sends_the_reminder(
+    session, owner, daniel, weekly, busy, due, sprints_on, monkeypatch, caplog
+):
+    def boom(*_args, **_kwargs):
+        raise ValueError("sprint maths")  # a ValueError is a permanent failure in the mail sender
+
+    monkeypatch.setattr(mail_summary, "opening_sprint", boom)
+    message = mail_of(session, OWNER_EMAIL)
+    assert "opens" not in message.html and "Finish checkout" in message.html
+    assert "reminder sent without its sprint line (ValueError)" in caplog.text
+    assert "sprint maths" not in caplog.text  # the type only
+
+
+def test_a_failing_summary_box_still_sends_the_reminder(
+    session, owner, daniel, weekly, busy, due, monkeypatch, caplog
+):
+    live_join(session, owner, due)
+
+    def boom(*_args, **_kwargs):
+        raise ValueError("bad rule")
+
+    monkeypatch.setattr(mail_summary, "summary_sentences", boom)
+    message = mail_of(session, OWNER_EMAIL)
+    assert BOX not in message.html and "Finish checkout" in message.html
+    assert "reminder sent without its summary box (ValueError)" in caplog.text
+
+
+def test_an_unknown_auto_join_rule_does_not_stop_the_reminder(
+    session, owner, daniel, weekly, busy, due, monkeypatch
+):
+    """`will_join` raises ValueError on a rule it does not know (the column's check keeps one out
+    of the table, so the rule is swapped in the way a future rule name would arrive)."""
+    live_join(session, owner, due)
+    monkeypatch.setattr(mail_summary, "will_join", mail_summary.will_join)
+    monkeypatch.setattr("app.gcal_rules.AUTO_JOIN_RULES", ("none",))
+    message = mail_of(session, OWNER_EMAIL)
+    assert BOX not in message.html and "Finish checkout" in message.html
+
+
+def test_a_database_error_inside_an_extra_leaves_the_rest_of_the_mail_working(
+    session, owner, daniel, weekly, busy, due, sprints_on, monkeypatch
+):
+    def broken_read(*_args, **_kwargs):
+        session.execute(sql("select * from no_such_table"))  # aborts a Postgres transaction
+
+    monkeypatch.setattr(mail_summary, "summary_sentences", broken_read)
+    message = mail_of(session, OWNER_EMAIL)
+    assert BOX not in message.html
+    assert "Finish checkout" in message.html and "Sprint 13 opens" in message.html
 
 
 # ---- the box as a whole ----
@@ -525,6 +679,7 @@ def test_the_three_sentences_come_in_order_in_one_box(
     closed, opening = sprints_on
     fill_sprint(session, weekly, busy, closed, opening, daniel, done=3, carried=1)
     milestone(session, project, "Client Portal launch", TODAY + timedelta(days=29))
+    live_join(session, owner, due)
     message = mail_of(session, OWNER_EMAIL)
     assert box(message) == (
         f"Sprint 12 closed with 3 of 4 tasks done. Client Portal launch is in 29 days. {JOIN}"

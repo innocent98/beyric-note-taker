@@ -588,7 +588,7 @@ No whole designed screen is missing. The designer's main file draws one desktop 
 - [ ] CI: apt cache key follows the runner image (PR #119, SOP `docs/sop/2026-11-07-ci-apt-cache-key.md`): until it merges a new runner image can break every test shard again; check that the second CI run shows a cache hit
 - [ ] **"Could not join" mail wiring:** built and tested, sent by nothing; needs his OK and an Opus review (new bell kind, per-meeting dedupe, manual sends; `app/pipeline.py` about 545-554)
 - [ ] Bake-off: his sign-ups (free Gmail for the bot, Skribby, Recall), keys file, first live check (`tools/bakeoff/README.md`); then 10 trials per arm and the decision rule (signed-in, invited bot near 95% vs Vexa)
-- [ ] Mails: summary box and "Sprint N opens" in the 1-hour reminder (rules approved 2026-11-07; session `mails-reminder-summary-b`)
+- [ ] Mails: summary box and "Sprint N opens" in the 1-hour reminder: **#121 merged 2026-11-07** (`08b9f78`) before the review fixes landed. Opus review found two Medium and one Low; fixed in a follow-up PR from branch `fix/mail-summary-join-and-guard` (join sentence needs a live `scheduled_joins` row; a failing extra no longer costs the reminder; the Sprint line reads only the recipient's own calendar), SOP `docs/sop/2026-11-07-mails-parity.md`. Open: that PR opened, CI green, his "merge"
 - [ ] GitGuardian: also mark the #118 finding (fake `sk_live_` test value, in the branch history only)
 
 ## CI speed (2026-11-04, PR #70, SOP `docs/sop/2026-11-04-ci-sharding.md`)
