@@ -37,7 +37,7 @@ Pages saved in `docs/spike/primary-pages-2026-11-07/`.
 | Skribby authenticated bot on the Free plan | "Easiest signed-in setup", free tier 5 h | The pages never say Authenticated Accounts are available on Free | Flagged in the README; first live check of `skribby-auth` answers it. |
 
 ## What's involved
-`tools/bakeoff/bakeoff.py` (the tool), `tools/bakeoff/README.md` (owner's steps), `tests/test_bakeoff_tool.py` (61 tests), `docs/spike/primary-pages-2026-11-07/` (32 saved pages and a README), `.gitignore` (`tools/bakeoff/logs/`, `tools/bakeoff/*.env`), `docs/checklist/master-checklist.md`. Nothing under `app/`, `web/`, `alembic/`, no migration, no new dependency, no `.env` variable on the server, no nginx change.
+`tools/bakeoff/bakeoff.py` (the tool), `tools/bakeoff/README.md` (owner's steps), `tests/test_bakeoff_tool.py` (61 tests), `docs/spike/primary-pages-2026-11-07/` (32 saved pages and `README-bakeoff-tool-pages.md`; the folder also holds the lead's pages from PR #114, with its own README.md), `.gitignore` (`tools/bakeoff/logs/`, `tools/bakeoff/*.env`), `docs/checklist/master-checklist.md`. Nothing under `app/`, `web/`, `alembic/`, no migration, no new dependency, no `.env` variable on the server, no nginx change.
 
 ## Verification
 - `ruff check .` and `ruff format --check .` with the pinned ruff 0.17.3: clean.
