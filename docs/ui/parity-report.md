@@ -114,6 +114,8 @@ The words are in one file (`web/components/landing/content.ts`) plus the two pre
 
 ## Out of scope: needs backend, not built
 
+> **Stale since 2026-11-07.** Almost every row below has been built since (Tasks, Projects, Team, Settings, Series, Share, Download, Translate, Emails). The current state is in `docs/ui/audit-2026-11-07-app.md` and `docs/ui/audit-2026-11-07-pages-emails.md`. Still true: the sidebar shows "Owner" instead of the name and email.
+
 | Designed element | Where | Needs |
 |---|---|---|
 | ~~Sign up, verify email code~~ (built as link and password: see "Account screens (stream D)"); set up workspace, accept (team) invite | `Auth.dc.html` | Workspaces, team invites |
