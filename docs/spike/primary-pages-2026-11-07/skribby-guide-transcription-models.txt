@@ -1,0 +1,123 @@
+SOURCE: https://skribby.io/docs/guides/transcription-models
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Transcription Models
+
+Skribby uses a unified naming convention for all supported transcription models to make it easier to understand which provider and model you are using. This guide explains how to format your transcription model keys, understand aliases, and what to expect in API responses.
+
+For provider no-training and retention details, see Transcription Privacy and Retention.
+
+Standardized Naming Convention
+
+Skribby uses the format <provider>/<model> for all official transcription model keys.
+
+When specifying a transcription_model in the API, we highly recommend using the official key for all new integrations:
+
+Copy{
+    "transcription_model": "deepgram/nova-2-realtime",
+    "meeting_url": "...",
+    "service": "gmeet",
+    "bot_name": "Alex from Acme"
+}
+
+Supported Models & Aliases
+
+We maintain backwards compatibility with older, simpler naming conventions (like whisper or deepgram). These are called aliases. When you request an alias, Skribby internally maps it to the corresponding official key.
+
+Below is the full mapping of official keys to their supported aliases:
+
+Official KeySupported AliasesType
+nonenoneNo Transcription
+groq/whisper-large-v3-turbowhisper, openai/whisper-large-v3Standard
+groq/whisper-large-v3Standard
+openai/gpt-4o-mini-transcribegpt-4o-mini-transcribeStandard
+openai/gpt-4o-transcribegpt-4o-transcribeStandard
+openai/gpt-4o-transcribe-diarizeStandard
+xai/speech-to-textStandard
+soniox/stt-async-v5soniox, soniox/latestStandard
+soniox/stt-rt-v5soniox-realtime, soniox/latest-realtimeRealtime
+assemblyai/universal-2assembly-aiStandard
+assemblyai/universal-3-5-proassemblyai/universal-3-pro, assembly-ai-universal-3-proStandard
+assemblyai/universal-streamingassembly-ai-realtimeRealtime
+assemblyai/universal-3-pro-streamingRealtime
+deepgram/nova-2deepgramStandard
+deepgram/nova-2-realtimedeepgram-realtimeRealtime
+deepgram/nova-3-multilingualdeepgram-v3Standard
+deepgram/nova-3-multilingual-realtimedeepgram-realtime-v3Realtime
+speechmatics/batch-standardspeechmaticsStandard
+speechmatics/realtime-standardspeechmatics-realtimeRealtime
+revai/reverb-foreign-languagerev-aiStandard
+elevenlabs/scribe-v1elevenlabsStandard
+elevenlabs/scribe-v2elevenlabs-v2Standard
+elevenlabs/scribe-v2-realtimeelevenlabs-realtime-v2Realtime
+gladia/asyncgladiaStandard
+gladia/realtimegladia-realtimeRealtime
+mistral/voxtral-mini-2mistral-voxtral-mini-2Standard
+mistral/voxtral-mini-transcribe-realtime-2602Realtime
+google/chirp-3Standard
+google/chirp-3-realtimeRealtime
+aws/transcribeStandard
+aws/transcribe-streamingRealtime
+
+API Responses
+
+When you create a bot or recording, the Skribby API response includes two fields relating to your model selection:
+
+transcription_model: This field echoes the exact string you provided in the request. If you sent an alias, this field will show the alias.
+
+transcription_model_key: This field always returns the canonical, official key that Skribby actually used to run the transcription.
+
+This design ensures that your application won't break if it expects transcription_model to match your request, while still giving you visibility into the exact provider and model version being used under the hood.
+
+Example 1: Request with Official Key
+
+Request
+
+Copy{
+    "transcription_model": "deepgram/nova-2"
+    // ...
+}
+
+Response
+
+Copy{
+    "transcription_model": "deepgram/nova-2",
+    "transcription_model_key": "deepgram/nova-2"
+    // ...
+}
+
+Example 2: Request with Legacy Alias
+
+Request
+
+Copy{
+    "transcription_model": "whisper"
+    // ...
+}
+
+Response
+
+Copy{
+    "transcription_model": "whisper",
+    "transcription_model_key": "groq/whisper-large-v3-turbo"
+    // ...
+}
+
+Example 3: Request with Semantic Alias
+
+Some aliases, like soniox/latest, are designed to always point to a provider's best or most recent model.
+
+Request
+
+Copy{
+    "transcription_model": "soniox/latest"
+    // ...
+}
+
+Response
+
+Copy{
+    "transcription_model": "soniox/latest",
+    "transcription_model_key": "soniox/stt-async-v5"
+    // ...
+}

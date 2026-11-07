@@ -1,0 +1,68 @@
+SOURCE: https://skribby.io/docs/guides/webhook-events
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Webhook Events
+
+Webhooks are the primary way Skribby notifies your application of asynchronous events. All webhook requests are POST requests sent to the webhook_url specified during bot creation.
+
+Event Envelope
+
+Every webhook payload follows this structure:
+
+Copy{
+  "bot_id": "uuid",
+  "type": "event_type",
+  "data": { ... },
+  "custom_metadata": { ... }
+}
+
+Available Events
+
+status_update
+
+Sent whenever the bot's status changes in its lifecycle (e.g., from recording to processing). This is the most important event for most integrations, as it signals when post-call assets are ready.
+
+Data Payload:
+
+old_status: Previous state.
+
+new_status: Current state.
+
+stop_reason: (Optional) If the status becomes finished or not_admitted, this explains why (e.g., meeting_ended, request_denied).
+
+Example: Bot Finished
+When a bot reaches the finished status, the webhook payload notifies you that the transcript and recording are now available for retrieval via the API.
+
+Copy{
+    "bot_id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "status_update",
+    "data": {
+        "old_status": "transcribing",
+        "new_status": "finished",
+        "stop_reason": "meeting_ended"
+    },
+    "custom_metadata": {
+        "internal_id": "meeting_123"
+    }
+}
+
+Example: Bot Not Admitted
+If a bot is denied entry or times out in the lobby, you'll receive a not_admitted status with a corresponding reason.
+
+Copy{
+    "bot_id": "550e8400-e29b-41d4-a716-446655440000",
+    "type": "status_update",
+    "data": {
+        "old_status": "joining",
+        "new_status": "not_admitted",
+        "stop_reason": "request_denied"
+    }
+}
+
+Important Notes
+
+Participant & Chat Events: These are not sent via webhooks. To receive live participant joins or chat messages as they happen, you must use the Real-time WebSockets.
+
+Transcription Availability: Regardless of whether you use a real-time or post-call model, the final, full transcript is always made available in the bot object once the status reaches finished. You can retrieve it via the GET /bot/{id} endpoint.
+
+Reliability: Skribby makes one delivery attempt per event and does not automatically retry failures. Return a 2xx response promptly and use polling as a fallback for critical status updates. See Webhook Delivery Debugging.

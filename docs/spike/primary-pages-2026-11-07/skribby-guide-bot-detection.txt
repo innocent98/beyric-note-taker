@@ -1,0 +1,52 @@
+SOURCE: https://skribby.io/docs/guides/bot-detection
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Bot Detection
+
+Meeting platforms like Google Meet, Zoom, and Microsoft Teams have increasingly sophisticated mechanisms to identify and block "virtual" participants. Understanding how these work and how to navigate them is crucial for a reliable integration.
+
+How Platforms Detect Bots
+
+Bot detection typically relies on a combination of behavioral signals and infrastructure fingerprinting:
+
+Browser Fingerprinting: Platforms look for headless browsers (like Puppeteer or Playwright). If certain browser APIs or properties are missing or look "automated," the participant is flagged.
+
+IP Reputation: Bots coming from known data center IP ranges (AWS, GCP, Azure) are much more likely to be blocked than those appearing from residential or office IP ranges.
+
+Behavioral Analysis: Bots that join and stay perfectly still without any "human" noise or camera movement can sometimes be identified, though this is less common for simple audio bots.
+
+Join Frequency: Sending 10 bots from the same account/IP to different meetings simultaneously is a massive red flag.
+
+Bypassing Strategies
+
+Skribby handles much of the heavy lifting (like IP rotation and browser stealth), but your implementation choices play a major role.
+
+1. Authenticated Joins (Highly Recommended)
+
+The single most effective way to avoid being blocked is to not join as a guest. Guest participants are the most scrutinized. By linking an account, your bot joins as a real user with a history and valid session cookie, making it nearly indistinguishable from a human participant.
+
+2. Human-Like Bot Names
+
+Avoid names that clearly identify the participant as automated, such as "Notetaker", "Bot", "Recorder", or "AI Assistant". Platforms can use participant names as a bot-detection signal, so obvious bot names are more likely to be flagged.
+
+Prefer names that look like real participants or customer-approved meeting support identities, such as Alex from Acme or Meeting Support - Jane. See the Bot Naming guide for platform-specific limits and examples.
+
+3. Graceful Retries
+
+Skribby includes built-in retry logic. If a bot is blocked, we will automatically attempt to rejoin up to 3 times.
+
+What to expect:
+
+The bot status will change to bot_detected.
+
+Skribby will rotate the worker instance to a new IP range and randomize fingerprints.
+
+The status will move back to booting or joining for the next attempt.
+
+This cycle repeats up to 3 times.
+
+If your bot still fails after the final attempt, the status will remain bot_detected. We then recommend notifying your user.
+
+4. Direct Email Invites
+
+For Google Meet and MS Teams, inviting the bot's service account email address to the calendar event often bypasses the "Waiting Room" and guest detection entirely, as the bot is then an "Invited Participant."

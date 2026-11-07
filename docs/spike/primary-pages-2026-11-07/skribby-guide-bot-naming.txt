@@ -1,0 +1,99 @@
+SOURCE: https://skribby.io/docs/guides/bot-naming
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Bot Naming
+
+The bot_name parameter controls how your bot appears to meeting participants. Choosing a good name is important for both user experience and reliability - particularly on Google Meet and Zoom where names influence bot detection.
+
+Character Limits
+
+Each meeting platform enforces its own character limit for participant names. To prevent join failures in production, Skribby automatically truncates names that exceed these limits:
+
+PlatformMax Characters
+Microsoft Teams50
+Google Meet60
+Zoom64
+
+Smart Truncation
+When truncation is needed, Skribby cuts at the last space before the limit to preserve whole words. For example, a 53-character name on Teams would be truncated at the last space before character 50, rather than cutting mid-word.
+
+Example
+
+A bot name that exceeds the Teams limit of 50 characters:
+
+Before: Acme Corp Meeting Assistant for Product Team | West Region (58 chars)
+
+After: Acme Corp Meeting Assistant for Product Team | (48 chars)
+
+The API accepts any length name without validation errors. Truncation happens silently when the bot joins the meeting.
+
+Google Meet and Zoom Name-Based Detection
+
+Google Meet and Zoom use participant names as one signal in their bot detection systems. Names containing common bot-related keywords are more likely to trigger detection, which can result in:
+
+Denial of access to the meeting
+
+Being placed in a waiting room indefinitely
+
+The bot being flagged as automated
+
+Keywords to Avoid
+
+Based on observed behavior, these keywords in bot names increase detection risk on Google Meet and Zoom:
+
+Generic bot terms: "Bot", "Notetaker", "Recorder", "Assistant", "AI"
+
+Known product names: "Otter", "Fireflies", "Grain", "Fathom", "Read.ai", "tl;dv", "Copilot"
+
+Recording indicators: "Recording", "Transcription", "Notes"
+
+Naming Recommendations
+
+For best reliability on Google Meet and Zoom:
+
+AvoidBetter Alternative
+Meeting Recorder BotSarah from Acme
+AI NotetakerAlex (Notes)
+Acme Recording AssistantAcme Meeting Support
+Transcription BotJamie
+
+Use Human-Like Names
+Names that look like real participants (e.g., "Alex from Sales", "Meeting Support - Jane") are significantly less likely to be flagged. Consider using your customer's preferred naming convention or their company name.
+
+Combined with Authentication
+
+For the highest reliability on Google Meet and Zoom, combine a human-like bot name with authenticated joins. Authenticated bots are treated as legitimate participants, making name-based detection largely irrelevant.
+
+Platform-Specific Notes
+
+Microsoft Teams
+
+The 50-character limit is strictly enforced
+
+Teams does not appear to use name-based bot detection
+
+Bot naming is straightforward - focus on clarity for participants
+
+Google Meet
+
+The 60-character limit applies
+
+Name-based detection is active - avoid bot-related keywords
+
+Authentication significantly reduces detection risk regardless of name
+
+Zoom
+
+The 64-character limit is the most generous
+
+Name-based detection is active - avoid bot-related keywords
+
+Authentication significantly reduces detection risk regardless of name
+
+Related Guides
+
+Bot Authentication - Link accounts for reliable joins
+
+Bot Detection & Bypassing - Understanding platform detection
+
+Platforms - Supported meeting platforms

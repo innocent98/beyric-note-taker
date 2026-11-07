@@ -525,6 +525,10 @@ No whole designed screen is missing. The designer's main file draws one desktop 
 - [ ] W10: real Slack webhook and real Linear key; the server must reach `hooks.slack.com:443` and `api.linear.app:443`
 - [ ] Migration chain on main is 0026, 0027, 0028, 0031, 0029, 0030, 0032, 0033 (numbers merged out of order; one head, 0033): the next free number is **0034**
 - [ ] Bot reliability: vendor bake-off (Skribby free tier, Recall 5 free hours; guest and signed-in, count joins, knocks and 403s) per `docs/spike/meeting-bot-vendors.md`; decision on a signed-in bot
+  - [x] Local runner built 2026-11-07 (branch `feature/bot-bakeoff-tool`; `tools/bakeoff/`, README for the owner, SOP `docs/sop/2026-11-07-bot-bakeoff-tool.md`; 61 tests with a pretend network; raw vendor pages saved in `docs/spike/primary-pages-2026-11-07/`). Arms: `vexa` (typed `note`), `skribby-guest`, `skribby-auth`, `recall-guest`; Recall signed-in is out of scope. **Not run against a live vendor yet**
+  - [ ] Adebayo: make a Skribby account (Free), an API key, the bot Google account under Authenticated Accounts, and a Recall account and key; put them in `~/.config/beyric-bakeoff/keys.env` (never in chat)
+  - [ ] First live check (README step 4, about 5 minutes), then tune the Skribby knock threshold and poll gap; find out whether Skribby's Free plan allows Authenticated Accounts (the pages do not say)
+  - [ ] 10 or more trials per arm (one bot per meeting), `report`, then the decision on a signed-in bot
 
 ## CI speed (2026-11-04, PR #70, SOP `docs/sop/2026-11-04-ci-sharding.md`)
 

@@ -1,0 +1,170 @@
+SOURCE: https://skribby.io/docs/rest-api/bot-operations/getbot
+Fetched 2026-11-07 with curl -sL -A 'Mozilla/5.0'
+
+Get Bot
+
+GET/bot/{id}Copy URL
+https://platform.skribby.io/api/v1/bot/{id}
+
+Retrieve information about a specific bot, including its current status,
+transcript (if available), participants, and lifecycle events.
+
+Path Parameters
+
+NameTypeDescription
+idrequired
+string<uuid>Bot ID
+
+Query Parameters
+
+NameTypeDescription
+with-speaker-events
+booleanInclude participant timeline events
+
+Responses
+
+200Bot information retrieved successfullyReturns Bot
+idstring<uuid>
+Unique bot identifier
+Example: "3c09b2aa-6708-42c1-8145-aa55ee223613"
+
+statusstring
+The current lifecycle status of the bot.
+Refer to the Bot Lifecycle guide for a detailed explanation of each state.
+
+*Note on bot_detected:* This is often non-terminal. Skribby automatically retries up to 3 times. You may see the status toggle between bot_detected and booting during retries.
+
+Allowed values: scheduledbootingjoiningwaiting_to_recordbreakout_waiting_roomrecordingprocessingtranscribingleavingfinishednot_admittedbot_detectedauth_requiredinvalid_credentialsfailed
+
+stop_reasonstring | null
+The reason why the bot stopped. This field is only populated when the status is finished or not_admitted.
+Refer to the Bot Lifecycle guide for the machine-to-human mapping of these codes.
+
+Allowed values: invalid_meeting_urlcall_already_finishedwaiting_room_timeoutrequest_deniedhost_in_another_meetingmanually_stoppedkickedmeeting_endedrecording_start_timeoutempty_meeting_timeoutlast_person_detectedbreakout_room_timeoutbreakout_room_deniedsilence_detection_triggered
+
+recording_start_modestring
+Whether recording starts automatically or waits for a start-recording WebSocket action.
+Manual mode requires a realtime transcription model or the Realtime features addon (realtime_audio: true).
+
+Allowed values: automaticmanual
+
+servicestring
+Service the bot joined
+Allowed values: gmeetteamszoom
+
+scheduled_forstring<date-time> | null
+When the bot is scheduled to join (for scheduled bots)
+
+time_limitinteger | null
+Use time_limit property in stop_options.
+
+stop_optionsobject
+Defined options when the bot should stop on certain conditions.
+
+bot_namestring
+Name of the bot as it appears in the meeting. This may be truncated from the original input
+if it exceeded platform limits (Teams: 50, Meet: 60, Zoom: 64 characters).
+
+bot_avatarstring<uri> | null
+URL to bot avatar image
+
+meeting_urlstring<uri>
+URL of the meeting
+
+webhook_urlstring<uri> | null
+Webhook URL for receiving updates.
+Refer to the Webhooks section for details on webhook format and available events.
+
+custom_metadataobject
+Metadata attached to the bot for tracking requests in your system.
+Keys and values must be strings. Up to 50 keys, each value up to 500 characters.
+Clearing metadata returns an empty object in responses.
+
+recording_urlstring<uri> | null
+URL to download the recording
+
+recording_available_untilstring<date-time> | null
+When the recording will be automatically deleted
+
+websocket_urlstring<uri> | null
+WebSocket URL for realtime meeting events and control actions. Available with a realtime transcription model or the Realtime features addon.
+
+websocket_read_only_urlstring<uri> | null
+Read-only WebSocket URL for realtime meeting events. It does not allow actions.
+Useful if you want to use the websocket directly in your front-end without providing access to the user.
+
+websocket_audio_urlstring<uri> | null
+WebSocket URL for receiving realtime audio data from the bot.
+Available with a realtime transcription model or the Realtime features addon (realtime_audio: true).
+Audio is streamed as 16-bit PCM at 16kHz sample rate.
+
+videoboolean
+Whether video is recorded for this meeting
+
+langstring | null
+Language specified when creating the bot
+
+detected_langstring | null
+Language detected from the conversation (if supported by the model)
+
+transcriptTranscriptSegment[]
+Array of transcript segments
+
+transcription_modelstring
+Exact transcription model identifier provided in the request. This may be an alias.
+Example: "soniox/latest"
+
+transcription_model_keystring
+Resolved official transcription model key used by Skribby.
+Example: "soniox/stt-async-v5"
+
+participantsParticipant[]
+List of meeting participants
+
+eventsEvent[]
+List of bot lifecycle events
+
+profanity_filterboolean
+Whether profanity filter was enabled
+
+custom_vocabularystring[]
+Words or phrases provided when creating meeting bot for transcription model
+
+created_atstring<date-time>
+When the bot was created
+
+finished_atstring<date-time> | null
+When the bot finished
+
+401Unauthorized - Invalid API key
+404Bot not found
+
+Request
+cURLJavaScriptPython
+Copycurl -X GET \
+  "https://platform.skribby.io/api/v1/bot/{id}" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -H "Content-Type: application/json"
+
+Response
+200 OKapplication/json
+Copy{
+  "id": "3c09b2aa-6708-42c1-8145-aa55ee223613",
+  "status": "scheduled",
+  "stop_reason": "invalid_meeting_url",
+  "recording_start_mode": "automatic",
+  "service": "gmeet",
+  "scheduled_for": null,
+  "time_limit": null,
+  "stop_options": {
+    "time_limit": 5,
+    "waiting_room_timeout": 1,
+    "recording_start_timeout": 1,
+    "breakout_room_timeout": 1,
+    "last_person_detection": 0,
+    "empty_meeting_timeout": 0,
+    "silence_detection": 0
+  },
+  "transcription_model": "soniox/latest",
+  "transcription_model_key": "soniox/stt-async-v5"
+}
