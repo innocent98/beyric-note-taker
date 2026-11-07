@@ -5,8 +5,10 @@ import { useState, type FormEvent } from "react";
 import { GoogleButton } from "@/components/auth/google-button";
 import { Alert, AppLink, Button, Field } from "@/components/ui";
 import { api } from "@/lib/api/browser";
+import { validEmail } from "@/lib/accounts";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import { hasPendingShare } from "@/lib/share-pending";
+import { takeSetupPending } from "@/lib/setup-pending";
 
 // POST /api/session from the browser, so the session cookie FastAPI sets lands in the browser by
 // itself. The button stays locked after a 429: the lockout lasts 5 minutes to an hour with no
@@ -31,6 +33,9 @@ export function LoginForm({
   const [password, setPassword] = useState("");
   const [show, setShow] = useState(false);
   const [error, setError] = useState<string | null>(redirectError);
+  // The designer's field-level lines under the inputs (Auth.dc.html:370-371); the API's own answer
+  // (wrong password, lockout) stays in the alert above the form.
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
   const [wrongCredentials, setWrongCredentials] = useState(false);
   const [pending, setPending] = useState(false);
   const [locked, setLocked] = useState(false);
@@ -38,21 +43,21 @@ export function LoginForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || locked) return;
-    if (email.trim() === "") {
-      setError("Enter your email.");
-      return;
-    }
-    if (password === "") {
-      setError("Enter your password.");
-      return;
-    }
+    const found: { email?: string; password?: string } = {};
+    if (email.trim() === "") found.email = "Enter your email.";
+    else if (!validEmail(email)) found.email = "Enter a valid email, like you@company.com.";
+    if (password === "") found.password = "Enter your password.";
+    setFieldErrors(found);
+    if (found.email || found.password) return;
     setPending(true);
     setError(null);
     setWrongCredentials(false);
     try {
       await api.login(email.trim(), password);
       // A meeting link shared from another app (the PWA share target) is waiting in this tab: back to it.
-      router.replace(hasPendingShare() ? "/share" : "/");
+      // A new account's first sign-in (the confirmation page marked this tab) goes to the workspace step.
+      const setup = takeSetupPending();
+      router.replace(hasPendingShare() ? "/share" : setup ? "/setup" : "/");
       router.refresh();
     } catch (caught) {
       setError(errorMessage(caught));
@@ -103,6 +108,7 @@ export function LoginForm({
           autoComplete="email"
           placeholder="you@company.com"
           value={email}
+          error={fieldErrors.email}
           onChange={(event) => setEmail(event.target.value)}
         />
         <Field
@@ -114,6 +120,7 @@ export function LoginForm({
           autoComplete="current-password"
           placeholder="Your password"
           value={password}
+          error={fieldErrors.password}
           onChange={(event) => setPassword(event.target.value)}
           end={
             <Button kind="quiet" type="button" onClick={() => setShow((value) => !value)} aria-pressed={show}>

@@ -37,6 +37,7 @@ export const config = {
     "/projects",
     "/team",
     "/accept-invite",
+    "/setup",
     "/decisions",
     "/review",
     "/share",

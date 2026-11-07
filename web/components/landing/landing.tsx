@@ -4,8 +4,9 @@ import { LEGAL_NAME } from "@/lib/site";
 import { FAQS, FEATURES, PLATFORMS, SECURITY, TOOLS } from "./content";
 
 // The landing page from the designer's Landing.dc.html, section by section. The sign-up buttons
-// ("Get started", "Create your account") and "See the app" are not drawn: accounts do not exist yet
-// and the prototype link is not a page (docs/ui/parity-report.md).
+// ("Get started", "Get started free", "Create your account") go to /signup, which draws the form, or
+// the closed or full screen with the waiting list when the pilot is not open. "See the app" is not
+// drawn: it links to the prototype file, which is not a page.
 
 function Glyph({ d, size, stroke = 1.9 }: { d: string; size: number; stroke?: number }) {
   return (
@@ -29,6 +30,9 @@ export function LandingHeader() {
         <div className="ld-header-actions">
           <AppLink className="ld-signin" href="/login">
             Sign in
+          </AppLink>
+          <AppLink className="ld-get-started" href="/signup">
+            Get started
           </AppLink>
         </div>
       </div>
@@ -54,8 +58,8 @@ function Hero() {
           right person on your team.
         </p>
         <div className="ld-cta">
-          <Button href="/login" size="xl">
-            Sign in
+          <Button href="/signup" size="xl">
+            Get started free
             <Icon name="arrow" size={16} stroke={2.2} />
           </Button>
         </div>
@@ -322,6 +326,9 @@ function Closing() {
           <p>Send the note taker to your next call and see the notes and tasks it leaves behind.</p>
         </div>
         <div className="ld-closing-actions">
+          <AppLink className="btn btn-xl ld-create" href="/signup">
+            Create your account
+          </AppLink>
           <Button kind="outline-light" href="/login" size="xl">
             Sign in
           </Button>
