@@ -2,7 +2,7 @@
 
 import { Icon } from "@/components/ui";
 import type { Task } from "@/lib/api/types";
-import { avatarTone, dueLabel, personInitials, sourceLabel, swatchClass } from "@/lib/tasks";
+import { avatarTone, isOverdue, personInitials, sourceLabel, swatchClass, taskDueText } from "@/lib/tasks";
 
 // The badges row, on a card and on a Backlog row: the project (dot and name, or "No project") while
 // the board shows every project, "Carried over" and "Check project". Nothing when there is none.
@@ -83,9 +83,9 @@ export function TaskCard({
       </div>
       <TaskBadges task={task} project={project} showProject={showProject} />
       <div className="tk-card-foot">
-        <span className={`tk-due${done ? " tk-due-done" : task.due_date === today ? " tk-due-today" : ""}`}>
+        <span className={`tk-due${done ? " tk-due-done" : isOverdue(task.due_date, today) ? " tk-due-overdue" : task.due_date === today ? " tk-due-today" : ""}`}>
           <Icon name="calendar" size={12} />
-          {dueLabel(task.due_date, today)}
+          {taskDueText(task, today)}
         </span>
         {task.assignee ? (
           <div className={`avatar tk-avatar ${avatarTone(task.assignee.user_id)}`} title={task.assignee.name}>

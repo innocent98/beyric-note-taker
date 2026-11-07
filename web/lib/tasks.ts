@@ -41,12 +41,26 @@ export function dayLabel(iso: string): string {
   return `${DAYS[weekday]} ${d} ${MONTHS[m - 1]}`;
 }
 
+// A due day before today. The designer's file draws it in red and says "Overdue" (a finished task
+// is never overdue: it keeps its plain grey day).
+export function isOverdue(due: string | null, today: string): boolean {
+  return due !== null && due !== "" && due < today;
+}
+
 // "Today", "Tomorrow", "Fri 6 Nov", or "No due date".
 export function dueLabel(due: string | null, today: string): string {
   if (!due) return "No due date";
   if (due === today) return "Today";
   if (due === addDays(today, 1)) return "Tomorrow";
   return dayLabel(due);
+}
+
+// The due line on a task card, a Backlog row, a series row and a meeting's action item: the
+// day, or "Overdue, Fri 30 Oct" while the task is open and the day has passed.
+export function taskDueText(task: Pick<Task, "due_date" | "status">, today: string): string {
+  return task.status !== "done" && isOverdue(task.due_date, today)
+    ? `Overdue, ${dayLabel(task.due_date as string)}`
+    : dueLabel(task.due_date, today);
 }
 
 // "Today, Mon 2 Nov" or "Fri 30 Oct": the day a task was assigned.
@@ -70,7 +84,11 @@ export function dueOptions(today: string, current: string | null): Array<{ value
 export type GroupBy = "assigned" | "due";
 
 export function groupLabel(by: GroupBy, key: string, today: string): string {
-  if (by === "due") return key === "" ? "No due date" : key === today ? "Due today" : `Due ${dueLabel(key, today)}`;
+  if (by === "due") {
+    if (key === "") return "No due date";
+    if (key === today) return "Due today";
+    return isOverdue(key, today) ? `Overdue, was due ${dayLabel(key)}` : `Due ${dueLabel(key, today)}`;
+  }
   return `Assigned ${assignedLabel(key, today)}`;
 }
 

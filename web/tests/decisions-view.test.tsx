@@ -25,6 +25,13 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+// A decision's "Remove from log" lives inside its row: open the row first (the designer's list).
+const openRow = (text: string) => userEvent.click(screen.getByText(text));
+const remove = async (text: string) => {
+  await openRow(text);
+  await userEvent.click(screen.getByRole("button", { name: "Remove from log" }));
+};
+
 const search = (text: string) => userEvent.type(screen.getByRole("searchbox", { name: "Search decisions" }), text);
 
 describe("decisions", () => {
@@ -68,7 +75,7 @@ describe("decisions", () => {
     mocks.list.mockResolvedValue(none);
     render(<DecisionsView initial={all} />);
     await search("zebra");
-    expect(await screen.findByText("No decisions match your search.")).toBeTruthy();
+    expect(await screen.findByText("No decisions match.")).toBeTruthy();
     expect(screen.queryByText("No decisions yet.")).toBeNull();
   });
 
@@ -95,7 +102,7 @@ describe("decisions", () => {
     expect(await screen.findByText("Proceed with the Metrika rollout in the next release.")).toBeTruthy();
     first(none); // the older search answers last and must not replace the newer list
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(screen.queryByText("No decisions match your search.")).toBeNull();
+    expect(screen.queryByText("No decisions match.")).toBeNull();
     expect(screen.getByText("Proceed with the Metrika rollout in the next release.")).toBeTruthy();
   });
 
@@ -147,11 +154,37 @@ describe("the first load failed", () => {
 
 describe("remove from log", () => {
   const first = all.groups[0].decisions[0];
+  const second = all.groups[0].decisions[1];
+
+  it("keeps the button out of sight until the row is opened, then shows it at the bottom of the row", async () => {
+    render(<DecisionsView initial={all} />);
+    expect(screen.queryByRole("button", { name: "Remove from log" })).toBeNull();
+    const row = screen.getByRole("button", { name: first.text });
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    await openRow(first.text);
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+    const panel = screen.getByRole("button", { name: "Remove from log" }).closest(".dec-panel");
+    expect(panel).toBeTruthy();
+    expect(panel?.previousElementSibling).toBe(row); // inside the row's own panel, under the text
+    await openRow(first.text);
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: "Remove from log" })).toBeNull();
+  });
+
+  it("opens one row at a time and closes an open ask when the row closes", async () => {
+    render(<DecisionsView initial={all} />);
+    await openRow(first.text);
+    await userEvent.click(screen.getByRole("button", { name: "Remove from log" }));
+    expect(screen.getByRole("group", { name: "Remove this decision from the log?" })).toBeTruthy();
+    await openRow(second.text); // another row opens: the first one closes, its ask is gone
+    expect(screen.getAllByRole("button", { name: "Remove from log" })).toHaveLength(1);
+    expect(screen.queryByRole("group")).toBeNull();
+  });
 
   it("asks first, then hides the decision and keeps the rest of its meeting", async () => {
     mocks.hide.mockResolvedValue(undefined);
     render(<DecisionsView initial={all} />);
-    await userEvent.click(screen.getByRole("button", { name: `Remove from log: ${first.text}` }));
+    await remove(first.text);
     expect(mocks.hide).not.toHaveBeenCalled();
     const ask = screen.getByRole("group", { name: "Remove this decision from the log?" });
     expect(ask.textContent).toContain("Remove this decision from the log? It stays in the meeting notes.");
@@ -166,14 +199,14 @@ describe("remove from log", () => {
     mocks.hide.mockResolvedValue(undefined);
     render(<DecisionsView initial={all} />);
     const only = all.groups[2].decisions[0];
-    await userEvent.click(screen.getByRole("button", { name: `Remove from log: ${only.text}` }));
+    await remove(only.text);
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.queryByRole("heading", { level: 2, name: "Google Meet nat-aaaa-bbb" })).toBeNull());
   });
 
   it("changes nothing when the owner keeps the decision", async () => {
     render(<DecisionsView initial={all} />);
-    await userEvent.click(screen.getByRole("button", { name: `Remove from log: ${first.text}` }));
+    await remove(first.text);
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(mocks.hide).not.toHaveBeenCalled();
     expect(screen.getByText(first.text)).toBeTruthy();
@@ -184,7 +217,7 @@ describe("remove from log", () => {
     const { status, code, message } = workspaceError("24-decision-hide-foreign.json");
     mocks.hide.mockRejectedValue(new ApiError(status, code, message));
     render(<DecisionsView initial={all} />);
-    await userEvent.click(screen.getByRole("button", { name: `Remove from log: ${first.text}` }));
+    await remove(first.text);
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(screen.queryByText(first.text)).toBeNull());
     expect(screen.queryByRole("alert")).toBeNull();
@@ -193,7 +226,7 @@ describe("remove from log", () => {
   it("keeps the decision and says what went wrong on any other failure", async () => {
     mocks.hide.mockRejectedValue(new ApiError(0, "network_error", NETWORK_MESSAGE));
     render(<DecisionsView initial={all} />);
-    await userEvent.click(screen.getByRole("button", { name: `Remove from log: ${first.text}` }));
+    await remove(first.text);
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
     expect((await screen.findByRole("alert")).textContent).toBe(NETWORK_MESSAGE);
     expect(screen.getByText(first.text)).toBeTruthy();

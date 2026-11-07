@@ -7,7 +7,7 @@ import { AppLink, Icon } from "@/components/ui";
 import { api } from "@/lib/api/browser";
 import { loadSprintBook, type SprintBook } from "@/lib/sprints";
 import type { Milestone, Project, Task, TaskPerson } from "@/lib/api/types";
-import { actionSummary, avatarTone, dueLabel, personInitials } from "@/lib/tasks";
+import { actionSummary, avatarTone, isOverdue, personInitials, taskDueText } from "@/lib/tasks";
 
 // The meeting page's Action items when the notes have been read into tasks (the designer's
 // `hasActionTasks` block): the heading, "N tasks created, assigned to M people · View board", and
@@ -99,9 +99,9 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
               </button>
               <div>
                 <div className={`ai-title${done ? " tk-done" : ""}`}>{task.title || "Untitled task"}</div>
-                <div className="ai-due">
+                <div className={done || !isOverdue(task.due_date, today) ? "ai-due" : "ai-due tk-due-overdue"}>
                   <Icon name="calendar" size={12} />
-                  {dueLabel(task.due_date, today)}
+                  {taskDueText(task, today)}
                 </div>
                 {failed === task.id ? <div className="ai-due" role="alert">Could not update this task. Try again.</div> : null}
               </div>

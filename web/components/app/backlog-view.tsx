@@ -3,7 +3,7 @@
 import { Icon } from "@/components/ui";
 import { TaskBadges } from "@/components/app/task-card";
 import type { Task } from "@/lib/api/types";
-import { avatarTone, dueLabel, personInitials, sourceLabel } from "@/lib/tasks";
+import { avatarTone, isOverdue, personInitials, sourceLabel, taskDueText } from "@/lib/tasks";
 
 export type BacklogSection = { key: string; title: string; sub: string; emptyText: string; tasks: Task[] };
 
@@ -63,7 +63,7 @@ export function BacklogView({
                 </div>
                 <TaskBadges task={task} project={projectOf(task)} showProject={showProject} />
               </div>
-              <span className={`tk-bl-due${task.due_date === today ? " tk-due-today" : ""}`}>{dueLabel(task.due_date, today)}</span>
+              <span className={`tk-bl-due${task.status !== "done" && isOverdue(task.due_date, today) ? " tk-due-overdue" : task.due_date === today ? " tk-due-today" : ""}`}>{taskDueText(task, today)}</span>
               <div>
                 {task.assignee ? (
                   <div className={`avatar tk-avatar ${avatarTone(task.assignee.user_id)}`} title={task.assignee.name}>

@@ -9,7 +9,7 @@ import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { AgendaItem, CarriedQuestion, SeriesPage, Task, TaskPerson } from "@/lib/api/types";
 import { durationLabel, initials, platformLabel, plural } from "@/lib/format";
-import { avatarTone, dayLabel, dueLabel, personInitials, todayIn } from "@/lib/tasks";
+import { avatarTone, dayLabel, isOverdue, personInitials, taskDueText, todayIn } from "@/lib/tasks";
 import { LocalTime } from "@/components/app/local-time";
 
 // A 422 is developer text for most calls (`errorMessage` hides it), but the agenda's own refusals are
@@ -57,8 +57,8 @@ function TaskRow({
       {done ? <Icon name="check" size={16} stroke={2.2} /> : null}
       <div className="sr-row-main">
         <div className="sr-row-title">{task.title || "Untitled task"}</div>
-        <div className={task.due_date === today && !done ? "sr-row-sub sr-row-sub-warn" : "sr-row-sub"}>
-          {done ? `Done ${finishedOn ?? ""}`.trim() : dueLabel(task.due_date, today)}
+        <div className={done ? "sr-row-sub" : isOverdue(task.due_date, today) ? "sr-row-sub tk-due-overdue" : task.due_date === today ? "sr-row-sub sr-row-sub-warn" : "sr-row-sub"}>
+          {done ? `Done ${finishedOn ?? ""}`.trim() : taskDueText(task, today)}
         </div>
       </div>
       {!done ? <span className={doing ? "sr-pill sr-pill-doing" : "sr-pill"}>{doing ? "In progress" : "To do"}</span> : null}
@@ -161,6 +161,9 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
       finished: p.finished.map((t) => (t.id === next.id ? next : t)),
     }));
   const noSend = page.agenda_recipients === 0;
+  // The score tiles: the open tasks whose day has passed (in the person's zone) are the Overdue
+  // tile; the rest of the open ones are Still open.
+  const overdue = page.unfinished.filter((t) => isOverdue(t.due_date, today)).length;
 
   return (
     <div className="stack-lg sr">
@@ -196,6 +199,20 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
             </Button>
           </div>
           <div className="sr-body">
+            <div className="sr-score">
+              <div className="sr-tile">
+                <div className="sr-tile-n sr-tile-done">{page.finished.length}</div>
+                <div className="sr-tile-label">Done since last meeting</div>
+              </div>
+              <div className="sr-tile">
+                <div className="sr-tile-n">{page.unfinished.length - overdue}</div>
+                <div className="sr-tile-label">Still open</div>
+              </div>
+              <div className="sr-tile">
+                <div className={overdue > 0 ? "sr-tile-n sr-tile-late" : "sr-tile-n"}>{overdue}</div>
+                <div className="sr-tile-label">Overdue</div>
+              </div>
+            </div>
             <div>
               <h2 className="sr-h2">Unfinished from last time</h2>
               <div className="sr-note">Tasks from earlier meetings in this series that are not done yet.</div>
