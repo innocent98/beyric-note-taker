@@ -8,7 +8,10 @@ tasks assigned to him.
 
 # ruff: noqa: F811  (fixtures are imported by name and used as arguments)
 
+import subprocess
+import sys
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from sqlalchemy import select
@@ -595,6 +598,22 @@ def test_not_after_the_joins_deadline(session, owner, daniel, weekly, busy, due,
     row.deadline_at = NOW - timedelta(seconds=1)
     session.commit()
     assert box(mail_of(session, OWNER_EMAIL)) is None
+
+
+@pytest.mark.parametrize(
+    "first", ["app.pipeline", "app.mail", "app.mail_summary", "app.join_runner"]
+)
+def test_importing_any_of_the_mail_modules_first_does_not_cycle(first):
+    """`mail_summary` reads `join_runner`'s retry list; a top-level import of it made a cycle
+    through gcal_sync, services, deletion and pipeline when the app started from `pipeline`."""
+    root = Path(__file__).resolve().parents[1]  # this checkout, not whichever `app` is installed
+    done = subprocess.run(
+        [sys.executable, "-c", f"import sys; sys.path.insert(0, {str(root)!r}); import {first}"],
+        capture_output=True,
+        text=True,
+        cwd=root,
+    )
+    assert done.returncode == 0, done.stderr[-600:]
 
 
 # ---- a failing extra never costs the reminder ----

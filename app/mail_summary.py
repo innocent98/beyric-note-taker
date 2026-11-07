@@ -46,7 +46,6 @@ from app import series as series_module
 from app import sprints, tasks, timezones, titles
 from app.config import Settings
 from app.gcal_rules import JoinSettings, will_join
-from app.join_runner import RETRYABLE_SKIPS
 from app.models import (
     CalendarConnection,
     CalendarEvent,
@@ -242,6 +241,10 @@ def _join_is_live(session: Session, user: User, event: CalendarEvent, now: datet
     and the runner can end a row with `needs_reconnect`, `duplicate_meeting`, `account_suspended`
     or `meeting_has_note_taker`, which are final. A `skipped` row counts only while the runner is
     still retrying it (`join_runner.RETRYABLE_SKIPS`: `hours_cap`, `user_limit`, `code_in_use`)."""
+    # Imported here, not at the top: join_runner pulls in gcal_sync, services and deletion, which
+    # import pipeline, which imports mail and so this module (a cycle at start-up).
+    from app.join_runner import RETRYABLE_SKIPS
+
     join = session.scalars(
         select(ScheduledJoin).where(
             ScheduledJoin.user_id == user.id, ScheduledJoin.calendar_event_id == event.id
