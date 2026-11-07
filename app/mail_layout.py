@@ -133,6 +133,13 @@ class TaskRows:
 
 
 @dataclass(frozen=True)
+class SummaryBox:
+    """The grey box that closes the one-hour reminder: a few plain sentences, no markup."""
+
+    text: str
+
+
+@dataclass(frozen=True)
 class Divider:
     """A thin rule between two parts of a mail (translated notes, then the original)."""
 
@@ -152,6 +159,7 @@ Block = (
     | Subline
     | Section
     | TaskRows
+    | SummaryBox
 )
 
 
@@ -278,6 +286,11 @@ def _block_html(block: Block) -> str:
             )
         case TaskRows(items):
             return _task_rows_html(items)
+        case SummaryBox(text):
+            return (
+                f'<div style="padding:12px 14px;background:{PAGE};border-radius:10px;'
+                f'font-size:13px;color:#4A524E;line-height:1.55">{esc(text)}</div>'
+            )
     raise TypeError(type(block).__name__)
 
 
@@ -335,6 +348,7 @@ def render_text(
                 | Pill(text)
                 | Subline(text)
                 | Section(text)
+                | SummaryBox(text)
             ):
                 parts.append(text)
             case TaskRows(items):
