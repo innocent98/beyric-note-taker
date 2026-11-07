@@ -34,7 +34,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import mail, series, timezones, titles
+from app import mail, mail_summary, series, sprints, timezones, titles
 from app.config import Settings
 from app.mail_layout import (
     Block,
@@ -49,6 +49,7 @@ from app.mail_layout import (
     Rows,
     Section,
     Subline,
+    SummaryBox,
     TaskRow,
     TaskRows,
     check_url,
@@ -500,10 +501,15 @@ def _series_reminder(
     # The one-hour mail names the end ("14:00 to 14:45 UTC"); the 30-minute one only the start.
     ends = event.ends_at if event is not None and one_hour else None
     when = _when(reminder.starts_at, ends, zone)
+    meta = [when, platform]
+    if one_hour:
+        opening = mail_summary.opening_sprint(session, user, found, reminder.starts_at, zone)
+        if opening is not None:
+            meta.append(f"{sprints.name_of(opening)} opens")
     blocks: list[Block] = [
         Pill(pill),
         Heading(name, after=4),
-        Subline(f"{when} · {platform}" if platform else when),
+        Subline(" · ".join(part for part in meta if part)),
     ]
     header = len(blocks)
     buttons = []
@@ -577,5 +583,11 @@ def _series_reminder(
             )
     if len(blocks) <= header:
         return Skip("nothing_to_say")
+    if one_hour:
+        sentences = mail_summary.summary_sentences(
+            session, user, found, reminder.starts_at, today, settings, now
+        )
+        if sentences:
+            blocks.append(SummaryBox(" ".join(sentences)))
     footer = f"You are getting this because you attend {name}."
     return _send_message(to, f"{pill}: {name}", blocks, footer, _prefs(settings))
