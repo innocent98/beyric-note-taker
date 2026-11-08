@@ -318,14 +318,14 @@ def run(base: str, ids: dict, engine, model: FakeModel) -> None:
     anon.call(
         "ask-logged-out", "POST", "/api/ask", body={"question": "pricing"}, note="No login: 401."
     )
-    ada.call("scope-ada", "GET", "/api/ask/scope", note="Ada: Pricing review (hers) and Design sync (Dan's, shared) are ready and readable = 2 meetings. The not-ready meeting and Dan's private 1:1 are not counted. Decisions: 1 (the hidden one is not counted). Tasks: 2 (her two on Pricing review; the one on Dan's private meeting is on a meeting she cannot read, so it is not counted). `suggestions` has the name chip: the most frequent speaker other than Ada.")  # fmt: skip
+    ada.call("scope-ada", "GET", "/api/ask/scope", note="Ada: Pricing review (hers) and Design sync (Dan's, shared) are ready and readable = 2 meetings. The not-ready meeting and Dan's private 1:1 are not counted. Decisions: 1 (the hidden one is not counted). Tasks: 2 (her two on Pricing review; the one on Dan's private meeting is on a meeting she cannot read, so it is not counted). `suggestions` are built from her own data, each one answerable: summarise her most recent meeting with notes (by day), what was decided on the day of her most recent meeting with a decision, what she committed to (last week here), her open tasks, and what the most frequent other speaker said.")  # fmt: skip
     dan.call(
         "scope-dan",
         "GET",
         "/api/ask/scope",
-        note="Dan reads his own two ready meetings (Design sync, shared; his private 1:1) = 2. Ada's Pricing review is private to Ada, so it is not counted, nor its decision. His tasks count is 1: the task on his private 1:1 (assigned to Ada) is on a meeting he can read.",
+        note="Dan reads his own two ready meetings (Design sync, shared; his private 1:1) = 2. Ada's Pricing review is private to Ada, so it is not counted, nor its decision. His tasks count is 1: the task on his private 1:1 (assigned to Ada) is on a meeting he can read. His chips: summarise his most recent meeting with notes and the frequent-speaker chip; no decision chip (he cannot read the one decision), no task chips (nothing assigned to him).",
     )
-    eve.call("scope-eve", "GET", "/api/ask/scope", note="Eve is on another team: nothing. No name chip (her meetings name no one), so four suggestions.")  # fmt: skip
+    eve.call("scope-eve", "GET", "/api/ask/scope", note="Eve has no ready meeting to read: nothing, and no chips (`suggestions` is empty).")  # fmt: skip
 
     ada.call("ask-answer", "POST", "/api/ask", body={"question": "What did we decide about pricing?"}, note="Search path. MODEL FAKED: it cites the first passage. Everything else is real: the chip is built by code from the passage's meeting (title, day, owner, shared, target, line).")  # fmt: skip
     note_file("prompt-sent-to-model", "What the model was shown for the last question: the system prompt and the user message (the question as a JSON string, the passages inside delimiters). Captured from the call the fake received.", {"model": model.calls[-1]["model"], "max_completion_tokens": model.calls[-1]["max_completion_tokens"], "timeout": model.calls[-1]["timeout"], "system": model.calls[-1]["messages"][0]["content"], "user": model.calls[-1]["messages"][1]["content"]})  # fmt: skip
