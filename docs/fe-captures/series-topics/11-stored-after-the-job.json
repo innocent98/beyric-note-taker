@@ -1,0 +1,24 @@
+{
+  "note": "The `series_topics` rows after the job. The stand-in model proposed three topics; \"Hiring plan\" is gone: more than half of its words are in an approved decision of the series (checked in code). `meeting_ids` are meeting ids.",
+  "content": [
+    {
+      "label": "Pricing model",
+      "agenda": "Decide the pricing model",
+      "reason": "no_decision",
+      "meeting_ids": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "label": "Compensation review",
+      "agenda": "Give the compensation review an owner",
+      "reason": "no_owner",
+      "meeting_ids": [
+        2,
+        4
+      ]
+    }
+  ]
+}

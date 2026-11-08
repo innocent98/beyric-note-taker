@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # model-calling questions one person may ask in a rolling 24 hours. Both optional.
     ask_model: str = "gpt-6-luna"
     ask_daily_limit: int = Field(default=30, ge=0)
+    # The call that finds topics repeated across a series' meetings (app/topics.py): one per series
+    # when its last meeting's notes are read. Optional.
+    topics_model: str = "gpt-6-luna"
 
     audio_retention_days: int = 7
     audio_dir: str = "data/audio"

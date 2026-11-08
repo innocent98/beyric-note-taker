@@ -1,0 +1,27 @@
+{
+  "note": "\"Add to agenda\" posts the suggested line's `text` to the existing agenda route.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/1/agenda",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "Decide the pricing model"
+    }
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "text": "Decide the pricing model",
+      "can_remove": true
+    }
+  }
+}

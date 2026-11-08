@@ -14,3 +14,5 @@ EXTRACT_REVIEW_PROMPT_VERSION = "extract-review-v1"
 TRANSLATE_PROMPT_VERSION = "translate-v1"
 # Ask Beyric: answering a question from the passages of the asker's own meetings (app/ask.py).
 ASK_PROMPT_VERSION = "ask-v1"
+# Keeps coming up: finding the topics that recur across a series' last meetings (app/topics.py).
+TOPICS_PROMPT_VERSION = "topics-v1"

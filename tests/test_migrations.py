@@ -1433,3 +1433,72 @@ def test_0034_lets_the_ledger_hold_ask_calls_and_downgrades_cleanly(scratch_url)
 def test_0034_follows_0033():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0034").down_revision == "0033"
+
+
+def test_0037_follows_0036():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0037").down_revision == "0036"
+
+
+def test_0037_round_trips_and_widens_the_ledger_to_topics(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0036")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
+        conn.execute(
+            text(
+                "insert into teams (name, owner_user_id) "
+                "select 'T', id from users where email = 'a@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into series (team_id, title) "
+                "select id, 'Monday planning' from teams where name = 'T'"
+            )
+        )
+        conn.execute(text("insert into ai_runs (kind, model) values ('ask', 'm')"))
+        with pytest.raises(sa.exc.IntegrityError), conn.begin_nested():
+            conn.execute(text("insert into ai_runs (kind, model) values ('topics', 'm')"))
+    command.upgrade(cfg, "0037")
+    # an existing series gets the three job columns at their defaults: "look now", no attempts
+    assert _rows(
+        engine,
+        "select topics_signature, topics_checked_at, topics_attempts from series",
+    ) == [(None, None, 0)]
+    with engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('topics', 'gpt-6-luna')"))
+        conn.execute(
+            text(
+                "insert into series_topics (series_id, label, agenda, reason, meeting_ids) "
+                "select id, 'Pricing model', 'Decide the pricing model', 'no_decision', "
+                "'[1, 2]'::jsonb from series"
+            )
+        )
+    assert _rows(engine, "select label, position, meeting_ids from series_topics") == [
+        ("Pricing model", 0, [1, 2])
+    ]
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # the reason is a list
+        conn.execute(
+            text(
+                "insert into series_topics (series_id, label, agenda, reason, meeting_ids) "
+                "select id, 'x', 'y', 'other', '[]'::jsonb from series"
+            )
+        )
+    # the topics go with their series
+    with engine.begin() as conn:
+        conn.execute(text("delete from series"))
+    assert _rows(engine, "select count(*) from series_topics") == [(0,)]
+    with engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('topics', 'm')"))
+    command.downgrade(cfg, "0036")
+    assert "series_topics" not in inspect(engine).get_table_names()
+    assert not {"topics_signature", "topics_checked_at", "topics_attempts"} & {
+        c["name"] for c in inspect(engine).get_columns("series")
+    }
+    assert _rows(engine, "select kind from ai_runs order by id") == [("ask",)]
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('topics', 'm')"))
+    command.upgrade(cfg, "head")
+    engine.dispose()

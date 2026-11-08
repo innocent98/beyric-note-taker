@@ -1,0 +1,25 @@
+{
+  "note": "Another team: 404, the same as for any series that is not yours.",
+  "client": "eve",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/1",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such recurring meeting"
+      }
+    }
+  }
+}

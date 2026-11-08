@@ -60,7 +60,7 @@ JOIN_STATES = (
 )
 # A join in one of these states holds its meeting code: only one bot per code at a time.
 LIVE_JOIN_STATES = ("dispatching", "no_capacity", "joined")
-AI_RUN_KINDS = ("extract", "translate", "notes", "label", "transcribe", "ask")
+AI_RUN_KINDS = ("extract", "translate", "notes", "label", "transcribe", "ask", "topics")
 AI_RUN_STATUSES = ("ok", "failed", "pending")
 # `pending` waits for the worker (or for a retry), `running` is being worked on, `done` is finished,
 # `failed` gave up after the retries, `skipped` means only the decisions were read from the notes
@@ -1060,6 +1060,40 @@ class Series(Base):
     platform: Mapped[str | None] = mapped_column(String(16))
     project_id: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # The worker's repeat-topics job (`app/topics.py`): a hash of what the last successful call was
+    # given (an unchanged series costs no call), when it last looked (null = look again now: new
+    # notes, a meeting joined or left) and how many calls failed since the input last changed.
+    topics_signature: Mapped[str | None] = mapped_column(String(64))
+    topics_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    topics_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
+TOPIC_REASONS = ("no_decision", "no_owner", "not_final")
+
+
+class SeriesTopic(Base):
+    """A topic that came up in two or more meetings of a series with no decision on it ("Keeps
+    coming up"). Stored by the worker's one model call per series and replaced as a set; the page
+    reads these rows and never calls the model. `label` and `agenda` are text the model wrote from
+    the meetings in `meeting_ids`, so a read shows a topic only to a viewer who may read at least
+    two of those meetings (`series.topics_for`)."""
+
+    __tablename__ = "series_topics"
+    __table_args__ = (
+        CheckConstraint(_in("reason", TOPIC_REASONS), name="ck_series_topics_reason"),
+        Index("ix_series_topics_series_id", "series_id", "position"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    series_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("series.id", ondelete="CASCADE"))
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    label: Mapped[str] = mapped_column(String(60))
+    agenda: Mapped[str] = mapped_column(String(100))
+    reason: Mapped[str] = mapped_column(String(12))
+    meeting_ids: Mapped[list[int]] = mapped_column(JSONB)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class SeriesAgendaItem(Base):

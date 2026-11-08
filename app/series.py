@@ -41,12 +41,13 @@ from app.models import (
     ScheduledJoin,
     Series,
     SeriesAgendaItem,
+    SeriesTopic,
     Task,
     TeamMember,
     User,
 )
 from app.notes_document import parse_transcript
-from app.visibility import can_read_clause, owns
+from app.visibility import can_read_clause, owns, visible_meetings
 
 logger = logging.getLogger(__name__)
 
@@ -234,7 +235,10 @@ def join(session: Session, meeting: Meeting, series: Series, *, consume: bool = 
     attach never consumes: it would let any member clear lines they may not remove. In the
     caller's transaction; the caller has checked who may."""
     first = meeting.series_id != series.id
+    if first and meeting.series_id is not None:
+        mark_topics_stale(session, meeting.series_id)
     meeting.series_id = series.id
+    mark_topics_stale(session, series.id)
     session.flush()
     if first and consume:
         session.execute(
@@ -362,6 +366,8 @@ def attach(session: Session, user: User, meeting: Meeting, series_id: int | None
     if not owns(user, meeting):
         raise SeriesRefused(404, "not_found", "No such meeting.")
     if series_id is None:
+        if meeting.series_id is not None:
+            mark_topics_stale(session, meeting.series_id)
         meeting.series_id = None
         session.flush()
         return None
@@ -817,3 +823,146 @@ def last_meeting_day(
 
     meeting = next(iter(meetings_of(session, series, viewer, limit=1)), None)
     return timezones.localise(meeting.created_at, zone)[0].date() if meeting else None
+
+
+# ---- repeat topics ("Keeps coming up") and the suggested agenda ----
+
+
+def mark_topics_stale(session: Session, series_id: int) -> None:
+    """Tell the worker's topics job to look at this series again: its notes changed or a meeting
+    joined or left it. In the caller's transaction."""
+    session.execute(
+        update(Series)
+        .where(Series.id == series_id)
+        .values(topics_checked_at=None, topics_attempts=0)
+    )
+
+
+@dataclass(frozen=True)
+class TopicView:
+    """A stored topic as one viewer may see it: `meetings` are only the ones they may read."""
+
+    id: int
+    label: str
+    agenda: str
+    reason: str
+    meetings: list[Meeting]
+
+
+def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView]:
+    """The stored topics of the series that the viewer may be shown. No model call: rows only.
+
+    A topic's label and agenda sentence were written from the meetings in its `meeting_ids`, some
+    of which may be a teammate's private meeting, so each topic's meetings are filtered through
+    `visible_meetings(viewer)` (and must still belong to the series) and a topic the viewer can
+    read fewer than two of is hidden: its words must never reach someone who cannot read the
+    meetings behind it."""
+    rows = list(
+        session.scalars(
+            select(SeriesTopic)
+            .where(SeriesTopic.series_id == series.id)
+            .order_by(SeriesTopic.position, SeriesTopic.id)
+        )
+    )
+    wanted = {i for row in rows for i in row.meeting_ids if isinstance(i, int)}
+    if not wanted:
+        return []
+    readable = {
+        m.id: m
+        for m in session.scalars(
+            visible_meetings(viewer).where(
+                Meeting.id.in_(wanted), Meeting.series_id == series.id, Meeting.status == "ready"
+            )
+        )
+    }
+    out = []
+    for row in rows:
+        seen = [readable[i] for i in dict.fromkeys(row.meeting_ids) if i in readable]
+        if len(seen) < 2:
+            continue
+        seen.sort(key=lambda m: (m.created_at, m.id))
+        out.append(TopicView(row.id, row.label, row.agenda, row.reason, seen))
+    return out
+
+
+_SUBLINES = {
+    "no_decision": "Discussed in {n} meetings without a decision",
+    "no_owner": "Raised in {n} meetings, still no owner or date",
+    "not_final": "Discussed in {n} meetings, approval rules not final",
+}
+
+
+def topic_line(reason: str, count: int) -> str:
+    """The sub-line under a topic: a template by reason, with the number of meetings the viewer
+    may read it was raised in."""
+    return _SUBLINES[reason].format(n=count)
+
+
+def topic_dates(days: list[date]) -> str:
+    """ "Mon 26 Oct, Fri 30 Oct and Mon 2 Nov 2026": the meetings' days, oldest first. The year
+    follows the last one; an earlier day from another year carries its own."""
+    last_year = days[-1].year
+    parts = [f"{d:%a} {d.day} {d:%b}" + (f" {d.year}" if d.year != last_year else "") for d in days]
+    text = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+    return f"{text} {last_year}"
+
+
+def suggested_task_count(session: Session, viewer: User, series: Series) -> int:
+    """Suggested tasks (waiting for someone to accept them) of the series' meetings that the
+    viewer may see. They are in no other count."""
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(Task)
+            .where(
+                tasks.visible(viewer),
+                Task.suggested.is_(True),
+                Task.meeting_id.in_(_series_meeting_ids(series)),
+            )
+        )
+        or 0
+    )
+
+
+def agenda_suggestions(
+    topics: list[TopicView],
+    unfinished: list[Task],
+    carried: int,
+    suggested: int,
+    today: date,
+) -> list[tuple[str, str]]:
+    """The "Suggested agenda" lines as (kind, text), built in code, no model, in the designer's
+    order: each repeat topic's agenda sentence, the overdue tasks, the carried-over questions, the
+    suggested tasks to confirm. A line with nothing behind it is left out. `today` is the viewer's
+    day, and `unfinished` must already be what the viewer may see (suggested tasks are not in it).
+    """
+    lines: list[tuple[str, str]] = [("topic", t.agenda) for t in topics]
+    overdue = sum(1 for t in unfinished if t.due_date is not None and t.due_date < today)
+    if overdue:
+        lines.append(
+            (
+                "overdue",
+                "Review the overdue task"
+                if overdue == 1
+                else f"Review the {overdue} overdue tasks",
+            )
+        )
+    if carried:
+        lines.append(
+            (
+                "questions",
+                "Settle 1 open question carried over"
+                if carried == 1
+                else f"Settle {carried} open questions carried over",
+            )
+        )
+    if suggested:
+        lines.append(
+            (
+                "suggested",
+                "Confirm 1 suggested task from last time"
+                if suggested == 1
+                else f"Confirm {suggested} suggested tasks from last time",
+            )
+        )
+    return lines

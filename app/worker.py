@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import deletion, mail, maintenance, translation, workspace
+from app import deletion, mail, maintenance, topics, translation, workspace
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import AppState, Meeting, User
@@ -91,15 +91,22 @@ def extract_pending(session: Session, now: datetime) -> int | None:
     return workspace.process_next(session, now)
 
 
+def find_topics(session: Session, now: datetime) -> int | None:
+    """Look for the topics that keep coming up in a series whose notes were just read, one model
+    call per series (`app/topics.py`)."""
+    return topics.process_next(session, now)
+
+
 def background_jobs(session: Session, mailer: mail.Mailer | None, now: datetime) -> None:
     """The jobs that run before each meeting pass: send due mail, purge deleted accounts, read a
-    finished meeting's notes into lists. Each is on its own, and whatever one throws is logged by
-    type only (an exception can hold an address or a link) and never reaches the loop, so a mail,
-    purge or extraction problem cannot stall meetings."""
+    finished meeting's notes into lists, look for a series' repeat topics. Each is on its own, and
+    whatever one throws is logged by type only (an exception can hold an address or a link) and
+    never reaches the loop, so a mail, purge, extraction or topics problem cannot stall meetings."""
     for name, job in (
         ("mail", lambda: send_mail(session, mailer, now)),
         ("purge", lambda: purge_deleted(session)),
         ("extraction", lambda: extract_pending(session, now)),
+        ("topics", lambda: find_topics(session, now)),
     ):
         try:
             job()

@@ -1,0 +1,143 @@
+{
+  "note": "Before the worker has looked at the series: `topics` is [] (the section is absent, no spinner). `suggested_agenda` already has the lines that need no model: the overdue task, the carried question and the suggested task to confirm. The suggested task is in no other list or count on the page.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/1",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "title": "Monday planning",
+      "cadence": "Recurring",
+      "platform": null,
+      "timezone": "UTC",
+      "next_starts_at": null,
+      "next_text": null,
+      "sprint_note": null,
+      "can_rename": true,
+      "agenda_recipients": 1,
+      "unfinished": [
+        {
+          "id": 1,
+          "title": "Send the pricing sheet",
+          "status": "todo",
+          "assignee": {
+            "user_id": 2,
+            "name": "Ada Lovelace",
+            "is_you": true
+          },
+          "spoken_owner": null,
+          "due_date": "2026-10-30",
+          "due_phrase": null,
+          "quote": null,
+          "is_new": false,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-10-26",
+          "done_at": null,
+          "created_at": "2026-11-08T19:02:54.663389Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 3,
+            "title": "Monday planning",
+            "platform": "google_meet",
+            "created_at": "2026-11-02T10:00:00Z"
+          },
+          "project_id": null,
+          "milestone_id": null,
+          "sprint_id": null,
+          "carried": false,
+          "check_project": false,
+          "suggested": false,
+          "confidence": null,
+          "reason": null,
+          "quote_speaker": null,
+          "quote_line": null,
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": false,
+          "can_delete": true,
+          "can_decide": false
+        }
+      ],
+      "finished_since_text": "Wed 4 Nov",
+      "finished": [],
+      "questions": [
+        {
+          "id": 1,
+          "text": "Which pricing model?",
+          "meeting": {
+            "id": 3,
+            "title": "Monday planning",
+            "platform": "google_meet",
+            "created_at": "2026-11-02T10:00:00Z"
+          },
+          "can_update": true
+        }
+      ],
+      "agenda": [],
+      "topics": [],
+      "suggested_agenda": [
+        {
+          "kind": "overdue",
+          "text": "Review the overdue task"
+        },
+        {
+          "kind": "questions",
+          "text": "Settle 1 open question carried over"
+        },
+        {
+          "kind": "suggested",
+          "text": "Confirm 1 suggested task from last time"
+        }
+      ],
+      "past_meetings": [
+        {
+          "id": 4,
+          "title": "Ada private notes",
+          "created_at": "2026-11-04T10:00:00Z",
+          "duration_seconds": 1800,
+          "tasks_count": 0
+        },
+        {
+          "id": 3,
+          "title": "Monday planning",
+          "created_at": "2026-11-02T10:00:00Z",
+          "duration_seconds": 1800,
+          "tasks_count": 1
+        },
+        {
+          "id": 2,
+          "title": "Monday planning",
+          "created_at": "2026-10-26T10:00:00Z",
+          "duration_seconds": 1800,
+          "tasks_count": 0
+        },
+        {
+          "id": 1,
+          "title": "Monday planning",
+          "created_at": "2026-10-19T10:00:00Z",
+          "duration_seconds": 1800,
+          "tasks_count": 0
+        }
+      ],
+      "attendees": [
+        {
+          "name": "Ada Lovelace",
+          "is_teammate": true
+        }
+      ]
+    }
+  }
+}

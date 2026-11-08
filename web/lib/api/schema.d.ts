@@ -2418,6 +2418,20 @@ export interface components {
             /** Names */
             names: string[];
         };
+        /**
+         * AgendaSuggestion
+         * @description One "Suggested agenda" row: `text` is what "Add to agenda" posts to the agenda (and what
+         *     "Added" is matched against, by exact text, in the live agenda list).
+         */
+        AgendaSuggestion: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "topic" | "overdue" | "questions" | "suggested";
+            /** Text */
+            text: string;
+        };
         /** AskIn */
         AskIn: {
             /** Question */
@@ -3526,10 +3540,14 @@ export interface components {
             questions: components["schemas"]["CarriedQuestion"][];
             /** Sprint Note */
             sprint_note: string | null;
+            /** Suggested Agenda */
+            suggested_agenda: components["schemas"]["AgendaSuggestion"][];
             /** Timezone */
             timezone: string;
             /** Title */
             title: string;
+            /** Topics */
+            topics: components["schemas"]["TopicOut"][];
             /** Unfinished */
             unfinished: components["schemas"]["TaskOut"][];
         };
@@ -4091,6 +4109,31 @@ export interface components {
             is_set: boolean;
             /** Time Zone */
             time_zone: string;
+        };
+        /**
+         * TopicOut
+         * @description One "Keeps coming up" row. Only topics the caller may read at least two meetings of are
+         *     sent, and `meetings` are only the ones they may read (so "N meetings" and the dates never
+         *     count a teammate's private one).
+         */
+        TopicOut: {
+            /** Agenda */
+            agenda: string;
+            /** Dates Text */
+            dates_text: string;
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /** Line */
+            line: string;
+            /** Meetings */
+            meetings: components["schemas"]["MeetingRef"][];
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "no_decision" | "no_owner" | "not_final";
         };
         /**
          * TranslationBrief

@@ -15,6 +15,7 @@ from app.ai_versions import (
     EXTRACT_REVIEW_PROMPT_VERSION,
     LABEL_PROMPT_VERSION,
     NOTES_PROMPT_VERSION,
+    TOPICS_PROMPT_VERSION,
     TRANSLATE_PROMPT_VERSION,
 )
 from app.models import AiRun
@@ -25,6 +26,7 @@ __all__ = [
     "EXTRACT_REVIEW_PROMPT_VERSION",
     "LABEL_PROMPT_VERSION",
     "NOTES_PROMPT_VERSION",
+    "TOPICS_PROMPT_VERSION",
     "TRANSLATE_PROMPT_VERSION",
     "record",
     "record_usage",
@@ -37,6 +39,7 @@ _VERSION_OF_KIND = {
     "notes": NOTES_PROMPT_VERSION,
     "label": LABEL_PROMPT_VERSION,
     "ask": ASK_PROMPT_VERSION,
+    "topics": TOPICS_PROMPT_VERSION,
 }
 
 
