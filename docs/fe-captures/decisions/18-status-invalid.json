@@ -1,0 +1,31 @@
+{
+  "note": "Not a status: 422 `validation_error`.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisions?status=done",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "status",
+            "message": "Input should be 'approved', 'proposed', 'replaced' or 'rejected'"
+          }
+        ]
+      }
+    }
+  }
+}

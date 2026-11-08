@@ -1,0 +1,32 @@
+{
+  "note": "Someone outside the team sees nothing: empty groups, zero counts.",
+  "client": "eve",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisions",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "groups": [],
+      "has_more": false,
+      "next_before_id": null,
+      "counts": {
+        "all": 0,
+        "approved": 0,
+        "proposed": 0,
+        "replaced": 0,
+        "rejected": 0
+      },
+      "due_this_week": 0
+    }
+  }
+}

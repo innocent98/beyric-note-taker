@@ -1,0 +1,28 @@
+{
+  "note": "A decision of Dan's PRIVATE meeting: Chidi cannot read it, so 404 (not 403).",
+  "client": "chidi",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/4",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "approved"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such decision"
+      }
+    }
+  }
+}

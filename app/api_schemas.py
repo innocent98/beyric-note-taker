@@ -493,14 +493,65 @@ class MeetingRef(BaseModel):
     created_at: UtcDatetime
 
 
+DecisionStatus = Literal["approved", "proposed", "replaced", "rejected"]
+
+
+class DecisionRef(BaseModel):
+    """Another decision the caller may read, named by its words."""
+
+    id: int
+    text: str
+
+
+class DecisionTaskRef(BaseModel):
+    """A task that carries a decision out. Only tasks the caller may see, never a suggested one."""
+
+    id: int
+    title: str
+    status: Literal["todo", "doing", "done"]
+
+
 class DecisionOut(BaseModel):
     id: int
     text: str
+    # `approved` (the default), `proposed` (the model read it as suggested, not agreed), or
+    # `replaced` / `rejected` (a person set it).
+    status: DecisionStatus
+    # A speaker of the transcript, only when the code found the name there; else null.
+    decided_by: str | None
+    # The words that show the decision, only when the code found them in the transcript.
+    quote: str | None
+    # Who said `quote` (the speaker label of the transcript row it was found in) and which row:
+    # `line` is the 1-based row of the transcript the meeting page shows (open
+    # `/meetings/{id}?tab=transcript&line={line}`). Both null when there is no quote or it was not
+    # found again; never a time.
+    quote_speaker: str | None
+    line: int | None
+    # A day a person chose to look at this decision again; null for none.
+    revisit_on: date | None
+    # Only meaningful when `status` is `replaced`; null if none was chosen or the caller may not
+    # read it.
+    replaced_by: DecisionRef | None
+    # The decisions that name this one as their replacement (that the caller may read).
+    replaces: list[DecisionRef]
+    related_tasks: list[DecisionTaskRef]
+    # The caller recorded the meeting: they may change the status and the revisit date.
+    can_edit: bool
 
 
 class DecisionGroup(BaseModel):
     meeting: MeetingRef
     decisions: list[DecisionOut]
+
+
+class DecisionCounts(BaseModel):
+    """The tab counts: over the caller's whole log, whatever tab or search is showing."""
+
+    all: int
+    approved: int
+    proposed: int
+    replaced: int
+    rejected: int
 
 
 class DecisionList(BaseModel):
@@ -509,6 +560,20 @@ class DecisionList(BaseModel):
     has_more: bool
     # Pass as `before_id` for the next page of meetings.
     next_before_id: int | None
+    counts: DecisionCounts
+    # Approved and proposed decisions with a revisit date in this week (Monday to Sunday of the
+    # caller's time zone): the banner. No mail or notification goes with it.
+    due_this_week: int
+
+
+class DecisionPatch(Body):
+    """A partial change: send only the fields that change. `revisit_on` and `replaced_by_id` set to
+    null clear them. `status` cannot be null."""
+
+    status: DecisionStatus | None = None
+    revisit_on: date | None = Field(None, strict=False)
+    # A decision in the caller's log; only with status `replaced` (also in the same request).
+    replaced_by_id: int | None = Field(None, ge=1, le=9223372036854775807)
 
 
 class ReviewItemOut(BaseModel):

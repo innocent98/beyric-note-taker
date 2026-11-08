@@ -1,0 +1,57 @@
+{
+  "note": "A tab: only the proposed ones. `counts` do not change.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisions?status=proposed",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "groups": [
+        {
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet nat-aaaa-bbb",
+            "platform": "google_meet",
+            "created_at": "2026-11-08T16:34:13.162482Z"
+          },
+          "decisions": [
+            {
+              "id": 3,
+              "text": "Look at a lifetime deal at some point.",
+              "status": "proposed",
+              "decided_by": "Amina",
+              "quote": "I suggest we also look at a lifetime deal, maybe later.",
+              "quote_speaker": "Amina",
+              "line": 4,
+              "revisit_on": null,
+              "replaced_by": null,
+              "replaces": [],
+              "related_tasks": [],
+              "can_edit": true
+            }
+          ]
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null,
+      "counts": {
+        "all": 4,
+        "approved": 3,
+        "proposed": 1,
+        "replaced": 0,
+        "rejected": 0
+      },
+      "due_this_week": 0
+    }
+  }
+}

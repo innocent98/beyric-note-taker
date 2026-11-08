@@ -972,6 +972,40 @@
         "title": "ConnectOut",
         "type": "object"
       },
+      "DecisionCounts": {
+        "description": "The tab counts: over the caller's whole log, whatever tab or search is showing.",
+        "properties": {
+          "all": {
+            "title": "All",
+            "type": "integer"
+          },
+          "approved": {
+            "title": "Approved",
+            "type": "integer"
+          },
+          "proposed": {
+            "title": "Proposed",
+            "type": "integer"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "replaced": {
+            "title": "Replaced",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "all",
+          "approved",
+          "proposed",
+          "replaced",
+          "rejected"
+        ],
+        "title": "DecisionCounts",
+        "type": "object"
+      },
       "DecisionGroup": {
         "properties": {
           "decisions": {
@@ -994,6 +1028,13 @@
       },
       "DecisionList": {
         "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/DecisionCounts"
+          },
+          "due_this_week": {
+            "title": "Due This Week",
+            "type": "integer"
+          },
           "groups": {
             "items": {
               "$ref": "#/components/schemas/DecisionGroup"
@@ -1020,12 +1061,187 @@
         "required": [
           "groups",
           "has_more",
-          "next_before_id"
+          "next_before_id",
+          "counts",
+          "due_this_week"
         ],
         "title": "DecisionList",
         "type": "object"
       },
       "DecisionOut": {
+        "properties": {
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "decided_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decided By"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "quote_speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Speaker"
+          },
+          "related_tasks": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionTaskRef"
+            },
+            "title": "Related Tasks",
+            "type": "array"
+          },
+          "replaced_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DecisionRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "replaces": {
+            "items": {
+              "$ref": "#/components/schemas/DecisionRef"
+            },
+            "title": "Replaces",
+            "type": "array"
+          },
+          "revisit_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revisit On"
+          },
+          "status": {
+            "enum": [
+              "approved",
+              "proposed",
+              "replaced",
+              "rejected"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "status",
+          "decided_by",
+          "quote",
+          "quote_speaker",
+          "line",
+          "revisit_on",
+          "replaced_by",
+          "replaces",
+          "related_tasks",
+          "can_edit"
+        ],
+        "title": "DecisionOut",
+        "type": "object"
+      },
+      "DecisionPatch": {
+        "additionalProperties": false,
+        "description": "A partial change: send only the fields that change. `revisit_on` and `replaced_by_id` set to\nnull clear them. `status` cannot be null.",
+        "properties": {
+          "replaced_by_id": {
+            "anyOf": [
+              {
+                "maximum": 9.223372036854776e+18,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced By Id"
+          },
+          "revisit_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revisit On"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "approved",
+                  "proposed",
+                  "replaced",
+                  "rejected"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "title": "DecisionPatch",
+        "type": "object"
+      },
+      "DecisionRef": {
+        "description": "Another decision the caller may read, named by its words.",
         "properties": {
           "id": {
             "title": "Id",
@@ -1040,7 +1256,36 @@
           "id",
           "text"
         ],
-        "title": "DecisionOut",
+        "title": "DecisionRef",
+        "type": "object"
+      },
+      "DecisionTaskRef": {
+        "description": "A task that carries a decision out. Only tasks the caller may see, never a suggested one.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "todo",
+              "doing",
+              "done"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status"
+        ],
+        "title": "DecisionTaskRef",
         "type": "object"
       },
       "DisconnectOut": {
@@ -7401,7 +7646,7 @@
     },
     "/api/decisions": {
       "get": {
-        "description": "Everything the caller's meetings decided, newest meeting first, grouped by meeting. `q`\nmatches a decision's words or its meeting's title (a title match shows all of that meeting's\ndecisions). `limit` counts meetings, not decisions. For the next page pass `before_id` =\n`next_before_id`. A decision the caller hid is not listed.",
+        "description": "Everything the caller's meetings decided, newest meeting first, grouped by meeting. `q`\nmatches a decision's words or its meeting's title (a title match shows all of that meeting's\ndecisions). `status` keeps one tab's decisions. `limit` counts meetings, not decisions. For\nthe next page pass `before_id` = `next_before_id`. A decision the caller hid is not listed.\n`counts` and `due_this_week` are over the whole log, whatever `q` and `status` say.",
         "operationId": "list_decisions",
         "parameters": [
           {
@@ -7419,6 +7664,28 @@
                 }
               ],
               "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "approved",
+                    "proposed",
+                    "replaced",
+                    "rejected"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
             }
           },
           {
@@ -7491,10 +7758,93 @@
                 }
               }
             },
-            "description": "Malformed request"
+            "description": "Unprocessable Content"
           }
         },
         "summary": "List Decisions",
+        "tags": [
+          "decisions"
+        ]
+      }
+    },
+    "/api/decisions/{decision_id}": {
+      "patch": {
+        "description": "Change a decision's status, revisit date or what replaced it. Only the person who recorded\nthe meeting may: 403 `not_owner` for a teammate who can read it, 404 for someone who cannot.\n`replaced_by_id` must be another decision of the caller's log, only with status `replaced`\n(422 `replaced_by_needs_replaced`, `replaced_by_self`, `replaced_by_not_found`,\n`replaced_by_cycle`). Moving a decision off `replaced` clears `replaced_by_id`. A change a\nperson made is never overwritten when the notes are read again.",
+        "operationId": "patch_decision",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "decision_id",
+            "required": true,
+            "schema": {
+              "title": "Decision Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DecisionOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_owner`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Patch Decision",
         "tags": [
           "decisions"
         ]

@@ -72,6 +72,8 @@ TRANSLATION_STATUSES = ("translating", "ready", "failed")
 TASK_STATUSES = ("todo", "doing", "done")
 TASK_SOURCES = ("ai", "manual")
 TASK_CONFIDENCES = ("high", "medium", "low")
+# `replaced` and `rejected` are only ever set by a person (the Decisions record).
+DECISION_STATUSES = ("approved", "proposed", "replaced", "rejected")
 # When the reminder mails go before a recurring meeting (the Settings choice): one hour before,
 # 30 minutes before, or both (the designer draws two mails).
 REMINDER_TIMINGS = ("1h", "30m", "both")
@@ -744,12 +746,18 @@ class UsageEntry(Base):
 
 
 class Decision(Base):
-    """One bullet of a meeting's "Decisions" section. Read from the notes by code (no model call).
-    `fingerprint` is the identity across a re-run, so a decision the owner hid stays hidden."""
+    """One bullet of a meeting's "Decisions" section. Read from the notes by code; the extraction
+    adds what the model said about it and the code checked (`decided_by`, `quote`, `proposed`, the
+    related tasks). `fingerprint` is the identity across a re-run, so a decision the owner hid stays
+    hidden and a status, revisit date or replaced-by a person set is never overwritten.
+
+    `status`: `approved` (default), `proposed` (from the model), `replaced` / `rejected` (by hand
+    only). `replaced_by_id` is the decision that replaced this one."""
 
     __tablename__ = "decisions"
     __table_args__ = (
         UniqueConstraint("meeting_id", "fingerprint", name="uq_decisions_meeting_fp"),
+        CheckConstraint(_in("status", DECISION_STATUSES), name="ck_decisions_status"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -761,6 +769,31 @@ class Decision(Base):
     fingerprint: Mapped[str] = mapped_column(String(64))
     hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[str] = mapped_column(String(10), default="approved", server_default="approved")
+    # A speaker of the transcript and their words, kept only when the code found them there.
+    decided_by: Mapped[str | None] = mapped_column(String(100))
+    quote: Mapped[str | None] = mapped_column(String(300))
+    revisit_on: Mapped[date | None] = mapped_column(Date)
+    replaced_by_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("decisions.id", ondelete="SET NULL"), index=True
+    )
+    # A person touched status, revisit date or replaced-by: the extraction leaves them be.
+    # (`status` itself is the source of truth; this only tells "proposed by the model" apart from
+    # "set to proposed by a person".)
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DecisionTask(Base):
+    """A task that carries out a decision (the Related tasks of the Decisions record)."""
+
+    __tablename__ = "decision_tasks"
+
+    decision_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("decisions.id", ondelete="CASCADE"), primary_key=True
+    )
+    task_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("tasks.id", ondelete="CASCADE"), primary_key=True, index=True
+    )
 
 
 class OpenQuestion(Base):

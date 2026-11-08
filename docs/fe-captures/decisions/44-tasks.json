@@ -1,0 +1,15 @@
+{
+  "note": "The two tasks of the shared meeting.",
+  "content": [
+    {
+      "id": 1,
+      "title": "Update the pricing page",
+      "suggested": false
+    },
+    {
+      "id": 2,
+      "title": "Tell the customers about the new launch date",
+      "suggested": false
+    }
+  ]
+}

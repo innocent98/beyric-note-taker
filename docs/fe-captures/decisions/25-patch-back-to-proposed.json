@@ -1,0 +1,36 @@
+{
+  "note": "Moving off Replaced clears `replaced_by` (and so the other side's `replaces`).",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "proposed"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "text": "Look at a lifetime deal at some point.",
+      "status": "proposed",
+      "decided_by": "Amina",
+      "quote": "I suggest we also look at a lifetime deal, maybe later.",
+      "quote_speaker": "Amina",
+      "line": 4,
+      "revisit_on": null,
+      "replaced_by": null,
+      "replaces": [],
+      "related_tasks": [],
+      "can_edit": true
+    }
+  }
+}

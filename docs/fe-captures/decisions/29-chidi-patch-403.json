@@ -1,0 +1,28 @@
+{
+  "note": "Chidi can read this decision but did not record the meeting: 403 `not_owner`.",
+  "client": "chidi",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "approved"
+    }
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_owner",
+        "message": "Only the person who recorded the meeting can change this."
+      }
+    }
+  }
+}

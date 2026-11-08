@@ -118,7 +118,7 @@ def test_the_prompt_and_schema_ask_for_a_reason():
     props = extraction.EXTRACT_SCHEMA_FULL["properties"]["action_items"]["items"]
     assert "reason" in props["required"] and "reason" in props["properties"]
     assert "120 characters" in extraction.EXTRACT_SYSTEM_FULL
-    assert "extract-v2" == extraction.EXTRACT_PROMPT_VERSION
+    assert "extract-v3" == extraction.EXTRACT_PROMPT_VERSION
 
 
 # ---- finding who said it, and where the meeting page shows it ----

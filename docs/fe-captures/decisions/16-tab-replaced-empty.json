@@ -1,0 +1,32 @@
+{
+  "note": "A tab with nothing in it: `groups` empty, `counts` still whole.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisions?status=replaced",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "groups": [],
+      "has_more": false,
+      "next_before_id": null,
+      "counts": {
+        "all": 4,
+        "approved": 3,
+        "proposed": 1,
+        "replaced": 0,
+        "rejected": 0
+      },
+      "due_this_week": 0
+    }
+  }
+}

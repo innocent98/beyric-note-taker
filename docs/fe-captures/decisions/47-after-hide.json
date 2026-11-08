@@ -1,0 +1,95 @@
+{
+  "note": "A hidden decision is in no group and no count.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/decisions",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "groups": [
+        {
+          "meeting": {
+            "id": 2,
+            "title": "Google Meet nat-pppp-rrr",
+            "platform": "google_meet",
+            "created_at": "2026-11-08T16:54:13.167501Z"
+          },
+          "decisions": [
+            {
+              "id": 4,
+              "text": "Let the contractor go at the end of the month.",
+              "status": "approved",
+              "decided_by": null,
+              "quote": null,
+              "quote_speaker": null,
+              "line": null,
+              "revisit_on": null,
+              "replaced_by": null,
+              "replaces": [],
+              "related_tasks": [],
+              "can_edit": true
+            }
+          ]
+        },
+        {
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet nat-aaaa-bbb",
+            "platform": "google_meet",
+            "created_at": "2026-11-08T16:34:13.162482Z"
+          },
+          "decisions": [
+            {
+              "id": 1,
+              "text": "Keep the free plan for two more months.",
+              "status": "rejected",
+              "decided_by": "Dan",
+              "quote": "I think we should keep the free plan for two more months.",
+              "quote_speaker": "Dan",
+              "line": 1,
+              "revisit_on": null,
+              "replaced_by": null,
+              "replaces": [],
+              "related_tasks": [],
+              "can_edit": true
+            },
+            {
+              "id": 3,
+              "text": "Look at a lifetime deal at some point.",
+              "status": "replaced",
+              "decided_by": "Amina",
+              "quote": "I suggest we also look at a lifetime deal, maybe later.",
+              "quote_speaker": "Amina",
+              "line": 4,
+              "revisit_on": null,
+              "replaced_by": null,
+              "replaces": [],
+              "related_tasks": [],
+              "can_edit": true
+            }
+          ]
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null,
+      "counts": {
+        "all": 3,
+        "approved": 1,
+        "proposed": 0,
+        "replaced": 1,
+        "rejected": 1
+      },
+      "due_this_week": 0
+    }
+  }
+}

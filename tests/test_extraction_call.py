@@ -123,6 +123,7 @@ def test_the_reply_is_requested_as_strict_json_schema():
         "action_items",
         "review",
         "milestones",
+        "decisions",
     }
 
 

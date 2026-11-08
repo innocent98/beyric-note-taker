@@ -169,11 +169,14 @@ def test_no_call_is_made_when_there_is_nothing_to_check(session, user):
     notes = NOTES.replace(
         '- "Metrika" may be misheard.\n- Grace\'s budget figure is unclear.', "None noted"
     ).replace("- Tunde: send the contract (by Friday)", "None noted")
+    notes = notes.replace(
+        "- Launch moves to 14 March.\n- Budget is capped at £4,000.", "None noted"
+    )  # decisions are asked about too (extract-v3)
     meeting = make_meeting(session, user, notes=notes)
     client = FakeChat([])
     assert workspace.run_extraction(session, meeting, client=client, now=NOW) == "done"
     assert client.calls == [] and session.scalars(select(AiRun)).all() == []
-    assert len(rows(session, Decision)) == 2  # the code-read lists are there regardless
+    assert len(rows(session, OpenQuestion)) == 1  # the code-read lists are there regardless
 
 
 def test_a_failed_call_keeps_the_lists_and_retries_up_to_three_times(session, meeting):
