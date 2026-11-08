@@ -44,6 +44,8 @@ const { values } = parseArgs({
     role: { type: "string", default: "owner" },
     overdue: { type: "boolean", default: false },
     topics: { type: "string", default: "live" },
+    notrecorded: { type: "string", default: "none" },
+    sendnow: { type: "string", default: "ok" },
   },
 });
 
@@ -79,6 +81,11 @@ const { values } = parseArgs({
 // the captured 202, then the captured translation 1.5 seconds later. Nothing is translated here:
 // the French and Spanish are the designer's own words, as captured with the model faked.
 
+// Not recorded and Send now (docs/fe-captures/send-now/): `--notrecorded list` makes GET /api/not-recorded answer the
+// captured list (two meetings) and, with `--calendar connected`, GET /api/calendar answer the capture whose Upcoming
+// rows carry the same two (`--notrecorded none` is the older calendar capture and an empty list). `--sendnow ok|busy`:
+// `ok` answers the captured 200 and takes the row off both lists (in memory; `/__mock/reset` puts it back), `busy` the
+// captured 409 `bot_busy` for every press. Both can be changed while the mock runs: `/__mock/set?sendnow=busy`.
 // `--calendar not_connected|connected|needs_reconnect|off`: what GET /api/calendar answers (the captures in
 // docs/fe-captures/calendar-state/; `paused` is connected with auto-join stopped by the operator; `off` is the feature being dark: 404 calendar_unavailable).
 // GET /api/calendar/recurring follows the same flag: `connected` replays the captures in
@@ -92,6 +99,8 @@ const prelaunchBody = (name) => JSON.parse(readFileSync(join(captureDir, "prelau
 const calendarCapture = (name) => JSON.parse(readFileSync(join(captureDir, "calendar-state", `${name}.json`), "utf8")).response.body;
 const recurringCapture = (name) => JSON.parse(readFileSync(join(captureDir, "calendar-recurring", `${name}.json`), "utf8")).response.body;
 const settingsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "calendar-settings", `${name}.json`), "utf8")).response.body;
+const sendNowCapture = (name) => JSON.parse(readFileSync(join(captureDir, "send-now", `${name}.json`), "utf8")).response.body;
+const sentJoins = new Set();
 const accountBody = (name) => JSON.parse(readFileSync(join(captureDir, "pilot-accounts", `${name}.json`), "utf8")).response.body;
 
 // One meeting per state, from the captures. Titles vary so the list reads like a real one.
@@ -635,8 +644,8 @@ const server = http.createServer(async (req, res) => {
   // states while the mock runs (the Next build proxies the browser's calls to one address, so one mock
   // has to serve every state).
   if (path === "/__mock/set") {
-    for (const key of ["decisions", "review", "ask", "topics"]) if (url.searchParams.has(key)) values[key] = url.searchParams.get(key);
-    return json(res, 200, { decisions: values.decisions, review: values.review, ask: values.ask, topics: values.topics });
+    for (const key of ["decisions", "review", "ask", "topics", "notrecorded", "sendnow"]) if (url.searchParams.has(key)) values[key] = url.searchParams.get(key);
+    return json(res, 200, { decisions: values.decisions, review: values.review, ask: values.ask, topics: values.topics, notrecorded: values.notrecorded, sendnow: values.sendnow });
   }
   // Not part of the API: lets parity-shots.mjs start each translation screen from nothing.
   if (path === "/__mock/reset") {
@@ -644,6 +653,7 @@ const server = http.createServer(async (req, res) => {
     defaultLanguage = values.language;
     shares = [];
     shareId = 0;
+    sentJoins.clear();
     armed.decisions = armed.review = armed.ask = true;
     decisionRows = decisionSeed();
     slackConnected = false;
@@ -1229,7 +1239,31 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(204, { "cache-control": "no-store" });
     return res.end();
   }
+  if (path === "/api/not-recorded" && method === "GET") {
+    if (!loggedIn) return json(res, 401, { error: { code: "not_authenticated", message: "Log in first." } });
+    const items = values.notrecorded === "list" ? sendNowCapture("11-list").items.filter((i) => !sentJoins.has(i.join_id)) : [];
+    return json(res, 200, { items });
+  }
+  const sendNow = /^\/api\/scheduled-joins\/(\d+)\/send-now$/.exec(path);
+  if (sendNow && method === "POST") {
+    if (!loggedIn) return json(res, 401, { error: { code: "not_authenticated", message: "Log in first." } });
+    const joinId = Number(sendNow[1]);
+    if (values.sendnow === "busy") return json(res, 409, sendNowCapture("13-send-now-busy"));
+    sentJoins.add(joinId);
+    return json(res, 200, { ...sendNowCapture("19-send-now"), join_id: joinId });
+  }
   if (path === "/api/calendar" && method === "GET") {
+    if (values.calendar === "connected" && values.notrecorded === "list") {
+      // The capture whose rows carry join_id, can_send_now and not_recorded_text; a row Send now has
+      // accepted is a meeting now, so it says nothing more.
+      const state = sendNowCapture("12-calendar-upcoming");
+      return json(res, 200, {
+        ...state,
+        upcoming: state.upcoming.map((row) =>
+          sentJoins.has(row.join_id) ? { ...row, can_send_now: false, not_recorded_text: null } : row,
+        ),
+      });
+    }
     if (values.calendar === "off") return json(res, 404, calendarCapture("04-state-feature-off"));
     if (values.calendar === "paused") {
       // Connected with events, and the operator's emergency stop on (the 22 capture's line).

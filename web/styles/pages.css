@@ -936,3 +936,10 @@
   .ask-q, .ask-body { padding-left: 14px; padding-right: 14px; }
   .ask-go { padding: 0 14px; }
 }
+
+/* ---- Not recorded and Send now (lead-designed, 2026-11-08): the Upcoming card's rows with a small
+   secondary button where the switch is, the reason in the warning text and a refusal in the danger
+   text under the row. ---- */
+.cal-up-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
+.nr-reason { margin: 2px 0 0; font-size: var(--text-sm); color: var(--warning-text); }
+.nr-error { margin: 4px 0 0; font-size: var(--text-sm); color: var(--danger-text); }

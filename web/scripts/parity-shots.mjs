@@ -391,6 +391,13 @@ const SCREENS = {
   "app-ask-gone": [null, [], "/ask", true, [{ fill: "e.g. What did we decide about pricing?", value: "gone", enter: true, wait: 1800 }, { text: "Launch review · Fri 30 Oct", wait: 1200 }]],
   "app-detail-line": [null, [], "/meetings/8?tab=transcript&line=12", true],
   "app-detail-line-out-of-range": [null, [], "/meetings/8?tab=transcript&line=99", true],
+  // Not recorded and Send now (C15b, LEAD-DESIGNED: the designer's file draws neither, so Next alone). Run against a
+  // mock started with `--calendar connected --notrecorded list` and a clock of 2026-11-08T21:15:00Z: the Upcoming
+  // card with a missed row, the Not recorded card, Send now pressed (the toast, both rows updated), and a refusal
+  // (run app-not-recorded-busy against `--sendnow busy`: the 409 `bot_busy` words under the row, the button kept).
+  "app-not-recorded": [null, [], "/", true],
+  "app-not-recorded-sent": [null, [], "/", true, [{ text: "Send now", wait: 1200 }]],
+  "app-not-recorded-busy": [null, [], "/", true, [{ text: "Send now", wait: 1200 }]],
   "app-settings-language": [APP, [["Settings", "first"], DEFAULT_LANG("French", 300)], "/settings", true, [DEFAULT_LANG("French", 400)]],
 };
 

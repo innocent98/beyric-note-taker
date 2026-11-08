@@ -6,6 +6,7 @@ import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import type { CalendarEvent, CalendarState } from "@/lib/api/types";
 import { formatDuration, formatEventDay, formatEventTime, plural } from "@/lib/format";
+import type { SendNowControl } from "./use-send-now";
 
 const subscribe = () => () => {};
 
@@ -21,19 +22,25 @@ const subscribe = () => () => {};
 // join", off for "Off", and dimmed with its hint for "Cannot join", which nothing the person
 // switches can change. Pressing it writes the person's choice (`PUT .../override`) and the row is
 // replaced by the server's answer, words included.
+//
+// A row the note taker did not get into (`not_recorded_text`) says so under its title, with a
+// Send now while `can_send_now` (LEAD-DESIGNED, 2026-11-08: the designer's file draws neither); the
+// button is the same one the Not recorded list has and needs `sendNow`, the shared control.
 export function CalendarBand({
   state,
   timeZone,
   now,
+  sendNow,
 }: {
   state: CalendarState | null;
   timeZone?: string;
   now?: Date;
+  sendNow?: SendNowControl;
 }) {
   if (state === null) return null;
   if (state.state === "needs_reconnect") return <DisconnectedBanner />;
   if (state.state === "not_connected") return <ConnectBand />;
-  return <Upcoming state={state} timeZone={timeZone} now={now} />;
+  return <Upcoming state={state} timeZone={timeZone} now={now} sendNow={sendNow} />;
 }
 
 // LEAD-DESIGNED, not in the designer's file (2026-11-05): the designer drew no "calendar
@@ -76,7 +83,17 @@ function ConnectBand() {
   );
 }
 
-function Upcoming({ state, timeZone, now }: { state: CalendarState; timeZone?: string; now?: Date }) {
+function Upcoming({
+  state,
+  timeZone,
+  now,
+  sendNow,
+}: {
+  state: CalendarState;
+  timeZone?: string;
+  now?: Date;
+  sendNow?: SendNowControl;
+}) {
   const inBrowser = useSyncExternalStore(subscribe, () => true, () => false);
   const reference = now ?? new Date();
   // The server's rows: what the page was given, or what the last re-read gave; a row the person has
@@ -153,6 +170,7 @@ function Upcoming({ state, timeZone, now }: { state: CalendarState; timeZone?: s
               timeZone={timeZone}
               switchedTo={saving[event.id]}
               onToggle={() => void toggle(event)}
+              sendNow={sendNow}
             />
           ))}
         </ul>
@@ -168,6 +186,7 @@ function Row({
   timeZone,
   switchedTo,
   onToggle,
+  sendNow,
 }: {
   event: CalendarEvent;
   ready: boolean;
@@ -175,6 +194,7 @@ function Row({
   timeZone?: string;
   switchedTo: boolean | undefined;
   onToggle: () => void;
+  sendNow?: SendNowControl;
 }) {
   const duration = formatDuration(event.starts_at, event.ends_at);
   const cannot = event.will_join_text === "Cannot join";
@@ -182,6 +202,11 @@ function Row({
   const on = switchedTo ?? event.will_join;
   const words = switchedTo === undefined ? event.will_join_text : switchedTo ? "Will join" : "Off";
   const hint = switchedTo === undefined ? event.reason_text : null;
+  const sent = event.join_id != null && sendNow?.sent.has(event.join_id);
+  const missed = sent ? null : event.not_recorded_text;
+  const canSend = !sent && event.can_send_now && event.join_id != null && sendNow !== undefined;
+  const busy = event.join_id != null && sendNow?.sending.has(event.join_id);
+  const error = event.join_id != null ? sendNow?.errors[event.join_id] : undefined;
   return (
     <li className="cal-up-row">
       <div className="cal-up-when">
@@ -197,22 +222,42 @@ function Row({
           {duration ? <span>{duration}</span> : null}
           {event.attendee_count > 0 ? <span>{plural(event.attendee_count, "person", "people")}</span> : null}
         </p>
+        {missed ? <p className="nr-reason">Not recorded: {missed}</p> : null}
+        {error ? (
+          <p className="nr-error" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        aria-disabled={cannot ? true : undefined}
-        aria-labelledby={`cal-up-name-${event.id} cal-up-state-${event.id}`}
-        className={`cal-up-switch${cannot ? " cal-up-state-off" : ""}`}
-        title={hint ?? undefined}
-        onClick={onToggle}
-      >
-        <span className="cal-up-state" id={`cal-up-state-${event.id}`}>
-          {words}
-        </span>
-        <span className={`cal-switch${on ? " cal-switch-on" : ""}`} aria-hidden="true" />
-      </button>
+      <div className="cal-up-actions">
+        {canSend ? (
+          <Button
+            type="button"
+            kind="secondary"
+            size="sm"
+            disabled={busy}
+            aria-describedby={`cal-up-name-${event.id}`}
+            onClick={() => sendNow?.send(event.join_id as number)}
+          >
+            {busy ? "Sending…" : "Send now"}
+          </Button>
+        ) : null}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-disabled={cannot ? true : undefined}
+          aria-labelledby={`cal-up-name-${event.id} cal-up-state-${event.id}`}
+          className={`cal-up-switch${cannot ? " cal-up-state-off" : ""}`}
+          title={hint ?? undefined}
+          onClick={onToggle}
+        >
+          <span className="cal-up-state" id={`cal-up-state-${event.id}`}>
+            {words}
+          </span>
+          <span className={`cal-switch${on ? " cal-switch-on" : ""}`} aria-hidden="true" />
+        </button>
+      </div>
     </li>
   );
 }

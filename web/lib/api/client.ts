@@ -13,7 +13,9 @@ import type {
   DecisionStatus,
   EmailPreferences,
   DisconnectResult,
+  NotRecordedList,
   RecurringState,
+  SendNowResult,
   ExportFormat,
   FieldError,
   LanguagePreferences,
@@ -490,6 +492,14 @@ export function createApi(options: ApiOptions = {}) {
           body: { override },
           write: true,
         }),
+      // "Not recorded" (docs/fe-integration-guide-calendar-send-now.md): the last seven days'
+      // meetings the note taker did not get into. `sendNow` takes a row's `join_id` (not an event
+      // id) and sends the note taker through the full pre-flight: 200 with the new meeting, or a
+      // 409 / 403 / 502 with the reason in `message` (`bot_busy`, `hours_cap_reached`,
+      // `meeting_ended`, `cannot_send_now`, `bot_send_failed`, ...) and nothing changed.
+      notRecorded: () => request<NotRecordedList>("GET", "/api/not-recorded"),
+      sendNow: (joinId: number) =>
+        request<SendNowResult>("POST", `/api/scheduled-joins/${joinId}/send-now`, { write: true }),
     },
     // The team's integrations (W10): the Slack webhook. The address goes up on connect and never comes back.
     integrations: {

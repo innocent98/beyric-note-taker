@@ -99,6 +99,9 @@ export type CalendarSettingsInput = Schemas["SettingsIn"];
 export type AutoJoinRule = CalendarState["rule"];
 export type ConnectStart = Schemas["ConnectOut"];
 export type DisconnectResult = Schemas["DisconnectOut"];
+export type NotRecordedItem = Schemas["NotRecordedItem"];
+export type NotRecordedList = Schemas["NotRecordedOut"];
+export type SendNowResult = Schemas["SendNowOut"];
 export type RecurringState = Schemas["RecurringOut"];
 export type RecurringSeries = Schemas["RecurringSeries"];
 
