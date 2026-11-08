@@ -317,7 +317,8 @@ docker compose up -d web worker
 
 Merging a PR into `main` deploys it: `ci` runs, and when it passes `.github/workflows/deploy.yml`
 connects over SSH and runs `deploy/deploy.sh <sha>`. That script refuses any commit not on
-`origin/main`, backs up the database, checks out the commit, builds (both images: FastAPI and
+`origin/main`, refuses while a calendar join is due (see "Deploying while a join is due" below),
+backs up the database, checks out the commit, builds (both images: FastAPI and
 Next.js), starts, and waits up to two minutes until all three checks pass: `127.0.0.1:8020/health`
 (through `next` to FastAPI and the database), `127.0.0.1:8020/healthz` (`next` itself) and
 `127.0.0.1:8021/health` (FastAPI directly). If the new version never turns healthy it starts the
@@ -355,6 +356,46 @@ docker compose up -d --force-recreate web worker
 
 Then copy the value from `.env` into your password manager (`grep '^TOKEN_ENC_KEY=' .env`, in a
 private terminal). Losing it means every user reconnects their calendar.
+
+### Deploying while a join is due
+
+Auto-join starts a bot with nobody pressing anything, so a deploy that restarts `web`, `worker` and
+`scheduler` just before a join is dispatched can drop that recording. `deploy/deploy.sh` therefore
+asks the database first (`deploy/gate.sh`, `join_due_soon`) and **refuses** when a join in state
+`scheduled`, `no_capacity` or `dispatching` has `run_at` within the next 10 minutes (or already
+past) and a `deadline_at` that has not passed. It prints one line naming the earliest due time (UTC)
+and exits 1, before it changes anything (no backup, no checkout, no build). The CD workflow then
+fails with that line in its log; nothing is retried. **Wait until the join has started** (up to about
+10 minutes), then re-run the failed `deploy` workflow in GitHub (Actions, the failed run, "Re-run
+failed jobs": it deploys the same commit) or run the deploy by hand (below).
+
+If the database cannot be asked (the `db` container is down, the query errors, the table is
+missing), the gate **refuses** as well, with its own line: it fails closed, never open. On a brand
+new server with no stack running yet, use the override for that first deploy.
+
+To deploy anyway (an emergency fix; a deliberate choice to lose a join), set
+`ALLOW_DEPLOY_WITH_JOINS_DUE=1` for **that one deploy**, by hand on the server. Only the exact value
+`1` counts. The CD key cannot pass it (its forced command takes only the SHA), so run the deploy
+yourself:
+
+```bash
+cd /opt/beyric-note-taker && git fetch origin main
+ALLOW_DEPLOY_WITH_JOINS_DUE=1 deploy/deploy.sh "$(git rev-parse origin/main)"
+```
+
+It prints `WARNING: a calendar join is due at <time>; deploying anyway` and carries on. Do not put
+the variable in `.env`, a shell profile or the `authorized_keys` line to leave it on: that turns the
+gate off for every deploy. If CD must be allowed through once (nobody at the server for a
+by-hand run), temporarily change the key's `command="..."` in `~/.ssh/authorized_keys` to
+`command="env ALLOW_DEPLOY_WITH_JOINS_DUE=1 /opt/beyric-note-taker/deploy/deploy.sh"`, re-run the
+workflow, and **put the line back** straight after.
+
+To take the gate out altogether, delete the two lines in `deploy/deploy.sh` that read
+`. "$(dirname ...)/gate.sh"` and `deploy_gate || return 1` (`deploy/gate.sh` can stay or go). Like
+every change to `deploy.sh`, it applies from the deploy after the one that ships it: the running
+script is the one already on the server, so **the deploy that introduces the gate is not itself
+gated**. `deploy/deploy-gate-check.sh` proves the gate against a scratch Postgres with the real
+schema (see its header); `tests/test_deploy_script.py` proves the wiring in `deploy.sh`.
 
 ### Deploy key setup (once)
 
