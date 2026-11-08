@@ -584,6 +584,31 @@
         "title": "AgendaSent",
         "type": "object"
       },
+      "AgendaSuggestion": {
+        "description": "One \"Suggested agenda\" row: `text` is what \"Add to agenda\" posts to the agenda (and what\n\"Added\" is matched against, by exact text, in the live agenda list).",
+        "properties": {
+          "kind": {
+            "enum": [
+              "topic",
+              "overdue",
+              "questions",
+              "suggested"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "AgendaSuggestion",
+        "type": "object"
+      },
       "AskIn": {
         "properties": {
           "question": {
@@ -3761,6 +3786,13 @@
             ],
             "title": "Sprint Note"
           },
+          "suggested_agenda": {
+            "items": {
+              "$ref": "#/components/schemas/AgendaSuggestion"
+            },
+            "title": "Suggested Agenda",
+            "type": "array"
+          },
           "timezone": {
             "title": "Timezone",
             "type": "string"
@@ -3768,6 +3800,13 @@
           "title": {
             "title": "Title",
             "type": "string"
+          },
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/TopicOut"
+            },
+            "title": "Topics",
+            "type": "array"
           },
           "unfinished": {
             "items": {
@@ -3793,6 +3832,8 @@
           "finished",
           "questions",
           "agenda",
+          "topics",
+          "suggested_agenda",
           "past_meetings",
           "attendees"
         ],
@@ -5557,6 +5598,58 @@
           "is_set"
         ],
         "title": "TimeZoneOut",
+        "type": "object"
+      },
+      "TopicOut": {
+        "description": "One \"Keeps coming up\" row. Only topics the caller may read at least two meetings of are\nsent, and `meetings` are only the ones they may read (so \"N meetings\" and the dates never\ncount a teammate's private one).",
+        "properties": {
+          "agenda": {
+            "title": "Agenda",
+            "type": "string"
+          },
+          "dates_text": {
+            "title": "Dates Text",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "meetings": {
+            "items": {
+              "$ref": "#/components/schemas/MeetingRef"
+            },
+            "title": "Meetings",
+            "type": "array"
+          },
+          "reason": {
+            "enum": [
+              "no_decision",
+              "no_owner",
+              "not_final"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "agenda",
+          "reason",
+          "line",
+          "dates_text",
+          "meetings"
+        ],
+        "title": "TopicOut",
         "type": "object"
       },
       "TranslationBrief": {

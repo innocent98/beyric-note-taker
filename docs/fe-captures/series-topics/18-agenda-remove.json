@@ -1,0 +1,20 @@
+{
+  "note": "A second click on \"Added\" removes the item by its id.",
+  "client": "ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/1/agenda/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "cache-control": "no-store"
+    },
+    "body": null
+  }
+}

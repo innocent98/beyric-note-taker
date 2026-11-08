@@ -1,0 +1,16 @@
+{
+  "note": "The ledger row (`ai_runs`, kind `topics`). No meeting text is stored; `meeting_id` and the account are null (one call per series).",
+  "content": [
+    {
+      "kind": "topics",
+      "model": "gpt-6-luna",
+      "prompt_version": "topics-v1",
+      "input_tokens": 1400,
+      "output_tokens": 160,
+      "status": "ok",
+      "error": null,
+      "has_user": false,
+      "meeting_id": null
+    }
+  ]
+}

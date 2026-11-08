@@ -1,6 +1,8 @@
 """Request and response bodies of the recurring-meeting routes (`app/api_series.py`) and the two
 small shapes the meeting page embeds (`SeriesRef`, `QuestionOut`)."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.api_schemas import Body, MeetingRef, Platform, SeriesRef, TaskOut, UtcDatetime
@@ -66,6 +68,33 @@ class PastMeeting(BaseModel):
     tasks_count: int
 
 
+class TopicOut(BaseModel):
+    """One "Keeps coming up" row. Only topics the caller may read at least two meetings of are
+    sent, and `meetings` are only the ones they may read (so "N meetings" and the dates never
+    count a teammate's private one)."""
+
+    id: int
+    # Plain text, at most 60 characters ("Pricing model").
+    label: str
+    # The sentence "Suggested agenda" offers for it, plain text, at most 100 characters.
+    agenda: str
+    reason: Literal["no_decision", "no_owner", "not_final"]
+    # The sub-line, written by the server from `reason` and the number of readable meetings:
+    # "Discussed in 3 meetings without a decision".
+    line: str
+    # "Mon 26 Oct, Fri 30 Oct and Mon 2 Nov 2026", in the caller's zone, oldest first.
+    dates_text: str
+    meetings: list[MeetingRef]
+
+
+class AgendaSuggestion(BaseModel):
+    """One "Suggested agenda" row: `text` is what "Add to agenda" posts to the agenda (and what
+    "Added" is matched against, by exact text, in the live agenda list)."""
+
+    kind: Literal["topic", "overdue", "questions", "suggested"]
+    text: str
+
+
 class SeriesPage(BaseModel):
     id: int
     title: str
@@ -89,6 +118,11 @@ class SeriesPage(BaseModel):
     finished: list[TaskOut]
     questions: list[CarriedQuestion]
     agenda: list[AgendaItemOut]
+    # "Keeps coming up", read from storage (no model call on a page load). Empty = hide the section.
+    topics: list[TopicOut]
+    # "Suggested agenda", built from the topics above, the overdue tasks, the carried questions and
+    # the suggested tasks of this series. Empty = hide the section.
+    suggested_agenda: list[AgendaSuggestion]
     past_meetings: list[PastMeeting]
     attendees: list[AttendeeOut]
 

@@ -125,8 +125,7 @@ def _items(lines: list[str]) -> list[str]:
     return items
 
 
-def parse_notes(notes: str) -> ParsedNotes:
-    """The bullets of each section the workspace uses. A missing section is empty."""
+def _sections(notes: str) -> dict[str, list[str]]:
     sections: dict[str, list[str]] = {}
     current: list[str] | None = None
     for line in notes.splitlines():
@@ -135,6 +134,18 @@ def parse_notes(notes: str) -> ParsedNotes:
             current = sections.setdefault(heading, [])
         elif current is not None:
             current.append(line)
+    return sections
+
+
+def key_points(notes: str) -> list[str]:
+    """The bullets of the notes' "Key points" section: what was discussed (the "Discussion" the
+    repeat-topics job reads)."""
+    return _items(_sections(notes).get("Key points", []))
+
+
+def parse_notes(notes: str) -> ParsedNotes:
+    """The bullets of each section the workspace uses. A missing section is empty."""
+    sections = _sections(notes)
     return ParsedNotes(
         decisions=_items(sections.get("Decisions", [])),
         action_items=_items(sections.get("Action items", [])),

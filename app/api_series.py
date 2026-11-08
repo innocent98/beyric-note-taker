@@ -46,6 +46,7 @@ from app.series_schemas import (
     AgendaItemIn,
     AgendaItemOut,
     AgendaSent,
+    AgendaSuggestion,
     AttendeeOut,
     CarriedQuestion,
     MeetingSeriesIn,
@@ -61,6 +62,7 @@ from app.series_schemas import (
     SeriesPage,
     SeriesPatch,
     SeriesProjectIn,
+    TopicOut,
 )
 from app.visibility import can_read_clause
 
@@ -299,6 +301,15 @@ def _page(session: Session, user: User, found: Series) -> SeriesPage:
         if past
         else []
     )
+    topics = series.topics_for(session, user, found)
+    today = now.astimezone(timezones.zone(zone_name)).date()
+    suggested_agenda = series.agenda_suggestions(
+        topics,
+        unfinished,
+        len(questions),
+        series.suggested_task_count(session, user, found),
+        today,
+    )
     team_ids = {a.user_id for a in series.attendees(session, found, user) if a.user_id}
     recipients = [a for a in series.recipients(session, found) if a.user_id != user.id][
         : series_mail.SEND_MAX_RECIPIENTS
@@ -341,6 +352,29 @@ def _page(session: Session, user: User, found: Series) -> SeriesPage:
             )
             for i in agenda
         ],
+        topics=[
+            TopicOut(
+                id=t.id,
+                label=t.label,
+                agenda=t.agenda,
+                reason=t.reason,
+                line=series.topic_line(t.reason, len(t.meetings)),
+                dates_text=series.topic_dates(
+                    [timezones.localise(m.created_at, zone_name)[0].date() for m in t.meetings]
+                ),
+                meetings=[
+                    MeetingRef(
+                        id=m.id,
+                        title=services.meeting_title(m),
+                        platform=m.platform,
+                        created_at=m.created_at,
+                    )
+                    for m in t.meetings
+                ],
+            )
+            for t in topics
+        ],
+        suggested_agenda=[AgendaSuggestion(kind=k, text=text) for k, text in suggested_agenda],
         past_meetings=[
             PastMeeting(
                 id=m.id,

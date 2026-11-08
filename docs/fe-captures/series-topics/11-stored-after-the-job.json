@@ -1,0 +1,34 @@
+{
+  "note": "The `series_topics` rows after the job. The stand-in model proposed three topics; \"Hiring plan\" is gone: more than half of its words are in an approved decision of the series (checked in code). `meeting_ids` are the meetings a topic cites; `source_meeting_ids` are all three meetings the model was shown. A viewer who cannot read every one of them is not shown the topic.",
+  "content": [
+    {
+      "label": "Pricing model",
+      "agenda": "Decide the pricing model",
+      "reason": "no_decision",
+      "meeting_ids": [
+        1,
+        2,
+        3
+      ],
+      "source_meeting_ids": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "label": "Compensation review",
+      "agenda": "Give the compensation review an owner",
+      "reason": "no_owner",
+      "meeting_ids": [
+        2,
+        3
+      ],
+      "source_meeting_ids": [
+        1,
+        2,
+        3
+      ]
+    }
+  ]
+}

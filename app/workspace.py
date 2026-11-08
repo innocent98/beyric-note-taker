@@ -16,6 +16,7 @@ from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import ai_runs, filing, integrations, mail, projects, tasks, teams, timezones, titles
+from app import series as series_rules
 from app.extraction import (
     CheckedExtraction,
     ExtractionFailed,
@@ -318,6 +319,10 @@ def run_extraction(
         session.commit()  # keeps the ledger row; the answer itself is dropped
         session.expire(meeting)
         return meeting.extraction_status
+    if status in ("done", "failed") and meeting.series_id is not None:
+        # The decisions of this meeting are as final as they will be: the series' repeat topics
+        # (`app/topics.py`) are worth looking at again.
+        series_rules.mark_topics_stale(session, meeting.series_id)
     if checked is not None and parsed.please_check:  # the answer is final: no answer means no hint
         hints = {
             fingerprint(text): {r.index: r.heard_as for r in checked.review}.get(i)
@@ -679,7 +684,16 @@ def update_decision(
     if not isinstance(replaced_by_id, Unset):
         decision.replaced_by_id = replaced_by_id if final == "replaced" else None
     decision.edited_at = datetime.now(UTC)
+    _topics_may_change(session, decision.meeting_id)
     session.commit()
+
+
+def _topics_may_change(session: Session, meeting_id: int) -> None:
+    """A decision's status or visibility changed: the series' repeat topics read decisions, so mark
+    the series stale (`app/topics.py`)."""
+    series_id = session.scalar(select(Meeting.series_id).where(Meeting.id == meeting_id))
+    if series_id is not None:
+        series_rules.mark_topics_stale(session, series_id)
 
 
 def hide_decision(session: Session, user: User, decision_id: int) -> bool:
@@ -694,6 +708,7 @@ def hide_decision(session: Session, user: User, decision_id: int) -> bool:
         return False
     if decision.hidden_at is None:
         decision.hidden_at = datetime.now(UTC)
+        _topics_may_change(session, decision.meeting_id)
         session.commit()
     return True
 

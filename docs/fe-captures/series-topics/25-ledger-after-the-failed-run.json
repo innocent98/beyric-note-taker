@@ -1,0 +1,27 @@
+{
+  "note": "Two rows now: the first ok, the second failed with the error class name only.",
+  "content": [
+    {
+      "kind": "topics",
+      "model": "gpt-6-luna",
+      "prompt_version": "topics-v1",
+      "input_tokens": 1400,
+      "output_tokens": 160,
+      "status": "ok",
+      "error": null,
+      "has_user": false,
+      "meeting_id": null
+    },
+    {
+      "kind": "topics",
+      "model": "gpt-6-luna",
+      "prompt_version": "topics-v1",
+      "input_tokens": 1400,
+      "output_tokens": 160,
+      "status": "failed",
+      "error": "JSONDecodeError",
+      "has_user": false,
+      "meeting_id": null
+    }
+  ]
+}
