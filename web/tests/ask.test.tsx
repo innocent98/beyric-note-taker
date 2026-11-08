@@ -167,6 +167,15 @@ describe("Ask Beyric page", () => {
     expect(screen.getByRole("link", { name: /Beyric Monday planning · Mon 2 Nov/ })).toBeTruthy();
   });
 
+  it("draws a task point with no cites as text alone (the API may send cites: [])", async () => {
+    mocks.ask.mockResolvedValue({ kind: "tasks", lead: "You have 1 task.", points: [{ text: "Finish checkout.", cites: [] }] });
+    show();
+    await type("my tasks{Enter}");
+    expect(await screen.findByText("Finish checkout.")).toBeTruthy();
+    expect(document.querySelector(".ask-cites")).toBeNull();
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+  });
+
   it("shows text from the API as plain text, never as markup", async () => {
     mocks.ask.mockResolvedValue({ kind: "answer", lead: "<b>bold</b> **x**", points: [{ text: "<img src=x onerror=alert(1)>", cites: [mine] }] });
     show();

@@ -164,6 +164,7 @@ function Answer({ answer }: { answer: AskAnswer }) {
               <span className="ask-dot" aria-hidden="true" />
               <div className="ask-point-body">
                 <span className="ask-point-text">{point.text}</span>
+                {point.cites.length > 0 ? (
                 <div className="ask-cites">
                   {point.cites.map((cite, i) => (
                     <AppLink
@@ -183,6 +184,7 @@ function Answer({ answer }: { answer: AskAnswer }) {
                     </AppLink>
                   ))}
                 </div>
+                ) : null}
               </div>
             </li>
           ))}

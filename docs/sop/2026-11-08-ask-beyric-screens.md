@@ -48,7 +48,7 @@ The designer drew Ask Beyric and "Show in transcript"; the audit found no route,
 | API client and types | `web/lib/api/client.ts` (`ask.scope`, `ask.ask`), `web/lib/api/types.ts` |
 | Styles | `web/styles/tokens.css` (`--highlight-row`), `web/styles/pages.css` (`.ask*`, `.transcript-line*`) |
 | Mock and shots | `web/scripts/mock-api.mjs` (the two endpoints, `--ask live|empty|scope-failed`, questions by their words), `web/scripts/parity-shots.mjs`, `web/scripts/parity-ask.mjs`, `docs/ui/parity/after/app-ask*-{1440,768,390}.jpg`, `app-detail-line*`, `ask-styles.json` |
-| Tests | `web/tests/ask.test.tsx` (32: the page, chips, errors, highlight, toast, sidebar), `web/tests/ask-page.test.tsx` |
+| Tests | `web/tests/ask.test.tsx` (33: the page, chips, errors, highlight, toast, sidebar), `web/tests/ask-page.test.tsx` |
 
 ## Contract status
 The two endpoints are the spec's (section 1.7): `GET /api/ask/scope`, `POST /api/ask`. When this was written the `ask-backend` PR had **not** landed on `origin/main`, so `web/lib/api/schema.d.ts` was **not** regenerated and the three types above are hand-typed; the mock answers to the same shapes. After the backend merges: `npm run gen:api`, then replace the hand-typed types with `Schemas["..."]` names (the spec's Cite is `{meeting_id, title, date_label, owner_name, shared, target, line}`). Not exercised against the real API.
