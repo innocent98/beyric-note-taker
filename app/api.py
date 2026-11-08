@@ -82,7 +82,7 @@ from app.pipeline import (
     is_join_failure,
     join_retry_at,
 )
-from app.services import Refused, get_openai_client, get_vexa
+from app.services import Refused, get_bot_provider, get_openai_client
 
 REFRESH_SECONDS = 30  # how often the Jinja page refreshes while a meeting is active
 LIST_DEFAULT, LIST_MAX = 50, 100
@@ -520,7 +520,7 @@ def create_meeting(
     response: Response,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_vexa),
+    vexa=Depends(get_bot_provider),
 ) -> MeetingDetail:
     """Send the bot to a Google Meet or Zoom link, through the same placement as every other way a
     bot is sent. 403 `hours_cap_reached` once the account has used its recorded hours. 409 for the
@@ -546,7 +546,7 @@ def delete_meeting(
     meeting_id: int,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_vexa),
+    vexa=Depends(get_bot_provider),
 ) -> Response:
     """Delete a meeting and everything taken from it: transcript, notes, translations, decisions,
     open questions, review items, notifications, mail still waiting to be sent, the audio and
@@ -615,7 +615,7 @@ def cancel_meeting(
     meeting_id: int,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_vexa),
+    vexa=Depends(get_bot_provider),
 ) -> MeetingDetail:
     """Take the bot out of a meeting that is still `bot_sent` and discard it. Only when `can_cancel`
     is true: once the bot has been ended with `POST /end` (the notes are being written) it is 409
@@ -635,7 +635,7 @@ def end_meeting(
     meeting_id: int,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_vexa),
+    vexa=Depends(get_bot_provider),
 ) -> MeetingDetail:
     """ "End now and write the notes": take the bot out of the call and write the notes from what
     it recorded. Only when `can_end` is true (409 `not_endable` otherwise, 409 `already_ending`
@@ -655,7 +655,7 @@ def retry_meeting(
     meeting_id: int,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_vexa),
+    vexa=Depends(get_bot_provider),
 ) -> MeetingDetail:
     """Resume a failed meeting at the step that failed. Only when `can_retry` is true. For a
     meeting whose join the worker ended (Google refused the bot, or it hung on a prompt) this

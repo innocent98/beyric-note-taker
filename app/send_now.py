@@ -43,10 +43,11 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import calendar_text, join_runner, placement, services
+from app.bot_provider import BotProvider, BotProviderError
 from app.config import Settings
+from app.meeting_url import UnsupportedMeetingUrl
 from app.models import CalendarEvent, Meeting, ScheduledJoin, Template, User, UserSettings
 from app.placement import PlacementRefused, PlacementRequest, place_bot
-from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError
 
 logger = logging.getLogger("app.send_now")
 
@@ -75,7 +76,7 @@ class Sent:
 
 def send_now(
     session: Session,
-    vexa: VexaClient,
+    vexa: BotProvider,
     user: User,
     join_id: int,
     *,
@@ -97,7 +98,7 @@ def send_now(
 
 def _attempt(
     session: Session,
-    vexa: VexaClient,
+    vexa: BotProvider,
     user: User,
     join_id: int,
     now: datetime,
@@ -180,7 +181,7 @@ def _attempt(
         # back by `place_bot` (and the bot stopped).
         session.rollback()
         raise services.placement_refusal(PlacementRefused("already_in_meeting")) from None
-    except VexaError as exc:
+    except BotProviderError as exc:
         logger.warning("send now for join %s: the host refused (%s)", row_id, type(exc).__name__)
         raise services.Refused(502, "bot_send_failed", SEND_FAILED_TEXT) from None
     except UnsupportedMeetingUrl:  # a link the host cannot join (Teams until T1)

@@ -32,11 +32,17 @@ from app import (
     workspace,
 )
 from app.audio import AudioError, NoSpeechError
+from app.bot_provider import (
+    BotDuplicate,
+    BotMeeting,
+    BotProviderError,
+    BotSendUncertain,
+    build_provider,
+)
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
 from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
-from app.vexa import VexaClient, VexaDuplicateBot, VexaError, VexaMeeting, VexaSendUncertain
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +185,7 @@ def audio_path(meeting_id: int) -> Path:
     return Path(get_settings().audio_dir) / str(meeting_id) / "source.webm"
 
 
-def _lookup(vexa, meeting: Meeting) -> VexaMeeting:
+def _lookup(vexa, meeting: Meeting) -> BotMeeting:
     """Ask Vexa about this meeting by its Vexa id, so a reused link cannot pick up an earlier
     recording. Rows without an id (made before it was stored) fall back to the meeting code."""
     if meeting.vexa_meeting_id:
@@ -262,7 +268,7 @@ def _give_up(session: Session, meeting: Meeting) -> None:
     _fail(session, meeting, f"The meeting did not finish being recorded within {hours} hours.")
 
 
-def _remember(meeting: Meeting, info: VexaMeeting) -> None:
+def _remember(meeting: Meeting, info: BotMeeting) -> None:
     """Keep what Vexa told us that is needed later: its recording id and why the bot left."""
     if info.recording_id is not None:
         meeting.vexa_recording_id = info.recording_id
@@ -272,7 +278,7 @@ def _remember(meeting: Meeting, info: VexaMeeting) -> None:
         meeting.completion_reason = info.completion_reason
 
 
-def _live_state(info: VexaMeeting) -> str | None:
+def _live_state(info: BotMeeting) -> str | None:
     """The bot's state for the owner while the call runs, or None when Vexa says something else
     (over, failed)."""
     captured = bool(info.segments) or info.recording_id is not None
@@ -308,7 +314,7 @@ def _lookup_missed(meeting: Meeting, now: datetime) -> None:
         _record_live_state(meeting, None, now)
 
 
-def _zoom_blocked(info: VexaMeeting) -> bool:
+def _zoom_blocked(info: BotMeeting) -> bool:
     return info.failure_reason is not None and ZOOM_BLOCKED in info.failure_reason
 
 
@@ -330,7 +336,7 @@ def _nothing_recorded_reason(meeting: Meeting) -> str:
     return REASON_NOT_ADMITTED
 
 
-def bot_failure_reason(meeting: Meeting, info: VexaMeeting) -> str:
+def bot_failure_reason(meeting: Meeting, info: BotMeeting) -> str:
     """Plain words for a failed bot, from what Vexa reported."""
     if meeting.completion_reason == BOT_END_REQUESTED:
         return REASON_ENDED_NOTHING_RECORDED  # the owner stopped the bot before it recorded
@@ -347,21 +353,21 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     """Send a fresh bot to the same link and point the meeting at it. The caller commits.
 
     False, with the meeting untouched, when Vexa could not take the bot. A send that got no clear
-    answer (`VexaSendUncertain`) leaves the meeting as an unconfirmed start for the worker to
+    answer (`BotSendUncertain`) leaves the meeting as an unconfirmed start for the worker to
     settle, and counts as sent. A Vexa duplicate refusal (a bot that is not ours is in that
     meeting) is raised when `raise_duplicate`, else it is a plain failure."""
     unconfirmed = False
     try:
         vexa_id = vexa.send_bot(meeting.url)
-    except VexaDuplicateBot:
+    except BotDuplicate:
         logger.warning("meeting %s: Vexa has another bot in that meeting", meeting.id)
         if raise_duplicate:
             raise
         return False
-    except VexaSendUncertain:
+    except BotSendUncertain:
         logger.warning("meeting %s: resending the bot got no clear answer", meeting.id)
         vexa_id, unconfirmed = None, True
-    except VexaError as exc:
+    except BotProviderError as exc:
         logger.warning("meeting %s: resending the bot failed (%s)", meeting.id, type(exc).__name__)
         return False
     meeting.join_attempts += 1
@@ -442,7 +448,7 @@ def join_retry_at(meeting: Meeting) -> datetime | None:
     return meeting.terminal_seen_at + refusal_retry_gap(meeting)
 
 
-def _join_problem(meeting: Meeting, info: VexaMeeting, now: datetime) -> str | None:
+def _join_problem(meeting: Meeting, info: BotMeeting, now: datetime) -> str | None:
     """Why a Meet join should be ended (a marker from `JOIN_FAILURE_MARKS`), or None."""
     if meeting.platform != "google_meet":
         return None
@@ -479,7 +485,7 @@ def _stop_bot(meeting: Meeting, vexa) -> bool:
         return True
     except ValueError:
         return True  # a code Vexa would never accept; nothing to retry
-    except VexaError as exc:
+    except BotProviderError as exc:
         tries = _stop_tries.get(meeting.id, 0) + 1
         _stop_tries[meeting.id] = tries
         logger.warning(
@@ -502,7 +508,7 @@ def _old_bot_gone(meeting: Meeting, vexa) -> bool:
     _gone_checks[meeting.id] = checks + 1
     try:
         old = _lookup(vexa, meeting)
-    except VexaError:
+    except BotProviderError:
         return False
     if old.status in ("failed", "completed"):
         return True
@@ -555,7 +561,7 @@ def _settle_unconfirmed(session: Session, meeting: Meeting, vexa, now: datetime)
     meanwhile (the placeholder is `bot_sent`, so no other placement can use it)."""
     try:
         info = vexa.get_meeting(meeting.platform, meeting.native_id)
-    except VexaError:
+    except BotProviderError:
         info = None
     if (
         info is not None
@@ -590,7 +596,7 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
         and not _settle_unconfirmed(session, meeting, vexa, now)
     ):
         return False
-    info: VexaMeeting | None = None
+    info: BotMeeting | None = None
     if _paused_for_retry(meeting):
         # Looking the refused bot up would only report the refusal again, except to check it left.
         if now - meeting.terminal_seen_at >= refusal_retry_gap(meeting) and _old_bot_gone(
@@ -607,7 +613,7 @@ def _poll(session: Session, meeting: Meeting, vexa, now: datetime) -> bool:
     else:
         try:
             info = _lookup(vexa, meeting)
-        except VexaError as exc:
+        except BotProviderError as exc:
             logger.warning("meeting %s: Vexa unreachable (%s)", meeting.id, type(exc).__name__)
             _lookup_missed(meeting, now)
 
@@ -847,7 +853,7 @@ def advance_meeting(
     `failed` with a plain reason, or untouched when the problem is temporary.
     """
     now = now or datetime.now(UTC)
-    vexa = vexa or VexaClient()
+    vexa = vexa or build_provider()
     meeting = _lock(session, meeting_id)
     try:
         while meeting is not None and meeting.status in ("bot_sent", "processing"):
@@ -874,7 +880,7 @@ def advance_meeting(
             if not proceed:
                 return
             meeting = _lock(session, meeting_id)  # commit released the lock; take it back
-    except VexaError as exc:
+    except BotProviderError as exc:
         # Temporary: stay at this step and try again on the next pass, until we give up.
         session.rollback()
         logger.warning("meeting %s: Vexa error (%s)", meeting_id, type(exc).__name__)
@@ -961,9 +967,9 @@ def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
             continue
         if meeting.vexa_recording_id is not None:
             try:
-                vexa = vexa or VexaClient()
+                vexa = vexa or build_provider()
                 vexa.delete_recording(meeting.vexa_recording_id)
-            except VexaError as exc:
+            except BotProviderError as exc:
                 logger.warning(
                     "meeting %s: could not delete Vexa's copy (%s); will retry",
                     meeting.id,

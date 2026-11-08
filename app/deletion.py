@@ -42,6 +42,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app import placement, teams
+from app.bot_provider import BotNotFound
 from app.models import (
     AuthToken,
     MailOutbox,
@@ -58,7 +59,7 @@ from app.models import (
     WaitlistEntry,
 )
 from app.pipeline import RECORDING_GRACE, audio_path
-from app.vexa import VexaError, VexaNotFound
+from app.vexa import VexaError
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def recording_to_delete(
         return stored
     try:
         info = vexa.get_meeting_by_id(meeting.vexa_meeting_id)
-    except VexaNotFound:
+    except BotNotFound:
         if stored is None:
             logger.error(
                 "meeting %s: Vexa does not know it (404) and no recording id is stored; "

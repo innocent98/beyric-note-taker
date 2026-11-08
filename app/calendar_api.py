@@ -42,7 +42,7 @@ from app.models import (
     User,
     UserSettings,
 )
-from app.services import get_vexa
+from app.services import get_bot_provider
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 # The two routes of the scheduled joins that do not live under `/calendar` (C15b): the list of
@@ -638,7 +638,7 @@ def send_now_route(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_vexa),
+    vexa=Depends(get_bot_provider),
 ) -> SendNowOut:
     """Send the note taker to a meeting it did not get into (CSRF header needed, no body). `join_id`
     comes from `GET /api/not-recorded` or an Upcoming row. Allowed while the meeting is still on,
