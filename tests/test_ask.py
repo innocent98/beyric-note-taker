@@ -791,18 +791,12 @@ def test_the_scope_counts_ready_meetings_unhidden_decisions_and_visible_tasks(
     assert (scope["meetings"], scope["decisions"], scope["tasks"]) == (1, 1, 1)
 
 
-def test_the_scope_and_chips_with_no_meetings(api):
-    scope = api.get("/api/ask/scope").json()
-    assert scope == {
+def test_the_scope_with_no_meetings_has_no_chips(api):
+    assert api.get("/api/ask/scope").json() == {
         "meetings": 0,
         "decisions": 0,
         "tasks": 0,
-        "suggestions": [
-            "What did we decide about pricing?",
-            "What did I commit to last week?",
-            "When is the launch?",
-            "Which decisions were made on Monday?",
-        ],
+        "suggestions": [],
     }
 
 
@@ -818,12 +812,178 @@ def test_the_name_chip_is_the_most_frequent_other_speaker_of_the_last_ten_meetin
         ),
     )
     suggestions = api.get("/api/ask/scope").json()["suggestions"]
-    assert suggestions[2] == "What did Daniel say?" and len(suggestions) == 5
+    assert "What did Daniel say?" in suggestions
+    assert not any("Grace" in text or "Unknown" in text for text in suggestions)
 
 
 def test_the_name_chip_ignores_the_asker_themself(api, session, template):
     meeting(session, template, speaker_transcript="[Owner]: a\n[owner]: b\n[Owner]: c\n[Grace]: d")
-    assert api.get("/api/ask/scope").json()["suggestions"][2] == "What did Grace say?"
+    suggestions = api.get("/api/ask/scope").json()["suggestions"]
+    assert "What did Grace say?" in suggestions and not any("Owner" in t for t in suggestions)
+
+
+def test_a_name_made_only_of_stop_words_gives_way_to_the_next_speaker(session, template, owner):
+    meeting(session, template, speaker_transcript="[Will]: a\n[Will]: b\n[Will]: c\n[Grace]: d")
+    assert "What did Grace say?" in ask.suggestions(session, owner, NOW)
+    assert not any("Will" in text for text in ask.suggestions(session, owner, NOW))
+
+
+# ---- the chips are built from the person's own data, and each one is answerable ----
+
+MON, THU, FRI = (datetime(2026, 11, d, 10, 0, tzinfo=UTC) for d in (2, 5, 6))
+DANIEL = "[Daniel Okoro]: We will move the launch.\n[owner]: Fine, I agree."
+
+
+def chip_world(session, template, owner):
+    """Two ready meetings (Mon 2 Nov with a decision, Thu 5 Nov with notes only), a task of the
+    owner's from Monday's meeting this week, and Daniel as the other speaker."""
+    monday = meeting(
+        session, template, title="Zebra planning", created_at=MON, speaker_transcript=DANIEL
+    )
+    thursday = meeting(
+        session,
+        template,
+        title="Walrus review",
+        created_at=THU,
+        notes="## Summary\nWe reviewed the walrus budget.\n\n## Key points\n- Budget is tight.",
+        speaker_transcript=DANIEL,
+    )
+    session.add(
+        Decision(meeting_id=monday.id, text="Pricing is set at £40", position=0, fingerprint="a")
+    )
+    session.commit()
+    mine(session, owner, monday, "Send the pricing sheet", assigned_on=date(2026, 11, 2))
+    return monday, thursday
+
+
+EXPECTED = [
+    "Summarise the meeting on Thu 5 Nov",
+    "What did we decide on Mon 2 Nov?",
+    "What did I commit to this week?",
+    "What are my open tasks?",
+    "What did Daniel Okoro say?",
+]
+
+
+def test_the_chips_are_this_persons_data_in_the_agreed_order(session, template, owner):
+    chip_world(session, template, owner)
+    assert ask.suggestions(session, owner, NOW) == EXPECTED
+    assert ask.scope(session, owner, now=NOW).suggestions == EXPECTED
+
+
+def test_every_chip_comes_back_as_an_answer_on_the_path_it_promises(
+    session, template, owner, model
+):
+    monday, thursday = chip_world(session, template, owner)
+    chips = ask.suggestions(session, owner, NOW)
+    assert runs(session) == [] and model.calls == []  # building chips costs nothing
+    found = {}
+    for chip in chips:
+        before = len(model.calls)
+        result = ask.answer(session, owner, chip, now=NOW, client=model)
+        assert result.kind != "none", chip
+        found[chip] = (result, len(model.calls) - before)
+    for chip in ("What did I commit to this week?", "What are my open tasks?"):
+        result, calls = found[chip]
+        assert result.kind == "tasks" and result.points and calls == 0, chip  # free path
+    summary, calls = found["Summarise the meeting on Thu 5 Nov"]
+    assert summary.kind == "answer" and calls == 1
+    sent = "\n".join(passages_of(model.calls[0]).values())
+    assert "walrus budget" in sent  # Thursday's notes, found by the date
+    decide, calls = found["What did we decide on Mon 2 Nov?"]
+    assert decide.kind == "answer" and calls == 1
+    assert {c.meeting_id for p in decide.points for c in p.cites} == {monday.id}
+    said, calls = found["What did Daniel Okoro say?"]
+    assert said.kind == "answer" and calls == 1
+    assert len(runs(session)) == 3  # the three searching chips, nothing for the two task chips
+
+
+def test_the_day_in_a_chip_is_in_the_form_the_date_parser_reads_and_names_that_meeting(
+    session, template, owner
+):
+    chip_world(session, template, owner)
+    for chip, day in (
+        ("Summarise the meeting on Thu 5 Nov", date(2026, 11, 5)),
+        ("What did we decide on Mon 2 Nov?", date(2026, 11, 2)),
+    ):
+        rng = ask.date_hint(chip, NOW.date())
+        assert (rng.start, rng.end) == (day, day + timedelta(days=1))
+
+
+def test_chips_never_use_a_meetings_title(session, template, owner):
+    chip_world(session, template, owner)
+    assert not any("Zebra" in c or "Walrus" in c for c in ask.suggestions(session, owner, NOW))
+
+
+def test_a_teammates_private_meeting_never_makes_a_chip_and_a_shared_one_does(
+    session, template, owner, teammate
+):
+    chip_world(session, template, owner)
+    theirs = meeting(
+        session,
+        template,
+        owner_user_id=teammate.id,
+        created_at=FRI,
+        title="Private",
+        notes="## Summary\nSecret.\n\n## Decisions\n- A private decision",
+        speaker_transcript="[Zed Private]: a\n[Zed Private]: b\n[Zed Private]: c\n[Zed Private]: d",
+    )
+    session.add(
+        Decision(meeting_id=theirs.id, text="A private decision", position=0, fingerprint="p")
+    )
+    session.commit()
+    assert ask.suggestions(session, owner, NOW) == EXPECTED
+    assert not any("Fri 6 Nov" in c or "Zed" in c for c in ask.suggestions(session, owner, NOW))
+    share(session, theirs, owner)
+    shared = ask.suggestions(session, owner, NOW)
+    assert shared[0] == "Summarise the meeting on Fri 6 Nov"
+    assert shared[1] == "What did we decide on Fri 6 Nov?"
+    assert shared[-1] == "What did Zed Private say?"
+
+
+def test_no_chip_is_made_when_the_person_has_no_ready_meeting(session, template, owner):
+    meeting(session, template, status="processing")
+    mine(session, owner, None, "A manual task", source="manual")
+    assert ask.suggestions(session, owner, NOW) == []
+
+
+def test_a_meeting_more_than_a_year_old_cannot_be_named_by_a_date_so_it_gets_no_day_chip(
+    session, template, owner
+):
+    meeting(session, template, created_at=datetime(2025, 11, 2, 10, 0, tzinfo=UTC))
+    chips = ask.suggestions(session, owner, NOW)
+    assert not any("Nov" in c for c in chips)  # "2 Nov" would mean this year's 2 Nov
+
+
+def test_a_day_with_more_than_three_meetings_is_not_offered_for_a_summary(session, template, owner):
+    for _ in range(4):
+        meeting(session, template, created_at=THU)
+    meeting(session, template, created_at=MON)
+    chips = ask.suggestions(session, owner, NOW)
+    assert chips[0] == "Summarise the meeting on Mon 2 Nov"
+
+
+def test_a_suggested_task_is_not_a_chip_not_listed_and_not_counted(session, template, owner):
+    found = meeting(session, template, created_at=MON)
+    mine(session, owner, found, "Unconfirmed", suggested=True, assigned_on=date(2026, 11, 2))
+    assert "What are my open tasks?" not in ask.suggestions(session, owner, NOW)
+    assert ask.scope(session, owner, now=NOW).tasks == 0
+    result = ask.answer(session, owner, "What are my tasks?", now=NOW)
+    assert (result.kind, result.points) == ("tasks", [])
+
+
+def test_the_date_words_of_a_question_are_not_words_to_search_for():
+    assert ask._stems(ask.strip_dates("Summarise the meeting on Mon 2 Nov")) == []
+    assert ask._stems(ask.strip_dates("29 Oct budget")) == ["budget"]
+    assert ask._stems(ask.strip_dates("budget on 2026-10-29")) == ["budget"]
+    assert ask._stems(ask.strip_dates("What did we decide on Mon 2 May?")) == ["deci"]
+
+
+def test_the_scope_contract_stays_a_list_of_at_most_five_strings(api, session, template):
+    meeting(session, template)
+    suggestions = api.get("/api/ask/scope").json()["suggestions"]
+    assert isinstance(suggestions, list) and len(suggestions) <= 5
+    assert all(isinstance(text, str) for text in suggestions)
 
 
 # ---- the tasks path ----

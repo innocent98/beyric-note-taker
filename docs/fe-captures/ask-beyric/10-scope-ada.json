@@ -1,5 +1,5 @@
 {
-  "note": "Ada: Pricing review (hers) and Design sync (Dan's, shared) are ready and readable = 2 meetings. The not-ready meeting and Dan's private 1:1 are not counted. Decisions: 1 (the hidden one is not counted). Tasks: 2 (her two on Pricing review; the one on Dan's private meeting is on a meeting she cannot read, so it is not counted). `suggestions` has the name chip: the most frequent speaker other than Ada.",
+  "note": "Ada: Pricing review (hers) and Design sync (Dan's, shared) are ready and readable = 2 meetings. The not-ready meeting and Dan's private 1:1 are not counted. Decisions: 1 (the hidden one is not counted). Tasks: 2 (her two on Pricing review; the one on Dan's private meeting is on a meeting she cannot read, so it is not counted). `suggestions` are built from her own data, each one answerable: summarise her most recent meeting with notes (by day), what was decided on the day of her most recent meeting with a decision, what she committed to (last week here), her open tasks, and what the most frequent other speaker said.",
   "client": "ada",
   "request": {
     "method": "GET",
@@ -20,11 +20,11 @@
       "decisions": 1,
       "tasks": 2,
       "suggestions": [
-        "What did we decide about pricing?",
+        "Summarise the meeting on Tue 3 Nov",
+        "What did we decide on Mon 2 Nov?",
         "What did I commit to last week?",
-        "What did Daniel Okoro say?",
-        "When is the launch?",
-        "Which decisions were made on Monday?"
+        "What are my open tasks?",
+        "What did Daniel Okoro say?"
       ]
     }
   }

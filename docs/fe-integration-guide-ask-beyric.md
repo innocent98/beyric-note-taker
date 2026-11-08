@@ -32,29 +32,39 @@ Ada (owns Pricing review; a teammate's Design sync is shared with her team; the 
   "decisions": 1,
   "tasks": 2,
   "suggestions": [
-    "What did we decide about pricing?",
+    "Summarise the meeting on Tue 3 Nov",
+    "What did we decide on Mon 2 Nov?",
     "What did I commit to last week?",
-    "What did Daniel Okoro say?",
-    "When is the launch?",
-    "Which decisions were made on Monday?"
+    "What are my open tasks?",
+    "What did Daniel Okoro say?"
   ]
 }
 ```
 
 * "Searches **2** meetings, **1** decisions and **2** tasks": ready meetings the person may read, their unhidden decisions, and tasks on those meetings that the person may see. Same visibility rule as everything else; no model call.
-* `suggestions` are the chips, in the designer's order. The third is built from the person's data: **"What did {Name} say?"**, the most frequent other speaker in their last 10 ready meetings. **It is left out when there is none**, so the list has 4 or 5 entries: **do not index it by position.** Capture `12-scope-eve.json` (a person with no meetings):
+* `suggestions` are the chips under the question box. **They are built from this person's own readable data, with no model call, and each is there only because it can be answered**: no meetings, no chips (an empty list); one without data is left out. In this order: `Summarise the meeting on {day}` (their most recent ready meeting with notes), `What did we decide on {day}?` (their most recent meeting with a decision), `What did I commit to last week?` (or `this week`, whichever has a task of theirs), `What are my open tasks?`, and `What did {Name} say?` (a frequent speaker other than them). `{day}` is written like a chip's date label, `Tue 3 Nov`, and a meeting's title is never in a chip. **There are 0 to 5, so never index by position**; render what comes (a person with one meeting may get two). Capture `11-scope-dan.json` (Dan has two meetings, no tasks of his own and no decisions he may read):
+
+```json
+{
+  "meetings": 2,
+  "decisions": 0,
+  "tasks": 1,
+  "suggestions": [
+    "Summarise the meeting on Wed 4 Nov",
+    "What did Ada Lovelace say?"
+  ]
+}
+```
+
+* Task chips take the free path (`kind: "tasks"`); the others are searched and cost one model call each, as a typed question would. Clicking a chip is the same as typing its text.
+* Capture `12-scope-eve.json` (a person with no meetings):
 
 ```json
 {
   "meetings": 0,
   "decisions": 0,
   "tasks": 0,
-  "suggestions": [
-    "What did we decide about pricing?",
-    "What did I commit to last week?",
-    "When is the launch?",
-    "Which decisions were made on Monday?"
-  ]
+  "suggestions": []
 }
 ```
 
@@ -280,7 +290,7 @@ Full bodies: captures `26`, `27`, `28`, `29`, `22`, `31`, `21`, `30`, `09`. The 
 * **`owner_name` is null for the asker's own meeting**, a name otherwise. `shared` is independent of it: the asker's own meeting that they have shared with the team has `owner_name: null, shared: true`.
 * **`date_label` is a day, never a time** ("Mon 2 Nov"), in the asker's time zone. Nothing in the API gives a time of day.
 * **A `tasks` answer with no points is a normal 200**, not a "could not find". Show its lead, not the "I could not find that" card.
-* **`suggestions` has 4 or 5 entries.** Do not index it.
+* **`suggestions` has 0 to 5 entries.** Do not index it; show none when it is empty.
 * **Text is plain.** `title`, `lead` and `text` are plain text (code strips Markdown, HTML and links from the model's words, and cleans meeting titles). Render them as text, never as HTML or Markdown, and do not turn anything in them into a link.
 
 ## States and timing
