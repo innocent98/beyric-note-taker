@@ -160,7 +160,7 @@ def closed_sprint_sentence(
         return None
     still_there, done = session.execute(
         select(func.count(), func.count().filter(Task.status == "done")).where(
-            Task.sprint_id == sprint.id, tasks.visible(user)
+            Task.sprint_id == sprint.id, tasks.visible(user), tasks.confirmed()
         )
     ).one()
     following = session.scalars(
@@ -170,7 +170,10 @@ def closed_sprint_sentence(
     if following is not None:
         carried = session.scalar(
             select(func.count()).where(
-                Task.sprint_id == following.id, Task.carried.is_(True), tasks.visible(user)
+                Task.sprint_id == following.id,
+                Task.carried.is_(True),
+                tasks.visible(user),
+                tasks.confirmed(),
             )
         )
     total = still_there + (carried or 0)

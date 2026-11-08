@@ -71,6 +71,7 @@ NOTE_LANGUAGES = ("en", "fr", "es")
 TRANSLATION_STATUSES = ("translating", "ready", "failed")
 TASK_STATUSES = ("todo", "doing", "done")
 TASK_SOURCES = ("ai", "manual")
+TASK_CONFIDENCES = ("high", "medium", "low")
 # When the reminder mails go before a recurring meeting (the Settings choice): one hour before,
 # 30 minutes before, or both (the designer draws two mails).
 REMINDER_TIMINGS = ("1h", "30m", "both")
@@ -452,6 +453,11 @@ class UserSettings(Base):
     # whether the people they are assigned to are emailed about them.
     auto_create_tasks: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
     email_assignees: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    # "Ask before adding unclear tasks": an action item the model rates medium or low waits under
+    # Suggested tasks instead of becoming a task. Off: every action item becomes a task.
+    ask_before_unclear: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=sa.true()
+    )
     # W8: whether this person is emailed the agenda a teammate sends and the reminders before a
     # recurring meeting they attend (Settings > Email).
     notify_reminders: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
@@ -825,6 +831,10 @@ class Task(Base):
     __table_args__ = (
         CheckConstraint(_in("status", TASK_STATUSES), name="ck_tasks_status"),
         CheckConstraint(_in("source", TASK_SOURCES), name="ck_tasks_source"),
+        CheckConstraint(
+            "confidence is null or " + _in("confidence", TASK_CONFIDENCES),
+            name="ck_tasks_confidence",
+        ),
         Index(
             "uq_tasks_meeting_fingerprint",
             "meeting_id",
@@ -888,6 +898,14 @@ class Task(Base):
     )
     # Moved on from a sprint that closed with the task unfinished ("Carried over").
     carried: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    # Suggested tasks (spec 2026-11-08, section 2): an action item the model was unsure about waits
+    # for a person to accept it (`suggested` false) or dismiss it (the tombstone). While it waits it
+    # is counted nowhere and mailed to nobody. `confidence` is the model's `high`, `medium` or `low`
+    # (null: made before extract-v2, or by hand); `reason` is its plain words on why a medium or low
+    # item is unclear.
+    suggested: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
+    confidence: Mapped[str | None] = mapped_column(String(8))
+    reason: Mapped[str | None] = mapped_column(String(200))
 
 
 class Project(Base):

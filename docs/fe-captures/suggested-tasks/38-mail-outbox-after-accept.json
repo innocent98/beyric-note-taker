@@ -1,0 +1,23 @@
+{
+  "note": "`mail_outbox` after Amina's task was accepted (twice): Chidi's from the extraction, and one for Amina. Accepting Chidi's suggestion (if it were accepted) would queue nothing: he already has a mail for this meeting.",
+  "content": [
+    {
+      "to": "chidi@example.test",
+      "template": "tasks_assigned",
+      "payload": {
+        "user_id": 3,
+        "meeting_id": 1
+      },
+      "status": "pending"
+    },
+    {
+      "to": "amina@example.test",
+      "template": "tasks_assigned",
+      "payload": {
+        "user_id": 4,
+        "meeting_id": 1
+      },
+      "status": "pending"
+    }
+  ]
+}

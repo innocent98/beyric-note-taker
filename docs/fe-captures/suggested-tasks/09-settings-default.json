@@ -1,0 +1,24 @@
+{
+  "note": "Before anything is saved: all three switches are on (also with no settings row).",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/settings/tasks",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "auto_create_tasks": true,
+      "email_assignees": true,
+      "ask_before_unclear": true
+    }
+  }
+}

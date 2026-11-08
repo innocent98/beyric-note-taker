@@ -1,0 +1,26 @@
+{
+  "note": "A task that never was a suggestion: 409 `not_suggested`.",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/tasks/1/accept",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_suggested",
+        "message": "This task is not waiting to be confirmed."
+      }
+    }
+  }
+}

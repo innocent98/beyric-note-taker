@@ -592,6 +592,7 @@ class LanguagePreferencesIn(Body):
 
 TaskStatus = Literal["todo", "doing", "done"]
 TaskSource = Literal["ai", "manual"]
+TaskConfidence = Literal["high", "medium", "low"]
 
 
 class PersonOut(BaseModel):
@@ -642,6 +643,22 @@ class TaskOut(BaseModel):
     # Filing was a guess (one keyword hit, or a tie): show "Check project" until someone confirms
     # (`PATCH` with `check_project: false`) or picks a project.
     check_project: bool
+    # Suggested tasks: the model was unsure of this action item, so it waits for a person to accept
+    # it (`POST /api/tasks/{id}/accept`) or dismiss it (`DELETE`). While it waits it is on no board
+    # and in no count or mail; `GET /api/tasks?suggested=true` lists these, and a meeting's task
+    # list marks them. Editing one leaves it suggested.
+    suggested: bool
+    # What the model said about the item: `high`, `medium` or `low`. Null for a task made by hand
+    # or before suggestions existed. Every new AI task carries one.
+    confidence: TaskConfidence | None
+    # Plain words on why a `medium` or `low` item is unclear ("Offered on a condition: ..."), at
+    # most 120 characters. Null for a `high` item and for older tasks. Never a link or HTML.
+    reason: str | None
+    # Who said the `quote`, and the 1-based row of the meeting's transcript page that holds it
+    # (open `/meetings/{id}?tab=transcript&line={quote_line}`). Both null unless the caller may
+    # read the meeting and the quote was found in its transcript. No time is stored or shown.
+    quote_speaker: str | None
+    quote_line: int | None
     # What the caller may do with it, so the screen shows only what will work.
     can_update: bool  # status, due date, project, milestone
     can_edit: bool  # the title
@@ -670,9 +687,14 @@ class TaskList(BaseModel):
 
 
 class MeetingTasks(BaseModel):
+    # Every task of the meeting, the suggested ones too (each marks itself with `suggested`).
     tasks: list[TaskOut]
-    # How many different people the tasks are assigned to ("8 tasks created, assigned to 3").
+    # How many different people the tasks that were created (not the suggested ones) are assigned
+    # to ("8 tasks created, assigned to 3 people, 2 to confirm").
     assigned_people: int
+    # How many of the tasks are suggested and wait for a person: the ", K to confirm" tail, shown
+    # only when above 0.
+    to_confirm: int
     extraction_status: ExtractionStatus | None
 
 
@@ -715,11 +737,17 @@ class TasksSettingsOut(BaseModel):
     auto_create_tasks: bool
     # "Email assignees": off means nobody is emailed about the tasks of this person's meetings.
     email_assignees: bool
+    # "Ask before adding unclear tasks": on means an action item the model is unsure about waits
+    # under Suggested tasks; off means every action item becomes a task. On by default. Turning
+    # it off does not move the tasks already waiting.
+    ask_before_unclear: bool
 
 
 class TasksSettingsIn(Body):
     auto_create_tasks: bool
     email_assignees: bool
+    # Left out: unchanged.
+    ask_before_unclear: bool | None = None
 
 
 class ExtractQueued(BaseModel):

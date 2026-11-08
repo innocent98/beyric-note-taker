@@ -291,7 +291,9 @@ def _page(session: Session, user: User, found: Series) -> SeriesPage:
     per_meeting = dict(
         session.execute(
             select(Task.meeting_id, func.count())
-            .where(tasks.visible(user), Task.meeting_id.in_([m.id for m in past]))
+            .where(
+                tasks.visible(user), tasks.confirmed(), Task.meeting_id.in_([m.id for m in past])
+            )
             .group_by(Task.meeting_id)
         ).all()
         if past

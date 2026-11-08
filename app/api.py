@@ -316,7 +316,7 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         **_summary(
             meeting,
             services.template_names(session, [meeting])[meeting.template_id],
-            len(task_rows),
+            sum(1 for task in task_rows if not task.suggested),  # a suggestion is not counted
         ).model_dump(),
         failure_reason=(meeting.failure_reason or REASON_UNEXPECTED) if failed else None,
         retry_block=block,

@@ -31,6 +31,7 @@ MAX_ITEM_CHARS = 1000
 MAX_TITLE_CHARS = 200
 MAX_QUOTE_CHARS = 300
 MAX_HEARD_CHARS = 100
+MAX_REASON_CHARS = 120
 MAX_HEARD_WORDS = 3
 QUOTE_FUZZY_RATIO = 0.9
 MIN_FUZZY_WORDS = 3
@@ -58,6 +59,11 @@ _WEEKDAYS = {
 }  # fmt: skip
 _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 _EMPHASIS = re.compile(r"(\*\*|__|`)")
+# What a plain-text reason must not hold: HTML, Markdown (emphasis, code, a link) or a web address.
+# A reason with any of it is dropped whole, never cleaned: the model was told to write plain words.
+_MARKUP = re.compile(r"[<>`]|\*\*|__|\]\(|\[[^\]]*\]|https?:|www\.|mailto:", re.IGNORECASE)
+CONFIDENCES = ("high", "medium", "low")
+UNCLEAR = ("medium", "low")
 
 
 @dataclass(frozen=True)
@@ -174,6 +180,7 @@ class ModelAction(BaseModel):
     due_date: str | None = None
     quote: str | None = None
     confidence: str | None = None
+    reason: str | None = None
 
 
 class ModelReview(BaseModel):
@@ -204,6 +211,7 @@ class CheckedAction:
     confidence: str | None
     unverified: bool  # no quote that is in the transcript
     from_parser: bool  # the model gave nothing for this bullet
+    reason: str | None = None  # plain words on why a medium or low item is unclear
 
 
 @dataclass(frozen=True)
@@ -271,6 +279,74 @@ def _fuzzy_found(words: list[str], heard: list[str]) -> bool:
     return False
 
 
+_LABELLED_LINE = re.compile(r"^\[([^\]\n]+)\]:\s?(.*)$")
+EVIDENCE_MIN_SHARE = 0.6  # a turn that holds this share of a quote's words stands in for it
+
+
+def transcript_turns(text: str) -> list[tuple[str | None, str]]:
+    """The rows the meeting page shows for this transcript string, split the way
+    `web/lib/transcript.ts` splits it: one row per `[Name]: words` line, a line without a label
+    continues the row above it, and a text with no label at all is a single row. A row's number
+    on the page is its position here plus one."""
+    rows: list[list] = []
+    for raw in text.split("\n"):
+        match = _LABELLED_LINE.match(raw)
+        if match:
+            rows.append([match.group(1), match.group(2)])
+        elif rows:
+            rows[-1][1] += f"\n{raw}"
+        else:
+            rows.append([None, raw])
+    if not any(speaker is not None for speaker, _ in rows):
+        return [(None, text)]
+    return [(speaker, words.rstrip()) for speaker, words in rows]
+
+
+class TranscriptIndex:
+    """A transcript split into the page's rows and normalised once, so many quotes of one meeting
+    are found without reading the text again for each."""
+
+    def __init__(self, transcript: str) -> None:
+        self.turns = transcript_turns(transcript) if transcript else []
+        self.spoken = [normalise(text) for _, text in self.turns]
+        self.joined, self.starts = "", []
+        for text in self.spoken:
+            self.starts.append(len(self.joined))
+            self.joined += f"{text} "
+
+    def locate(self, quote: str | None) -> tuple[str | None, int] | None:
+        """Who said `quote` and on which row of the transcript page (1-based): the first row that
+        holds all of its words; else the row where a quote that runs over two rows starts; else, for
+        a quote that was only close to the transcript (`quote_in_transcript` allows 90%), the row
+        that shares most of its words (at least 60%). None when nothing fits. Case, accents and
+        punctuation are ignored. Never a time: none is stored."""
+        words = normalise(quote or "").split()
+        if not words or not self.turns:
+            return None
+        target = f" {' '.join(words)} "
+        for number, text in enumerate(self.spoken, start=1):
+            if target in f" {text} ":
+                return self.turns[number - 1][0], number
+        at = f" {self.joined}".find(target)
+        if at >= 0:
+            number = max(i for i, start in enumerate(self.starts, start=1) if start <= at)
+            return self.turns[number - 1][0], number
+        wanted = set(words)
+        best, best_share = None, 0.0
+        for number, text in enumerate(self.spoken, start=1):
+            share = len(wanted & set(text.split())) / len(wanted)
+            if share > best_share:
+                best, best_share = number, share
+        if best is not None and best_share >= EVIDENCE_MIN_SHARE:
+            return self.turns[best - 1][0], best
+        return None
+
+
+def locate_quote(transcript: str, quote: str | None) -> tuple[str | None, int] | None:
+    """`TranscriptIndex(transcript).locate(quote)`, for one quote."""
+    return TranscriptIndex(transcript).locate(quote)
+
+
 def term_ok(heard: str | None) -> bool:
     """Whether `heard` looks like a name or term (at most three words, no digits), not a number,
     a price or a sentence."""
@@ -316,6 +392,23 @@ def _plain(text: str | None, limit: int) -> str | None:
     return " ".join(clean.split())[:limit] or None
 
 
+def _confidence(value: str | None) -> str | None:
+    """`high`, `medium` or `low` as the model said it (case and spaces ignored); anything else is
+    no confidence at all, never a guess."""
+    word = (value or "").strip().lower()
+    return word if word in CONFIDENCES else None
+
+
+def _reason(value: str | None, confidence: str | None) -> str | None:
+    """Why an unclear item is unclear: kept only for a `medium` or `low` item, as plain text of at
+    most 120 characters. A reason with markup, a link or an address is dropped (the screen shows
+    it as text, so it must read as words)."""
+    if confidence not in UNCLEAR:
+        return None
+    text = _plain(value, MAX_REASON_CHARS)
+    return None if text is None or _MARKUP.search(text) else text
+
+
 def _check_action(
     raw: ModelAction, bullet: str, transcript: str, meeting_date: date
 ) -> CheckedAction:
@@ -325,6 +418,7 @@ def _check_action(
     if not title_ok(title, bullet):
         title = _plain(parse_action_bullet(bullet).task, MAX_TITLE_CHARS) or ""
     owner = _plain(raw.spoken_owner, MAX_HEARD_CHARS)
+    confidence = _confidence(raw.confidence)
     return CheckedAction(
         index=raw.index,
         title=title,
@@ -332,9 +426,10 @@ def _check_action(
         due_phrase=_plain(raw.due_phrase, MAX_HEARD_CHARS),
         due_date=raw.due_date if due_date_ok(raw.due_date, raw.due_phrase, meeting_date) else None,
         quote=quote if verified else None,
-        confidence=raw.confidence,
+        confidence=confidence,
         unverified=not verified,
         from_parser=False,
+        reason=_reason(raw.reason, confidence),
     )
 
 
@@ -467,6 +562,11 @@ or after the meeting date. "This week" resolves to that week's Friday.
 Every item needs one.
 - confidence: "high" when the owner and the task are both plainly said, "medium" or "low" \
 otherwise.
+- reason: null when confidence is "high". For "medium" or "low", one short plain sentence of at \
+most 120 characters saying why the item is unclear, in neutral words that may quote a few of the \
+speaker's own words (for example: Raised as something to do "at some point", with no commitment or \
+date. / Offered on a condition: "if you need it". / No one took this on. It was said as "someone \
+should".). No links, no markup, no instructions.
 - review: only for a "Please check" item about a person's name, a company, product or technical \
 term that may have been misheard or misspelled. heard_as is just that name or term (one to three \
 words), exactly as the transcript writes it. Never for a number, price, date, quantity or a whole \
@@ -495,6 +595,7 @@ EXTRACT_SCHEMA_FULL = {
                     "due_date",
                     "quote",
                     "confidence",
+                    "reason",
                 ],
                 "properties": {
                     "index": {"type": "integer"},
@@ -504,6 +605,7 @@ EXTRACT_SCHEMA_FULL = {
                     "due_date": _STRING_OR_NULL,
                     "quote": _STRING_OR_NULL,
                     "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                    "reason": _STRING_OR_NULL,
                 },
             },
         },

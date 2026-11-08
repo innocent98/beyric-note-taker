@@ -1,0 +1,14 @@
+{
+  "note": "`mail_outbox` after the extraction: Chidi has one clear task, so he is mailed (ids only). Nothing for Amina (her task is only suggested), nothing for Dan (the owner).",
+  "content": [
+    {
+      "to": "chidi@example.test",
+      "template": "tasks_assigned",
+      "payload": {
+        "user_id": 3,
+        "meeting_id": 1
+      },
+      "status": "pending"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "note": "The tasks table as the extraction left it (only the columns this feature adds, plus the filing columns): a suggested task is unfiled; the web address in one reason was dropped by the check (`reason` null on a suggested task is possible).",
+  "content": [
+    {
+      "position": 0,
+      "title": "Finish the checkout page",
+      "suggested": false,
+      "confidence": "high",
+      "reason": null,
+      "project_id": null,
+      "sprint_id": 1,
+      "is_new": true
+    },
+    {
+      "position": 1,
+      "title": "Look into the analytics setup",
+      "suggested": true,
+      "confidence": "medium",
+      "reason": "Raised as something to do \"at some point\", with no commitment or date.",
+      "project_id": null,
+      "sprint_id": null,
+      "is_new": true
+    },
+    {
+      "position": 2,
+      "title": "Help with the demo",
+      "suggested": true,
+      "confidence": "low",
+      "reason": "Offered on a condition: \"if you need it\".",
+      "project_id": null,
+      "sprint_id": null,
+      "is_new": true
+    },
+    {
+      "position": 3,
+      "title": "Look into the invoice export",
+      "suggested": true,
+      "confidence": "low",
+      "reason": null,
+      "project_id": null,
+      "sprint_id": null,
+      "is_new": true
+    },
+    {
+      "position": 4,
+      "title": "Book the venue",
+      "suggested": false,
+      "confidence": "high",
+      "reason": null,
+      "project_id": null,
+      "sprint_id": 1,
+      "is_new": true
+    }
+  ]
+}

@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, services, tasks, teams, timezones, titles, workspace
+from app import auth, mail, services, tasks, teams, timezones, titles, workspace
 from app.api_schemas import (
     AttentionOut,
     ErrorResponse,
@@ -31,6 +31,7 @@ from app.api_schemas import (
     TasksSettingsOut,
 )
 from app.db import get_session
+from app.extraction import TranscriptIndex
 from app.models import Meeting, Task, User, UserSettings
 from app.visibility import can_read_clause
 
@@ -69,10 +70,20 @@ def present(session: Session, viewer: User, rows: list[Task]) -> list[TaskOut]:
         )
     }
     member = tasks.membership(session, viewer)
+    indexes: dict[int, TranscriptIndex] = {}
     out = []
     for task in rows:
         allowed = tasks.permissions(task, viewer, member)
         meeting = meetings.get(task.meeting_id) if task.meeting_id else None
+        # Where the quote was said: only for a meeting the viewer may read (an assignee of a
+        # private meeting's task gets the quote and nothing around it, spec 8.2).
+        said = None
+        if meeting is not None and task.quote:
+            if meeting.id not in indexes:  # each transcript is read once per request
+                indexes[meeting.id] = TranscriptIndex(
+                    meeting.speaker_transcript or meeting.transcript or ""
+                )
+            said = indexes[meeting.id].locate(task.quote)
         out.append(
             TaskOut(
                 id=task.id,
@@ -109,6 +120,11 @@ def present(session: Session, viewer: User, rows: list[Task]) -> list[TaskOut]:
                 sprint_id=task.sprint_id,
                 carried=task.carried,
                 check_project=task.check_project,
+                suggested=task.suggested,
+                confidence=task.confidence,
+                reason=task.reason,
+                quote_speaker=said[0] if said else None,
+                quote_line=said[1] if said else None,
                 can_update=allowed.update,
                 can_edit=allowed.edit,
                 can_assign=allowed.assign,
@@ -142,6 +158,11 @@ def list_tasks(
         description="`me`, `none` (Needs owner) or a user id",
     ),
     status: Literal["todo", "doing", "done"] | None = None,
+    suggested: bool = Query(
+        False,
+        description="`false` (the default): the Board and Backlog tasks, suggested ones left out. "
+        "`true`: only the suggested tasks (the Suggested tasks section).",
+    ),
     project: str | None = Query(
         None,
         pattern=r"^(none|\d{1,10})$",
@@ -160,7 +181,8 @@ def list_tasks(
 ) -> TaskList:
     """The tasks the caller can see: those assigned to them, those from meetings they can read,
     and their team's manual tasks. Newest first; for the next page pass `before_id` =
-    `next_before_id`. `attention` counts every open task the caller sees, whatever the filter."""
+    `next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a
+    suggested task is in no count."""
     rows, more = tasks.list_tasks(
         session,
         user,
@@ -171,6 +193,7 @@ def list_tasks(
         project=project,
         milestone=milestone,
         sprint=sprint,
+        suggested=suggested,
     )
     return TaskList(
         tasks=present(session, user, rows),
@@ -275,6 +298,60 @@ def delete_task(
     return Response(status_code=204)
 
 
+@router.post(
+    "/tasks/{task_id:id}/accept",
+    tags=["tasks"],
+    responses={
+        **SEE_ONLY,
+        404: {"model": ErrorResponse},
+        409: {"model": ErrorResponse, "description": "`not_suggested`"},
+    },
+)
+def accept_task(
+    task_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> TaskOut:
+    """Accept a suggested task: it joins the board, is filed into a project and sprint as a new
+    task is, and its assignee is emailed as they would have been (when the meeting owner's "Email
+    assignees" is on and they were not already mailed about this meeting). Whoever may edit the task
+    may accept it (403 `team_forbidden` otherwise); a person who cannot read the meeting gets 404.
+    Idempotent: accepting a task that was already accepted answers 200 with the task and sends
+    nothing. 409 `not_suggested` for a task that never was a suggestion. To dismiss one, `DELETE`
+    it."""
+    task = _task_or_404(session, user, task_id)
+    try:
+        accepted = tasks.accept(session, user, task)
+    except tasks.TaskForbidden:
+        session.rollback()
+        raise services.Refused(403, "team_forbidden", FORBIDDEN) from None
+    except tasks.NotSuggested:
+        session.rollback()
+        raise services.Refused(
+            409, "not_suggested", "This task is not waiting to be confirmed."
+        ) from None
+    if accepted and task.meeting_id is not None:
+        _mail_accepted(session, task)
+    session.commit()
+    return present(session, user, [task])[0]
+
+
+def _mail_accepted(session: Session, task: Task) -> None:
+    """What creation would have sent: the assignee mail, for a person who is not the meeting's
+    owner, when the owner emails assignees and the meeting is not a quiet or an old one. The
+    mail's own once-per-person-per-meeting rule stands: someone already mailed about this meeting
+    is not mailed again. In the caller's transaction."""
+    meeting = session.get(Meeting, task.meeting_id)
+    if meeting is None:
+        return
+    prefs = workspace.owner_prefs(session, meeting.owner_user_id)
+    recent = datetime.now(UTC) - meeting.created_at < mail.KEEP_SENT_FOR
+    if prefs.email_assignees and recent and not meeting.extraction_quiet:
+        mail.queue_tasks_assigned(
+            session, meeting, tasks.new_assignees([task], meeting.owner_user_id)
+        )
+
+
 @router.get(
     "/meetings/{meeting_id:id}/tasks",
     tags=["tasks"],
@@ -291,7 +368,10 @@ def meeting_tasks(
     rows = tasks.meeting_tasks(session, user, meeting.id)
     return MeetingTasks(
         tasks=present(session, user, rows),
-        assigned_people=len({t.assignee_user_id for t in rows if t.assignee_user_id}),
+        assigned_people=len(
+            {t.assignee_user_id for t in rows if t.assignee_user_id and not t.suggested}
+        ),
+        to_confirm=sum(1 for t in rows if t.suggested),
         extraction_status=meeting.extraction_status if meeting.status == "ready" else None,
     )
 
@@ -335,10 +415,14 @@ settings_router = APIRouter(prefix="/settings", tags=["settings"])
 def read_tasks_settings(
     session: Session = Depends(get_session), user: User = Depends(auth.current_user)
 ) -> TasksSettingsOut:
-    """The two switches of Settings > Tasks (both on by default, also for an account with no
+    """The three switches of Settings > Tasks (all on by default, also for an account with no
     settings row yet)."""
-    auto, email, _zone_name = workspace.owner_prefs(session, user.id)
-    return TasksSettingsOut(auto_create_tasks=auto, email_assignees=email)
+    prefs = workspace.owner_prefs(session, user.id)
+    return TasksSettingsOut(
+        auto_create_tasks=prefs.auto_create_tasks,
+        email_assignees=prefs.email_assignees,
+        ask_before_unclear=prefs.ask_before_unclear,
+    )
 
 
 @settings_router.put("/tasks")
@@ -347,16 +431,20 @@ def write_tasks_settings(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TasksSettingsOut:
-    """Set both switches. They are read when a meeting is read (tasks) and when the mail is sent
-    (assignees), so turning email off also stops mail already queued."""
+    """Set the switches. They are read when a meeting is read (tasks, and which are suggestions) and
+    when the mail is sent (assignees), so turning email off also stops mail already queued.
+    `ask_before_unclear` may be left out: it then stays as it is (a client from before it existed).
+    Turning it off does not touch the tasks already waiting under Suggested tasks."""
     values = {"auto_create_tasks": body.auto_create_tasks, "email_assignees": body.email_assignees}
+    if body.ask_before_unclear is not None:
+        values["ask_before_unclear"] = body.ask_before_unclear
     session.execute(
         insert(UserSettings)
         .values(user_id=user.id, **values)
         .on_conflict_do_update(index_elements=["user_id"], set_=values)
     )
     session.commit()
-    return TasksSettingsOut(**values)
+    return read_tasks_settings(session, user)
 
 
 router.include_router(settings_router)

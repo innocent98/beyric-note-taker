@@ -1593,14 +1593,16 @@ export interface paths {
         };
         /**
          * Read Tasks Settings
-         * @description The two switches of Settings > Tasks (both on by default, also for an account with no
+         * @description The three switches of Settings > Tasks (all on by default, also for an account with no
          *     settings row yet).
          */
         get: operations["read_tasks_settings"];
         /**
          * Write Tasks Settings
-         * @description Set both switches. They are read when a meeting is read (tasks) and when the mail is sent
-         *     (assignees), so turning email off also stops mail already queued.
+         * @description Set the switches. They are read when a meeting is read (tasks, and which are suggestions) and
+         *     when the mail is sent (assignees), so turning email off also stops mail already queued.
+         *     `ask_before_unclear` may be left out: it then stays as it is (a client from before it existed).
+         *     Turning it off does not touch the tasks already waiting under Suggested tasks.
          */
         put: operations["write_tasks_settings"];
         post?: never;
@@ -1743,7 +1745,8 @@ export interface paths {
          * List Tasks
          * @description The tasks the caller can see: those assigned to them, those from meetings they can read,
          *     and their team's manual tasks. Newest first; for the next page pass `before_id` =
-         *     `next_before_id`. `attention` counts every open task the caller sees, whatever the filter.
+         *     `next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a
+         *     suggested task is in no count.
          */
         get: operations["list_tasks"];
         put?: never;
@@ -1785,6 +1788,32 @@ export interface paths {
          *     more is 403 `team_forbidden` and nothing is changed. A status change clears "New".
          */
         patch: operations["patch_task"];
+        trace?: never;
+    };
+    "/api/tasks/{task_id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Task
+         * @description Accept a suggested task: it joins the board, is filed into a project and sprint as a new
+         *     task is, and its assignee is emailed as they would have been (when the meeting owner's "Email
+         *     assignees" is on and they were not already mailed about this meeting). Whoever may edit the task
+         *     may accept it (403 `team_forbidden` otherwise); a person who cannot read the meeting gets 404.
+         *     Idempotent: accepting a task that was already accepted answers 200 with the task and sends
+         *     nothing. 409 `not_suggested` for a task that never was a suggestion. To dismiss one, `DELETE`
+         *     it.
+         */
+        post: operations["accept_task"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/team": {
@@ -2852,6 +2881,8 @@ export interface components {
             extraction_status: ("pending" | "running" | "done" | "failed" | "skipped") | null;
             /** Tasks */
             tasks: components["schemas"]["TaskOut"][];
+            /** To Confirm */
+            to_confirm: number;
         };
         /** MilestoneConfirm */
         MilestoneConfirm: {
@@ -3583,6 +3614,8 @@ export interface components {
             carried: boolean;
             /** Check Project */
             check_project: boolean;
+            /** Confidence */
+            confidence: ("high" | "medium" | "low") | null;
             /**
              * Created At
              * Format: date-time
@@ -3607,6 +3640,12 @@ export interface components {
             project_id: number | null;
             /** Quote */
             quote: string | null;
+            /** Quote Line */
+            quote_line: number | null;
+            /** Quote Speaker */
+            quote_speaker: string | null;
+            /** Reason */
+            reason: string | null;
             /**
              * Source
              * @enum {string}
@@ -3621,6 +3660,8 @@ export interface components {
              * @enum {string}
              */
             status: "todo" | "doing" | "done";
+            /** Suggested */
+            suggested: boolean;
             /** Title */
             title: string;
             /** Unverified */
@@ -3651,6 +3692,8 @@ export interface components {
         };
         /** TasksSettingsIn */
         TasksSettingsIn: {
+            /** Ask Before Unclear */
+            ask_before_unclear?: boolean | null;
             /** Auto Create Tasks */
             auto_create_tasks: boolean;
             /** Email Assignees */
@@ -3658,6 +3701,8 @@ export interface components {
         };
         /** TasksSettingsOut */
         TasksSettingsOut: {
+            /** Ask Before Unclear */
+            ask_before_unclear: boolean;
             /** Auto Create Tasks */
             auto_create_tasks: boolean;
             /** Email Assignees */
@@ -9819,6 +9864,8 @@ export interface operations {
                 /** @description `me`, `none` (Needs owner) or a user id */
                 assignee?: string | null;
                 status?: ("todo" | "doing" | "done") | null;
+                /** @description `false` (the default): the Board and Backlog tasks, suggested ones left out. `true`: only the suggested tasks (the Suggested tasks section). */
+                suggested?: boolean;
                 /** @description `none` (No project) or a project id */
                 project?: string | null;
                 milestone?: number | null;
@@ -10088,6 +10135,73 @@ export interface operations {
                 };
             };
             /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    accept_task: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_suggested` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
             422: {
                 headers: {
                     [name: string]: unknown;

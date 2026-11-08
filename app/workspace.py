@@ -10,11 +10,13 @@ them) and a meeting stuck in `running` by a crash is taken back after a while.
 
 import logging
 from datetime import UTC, date, datetime, timedelta
+from typing import NamedTuple
 
 from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import ai_runs, filing, integrations, mail, projects, tasks, teams, timezones, titles
+from app.ai_versions import LEGACY_EXTRACT_VERSIONS
 from app.extraction import (
     CheckedExtraction,
     ExtractionFailed,
@@ -144,18 +146,28 @@ def _configured_model() -> str:
     return get_settings().extract_model
 
 
-def owner_prefs(session: Session, owner_id: int) -> tuple[bool, bool, str]:
+class OwnerPrefs(NamedTuple):
+    auto_create_tasks: bool
+    email_assignees: bool
+    time_zone: str
+    ask_before_unclear: bool
+
+
+def owner_prefs(session: Session, owner_id: int) -> OwnerPrefs:
     """The meeting owner's Settings that shape an extraction: whether action items become tasks,
-    whether assignees are emailed, and the owner's time zone (UTC until chosen). Defaults are on
-    for an account with no settings row."""
+    whether assignees are emailed, the owner's time zone (UTC until chosen) and whether unclear
+    action items wait as suggestions. Defaults are on for an account with no settings row."""
     row = session.execute(
         select(
-            UserSettings.auto_create_tasks, UserSettings.email_assignees, UserSettings.time_zone
+            UserSettings.auto_create_tasks,
+            UserSettings.email_assignees,
+            UserSettings.time_zone,
+            UserSettings.ask_before_unclear,
         ).where(UserSettings.user_id == owner_id)
     ).first()
     if row is None:
-        return True, True, DEFAULT_TIMEZONE
-    return row[0], row[1], row[2] or DEFAULT_TIMEZONE
+        return OwnerPrefs(True, True, DEFAULT_TIMEZONE, True)
+    return OwnerPrefs(row[0], row[1], row[2] or DEFAULT_TIMEZONE, row[3])
 
 
 def run_extraction(
@@ -194,7 +206,9 @@ def run_extraction(
 
     stamp = now or datetime.now(UTC)
     transcript = meeting.speaker_transcript or meeting.transcript or ""
-    make_tasks, mail_assignees, time_zone = owner_prefs(session, owner_id)
+    make_tasks, mail_assignees, time_zone, ask_unclear = owner_prefs(session, owner_id)
+    # A meeting read before the model gave a confidence keeps its tasks as they are.
+    suggest = ask_unclear and meeting.extraction_version not in LEGACY_EXTRACT_VERSIONS
     created = meeting.created_at or stamp
     day = timezones.localise(created, time_zone)[0].date()
     quiet = meeting.extraction_quiet
@@ -271,7 +285,7 @@ def run_extraction(
         members = tasks.members_of(session, team_id)
         live = tasks.reconcile(
             session, meeting, team_id, parsed.action_items, checked.action_items, members, day,
-            quiet=quiet,
+            quiet=quiet, suggest=suggest,
         )  # fmt: skip
         # Dates the meeting stated for a launch or deadline: proposals only, a person confirms.
         projects.propose(
@@ -283,8 +297,10 @@ def run_extraction(
         recent = stamp - created < mail.KEEP_SENT_FOR
         if answered and mail_assignees and not quiet and recent:
             mail.queue_tasks_assigned(session, meeting, tasks.new_assignees(live, owner_id))
-        if answered and not quiet and recent and live:
-            post_to_slack = (list(live), members)
+        # A suggested task is not posted to Slack or Linear and not mailed: it is not a task yet.
+        posted = [task for task in live if not task.suggested]
+        if answered and not quiet and recent and posted:
+            post_to_slack = (posted, members)
     session.commit()
     session.expire(meeting)
     if post_to_slack is not None:

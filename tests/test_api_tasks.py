@@ -140,6 +140,11 @@ def test_the_list_carries_tasks_people_and_the_attention_counts(api, session, te
         "sprint_id": None,
         "carried": False,
         "check_project": False,
+        "suggested": False,
+        "confidence": None,
+        "reason": None,
+        "quote_speaker": None,  # the test meeting has no transcript to find the quote in
+        "quote_line": None,
         "can_update": True,
         "can_edit": True,
         "can_assign": True,
@@ -232,7 +237,11 @@ def test_a_deleted_tasks_account_owner_is_not_a_route_into_it(app, session, team
 # ---- the route enumeration (spec 8.2) ----
 
 TASK_READS = {("GET", "/api/tasks/{task_id}")}
-TASK_WRITES = {("PATCH", "/api/tasks/{task_id}"), ("DELETE", "/api/tasks/{task_id}")}
+TASK_WRITES = {
+    ("PATCH", "/api/tasks/{task_id}"),
+    ("DELETE", "/api/tasks/{task_id}"),
+    ("POST", "/api/tasks/{task_id}/accept"),
+}
 TASK_LISTS = {("GET", "/api/tasks"), ("POST", "/api/tasks")}
 
 
@@ -519,12 +528,14 @@ def test_the_tasks_settings_default_on_and_round_trip(api):
     assert api.get("/api/settings/tasks").json() == {
         "auto_create_tasks": True,
         "email_assignees": True,
+        "ask_before_unclear": True,
     }
     saved = api.put("/api/settings/tasks", {"auto_create_tasks": True, "email_assignees": False})
     assert saved.status_code == 200 and saved.json()["email_assignees"] is False
     assert api.get("/api/settings/tasks").json() == {
         "auto_create_tasks": True,
         "email_assignees": False,
+        "ask_before_unclear": True,
     }
     error_of(api.put("/api/settings/tasks", {"auto_create_tasks": "yes"}), 422, "validation_error")
 

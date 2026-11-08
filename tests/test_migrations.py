@@ -1204,10 +1204,9 @@ def test_0032_follows_0030():
     assert script.get_revision("0032").down_revision == "0030"
 
 
-def test_0033_follows_0032_and_is_the_only_head():
+def test_0033_follows_0032():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0033").down_revision == "0032"
-    assert script.get_heads() == ["0033"]
 
 
 def test_0033_round_trips_and_keeps_slack_rows(scratch_url):
@@ -1242,5 +1241,49 @@ def test_0033_round_trips_and_keeps_slack_rows(scratch_url):
         )
     command.downgrade(cfg, "0032")
     assert _rows(engine, "select kind from integrations") == [("slack_webhook",)]
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0034_follows_0033_and_is_the_only_head():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0034").down_revision == "0033"
+    assert script.get_heads() == ["0034"]
+
+
+def test_0034_round_trips_and_keeps_tasks_and_settings(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0033")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
+        conn.execute(
+            text("insert into teams (name, owner_user_id) select 'T', id from users limit 1")
+        )
+        conn.execute(
+            text("insert into tasks (team_id, title) select id, 'Old task' from teams limit 1")
+        )
+        # migration 0006's owner account already has a settings row; make sure one exists
+        conn.execute(
+            text(
+                "insert into user_settings (user_id) select id from users "
+                "where id not in (select user_id from user_settings)"
+            )
+        )
+    command.upgrade(cfg, "0034")
+    # Old rows read as "not suggested, no confidence, no reason", and the setting is on.
+    assert _rows(engine, "select suggested, confidence, reason from tasks") == [(False, None, None)]
+    assert {r[0] for r in _rows(engine, "select ask_before_unclear from user_settings")} == {True}
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("update tasks set confidence = 'certain'"))
+    with engine.begin() as conn:
+        conn.execute(text("update tasks set confidence = 'low', reason = 'Said as someone should'"))
+    command.downgrade(cfg, "0033")
+    columns = {c["name"] for c in inspect(engine).get_columns("tasks")}
+    assert not columns & {"suggested", "confidence", "reason"}
+    assert "ask_before_unclear" not in {
+        c["name"] for c in inspect(engine).get_columns("user_settings")
+    }
+    assert _rows(engine, "select title from tasks") == [("Old task",)]
     command.upgrade(cfg, "head")
     engine.dispose()

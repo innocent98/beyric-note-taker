@@ -1,0 +1,26 @@
+{
+  "note": "",
+  "client": "eve",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/tasks/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-H>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such task"
+      }
+    }
+  }
+}

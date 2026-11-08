@@ -160,7 +160,12 @@ def open_task_counts(session: Session, user: User, project_ids: list[int]) -> di
         return {}
     rows = session.execute(
         select(Task.project_id, func.count())
-        .where(Task.project_id.in_(project_ids), Task.status != "done", tasks.visible(user))
+        .where(
+            Task.project_id.in_(project_ids),
+            Task.status != "done",
+            tasks.visible(user),
+            tasks.confirmed(),
+        )
         .group_by(Task.project_id)
     )
     return {pid: n for pid, n in rows}
@@ -181,7 +186,12 @@ def sprint_counts(
             func.count().filter(Task.sprint_id.in_(current)),
             func.count().filter(Task.sprint_id.is_(None)),
         )
-        .where(Task.project_id.in_(project_ids), Task.status != "done", tasks.visible(user))
+        .where(
+            Task.project_id.in_(project_ids),
+            Task.status != "done",
+            tasks.visible(user),
+            tasks.confirmed(),
+        )
         .group_by(Task.project_id)
     )
     return {pid: (in_current, backlog) for pid, in_current, backlog in rows}
@@ -197,7 +207,7 @@ def milestone_progress(session: Session, user: User, ids: list[int]) -> dict[int
             func.count(),
             func.count().filter(Task.status == "done"),
         )
-        .where(Task.milestone_id.in_(ids), tasks.visible(user))
+        .where(Task.milestone_id.in_(ids), tasks.visible(user), tasks.confirmed())
         .group_by(Task.milestone_id)
     )
     return {mid: (total, done) for mid, total, done in rows}

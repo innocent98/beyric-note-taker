@@ -593,6 +593,7 @@ def _tasks_assigned(
                 Task.assignee_user_id == recipient.id,
                 Task.source == "ai",
                 Task.deleted_at.is_(None),
+                Task.suggested.is_(False),  # a suggestion is mailed when it is accepted
                 Task.status == "todo",
                 Task.is_new.is_(True),  # backfilled (quiet) tasks are never New
             )

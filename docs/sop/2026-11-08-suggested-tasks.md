@@ -1,0 +1,84 @@
+# SOP: Suggested tasks and "Ask before adding unclear tasks" (audit B12, B13, B21 to B24)
+
+Spec: `docs/superpowers/specs/2026-11-08-designer-v2-features-design.md`, section 2 (approved by delegation, 2026-11-08). **PR 1 (backend):** branch `feature/suggested-tasks-backend` (number in the PR list). **PR 2 (screens):** `feature/suggested-tasks-screens`, added to this SOP when it ships. **Migration 0034.** FE guide: `docs/fe-integration-guide-suggested-tasks.md`; captures `docs/fe-captures/suggested-tasks/` (`scripts/capture_suggested_tasks_api.py`).
+
+## What shipped (PR 1)
+1. **Migration 0034:** `tasks.suggested` (bool, default false), `tasks.confidence` (`high | medium | low`, check constraint, null), `tasks.reason` (varchar 200, null), `user_settings.ask_before_unclear` (bool, default **true**). No row is rewritten: old tasks keep `suggested` false, `confidence` null.
+2. **Extraction `extract-v2`** (`EXTRACT_PROMPT_VERSION`): the model also returns `reason` for a `medium` or `low` item. Code keeps the confidence of every action item and checks the reason (plain text, at most 120 characters, dropped whole if it holds HTML, Markdown, a link or an address).
+3. **A suggested task** is made when `ask_before_unclear` is on and confidence is `medium` or `low`: unfiled (no project, no sprint), not "Check project", not mailed, counted nowhere. **Re-runs never undo a decision**: an accepted task is never turned back, a dismissed one (tombstone) never returns, a waiting one stays waiting.
+4. **`POST /api/tasks/{id}/accept`**: clears the flag, files the task as creation does, queues the assignee mail. Idempotent. Dismiss is the existing `DELETE` (tombstone).
+5. **API:** `TaskOut` gains `suggested`, `confidence`, `reason`, `quote_speaker`, `quote_line`; `GET /api/tasks` leaves suggested tasks out unless `suggested=true`; `GET /api/meetings/{id}/tasks` gains `to_confirm`; `GET/PUT /api/settings/tasks` gain `ask_before_unclear`.
+6. **Exclusions** on the server in every place the spec lists (table below).
+
+## Why
+The AI turns every action item into a task; the vague and conditional ones ("we should look at analytics at some point") clutter the board and mail people about things nobody agreed to. The designer's file lets the person confirm those first. Goal: unclear items wait for a person, are counted nowhere and mail nobody until accepted.
+
+## How: decisions and trade-offs
+| Topic | Decision |
+|---|---|
+| Unfiled until accepted | A suggested task is made with no project and no sprint; **Accept does the filing** (`tasks.accept`: the series' linked project, else keywords, else the team's single project; the sprint by due date). A person's own choice of project or sprint while it waited is kept. Alternative rejected: file at creation and hide: the task would sit in a project and sprint it never joined and a close of the sprint would carry it |
+| Two passes | The worker makes the notes parser's tasks first (no confidence yet), then asks the model. A task is **rated once**: the first time its `confidence` is set, an unclear one turns suggested (and is unfiled again). After that a re-run changes neither `suggested` nor `confidence` nor `reason`. This is what keeps an accepted task accepted and a waiting one waiting even when the model changes its mind |
+| If the model fails | The notes' tasks stay as today: unrated, not suggested (the same as before this feature). A suggestion exists only when the model said so |
+| Old meetings | `LEGACY_EXTRACT_VERSIONS = ("extract-v1",)`: a meeting read with `extract-v1` never gets suggestions from a re-run (new notes, the on-demand button). Its confidence is stored, its tasks are left as they are. "Old tasks keep confidence null and suggested false; nothing re-extracts old meetings" |
+| Accept: 200 and 409 | The spec says both "idempotent" and "409 `not_suggested` if already cleared". Resolved: the row is locked and read again; **a task that was suggested (rated `medium` or `low`) and is no longer waiting answers 200 with the task, and sends nothing** (a double click); a task that never was a suggestion (clear, manual, older) is **409 `not_suggested`** |
+| Who may | Whoever may edit the task (`Permissions.edit`: owner or admin of the task's team, the maker of a manual task). 403 `team_forbidden` for a reader who may not, 404 for anyone who cannot see it. **Consequence for the lead to confirm:** a plain *member* who owns the meeting (on a team where they are not an admin) cannot accept or dismiss their own meeting's suggestions. The API gives `can_edit` and `can_delete`; one line in `tasks.accept` and `tasks.delete` would widen it |
+| Assignee mail on accept | `mail.queue_tasks_assigned` unchanged: **one mail per person per meeting** (unique index). A person already mailed about the meeting gets no second mail when their suggested task is accepted: it shows on their board. Queued only when the owner's "Email assignees" is on, the person is not the owner, the meeting is not quiet (backfilled) and not older than the outbox keeps (30 days). Alternative rejected: a new mail template and index per accepted task (more mail surface for the pilot); listed as a follow-up |
+| Slack and Linear | A suggested task is **not** posted or pushed at extraction, and **not** when accepted later (both are once per meeting or task by design). Follow-up |
+| `assigned_people` | Counts only tasks that were made. The designer's script counts every task's owner (including a suggested one's), but a suggested task is not assigned yet; the summary "N tasks created, assigned to M people, K to confirm" is then true |
+| API shape | `GET /api/tasks?suggested=true` is the Suggested tasks section's list (the default `false` is the Board and Backlog). The meeting's own list and page `tasks` carry both kinds, each marked |
+| Evidence (lead-designed, not in the designer's file) | `quote_speaker` and `quote_line` are computed on read from the transcript string the page shows, split exactly as `web/lib/transcript.ts` splits it (`extraction.transcript_turns`, `locate_quote`). Only when the caller may read the meeting; otherwise null (an assignee of a private meeting's task gets the quote and nothing around it, spec 8.2). No time is stored or shown. The paraphrase line of the designer's drawer is dropped (U10) |
+| Settings PUT | `ask_before_unclear` is **optional** in `PUT /api/settings/tasks` so the current front end keeps working; left out it stays as it is. Turning it off does not touch tasks already waiting |
+
+## What's involved
+**Changed (each proven by a test that fails with the change removed):**
+| Place | Where |
+|---|---|
+| Board and Backlog list | `tasks.list_tasks` (`suggested` filter, default false) |
+| Attention (needs owner, unverified, check project) | `tasks.attention` |
+| Sidebar badge `tasks_new` | `tasks.new_count` |
+| Meetings list and meeting page `tasks_count` | `tasks.counts_for_meetings`, `api.py` (`_detail`) |
+| Series "Unfinished from last time", "Finished since", cards' unfinished count | `series.unfinished_tasks`, `finished_since`, `counts_for` |
+| Series past meetings' task counts | `api_series._page` |
+| Project open counts, "in current sprint / in backlog", milestone progress | `projects.open_task_counts`, `sprint_counts`, `milestone_progress` |
+| Sprint progress and the count of tasks moved by a close | `api_sprints._counts`, `close_sprint` |
+| Per-person open counts on Team | `team_admin.open_task_counts` |
+| One-hour reminder mail "Still open from last time" | through `series.unfinished_tasks` (`series_mail._task_rows`) |
+| Summary box "closed with N of M tasks done" | `mail_summary.closed_sprint_sentence` |
+| Assignee mail ("New tasks assigned") | `new_assignees` (skips suggested), `mail_templates._tasks_assigned` (never lists one), `workspace.run_extraction` |
+| Slack and Linear after extraction | `workspace.run_extraction` passes only tasks that are not suggested |
+| Meeting task summary | `api_tasks.meeting_tasks` (`to_confirm`, `assigned_people`) |
+
+**Checked and left unchanged (on purpose):**
+| Place | Why |
+|---|---|
+| `tasks.meeting_tasks`, `tasks.get`, `tasks.visible` | The meeting's Action items row and the drawer must show a suggested task; visibility rules are the task's, unchanged |
+| `tasks.update` (PATCH) | Editing a suggested task leaves it suggested (never touches `suggested`); `suggested` is not a PATCH field |
+| `sprints.close_current` | Moves every open task of the sprint, suggested ones included (only possible when a person placed one by hand); only the count a person sees leaves them out |
+| `teams.py` (a person joins or leaves a team) | Re-homes tasks by ownership; it does not count |
+| `deletion.py`, meeting delete | Cascades by meeting or maker; no counts |
+| `integrations.py` bodies, `mail.queue_tasks_assigned` | Unchanged; their callers pass only tasks that are not suggested |
+| `notifications.py`, `alerts.py`, `export*.py`, `sweeps.py`, `scheduler.py`, `web.py` | `grep` finds no read of `tasks` there |
+| `scripts/extraction_review.py`, `tests/eval/` | Evaluate the extraction prompt offline; they still run (the label `extract-v1` in the review script's HTML is its own) |
+
+## Lead-designed pieces (PR 2 builds them; not in the designer's file)
+* The evidence box shows the verbatim `quote` and its speaker, no time; the designer's paraphrase line is dropped.
+* "Show source" links to `/meetings/{id}?tab=transcript&line=N` (`ask-screens` builds the highlight; until it merges the link opens the Transcript tab).
+* Edit leaves the task suggested until Accept. A failed accept or dismiss shows "Could not update the task. Try again." and the row stays. The phone layout stacks the four buttons under the row text.
+
+## Verification
+* pytest (Postgres 16, port 54346): `tests/test_suggested_tasks.py` (36: reason and confidence checks, quote location, who is suggested, re-run rules), `tests/test_suggested_tasks_api.py` (26: list, accept, dismiss, roles, mail, settings, evidence), `tests/test_suggested_exclusions.py` (8: one test per counting place), `tests/test_migrations.py` (0034 round trip, one head); the whole of `test_accounts`, route enumeration (`test_api_tasks`, `test_team_visibility`), `test_models`, `test_api` and the task, series, project, sprint, mail, integration and extraction suites pass. A mutation check (filters removed) failed ten of these tests, so they do bind.
+* Route enumeration: `POST /api/tasks/{id}/accept` is classified as a task write and is 404 for a non-reader and a teammate without access (`test_every_task_route_is_404_for_outsiders_and_teammates_without_access`).
+* Real HTTP captures (`docs/fe-captures/suggested-tasks/`, 48 files) feed the guide. **Not live:** the model's real answer (no OpenAI key: stand-in reply), accept filing into a project and sprint, the series, project, sprint and team figures and the reminder and summary mails (unit-tested only).
+* `docs/openapi.json` regenerated; `web/lib/api/schema.d.ts` regenerated.
+
+## Operate / roll back
+* **Server steps before merge:** the migration runs on deploy (`alembic upgrade head`); **no new environment variable.** One Python deploy, in a no-meetings window.
+* **Do not run `scripts/backfill_extraction.py` right after deploy by habit:** `EXTRACT_PROMPT_VERSION` changed to `extract-v2`, so it would re-queue (quietly, no mail) every meeting of the last 14 days that was read with `extract-v1`. They are protected from suggestions (legacy gate), but the run costs model calls.
+* Roll back: revert the PR and `alembic downgrade 0033` (drops the four columns; suggested tasks then become plain tasks with no column to say they were waiting, so downgrade after accepting or dismissing the waiting ones).
+* The setting can be turned off per person (Settings > Tasks) or by `update user_settings set ask_before_unclear = false` for everyone; waiting tasks stay waiting until handled.
+
+## Follow-ups
+* Decide whether a plain member who owns the meeting may accept or dismiss its suggestions (see "Who may").
+* A second assignee mail for an accepted task when the person was already mailed about the meeting (needs its own template and index).
+* Post an accepted task to Slack or the tracker (needs a rule for "once per task").
+* Real model run: check how often `medium` and `low` are chosen and read the reasons (ledger `ai_runs`, `prompt_version` `extract-v2`) before the pilot relies on it.
