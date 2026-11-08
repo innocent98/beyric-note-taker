@@ -684,7 +684,16 @@ def update_decision(
     if not isinstance(replaced_by_id, Unset):
         decision.replaced_by_id = replaced_by_id if final == "replaced" else None
     decision.edited_at = datetime.now(UTC)
+    _topics_may_change(session, decision.meeting_id)
     session.commit()
+
+
+def _topics_may_change(session: Session, meeting_id: int) -> None:
+    """A decision's status or visibility changed: the series' repeat topics read decisions, so mark
+    the series stale (`app/topics.py`)."""
+    series_id = session.scalar(select(Meeting.series_id).where(Meeting.id == meeting_id))
+    if series_id is not None:
+        series_rules.mark_topics_stale(session, series_id)
 
 
 def hide_decision(session: Session, user: User, decision_id: int) -> bool:
@@ -699,6 +708,7 @@ def hide_decision(session: Session, user: User, decision_id: int) -> bool:
         return False
     if decision.hidden_at is None:
         decision.hidden_at = datetime.now(UTC)
+        _topics_may_change(session, decision.meeting_id)
         session.commit()
     return True
 

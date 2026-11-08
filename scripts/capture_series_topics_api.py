@@ -117,7 +117,7 @@ class FakeModel:
                         },
                         {
                             "label": "Compensation review",
-                            "meetings": [numbers[1], numbers[-1]],
+                            "meetings": numbers[-2:],
                             "reason": "no_owner",
                             "agenda": "Give the compensation review an owner",
                         },
@@ -278,13 +278,14 @@ def seed(engine) -> dict:
         # Ada's three shared Monday meetings, then Ada's own private one, then Dan's private one.
         m1 = add_meeting(session, ada, template_id, datetime(2026, 10, 19, 10, 0, tzinfo=UTC), "Monday planning", notes("Pricing model came up: per seat or per workspace.", "Hiring plan for next quarter."), sid, shared_team_id=team.id)  # fmt: skip
         m2 = add_meeting(session, ada, template_id, datetime(2026, 10, 26, 10, 0, tzinfo=UTC), "Monday planning", notes("Pricing model again, no agreement.", "Compensation review needs someone to run it.", "Hiring plan: two roles."), sid, shared_team_id=team.id)  # fmt: skip
-        m3 = add_meeting(session, ada, template_id, datetime(2026, 11, 2, 10, 0, tzinfo=UTC), "Monday planning", notes("Pricing model, third time.", "Launch checklist."), sid, shared_team_id=team.id, )  # fmt: skip
-        m4 = add_meeting(session, ada, template_id, datetime(2026, 11, 4, 10, 0, tzinfo=UTC), "Ada private notes", notes("Compensation review: the CTO's pay band."), sid)  # fmt: skip
+        m3 = add_meeting(session, ada, template_id, datetime(2026, 11, 2, 10, 0, tzinfo=UTC), "Monday planning", notes("Pricing model, third time.", "Launch checklist.", "Compensation review still has no owner."), sid, shared_team_id=team.id, )  # fmt: skip
+        m4 = add_meeting(session, ada, template_id, datetime(2026, 11, 4, 10, 0, tzinfo=UTC), "Ada private notes", notes("PAYBAND: the CTO's pay band, private to Ada."), sid)  # fmt: skip
         m5 = add_meeting(session, dan, template_id, datetime(2026, 11, 3, 10, 0, tzinfo=UTC), "Dan private notes", notes("MULBERRY reorganisation: who is affected."), sid)  # fmt: skip
         # An approved decision about the hiring plan: the model's "Hiring plan" topic is removed by code.
         session.add(Decision(meeting_id=m3.id, text="The hiring plan for next quarter is approved", position=0, fingerprint="d1", status="approved"))  # fmt: skip
         session.add(OpenQuestion(meeting_id=m3.id, text="Which pricing model?", position=0, fingerprint="q1"))  # fmt: skip
         session.add(Task(team_id=team.id, meeting_id=m3.id, title="Send the pricing sheet", assignee_user_id=ada, source="ai", ai_fingerprint="t1", due_date=date(2026, 10, 30), assigned_on=date(2026, 10, 26)))  # fmt: skip
+        session.add(Task(team_id=team.id, meeting_id=m4.id, title="Maybe plan the offsite", source="ai", ai_fingerprint="t3", suggested=True, confidence="low", assigned_on=date(2026, 11, 4)))  # fmt: skip
         session.add(Task(team_id=team.id, meeting_id=m3.id, title="Maybe book the venue", source="ai", ai_fingerprint="t2", suggested=True, confidence="low", assigned_on=date(2026, 11, 2)))  # fmt: skip
         session.commit()
         ids.update(series=sid, m1=m1.id, m2=m2.id, m3=m3.id, m4=m4.id, m5=m5.id)
@@ -348,16 +349,20 @@ def run(base: str, ids: dict, engine, model: FakeModel) -> None:
     )
     run_job(engine, model, datetime.now(UTC))
     note_file("prompt-sent-to-model", "What the model was shown (the worker's job, run here with the stand-in model): the system prompt and the user message. Five meetings exist in the series; the model got four. Dan's private meeting (MULBERRY) was never read: the job reads only the meetings the Series page shows to the series' owner (Ada), which are her own and those shared with the team. Ada's own private meeting is read.", {"model": model.calls[-1]["model"], "max_completion_tokens": model.calls[-1]["max_completion_tokens"], "timeout": model.calls[-1]["timeout"], "system": model.calls[-1]["messages"][0]["content"], "user": model.calls[-1]["messages"][1]["content"]})  # fmt: skip
-    note_file("stored-after-the-job", "The `series_topics` rows after the job. The stand-in model proposed three topics; \"Hiring plan\" is gone: more than half of its words are in an approved decision of the series (checked in code). `meeting_ids` are the meetings a topic cites; `source_meeting_ids` are all four meetings the model was shown (Dan's private one is not among them). A viewer who cannot read all of the sources sees a topic only if its words are in the notes they can read.", stored(engine))  # fmt: skip
+    note_file("stored-after-the-job", "The `series_topics` rows after the job. The stand-in model proposed three topics; \"Hiring plan\" is gone: more than half of its words are in an approved decision of the series (checked in code). `meeting_ids` are the meetings a topic cites; `source_meeting_ids` are all three meetings the model was shown. A viewer who cannot read every one of them is not shown the topic.", stored(engine))  # fmt: skip
     note_file("ledger-after-the-job", "The ledger row (`ai_runs`, kind `topics`). No meeting text is stored; `meeting_id` and the account are null (one call per series).", ledger(engine))  # fmt: skip
-    ada.call("series-ada", "GET", page, note="Ada (the series' owner) reads two topics: \"Pricing model\" across three meetings, and \"Compensation review\" across a shared meeting and her own private one. `line` is the sub-line, written by the server; `dates_text` is in her zone, oldest first. `suggested_agenda` lists the topics' agenda sentences first, then the overdue task, the carried question and the suggested task to confirm.")  # fmt: skip
-    dan.call("series-dan", "GET", page, note="Dan (a teammate) may read the three shared meetings but not Ada's private one. \"Pricing model\" is shown with its three readable meetings. \"Compensation review\" came from one shared and one private meeting: Dan can read only one, so the whole topic is hidden from him (its label would reveal what Ada's private meeting said). Its agenda line is hidden with it. Nothing from Dan's own private meeting was ever read by the job.")  # fmt: skip
+    ada.call("series-ada", "GET", page, note="Ada (the series' owner): two topics, both from shared meetings. `line` is the sub-line, written by the server; `dates_text` is in her zone, oldest first. `suggested_agenda` lists the topics' agenda sentences first, then the overdue task, the carried question and the suggested task to confirm (counted over the series' LAST meeting that she may read: her own private one, which holds one).")  # fmt: skip
+    dan.call("series-dan", "GET", page, note="Dan (a teammate) reads every shared meeting, so he sees the same two topics as Ada. \"Confirm N suggested tasks from last time\" counts the last meeting HE may read, which is his own private one of 3 Nov (it holds none), so he has no such line; Ada's last readable meeting (her private one of 4 Nov) holds one, so she has it. Neither private meeting was ever read by the job.")  # fmt: skip
     eve.call("series-eve", "GET", page, note="Another team: 404, the same as for any series that is not yours.")  # fmt: skip
     ada.call("agenda-add", "POST", f"{page}/agenda", body={"text": "Decide the pricing model"}, note="\"Add to agenda\" posts the suggested line's `text` to the existing agenda route.")  # fmt: skip
     after_add = ada.call("series-after-add", "GET", page, note="The agenda now holds the line, so the FE shows \"Added\" for the suggested row whose `text` equals an agenda item's `text` (exact string). `suggested_agenda` is unchanged: it does not hide added lines.")  # fmt: skip
     item = after_add.json()["agenda"][0]["id"]
     ada.call("agenda-remove", "DELETE", f"{page}/agenda/{item}", note="A second click on \"Added\" removes the item by its id.")  # fmt: skip
     ada.call("series-after-remove", "GET", page, note="Back to \"Add to agenda\".")  # fmt: skip
+    ada.call("unshare-meeting", "DELETE", f"/api/meetings/{ids['m3']}/share", note="Ada makes the 2 Nov meeting private again. This also marks the series so the worker looks at it again soon.")  # fmt: skip
+    dan.call("series-dan-after-unshare", "GET", page, note="Dan can no longer read a meeting the model was shown (and both topics cite it), so BOTH topics are gone from his page, and their agenda lines with them. Nothing says why. The topics come back after the worker recomputes from the meetings that are still shared (or if the meeting is shared again).")  # fmt: skip
+    ada.call("series-ada-after-unshare", "GET", page, note="Ada still reads every meeting behind the topics (her own), so her page is unchanged.")  # fmt: skip
+    ada.call("reshare-meeting", "POST", f"/api/meetings/{ids['m3']}/share", note="Shared again.")  # fmt: skip
     # A new meeting changes the input; the model then fails once: the stored set stays as it was.
     with Session(engine) as session:
         template_id = session.scalars(select(Template.id).where(Template.owner_user_id == ids["ada@example.test"])).first()  # fmt: skip
@@ -368,7 +373,7 @@ def run(base: str, ids: dict, engine, model: FakeModel) -> None:
         session.commit()
     model.mode = "garbage"
     run_job(engine, model, datetime.now(UTC))
-    ada.call("series-after-a-failed-run", "GET", page, note="The model answered with something that is not the requested JSON (STAND-IN misbehaving on purpose). The job records a failed ledger row and leaves the stored topics exactly as they were; the page is unchanged (the new meeting is in `past_meetings`).")  # fmt: skip
+    ada.call("series-after-a-failed-run", "GET", page, note="The model answered with something that is not the requested JSON (STAND-IN misbehaving on purpose). The job records a failed ledger row and leaves the stored topics exactly as they were. The new meeting of 9 Nov is now Ada's last meeting and holds no suggested task, so her \"Confirm\" line is gone: that count follows the last meeting.")  # fmt: skip
     note_file("ledger-after-the-failed-run", "Two rows now: the first ok, the second failed with the error class name only.", ledger(engine))  # fmt: skip
 
 

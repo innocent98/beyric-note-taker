@@ -3,9 +3,8 @@
 `series_topics` holds what the worker's one model call per series found: topics discussed in two or
 more of the series' meetings without a decision. It is replaced as a set at each computation and
 read as stored (a page load never calls the model). `meeting_ids` are the meetings the topic cites
-and `source_meeting_ids` every meeting the model was shown. Every read filters them through what
-the viewer may read, hides a topic with fewer than two left and, when the viewer cannot read all
-the meetings the model saw, shows it only if its words are in the notes they can read.
+and `source_meeting_ids` every meeting the model was shown (only meetings shared with the series'
+team are ever shown). A read hides a topic unless the viewer can still read every one of them.
 
 Three columns on `series` drive the job: `topics_signature` (a hash of what the last successful
 call was given, so an unchanged series costs no call), `topics_checked_at` (null means "look again

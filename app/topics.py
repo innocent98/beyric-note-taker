@@ -9,14 +9,12 @@ a reason from a fixed list and at least two distinct valid meeting numbers, at m
 kept, and a topic whose words overlap an *approved* decision of the series by more than half is
 dropped. The rows in `series_topics` are replaced as a set; a failed call leaves the old rows.
 
-**Visibility.** The series has no single reader, so the job reads exactly the meetings the Series
-page shows to the series' owner (`series.meetings_of(series, owner)`): the owner's own and those
-shared with the team. A private meeting of another teammate is never read. Even so, the owner's
-private meetings are in the input, so a topic's words may come from a meeting a teammate cannot
-read: the read side filters every topic's `meeting_ids` through `visible_meetings(viewer)`, hides a
-topic with fewer than two left, and, when the viewer cannot read every meeting the model was shown
-(`source_meeting_ids`), shows it only if its words are in the notes they can read
-(`series.topics_for`).
+**Visibility.** The job reads only the meetings **shared with the series' team**
+(`source_meetings`), so every reader of the series may read every meeting a word could come from.
+A private meeting, the owner's own included, is never an input. Sharing can change afterwards, so
+the read side (`series.topics_for`) is a guard: a topic is shown only to a viewer who can still read
+every meeting behind it, cited or merely shown to the model (`source_meeting_ids`); unsharing marks
+the series stale so the job recomputes.
 
 Meeting text is data, never instructions: it sits between delimiters and the system prompt says so.
 The ledger (`ai_runs`, kind `topics`) keeps the model, the token counts and the outcome; no text.
@@ -31,7 +29,7 @@ from datetime import UTC, datetime, timedelta
 
 import openai
 from openai import OpenAI
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import ai_runs, titles
@@ -58,9 +56,12 @@ MEETING_CHARS = 2600  # one meeting's share of the input
 DISCUSSION_CHARS = 1800  # of which the discussion may use this much
 MAX_OUTPUT_TOKENS = 900
 TOPICS_TIMEOUT = 45.0
-MAX_ATTEMPTS = 3  # failed calls before the job waits for the input to change
+MAX_ATTEMPTS = 3  # failed calls in a row before the job waits (`ATTEMPTS_RESET`, or a change)
 RECHECK = timedelta(hours=6)  # how often an unchanged series is looked at again (no call)
 RETRY_GAP = timedelta(minutes=30)
+ATTEMPTS_RESET = timedelta(
+    hours=24
+)  # after this long, a series that failed `MAX_ATTEMPTS` times may try again
 PER_PASS = 25  # series looked at in one worker pass, stopping at the first model call
 OVERLAP_DROPS_ABOVE = 0.5
 NOTHING = "- (nothing noted)"
@@ -82,21 +83,32 @@ class Topic:
 
 
 def source_meetings(session: Session, series: Series) -> list[Meeting]:
-    """The ready meetings the Series page shows to the series' owner, newest first. Nothing when
-    the series has no active owner in its own team: nobody's view can be named then."""
-    if series.owner_user_id is None:
-        return []
-    owner = session.get(User, series.owner_user_id)
-    if owner is None or owner.status != "active":
-        return []
-    member = series_rules.membership(session, owner)
-    if member is None or member.team_id != series.team_id:
-        return []
-    return series_rules.meetings_of(session, series, owner, limit=series_rules.PAGE_LIST_LIMIT)
+    """The ready meetings of the series that are **shared with its team**, newest first. Only
+    those: every reader of the series may read them, so no word the model writes can come from a
+    meeting some of them may not read. A private meeting, the series owner's own included, is
+    never an input. (A person's meetings leave the team's series when they leave the team, and a
+    meeting of an account being deleted is treated as absent, as `visibility.can_read_clause`
+    does.)"""
+    return list(
+        session.scalars(
+            select(Meeting)
+            .where(
+                Meeting.series_id == series.id,
+                Meeting.status == "ready",
+                Meeting.shared_team_id == series.team_id,
+                Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
+            )
+            .order_by(Meeting.created_at.desc(), Meeting.id.desc())
+            .limit(series_rules.PAGE_LIST_LIMIT)
+        )
+    )
 
 
 def _line(text: str, limit: int) -> str:
-    return titles.clean_title(text, limit).replace("<", "&lt;").replace(">", "&gt;")
+    """One line of meeting text for the prompt: `&`, `<` and `>` escaped, so spoken or edited text
+    cannot pass for the prompt's own tags (or for an escape the prompt describes)."""
+    cleaned = titles.clean_title(text, limit)
+    return cleaned.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _decisions_of(session: Session, meeting_ids: list[int]) -> dict[int, list[Decision]]:
@@ -202,7 +214,7 @@ or details are not final.
 agenda ("Decide the pricing model").
 - At most 5 topics, the most important first. Reply {"topics": []} when nothing qualifies.
 - Plain text only: no Markdown, no HTML, no links, and no names of people.
-- &lt; and &gt; in the meetings stand for the characters < and >."""
+- &amp;, &lt; and &gt; in the meetings stand for the characters &, < and >."""
 
 SCHEMA = {
     "type": "object",
@@ -338,14 +350,16 @@ def check_reply(raw: str, count: int, approved: list[str]) -> list[Topic]:
 # ---- the job ----
 
 
-def _finish(session: Session, series_id: int, stamp: datetime, **values) -> None:
+def _finish(session: Session, series_id: int, stamp: datetime, **values) -> bool:
     """Write the series' job state only if nothing marked it stale since this attempt claimed it
-    (a stale mark nulls `topics_checked_at`; then the next pass looks again)."""
-    session.execute(
+    (a stale mark nulls `topics_checked_at`; then the next pass looks again). True when exactly
+    this attempt's claim was still in place."""
+    done = session.execute(
         update(Series)
         .where(Series.id == series_id, Series.topics_checked_at == stamp)
         .values(**values)
-    )
+    ).rowcount
+    return done == 1
 
 
 def claim_next(session: Session, now: datetime) -> tuple[int, datetime] | None:
@@ -356,8 +370,21 @@ def claim_next(session: Session, now: datetime) -> tuple[int, datetime] | None:
     row = session.scalars(
         select(Series)
         .where(
-            Series.topics_attempts < MAX_ATTEMPTS,
-            (Series.topics_checked_at.is_(None)) | (Series.topics_checked_at <= now - RECHECK),
+            or_(
+                and_(
+                    Series.topics_attempts < MAX_ATTEMPTS,
+                    or_(
+                        Series.topics_checked_at.is_(None),
+                        Series.topics_checked_at <= now - RECHECK,
+                    ),
+                ),
+                # failed `MAX_ATTEMPTS` times: try again after a day (a provider outage must not
+                # freeze the series until its next meeting)
+                and_(
+                    Series.topics_attempts >= MAX_ATTEMPTS,
+                    Series.topics_checked_at <= now - ATTEMPTS_RESET,
+                ),
+            )
         )
         .order_by(Series.topics_checked_at.asc().nulls_first(), Series.id)
         .limit(1)
@@ -366,6 +393,8 @@ def claim_next(session: Session, now: datetime) -> tuple[int, datetime] | None:
     if row is None:
         return None
     row.topics_checked_at = now
+    if row.topics_attempts >= MAX_ATTEMPTS:
+        row.topics_attempts = 0
     series_id = row.id
     session.commit()
     return series_id, now
@@ -449,17 +478,19 @@ def compute(
             type(failure.__cause__ or failure).__name__,
         )
         attempts = (series.topics_attempts or 0) + 1
-        # Look again in `RETRY_GAP`, up to `MAX_ATTEMPTS` times, unless the input changes first.
+        # Look again in `RETRY_GAP`, up to `MAX_ATTEMPTS` times in a row; then in `ATTEMPTS_RESET`
+        # (or at once if the input changes first).
         _finish(
             session,
             series_id,
             stamp,
             topics_attempts=attempts,
-            topics_checked_at=now - RECHECK + RETRY_GAP,
+            topics_checked_at=now if attempts >= MAX_ATTEMPTS else now - RECHECK + RETRY_GAP,
         )
-    else:
+    elif _finish(session, series_id, stamp, topics_signature=sig, topics_attempts=0):
+        # Only the attempt that still holds the claim writes: a series marked stale while the model
+        # ran (or claimed by another worker since) keeps what it has, and is looked at again.
         _replace(session, series_id, topics, numbers)
-        _finish(session, series_id, stamp, topics_signature=sig, topics_attempts=0)
     session.commit()
     return True
 
