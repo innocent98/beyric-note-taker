@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BacklogView } from "@/components/app/backlog-view";
 import { SprintHeader } from "@/components/app/sprint-header";
+import { SuggestedTasks } from "@/components/app/suggested-tasks";
 import { TaskCard } from "@/components/app/task-card";
 import { TaskDrawer } from "@/components/app/task-drawer";
 import { INVITE_NAME_KEY } from "@/components/app/team-view";
+import { useSuggestedActions } from "@/components/app/use-suggested";
 import { useToday } from "@/components/app/use-today";
 import { Alert, Button, Icon, PageHead, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
@@ -50,14 +52,21 @@ const COLUMN_DOT: Record<TaskStatus, string> = { todo: "tk-dot-todo", doing: "tk
 // then left out rather than drawn empty. `sprints` is null when the sprints could not be read: the
 // board then shows every task, as it did before sprints, with a line and Try again; left out
 // (undefined) it is simply not drawn.
+//
+// Suggested tasks: `suggested` is the action items the AI was unsure of (`GET /api/tasks?suggested=true`),
+// which the board and every count leave out. Its section sits above the board, hidden when there are
+// none; Accept puts a task on the board, Dismiss deletes it, Edit opens the drawer (the task stays
+// suggested until it is accepted). `null` (the list could not be read) draws no section.
 export function TasksView({
   initial,
+  suggested = [],
   projects = null,
   milestones = [],
   sprints,
   canInviteToTeam = false,
 }: {
   initial: TaskList | null;
+  suggested?: Task[] | null;
   projects?: Project[] | null;
   milestones?: Milestone[];
   sprints?: SprintBook | null;
@@ -66,6 +75,7 @@ export function TasksView({
   const today = useToday();
   const router = useRouter();
   const [data, setData] = useState<TaskList | null>(initial);
+  const [waiting, setWaiting] = useState<Task[]>(suggested ?? []);
   const [failed, setFailed] = useState(initial === null);
   const [filter, setFilter] = useState<Filter>("all");
   const [groupBy, setGroupBy] = useState<GroupBy>("assigned");
@@ -90,16 +100,36 @@ export function TasksView({
     setData((current) =>
       current ? { ...current, tasks: current.tasks.map((t) => (t.id === next.id ? next : t)) } : current,
     );
+    setWaiting((current) => current.map((t) => (t.id === next.id ? next : t)));
   }, []);
   const drop = useCallback((id: number) => {
     setData((current) => (current ? { ...current, tasks: current.tasks.filter((t) => t.id !== id) } : current));
+    setWaiting((current) => current.filter((t) => t.id !== id));
     setOpenId(null);
+  }, []);
+  // A task accepted joins the board at once (the answer is the whole task) and leaves the section.
+  const accepted = useCallback((next: Task) => {
+    setWaiting((current) => current.filter((t) => t.id !== next.id));
+    setData((current) =>
+      current ? { ...current, tasks: [next, ...current.tasks.filter((t) => t.id !== next.id)] } : current,
+    );
+  }, []);
+  const suggestions = useSuggestedActions({ flash, onAccepted: accepted, onDismissed: drop });
+
+  // The suggestions are read again with the board; a failure here leaves the ones on screen.
+  const reloadSuggested = useCallback(async () => {
+    try {
+      setWaiting((await api.tasks.list({ suggested: true, limit: 500 })).tasks);
+    } catch {
+      // the section keeps what it had
+    }
   }, []);
 
   async function reload() {
     setFailed(false);
     try {
       setData(await api.tasks.list({ limit: 500 }));
+      void reloadSuggested();
     } catch {
       setFailed(true);
     }
@@ -113,12 +143,13 @@ export function TasksView({
         const [list, next] = await Promise.all([api.tasks.list({ limit: 500 }), loadSprintBook(api, projects)]);
         setData(list);
         setFailed(false);
+        void reloadSuggested();
         if (next || !quiet) setBook(next);
       } catch (caught) {
         if (!quiet) throw caught;
       }
     },
-    [projects],
+    [projects, reloadSuggested],
   );
   const hasBook = Boolean(book);
   useEffect(() => {
@@ -247,7 +278,7 @@ export function TasksView({
           },
         ]
       : [];
-  const open = tasks.find((t) => t.id === openId) ?? null;
+  const open = tasks.find((t) => t.id === openId) ?? waiting.find((t) => t.id === openId) ?? null;
   const needOwner = tasks.filter((t) => !t.assignee && t.status !== "done");
   const needCheck = tasks.filter((t) => t.check_project && t.status !== "done");
   const firstToReview = needOwner[0] ?? needCheck[0];
@@ -442,6 +473,15 @@ export function TasksView({
           </button>
         </div>
       ) : null}
+      {suggested !== null ? (
+        <SuggestedTasks
+          tasks={waiting}
+          busyId={suggestions.busyId}
+          onAccept={(task) => void suggestions.accept(task)}
+          onDismiss={(task) => void suggestions.dismiss(task)}
+          onEdit={(task) => setOpenId(task.id)}
+        />
+      ) : null}
       {view === "board" || !book ? (
         <div className="tk-board">
           {COLUMNS.map(([status, label]) => {
@@ -530,6 +570,9 @@ export function TasksView({
           milestones={milestones}
           sprints={book ?? null}
           canInvite={canInviteToTeam}
+          onAccept={(task) => void suggestions.accept(task)}
+          onDismiss={(task) => void suggestions.dismiss(task)}
+          suggestionBusy={suggestions.busyId !== null}
           onInvite={(name) => {
             // The Team page opens its invite dialog with this name (team-view.tsx).
             try {

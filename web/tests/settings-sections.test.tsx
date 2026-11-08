@@ -96,7 +96,7 @@ describe("nothing is on, nothing is connected, nothing is invented", () => {
   it("shows every switch off and no connected state or sample figure", () => {
     const { container } = render(<SettingsPlannedSections />);
     const switches = screen.getAllByRole("switch");
-    expect(switches).toHaveLength(4);
+    expect(switches).toHaveLength(5);
     for (const toggle of switches) expect(toggle.getAttribute("aria-checked")).toBe("false");
     const text = container.textContent ?? "";
     for (const invented of [
@@ -126,7 +126,7 @@ describe("every control is off", () => {
   it("has no control a person could use: each is disabled, none is a link", () => {
     const { container } = render(<SettingsPlannedSections />);
     const controls = everyControl(container);
-    expect(controls).toHaveLength(9); // 4 switches, 3 selects, the Connect and Connect Slack buttons
+    expect(controls).toHaveLength(10); // 5 switches, 3 selects, the Connect and Connect Slack buttons
     for (const control of controls) {
       expect(control.tagName).not.toBe("A");
       const off = (control as HTMLButtonElement).disabled || control.getAttribute("aria-disabled") === "true";
