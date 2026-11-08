@@ -702,7 +702,23 @@ def test_the_agenda_sentence_must_be_grounded_too(app, session, template, weekly
     share(session, a, owner)
     share(session, b, owner)
     page = sign_in(app, DANIEL_EMAIL).get(f"/api/series/{weekly.id}").json()
-    assert page["topics"] == [] and "Fire the CTO" not in json.dumps(page)
+    # the label is in two readable meetings, so the topic stands; the model's sentence does not
+    assert [(t["label"], t["agenda"]) for t in page["topics"]] == [("Pricing model", "")]
+    assert "Fire the CTO" not in json.dumps(page) and page["suggested_agenda"] == []
+    owner_page = _owner_page(app, session, weekly)  # reads every meeting the model saw
+    assert owner_page["topics"][0]["agenda"] == "Fire the CTO over compensation"
+    assert owner_page["suggested_agenda"][0]["text"] == "Fire the CTO over compensation"
+    # a sentence made only of generic verbs and words the readable notes hold is shown
+    topic = session.scalars(select(SeriesTopic)).one()
+    topic.agenda = "Decide the pricing model"
+    session.commit()
+    page = sign_in(app, DANIEL_EMAIL).get(f"/api/series/{weekly.id}").json()
+    assert page["topics"][0]["agenda"] == "Decide the pricing model"
+    # one word the readable notes never say hides it
+    topic.agenda = "Decide the pricing model for Mulberry"
+    session.commit()
+    page = sign_in(app, DANIEL_EMAIL).get(f"/api/series/{weekly.id}").json()
+    assert page["topics"][0]["agenda"] == ""
 
 
 def test_the_job_stores_every_meeting_it_showed_the_model(session, weekly, three_weeks):

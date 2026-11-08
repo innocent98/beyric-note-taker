@@ -851,7 +851,6 @@ class TopicView:
 
 
 MIN_GROUNDED = 2  # readable meetings that must carry a topic's label when some meetings are hidden
-AGENDA_GROUNDED_ABOVE = 0.5  # share of the agenda sentence's words the readable notes must hold
 
 
 def _notes_text(meeting: Meeting) -> str:
@@ -863,19 +862,26 @@ def _notes_text(meeting: Meeting) -> str:
     return " ".join([*key_points(meeting.notes), *parse_notes(meeting.notes).decisions])
 
 
-def _grounded(row: SeriesTopic, readable: list[Meeting]) -> bool:
-    """Whether a topic's words are in what this viewer can read: every content word of the label
-    is in the notes of at least `MIN_GROUNDED` of their readable meetings, and more than half of the
-    agenda sentence's content words are in the notes of those readable meetings together. A label
-    or sentence with no content words is grounded nowhere."""
+# Words an agenda sentence may carry that no meeting need have said ("Decide the pricing model").
+GENERIC_AGENDA_WORDS = frozenset(
+    stems(
+        "decide discuss agree review settle confirm finalise finalize fix set assign resolve plan"
+    )
+)
+
+
+def _label_grounded(row: SeriesTopic, texts: list[set[str]]) -> bool:
+    """Every content word of the label is in the notes of at least `MIN_GROUNDED` of the viewer's
+    readable meetings. A label with no content words is grounded nowhere."""
     label = set(stems(row.label))
-    agenda = set(stems(row.agenda))
-    if not label or not agenda:
-        return False
-    texts = [set(stems(_notes_text(m))) for m in readable]
-    if sum(1 for words in texts if label <= words) < MIN_GROUNDED:
-        return False
-    return len(agenda & set().union(*texts)) / len(agenda) > AGENDA_GROUNDED_ABOVE
+    return bool(label) and sum(1 for words in texts if label <= words) >= MIN_GROUNDED
+
+
+def _agenda_grounded(row: SeriesTopic, texts: list[set[str]]) -> bool:
+    """Every content word of the agenda sentence, other than generic directive verbs, is in the
+    viewer's readable notes (together). A sentence of only generic words is not grounded."""
+    words = set(stems(row.agenda)) - GENERIC_AGENDA_WORDS
+    return bool(words) and words <= set().union(*texts)
 
 
 def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView]:
@@ -887,9 +893,10 @@ def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView
     read fewer than two of is hidden: its words must never reach someone who cannot read the
     meetings behind it. The model's choice of which meetings to cite is not access control: the
     job stores every meeting it was *shown* (`source_meeting_ids`), and when the viewer cannot read
-    all of those the topic is shown only if its label and agenda sentence are grounded in the
-    notes of the meetings they can read (`_grounded`). Fail closed: a paraphrase the readable notes
-    do not echo is hidden from that viewer.
+    all of those the topic is shown only if its label is grounded in the notes of the meetings they
+    can read (`_label_grounded`), and its agenda sentence only if every word of it but the generic
+    directive verbs is too (`_agenda_grounded`; else `agenda` is "" and no line is offered).
+    Fail closed: a paraphrase the readable notes do not echo is not shown to that viewer.
     """
     rows = list(
         session.scalars(
@@ -920,12 +927,17 @@ def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView
         seen = [readable[i] for i in dict.fromkeys(row.meeting_ids) if i in readable]
         if len(seen) < 2:
             continue
-        if any(i not in readable for i in ids_of(row)) and not _grounded(
-            row, [readable[i] for i in sorted(ids_of(row)) if i in readable]
-        ):
-            continue
+        agenda = row.agenda
+        if any(i not in readable for i in ids_of(row)):
+            texts = [
+                set(stems(_notes_text(readable[i]))) for i in sorted(ids_of(row)) if i in readable
+            ]
+            if not _label_grounded(row, texts):
+                continue
+            if not _agenda_grounded(row, texts):
+                agenda = ""  # the label stands; the model's sentence is not shown to this viewer
         seen.sort(key=lambda m: (m.created_at, m.id))
-        out.append(TopicView(row.id, row.label, row.agenda, row.reason, seen))
+        out.append(TopicView(row.id, row.label, agenda, row.reason, seen))
     return out
 
 
@@ -980,7 +992,7 @@ def agenda_suggestions(
     suggested tasks to confirm. A line with nothing behind it is left out. `today` is the viewer's
     day, and `unfinished` must already be what the viewer may see (suggested tasks are not in it).
     """
-    lines: list[tuple[str, str]] = [("topic", t.agenda) for t in topics]
+    lines: list[tuple[str, str]] = [("topic", t.agenda) for t in topics if t.agenda]
     overdue = sum(1 for t in unfinished if t.due_date is not None and t.due_date < today)
     if overdue:
         lines.append(

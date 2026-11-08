@@ -76,7 +76,9 @@ class TopicOut(BaseModel):
     id: int
     # Plain text, at most 60 characters ("Pricing model").
     label: str
-    # The sentence "Suggested agenda" offers for it, plain text, at most 100 characters.
+    # The sentence "Suggested agenda" offers for it, plain text, at most 100 characters. "" when
+    # this viewer cannot read every meeting the model was shown and the sentence is not grounded
+    # in the ones they can: then the topic stands without it and no agenda line is offered.
     agenda: str
     reason: Literal["no_decision", "no_owner", "not_final"]
     # The sub-line, written by the server from `reason` and the number of readable meetings:
