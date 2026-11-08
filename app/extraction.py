@@ -33,6 +33,7 @@ MAX_QUOTE_CHARS = 300
 MAX_HEARD_CHARS = 100
 MAX_REASON_CHARS = 120
 MAX_HEARD_WORDS = 3
+MAX_SPEAKER_WORDS = 4
 QUOTE_FUZZY_RATIO = 0.9
 MIN_FUZZY_WORDS = 3
 TITLE_SHARED_WORDS = 0.6
@@ -385,6 +386,20 @@ def name_in_transcript(name: str | None, transcript: str) -> bool:
     return bool(wanted) and f" {wanted} " in f" {normalise(transcript)} "
 
 
+def speaker_in_transcript(name: str | None, transcript: str) -> bool:
+    """Whether `name` is a speaker of the transcript: what it holds is a label like `[Grace]:` and
+    `name` is that label or some of its words ("Grace" for "[Grace Okoro]:"), at most four words and
+    no digits. A phrase only said in the meeting ("the budget", "everyone") is no speaker."""
+    words = normalise(name or "").split()
+    if not words or len(words) > MAX_SPEAKER_WORDS or any(c.isdigit() for c in name or ""):
+        return False
+    wanted = set(words)
+    return any(
+        speaker is not None and wanted <= set(normalise(speaker).split())
+        for speaker, _ in transcript_turns(transcript)
+    )
+
+
 def due_date_ok(value: str | None, phrase: str | None, meeting_date: date) -> bool:
     """A real YYYY-MM-DD within 400 days of the meeting that falls on the weekday the phrase
     names, when it names one."""
@@ -542,7 +557,7 @@ def _check_decisions(
         out.append(
             CheckedDecision(
                 index,
-                who if name_in_transcript(who, transcript) else None,
+                who if speaker_in_transcript(who, transcript) else None,
                 said if said and quote_in_transcript(said, transcript) else None,
                 entry.proposed is True,
                 related,

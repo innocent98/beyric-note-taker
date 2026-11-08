@@ -6,7 +6,7 @@ The frontend generates its TypeScript types from these (see `scripts/export_open
 from datetime import UTC, date, datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
 
 def _utc(value: datetime) -> datetime:
@@ -574,6 +574,13 @@ class DecisionPatch(Body):
     revisit_on: date | None = Field(None, strict=False)
     # A decision in the caller's log; only with status `replaced` (also in the same request).
     replaced_by_id: int | None = Field(None, ge=1, le=9223372036854775807)
+
+    @field_validator("revisit_on")
+    @classmethod
+    def _sane_day(cls, value: date | None) -> date | None:
+        if value is not None and not date(2000, 1, 1) <= value <= date(2100, 12, 31):
+            raise ValueError("The day must be between 2000-01-01 and 2100-12-31.")
+        return value
 
 
 class ReviewItemOut(BaseModel):

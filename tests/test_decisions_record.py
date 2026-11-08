@@ -128,6 +128,32 @@ def test_a_decider_must_be_a_name_in_the_transcript_and_a_quote_must_have_been_s
     assert (got[1].decided_by, got[1].quote) == (None, None)
 
 
+def test_a_decider_must_be_a_speaker_not_just_words_said_in_the_meeting():
+    # "Metrika" and "March" are said in the meeting; "Grace" and "Adebayo" are its speakers
+    for phrase in (
+        "Metrika",
+        "March",
+        "the budget",
+        "everyone",
+        "Grace and Adebayo agreed it",
+        "Grace 2",
+    ):
+        assert checked(ModelDecision(index=0, decided_by=phrase))[0].decided_by is None, phrase
+    assert checked(ModelDecision(index=0, decided_by="grace"))[0].decided_by == "grace"
+    assert checked(ModelDecision(index=0, decided_by="Adebayo"))[0].decided_by == "Adebayo"
+
+
+def test_a_first_name_matches_a_fuller_speaker_label_and_an_unlabelled_transcript_has_none():
+    full = "[Grace Okoro]: Launch is fourteenth of March.\n[Tunde]: Fine."
+    notes = ParsedNotes(["A"], [], [], [])
+    entry = ModelExtraction(decisions=[ModelDecision(index=0, decided_by="Grace")])
+    assert check_extraction(entry, notes, full, NOW.date()).decisions[0].decided_by == "Grace"
+    longer = ModelExtraction(decisions=[ModelDecision(index=0, decided_by="Grace Okoro Junior")])
+    assert check_extraction(longer, notes, full, NOW.date()).decisions[0].decided_by is None
+    plain = "Grace said launch is fourteenth of March."  # no speaker labels at all
+    assert check_extraction(entry, notes, plain, NOW.date()).decisions[0].decided_by is None
+
+
 def test_a_quote_that_is_almost_there_still_passes_the_same_check_tasks_use():
     got = checked(ModelDecision(index=0, quote="launch is fourteenth of march"))
     assert got[0].quote == "launch is fourteenth of march"
@@ -637,3 +663,79 @@ def test_the_old_rows_read_as_approved_with_nothing_else(api, session, meeting):
         )
         assert (d["related_tasks"], d["replaces"], d["replaced_by"]) == ([], [], None)
     assert body["counts"] == {"all": 2, "approved": 2, "proposed": 0, "replaced": 0, "rejected": 0}
+
+
+# ---- review of #137: empty body, days out of range, concurrent changes ----
+
+
+def test_an_empty_patch_is_refused_and_freezes_nothing(api, session, meeting):
+    extract(session, meeting)
+    ids = ids_of(session, meeting)
+    err = error_of(patch(api, ids[LAUNCH]), 422, "nothing_to_change")
+    assert "at least one" in err["message"]
+    session.expire_all()
+    assert session.get(Decision, ids[LAUNCH]).edited_at is None
+
+
+def test_a_revisit_day_outside_2000_to_2100_is_refused(api, session, meeting):
+    extract(session, meeting)
+    ids = ids_of(session, meeting)
+    for day in ("0001-01-01", "1999-12-31", "2101-01-01", "9999-12-31"):
+        error_of(patch(api, ids[LAUNCH], revisit_on=day), 422, "validation_error")
+    for day in ("2000-01-01", "2100-12-31"):
+        assert patch(api, ids[LAUNCH], revisit_on=day).json()["revisit_on"] == day
+    session.expire_all()
+
+
+def test_a_change_waits_its_turn_and_reads_the_row_as_the_other_change_left_it(
+    api, session, meeting, engine
+):
+    """A session loaded the decision before another request made it Replaced by another decision:
+    the status change that follows must clear that link, not leave the row Approved with a stale
+    replaced_by_id."""
+    from sqlalchemy.orm import Session
+
+    from app.models import User
+    from app.workspace import update_decision
+
+    extract(session, meeting)
+    ids = ids_of(session, meeting)
+    with Session(engine) as stale:
+        owner_row = stale.scalars(select(User)).first()
+        decision = stale.get(Decision, ids[BUDGET])
+        loaded = stale.get(type(meeting), meeting.id)
+        assert decision.status == "proposed" and decision.replaced_by_id is None  # what it holds
+        other = patch(api, ids[BUDGET], status="replaced", replaced_by_id=ids[LAUNCH])
+        assert other.status_code == 200
+        update_decision(stale, owner_row, decision, loaded, status="approved")
+    session.expire_all()
+    row = session.get(Decision, ids[BUDGET])
+    assert (row.status, row.replaced_by_id) == ("approved", None)
+
+
+def test_changing_a_decision_locks_its_row_and_naming_a_replacement_locks_in_id_order(
+    api, session, meeting, engine
+):
+    from sqlalchemy import event
+
+    extract(session, meeting)
+    ids = ids_of(session, meeting)
+    seen: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        seen.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        assert patch(api, ids[LAUNCH], status="rejected").status_code == 200
+        plain = [q for q in seen if "FOR UPDATE" in q]
+        assert plain and not any("pg_advisory_xact_lock" in q for q in seen)
+        seen.clear()
+        done = patch(api, ids[BUDGET], status="replaced", replaced_by_id=ids[LAUNCH])
+        assert done.status_code == 200
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+    lock_at = next(i for i, q in enumerate(seen) if "pg_advisory_xact_lock" in q)
+    rows_at = next(i for i, q in enumerate(seen) if "FOR UPDATE" in q)
+    assert lock_at < rows_at  # the one lock first, then the rows, ordered by id
+    assert "ORDER BY decisions.id" in seen[rows_at]

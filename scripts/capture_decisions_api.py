@@ -468,6 +468,10 @@ def run(base: str, engine) -> None:
         body={"revisit_on": "next friday"},
     )
     dan.call("patch-unknown-field", "PATCH", f"/api/decisions/{free['id']}", body={"text": "x"})
+    dan.call("patch-empty", "PATCH", f"/api/decisions/{free['id']}", body={},
+             note="Nothing to change: 422 `nothing_to_change`, and the decision is NOT marked as touched.")  # fmt: skip
+    dan.call("patch-date-range", "PATCH", f"/api/decisions/{free['id']}", body={"revisit_on": "9999-12-31"},
+             note="A revisit day must be between 2000-01-01 and 2100-12-31: 422 `validation_error`.")  # fmt: skip
 
     # --- the model is asked again: what a person set stays ---
     with Session(engine) as session:

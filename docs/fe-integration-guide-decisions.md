@@ -36,7 +36,7 @@ The owner's whole log, two meetings (the first listed is private), no filter `[c
         "id": 2,
         "title": "Google Meet nat-pppp-rrr",
         "platform": "google_meet",
-        "created_at": "2026-11-08T16:54:13.167501Z"
+        "created_at": "2026-11-08T17:23:05.588120Z"
       },
       "decisions": [
         {
@@ -60,7 +60,7 @@ The owner's whole log, two meetings (the first listed is private), no filter `[c
         "id": 1,
         "title": "Google Meet nat-aaaa-bbb",
         "platform": "google_meet",
-        "created_at": "2026-11-08T16:34:13.162482Z"
+        "created_at": "2026-11-08T17:03:05.583112Z"
       },
       "decisions": [
         {
@@ -138,7 +138,7 @@ The owner's whole log, two meetings (the first listed is private), no filter `[c
 | Field | What it is, and what to do |
 |---|---|
 | `status` | `approved` \| `proposed` \| `replaced` \| `rejected`. Drives the pill (Approved green, Proposed amber, Replaced grey, Rejected red) and greys the text of replaced and rejected ones |
-| `decided_by` | A speaker's name, **only when the server found that name in the transcript**; otherwise `null` (as on decision 2 above, where the stand-in model named a person who is not in the meeting). Show "Decided by {name}" only when not null. **It is not the user who owns the meeting.** |
+| `decided_by` | A speaker's name, **only when it is (a word of) a speaker label of the transcript** (`[Grace Okoro]:` allows `Grace`); a phrase that is merely said in the meeting is dropped; otherwise `null` (as on decision 2 above, where the stand-in model named a person who is not in the meeting). Show "Decided by {name}" only when not null. **It is not the user who owns the meeting.** |
 | `quote` | The words that show the decision, **only when the server found them in the transcript**; otherwise `null` |
 | `quote_speaker`, `line` | Who said `quote` and its **1-based row in the transcript the meeting page shows**. `null` together when there is no `quote` **or** the quote could not be found again in the displayed transcript (so `quote` can be present with `line` null: show the words without the link). Never a time: none is stored |
 | `revisit_on` | `YYYY-MM-DD` or `null`. A calendar day, no time zone: show it as written (for example "Revisit Sun 8 Nov 2026") |
@@ -284,7 +284,7 @@ Rules the FE can rely on:
 | Case | Status | Body |
 |---|---|---|
 | A teammate who **can read** the decision but did not record the meeting `[capture 29]` | 403 | `{"error": {"code": "not_owner", "message": "Only the person who recorded the meeting can change this."}}` |
-| Someone who **cannot read** it: a private meeting `[capture 30]`, not on the team `[capture 31]`, no such id `[capture 32]`, a hidden decision `[capture 48]` | 404 | `{"error": {"code": "not_found", "message": "No such decision"}}` |
+| Someone who **cannot read** it: a private meeting `[capture 30]`, not on the team `[capture 31]`, no such id `[capture 32]`, a hidden decision `[capture 50]` | 404 | `{"error": {"code": "not_found", "message": "No such decision"}}` |
 | No CSRF header `[capture 33]` | 403 | `{"error": {"code": "csrf_rejected", "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."}}` |
 | `replaced_by_id` while the status is not Replaced `[capture 34]` | 422 | `{"error": {"code": "replaced_by_needs_replaced", "message": "Choose Replaced before naming the decision that replaced this one."}}` |
 | `replaced_by_id` is the decision itself `[capture 35]` | 422 | `{"error": {"code": "replaced_by_self", "message": "A decision cannot be replaced by itself."}}` |
@@ -294,6 +294,8 @@ Rules the FE can rely on:
 | `"status": null` `[capture 40]` | 422 | `{"error": {"code": "validation_error", "message": "Status cannot be null."}}` |
 | A revisit day that is not a date `[capture 41]` | 422 | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "revisit_on", "message": "Input should be a valid date or datetime, invalid character in year"}]}}` |
 | An unknown field `[capture 42]` | 422 | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "text", "message": "Extra inputs are not permitted"}]}}` |
+| An **empty body** `{}` `[capture 43]`: nothing is changed and the decision is **not** marked as touched | 422 | `{"error": {"code": "nothing_to_change", "message": "Send at least one of status, revisit_on or replaced_by_id."}}` |
+| A revisit day outside 2000-01-01 to 2100-12-31 `[capture 44]` (the message is the library's: show your own words) | 422 | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "revisit_on", "message": "Value error, The day must be between 2000-01-01 and 2100-12-31."}]}}` |
 
 The 404 text for a decision that is missing, hidden or unreadable is the same on purpose. A teammate never needs to see the 403: render no select for them (`can_edit: false`). If it happens anyway (their access changed meanwhile), show the page's error line **"Could not update the decision. Try again."** (lead-designed wording) and leave the row as it was.
 
@@ -312,22 +314,23 @@ The designer's "Replaced by: {text}" opens that decision with the tab on All and
 
 ## 7. UX consequences the FE must surface
 
-1. **The owner's status and date are final for the AI.** Do not tell the owner that a re-read of the notes may change them: it will not `[capture 43]` (the stand-in model said the opposite for every decision after the owner changed them, and every status stayed as the owner set it).
+1. **The owner's status and date are final for the AI.** Do not tell the owner that a re-read of the notes may change them: it will not `[capture 45]` (the stand-in model said the opposite for every decision after the owner changed them, and every status stayed as the owner set it).
 2. **A related task may disappear from a decision** without anyone editing the decision: when a task is dismissed, deleted, or turned back into a suggestion. A decision's related-task count can differ between two teammates.
-3. **A suggested task is never a related task** `[capture 45]`: the pricing task was made a suggested task and is gone from decision 1's `related_tasks` (it comes back when it is accepted).
+3. **A suggested task is never a related task** `[capture 47]`: the pricing task was made a suggested task and is gone from decision 1's `related_tasks` (it comes back when it is accepted).
 4. **There is no mail or bell for a revisit day.** Do not offer "remind me".
-5. **Hiding is unchanged**: "Remove from log" (inside the expanded row) asks "Remove this decision from the log? It stays in the meeting notes." and calls `POST /api/decisions/{id}/hide` (204) `[capture 46]`; the decision then leaves the groups and the counts `[capture 47]`, and cannot be changed (404).
-6. **A person's changes are lost only if the notes change that decision's words**: a decision is identified by its text, so if the notes are rewritten and that bullet's wording changes it is a new decision (Approved, nothing set). Do not cache a decision across a rewrite.
+5. **Hiding is unchanged**: "Remove from log" (inside the expanded row) asks "Remove this decision from the log? It stays in the meeting notes." and calls `POST /api/decisions/{id}/hide` (204) `[capture 48]`; the decision then leaves the groups and the counts `[capture 49]`, and cannot be changed (404).
+6. **A person's changes are lost if the notes change that decision's words.** A decision is identified by its text: when the notes are rewritten, or a bullet is edited so its wording changes, the old decision is **deleted** and a new one is made (Approved, nothing set, no revisit day, no replaced-by). Anything that pointed at the old one loses its link: a decision that was Replaced by it stays Replaced with no replacement named. Do not cache a decision across a rewrite, and do not promise the owner that a status survives an edit of the wording.
 
 ## 8. Verification table
 
 | Behaviour | Verified |
 |---|---|
 | Shapes of the list, counts, `due_this_week`, tabs, the owner, teammate and outsider views | **verified live** (captures 11 to 18, 21) |
-| Every PATCH success and every error string in section 4 | **verified live** (captures 19 to 42, 48) |
-| The owner's changes survive a re-read of the notes | **verified live** against a stand-in model reply (capture 43); also unit tests |
+| Two changes to one decision at once (row locks, the one lock for naming a replacement) | **unit test only** (a stale second session, and the statements issued); not captured: a script cannot make two requests collide reliably |
+| Every PATCH success and every error string in section 4 | **verified live** (captures 19 to 44, 50) |
+| The owner's changes survive a re-read of the notes | **verified live** against a stand-in model reply (capture 45); also unit tests |
 | The checks drop a decider, a quote and a related action the transcript does not support | **verified live** against a stand-in model reply (captures 9 and 10); also unit tests |
-| Suggested tasks never appear as related tasks | **verified live** (capture 45) and by unit tests |
+| Suggested tasks never appear as related tasks | **verified live** (capture 47) and by unit tests |
 | `quote_speaker` / `line` of the evidence | **verified live** for found quotes (decisions 1 and 3 of capture 11); the "quote present, row not found" case (`line` null with `quote` set) is a unit test only, not captured |
 | `due_this_week` in a **non-UTC zone** and at the week's edges | **unit test only** (zone UTC+14, Monday and Sunday); the capture ran in the default zone |
 | What the **real model** returns for `decided_by`, `quote`, `proposed`, `related_actions` | **not verified**: stand-in reply. The first live meeting shows the real choices and how often `proposed` fires |

@@ -38,7 +38,7 @@ The designer's file turns Decisions from a flat list into a tracked record (stat
 | Writing and rules | `app/workspace.py` (`_write_decisions`, `run_extraction`, `decision_counts`, `due_this_week`, `update_decision`, `list_decisions`) |
 | API | `app/api_workspace.py` (`_present_decisions`, `GET`, `PATCH`), `app/api_schemas.py` (`DecisionOut`, `DecisionList`, `DecisionPatch`, `DecisionRef`, `DecisionTaskRef`, `DecisionCounts`) |
 | Generated | `docs/openapi.json`, `web/lib/api/schema.d.ts` |
-| Tests | `tests/test_decisions_record.py` (35), `tests/test_migrations.py` (0036), `tests/test_accounts.py` (the IDOR guard lists the PATCH route), the existing extraction and workspace tests updated for `extract-v3` |
+| Tests | `tests/test_decisions_record.py` (41), `tests/test_migrations.py` (0036), `tests/test_accounts.py` (the IDOR guard lists the PATCH route), the existing extraction and workspace tests updated for `extract-v3` |
 | Docs | `docs/fe-integration-guide-decisions.md`, `docs/fe-captures/decisions/`, `scripts/capture_decisions_api.py` |
 
 ## Verification
@@ -52,7 +52,19 @@ The designer's file turns Decisions from a flat list into a tracked record (stat
 * **Cost:** the extraction call grows by the decision bullets (a few hundred output tokens). Old decisions are **not** re-read by the deploy. The existing `backfill_tasks` pass requeues recent meetings (last 14 days) whose extraction version is not `extract-v3`, quietly (no mail), if the owner runs it: that is a model call per recent meeting, the same shape of cost as the `extract-v2` bump. A person can also rewrite a meeting's notes to have its decisions read.
 * **Roll back:** revert the code, then `alembic downgrade 0035` (drops the new columns and `decision_tasks`; statuses, dates and links set by people are lost). The extra columns are harmless to old code if only the code is rolled back.
 
+## Review fixes (Opus review of #137, Lows 1, 2, 3, 7; findings 4, 5, 6 accepted as designed)
+| Finding | Fix |
+|---|---|
+| 1 `decided_by` was any phrase said in the meeting | `extraction.speaker_in_transcript`: the name must be a speaker label of the transcript or words of one (`Grace` for `[Grace Okoro]:`), at most four words, no digits; an unlabelled transcript yields none |
+| 2 Concurrent PATCHes could leave status and `replaced_by_id` inconsistent, or close a loop | `workspace.update_decision` locks the row (and the target) `FOR UPDATE` in id order, re-reads the decision after the lock (`session.refresh`), and naming a replacement also takes one advisory lock (`DECISION_LINK_LOCK`) so a chain of three requests at once cannot close a loop |
+| 3 An empty PATCH marked the decision touched | 422 `nothing_to_change`, nothing written |
+| 7 `revisit_on` took any date | 422 `validation_error` outside 2000-01-01 to 2100-12-31 |
+| 4 Editing a bullet's wording resets hand-set values | Accepted by design (identity is the text's fingerprint). **Stated plainly:** an edit of the wording, or a rewrite that changes it, deletes the old decision row and makes a new Approved one with nothing set; anything that pointed at the old one loses its link (a decision that was Replaced by it stays Replaced with none named). In the FE guide, section 7 |
+| 5 Decisions-only meetings now make a full call | Accepted, documented above (the failure path is pending, then failed after three tries, and `projects.propose` runs for them) |
+| 6 `quote` is the model's text at up to 10% difference | Accepted, same pattern as task quotes |
+
 ## Follow-ups
+* A meeting that is rewritten with the decision's wording changed loses that decision's status, date and links (finding 4): a stable identity would need a reconciliation by similarity, not planned.
 * An owner with tasks off gets no decision details (above).
 * The API has no "get one decision"; the FE finds a Replaced by / Replaces target by searching its words. A `GET /api/decisions/{id}` is a small addition if wanted.
 * `replaced_by` choices are built by the FE from the decisions it already loaded (most recent 30); no dedicated endpoint.
