@@ -34,6 +34,7 @@ from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from app import calendar_providers, calendar_states
+from app.bot_provider import BotProvider, build_provider
 from app.calendar_source import CalendarSource, CalendarSourceError, SyncBatch, SyncTokenExpired
 from app.config import Settings, get_settings
 from app.gcal_client import WINDOW_AFTER, WINDOW_BEFORE
@@ -50,7 +51,6 @@ from app.models import (
     UserSettings,
 )
 from app.services import Refused, cancel_meeting
-from app.vexa import VexaClient
 
 logger = logging.getLogger("app.gcal_sync")
 
@@ -172,7 +172,7 @@ def apply_batch(
     *,
     now: datetime,
     settings: Settings | None = None,
-    vexa: VexaClient | None = None,
+    vexa: BotProvider | None = None,
 ) -> ApplyResult:
     """Apply `batch` for `conn` and commit. `user_settings` supplies `auto_join_rule` and
     `calendar_template_id`. `vexa` is only needed (and only built when absent) to stop a bot whose
@@ -457,7 +457,7 @@ def _cancel_missing(run: _Run, named: set[str]) -> None:
             _cancel_join(run, join, "removed")
 
 
-def _stop_cancelled_bots(run: _Run, vexa: VexaClient | None) -> None:
+def _stop_cancelled_bots(run: _Run, vexa: BotProvider | None) -> None:
     """Stop the bot of each meeting whose event was cancelled while the bot was sent and not yet
     done. `cancel_meeting` refuses a meeting the pipeline already took, and says 502 when Vexa will
     not stop the bot: in both cases the join stays `joined` and nothing is raised (the calendar
@@ -468,7 +468,7 @@ def _stop_cancelled_bots(run: _Run, vexa: VexaClient | None) -> None:
         meeting = session.get(Meeting, join.meeting_id) if join and join.meeting_id else None
         if join is None or meeting is None:
             continue
-        vexa = vexa or VexaClient()
+        vexa = vexa or build_provider()
         try:
             cancel_meeting(session, vexa, meeting)
         except Refused as refused:
@@ -523,7 +523,7 @@ def sync_connection(
     *,
     now: datetime,
     settings: Settings | None = None,
-    vexa: VexaClient | None = None,
+    vexa: BotProvider | None = None,
 ) -> None:
     """Sync one connection. Never raises for what Google or the data does: a failure is recorded
     in `last_error` and the next attempt starts from the same state."""

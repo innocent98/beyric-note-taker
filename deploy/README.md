@@ -135,6 +135,7 @@ Edit `.env`:
 | `POSTGRES_PASSWORD`, `VEXA_DB_PASSWORD`, `VEXA_STORAGE_SECRET` | each `openssl rand -hex 24` |
 | `VEXA_API_KEY` | from step 4 |
 | `DATABASE_URL`, `VEXA_BASE_URL` | leave commented; compose sets both |
+| `BOT_PROVIDER` | leave `vexa`; the only provider there is today. An unknown value stops web, worker and scheduler at startup |
 | `OPENAI_API_KEY` | the OpenAI key |
 | `OWNER_EMAIL`, `OWNER_PASSWORD` | The admin account's email and a long password. Migration `0006` creates the account from them (once; later changes to these two do nothing), and the sign-in is then email plus password. **Both must be in `.env` before the first deploy that contains migration `0006`**, or that migration fails and rolls back. `OWNER_PASSWORD` can be removed after it has run |
 | `SESSION_SECRET` | `openssl rand -hex 48`. The app refuses to start if it is shorter than 32 characters (it is the only key behind every session cookie) |

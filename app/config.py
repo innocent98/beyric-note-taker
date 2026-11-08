@@ -1,14 +1,28 @@
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    @field_validator("bot_provider")
+    @classmethod
+    def _known_bot_provider(cls, value: str) -> str:
+        from app.bot_provider import PROVIDER_FACTORIES
+
+        name = value.strip().lower()
+        if name not in PROVIDER_FACTORIES:
+            known = ", ".join(sorted(PROVIDER_FACTORIES))
+            raise ValueError(f"BOT_PROVIDER is {value!r}; it must be one of: {known}")
+        return name
+
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/notetaker"
 
+    # Which bot provider puts the bot in meetings (`app/bot_provider.py`). Only `vexa` exists
+    # today; an unknown value stops the process at startup instead of failing at the first meeting.
+    bot_provider: str = "vexa"
     vexa_base_url: str = "http://localhost:8056"
     vexa_api_key: str = ""
     bot_name: str = "Beyric Note Taker (recording)"

@@ -20,9 +20,9 @@ from sqlalchemy import func, select
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import admin, deletion, signup, teams  # noqa: E402
+from app.bot_provider import BotProviderError, build_provider  # noqa: E402
 from app.db import SessionLocal  # noqa: E402
 from app.models import Meeting, User  # noqa: E402
-from app.vexa import VexaClient, VexaError  # noqa: E402
 
 
 def run(argv: list[str]) -> int:
@@ -71,8 +71,8 @@ def run(argv: list[str]) -> int:
             print("Refusing: this is the last admin account.", file=sys.stderr)
             return 1
         try:
-            deletion.purge_user(session, user, VexaClient())
-        except VexaError as exc:
+            deletion.purge_user(session, user, build_provider())
+        except BotProviderError as exc:
             print(
                 f"Vexa did not answer ({type(exc).__name__}); nothing was deleted.", file=sys.stderr
             )
