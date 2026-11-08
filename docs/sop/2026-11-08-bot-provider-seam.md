@@ -1,6 +1,6 @@
 # SOP: the `BotProvider` seam (plan task B1; also the Phase D seam)
 
-Plan: `docs/superpowers/plans/2026-11-03-meet-signed-in-bot-and-vendor.md` (section 3.3 and task B1). Why now: `docs/spike/bot-hosting-cost-stress-infra-2026-11-08.md` (headline: "build the seam (B1) regardless"; it turns every later switch from a rewrite into a configuration change). **Branch:** `feature/bot-provider-seam` (the number is in the PR list). **No migration, no endpoint, no UI, no behaviour change.**
+Plan: `docs/superpowers/plans/2026-11-03-meet-signed-in-bot-and-vendor.md` (section 3.3 and task B1). Why now: `docs/spike/bot-hosting-cost-stress-infra-2026-11-08.md` (headline: "build the seam (B1) regardless"; it turns every later switch from a rewrite into a configuration change). **Branch:** `feature/bot-provider-seam`, PR #144. **No migration, no endpoint, no UI, no behaviour change.**
 
 ## What shipped
 One interface, `app.bot_provider.BotProvider`, between the app and whatever puts a bot in a meeting; `VexaProvider` (the self-hosted Vexa, wrapping the unchanged `VexaClient`); `FakeProvider` for tests; a `BOT_PROVIDER` setting (default `vexa`) that picks the provider; every call site moved from `VexaClient` to the interface; contract tests that run the same scenarios against the fake and the Vexa wrapper.
