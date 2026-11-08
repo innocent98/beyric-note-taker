@@ -1,0 +1,25 @@
+{
+  "note": "No cookie.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/scheduled-joins/1/send-now",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

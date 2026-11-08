@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app import accounts, auth, google_oauth, passwords, teams
 from app.models import (
@@ -20,6 +20,7 @@ from app.models import (
     OpenQuestion,
     Project,
     ReviewItem,
+    ScheduledJoin,
     Series,
     Sprint,
     Task,
@@ -654,7 +655,25 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     )
     session.add(event)
     session.commit()
+    # A join of the owner's the scheduler did not get into: the send-now route's id.
+    stuck = ScheduledJoin(
+        user_id=owner.id,
+        calendar_event_id=event.id,
+        platform="google_meet",
+        native_id="abc-defg-hij",
+        meeting_url="https://meet.google.com/abc-defg-hij",
+        starts_at=start,
+        ends_at=start + timedelta(hours=1),
+        run_at=start,
+        state="failed",
+        skip_reason="not_recorded",
+        template_id=template.id,
+        deadline_at=start + timedelta(minutes=15),
+    )
+    session.add(stuck)
+    session.commit()
     ids = {
+        "join_id": stuck.id,
         "event_id": event.id,
         "meeting_id": mine.id,
         "template_id": template.id,
@@ -709,6 +728,9 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
     # stranger's attempt changed nothing.
     session.expire_all()
     assert session.get(CalendarEvent, event.id).override is None
+    # the stranger's send-now was refused as a missing join: no bot, nothing recorded, no change
+    assert session.get(ScheduledJoin, stuck.id).state == "failed"
+    assert session.scalar(select(func.count(Meeting.id)).where(Meeting.source == "calendar")) == 0
     assert session.get(Series, recurring.id).project_id is None  # nor did the stranger's link
     # the stranger's DELETE of the owner's template was refused, not carried out
     assert session.get(Template, template.id).deleted_at is None

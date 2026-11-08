@@ -1,0 +1,26 @@
+{
+  "note": "Now the first resent meeting holds the slot, so the other `no_capacity` row is refused 409 `bot_busy`.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/scheduled-joins/3/send-now",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "bot_busy",
+        "message": "The note taker is busy right now. Try again in a few minutes."
+      }
+    }
+  }
+}

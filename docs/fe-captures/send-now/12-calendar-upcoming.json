@@ -1,0 +1,95 @@
+{
+  "note": "The Upcoming rows carry `join_id`, `can_send_now` and `not_recorded_text`. The rows that were not missed have `join_id` set and the two flags null/false; `Retro` (in two hours) has a `scheduled` join.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": true,
+      "state": "connected",
+      "state_text": "Connected",
+      "account_email": "grace@example.test",
+      "provider": "google",
+      "last_sync_at": "2026-11-08T21:34:51.132073Z",
+      "last_error": null,
+      "rule": "all",
+      "rule_text": "Joining all meetings",
+      "calendar_template_id": 2,
+      "auto_join_paused": false,
+      "auto_join_paused_text": null,
+      "upcoming": [
+        {
+          "id": 1,
+          "title": "Weekly planning",
+          "starts_at": "2026-11-08T21:20:00Z",
+          "ends_at": "2026-11-08T22:20:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 1,
+          "can_send_now": true,
+          "not_recorded_text": "The note taker could not join before the 15 minutes were up."
+        },
+        {
+          "id": 2,
+          "title": "Customer call",
+          "starts_at": "2026-11-08T21:32:00Z",
+          "ends_at": "2026-11-08T22:32:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 2,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 3,
+          "title": "Design review",
+          "starts_at": "2026-11-08T21:32:00Z",
+          "ends_at": "2026-11-08T22:32:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 3,
+          "can_send_now": true,
+          "not_recorded_text": "The note taker was busy with other meetings."
+        },
+        {
+          "id": 4,
+          "title": "Retro",
+          "starts_at": "2026-11-08T23:34:00Z",
+          "ends_at": "2026-11-09T00:04:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": 4,
+          "can_send_now": false,
+          "not_recorded_text": null
+        }
+      ]
+    }
+  }
+}

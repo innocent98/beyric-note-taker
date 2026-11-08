@@ -1,0 +1,45 @@
+{
+  "note": "Unchanged by the refusal.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/not-recorded",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "items": [
+        {
+          "join_id": 3,
+          "title": "Design review",
+          "starts_at": "2026-11-08T21:32:00Z",
+          "ends_at": "2026-11-08T22:32:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "state": "no_capacity",
+          "reason_text": "The note taker was busy with other meetings.",
+          "can_send_now": true
+        },
+        {
+          "join_id": 1,
+          "title": "Weekly planning",
+          "starts_at": "2026-11-08T21:20:00Z",
+          "ends_at": "2026-11-08T22:20:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "state": "failed",
+          "reason_text": "The note taker could not join before the 15 minutes were up.",
+          "can_send_now": true
+        }
+      ]
+    }
+  }
+}

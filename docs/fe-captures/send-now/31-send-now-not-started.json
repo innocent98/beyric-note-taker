@@ -1,0 +1,26 @@
+{
+  "note": "NOT reached live: the row is inserted directly (a skipped join three days ahead, as a lapsed calendar leaves them). 409 `not_started`; nothing changes.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/scheduled-joins/6/send-now",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_started",
+        "message": "This meeting has not started yet."
+      }
+    }
+  }
+}

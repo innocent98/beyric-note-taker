@@ -1,0 +1,26 @@
+{
+  "note": "An id that does not exist answers like another person's: 404 `not_found`.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/scheduled-joins/999999/send-now",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

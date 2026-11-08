@@ -1,0 +1,7 @@
+{
+  "note": "The designer's Could not join mail, rendered by the real template. The button opens the Meetings page in the signed-in app: a plain link, no token, nothing happens by opening it. The payload is the one the pipeline queues for a not-admitted bot (the meeting and time are placeholders).",
+  "content": {
+    "send_it_again_href": "https://notes.example.test/",
+    "text_version": "The note taker could not join your meeting\n\nWe tried to join Google Meet btp-tkio-gtb at 11:58 GMT+1 but were not admitted. This usually happens when the host does not let the note taker in from the waiting room.\n\nIf the meeting is still running, you can send it again.\n\nSend it again:\nhttps://notes.example.test/\n\nYou received this because you sent the note taker to this meeting.\nEmail preferences: https://notes.example.test/settings#email-preferences"
+  }
+}

@@ -111,3 +111,93 @@ def error_text(recorded: str | None) -> str | None:
     if recorded.startswith("AuthRevoked"):
         return REVOKED_ERROR_TEXT
     return GENERIC_ERROR_TEXT
+
+
+# ---- "Not recorded" and Send now (plan C15b) ----
+
+# The skip reasons that mean the meeting was not recorded (spec 7.7). `duplicate_meeting` is one of
+# them, as the spec lists it: the note taker did not get into THIS calendar meeting. (The runner
+# also gives it when the owner's own bot is or was in that room because they pasted the link; the
+# text then says so, and Send now is still allowed: placement refuses with its own words while that
+# bot is still there.) `needs_reconnect` is what `calendar_states` stores when the connection
+# lapsed (the spec calls it calendar_disconnected, which is accepted too); `refused` is the
+# runner's catch-all for a refusal it has no word for.
+NOT_RECORDED_SKIP_REASONS = (
+    "hours_cap",
+    "user_limit",
+    "code_in_use",
+    "meeting_has_note_taker",
+    "needs_reconnect",
+    "calendar_disconnected",
+    "account_suspended",
+    "duplicate_meeting",
+    "refused",
+)
+# A suspended account cannot send anything (spec 7.7), so its row never offers Send now.
+NO_SEND_NOW_REASONS = frozenset({"account_suspended"})
+SEND_NOW_STATES = ("failed", "no_capacity", "skipped")
+
+NOT_RECORDED_REASON_TEXT = {
+    "not_recorded": "The note taker could not join before the 15 minutes were up.",
+    "error": "Something went wrong starting the note taker.",
+    "unsupported_link": "The note taker cannot join this kind of meeting link yet.",
+    "no_template": "Choose a notes template for calendar meetings, then send it again.",
+    "hours_cap": "Your recording hours are used up.",
+    "user_limit": "You already had the most note takers allowed at once.",
+    "code_in_use": "Your note taker was still in an earlier meeting on the same link.",
+    "meeting_has_note_taker": "A note taker was already in this meeting.",
+    "needs_reconnect": "Your calendar was disconnected.",
+    "calendar_disconnected": "Your calendar was disconnected.",
+    "account_suspended": "This account is suspended.",
+    "duplicate_meeting": "A note taker was already in this meeting from a link you pasted.",
+}
+NO_CAPACITY_TEXT = "The note taker was busy with other meetings."
+NOT_RECORDED_DEFAULT_TEXT = "The note taker did not join this meeting."
+
+
+def not_recorded_text(state: str, reason: str | None) -> str:
+    """Why a scheduled join produced no meeting, in one sentence a person can read. Never a code,
+    a link or a passcode."""
+    if state == "no_capacity":
+        return NO_CAPACITY_TEXT
+    return NOT_RECORDED_REASON_TEXT.get(reason or "", NOT_RECORDED_DEFAULT_TEXT)
+
+
+# What Send now answers once the bot is on its way.
+SENT_TEXT = "The note taker is on its way to this meeting."
+
+
+def is_not_recorded(join, now) -> bool:
+    """Whether a scheduled join (a `ScheduledJoin`) is one the "Not recorded" list shows: its moment
+    has come (a row skipped hours ahead because the calendar lapsed is not "not recorded" yet), and
+    it ended `failed`, `no_capacity`, or `skipped` for a reason above. A join that dispatched is
+    `joined` or `completed`, never one of these, so a failed meeting stays a meeting row."""
+    if join.run_at > now:
+        return False
+    if join.state in ("failed", "no_capacity"):
+        return True
+    return join.state == "skipped" and join.skip_reason in NOT_RECORDED_SKIP_REASONS
+
+
+def send_now_block(join, now) -> str | None:
+    """THE rule for Send now, used by the route and by the lists, so the button and the server never
+    disagree. None when a send may go ahead (the pre-flight in `place_bot` still decides); else why
+    not, in the order the route checks: `account_suspended`, `not_sendable` (not on the Not recorded
+    list: still scheduled, switched off, done, or a reason nothing can fix), `not_started` (the
+    meeting's moment has not come) and `meeting_ended`."""
+    if join.skip_reason in NO_SEND_NOW_REASONS:
+        return "account_suspended"
+    if join.state not in SEND_NOW_STATES or (
+        join.state == "skipped" and join.skip_reason not in NOT_RECORDED_SKIP_REASONS
+    ):
+        return "not_sendable"
+    if join.run_at > now:
+        return "not_started"
+    if now > join.ends_at:
+        return "meeting_ended"
+    return None
+
+
+def can_send_now(join, now) -> bool:
+    """Whether Send now is on offer for a row on the lists (and so whether the route accepts it)."""
+    return send_now_block(join, now) is None

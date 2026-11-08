@@ -1,0 +1,25 @@
+{
+  "note": "Signed in, but the `X-CSRF-Token` header is left out.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/scheduled-joins/1/send-now",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

@@ -1099,6 +1099,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/not-recorded": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Not Recorded
+         * @description The meetings of the last seven days the note taker did not get into, for the Meetings page
+         *     (no CSRF header needed): the calendar's `failed` and `no_capacity` joins, and the skipped ones
+         *     whose reason means the meeting was not recorded (recording hours used up, too many note takers
+         *     at once, the link still in use, a note taker from another account already there, the calendar
+         *     disconnected, a suspended account). Only the caller's own. Each item says why in plain words
+         *     and whether Send now is on offer. Newest first.
+         */
+        get: operations["not_recorded"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/notifications": {
         parameters: {
             query?: never;
@@ -1383,6 +1408,37 @@ export interface paths {
          *     the notes" (`POST /meetings/{id}/regenerate`) afterwards.
          */
         post: operations["add_review_term"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/scheduled-joins/{join_id}/send-now": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Now Route
+         * @description Send the note taker to a meeting it did not get into (CSRF header needed, no body). `join_id`
+         *     comes from `GET /api/not-recorded` or an Upcoming row. Allowed while the meeting is still on,
+         *     for a join that is `failed`, `no_capacity` or `skipped` (not for a suspended account). The note
+         *     taker is sent through the same placement as every other bot, so the whole pre-flight runs again
+         *     and nothing is bypassed: refusals come back with the same codes as pasting a link
+         *     (403 `hours_cap_reached`, 409 `user_limit`, `already_in_meeting`, `meeting_has_note_taker`,
+         *     `bot_busy`) and change nothing. 409 `meeting_ended` once the meeting is over, 409
+         *     `cannot_send_now` for a join that is not in a sendable state (still scheduled, switched off,
+         *     done), 403 `account_suspended`, 409 `template_required` when no calendar template is chosen,
+         *     502 `bot_send_failed` when the bot service did not take it, 404 `not_found` for a join that is
+         *     not the caller's. Pressing it twice answers 200 twice with the same `meeting_id` and sends one
+         *     bot. The join's retry window restarts: 15 minutes from now.
+         */
+        post: operations["send_now_route"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3170,6 +3226,56 @@ export interface components {
             /** Term */
             term: string;
         };
+        /**
+         * NotRecordedItem
+         * @description One meeting the note taker did not get into. `reason_text` says why in words (show it as it
+         *     is). `state` is for choosing the look: `no_capacity` (the note taker was busy), `failed` or
+         *     `skipped`. `can_send_now` is true while the meeting is still on and the account may send; show
+         *     the Send now button only then. `join_id` is what `POST /api/scheduled-joins/{id}/send-now` takes
+         *     (it is not an event id).
+         */
+        NotRecordedItem: {
+            /** Can Send Now */
+            can_send_now: boolean;
+            /**
+             * Ends At
+             * Format: date-time
+             */
+            ends_at: string;
+            /** Join Id */
+            join_id: number;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "google_meet" | "zoom" | "teams";
+            /** Platform Label */
+            platform_label: string;
+            /** Reason Text */
+            reason_text: string;
+            /**
+             * Starts At
+             * Format: date-time
+             */
+            starts_at: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "failed" | "no_capacity" | "skipped";
+            /** Title */
+            title: string;
+        };
+        /**
+         * NotRecordedOut
+         * @description The last seven days, newest first, at most 100. A meeting the note taker did join and that
+         *     then failed (not let in, recording failed) is not here: it is an ordinary failed meeting on
+         *     the Meetings list.
+         */
+        NotRecordedOut: {
+            /** Items */
+            items: components["schemas"]["NotRecordedItem"][];
+        };
         /** NotificationList */
         NotificationList: {
             /** Has More */
@@ -3473,6 +3579,20 @@ export interface components {
             suggestions: string[];
             /** Tasks */
             tasks: number;
+        };
+        /**
+         * SendNowOut
+         * @description The note taker is on its way. `meeting_id` is the new meeting (the Meetings list and its
+         *     page follow it as it is joined and written up). The same answer comes back if the button is
+         *     pressed twice.
+         */
+        SendNowOut: {
+            /** Join Id */
+            join_id: number;
+            /** Meeting Id */
+            meeting_id: number;
+            /** Status Text */
+            status_text: string;
         };
         /**
          * SeriesCard
@@ -4204,12 +4324,21 @@ export interface components {
             /** Attendee Count */
             attendee_count: number;
             /**
+             * Can Send Now
+             * @default false
+             */
+            can_send_now: boolean;
+            /**
              * Ends At
              * Format: date-time
              */
             ends_at: string;
             /** Id */
             id: number;
+            /** Join Id */
+            join_id?: number | null;
+            /** Not Recorded Text */
+            not_recorded_text?: string | null;
             /** Platform */
             platform: ("google_meet" | "zoom" | "teams") | null;
             /**
@@ -7935,6 +8064,53 @@ export interface operations {
             };
         };
     };
+    not_recorded: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotRecordedOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_notifications: {
         parameters: {
             query?: {
@@ -8838,6 +9014,82 @@ export interface operations {
             };
             /** @description Malformed request */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    send_now_route: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                join_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendNowOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Bad Gateway */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };
