@@ -674,6 +674,9 @@ class Meeting(Base):
     # UUID as text too) and which provider ran it. Old rows are `vexa`.
     vexa_meeting_id: Mapped[str | None] = mapped_column(String(100))
     bot_provider: Mapped[str] = mapped_column(String(32), default="vexa", server_default="vexa")
+    # When a hosted provider's copy (recording, transcript, bot record) was deleted at the provider;
+    # null until then, and always null for Vexa (its copy follows the retention rule).
+    provider_copy_deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(16), default="bot_sent", server_default="bot_sent")
     step: Mapped[str] = mapped_column(String(16), default="waiting", server_default="waiting")
     failure_reason: Mapped[str | None] = mapped_column(Text)

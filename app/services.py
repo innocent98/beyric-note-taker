@@ -683,8 +683,7 @@ def delete_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Non
             recording_id = deletion.recording_to_delete(
                 session, holder, locked, datetime.now(UTC), set()
             )
-            if recording_id is not None:
-                holder.delete_recording(recording_id)
+            deletion.delete_provider_copy(holder, locked, recording_id)
     except (BotProviderError, ValueError) as exc:
         session.rollback()
         logger.warning("meeting %s: Vexa cleanup failed (%s)", meeting_id, type(exc).__name__)

@@ -17,7 +17,7 @@ from app.bot_provider import build_provider
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import AppState, Meeting, User
-from app.pipeline import advance_meeting, delete_expired_audio
+from app.pipeline import advance_meeting, delete_expired_audio, delete_fetched_copies
 
 logger = logging.getLogger("app.worker")
 CLEANUP_EVERY_SECONDS = 3600
@@ -99,7 +99,8 @@ def find_topics(session: Session, now: datetime) -> int | None:
 
 def background_jobs(session: Session, mailer: mail.Mailer | None, now: datetime) -> None:
     """The jobs that run before each meeting pass: send due mail, purge deleted accounts, read a
-    finished meeting's notes into lists, look for a series' repeat topics. Each is on its own, and
+    finished meeting's notes into lists, look for a series' repeat topics, retry the deletion of a
+    hosted provider's copy. Each is on its own, and
     whatever one throws is logged by type only (an exception can hold an address or a link) and
     never reaches the loop, so a mail, purge, extraction or topics problem cannot stall meetings."""
     for name, job in (
@@ -107,6 +108,7 @@ def background_jobs(session: Session, mailer: mail.Mailer | None, now: datetime)
         ("purge", lambda: purge_deleted(session)),
         ("extraction", lambda: extract_pending(session, now)),
         ("topics", lambda: find_topics(session, now)),
+        ("provider copies", lambda: delete_fetched_copies(session, now)),
     ):
         try:
             job()

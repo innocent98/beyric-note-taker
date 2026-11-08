@@ -94,6 +94,18 @@ def accept(mock, *ids):
         mock.add_response(method="POST", url=f"{API}/bot", status_code=201, json={"id": bot})
 
 
+def deletable(mock, bot=BOT, *statuses):
+    """Skribby's `DELETE /bot/{id}`: each answer in turn (the last one repeats); 200 by default."""
+    for status in statuses or (200,):
+        mock.add_response(
+            method="DELETE", url=f"{API}/bot/{bot}", status_code=status, json={"message": "x"}
+        )
+
+
+def deletes(mock):
+    return [r for r in mock.get_requests() if r.method == "DELETE"]
+
+
 def looks(mock, bot, *bodies):
     for item in bodies:
         mock.add_response(method="GET", url=f"{API}/bot/{bot}", json=item)
@@ -149,6 +161,7 @@ def posts(mock, suffix=""):
 def test_a_meeting_goes_from_the_send_to_notes_with_skribbys_speaker_names(
     session, skribby, user, template, httpx_mock
 ):
+    deletable(httpx_mock)
     accept(httpx_mock)
     looks(httpx_mock, BOT, *GOOD_CALL)
     httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
@@ -177,46 +190,140 @@ def test_a_meeting_goes_from_the_send_to_notes_with_skribbys_speaker_names(
     assert len(downloads) == 1
 
 
-def test_the_bots_data_at_skribby_is_deleted_when_our_retention_runs_out(
+def test_the_bots_data_at_skribby_is_deleted_as_soon_as_we_have_the_audio_and_the_names(
     session, skribby, user, template, httpx_mock
 ):
     accept(httpx_mock)
     looks(httpx_mock, BOT, *GOOD_CALL)
     httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
-    httpx_mock.add_response(method="DELETE", url=f"{API}/bot/{BOT}", json={"message": "deleted"})
+    deletable(httpx_mock)
+    meeting = place(session, skribby, user, template)
+
+    passes(session, meeting.id)
+
+    assert [r.url.path for r in deletes(httpx_mock)] == [f"/api/v1/bot/{BOT}"]
+    session.expire_all()
+    done = session.get(Meeting, meeting.id)
+    assert done.status == "ready" and done.provider_copy_deleted_at is not None
+    # the retention pass has nothing left to ask Skribby: it clears our folder and marks it
+    cleared = pipeline.delete_expired_audio(session, datetime.now(UTC) + timedelta(days=10))
+    assert cleared == 1 and len(deletes(httpx_mock)) == 1
+
+
+def test_the_delete_is_after_the_download_and_the_speaker_lookup_never_before(
+    session, skribby, user, template, httpx_mock
+):
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, *GOOD_CALL)
+    httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
+    deletable(httpx_mock)
+    meeting = place(session, skribby, user, template)
+
+    passes(session, meeting.id)
+
+    order = [
+        r.method
+        for r in httpx_mock.get_requests()
+        if str(r.url) in (FILES,) or r.method == "DELETE"
+    ]
+    assert order == ["GET", "DELETE"]
+    last_lookup = max(
+        i
+        for i, r in enumerate(httpx_mock.get_requests())
+        if r.url.path.endswith(BOT) and r.method == "GET"
+    )
+    first_delete = min(i for i, r in enumerate(httpx_mock.get_requests()) if r.method == "DELETE")
+    assert last_lookup < first_delete
+
+
+def test_a_delete_skribby_refuses_never_holds_up_the_notes_and_is_retried_until_it_works(
+    session, skribby, user, template, httpx_mock
+):
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, *GOOD_CALL)
+    httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
+    deletable(httpx_mock, BOT, 500, 500, 200)  # the step, the first retry, the second retry
+    meeting = place(session, skribby, user, template)
+
+    passes(session, meeting.id)
+
+    session.expire_all()
+    done = session.get(Meeting, meeting.id)
+    assert done.status == "ready" and done.notes == NOTES + "\n"  # the notes did not wait for it
+    assert done.provider_copy_deleted_at is None
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0  # still refused
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).provider_copy_deleted_at is None
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 1
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).provider_copy_deleted_at is not None
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0  # nothing left to do
+    assert len(deletes(httpx_mock)) == 3
+
+
+def test_a_delete_that_keeps_failing_is_tried_again_by_the_retention_pass_too(
+    session, skribby, user, template, httpx_mock
+):
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, *GOOD_CALL)
+    httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
+    deletable(httpx_mock, BOT, 500, 200)
     meeting = place(session, skribby, user, template)
     passes(session, meeting.id)
 
     cleared = pipeline.delete_expired_audio(session, datetime.now(UTC) + timedelta(days=10))
 
     assert cleared == 1
-    deletes = [r for r in httpx_mock.get_requests() if r.method == "DELETE"]
-    assert [r.url.path for r in deletes] == [f"/api/v1/bot/{BOT}"]
     session.expire_all()
-    assert session.get(Meeting, meeting.id).audio_deleted_at is not None
+    assert session.get(Meeting, meeting.id).provider_copy_deleted_at is not None
 
 
-def test_a_delete_skribby_refuses_is_tried_again_and_the_meeting_is_not_marked_cleared(
+def test_the_worker_loops_job_retries_the_delete(session, skribby, user, template, httpx_mock):
+    from app import worker
+
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, *GOOD_CALL)
+    httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
+    deletable(httpx_mock, BOT, 500, 200)
+    meeting = place(session, skribby, user, template)
+    passes(session, meeting.id)
+
+    worker.background_jobs(session, None, datetime.now(UTC))
+
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).provider_copy_deleted_at is not None
+
+
+def test_a_meeting_that_has_not_yet_got_its_speaker_names_keeps_skribbys_copy(
     session, skribby, user, template, httpx_mock
 ):
     accept(httpx_mock)
     looks(httpx_mock, BOT, *GOOD_CALL)
-    httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
-    httpx_mock.add_response(method="DELETE", url=f"{API}/bot/{BOT}", status_code=500)
     meeting = place(session, skribby, user, template)
-    passes(session, meeting.id)
+    meeting.status, meeting.step = "failed", "transcribing"
+    meeting.vexa_recording_id = recording_handle(BOT)  # the audio is fetched, the names are not
+    session.commit()
 
-    cleared = pipeline.delete_expired_audio(session, datetime.now(UTC) + timedelta(days=10))
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0
 
-    assert cleared == 0
-    session.expire_all()
-    assert session.get(Meeting, meeting.id).audio_deleted_at is None
+    assert deletes(httpx_mock) == []
+
+
+def test_a_vexa_meeting_is_never_touched_by_the_delete_job(session, user, template, httpx_mock):
+    meeting = vexa_row(session, user, template)
+    meeting.status, meeting.speaker_transcript = "ready", "[Ada]: hi"
+    session.commit()
+
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0
+
+    assert httpx_mock.get_requests() == []
 
 
 def test_a_meeting_that_took_the_key_to_skribby_kept_it_out_of_every_log(
     session, skribby, user, template, httpx_mock, caplog
 ):
     caplog.set_level("DEBUG")
+    deletable(httpx_mock)
     accept(httpx_mock)
     looks(httpx_mock, BOT, *GOOD_CALL)
     httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
@@ -231,6 +338,7 @@ def test_a_meeting_that_took_the_key_to_skribby_kept_it_out_of_every_log(
 def test_a_bot_that_knocks_shows_waiting_to_be_let_in_then_records(
     session, skribby, user, template, httpx_mock
 ):
+    deletable(httpx_mock)
     accept(httpx_mock)
     looks(
         httpx_mock,
@@ -292,6 +400,7 @@ def test_googles_block_pauses_for_one_retry_and_the_second_bot_goes_through_the_
     blocked = body(
         "bot_detected", events=[("bot_detected", 100 - n) for n in range(4)], finished_at=ago(1)
     )
+    deletable(httpx_mock)
     accept(httpx_mock, BOT, SECOND)
     looks(httpx_mock, BOT, body("joining", events=[("joining", 5)]), blocked)
     looks(httpx_mock, SECOND, body("joining", SECOND, events=[("joining", 5)]))
@@ -387,12 +496,12 @@ def test_deleting_a_finished_skribby_meeting_deletes_the_bots_data_at_skribby(
     meeting = place(session, skribby, user, template)
     passes(session, meeting.id)
     session.expire_all()
+    assert len(deletes(httpx_mock)) == 1  # as soon as the names were saved
 
     services.delete_meeting(session, VexaProvider(), session.get(Meeting, meeting.id))
 
-    assert [r.url.path for r in httpx_mock.get_requests() if r.method == "DELETE"] == [
-        f"/api/v1/bot/{BOT}"
-    ]
+    # the owner's delete asks again and Skribby's answer for a bot already gone is success
+    assert [r.url.path for r in deletes(httpx_mock)] == [f"/api/v1/bot/{BOT}"] * 2
     assert session.get(Meeting, meeting.id) is None
 
 
@@ -520,16 +629,90 @@ def test_a_bot_that_was_never_let_in_has_its_record_deleted_at_skribby_too(
         BOT,
         body("not_admitted", stop_reason="request_denied", events=[("joining", 70)]),
     )
-    httpx_mock.add_response(method="DELETE", url=f"{API}/bot/{BOT}", json={"message": "deleted"})
+    deletable(httpx_mock)
+    meeting = place(session, skribby, user, template)
+    passes(session, meeting.id)
+
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 1
+
+    assert [r.url.path for r in deletes(httpx_mock)] == [f"/api/v1/bot/{BOT}"]
+    cleared = pipeline.delete_expired_audio(session, datetime.now(UTC) + timedelta(days=10))
+    assert cleared == 1 and len(deletes(httpx_mock)) == 1
+
+
+def test_a_bot_whose_record_was_never_deleted_is_caught_by_the_retention_pass(
+    session, skribby, user, template, httpx_mock
+):
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, body("not_admitted", stop_reason="request_denied"))
+    deletable(httpx_mock)
     meeting = place(session, skribby, user, template)
     passes(session, meeting.id)
 
     cleared = pipeline.delete_expired_audio(session, datetime.now(UTC) + timedelta(days=10))
 
-    assert cleared == 1
-    assert [r.url.path for r in httpx_mock.get_requests() if r.method == "DELETE"] == [
-        f"/api/v1/bot/{BOT}"
-    ]
+    assert cleared == 1 and len(deletes(httpx_mock)) == 1
+
+
+def test_deleting_an_account_deletes_the_record_of_a_bot_that_never_recorded(
+    session, skribby, user, template, httpx_mock
+):
+    from app import deletion
+
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, body("not_admitted", stop_reason="request_denied"))
+    deletable(httpx_mock)
+    meeting = place(session, skribby, user, template)
+    passes(session, meeting.id)
+
+    deletion.purge_user(session, user, VexaProvider())
+
+    assert [r.url.path for r in deletes(httpx_mock)] == [f"/api/v1/bot/{BOT}"]
+
+
+def test_deleting_a_meeting_that_never_recorded_deletes_the_bots_record_too(
+    session, skribby, user, template, httpx_mock
+):
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, body("not_admitted", stop_reason="request_denied"))
+    deletable(httpx_mock)
+    meeting = place(session, skribby, user, template)
+    passes(session, meeting.id)
+    session.expire_all()
+
+    services.delete_meeting(session, VexaProvider(), session.get(Meeting, meeting.id))
+
+    assert [r.url.path for r in deletes(httpx_mock)] == [f"/api/v1/bot/{BOT}"]
+
+
+def test_sending_a_new_bot_deletes_the_replaced_bots_record_while_its_id_is_still_known(
+    session, skribby, user, template, httpx_mock
+):
+    meeting = vexa_row(session, user, template, bot_id=BOT)
+    meeting.bot_provider = "skribby"
+    session.commit()
+    looks(httpx_mock, BOT, body("not_admitted", stop_reason="request_denied"))  # it is over
+    accept(httpx_mock, SECOND)
+    deletable(httpx_mock)
+
+    assert pipeline.send_again(meeting, skribby) is True
+
+    assert [r.url.path for r in deletes(httpx_mock)] == [f"/api/v1/bot/{BOT}"]
+    assert (meeting.vexa_meeting_id, meeting.provider_copy_deleted_at) == (SECOND, None)
+
+
+def test_a_replaced_bots_record_that_cannot_be_deleted_never_stops_the_new_bot(
+    session, skribby, user, template, httpx_mock
+):
+    meeting = vexa_row(session, user, template, bot_id=BOT)
+    meeting.bot_provider = "skribby"
+    session.commit()
+    looks(httpx_mock, BOT, body("not_admitted", stop_reason="request_denied"))  # it is over
+    accept(httpx_mock, SECOND)
+    deletable(httpx_mock, BOT, 500)
+
+    assert pipeline.send_again(meeting, skribby) is True
+    assert meeting.vexa_meeting_id == SECOND
 
 
 def test_a_failed_meeting_with_no_bot_id_has_nothing_to_delete_at_skribby(
