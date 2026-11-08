@@ -51,10 +51,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app import alerts, calendar_providers, calendar_states, titles
+from app.bot_provider import BotProvider, BotProviderError, build_provider
 from app.calendar_source import AuthRevoked, CalendarSource, CalendarSourceError, SyncBatch
 from app.config import Settings, get_settings
 from app.gcal_rules import JoinSettings, will_join
 from app.gcal_sync import DEFAULT_USER_SETTINGS, apply_batch
+from app.meeting_url import UnsupportedMeetingUrl
 from app.models import (
     LIVE_JOIN_STATES,
     AppState,
@@ -66,7 +68,6 @@ from app.models import (
     UserSettings,
 )
 from app.placement import PlacementRefused, PlacementRequest, place_bot
-from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError
 
 logger = logging.getLogger("app.join_runner")
 
@@ -158,7 +159,7 @@ def _connection_of(session: Session, join: ScheduledJoin) -> CalendarConnection 
 
 def run_due_joins(
     session: Session,
-    vexa: VexaClient,
+    vexa: BotProvider,
     calendar: "calendar_providers.SourceRegistry | CalendarSource | None",
     *,
     now: datetime,
@@ -356,7 +357,7 @@ def _lock(session: Session, join_id: int, now: datetime) -> ScheduledJoin | None
 
 def _process(
     session: Session,
-    vexa: VexaClient,
+    vexa: BotProvider,
     calendar: "calendar_providers.SourceRegistry",
     join_id: int,
     now: datetime,
@@ -525,7 +526,7 @@ def _recheck_due(join: ScheduledJoin, now: datetime) -> bool:
 
 def _recheck(
     session: Session,
-    vexa: VexaClient,
+    vexa: BotProvider,
     calendar: "calendar_providers.SourceRegistry",
     join: ScheduledJoin,
     now: datetime,
@@ -593,7 +594,7 @@ def _recheck(
 
 
 def _place(
-    session: Session, vexa: VexaClient, join: ScheduledJoin, now: datetime, settings: Settings
+    session: Session, vexa: BotProvider, join: ScheduledJoin, now: datetime, settings: Settings
 ) -> JoinOutcome | None:
     """`place_bot()` under the row lock (the retry gap is already in the due query). The row lock
     was taken before the
@@ -654,7 +655,7 @@ def _place(
         # rolled back. A retry after the gap, never the error path and its mail.
         session.rollback()
         return _wait_after_a_conflict(session, join_id, now)
-    except VexaError as exc:
+    except BotProviderError as exc:
         logger.warning("sending the bot for join %s failed (%s)", join_id, type(exc).__name__)
         return _send_failed(session, join_id, now)
     except UnsupportedMeetingUrl:  # a link the host cannot join (Teams until T1): retrying is vain
@@ -913,7 +914,7 @@ def register_join_runner(
     settings: Settings | None = None,
     *,
     source: "calendar_providers.SourceRegistry | CalendarSource | None" = None,
-    vexa: VexaClient | None = None,
+    vexa: BotProvider | None = None,
 ) -> bool:
     """Put the runner on the scheduler's dispatch loop (every tick, 10 s). Not registered while
     `AUTOJOIN_ENABLED` is false (the operator's emergency stop). The scheduler process shares its
@@ -921,7 +922,7 @@ def register_join_runner(
     settings = settings or get_settings()
     if not settings.autojoin_enabled:
         return False
-    vexa = vexa or VexaClient()
+    vexa = vexa or build_provider()
     scheduler.register(
         "join_runner",
         1,

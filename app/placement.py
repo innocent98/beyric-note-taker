@@ -28,10 +28,10 @@ at most `LOCK_WAIT_SECONDS` (3 s) and gives its pooled database connection back 
 answers `bot_busy` with `slot_locked` set (words: a note taker is being set up, try again in a
 minute), and if the slot is simply full it answers `bot_busy` (words: busy, try in a few minutes).
 A caller that holds a row lock passes `wait_seconds=0`: the rollback between looks would drop it.
-The holder is bounded too: `VexaClient.send_bot` has a total deadline
-(`app.vexa.SEND_DEADLINE_SECONDS`).
+The holder is bounded too: `BotProvider.send_bot` has a total deadline
+(`app.bot_provider.SEND_DEADLINE_SECONDS`).
 
-An uncertain send (`VexaSendUncertain`: a timeout, a lost answer, a 5xx) may have reached the
+An uncertain send (`BotSendUncertain`: a timeout, a lost answer, a 5xx) may have reached the
 host, which keeps handling the request after the client leaves, so the bot can join seconds later.
 A stop sent now would find nothing, so instead the meeting is kept as a placeholder: `bot_sent`, no
 Vexa id, `completion_reason = SEND_UNCONFIRMED` (the owner reads "Starting the bot"), counted for
@@ -54,9 +54,15 @@ from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app import titles, usage
+from app.bot_provider import (
+    BotDuplicate,
+    BotProvider,
+    BotProviderError,
+    BotSendUncertain,
+    run_within,
+)
 from app.config import Settings, get_settings
 from app.models import MEETING_SOURCES, Meeting, Template, User, UserSettings
-from app.vexa import VexaClient, VexaDuplicateBot, VexaError, VexaSendUncertain, _within
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +72,7 @@ PLACEMENT_LOCK = 6004
 LOCAL_HOST_ID = 1
 # How long a request polls for the lock before it answers `bot_busy` ("being set up"). Short on
 # purpose: it is time spent behind another request's send, and the connection is let go between
-# looks. A send itself is bounded by `app.vexa.SEND_DEADLINE_SECONDS`.
+# looks. A send itself is bounded by `app.bot_provider.SEND_DEADLINE_SECONDS`.
 LOCK_WAIT_SECONDS = 3.0
 LOCK_POLL_SECONDS = 0.2
 # The most a calendar join waits for Vexa to say what bot is on a code (see `_orphan_to_adopt`).
@@ -234,7 +240,7 @@ def _resolve(session: Session, req: PlacementRequest) -> tuple[User, int]:
 
 def place_bot(
     session: Session,
-    vexa: VexaClient,
+    vexa: BotProvider,
     req: PlacementRequest,
     *,
     now: datetime,
@@ -250,11 +256,11 @@ def place_bot(
     meeting with a join row that does not know it. If it raises, the bot is stopped and nothing
     is recorded, as for a failed flush.
 
-    Commits (the meeting row and the lock leave together). A `VexaError` from the send is raised
-    after a rollback: no meeting exists and the slot is free again. If the send may have reached
-    the host without an answer (`VexaSendUncertain`), the meeting is returned as an unconfirmed
-    start (see the module doc) for the worker to settle. If recording the meeting fails after a
-    send, the bot is stopped, best effort, before the failure is raised."""
+    Commits (the meeting row and the lock leave together). A `BotProviderError` from the send is
+    raised after a rollback: no meeting exists and the slot is free again. If the send may have
+    reached the host without an answer (`BotSendUncertain`), the meeting is returned as an
+    unconfirmed start (see the module doc) for the worker to settle. If recording the meeting fails
+    after a send, the bot is stopped, best effort, before the failure is raised."""
     user, template_id = _resolve(session, req)
     try:
         reserve_slot(
@@ -271,7 +277,7 @@ def place_bot(
         raise
     try:
         vexa_id = vexa.send_bot(req.meeting_url)
-    except VexaDuplicateBot:  # a bot that is not ours is there (another host, a race)...
+    except BotDuplicate:  # a bot that is not ours is there (another host, a race)...
         if not req.adopt_orphan:
             session.rollback()
             raise PlacementRefused("meeting_has_note_taker") from None
@@ -280,7 +286,7 @@ def place_bot(
         # and adopt it only if it is arriving or live and no row holds its Vexa id; a leftover that
         # is still leaving (a cancelled meeting's bot) is a retry, not an adoption.
         vexa_id = _orphan_to_adopt(session, vexa, req)
-    except VexaSendUncertain:  # it may be joining in a moment: keep the code, let the worker settle
+    except BotSendUncertain:  # it may be joining in a moment: keep the code, let the worker settle
         logger.warning("send_bot gave no clear answer: the meeting is kept as an unconfirmed start")
         vexa_id = None
     except BaseException:  # the host said no, or anything else: no meeting, free the slot
@@ -317,7 +323,7 @@ def place_bot(
     return meeting
 
 
-def _orphan_to_adopt(session: Session, vexa: VexaClient, req: PlacementRequest) -> int:
+def _orphan_to_adopt(session: Session, vexa: BotProvider, req: PlacementRequest) -> int:
     """The Vexa id of the live bot on the code, or `PlacementRefused("code_busy")` (after a
     rollback) when there is none to adopt: it is leaving, finished, unknown, or some row's."""
     from app.pipeline import ADOPTABLE_STATES  # imports this module, so not at the top
@@ -325,8 +331,10 @@ def _orphan_to_adopt(session: Session, vexa: VexaClient, req: PlacementRequest) 
     try:
         # A short whole-call deadline: this runs under the placement, row and event locks, and the
         # client's own timeouts are per phase (30 s each).
-        info = _within(ADOPT_LOOKUP_SECONDS, lambda: vexa.get_meeting(req.platform, req.native_id))
-    except (VexaError, TimeoutError):
+        info = run_within(
+            ADOPT_LOOKUP_SECONDS, lambda: vexa.get_meeting(req.platform, req.native_id)
+        )
+    except (BotProviderError, TimeoutError):
         info = None
     if (
         info is None
@@ -344,7 +352,7 @@ def _orphan_to_adopt(session: Session, vexa: VexaClient, req: PlacementRequest) 
 
 
 def commit_or_stop(
-    session: Session, vexa: VexaClient, *, platform: str, native_id: str, vexa_id: int | None
+    session: Session, vexa: BotProvider, *, platform: str, native_id: str, vexa_id: int | None
 ) -> None:
     """Commit a meeting row that points at the bot `vexa_id` (None: an unconfirmed start). If the
     commit fails, roll back FIRST (the lock is gone from then on), then stop that bot, unless the
@@ -362,7 +370,7 @@ def commit_or_stop(
 
 
 def _stop_if_the_code_is_free(
-    session: Session, vexa: VexaClient, platform: str, native_id: str
+    session: Session, vexa: BotProvider, platform: str, native_id: str
 ) -> None:
     """Stop an unrecorded bot by code while holding the placement lock, so nobody else can place on
     the code meanwhile, and skip the stop when a live meeting of anyone holds the code: the bot
@@ -415,12 +423,12 @@ def _is_recorded(session: Session, platform: str, native_id: str, vexa_id: int) 
         return False
 
 
-def stop_unrecorded_bot(vexa: VexaClient, platform: str, native_id: str) -> None:
+def stop_unrecorded_bot(vexa: BotProvider, platform: str, native_id: str) -> None:
     """The bot is in a meeting the database has no row for. Take it out; if that fails too the
     bot stays until Vexa's own limits end it, which is logged for an operator."""
     try:
         vexa.stop_bot(platform, native_id)
-    except (VexaError, ValueError) as exc:
+    except (BotProviderError, ValueError) as exc:
         logger.error(
             "a bot was sent but its meeting could not be saved, and it could not be stopped (%s)",
             type(exc).__name__,

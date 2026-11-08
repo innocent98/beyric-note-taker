@@ -13,11 +13,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app import deletion, mail, maintenance, topics, translation, workspace
+from app.bot_provider import build_provider
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import AppState, Meeting, User
 from app.pipeline import advance_meeting, delete_expired_audio
-from app.vexa import VexaClient
 
 logger = logging.getLogger("app.worker")
 CLEANUP_EVERY_SECONDS = 3600
@@ -82,7 +82,7 @@ def send_mail(session: Session, mailer: mail.Mailer | None, now: datetime) -> in
 
 def purge_deleted(session: Session, vexa=None) -> int:
     """Remove the data of accounts the admin deleted (`app/deletion.py`)."""
-    return deletion.purge_deleted(session, vexa or VexaClient())
+    return deletion.purge_deleted(session, vexa or build_provider())
 
 
 def extract_pending(session: Session, now: datetime) -> int | None:
@@ -122,7 +122,7 @@ def hourly_jobs(session: Session, now: datetime, vexa=None) -> None:
     is caught and logged by type only."""
 
     def audio() -> None:
-        removed = delete_expired_audio(session, now, vexa=vexa or VexaClient())
+        removed = delete_expired_audio(session, now, vexa=vexa or build_provider())
         if removed:
             logger.info("deleted audio for %s meetings", removed)
 
