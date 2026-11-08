@@ -57,3 +57,51 @@ The designer's Series page shows two blocks nothing computed: topics that keep c
 * A topic is dropped by word overlap with approved decisions (a crude stem). A decision approved *after* the call does not remove a stored topic until the series is recomputed (the next stale mark or the 6-hour look: it changes the input, so a call is made).
 * The job runs inside `background_jobs`, so a 45-second call (more with the retry) delays the meeting polling pass by that much; extraction already works the same way. If the pilot grows, move it to its own thread like translation.
 * The Series cards (list) do not show topics; only the page does.
+
+---
+
+# PR 2: the screens (parity D:698-725, script D:1559-1565 and 1886-1915)
+
+Stacked on PR 1 (`feature/keeps-agenda-backend`); retarget to `main` once PR 1 is merged. Web only: no migration, no API change.
+
+## What shipped (PR 2)
+`web/components/app/series-view.tsx` draws the two blocks between the score tiles and "Unfinished from last time", as the designer's file orders them.
+
+* **Keeps coming up**: heading, "Topics discussed in more than one meeting without a decision.", one amber row per `topics[]` (refresh icon, bold `label`, the server's `line` in amber, `dates_text` in grey). **Absent** when `topics` is empty: no heading, no spinner, no empty state (U14).
+* **Suggested agenda**: heading, "Built from repeat topics, overdue work, open questions and tasks to confirm.", numbered rows in the order the server sends them, each with **Add to agenda** / **Added** (teal fill, `aria-pressed`). Absent when `suggested_agenda` is empty.
+* **Add to agenda** posts the line's exact `text` to `POST /api/series/{id}/agenda`; the item lands in "Other agenda items". The row shows **Added** when a live `agenda[]` item has exactly the same text, and a second click removes that item (`DELETE .../agenda/{id}`). A double click does nothing while a click is in flight. Refusals (`agenda_full`, 403) show in the page's error line and leave the row as it was.
+* `web/lib/api/types.ts` (`SeriesTopic`, `AgendaSuggestion`), `web/styles/pages.css` (`.sr-topic*`, `.sr-sug*`), token `--warning-pale` (the designer's `#FFFBF2`).
+
+## Parity (1440 / 768 / 390, design on the left, page on the right)
+Shots in `docs/ui/parity/after/app-series-{1440,768,390}.jpg`, `app-series-friday-*` (one topic, "approval rules not final"), `app-series-added-*` (the first row pressed: the design turns it into "Added", ours too) and `app-series-notopics-*` (Next alone), made with `web/scripts/parity-shots.mjs` against `web/scripts/mock-api.mjs`, which now serves the designer's own TOPICS sample (D:1559-1565) for series 1 and 3 and builds the agenda lines from the page as the server does (`--topics none` removes the topics; `/__mock/reset` restores the agenda).
+
+| Piece | Design | Page |
+|---|---|---|
+| "Keeps coming up" heading (15 px / 600), grey sub-line | D:699-700 | same sizes and colours |
+| Amber topic row: border `#F3DDB0`, fill `#FFFBF2`, radius 10, padding 10 12, icon 16 px `#9A5B00` | D:704-710 | same (tokens `--warning-line`, `--warning-pale`, `--warning`) |
+| Topic label 550, sub-line 12 px `#7A4A00`, dates 12 px `#6E7772` | D:709 | same |
+| "Suggested agenda" heading and sub-line | D:713-714 | same |
+| Rows: 22 px number chip (radius 6, `#EEF1F0`, 11 px / 600), text, 28 px button (radius 7, 12 px / 550), rows divided by `#F0F2F1` | D:717-722 | same |
+| Added: fill `#E6F1EE`, border `#BFDCD5`, text `#0A5248`, label "Added" | D:1904 | same (`--teal-tint`, `--teal-border`, `--teal-deep`) |
+| Placement: after the three tiles, before "Unfinished from last time" | D:701-725 | same (asserted by a test) |
+| The words of the four agenda lines | D:1892-1895 | the server writes them with the same words and plurals |
+
+The sample words in the shots differ from the design's (the mock's page is the owner's view of the captured "Beyric Monday planning"): the blocks, their order, sizes, colours and states are what is compared.
+
+## Lead-designed, not in the designer's file
+| Piece | What we did |
+|---|---|
+| Phone (≤ 480 px, U7) | The "Add to agenda" / "Added" button drops under the row text, indented past the number chip, so a long line keeps its width. Tablet (768) is the desktop layout |
+| An Added line the person may not remove (`can_remove` false) | The button is disabled with the title "Only the person who added it, or an owner or admin, can remove this." (the design has no permissions) |
+| A failed add or remove | The page's existing red error line (the server's own words for `agenda_full`); the row keeps its state |
+| Loading state (U14) | None: the blocks are absent until the server sends rows |
+| A viewer who may not read everything behind a topic | Nothing is drawn about it: the server sends fewer topics (none, when a meeting behind them was unshared). Never a "hidden" notice |
+
+## Verification
+* `web/tests/series-view.test.tsx` (new block, driven by the real captures `docs/fe-captures/series-topics/13`, `14` and `21`): both blocks in order after the tiles, the three sub-line templates and dates as sent, numbered rows in the received order, absent when empty (no heading, no spinner), a teammate's page (same topics, no "Confirm" line) and a teammate after an unshare (neither block, nothing said), Add posts the exact text and the row becomes Added and the item is in "Other agenda items", a second click removes it, Added at once for an existing item, disabled when it may not be removed, refusal shown and the row unchanged. Older captures get the two empty fields the API now always sends.
+* `npm run lint`, `typecheck`, `vitest` (all 61 files), the design guards (the new colour is a token).
+* Parity shots as above; the mock and the page agree with the captured shapes.
+
+## Follow-ups
+* The Series cards (list) do not show topics.
+* Real-model topics are unchecked until the first live series; the mock's topics are the designer's sample.

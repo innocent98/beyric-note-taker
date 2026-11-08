@@ -825,6 +825,26 @@
 .sr-tile-done { color: var(--teal); }
 .sr-tile-late { color: var(--danger); }
 .sr-tile-label { font-size: var(--text-xs); color: var(--text-2); }
+/* Keeps coming up (designer D:698-711): amber rows with the refresh icon; Suggested agenda (D:712-725). */
+.sr-topics { display: flex; flex-direction: column; gap: 8px; }
+.sr-topic { display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border: 1px solid var(--warning-line); border-radius: var(--radius-md); background: var(--warning-pale); }
+.sr-topic-icon { flex: none; margin-top: 3px; color: var(--warning); }
+.sr-topic-main { flex: 1; min-width: 0; }
+.sr-topic-label { font-weight: 550; overflow-wrap: anywhere; }
+.sr-topic-line { font-size: var(--text-xs); color: var(--warning-text); }
+.sr-topic-when { font-size: var(--text-xs); color: var(--text-3); }
+.sr-sug { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-bottom: 1px solid var(--border-softer); }
+.sr-sug-n { display: flex; flex: none; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 6px; background: var(--surface-active); color: var(--ink-3); font-size: 11px; font-weight: 600; }
+.sr-sug-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.sr-sug-btn { flex: none; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--text); font-size: var(--text-xs); font-weight: 550; white-space: nowrap; cursor: pointer; }
+.sr-sug-btn-on { border-color: var(--teal-border); background: var(--teal-tint); color: var(--teal-deep); }
+.sr-sug-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+/* Lead-designed (the file has no @media): on a phone the button drops under the text so the line keeps its width. */
+@media (max-width: 480px) {
+  .sr-sug { flex-wrap: wrap; }
+  .sr-sug-text { flex-basis: calc(100% - 34px); }
+  .sr-sug-btn { margin-left: 34px; }
+}
 
 /* Suggested tasks (the designer's `hasSuggested` block, `dt.suggested` drawer box and the Action items
    "To confirm" pill). The phone layout that stacks the four buttons is lead-designed. */

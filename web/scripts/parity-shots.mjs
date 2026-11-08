@@ -84,6 +84,10 @@ const SCREENS = {
   // captured "Beyric Monday planning"; the designer's has the sample team's data, so the words in the
   // lists differ and the layout, the blocks and their states are what is compared.
   "app-series": [APP, [["Next: Mon 9 Nov, 14:00", "first"]], "/series/1", true],
+  // Keeps coming up and Suggested agenda: the first "Add to agenda" pressed (the design turns it into "Added"
+  // with the teal fill), and a series with no topics (mock `--topics none`: both blocks absent, no spinner).
+  "app-series-added": [APP, [["Next: Mon 9 Nov, 14:00", "first"], ["Add to agenda", "first", 300]], "/series/1", true, [{ text: "Add to agenda", wait: 500 }]],
+  "app-series-notopics": [null, [], "/series/1", true],
   "app-series-friday": [APP, [["Next: Fri 6 Nov, 15:00", "first"]], "/series/3", true],
   // Lead-designed pieces (no prototype, so shot alone): the Series row's "Add to recurring meeting"
   // dialog and the "Make this a recurring meeting?" chip (meeting 6 of the mock reuses a link).
