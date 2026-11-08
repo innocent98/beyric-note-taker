@@ -110,7 +110,7 @@ The page then lists it under `agenda` *(capture `17-series-after-add.json`)*:
 
 ## What a viewer may see: the traps
 
-**Who sees a topic.** A topic's words were written from the meetings behind it, and one of them can be a teammate's private meeting. The server therefore keeps, for each viewer, only the topic's meetings that viewer may read, and **hides a topic that has fewer than two left** (and, when some meetings were unreadable, one whose label the readable ones do not mention). Four consequences:
+**Who sees a topic.** A topic's words were written from the meetings behind it, and one of them can be a teammate's private meeting. The server therefore keeps, for each viewer, only the topic's meetings that viewer may read, and **hides a topic that has fewer than two left** (and, when the model was shown meetings the viewer cannot read, one whose words the readable notes do not echo). Four consequences:
 
 1. **The same series shows different topics to different people.** Captured: `GET` as **dan** (a teammate; the three shared meetings are readable by him, Ada's private one is not) → **200** *(capture `14-series-dan.json`)*: `topics` holds only "Pricing model" (3 meetings, all shared). "Compensation review" is **absent** for him (it came from one shared meeting and Ada's private one, so he can read one), and its agenda line is gone from `suggested_agenda`:
 
@@ -125,7 +125,7 @@ The page then lists it under `agenda` *(capture `17-series-after-add.json`)*:
 
    Do not cache a topics list across users, do not infer "there should be a topic" from anything else, and do not explain the absence. The viewer is never told a topic was hidden.
 2. **`line` and `dates_text` count only what this viewer may read.** A topic raised in three meetings of which a viewer may read two says "Discussed in 2 meetings…" for that viewer. Draw `line` as received; never recompute N from `meetings.length` of another response.
-3. **A topic can be hidden even when the viewer reads two of its meetings.** If the viewer cannot read every meeting the topic came from, the server also checks that the label's words are in the notes of two meetings they can read; if not, the topic is not sent. (Test: `test_a_label_drawn_from_a_meeting_the_viewer_cannot_read_is_not_shown_on_two_incidental_ones`; **not captured live**.) Same rule for you: absence is never explained.
+3. **A topic can be hidden even when the viewer reads two (or all) of the meetings it cites.** The server stores every meeting the model was shown. If the viewer cannot read all of them, the topic is sent only when its words are found in the notes of meetings they can read (every word of the label in two meetings, most words of the agenda sentence in all of them together); otherwise it is not sent. Tests: `test_a_topic_written_after_seeing_a_hidden_meeting_must_be_grounded_anyway`, `test_the_agenda_sentence_must_be_grounded_too`; **not captured live** (capture `14` is the case that passes). Same rule for you: absence is never explained, and there is nothing to do about it on the FE.
 4. **A change in sharing changes the page.** If a meeting is unshared, or moved out of the series, the topic can vanish on the next load. This is not an error.
 
 Another team's series is **404** *(capture `15-series-eve.json`)*: `{"error": {"code": "not_found", "message": "No such recurring meeting"}}` is the existing error shape, unchanged. No login: **401** `{"error": {"code": "not_authenticated", "message": "Log in first."}}` *(capture `07-series-logged-out.json`)*.

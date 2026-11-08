@@ -579,7 +579,7 @@ def test_the_job_never_reads_a_teammates_private_meeting(session, template, week
     assert "SECRETWORD" in message_of(fake.calls[1])
 
 
-def two_meeting_topic(session, weekly, ids, label="Pricing model"):
+def two_meeting_topic(session, weekly, ids, label="Pricing model", sources=None):
     session.add(
         SeriesTopic(
             series_id=weekly.id,
@@ -588,6 +588,7 @@ def two_meeting_topic(session, weekly, ids, label="Pricing model"):
             agenda=f"Decide {label.lower()}",
             reason="no_decision",
             meeting_ids=ids,
+            source_meeting_ids=sources if sources is not None else ids,
         )
     )
     session.commit()
@@ -650,6 +651,65 @@ def test_a_label_drawn_from_a_meeting_the_viewer_cannot_read_is_not_shown_on_two
     assert [t["label"] for t in mate.get(f"/api/series/{weekly.id}").json()["topics"]] == [
         "Redundancy plan"
     ]
+
+
+def test_a_topic_written_after_seeing_a_hidden_meeting_must_be_grounded_anyway(
+    app, session, template, weekly, daniel, owner
+):
+    a = week(session, template, weekly, 0, "Launch checklist")
+    b = week(session, template, weekly, 1, "Budget talk")
+    secret = week(session, template, weekly, 2, "Redundancy plan for the CTO")  # private
+    # the model saw all three but cited only the two readable ones
+    two_meeting_topic(
+        session, weekly, [a.id, b.id], "Redundancy plan", sources=[a.id, b.id, secret.id]
+    )
+    two_meeting_topic(
+        session, weekly, [a.id, b.id], "Launch checklist", sources=[a.id, b.id, secret.id]
+    )
+    share(session, a, owner)
+    share(session, b, owner)
+    mate = sign_in(app, DANIEL_EMAIL)
+    page = mate.get(f"/api/series/{weekly.id}").json()
+    # "Launch checklist" is in one readable meeting, "Redundancy plan" in none: neither is shown
+    assert page["topics"] == [] and page["suggested_agenda"] == []
+    b.notes = notes_with("Launch dates", "Launch checklist")
+    session.commit()
+    assert [t["label"] for t in mate.get(f"/api/series/{weekly.id}").json()["topics"]] == [
+        "Launch checklist"
+    ]
+    owner_page = _owner_page(app, session, weekly)  # reads all three: nothing is hidden
+    assert [t["label"] for t in owner_page["topics"]] == [
+        "Redundancy plan",
+        "Launch checklist",
+    ]
+
+
+def test_the_agenda_sentence_must_be_grounded_too(app, session, template, weekly, daniel, owner):
+    a = week(session, template, weekly, 0, "Pricing model came up")
+    b = week(session, template, weekly, 1, "Pricing model again")
+    secret = week(session, template, weekly, 2, "c")
+    session.add(
+        SeriesTopic(
+            series_id=weekly.id,
+            label="Pricing model",
+            agenda="Fire the CTO over compensation",  # words the readable notes never say
+            reason="no_decision",
+            meeting_ids=[a.id, b.id],
+            source_meeting_ids=[a.id, b.id, secret.id],
+        )
+    )
+    session.commit()
+    share(session, a, owner)
+    share(session, b, owner)
+    page = sign_in(app, DANIEL_EMAIL).get(f"/api/series/{weekly.id}").json()
+    assert page["topics"] == [] and "Fire the CTO" not in json.dumps(page)
+
+
+def test_the_job_stores_every_meeting_it_showed_the_model(session, weekly, three_weeks):
+    run(session, FakeTopics(lambda numbers, n: {"topics": [topic(meetings=numbers[:2])]}))
+    [row] = stored(session, weekly.id)
+    assert row.meeting_ids == [m.id for m in three_weeks[:2]]
+    assert row.source_meeting_ids == [m.id for m in three_weeks]
 
 
 def test_unsharing_a_meeting_hides_the_topic_again(app, session, template, weekly, daniel, owner):

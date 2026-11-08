@@ -13,8 +13,10 @@ dropped. The rows in `series_topics` are replaced as a set; a failed call leaves
 page shows to the series' owner (`series.meetings_of(series, owner)`): the owner's own and those
 shared with the team. A private meeting of another teammate is never read. Even so, the owner's
 private meetings are in the input, so a topic's words may come from a meeting a teammate cannot
-read: the read side filters every topic's `meeting_ids` through `visible_meetings(viewer)` and hides
-a topic with fewer than two left (`series.topics_for`).
+read: the read side filters every topic's `meeting_ids` through `visible_meetings(viewer)`, hides a
+topic with fewer than two left, and, when the viewer cannot read every meeting the model was shown
+(`source_meeting_ids`), shows it only if its words are in the notes they can read
+(`series.topics_for`).
 
 Meeting text is data, never instructions: it sits between delimiters and the system prompt says so.
 The ledger (`ai_runs`, kind `topics`) keeps the model, the token counts and the outcome; no text.
@@ -380,6 +382,7 @@ def _replace(session: Session, series_id: int, topics: list[Topic], numbers: dic
                 agenda=topic.agenda,
                 reason=topic.reason,
                 meeting_ids=[numbers[n] for n in topic.meeting_numbers],
+                source_meeting_ids=sorted(numbers.values()),
             )
         )
 

@@ -1091,6 +1091,9 @@ class SeriesTopic(Base):
     agenda: Mapped[str] = mapped_column(String(100))
     reason: Mapped[str] = mapped_column(String(12))
     meeting_ids: Mapped[list[int]] = mapped_column(JSONB)
+    # Every meeting the model was shown when it wrote this topic (the cited ones are `meeting_ids`):
+    # a viewer who cannot read all of them sees the topic only if it is grounded in what they can.
+    source_meeting_ids: Mapped[list[int]] = mapped_column(JSONB, default=list, server_default="[]")
     computed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

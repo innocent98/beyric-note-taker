@@ -2,11 +2,14 @@
 
 `series_topics` holds what the worker's one model call per series found: topics discussed in two or
 more of the series' meetings without a decision. It is replaced as a set at each computation and
-read as stored (a page load never calls the model). `meeting_ids` are the meetings the topic came
-from; every read filters them through what the viewer may read, and a topic with fewer than two
-left is hidden. Three columns on `series` drive the job: `topics_signature` (a hash of what the last
-successful call was given, so an unchanged series costs no call), `topics_checked_at` (null means
-"look again now"; a new meeting's notes, a meeting joining or leaving the series set it null) and
+read as stored (a page load never calls the model). `meeting_ids` are the meetings the topic cites
+and `source_meeting_ids` every meeting the model was shown. Every read filters them through what
+the viewer may read, hides a topic with fewer than two left and, when the viewer cannot read all
+the meetings the model saw, shows it only if its words are in the notes they can read.
+
+Three columns on `series` drive the job: `topics_signature` (a hash of what the last successful
+call was given, so an unchanged series costs no call), `topics_checked_at` (null means "look again
+now"; a new meeting's notes, a meeting joining or leaving the series set it null) and
 `topics_attempts` (failed calls since the input last changed; the job stops at three).
 `ai_runs.kind` is widened to allow `topics`; no row is rewritten.
 
@@ -43,6 +46,7 @@ def upgrade() -> None:
         sa.Column("agenda", sa.String(100), nullable=False),
         sa.Column("reason", sa.String(12), nullable=False),
         sa.Column("meeting_ids", JSONB(), nullable=False),
+        sa.Column("source_meeting_ids", JSONB(), nullable=False, server_default="[]"),
         sa.Column(
             "computed_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
         ),

@@ -314,7 +314,13 @@ def stored(engine) -> list[dict]:
         from app.models import SeriesTopic
 
         return [
-            {"label": t.label, "agenda": t.agenda, "reason": t.reason, "meeting_ids": t.meeting_ids}
+            {
+                "label": t.label,
+                "agenda": t.agenda,
+                "reason": t.reason,
+                "meeting_ids": t.meeting_ids,
+                "source_meeting_ids": t.source_meeting_ids,
+            }
             for t in session.scalars(select(SeriesTopic).order_by(SeriesTopic.id))
         ]
 
@@ -342,7 +348,7 @@ def run(base: str, ids: dict, engine, model: FakeModel) -> None:
     )
     run_job(engine, model, datetime.now(UTC))
     note_file("prompt-sent-to-model", "What the model was shown (the worker's job, run here with the stand-in model): the system prompt and the user message. Five meetings exist in the series; the model got four. Dan's private meeting (MULBERRY) was never read: the job reads only the meetings the Series page shows to the series' owner (Ada), which are her own and those shared with the team. Ada's own private meeting is read.", {"model": model.calls[-1]["model"], "max_completion_tokens": model.calls[-1]["max_completion_tokens"], "timeout": model.calls[-1]["timeout"], "system": model.calls[-1]["messages"][0]["content"], "user": model.calls[-1]["messages"][1]["content"]})  # fmt: skip
-    note_file("stored-after-the-job", "The `series_topics` rows after the job. The stand-in model proposed three topics; \"Hiring plan\" is gone: more than half of its words are in an approved decision of the series (checked in code). `meeting_ids` are meeting ids.", stored(engine))  # fmt: skip
+    note_file("stored-after-the-job", "The `series_topics` rows after the job. The stand-in model proposed three topics; \"Hiring plan\" is gone: more than half of its words are in an approved decision of the series (checked in code). `meeting_ids` are the meetings a topic cites; `source_meeting_ids` are all four meetings the model was shown (Dan's private one is not among them). A viewer who cannot read all of the sources sees a topic only if its words are in the notes they can read.", stored(engine))  # fmt: skip
     note_file("ledger-after-the-job", "The ledger row (`ai_runs`, kind `topics`). No meeting text is stored; `meeting_id` and the account are null (one call per series).", ledger(engine))  # fmt: skip
     ada.call("series-ada", "GET", page, note="Ada (the series' owner) reads two topics: \"Pricing model\" across three meetings, and \"Compensation review\" across a shared meeting and her own private one. `line` is the sub-line, written by the server; `dates_text` is in her zone, oldest first. `suggested_agenda` lists the topics' agenda sentences first, then the overdue task, the carried question and the suggested task to confirm.")  # fmt: skip
     dan.call("series-dan", "GET", page, note="Dan (a teammate) may read the three shared meetings but not Ada's private one. \"Pricing model\" is shown with its three readable meetings. \"Compensation review\" came from one shared and one private meeting: Dan can read only one, so the whole topic is hidden from him (its label would reveal what Ada's private meeting said). Its agenda line is hidden with it. Nothing from Dan's own private meeting was ever read by the job.")  # fmt: skip

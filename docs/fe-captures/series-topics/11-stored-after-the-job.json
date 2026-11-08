@@ -1,5 +1,5 @@
 {
-  "note": "The `series_topics` rows after the job. The stand-in model proposed three topics; \"Hiring plan\" is gone: more than half of its words are in an approved decision of the series (checked in code). `meeting_ids` are meeting ids.",
+  "note": "The `series_topics` rows after the job. The stand-in model proposed three topics; \"Hiring plan\" is gone: more than half of its words are in an approved decision of the series (checked in code). `meeting_ids` are the meetings a topic cites; `source_meeting_ids` are all four meetings the model was shown (Dan's private one is not among them). A viewer who cannot read all of the sources sees a topic only if its words are in the notes they can read.",
   "content": [
     {
       "label": "Pricing model",
@@ -9,6 +9,12 @@
         1,
         2,
         3
+      ],
+      "source_meeting_ids": [
+        1,
+        2,
+        3,
+        4
       ]
     },
     {
@@ -17,6 +23,12 @@
       "reason": "no_owner",
       "meeting_ids": [
         2,
+        4
+      ],
+      "source_meeting_ids": [
+        1,
+        2,
+        3,
         4
       ]
     }
