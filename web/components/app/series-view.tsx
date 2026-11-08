@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/toast";
 import { useToday } from "@/components/app/use-today";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
-import type { AgendaItem, CarriedQuestion, SeriesPage, Task, TaskPerson } from "@/lib/api/types";
+import type { AgendaItem, AgendaSuggestion, CarriedQuestion, SeriesPage, Task, TaskPerson } from "@/lib/api/types";
 import { durationLabel, initials, platformLabel, plural } from "@/lib/format";
 import { avatarTone, dayLabel, isOverdue, personInitials, taskDueText, todayIn } from "@/lib/tasks";
 import { LocalTime } from "@/components/app/local-time";
@@ -82,6 +82,8 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
   const [toast, flash] = useToast();
   const [text, setText] = useState("");
   const [busy, setBusy] = useState<"add" | "send" | null>(null);
+  // The "Suggested agenda" lines whose Add / Added click is in flight (by text), so a double click does nothing.
+  const [toggling, setToggling] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [people, setPeople] = useState<TaskPerson[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
@@ -141,6 +143,27 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
     } catch (caught) {
       setError(say(caught));
     }
+  }
+
+  // "Add to agenda" posts the suggested line's text to the agenda; a second click on "Added" removes the
+  // item that has that exact text (docs/fe-integration-guide-series-topics.md).
+  async function toggleSuggestion(line: AgendaSuggestion) {
+    if (toggling.includes(line.text)) return;
+    setToggling((t) => [...t, line.text]);
+    setError(null);
+    try {
+      const existing = page.agenda.find((a) => a.text === line.text);
+      if (existing) {
+        await api.series.removeAgenda(page.id, existing.id);
+        setPage((p) => ({ ...p, agenda: p.agenda.filter((a) => a.id !== existing.id) }));
+      } else {
+        const item: AgendaItem = await api.series.addAgenda(page.id, line.text);
+        setPage((p) => ({ ...p, agenda: [...p.agenda, item] }));
+      }
+    } catch (caught) {
+      setError(say(caught));
+    }
+    setToggling((t) => t.filter((x) => x !== line.text));
   }
 
   async function resolve(question: CarriedQuestion) {
@@ -215,6 +238,54 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
                 <div className="sr-tile-label">Overdue</div>
               </div>
             </div>
+            {page.topics.length > 0 ? (
+              <div>
+                <h2 className="sr-h2">Keeps coming up</h2>
+                <div className="sr-note">Topics discussed in more than one meeting without a decision.</div>
+                <div className="sr-topics">
+                  {page.topics.map((topic) => (
+                    <div className="sr-topic" key={topic.id}>
+                      <svg className="sr-topic-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5" />
+                      </svg>
+                      <div className="sr-topic-main">
+                        <div className="sr-topic-label">{topic.label}</div>
+                        <div className="sr-topic-line">{topic.line}</div>
+                        <div className="sr-topic-when">{topic.dates_text}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {page.suggested_agenda.length > 0 ? (
+              <div>
+                <h2 className="sr-h2">Suggested agenda</h2>
+                <div className="sr-note">Built from repeat topics, overdue work, open questions and tasks to confirm.</div>
+                <div className="sr-list">
+                  {page.suggested_agenda.map((line, index) => {
+                    const existing = page.agenda.find((a) => a.text === line.text);
+                    const locked = existing !== undefined && !existing.can_remove;
+                    return (
+                      <div className="sr-sug" key={`${line.kind}-${line.text}`}>
+                        <span className="sr-sug-n">{index + 1}</span>
+                        <span className="sr-sug-text">{line.text}</span>
+                        <button
+                          type="button"
+                          className={existing ? "sr-sug-btn sr-sug-btn-on" : "sr-sug-btn"}
+                          aria-pressed={existing !== undefined}
+                          disabled={locked || toggling.includes(line.text)}
+                          title={locked ? "Only the person who added it, or an owner or admin, can remove this." : undefined}
+                          onClick={() => void toggleSuggestion(line)}
+                        >
+                          {existing ? "Added" : "Add to agenda"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             <div>
               <h2 className="sr-h2">Unfinished from last time</h2>
               <div className="sr-note">Tasks from earlier meetings in this series that are not done yet.</div>

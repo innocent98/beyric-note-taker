@@ -43,6 +43,7 @@ const { values } = parseArgs({
     "time-zone": { type: "string" },
     role: { type: "string", default: "owner" },
     overdue: { type: "boolean", default: false },
+    topics: { type: "string", default: "live" },
   },
 });
 
@@ -582,6 +583,28 @@ if (values.overdue) {
   seriesPages[1].unfinished.slice(0, 2).forEach((t) => (t.due_date = "2026-10-30"));
   [tasks.find((t) => t.id === 5), tasks.find((t) => t.id === 6)].forEach((t) => (t.due_date = "2026-10-30"));
 }
+// Keeps coming up and Suggested agenda (docs/fe-captures/series-topics/ has the shapes): the designer's own
+// TOPICS sample (D:1559-1565) for series 1 and 3, the sub-lines and dates as the server writes them. The
+// agenda lines are built from the page as the server does: topic sentences, overdue (before TODAY), carried
+// questions, suggested tasks. `--topics none` leaves the page with no topics; with nothing behind them the
+// lines are absent. Series 1 and 3 stand for the designer's s1 and s2.
+const topicSample = {
+  1: [
+    { id: 1, label: "Pricing model", agenda: "Decide the pricing model", reason: "no_decision", line: "Discussed in 3 meetings without a decision", dates_text: "Mon 26 Oct, Fri 30 Oct and Mon 2 Nov 2026" },
+    { id: 2, label: "Figma file organisation", agenda: "Agree who organises the Figma file, and by when", reason: "no_owner", line: "Raised in 2 meetings, still no owner or date", dates_text: "Fri 30 Oct and Mon 2 Nov 2026" },
+  ],
+  3: [{ id: 3, label: "Workspace approvals", agenda: "Finalise the workspace approval rules", reason: "not_final", line: "Discussed in 2 meetings, approval rules not final", dates_text: "Fri 23 Oct and Fri 30 Oct 2026" }],
+};
+const withTopics = (page, id) => {
+  const topics = values.topics === "none" ? [] : (topicSample[id] ?? []).map((t) => ({ ...t, meetings: [] }));
+  const overdue = page.unfinished.filter((t) => t.due_date && t.due_date < TODAY).length;
+  const suggested = id === 1 ? tasks.filter((t) => t.suggested).length : 0;
+  const lines = topics.map((t) => ({ kind: "topic", text: t.agenda }));
+  if (overdue) lines.push({ kind: "overdue", text: overdue === 1 ? "Review the overdue task" : `Review the ${overdue} overdue tasks` });
+  if (page.questions.length) lines.push({ kind: "questions", text: page.questions.length === 1 ? "Settle 1 open question carried over" : `Settle ${page.questions.length} open questions carried over` });
+  if (suggested) lines.push({ kind: "suggested", text: suggested === 1 ? "Confirm 1 suggested task from last time" : `Confirm ${suggested} suggested tasks from last time` });
+  return { ...page, topics, suggested_agenda: lines };
+};
 let nextAgendaId = 100;
 const questionState = Object.fromEntries(seriesCapture("15").open_questions.map((q) => [q.id, { ...q }]));
 details[0].series = { id: 1, title: "Beyric Monday planning" };
@@ -599,6 +622,7 @@ let notifyReminders = true;
 // What the tasks were when the mock started: Accept, Dismiss and a delete change them in memory, and
 // `/__mock/reset` puts them back so each parity shot starts from the same board.
 const tasksAtStart = JSON.stringify(tasks);
+const agendaAtStart = JSON.stringify(Object.fromEntries(Object.entries(seriesPages).map(([id, p]) => [id, p.agenda])));
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
@@ -611,8 +635,8 @@ const server = http.createServer(async (req, res) => {
   // states while the mock runs (the Next build proxies the browser's calls to one address, so one mock
   // has to serve every state).
   if (path === "/__mock/set") {
-    for (const key of ["decisions", "review", "ask"]) if (url.searchParams.has(key)) values[key] = url.searchParams.get(key);
-    return json(res, 200, { decisions: values.decisions, review: values.review, ask: values.ask });
+    for (const key of ["decisions", "review", "ask", "topics"]) if (url.searchParams.has(key)) values[key] = url.searchParams.get(key);
+    return json(res, 200, { decisions: values.decisions, review: values.review, ask: values.ask, topics: values.topics });
   }
   // Not part of the API: lets parity-shots.mjs start each translation screen from nothing.
   if (path === "/__mock/reset") {
@@ -626,6 +650,7 @@ const server = http.createServer(async (req, res) => {
     resetProjects();
     resetSprints();
     tasks.splice(0, tasks.length, ...JSON.parse(tasksAtStart));
+    for (const [id, agenda] of Object.entries(JSON.parse(agendaAtStart))) seriesPages[id].agenda = agenda;
     tasksSettings = { auto_create_tasks: true, email_assignees: true, ask_before_unclear: true };
     for (const t of tasks) t.milestone_id = [1, 3, 5, 8, 9, 10, 11, 12].includes(t.id) ? 1 : null;
     proposalOpen = true;
@@ -720,7 +745,7 @@ const server = http.createServer(async (req, res) => {
   const onePage = /^\/api\/series\/(\d+)$/.exec(path);
   if (onePage && method === "GET") {
     const page = seriesPages[onePage[1]];
-    return page ? json(res, 200, page) : json(res, 404, { error: { code: "not_found", message: "No such recurring meeting" } });
+    return page ? json(res, 200, withTopics(page, Number(onePage[1]))) : json(res, 404, { error: { code: "not_found", message: "No such recurring meeting" } });
   }
   const agenda = /^\/api\/series\/(\d+)\/agenda(?:\/(\d+)|\/send)?$/.exec(path);
   if (agenda && seriesPages[agenda[1]]) {
