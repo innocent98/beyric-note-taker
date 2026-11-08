@@ -113,7 +113,7 @@ for (const meeting of details) {
 for (const meeting of details) meeting.template_name = body("11-templates-seeded").templates.find((t) => t.id === meeting.template_id)?.name ?? "General";
 const summary = ({ id, title, platform, native_id, status, step, status_text, status_tone, template_id, template_name, created_at }) => ({
   id, title, platform, native_id, status, step, status_text, status_tone, template_id, template_name, created_at,
-  tasks_count: meetingTasks(id).length,
+  tasks_count: made(meetingTasks(id)).length,
 });
 
 
@@ -162,7 +162,8 @@ const makeTask = (id, title, who, due, status, ref, extra = {}) => ({
   id, title, status, assignee: personOf(who), spoken_owner: null, due_date: due, due_phrase: null,
   quote: null, is_new: !!ref && ref === mondayRef && status !== "done", unverified: false, source: ref ? "ai" : "manual",
   assigned_on: ref ? ref.created_at.slice(0, 10) : "2026-11-02", done_at: status === "done" ? "2026-11-02T10:00:00Z" : null,
-  created_at: "2026-11-02T10:00:00Z", from_meeting: !!ref, meeting: ref, project_id: ref ? 1 : null, milestone_id: null, check_project: false, ...allowed, ...extra,
+  created_at: "2026-11-02T10:00:00Z", from_meeting: !!ref, meeting: ref, project_id: ref ? 1 : null, milestone_id: null, check_project: false,
+  suggested: false, confidence: null, reason: null, quote_speaker: null, quote_line: null, ...allowed, ...extra,
 });
 const tasks = [
   makeTask(8, "Continue hiring for the customer success lead role", null, "2026-11-06", "todo", mondayRef, { spoken_owner: "Kemi Adeyemi", quote: "Intended start on or before Friday.", can_claim: true }),
@@ -205,7 +206,18 @@ tasks.push(
   makeTask(14, "Decide how sending the note taker can be automated", 2, null, "todo", zoomRef, { project_id: 2, is_new: false }),
 );
 for (const t of tasks) if ([1, 3, 5, 8, 9, 10, 11, 12].includes(t.id)) t.milestone_id = 1;
-tasks.find((t) => t.id === 6).check_project = true;
+tasks.find((t) => t.id === 7).check_project = true; // the design: "Share the meeting summary" is the one to check
+// Suggested tasks (docs/fe-captures/suggested-tasks/): the designer's three, "Organise the Figma file"
+// (medium), "Support Daniel Okoro with testing" (low) and "Look into the Metrika analytics setup"
+// (low, nobody's), with the designer's reasons. They are unfiled, as the server makes them. The
+// evidence is the verbatim quote and its speaker (lead-designed: the design also draws a time and a
+// paraphrase line).
+Object.assign(tasks.find((t) => t.id === 4), { suggested: true, confidence: "medium", reason: 'Raised as something to do "at some point", with no commitment or date.', quote: "At some point we should move the Figma file into the team workspace.", quote_speaker: "Amara Nwosu", quote_line: 12, project_id: null, milestone_id: null, sprint_id: null });
+Object.assign(tasks.find((t) => t.id === 6), { suggested: true, confidence: "low", reason: 'Offered on a condition: "if you need it".', quote: "Daniel, I can support you with testing this week if you need it.", quote_speaker: "Adebayo Tosin", quote_line: 8, check_project: false, project_id: null, due_date: null, sprint_id: null });
+tasks.push(makeTask(15, "Look into the Metrika analytics setup", null, null, "todo", mondayRef, {
+  suggested: true, confidence: "low", reason: 'No one took this on. It was said as "someone should".', quote: "Someone should look at the Metrika analytics setup.",
+  quote_speaker: "Daniel Okoro", quote_line: 16, project_id: null, sprint_id: null, can_claim: true,
+}));
 const proposal = { id: 2, name: "Beta release", due_date: "2026-11-20", project_id: 2, source_meeting: refOf(8, "Zoom 88205679674", "2026-11-02"), quote: "We want the beta out by the twentieth of November.", confirmed_at: null, task_count: 0, done_count: 0 };
 
 // Sprints (W9). The shapes are the ones in docs/fe-captures/sprints-w9/; the values are the designer's:
@@ -228,6 +240,10 @@ function resetSprints() {
   team.sprint_align_weekdays = true;
   seriesList = [{ pid: null, base: 12, current: 12, closed: [{ number: 11, early: false }] }];
   for (const t of tasks) {
+    if (t.suggested) {
+      t.sprint_id = null; // a suggested task is unfiled until it is accepted
+      continue;
+    }
     t.sprint_id = { 1: 12, 2: 12, 5: 12, 6: 12, 8: 12, 9: 12, 10: 12, 11: 11, 12: 11, 4: 13, 13: 12 }[t.id] ?? null;
     t.carried = [9, 10].includes(t.id);
   }
@@ -319,9 +335,11 @@ const milestoneOut = (m) => {
   return { ...m, task_count: ofIt.length, done_count: ofIt.filter((t) => t.status === "done").length, can_confirm: manage && !m.confirmed_at, can_edit: manage };
 };
 const meetingTasks = (id) => tasks.filter((t) => t.meeting?.id === id).sort((a, b) => b.id - a.id);
-const tasksNew = () => tasks.filter((t) => t.is_new && t.status !== "done").length;
-const attention = () => ({ needs_owner: tasks.filter((t) => !t.assignee && t.status !== "done").length, unverified: 0, check_project: tasks.filter((t) => t.check_project && t.status !== "done").length });
-let tasksSettings = { auto_create_tasks: true, email_assignees: true };
+// A suggested task is counted nowhere (the server leaves it out of every count).
+const made = (list) => list.filter((t) => !t.suggested);
+const tasksNew = () => made(tasks).filter((t) => t.is_new && t.status !== "done").length;
+const attention = () => ({ needs_owner: made(tasks).filter((t) => !t.assignee && t.status !== "done").length, unverified: 0, check_project: made(tasks).filter((t) => t.check_project && t.status !== "done").length });
+let tasksSettings = { auto_create_tasks: true, email_assignees: true, ask_before_unclear: true };
 const integrationsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "integrations-w10", `${name}.json`), "utf8")).response.body;
 let slackConnected = false;
 let linearConnected = false;
@@ -487,6 +505,9 @@ details[0].notes_html =
 // person's own reminder mail switch is GET/PUT /api/settings/reminders.
 details[5].suggest_recurring = true;
 let notifyReminders = true;
+// What the tasks were when the mock started: Accept, Dismiss and a delete change them in memory, and
+// `/__mock/reset` puts them back so each parity shot starts from the same board.
+const tasksAtStart = JSON.stringify(tasks);
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
@@ -512,6 +533,8 @@ const server = http.createServer(async (req, res) => {
     slackConnected = false;
     resetProjects();
     resetSprints();
+    tasks.splice(0, tasks.length, ...JSON.parse(tasksAtStart));
+    tasksSettings = { auto_create_tasks: true, email_assignees: true, ask_before_unclear: true };
     for (const t of tasks) t.milestone_id = [1, 3, 5, 8, 9, 10, 11, 12].includes(t.id) ? 1 : null;
     proposalOpen = true;
     linearConnected = false;
@@ -790,7 +813,9 @@ const server = http.createServer(async (req, res) => {
     const sprint = url.searchParams.get("sprint");
     if (sprint !== null && !["none", "current", "next"].includes(sprint) && !/^\d+$/.test(sprint)) return json(res, 422, { error: { code: "validation_error", message: "Some fields need attention.", fields: [{ field: "sprint", message: "Use none, current, next or a sprint id" }] } });
     const inSprint = (t) => (sprint === null ? true : sprint === "none" ? t.sprint_id === null : ["current", "next"].includes(sprint) ? roleIds(sprint).includes(t.sprint_id) : t.sprint_id === Number(sprint));
-    const list = tasks.filter((t) => (who === "me" ? t.assignee?.is_you : who === "none" ? !t.assignee : true) && inSprint(t));
+    // The default list leaves suggested tasks out; `suggested=true` lists only them.
+    const wantSuggested = url.searchParams.get("suggested") === "true";
+    const list = tasks.filter((t) => t.suggested === wantSuggested && (who === "me" ? t.assignee?.is_you : who === "none" ? !t.assignee : true) && inSprint(t));
     return json(res, 200, { tasks: list, people, attention: attention(), has_more: false, next_before_id: null });
   }
   if (path === "/api/tasks" && method === "POST") {
@@ -812,6 +837,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(204);
       return res.end();
     }
+    if (method === "POST") return json(res, 405, { error: { code: "method_not_allowed", message: "Method not allowed." } });
     if (method === "PATCH") {
       for (const [key, value] of Object.entries(data ?? {})) {
         if (key === "assignee_user_id") task.assignee = personOf(value);
@@ -827,10 +853,19 @@ const server = http.createServer(async (req, res) => {
     }
     return json(res, 200, task);
   }
+  const accept = /^\/api\/tasks\/(\d+)\/accept$/.exec(path);
+  if (accept && method === "POST") {
+    const task = tasks.find((t) => t.id === Number(accept[1]));
+    if (!task) return json(res, 404, { error: { code: "not_found", message: "No such task" } });
+    if (!task.suggested && task.confidence === null) return json(res, 409, { error: { code: "not_suggested", message: "This task is not waiting to be confirmed." } });
+    task.suggested = false; // filed as creation files it: the team's one project, the Backlog without a date
+    if (task.meeting && task.project_id === null) task.project_id = 1;
+    return json(res, 200, task);
+  }
   const ofMeeting = /^\/api\/meetings\/(\d+)\/tasks$/.exec(path);
   if (ofMeeting && method === "GET") {
     const list = meetingTasks(Number(ofMeeting[1]));
-    return json(res, 200, { tasks: list, assigned_people: new Set(list.filter((t) => t.assignee).map((t) => t.assignee.user_id)).size, extraction_status: "done" });
+    return json(res, 200, { tasks: list, assigned_people: new Set(made(list).filter((t) => t.assignee).map((t) => t.assignee.user_id)).size, to_confirm: list.length - made(list).length, extraction_status: "done" });
   }
   if (path === "/api/integrations/linear/teams") return json(res, 200, integrationsCapture("23-linear-teams"));
   if (path === "/api/integrations/linear") {
@@ -858,7 +893,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, integrationsCapture(slackConnected ? "10-slack-connected" : "05-slack-not-connected"));
   }
   if (path === "/api/settings/tasks") {
-    if (method === "PUT") tasksSettings = { auto_create_tasks: !!data?.auto_create_tasks, email_assignees: !!data?.email_assignees };
+    if (method === "PUT") tasksSettings = { auto_create_tasks: !!data?.auto_create_tasks, email_assignees: !!data?.email_assignees, ask_before_unclear: data?.ask_before_unclear === undefined ? tasksSettings.ask_before_unclear : !!data.ask_before_unclear };
     return json(res, 200, tasksSettings);
   }
   // Share notes by email: the refusals replay the real captures in docs/fe-captures/share/; a good
@@ -931,7 +966,7 @@ const server = http.createServer(async (req, res) => {
         : Number(detail[1]) === withStranger.id
           ? withStranger
           : details.find((m) => m.id === Number(detail[1]));
-    if (meeting && meeting !== sample && meeting !== withStranger) Object.assign(meeting, { tasks: meetingTasks(meeting.id), tasks_count: meetingTasks(meeting.id).length });
+    if (meeting && meeting !== sample && meeting !== withStranger) Object.assign(meeting, { tasks: meetingTasks(meeting.id), tasks_count: made(meetingTasks(meeting.id)).length });
     return meeting ? json(res, 200, meeting) : json(res, 404, { error: { code: "not_found", message: "That meeting was not found." } });
   }
   // Email preferences and the bell: the captures in docs/fe-captures/prelaunch-mail-prefs/. The

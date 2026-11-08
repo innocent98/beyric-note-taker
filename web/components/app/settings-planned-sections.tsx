@@ -176,6 +176,13 @@ export function SettingsPlannedSections({
           <Switch label="Create tasks from action items" />
         </div>
         <div className="pl-row">
+          <Text title="Ask before adding unclear tasks">
+            Clear commitments like &quot;I&apos;ll take checkout&quot; are added straight away. Vague or conditional ones wait
+            under Suggested tasks.
+          </Text>
+          <Switch label="Ask before adding unclear tasks" />
+        </div>
+        <div className="pl-row">
           <Text title="Email assignees">Send each person a list of their new tasks after the meeting.</Text>
           <Switch label="Email assignees" />
         </div>

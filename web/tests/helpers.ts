@@ -139,12 +139,25 @@ export function tasksBody<T>(file: string): T {
     task.project_id ??= null;
     task.milestone_id ??= null;
     task.check_project ??= false;
+    // Captures made before Suggested tasks lack these, which the API now always sends.
+    task.suggested ??= false;
+    task.confidence ??= null;
+    task.reason ??= null;
+    task.quote_speaker ??= null;
+    task.quote_line ??= null;
   };
   if (body && Array.isArray(body.tasks)) {
     body.tasks.forEach(fill);
     if (body.attention) body.attention.check_project ??= 0;
   } else if (body && typeof body === "object" && "can_update" in body) fill(body);
   return body as T;
+}
+
+// The body of a capture from the running API for Suggested tasks
+// (docs/fe-captures/suggested-tasks/<file>, `python scripts/capture_suggested_tasks_api.py`; the
+// model's reply in those captures is a labelled stand-in).
+export function suggestedBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/suggested-tasks", file))).response.body as T;
 }
 
 // The body of a capture from the running API for the Team routes

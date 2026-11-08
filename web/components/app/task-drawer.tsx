@@ -6,7 +6,23 @@ import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
 import type { Milestone, Project, Task, TaskChanges, TaskPerson } from "@/lib/api/types";
 import { type SprintBook, sprintChoices } from "@/lib/sprints";
-import { assignedLabel, COLUMNS, dueOptions, milestoneTitle, sourceLabel } from "@/lib/tasks";
+import {
+  assignedLabel,
+  avatarTone,
+  COLUMNS,
+  dueOptions,
+  milestoneTitle,
+  personInitials,
+  sourceLabel,
+  suggestedLead,
+  transcriptHref,
+} from "@/lib/tasks";
+
+// A speaker is not a team member, so the circle's colour comes from the name (the same name, the same
+// colour), not from a user id.
+function speakerTone(name: string): number {
+  return [...name].reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+}
 
 // The task drawer (the designer's `drawerOpen` panel): a side panel with the task's title, the
 // notice about a spoken owner nobody on the team matched, the Status, Assignee, Due and Assigned
@@ -21,6 +37,12 @@ import { assignedLabel, COLUMNS, dueOptions, milestoneTitle, sourceLabel } from 
 // drawn when the sprints are given: Backlog, the current and the next sprint of the task's project
 // (planning is filing, so it is off unless `can_edit`). "Invite them to the team" opens the Team page
 // with its invite dialog filled in (W3); a member, who may not invite, is told to ask.
+//
+// A suggested task (the AI was unsure of it) opens with the designer's amber box, "Suggested task,
+// medium confidence." and the reason, with Accept and Dismiss; the parent does both (`onAccept`,
+// `onDismiss`: the API call, the toast and the lists). Editing it leaves it suggested. "FROM THE
+// MEETING" shows the evidence card: the verbatim quote and who said it (no time, none is stored; the
+// designer's paraphrase line is dropped: lead-designed) and "Show in transcript".
 export function TaskDrawer({
   task,
   people,
@@ -30,6 +52,9 @@ export function TaskDrawer({
   sprints = null,
   canInvite = false,
   onInvite,
+  onAccept,
+  onDismiss,
+  suggestionBusy = false,
   onChange,
   onDelete,
   onClose,
@@ -47,6 +72,9 @@ export function TaskDrawer({
   // An owner or admin of the team may invite the person a meeting named (`GET /api/team` `can_manage`).
   canInvite?: boolean;
   onInvite?: (spokenName: string) => void;
+  onAccept?: (task: Task) => void;
+  onDismiss?: (task: Task) => void;
+  suggestionBusy?: boolean;
   onChange: (task: Task) => void;
   onDelete: (id: number) => void;
   onClose: () => void;
@@ -139,6 +167,34 @@ export function TaskDrawer({
             }}
           />
           {error ? <Alert kind="error">{error}</Alert> : null}
+          {task.suggested ? (
+            <div className="td-suggest">
+              <span>
+                <span className="td-suggest-lead">{suggestedLead(task)}</span>
+                {task.reason ? ` ${task.reason}` : ""}
+              </span>
+              {onAccept && onDismiss ? (
+                <div className="td-suggest-actions">
+                  <button
+                    type="button"
+                    className="td-suggest-accept"
+                    disabled={busy || suggestionBusy || !task.can_edit}
+                    onClick={() => onAccept(task)}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    className="td-suggest-dismiss"
+                    disabled={busy || suggestionBusy || !task.can_delete}
+                    onClick={() => onDismiss(task)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {!task.assignee && task.spoken_owner ? (
             <div className="td-notice">
               <span>&quot;{task.spoken_owner}&quot; was named as the owner in the meeting, but is not on your team.</span>
@@ -267,7 +323,25 @@ export function TaskDrawer({
           {task.from_meeting ? (
             <div className="td-source">
               <div className="td-source-label">FROM THE MEETING</div>
-              {task.quote ? <div className="td-quote">{task.quote}</div> : null}
+              {task.quote ? (
+                <div className="td-ev">
+                  {task.quote_speaker ? (
+                    <div className="td-ev-who">
+                      <span className={`avatar ${avatarTone(speakerTone(task.quote_speaker))}`}>
+                        {personInitials({ name: task.quote_speaker })}
+                      </span>
+                      <span className="td-ev-name">{task.quote_speaker}</span>
+                    </div>
+                  ) : null}
+                  <div className="td-ev-text">“{task.quote}”</div>
+                  {transcriptHref(task) && task.quote_speaker ? (
+                    <AppLink className="td-ev-link" href={transcriptHref(task) as string}>
+                      <Icon name="video" size={12} />
+                      Show in transcript
+                    </AppLink>
+                  ) : null}
+                </div>
+              ) : null}
               {task.meeting ? (
                 <AppLink className="td-source-link" href={`/meetings/${task.meeting.id}`}>
                   <Icon name="video" size={12} />

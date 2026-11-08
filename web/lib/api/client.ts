@@ -331,14 +331,20 @@ export function createApi(options: ApiOptions = {}) {
     // Deleting answers 204. `forMeeting` is the meeting page's Action items.
     tasks: {
       list: (
-        query: { assignee?: string; status?: string; project?: string; milestone?: number; sprint?: string; limit?: number; before_id?: number } = {},
+        query: { assignee?: string; status?: string; suggested?: boolean; project?: string; milestone?: number; sprint?: string; limit?: number; before_id?: number } = {},
       ) =>
-        request<TaskList>("GET", "/api/tasks", { query }),
+        request<TaskList>("GET", "/api/tasks", {
+          query: { ...query, suggested: query.suggested === undefined ? undefined : String(query.suggested) },
+        }),
       get: (id: number) => request<Task>("GET", `/api/tasks/${id}`),
       create: (body: Partial<NewTask> = {}) => request<Task>("POST", "/api/tasks", { body, write: true }),
       update: (id: number, body: TaskChanges) =>
         request<Task>("PATCH", `/api/tasks/${id}`, { body, write: true }),
       remove: (id: number) => request<void>("DELETE", `/api/tasks/${id}`, { write: true }),
+      // Suggested tasks (docs/fe-integration-guide-suggested-tasks.md): `list({ suggested: true })` is
+      // the Suggested tasks section (the default list leaves them out); `accept` answers the task,
+      // `remove` is Dismiss. A task already accepted answers 200 again; 404 means it is gone.
+      accept: (id: number) => request<Task>("POST", `/api/tasks/${id}/accept`, { write: true }),
       forMeeting: (meetingId: number) => request<MeetingTasks>("GET", `/api/meetings/${meetingId}/tasks`),
     },
     // Projects and milestones (docs/fe-integration-guide-projects.md). Everyone on the team reads;
@@ -401,7 +407,7 @@ export function createApi(options: ApiOptions = {}) {
         set: (time_zone: string) =>
           request<TimeZonePreferences>("PUT", "/api/settings/time-zone", { body: { time_zone }, write: true }),
       },
-      // The two switches of the Tasks card (GET and PUT /api/settings/tasks); both are sent together.
+      // The three switches of the Tasks card (GET and PUT /api/settings/tasks); all are sent together.
       tasks: {
         get: () => request<TasksSettings>("GET", "/api/settings/tasks"),
         set: (body: TasksSettings) => request<TasksSettings>("PUT", "/api/settings/tasks", { body, write: true }),
