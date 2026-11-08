@@ -381,6 +381,22 @@ def test_an_unknown_provider_stops_startup_with_a_message_naming_the_setting_and
         get_settings.cache_clear()
 
 
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_an_empty_bot_provider_line_means_the_default_and_does_not_stop_startup(monkeypatch, blank):
+    monkeypatch.setenv("BOT_PROVIDER", blank)
+    get_settings.cache_clear()
+    try:
+        assert get_settings().bot_provider == "vexa"
+        assert isinstance(build_provider(), VexaProvider)
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("name", ["vexa", "Vexa", "  VEXA "])
+def test_build_provider_reads_an_explicit_name_as_the_setting_does(name):
+    assert isinstance(build_provider(name), VexaProvider)
+
+
 def test_build_provider_refuses_an_unknown_name_too():
     with pytest.raises(ValueError, match="unknown bot provider 'nope'; expected one of: vexa"):
         build_provider("nope")

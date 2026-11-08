@@ -157,6 +157,7 @@ def build_provider(name: str | None = None) -> BotProvider:
         from app.config import get_settings  # inside: app/config.py reads this module
 
         name = get_settings().bot_provider
+    name = name.strip().lower()  # as the setting is read, so an explicit name is not stricter
     try:
         factory = PROVIDER_FACTORIES[name]
     except KeyError:

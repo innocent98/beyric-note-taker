@@ -7,6 +7,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    @field_validator("bot_provider", mode="before")
+    @classmethod
+    def _blank_bot_provider_is_the_default(cls, value):
+        """An empty `BOT_PROVIDER=` line (a commented-out value left as a bare key) means "not
+        set", the same as leaving it out, so it cannot stop every process at startup."""
+        if isinstance(value, str) and not value.strip():
+            return "vexa"
+        return value
+
     @field_validator("bot_provider")
     @classmethod
     def _known_bot_provider(cls, value: str) -> str:
