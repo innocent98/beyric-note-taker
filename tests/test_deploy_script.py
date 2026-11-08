@@ -15,6 +15,8 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).parent.parent / "deploy" / "deploy.sh"
+GATE = SCRIPT.with_name("gate.sh")
+DUE = "2026-11-08T21:30:00Z"
 OLD = "a" * 40
 NEW = "b" * 40
 
@@ -34,6 +36,12 @@ case "$1 $2" in
     [ "$head" = "$STUB_NEW" ] && [ "$STUB_SCHED" = "1" ] && echo scheduler
     exit 0 ;;
   "compose exec")
+    if grep -q scheduled_joins; then
+      echo "gate-query @${head:0:1}" >> "$state/log"
+      [ "$STUB_JOINS" = "error" ] && { echo "psql: connection refused" >&2; exit 1; }
+      echo "$STUB_JOINS"
+      exit 0
+    fi
     echo "scheduler-beat-query @${head:0:1}" >> "$state/log"
     if [ -f "$state/beat" ]; then echo 1; else echo 0; fi
     exit 0 ;;
@@ -79,6 +87,7 @@ def server(tmp_path):
     project = tmp_path / "project"
     (project / "deploy").mkdir(parents=True)
     shutil.copy(SCRIPT, project / "deploy" / "deploy.sh")
+    shutil.copy(GATE, project / "deploy" / "gate.sh")
     bin_dir, state = tmp_path / "bin", tmp_path / "state"
     bin_dir.mkdir()
     state.mkdir()
@@ -108,6 +117,8 @@ def server(tmp_path):
             scheduler=False,
             beat=True,
             fetch_fails=0,
+            joins="",
+            allow=None,
         ):
             env = {
                 **os.environ,
@@ -122,7 +133,11 @@ def server(tmp_path):
                 "STUB_FETCH_FAILS": str(fetch_fails),
                 "STUB_SCHED": "1" if scheduler else "0",
                 "STUB_BEAT": "yes" if beat else "no",
+                "STUB_JOINS": joins,  # what the gate's query prints: nothing, a time, or "error"
             }
+            env.pop("ALLOW_DEPLOY_WITH_JOINS_DUE", None)
+            if allow is not None:
+                env["ALLOW_DEPLOY_WITH_JOINS_DUE"] = allow
             result = subprocess.run(
                 ["bash", str(project / "deploy" / "deploy.sh"), sha],
                 env=env,
@@ -138,6 +153,11 @@ def server(tmp_path):
         def log(self) -> list[str]:
             path = state / "log"
             return path.read_text().splitlines() if path.exists() else []
+
+        @property
+        def calls(self) -> list[str]:
+            """The log without the stand-in's own line for each `docker compose exec`."""
+            return [line for line in self.log if not line.startswith("docker compose exec")]
 
         @property
         def head(self) -> str:
@@ -252,3 +272,49 @@ def test_a_fetch_that_never_works_changes_nothing_and_exits_128(server):
     assert result.returncode == 128 and "nothing was changed" in result.stderr
     assert result.stderr.count("git fetch failed") == 6
     assert server.log == [] and server.head == OLD  # no checkout, no build, no `up`
+
+
+def test_a_due_join_refuses_before_anything_changes_and_names_its_time(server):
+    result = server.deploy(joins=DUE)
+    assert result.returncode == 1
+    assert result.stderr.strip().count("\n") == 0  # one clear line
+    assert f"a calendar join is due at {DUE}" in result.stderr
+    assert "ALLOW_DEPLOY_WITH_JOINS_DUE=1" in result.stderr
+    assert server.calls == ["gate-query @a"] and server.head == OLD  # no backup, checkout or build
+
+
+def test_no_due_join_lets_the_deploy_through(server):
+    result = server.deploy(joins="")
+    assert result.returncode == 0 and f"deployed {NEW}" in result.stdout
+    assert server.log.count("gate-query @a") == 1
+
+
+def test_the_override_deploys_despite_a_due_join_and_says_so(server):
+    result = server.deploy(joins=DUE, allow="1")
+    assert result.returncode == 0 and f"deployed {NEW}" in result.stdout
+    assert f"WARNING: a calendar join is due at {DUE}" in result.stderr
+    assert server.head == NEW
+
+
+@pytest.mark.parametrize("value", ["", "0", "yes", "true", "1 "])
+def test_only_the_exact_value_1_overrides(server, value):
+    result = server.deploy(joins=DUE, allow=value)
+    assert result.returncode == 1 and "refusing" in result.stderr and server.head == OLD
+
+
+def test_a_database_that_cannot_be_asked_refuses_and_changes_nothing(server):
+    result = server.deploy(joins="error")
+    assert result.returncode == 1
+    assert "refusing: could not check for due calendar joins" in result.stderr
+    assert server.calls == ["gate-query @a"] and server.head == OLD
+
+
+def test_an_unexpected_answer_from_the_database_also_refuses(server):
+    result = server.deploy(joins="ERROR: relation does not exist")
+    assert result.returncode == 1 and "unexpected answer" in result.stderr
+    assert "refusing: could not check" in result.stderr and server.head == OLD
+
+
+def test_a_sha_not_on_main_is_refused_before_the_gate_asks_anything(server):
+    result = server.deploy(on_main=False, joins=DUE)
+    assert "not on origin/main" in result.stderr and server.log == []
