@@ -152,9 +152,9 @@ describe("the first load failed", () => {
     expect(mocks.list).toHaveBeenCalledWith({ q: undefined });
   });
 
-  it("says Decisions made in your meetings, newest first.", () => {
+  it("says the new subtitle: the status and the tasks that carry the decisions out", () => {
     render(<DecisionsView initial={all} />);
-    expect(screen.getByText("Decisions made in your meetings, newest first.")).toBeTruthy();
+    expect(screen.getByText("Decisions made in your meetings, with their status and the tasks that carry them out.")).toBeTruthy();
   });
 });
 
@@ -165,7 +165,7 @@ describe("remove from log", () => {
   it("keeps the button out of sight until the row is opened, then shows it at the bottom of the row", async () => {
     render(<DecisionsView initial={all} />);
     expect(screen.queryByRole("button", { name: "Remove from log" })).toBeNull();
-    const row = screen.getByRole("button", { name: first.text });
+    const row = screen.getByText(first.text).closest("button")!;
     expect(row.getAttribute("aria-expanded")).toBe("false");
     await openRow(first.text);
     expect(row.getAttribute("aria-expanded")).toBe("true");

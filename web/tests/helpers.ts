@@ -31,6 +31,20 @@ export function rel(path: string): string {
 // `decisions_count` and `review_open_count`, which the API now always sends (nothing is invented:
 // the values are what a meeting with no recording, no speakers and nothing extracted has).
 function withDetailDefaults<T>(body: T): T {
+  // Decision lists captured before the Decisions record (migration 0036) lack the status, the evidence,
+  // the links, `can_edit` and the page's `counts` and `due_this_week`, which the API now always sends:
+  // what an old decision reads as is Approved with nothing else, and the owner may change it.
+  if (body && typeof body === "object" && "groups" in body && "has_more" in body && !("counts" in body)) {
+    const groups = (body as { groups: Array<{ decisions: Array<Record<string, unknown>> }> }).groups;
+    for (const group of groups) {
+      group.decisions = group.decisions.map((d) => ({
+        status: "approved", decided_by: null, quote: null, quote_speaker: null, line: null, revisit_on: null,
+        replaced_by: null, replaces: [], related_tasks: [], can_edit: true, ...d,
+      }));
+    }
+    const all = groups.reduce((n, g) => n + g.decisions.length, 0);
+    Object.assign(body, { counts: { all, approved: all, proposed: 0, replaced: 0, rejected: 0 }, due_this_week: 0 });
+  }
   if (body && typeof body === "object" && "notes_html" in body && !("participants" in body)) {
     Object.assign(body, { duration_seconds: null, participants: [], decisions_count: 0, review_open_count: 0 });
   }
@@ -79,6 +93,15 @@ export function capturedDelete(file: string): { request: { method: string; path:
 }
 
 type AccountCapture = { request: { body: unknown }; response: { status: number; body: unknown } };
+
+// A capture from the running API for the Decisions record (docs/fe-captures/decisions/<file>, `python
+// scripts/capture_decisions_api.py`): the response body, or the whole exchange.
+export function decisionsCapture(file: string): { request: { method: string; path: string; body: unknown }; response: { status: number; body: unknown } } {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/decisions", file)));
+}
+export function decisionsBody<T>(file: string): T {
+  return decisionsCapture(file).response.body as T;
+}
 
 // A capture from the running API for the accounts routes (docs/fe-captures/pilot-accounts/<file>).
 export function capturedAccount(file: string): AccountCapture {

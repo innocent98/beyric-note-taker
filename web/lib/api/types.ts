@@ -18,6 +18,12 @@ export type MeetingRef = Schemas["MeetingRef"];
 export type Decision = Schemas["DecisionOut"];
 export type DecisionGroup = Schemas["DecisionGroup"];
 export type DecisionList = Schemas["DecisionList"];
+export type DecisionStatus = Decision["status"];
+export type DecisionRef = Schemas["DecisionRef"];
+export type DecisionTaskRef = Schemas["DecisionTaskRef"];
+export type DecisionCounts = Schemas["DecisionCounts"];
+// A change sends only the fields that change; the schema lists them all as optional already.
+export type DecisionChanges = Partial<Schemas["DecisionPatch"]>;
 export type ReviewItem = Schemas["ReviewItemOut"];
 export type ReviewList = Schemas["ReviewList"];
 export type ReviewTermResult = Schemas["ReviewTermOut"];

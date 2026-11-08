@@ -127,33 +127,77 @@ const SCREENS = {
   "app-unsubscribe": [null, [], "/unsubscribe?token=tok", false],
   "app-unsubscribe-done": [null, [], "/unsubscribe?token=tok", false, [{ text: "Stop these emails", wait: 600 }]],
   // Decisions and Review (the designer's states: run the mock with --decisions/--review failed|empty|loading
-  // and the design copy with its "Preview states" default changed, see the SOP). Live list, the
-  // inline remove ask and its toast, the rewrite offer, the row errors, the checked rows.
+  // and the design copy with its "Preview states" default changed, see the SOP). The mock's decisions are the
+  // designer's own sample (same words, statuses, deciders and related tasks), so both sides name the same rows.
+  // Decisions record (batch 4): the list with tabs, pills and the banner; open rows (Status, Revisit on, evidence,
+  // related tasks, links); a tab; the inline remove ask; the empty search line. "Remove from log" lives inside the row.
   "app-decisions": [APP, [["Decisions", "first", 1200]], "/decisions", true],
-  // "Remove from log" lives inside the open row (batch 3): open a row, then the button. The design's first
-  // decision and the capture's first differ in words, so each side names its own.
   "app-decisions-open": [
     APP,
-    [["Decisions", "first", 1200], ["Beyric Note Taker is intended for internal use.", "first", 300]],
+    [["Decisions", "first", 1200], ["Use Slack for official work discussions and updates going forward.", "first", 300]],
     "/decisions",
     true,
-    [{ text: "Keep the data export in CSV for version one; Excel can wait.", wait: 300 }],
+    [{ text: "Use Slack for official work discussions and updates going forward.", wait: 300 }],
+  ],
+  // Revisit date, three related tasks and "Replaces:" on one decision.
+  "app-decisions-open-links": [
+    APP,
+    [["Decisions", "first", 1200], ["Prepare for the December 8 launch.", "first", 300]],
+    "/decisions",
+    true,
+    [{ text: "Prepare for the December 8 launch.", wait: 300 }],
+  ],
+  // "Replaced by:" on the replaced decision (greyed).
+  "app-decisions-open-replaced": [
+    APP,
+    [["Decisions", "first", 1200], ["Launch the Client Portal on Mon 30 Nov 2026.", "first", 300]],
+    "/decisions",
+    true,
+    [{ text: "Launch the Client Portal on Mon 30 Nov 2026.", wait: 300 }],
+  ],
+  // The Proposed tab (counts stay over the whole log).
+  "app-decisions-tab-proposed": [APP, [["Decisions", "first", 1200], { btn: "Proposed", wait: 500 }], "/decisions", true, [{ btn: "Proposed", wait: 800 }]],
+  // A decision with no quote: "No transcript is available for this meeting."
+  "app-decisions-open-noevidence": [
+    APP,
+    [["Decisions", "first", 1200], ["Keep the Monday planning and Friday review cadence.", "first", 300]],
+    "/decisions",
+    true,
+    [{ text: "Keep the Monday planning and Friday review cadence.", wait: 300 }],
   ],
   "app-decisions-confirm": [
     APP,
-    [["Decisions", "first", 1200], ["Beyric Note Taker is intended for internal use.", "first", 300], ["Remove from log", "first"]],
+    [["Decisions", "first", 1200], ["Use Slack for official work discussions and updates going forward.", "first", 300], ["Remove from log", "first"]],
     "/decisions",
     true,
-    [{ text: "Keep the data export in CSV for version one; Excel can wait.", wait: 300 }, { text: "Remove from log" }],
+    [{ text: "Use Slack for official work discussions and updates going forward.", wait: 300 }, { text: "Remove from log" }],
   ],
   "app-decisions-removed": [
     APP,
-    [["Decisions", "first", 1200], ["Beyric Note Taker is intended for internal use.", "first", 300], ["Remove from log", "first"], ["Remove", "first", 300]],
+    [["Decisions", "first", 1200], ["Use Slack for official work discussions and updates going forward.", "first", 300], ["Remove from log", "first"], ["Remove", "first", 300]],
     "/decisions",
     true,
-    [{ text: "Keep the data export in CSV for version one; Excel can wait.", wait: 300 }, { text: "Remove from log" }, { text: "Remove", wait: 500 }],
+    [{ text: "Use Slack for official work discussions and updates going forward.", wait: 300 }, { text: "Remove from log" }, { text: "Remove", wait: 500 }],
   ],
-  // The empty search line, "No decisions match." (the mock answers a search with the capture of no match).
+  // The status change toast ("Status changed to Rejected"): the design's Status select is the one that holds "Approved".
+  "app-decisions-status-changed": [
+    APP,
+    [["Decisions", "first", 1200], ["Use Slack for official work discussions and updates going forward.", "first", 300], { select: "Rejected", design: "Approved", next: "Status", wait: 500 }],
+    "/decisions",
+    true,
+    [{ text: "Use Slack for official work discussions and updates going forward.", wait: 300 }, { select: "Rejected", design: "Approved", next: "Status", wait: 600 }],
+  ],
+  // Lead-designed, no prototype (shot alone): a teammate who may only read (mock `--decisions teammate`), and Replaced
+  // with the optional "Replaced by" select.
+  "app-decisions-teammate-open": [null, [], "/decisions", true, [{ text: "Use Slack for official work discussions and updates going forward.", wait: 300 }]],
+  "app-decisions-replaced-by-select": [
+    null,
+    [],
+    "/decisions",
+    true,
+    [{ text: "Launch the Client Portal on Mon 30 Nov 2026.", wait: 300 }],
+  ],
+  // The empty search line, "No decisions match." (the mock answers a search with nothing for "zebra").
   "app-decisions-nomatch": [
     APP,
     [["Decisions", "first", 1200], { fill: "Search decisions", value: "zebra", wait: 600 }],
@@ -382,6 +426,10 @@ async function shoot(url, width, clicks, signedIn, side = "design") {
             ? page.locator("select", { hasText: step.design })
             : page.getByRole("combobox", { name: step.next });
         await field.first().selectOption({ label: step.select });
+      } else if (step.btn) {
+        // A tab or button whose name starts with `step.btn` (a count follows the label of a decision tab).
+        const target = page.locator("button", { hasText: new RegExp(`^${step.btn}`) }).first();
+        await target.evaluate((el) => el.click());
       } else if (step.click) {
         // `optional`: the button is not there at this width (the menu button is hidden on desktop).
         const target = page.getByRole("button", { name: step.click, exact: step.exact }).first();
