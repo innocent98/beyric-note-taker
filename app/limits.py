@@ -67,6 +67,10 @@ class PublicLimits:
         self.forgot_address = Limit(s, "forgot_address", 5, HOUR)
         self.waitlist_address = Limit(s, "waitlist_address", 5, HOUR)
         self.waitlist_email = Limit(s, "waitlist_email", 1, 60.0)
+        # Ask Beyric questions a signed-in person may ask in a minute, by user id. The daily cap
+        # (app/ask.py) counts only model calls; this bounds the free ones (nothing found, tasks),
+        # each of which still reads the person's meetings.
+        self.ask_rate = Limit(s, "ask_rate", 20, 60.0)
 
     def reset(self) -> None:
         self.store.reset()  # tests only

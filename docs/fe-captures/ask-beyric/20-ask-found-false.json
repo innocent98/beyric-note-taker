@@ -1,0 +1,27 @@
+{
+  "note": "MODEL FAKED to say it found nothing (`found: false`): `none`. This call was made, so it counts toward the cap.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "What was the pricing?"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "none",
+      "lead": "I could not find that in your meetings.",
+      "points": []
+    }
+  }
+}

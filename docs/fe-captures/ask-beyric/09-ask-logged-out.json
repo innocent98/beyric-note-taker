@@ -1,0 +1,28 @@
+{
+  "note": "No login: 401.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-G>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "pricing"
+    }
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "note": "MODEL FAKED to return text that is not JSON: 502 `ask_failed`. The call still counts toward the cap.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "What was the pricing?"
+    }
+  },
+  "response": {
+    "status": 502,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "ask_failed",
+        "message": "Beyric could not answer that. Try again."
+      }
+    }
+  }
+}

@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # The call that translates notes and transcripts (app/translation.py). Its own setting so the
     # quality eval (tests/eval/translation_eval.py) can move it without touching the others.
     translate_model: str = "gpt-6-luna"
+    # The call that answers a question on the Ask Beyric page (app/ask.py), and how many such
+    # model-calling questions one person may ask in a rolling 24 hours. Both optional.
+    ask_model: str = "gpt-6-luna"
+    ask_daily_limit: int = Field(default=30, ge=0)
 
     audio_retention_days: int = 7
     audio_dir: str = "data/audio"

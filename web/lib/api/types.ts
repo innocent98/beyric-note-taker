@@ -109,19 +109,8 @@ export type QuestionChanges = Partial<Schemas["QuestionPatch"]>;
 export type MeetingSeriesResult = Schemas["MeetingSeriesOut"];
 export type ReminderPreferences = Schemas["ReminderPreferencesOut"];
 
-// Ask Beyric (spec docs/superpowers/specs/2026-11-08-designer-v2-features-design.md section 1.7).
-// HAND-TYPED to that contract: the backend PR (`ask-backend`) had not landed when this was written.
-// Once docs/openapi.json holds /api/ask, run `npm run gen:api` and replace these with
-// Schemas["..."] names like every type above.
-export type AskCite = {
-  meeting_id: number;
-  title: string;
-  date_label: string;
-  owner_name: string | null;
-  shared: boolean;
-  target: "transcript" | "notes";
-  line: number | null;
-};
-export type AskPoint = { text: string; cites: AskCite[] };
-export type AskAnswer = { kind: "answer" | "tasks" | "none"; lead: string; points: AskPoint[] };
-export type AskScope = { meetings: number; decisions: number; tasks: number; suggestions: string[] };
+// Ask Beyric (docs/fe-integration-guide-ask-beyric.md): `GET /api/ask/scope` and `POST /api/ask`.
+export type AskCite = Schemas["CiteOut"];
+export type AskPoint = Schemas["PointOut"];
+export type AskAnswer = Schemas["AskOut"];
+export type AskScope = Schemas["ScopeOut"];

@@ -61,7 +61,7 @@ const { values } = parseArgs({
 // spec's, since the real API was being built at the same time: the error envelope is the one the running API
 // sends, `{"error": {"code", "message"}}`). `--ask live|empty|scope-failed`: `empty` is a person with no
 // ready meetings (zero counts), `scope-failed` makes GET /api/ask/scope a 500. Questions reach every state
-// by their words: "fail" is a 502 the first time (asking again answers), "limit" a 429 `ask_limit`,
+// by their words: "fail" is a 502 the first time (asking again answers), "limit" a 429 `ask_limit`, "rate" a 429 `ask_rate`,
 // "zebra" the "none" answer, "tasks" or "commit" the tasks path, "gone" a chip to a meeting that is not
 // there (999), "long" an answer with long chip labels, and "pricing" the full answer with transcript
 // chips (meeting 8 has 20 rows; a teammate's chip names its owner).
@@ -984,6 +984,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 502, { error: { code: "ask_failed", message: "Beyric could not answer that. Try again." } });
     }
     if (q.includes("limit")) return json(res, 429, { error: { code: "ask_limit", message: "You have asked 30 questions today. Try again tomorrow." } });
+    if (q.includes("rate")) return json(res, 429, { error: { code: "ask_rate", message: "Slow down a little and try again in a minute." } });
     if (q.includes("zebra") || values.ask === "empty") return json(res, 200, { kind: "none", lead: "I could not find that in your meetings.", points: [] });
     if (q.includes("tasks") || q.includes("commit")) {
       return json(res, 200, {

@@ -1,0 +1,27 @@
+{
+  "note": "The word only appears in Dan's PRIVATE meeting, which Ada may not read: nothing is retrieved, so `none`, no model call, no charge.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "What about the Mulberry reorganisation?"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "none",
+      "lead": "I could not find that in your meetings.",
+      "points": []
+    }
+  }
+}

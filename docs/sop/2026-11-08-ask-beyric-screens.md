@@ -18,11 +18,11 @@ The designer drew Ask Beyric and "Show in transcript"; the audit found no route,
 | Row address | `id="tl-N"` on every transcript row, N from 1 in `parseTranscript` order (the designer used `tl-{time}`; no time is stored). The backend's `cite.line` must be the same count (told to `ask-backend`). |
 | Highlight look | Designer's row: `padding 12px 10px; margin 0 -10px; border-radius 8px` on **every** row, background only on the cited one. The existing rows had `padding 12px 0`; the page now uses the designer's box, with the same visual result (the negative margin cancels the padding). |
 | Deleted or unshared meeting | The spec says the chip opens the normal 404 page and the toast shows there. A chip click writes `sessionStorage["beyric:ask-chip"] = "/meetings/{id}"`; `app/not-found.tsx` renders `AskGoneToast`, which reads it once, compares it with the path, and flashes the toast. A flag for another path is cleared without a message. **Differs from the designer's file**, whose toast appears on the Ask page without leaving it (it checks its own list before navigating). Rejected alternative: a pre-flight `GET /api/meetings/{id}` before every chip click (an extra request on every click and a race, for a rare case). |
-| Errors | `429` and `422` show the API's own message in the red card with no button; every other failure and a lost connection show "Beyric could not answer that." with **Try again**, which re-asks the same question in the same card. Never the "could not find" words. |
+| Errors | By `code`, as `docs/fe-integration-guide-ask-beyric.md` says: `ask_limit` (daily cap) and `question_invalid` show the API's own message in the red card with no button; `ask_rate` (the per-minute brake, 429) shows its own message with **Try again**; every other failure and a lost connection show "Beyric could not answer that." with **Try again**, which re-asks the same question in the same card. Never the "could not find" words. |
 | Chips | `GET /api/ask/scope` returns `suggestions`; the page draws exactly those (the backend builds the name chip from the person's speakers and leaves it out when there is none). |
 | Scope load fails | The page still draws the box; the chips and the scope line are left out (no invented numbers). A 401 goes to `/login`. |
 | Thread | Page state only: a refresh clears it. Nothing is stored in the browser except the one-shot chip flag above. |
-| Types | `AskScope`, `AskAnswer`, `AskCite` in `web/lib/api/types.ts` are **hand-typed to spec 1.7** (see "Contract status"). The error envelope is the one the real API sends (`{"error": {"code", "message"}}`, `web/lib/api/client.ts`), not the spec's `{"detail": ...}` sketch, which section 1.7 itself says the builder will match. |
+| Types | `AskScope`, `AskAnswer`, `AskCite`, `AskPoint` are names for the generated `ScopeOut`, `AskOut`, `CiteOut`, `PointOut` (`web/lib/api/types.ts`; `schema.d.ts` regenerated from `docs/openapi.json` after the backend, PR #134, merged). The error envelope is `{"error": {"code", "message"}}`, as `web/lib/api/client.ts` parses it. |
 | Routes | `/ask` added to `NEXT_PAGES`, the `proxy.ts` matcher and `APP_PATHS` (robots), as every Next page. |
 
 ## Lead-designed, not in the designer's file
@@ -48,10 +48,10 @@ The designer drew Ask Beyric and "Show in transcript"; the audit found no route,
 | API client and types | `web/lib/api/client.ts` (`ask.scope`, `ask.ask`), `web/lib/api/types.ts` |
 | Styles | `web/styles/tokens.css` (`--highlight-row`), `web/styles/pages.css` (`.ask*`, `.transcript-line*`) |
 | Mock and shots | `web/scripts/mock-api.mjs` (the two endpoints, `--ask live|empty|scope-failed`, questions by their words), `web/scripts/parity-shots.mjs`, `web/scripts/parity-ask.mjs`, `docs/ui/parity/after/app-ask*-{1440,768,390}.jpg`, `app-detail-line*`, `ask-styles.json` |
-| Tests | `web/tests/ask.test.tsx` (33: the page, chips, errors, highlight, toast, sidebar), `web/tests/ask-page.test.tsx` |
+| Tests | `web/tests/ask.test.tsx` (38: the page, chips, errors, the backend's captured responses, highlight, toast, sidebar), `web/tests/ask-page.test.tsx` |
 
 ## Contract status
-The two endpoints are the spec's (section 1.7): `GET /api/ask/scope`, `POST /api/ask`. When this was written the `ask-backend` PR had **not** landed on `origin/main`, so `web/lib/api/schema.d.ts` was **not** regenerated and the three types above are hand-typed; the mock answers to the same shapes. After the backend merges: `npm run gen:api`, then replace the hand-typed types with `Schemas["..."]` names (the spec's Cite is `{meeting_id, title, date_label, owner_name, shared, target, line}`). Not exercised against the real API.
+Built against the backend of PR #134 (merged): `GET /api/ask/scope`, `POST /api/ask`, shapes and error codes from `docs/fe-integration-guide-ask-beyric.md`, types generated into `web/lib/api/schema.d.ts`. The mock (`web/scripts/mock-api.mjs`) answers the same fields and the same envelope, including `ask_limit` and `ask_rate`. `cite.line` is the 1-based row of `parseTranscript` (text before the first `[Name]:` line is its own row 1), the count the page highlights. A task point may come with `cites: []`: drawn as text, no chip row. Not run against the live site.
 
 ## Parity proof (full parity, nothing invented)
 Method as `docs/ui/parity-report.md`: the designer's file served read-only beside the built Next app (standalone server) on the mock API, a real Chromium. `web/scripts/parity-ask.mjs` compares computed style and size of the same element on both pages at 1440 px after asking "What did we decide about pricing?" on each (result: `docs/ui/parity/after/ask-styles.json`, exit 0). Sizes within 1 px count as equal (the same text measures a fraction of a pixel apart); fields that follow the words are named, not hidden.
@@ -77,7 +77,8 @@ Screens shot against the designer at 1440 / 768 / 390 in `docs/ui/parity/after/`
 * **Words differ in the side-by-side shots**: the designer's answers are its own sample sentences with times; ours come from the mock in the spec's shape. Layout, blocks and states are what is compared.
 * **The designer's file is not responsive**: its 768 and 390 shots are the file's own broken layout; the phone and tablet layout is ours (lead-designed 7).
 * **The 404 toast is on the 404 page**, not on the Ask page as drawn (decision above).
-* **Not run against the real API**, no FE integration guide from this PR: the guide holds captured responses, which `ask-backend` captures.
+* **Not run against the real API** (only the mock, which answers the backend's shapes); no FE integration guide from this PR: `docs/fe-integration-guide-ask-beyric.md` is the backend's, built from captured responses.
+* **nginx `proxy_read_timeout` is 60 s** (`deploy/nginx.conf:87`) and a search question can take up to about 60 s (30 s model timeout, one retry); the backend guide says not to time out before about 65 s. Needs a `/api/ask` location with a longer read timeout; a server step for the lead, not done here.
 * The privacy page needs two sentences (the legal pages are not edited here): questions and the meeting text they need are sent to the model provider; we do not keep the question or the answer.
 
 ## Verification
@@ -88,6 +89,5 @@ Screens shot against the designer at 1440 / 768 / 390 in `docs/ui/parity/after/`
 No config, no migration. Revert the PR; `/ask` goes back to FastAPI (404) and the sidebar loses the item. The not-found toast flag in `sessionStorage` is harmless without the page. The page works only with the backend's two endpoints; before they exist the scope call fails and the page shows the box alone (questions then fail with "Beyric could not answer that.").
 
 ## Follow-ups
-* Regenerate `schema.d.ts` and switch to generated types after the backend PR lands.
-* Privacy page: the two sentences above (lawyer read first).
+* * Privacy page: the two sentences above (lawyer read first).
 * Suggested tasks "Show source" and Decisions "Show in transcript" reuse the same link (`?tab=transcript&line=N`); `citeHref` is the one place that builds it for Ask.

@@ -1,0 +1,27 @@
+{
+  "note": "Nothing matches: `none`, free.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "xylophone quarterly"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "none",
+      "lead": "I could not find that in your meetings.",
+      "points": []
+    }
+  }
+}

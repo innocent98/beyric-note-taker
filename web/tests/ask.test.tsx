@@ -10,7 +10,8 @@ import { MeetingView } from "@/components/app/meeting-view";
 import { ApiError, NETWORK_MESSAGE } from "@/lib/api/client";
 import type { AskAnswer, AskCite, AskScope, Meeting } from "@/lib/api/types";
 import { ASK_CHIP_FLAG, citeHref, citeLabel, parseLine } from "@/lib/ask";
-import { captured } from "./helpers";
+import { captured, read, REPO } from "./helpers";
+import { join } from "node:path";
 
 // Ask Beyric: the page's states, the source chips' words and links, the meeting page's transcript
 // highlight and the toast for a meeting that is gone. The API is faked to the spec's contract
@@ -223,6 +224,17 @@ describe("Ask Beyric failures (lead-designed)", () => {
     expect(screen.queryByText("Beyric could not answer that.")).toBeNull();
   });
 
+  it("shows the per-minute brake's message with Try again (ask_rate is not the daily cap)", async () => {
+    mocks.ask.mockRejectedValueOnce(new ApiError(429, "ask_rate", "Slow down a little and try again in a minute."));
+    mocks.ask.mockResolvedValueOnce(answer);
+    show();
+    await type("pricing{Enter}");
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("Slow down a little and try again in a minute.")).toBeTruthy();
+    await userEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("No pricing model has been chosen yet.")).toBeTruthy();
+  });
+
   it("keeps an earlier answer on screen when a later question fails", async () => {
     mocks.ask.mockResolvedValueOnce(answer);
     mocks.ask.mockRejectedValueOnce(new ApiError(502, "ask_failed", "x"));
@@ -232,6 +244,55 @@ describe("Ask Beyric failures (lead-designed)", () => {
     await type("two{Enter}");
     await screen.findByRole("alert");
     expect(screen.getByText("No pricing model has been chosen yet.")).toBeTruthy();
+  });
+});
+
+// The backend's captured responses (docs/fe-captures/ask-beyric/, from the running app): the page is fed the real bodies.
+const capture = (file: string) => JSON.parse(read(join(REPO, "docs/fe-captures/ask-beyric", file))).response as { status: number; body: never };
+
+describe("the backend's captured responses", () => {
+  it("draws the captured scope and a captured transcript answer with its chip link", async () => {
+    mocks.ask.mockResolvedValue(capture("15-ask-transcript-line.json").body);
+    show(capture("10-scope-ada.json").body);
+    expect(screen.getByText("Searches 2 meetings, 1 decision and 2 tasks")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "What did Daniel Okoro say?" })).toBeTruthy();
+    await type("pricing{Enter}");
+    const chip = await screen.findByRole("link", { name: /Pricing review · Mon 2 Nov/ });
+    expect(chip.getAttribute("href")).toBe("/meetings/1?tab=transcript&line=1");
+  });
+
+  it("names the owner on a captured teammate chip", async () => {
+    mocks.ask.mockResolvedValue(capture("16-ask-shared-teammate-meeting.json").body);
+    show();
+    await type("x{Enter}");
+    const chip = await screen.findByRole("link", { name: /Design sync/ });
+    expect(chip.textContent).toBe("Design sync · Tue 3 Nov · Dan Okoro");
+    expect(chip.getAttribute("href")).toBe("/meetings/2");
+  });
+
+  it("shows a captured tasks answer with no points as its lead alone, not as 'could not find'", async () => {
+    mocks.ask.mockResolvedValue(capture("25-ask-tasks-none.json").body);
+    show();
+    await type("my tasks{Enter}");
+    expect(await screen.findByText("You have no open tasks assigned to you.")).toBeTruthy();
+    expect(screen.queryByText("Try asking about a person, a project, a decision or a date.")).toBeNull();
+  });
+
+  it("tells the two captured 429s apart: the cap has no button, the per-minute brake has Try again", async () => {
+    const cap = capture("22-ask-cap-reached.json");
+    const rate = capture("31-ask-rate-limited.json");
+    const err = (c: { status: number; body: { error: { code: string; message: string } } }) => new ApiError(c.status, c.body.error.code, c.body.error.message);
+    mocks.ask.mockRejectedValueOnce(err(cap as never));
+    show();
+    await type("a{Enter}");
+    const first = await screen.findByRole("alert");
+    expect(within(first).getByText("You have asked 5 questions today. Try again tomorrow.")).toBeTruthy();
+    expect(within(first).queryByRole("button")).toBeNull();
+    mocks.ask.mockRejectedValueOnce(err(rate as never));
+    await type("b{Enter}");
+    const alerts = await screen.findAllByRole("alert");
+    expect(within(alerts[0]).getByText("Slow down a little and try again in a minute.")).toBeTruthy();
+    expect(within(alerts[0]).getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 });
 

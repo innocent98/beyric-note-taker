@@ -11,12 +11,14 @@ import { plural } from "@/lib/format";
 // The longest question the API takes (spec 1.4: 300 characters; longer is a 422).
 const MAX_QUESTION = 300;
 
-// What a card shows. `failed` can be asked again; `refused` (the daily cap, a question the API
-// will not take) says its message and offers nothing to press.
+// What a card shows. `failed` can be asked again (`message` is the API's own words when it sent a
+// retryable one, the per-minute brake `ask_rate`; else "Beyric could not answer that."); `refused`
+// (the daily cap `ask_limit`, a question the API will not take) says its message and offers
+// nothing to press.
 type Card =
   | { id: number; question: string; state: "loading" }
   | { id: number; question: string; state: "ready"; answer: AskAnswer }
-  | { id: number; question: string; state: "failed" }
+  | { id: number; question: string; state: "failed"; message?: string }
   | { id: number; question: string; state: "refused"; message: string };
 
 // Ask Beyric (the designer's screen, D:564-608): a question box, the suggestion chips, the scope
@@ -41,8 +43,10 @@ export function AskView({ scope, initials }: { scope: AskScope | null; initials:
     try {
       update(id, { id, question, state: "ready", answer: await api.ask.ask(question) });
     } catch (caught) {
-      if (caught instanceof ApiError && (caught.status === 429 || caught.status === 422)) {
+      if (caught instanceof ApiError && (caught.code === "ask_limit" || caught.code === "question_invalid")) {
         update(id, { id, question, state: "refused", message: caught.message });
+      } else if (caught instanceof ApiError && caught.code === "ask_rate") {
+        update(id, { id, question, state: "failed", message: caught.message });
       } else {
         // A failed call and a lost connection read the same: Beyric could not answer.
         update(id, { id, question, state: "failed" });
@@ -131,7 +135,7 @@ export function AskView({ scope, initials }: { scope: AskScope | null; initials:
               <div className="state-fail" role="alert">
                 <span className="state-fail-text">
                   <Icon name="info" />
-                  Beyric could not answer that.
+                  {card.message ?? "Beyric could not answer that."}
                 </span>
                 <Button kind="secondary" size="sm" type="button" onClick={() => retry(card)}>
                   Try again

@@ -1,0 +1,42 @@
+{
+  "note": "Dan owns that meeting: he gets an answer (MODEL FAKED).",
+  "client": "dan",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "What about the Mulberry reorganisation?"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "answer",
+      "lead": "Here is what your meetings say.",
+      "points": [
+        {
+          "text": "The answer drawn from the first passage.",
+          "cites": [
+            {
+              "meeting_id": 3,
+              "title": "Dan private 1:1",
+              "date_label": "Wed 4 Nov",
+              "owner_name": null,
+              "shared": false,
+              "target": "notes",
+              "line": null
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
