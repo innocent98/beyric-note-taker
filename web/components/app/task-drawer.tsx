@@ -82,6 +82,10 @@ export function TaskDrawer({
   const [title, setTitle] = useState(task.title);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Who said the quote and on which row: the lists carry it for suggested tasks only, so the drawer of
+  // any other task asks for the one task (the answer to `GET /api/tasks/{id}` has it). A failure here
+  // leaves the quote without a speaker.
+  const [found, setFound] = useState<{ id: number; speaker: string | null; line: number | null } | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const closeNow = useRef(onClose);
   useEffect(() => {
@@ -106,6 +110,22 @@ export function TaskDrawer({
       if (before instanceof HTMLElement) before.focus();
     };
   }, []);
+
+  const needsEvidence = Boolean(task.quote && task.meeting && !task.suggested && task.quote_speaker === null);
+  useEffect(() => {
+    if (!needsEvidence) return;
+    let live = true;
+    Promise.resolve()
+      .then(() => api.tasks.get(task.id))
+      .then((one) => live && setFound({ id: task.id, speaker: one.quote_speaker, line: one.quote_line }))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [needsEvidence, task.id]);
+  const evidence = found && found.id === task.id ? found : null;
+  const speaker = task.quote_speaker ?? evidence?.speaker ?? null;
+  const evidenceHref = transcriptHref({ meeting: task.meeting, quote_line: task.quote_line ?? evidence?.line ?? null });
 
   async function save(changes: TaskChanges) {
     if (busy) return;
@@ -178,7 +198,7 @@ export function TaskDrawer({
                   <button
                     type="button"
                     className="td-suggest-accept"
-                    disabled={busy || suggestionBusy || !task.can_edit}
+                    disabled={busy || suggestionBusy || !task.can_decide}
                     onClick={() => onAccept(task)}
                   >
                     Accept
@@ -186,7 +206,7 @@ export function TaskDrawer({
                   <button
                     type="button"
                     className="td-suggest-dismiss"
-                    disabled={busy || suggestionBusy || !task.can_delete}
+                    disabled={busy || suggestionBusy || !task.can_decide}
                     onClick={() => onDismiss(task)}
                   >
                     Dismiss
@@ -325,17 +345,17 @@ export function TaskDrawer({
               <div className="td-source-label">FROM THE MEETING</div>
               {task.quote ? (
                 <div className="td-ev">
-                  {task.quote_speaker ? (
+                  {speaker ? (
                     <div className="td-ev-who">
-                      <span className={`avatar ${avatarTone(speakerTone(task.quote_speaker))}`}>
-                        {personInitials({ name: task.quote_speaker })}
+                      <span className={`avatar ${avatarTone(speakerTone(speaker))}`}>
+                        {personInitials({ name: speaker })}
                       </span>
-                      <span className="td-ev-name">{task.quote_speaker}</span>
+                      <span className="td-ev-name">{speaker}</span>
                     </div>
                   ) : null}
                   <div className="td-ev-text">“{task.quote}”</div>
-                  {transcriptHref(task) && task.quote_speaker ? (
-                    <AppLink className="td-ev-link" href={transcriptHref(task) as string}>
+                  {evidenceHref && speaker ? (
+                    <AppLink className="td-ev-link" href={evidenceHref}>
                       <Icon name="video" size={12} />
                       Show in transcript
                     </AppLink>

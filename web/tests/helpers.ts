@@ -145,6 +145,7 @@ export function tasksBody<T>(file: string): T {
     task.reason ??= null;
     task.quote_speaker ??= null;
     task.quote_line ??= null;
+    task.can_decide ??= false;
   };
   if (body && Array.isArray(body.tasks)) {
     body.tasks.forEach(fill);

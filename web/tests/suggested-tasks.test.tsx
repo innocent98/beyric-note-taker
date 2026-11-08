@@ -22,13 +22,14 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   remove: vi.fn(),
   accept: vi.fn(),
+  get: vi.fn(),
   setSettings: vi.fn(),
 }));
 const nav = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: nav.push }) }));
 vi.mock("@/lib/api/browser", () => ({
   api: {
-    tasks: { list: mocks.list, create: mocks.create, update: mocks.update, remove: mocks.remove, accept: mocks.accept },
+    tasks: { list: mocks.list, create: mocks.create, update: mocks.update, remove: mocks.remove, accept: mocks.accept, get: mocks.get },
     settings: { tasks: { set: mocks.setSettings } },
   },
 }));
@@ -156,6 +157,15 @@ describe("the Suggested tasks section", () => {
     expect(within(r).queryByText("Chidi")).toBeNull(); // no speaker: the meeting is not theirs to read
   });
 
+  it("lets the person who owns the meeting accept and dismiss even without edit rights (can_decide)", async () => {
+    mocks.accept.mockResolvedValue({ ...analytics, suggested: false });
+    render(<TasksView initial={board} suggested={[{ ...analytics, can_edit: false, can_delete: false, can_decide: true }]} />);
+    const r = row(analytics.title);
+    expect((within(r).getByRole("button", { name: "Dismiss" }) as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(within(r).getByRole("button", { name: "Accept" }));
+    expect(mocks.accept).toHaveBeenCalledWith(analytics.id);
+  });
+
   it("Edit opens the drawer with the amber box, and an edit leaves the task suggested", async () => {
     mocks.update.mockResolvedValue({ ...analytics, title: "Look into analytics" });
     render(<TasksView initial={board} suggested={waiting} />);
@@ -206,6 +216,28 @@ describe("the task drawer's evidence card", () => {
       "/meetings/1?tab=transcript&line=3",
     );
     expect(card.textContent).not.toMatch(/\d{2}:\d{2}/);
+  });
+
+  it("asks for the one task to learn who said the quote when the list did not say", async () => {
+    const made = board.tasks.find((t) => t.quote && t.meeting)!;
+    expect(made.quote_speaker).toBeNull(); // a Board list carries it for suggested tasks only
+    mocks.get.mockResolvedValue({ ...made, quote_speaker: "Dan", quote_line: 4 });
+    setup(made);
+    const card = screen.getByText(`“${made.quote!}”`).closest(".td-ev") as HTMLElement;
+    await waitFor(() => expect(within(card).getByText("Dan")).toBeTruthy());
+    expect(mocks.get).toHaveBeenCalledWith(made.id);
+    expect(within(card).getByRole("link", { name: "Show in transcript" }).getAttribute("href")).toBe(
+      `/meetings/${made.meeting!.id}?tab=transcript&line=4`,
+    );
+  });
+
+  it("keeps the quote without a speaker when that call fails", async () => {
+    const made = board.tasks.find((t) => t.quote && t.meeting)!;
+    mocks.get.mockRejectedValue(new Error("offline"));
+    setup(made);
+    await waitFor(() => expect(mocks.get).toHaveBeenCalled());
+    const card = screen.getByText(`“${made.quote!}”`).closest(".td-ev") as HTMLElement;
+    expect(card.querySelector(".td-ev-who")).toBeNull();
   });
 
   it("has no speaker line and no transcript link for someone who cannot read the meeting", () => {

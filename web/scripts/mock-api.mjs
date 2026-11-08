@@ -163,7 +163,7 @@ const makeTask = (id, title, who, due, status, ref, extra = {}) => ({
   quote: null, is_new: !!ref && ref === mondayRef && status !== "done", unverified: false, source: ref ? "ai" : "manual",
   assigned_on: ref ? ref.created_at.slice(0, 10) : "2026-11-02", done_at: status === "done" ? "2026-11-02T10:00:00Z" : null,
   created_at: "2026-11-02T10:00:00Z", from_meeting: !!ref, meeting: ref, project_id: ref ? 1 : null, milestone_id: null, check_project: false,
-  suggested: false, confidence: null, reason: null, quote_speaker: null, quote_line: null, ...allowed, ...extra,
+  suggested: false, confidence: null, reason: null, quote_speaker: null, quote_line: null, can_decide: false, ...allowed, ...extra,
 });
 const tasks = [
   makeTask(8, "Continue hiring for the customer success lead role", null, "2026-11-06", "todo", mondayRef, { spoken_owner: "Kemi Adeyemi", quote: "Intended start on or before Friday.", can_claim: true }),
@@ -212,10 +212,10 @@ tasks.find((t) => t.id === 7).check_project = true; // the design: "Share the me
 // (low, nobody's), with the designer's reasons. They are unfiled, as the server makes them. The
 // evidence is the verbatim quote and its speaker (lead-designed: the design also draws a time and a
 // paraphrase line).
-Object.assign(tasks.find((t) => t.id === 4), { suggested: true, confidence: "medium", reason: 'Raised as something to do "at some point", with no commitment or date.', quote: "At some point we should move the Figma file into the team workspace.", quote_speaker: "Amara Nwosu", quote_line: 12, project_id: null, milestone_id: null, sprint_id: null });
-Object.assign(tasks.find((t) => t.id === 6), { suggested: true, confidence: "low", reason: 'Offered on a condition: "if you need it".', quote: "Daniel, I can support you with testing this week if you need it.", quote_speaker: "Adebayo Tosin", quote_line: 8, check_project: false, project_id: null, due_date: null, sprint_id: null });
+Object.assign(tasks.find((t) => t.id === 4), { suggested: true, can_decide: true, confidence: "medium", reason: 'Raised as something to do "at some point", with no commitment or date.', quote: "At some point we should move the Figma file into the team workspace.", quote_speaker: "Amara Nwosu", quote_line: 12, project_id: null, milestone_id: null, sprint_id: null });
+Object.assign(tasks.find((t) => t.id === 6), { suggested: true, can_decide: true, confidence: "low", reason: 'Offered on a condition: "if you need it".', quote: "Daniel, I can support you with testing this week if you need it.", quote_speaker: "Adebayo Tosin", quote_line: 8, check_project: false, project_id: null, due_date: null, sprint_id: null });
 tasks.push(makeTask(15, "Look into the Metrika analytics setup", null, null, "todo", mondayRef, {
-  suggested: true, confidence: "low", reason: 'No one took this on. It was said as "someone should".', quote: "Someone should look at the Metrika analytics setup.",
+  suggested: true, can_decide: true, confidence: "low", reason: 'No one took this on. It was said as "someone should".', quote: "Someone should look at the Metrika analytics setup.",
   quote_speaker: "Daniel Okoro", quote_line: 16, project_id: null, sprint_id: null, can_claim: true,
 }));
 const proposal = { id: 2, name: "Beta release", due_date: "2026-11-20", project_id: 2, source_meeting: refOf(8, "Zoom 88205679674", "2026-11-02"), quote: "We want the beta out by the twentieth of November.", confirmed_at: null, task_count: 0, done_count: 0 };
@@ -858,7 +858,8 @@ const server = http.createServer(async (req, res) => {
     const task = tasks.find((t) => t.id === Number(accept[1]));
     if (!task) return json(res, 404, { error: { code: "not_found", message: "No such task" } });
     if (!task.suggested && task.confidence === null) return json(res, 409, { error: { code: "not_suggested", message: "This task is not waiting to be confirmed." } });
-    task.suggested = false; // filed as creation files it: the team's one project, the Backlog without a date
+    task.suggested = false;
+    task.can_decide = false; // filed as creation files it: the team's one project, the Backlog without a date
     if (task.meeting && task.project_id === null) task.project_id = 1;
     return json(res, 200, task);
   }

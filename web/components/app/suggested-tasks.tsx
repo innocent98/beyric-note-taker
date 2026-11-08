@@ -9,7 +9,8 @@ import { avatarTone, confidenceLabel, personInitials, transcriptHref } from "@/l
 // the title and the confidence pill, the evidence box (the verbatim quote and who said it: no time,
 // none is stored, and no paraphrase line: lead-designed, not in the designer's file), the reason in
 // amber, the assignee or "No owner", and Show source, Edit, Dismiss and Accept. Titles, quotes and
-// reasons are plain text. On a phone the four buttons stack under the row's text (lead-designed).
+// reasons are plain text. Accept and Dismiss follow `can_decide` (whoever may edit the task or owns its
+// meeting). On a phone the four buttons stack under the row's text (lead-designed).
 export function SuggestedTasks({
   tasks,
   busyId,
@@ -76,13 +77,13 @@ export function SuggestedTasks({
               <button type="button" className="tk-sg-btn" onClick={() => onEdit(task)}>
                 Edit
               </button>
-              <button type="button" className="tk-sg-btn" disabled={busy || !task.can_delete} onClick={() => onDismiss(task)}>
+              <button type="button" className="tk-sg-btn" disabled={busy || !task.can_decide} onClick={() => onDismiss(task)}>
                 Dismiss
               </button>
               <button
                 type="button"
                 className="tk-sg-btn tk-sg-accept"
-                disabled={busy || !task.can_edit}
+                disabled={busy || !task.can_decide}
                 onClick={() => onAccept(task)}
               >
                 Accept

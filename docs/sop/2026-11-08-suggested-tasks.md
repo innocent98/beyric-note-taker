@@ -98,7 +98,8 @@ Fixed on the branch: (1) Medium: only tasks made by the current extraction may t
 * **Edit** opens the drawer and the task stays suggested until Accept (U11).
 * A **failed** Accept or Dismiss shows the toast **"Could not update the task. Try again."** and the row stays (a 404 drops it).
 * **Phone layout:** the row's text first, then the four buttons stacked full width (`@media (max-width: 560px)`).
-* Accept and Dismiss are disabled (not hidden) when the task's `can_edit` / `can_delete` is false (a member who may not edit it, see PR 1 "Who may").
+* Accept and Dismiss follow `can_decide` and are disabled (not hidden) when it is false (a teammate who only reads the task; the owner of the meeting may decide, see PR 1 "Who may").
+* The drawer of a task whose list row has no `quote_speaker` (the Board lists carry it for suggested tasks only) asks for the one task (`GET /api/tasks/{id}`) to show who said the quote; a failed call leaves the quote without a speaker.
 
 ## Deviations from the designer's file
 * **Row position of the Settings switch:** the file puts "Ask before adding unclear tasks" **second** (between "Create tasks from action items" and "Email assignees"); the spec and audit call it the "third row". Built as drawn.
@@ -106,7 +107,7 @@ Fixed on the branch: (1) Medium: only tasks made by the current extraction may t
 * The design draws the Needs-owner pill only for a task that is not suggested; the same rule is used.
 
 ## Verification (PR 2)
-* `npm run typecheck` clean, `npm run lint` no new warning (the 3 existing ones are in `scripts/parity-meeting-delete.mjs`), `npx vitest run`: 883 passed (25 new in `tests/suggested-tasks.test.tsx`, fed the real captures in `docs/fe-captures/suggested-tasks/`; three existing tests updated for the new quote card and the extra Settings switch).
+* `npm run typecheck` clean, `npm run lint` no new warning (the 3 existing ones are in `scripts/parity-meeting-delete.mjs`), `npx vitest run`: 886 passed (28 new in `tests/suggested-tasks.test.tsx`, fed the real captures in `docs/fe-captures/suggested-tasks/`; three existing tests updated for the new quote card and the extra Settings switch).
 * **Parity shots** (`web/scripts/parity-shots.mjs`, design beside page, 1440, 768 and 390) built against `web/scripts/mock-api.mjs` and saved under `docs/ui/parity/after/`: `app-tasks`, `app-tasks-suggested-edit` (drawer), `app-tasks-suggested-accept` and `-dismiss` (toasts), `app-detail` (Action items), `app-settings`, `app-tasks-drawer`, each at the three widths (22 files). Read side by side at 1440: the section, the pills, the evidence boxes, the reasons, the buttons, the drawer box and the Action items rows match the file; differences are the ones listed above. At 390 the prototype itself is not responsive (it is squashed), so the phone layout is checked against the lead-designed rule only.
 * The shots use `--now 2026-11-02T10:00:00Z` as every earlier parity run does; with that fixed clock the server render and the browser disagree on "today" and React logs hydration error #418 on `/tasks`. Without `--now` the same page logs none (checked).
 * **Not covered:** the failed-accept toast and the "Show in transcript" highlight (needs `ask-screens`) are unit-tested, not shot; no real browser run against the real API.
