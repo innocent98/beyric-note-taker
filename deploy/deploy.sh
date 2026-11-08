@@ -13,6 +13,11 @@
 # commit that changes this file cannot corrupt the run in progress.
 set -euo pipefail
 
+# The deploy gate (join_due_soon, deploy_gate): see deploy/gate.sh. Read here, before main starts,
+# so the checkout below cannot change it mid-run.
+# shellcheck source=deploy/gate.sh
+. "$(dirname "${BASH_SOURCE[0]}")/gate.sh"
+
 main() {
     local sha="${1:-${SSH_ORIGINAL_COMMAND:-}}"
     if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
@@ -34,6 +39,10 @@ main() {
         echo "refusing: $sha is not on origin/main" >&2
         return 1
     fi
+
+    # Nothing has changed yet, so refusing here costs nothing. Auto-join sends bots with nobody
+    # pressing anything: do not restart the stack while one is about to go out.
+    deploy_gate || return 1
 
     local previous
     previous="$(git rev-parse HEAD)"
