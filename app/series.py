@@ -48,6 +48,7 @@ from app.models import (
 )
 from app.notes_document import parse_transcript
 from app.visibility import can_read_clause, owns, visible_meetings
+from app.words import stems
 
 logger = logging.getLogger(__name__)
 
@@ -849,6 +850,24 @@ class TopicView:
     meetings: list[Meeting]
 
 
+MIN_GROUNDED = (
+    2  # meetings a viewer reads that must mention a topic that is partly hidden from them
+)
+GROUNDED_SHARE = 0.5  # of the label's words a meeting's notes must hold to "mention" it
+
+
+def _mentions(label: str, meeting: Meeting) -> bool:
+    """Whether the label's words are in what the meeting's notes say (its Key points and decisions,
+    the text the topic job reads). A label with no content words is not grounded anywhere."""
+    from app.extraction import key_points, parse_notes
+
+    wanted = set(stems(label))
+    if not wanted or not meeting.notes:
+        return False
+    text = " ".join([*key_points(meeting.notes), *parse_notes(meeting.notes).decisions])
+    return len(wanted & set(stems(text))) / len(wanted) >= GROUNDED_SHARE
+
+
 def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView]:
     """The stored topics of the series that the viewer may be shown. No model call: rows only.
 
@@ -856,7 +875,10 @@ def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView
     of which may be a teammate's private meeting, so each topic's meetings are filtered through
     `visible_meetings(viewer)` (and must still belong to the series) and a topic the viewer can
     read fewer than two of is hidden: its words must never reach someone who cannot read the
-    meetings behind it."""
+    meetings behind it. The model's choice of meetings is not trusted as access control: when the
+    viewer cannot read every meeting a topic cites, the topic is shown only if its label's words
+    are in the notes of at least two meetings they can read (`_mentions`), so a label drawn from
+    the hidden meeting is not shown on the strength of two incidental readable ones."""
     rows = list(
         session.scalars(
             select(SeriesTopic)
@@ -879,6 +901,13 @@ def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView
     for row in rows:
         seen = [readable[i] for i in dict.fromkeys(row.meeting_ids) if i in readable]
         if len(seen) < 2:
+            continue
+        if (
+            len(seen) < len(set(row.meeting_ids))
+            and sum(_mentions(row.label, m) for m in seen) < MIN_GROUNDED
+        ):
+            # The viewer cannot read every meeting behind this topic, and the label's words are not
+            # in two of the ones they can: the model may have drawn it from one they may not read.
             continue
         seen.sort(key=lambda m: (m.created_at, m.id))
         out.append(TopicView(row.id, row.label, row.agenda, row.reason, seen))

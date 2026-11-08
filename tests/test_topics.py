@@ -596,37 +596,60 @@ def two_meeting_topic(session, weekly, ids, label="Pricing model"):
 def test_a_teammate_sees_a_topic_only_with_two_meetings_they_may_read(
     app, session, template, weekly, daniel, owner
 ):
-    public_a = week(session, template, weekly, 0, "a")
-    public_b = week(session, template, weekly, 1, "b")
+    public_a = week(session, template, weekly, 0, "Pricing model came up")
+    public_b = week(session, template, weekly, 1, "The pricing model again")
     private = week(session, template, weekly, 2, "c")  # the owner's own, private
     other_private = week(session, template, weekly, 3, "d", user=daniel)
     two_meeting_topic(session, weekly, [public_a.id, private.id], "Hidden topic")
-    two_meeting_topic(session, weekly, [public_a.id, public_b.id, private.id], "Shown topic")
+    two_meeting_topic(session, weekly, [public_a.id, public_b.id, private.id], "Pricing model")
     two_meeting_topic(session, weekly, [private.id, other_private.id], "Both private")
     share(session, public_a, owner)
     share(session, public_b, owner)
     mate = sign_in(app, DANIEL_EMAIL)
     page = mate.get(f"/api/series/{weekly.id}").json()
-    assert [t["label"] for t in page["topics"]] == ["Shown topic"]
+    assert [t["label"] for t in page["topics"]] == ["Pricing model"]
     [shown] = page["topics"]
     # the count and the dates cover only what the teammate may read: 2 meetings, not 3
     assert shown["line"] == "Discussed in 2 meetings without a decision"
     assert [m["id"] for m in shown["meetings"]] == [public_a.id, public_b.id]
     assert "Hidden topic" not in json.dumps(page) and "Both private" not in json.dumps(page)
-    assert [a["text"] for a in page["suggested_agenda"]] == ["Decide shown topic"]
+    assert [a["text"] for a in page["suggested_agenda"]] == ["Decide pricing model"]
     # nothing about the private meeting leaks into the count line either
     assert private.id not in [m["id"] for m in page["past_meetings"]]
     assert private.id not in [m["id"] for t in page["topics"] for m in t["meetings"]]
     # the owner reads two meetings of "Hidden topic" and three of "Shown topic", but only one of
     # "Both private" (the other is Daniel's private meeting): no one reads another's private one
     page = _owner_page(app, session, weekly)
-    assert [t["label"] for t in page["topics"]] == ["Hidden topic", "Shown topic"]
+    assert [t["label"] for t in page["topics"]] == ["Hidden topic", "Pricing model"]
 
 
 def _owner_page(app, session, weekly):
     from tests.test_api import OWNER_EMAIL
 
     return sign_in(app, OWNER_EMAIL).get(f"/api/series/{weekly.id}").json()
+
+
+def test_a_label_drawn_from_a_meeting_the_viewer_cannot_read_is_not_shown_on_two_incidental_ones(
+    app, session, template, weekly, daniel, owner
+):
+    a = week(session, template, weekly, 0, "Launch checklist")
+    b = week(session, template, weekly, 1, "Budget talk")
+    secret = week(session, template, weekly, 2, "Redundancy plan for the CTO")  # private
+    two_meeting_topic(session, weekly, [a.id, b.id, secret.id], "Redundancy plan")
+    share(session, a, owner)
+    share(session, b, owner)
+    mate = sign_in(app, DANIEL_EMAIL)
+    # Daniel reads two of the three cited meetings, but neither says anything about the label
+    assert mate.get(f"/api/series/{weekly.id}").json()["topics"] == []
+    page = _owner_page(app, session, weekly)  # the owner reads all three: no such check
+    assert [t["label"] for t in page["topics"]] == ["Redundancy plan"]
+    # shared, he reads all three meetings, so there is nothing hidden to be wary of
+    share(session, secret, owner)
+    b.notes = notes_with("The redundancy plan again")
+    session.commit()
+    assert [t["label"] for t in mate.get(f"/api/series/{weekly.id}").json()["topics"]] == [
+        "Redundancy plan"
+    ]
 
 
 def test_unsharing_a_meeting_hides_the_topic_again(app, session, template, weekly, daniel, owner):

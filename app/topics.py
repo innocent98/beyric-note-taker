@@ -35,10 +35,10 @@ from sqlalchemy.orm import Session
 from app import ai_runs, titles
 from app import series as series_rules
 from app.ai_versions import TOPICS_PROMPT_VERSION
-from app.ask import _stems
 from app.config import get_settings
 from app.extraction import key_points
 from app.models import TOPIC_REASONS, Decision, Meeting, Series, SeriesTopic, User
+from app.words import stems as _stems
 
 logger = logging.getLogger(__name__)
 
