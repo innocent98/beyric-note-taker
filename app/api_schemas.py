@@ -652,11 +652,14 @@ class TaskOut(BaseModel):
     # or before suggestions existed. Every new AI task carries one.
     confidence: TaskConfidence | None
     # Plain words on why a `medium` or `low` item is unclear ("Offered on a condition: ..."), at
-    # most 120 characters. Null for a `high` item and for older tasks. Never a link or HTML.
+    # most 120 characters. Null for a `high` item, for older tasks and for someone who may not read
+    # the meeting (the reason can quote the speaker). Never a link or HTML.
     reason: str | None
     # Who said the `quote`, and the 1-based row of the meeting's transcript page that holds it
     # (open `/meetings/{id}?tab=transcript&line={quote_line}`). Both null unless the caller may
-    # read the meeting and the quote was found in its transcript. No time is stored or shown.
+    # read the meeting and the quote was found in its transcript, and they are worked out only for
+    # a suggested task and for `GET /api/tasks/{id}` and accept (a long board list leaves them
+    # null). No time is stored or shown.
     quote_speaker: str | None
     quote_line: int | None
     # What the caller may do with it, so the screen shows only what will work.
@@ -665,6 +668,10 @@ class TaskOut(BaseModel):
     can_assign: bool  # give it to someone else, or to nobody
     can_claim: bool  # take a task that has no owner yet
     can_delete: bool
+    # Whether the caller may accept or dismiss it: only ever true for a suggested task, and for
+    # whoever may edit the task or owns the meeting it came from (a member who owns their own
+    # meeting may decide its suggestions; a teammate who merely reads it may not).
+    can_decide: bool
 
 
 class AttentionOut(BaseModel):

@@ -16,7 +16,6 @@ from sqlalchemy import and_, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import ai_runs, filing, integrations, mail, projects, tasks, teams, timezones, titles
-from app.ai_versions import LEGACY_EXTRACT_VERSIONS
 from app.extraction import (
     CheckedExtraction,
     ExtractionFailed,
@@ -206,9 +205,8 @@ def run_extraction(
 
     stamp = now or datetime.now(UTC)
     transcript = meeting.speaker_transcript or meeting.transcript or ""
-    make_tasks, mail_assignees, time_zone, ask_unclear = owner_prefs(session, owner_id)
-    # A meeting read before the model gave a confidence keeps its tasks as they are.
-    suggest = ask_unclear and meeting.extraction_version not in LEGACY_EXTRACT_VERSIONS
+    make_tasks, mail_assignees, time_zone, suggest = owner_prefs(session, owner_id)
+    never_answered = meeting.extraction_version is None
     created = meeting.created_at or stamp
     day = timezones.localise(created, time_zone)[0].date()
     quiet = meeting.extraction_quiet
@@ -221,7 +219,7 @@ def run_extraction(
     _reconcile(session, Decision, meeting_id, parsed.decisions)
     _reconcile(session, OpenQuestion, meeting_id, parsed.open_questions)
     _reconcile(session, ReviewItem, meeting_id, parsed.please_check, owner_user_id=owner_id)
-    team_id, members = None, []
+    team_id, members, fresh = None, [], frozenset()
     if make_tasks:
         team_id = teams.ensure_team(session, session.get(User, owner_id)).id
         members = tasks.members_of(session, team_id)
@@ -229,10 +227,12 @@ def run_extraction(
         from_notes = check_extraction(
             _EMPTY, ParsedNotes([], parsed.action_items, [], []), transcript, day
         )
-        tasks.reconcile(
+        known = tasks.fingerprints_of(session, meeting_id)
+        first_pass = tasks.reconcile(
             session, meeting, team_id, parsed.action_items, from_notes.action_items, members, day,
             quiet=quiet, refresh=False,
         )  # fmt: skip
+        fresh = tasks.fresh_fingerprints(first_pass, known, never_answered, stamp)
     session.commit()  # no row lock or open transaction while the model is being asked
 
     full = make_tasks and bool(parsed.action_items)
@@ -285,7 +285,7 @@ def run_extraction(
         members = tasks.members_of(session, team_id)
         live = tasks.reconcile(
             session, meeting, team_id, parsed.action_items, checked.action_items, members, day,
-            quiet=quiet, suggest=suggest,
+            quiet=quiet, suggest=suggest, fresh=fresh,
         )  # fmt: skip
         # Dates the meeting stated for a launch or deadline: proposals only, a person confirms.
         projects.propose(
@@ -298,7 +298,8 @@ def run_extraction(
         if answered and mail_assignees and not quiet and recent:
             mail.queue_tasks_assigned(session, meeting, tasks.new_assignees(live, owner_id))
         # A suggested task is not posted to Slack or Linear and not mailed: it is not a task yet.
-        posted = [task for task in live if not task.suggested]
+        # An accepted one is a person's touch (`edited_at`), so no re-run posts or pushes it later.
+        posted = [task for task in live if not task.suggested and task.edited_at is None]
         if answered and not quiet and recent and posted:
             post_to_slack = (posted, members)
     session.commit()

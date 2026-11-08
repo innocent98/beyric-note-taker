@@ -150,6 +150,7 @@ def test_the_list_carries_tasks_people_and_the_attention_counts(api, session, te
         "can_assign": True,
         "can_claim": False,
         "can_delete": True,
+        "can_decide": False,  # only a suggested task can be decided
     }
     assert task["created_at"].endswith("Z")
 

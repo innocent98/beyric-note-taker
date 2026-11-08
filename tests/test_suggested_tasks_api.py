@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
-from app.models import MailOutbox, Project, UserSettings
+from app.models import MailOutbox, Project, Task, UserSettings
 from tests.test_api_tasks import (  # noqa: F401  (fixtures used by name)
     MEMBER_EMAIL,
     Api,
@@ -349,3 +349,87 @@ def test_accepting_keeps_the_project_and_sprint_a_person_chose_while_it_waited(
     task = suggest(session, team, private, project_id=chosen.id, title="Chosen project")
     body = api.post(f"/api/tasks/{task.id}/accept").json()
     assert body["project_id"] == chosen.id  # two projects: nothing would have filed it there
+
+
+# ---- the person who owns the meeting may decide its suggestions ----
+
+
+def own_meeting_of(session, template, person):
+    meeting = ready(session, template)
+    meeting.owner_user_id = person.id
+    session.commit()
+    return meeting
+
+
+def test_a_plain_member_who_owns_the_meeting_may_accept_and_dismiss_its_suggestions(
+    app, session, team, template, owner, member
+):
+    mine = own_meeting_of(session, template, member)
+    keep = suggest(session, team, mine, title="Keep")
+    drop = suggest(session, team, mine, title="Drop")
+    me = as_user(app, MEMBER_EMAIL)
+    shown = me.get(f"/api/tasks/{keep.id}").json()
+    assert (
+        shown["can_decide"] is True and shown["can_edit"] is False
+    )  # not an editor, still decides
+    assert me.call("POST", f"/api/tasks/{keep.id}/accept").status_code == 200
+    assert me.call("DELETE", f"/api/tasks/{drop.id}").status_code == 204
+    session.expire_all()
+    assert session.get(Task, keep.id).suggested is False
+    assert session.get(Task, drop.id).deleted_at is not None
+
+
+def test_a_plain_reader_still_cannot_decide_and_a_non_reader_still_gets_404(
+    app, session, team, shared_meeting, private, owner, member
+):
+    shared = suggest(session, team, shared_meeting, title="Shared", assignee=member)
+    plain = as_user(app, MEMBER_EMAIL)
+    seen = plain.get(f"/api/tasks/{shared.id}").json()
+    assert seen["can_decide"] is False
+    error_of(plain.call("POST", f"/api/tasks/{shared.id}/accept"), 403, "team_forbidden")
+    error_of(plain.call("DELETE", f"/api/tasks/{shared.id}"), 403, "team_forbidden")
+    hidden = suggest(session, team, private, title="Hidden")
+    error_of(plain.call("POST", f"/api/tasks/{hidden.id}/accept"), 404, "not_found")
+    error_of(plain.call("DELETE", f"/api/tasks/{hidden.id}"), 404, "not_found")
+
+
+def test_owning_the_meeting_only_opens_suggestions_not_other_tasks(
+    app, session, team, template, owner, member
+):
+    mine = own_meeting_of(session, template, member)
+    made = add_task(session, team, mine, title="Made", confidence="high")
+    me = as_user(app, MEMBER_EMAIL)
+    error_of(me.call("DELETE", f"/api/tasks/{made.id}"), 403, "team_forbidden")
+    assert me.get(f"/api/tasks/{made.id}").json()["can_decide"] is False
+
+
+# ---- what a person who cannot read the meeting is not shown ----
+
+
+def test_the_reason_is_only_for_someone_who_may_read_the_meeting(
+    api, app, session, team, template, member
+):
+    meeting = ready(session, template, speaker_transcript=SAID)  # the owner's private meeting
+    task = suggest(session, team, meeting, assignee=member, quote="I'll take checkout.")
+    assert api.get(f"/api/tasks/{task.id}").json()["reason"] == REASON
+    theirs = as_user(app, MEMBER_EMAIL).get(f"/api/tasks/{task.id}").json()
+    assert theirs["reason"] is None and theirs["quote"] == "I'll take checkout."
+    assert theirs["confidence"] == "medium"
+    listed = as_user(app, MEMBER_EMAIL).get("/api/tasks?suggested=true").json()["tasks"][0]
+    assert listed["reason"] is None
+
+
+def test_who_said_it_is_worked_out_for_suggestions_and_single_tasks_not_for_a_long_list(
+    api, session, team, template
+):
+    meeting = ready(session, template, speaker_transcript=SAID)
+    made = add_task(
+        session, team, meeting, title="Made", confidence="high", quote="I'll take checkout."
+    )
+    waiting = suggest(session, team, meeting, quote="I'll take checkout.")
+    board = api.get("/api/tasks").json()["tasks"]
+    assert board[0]["id"] == made.id and board[0]["quote_speaker"] is None  # not on a list
+    one = api.get(f"/api/tasks/{made.id}").json()
+    assert (one["quote_speaker"], one["quote_line"]) == ("Daniel", 2)
+    listed = api.get("/api/tasks?suggested=true").json()["tasks"][0]
+    assert listed["id"] == waiting.id and listed["quote_speaker"] == "Daniel"
