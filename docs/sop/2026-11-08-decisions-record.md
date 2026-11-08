@@ -1,6 +1,6 @@
 # SOP: Decisions as a record (audit B26 to B34, U6, U8, U9, U12)
 
-Spec: `docs/superpowers/specs/2026-11-08-designer-v2-features-design.md`, section 3 (approved by delegation, 2026-11-08). **PR 1 (backend):** branch `feature/decisions-record-backend` (number in the PR list). **PR 2 (screens):** `feature/decisions-record-screens` (stacked on PR 1; section "PR 2: the screens" below). **Migration 0036.** FE guide: `docs/fe-integration-guide-decisions.md`; captures `docs/fe-captures/decisions/` (`scripts/capture_decisions_api.py`).
+Spec: `docs/superpowers/specs/2026-11-08-designer-v2-features-design.md`, section 3 (approved by delegation, 2026-11-08). **PR 1 (backend):** branch `feature/decisions-record-backend` (number in the PR list). **PR 2 (screens):** `feature/decisions-record-screens` (section "PR 2: the screens" below). **Migration 0036.** FE guide: `docs/fe-integration-guide-decisions.md`; captures `docs/fe-captures/decisions/` (`scripts/capture_decisions_api.py`).
 
 ## What shipped (PR 1)
 1. **Migration 0036:** `decisions.status` (`approved | proposed | replaced | rejected`, check constraint, default `approved`), `decided_by` (varchar 100), `quote` (varchar 300), `revisit_on` (date), `replaced_by_id` (self reference, `on delete set null`), `edited_at` (timestamptz, see below), and table `decision_tasks (decision_id, task_id)` (composite key, both foreign keys `on delete cascade`). No row is rewritten: every old decision reads as Approved with no decider and no evidence.

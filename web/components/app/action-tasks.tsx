@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { TaskDrawer } from "@/components/app/task-drawer";
+import { useSuggestedActions } from "@/components/app/use-suggested";
 import { useToday } from "@/components/app/use-today";
-import { AppLink, Icon } from "@/components/ui";
+import { AppLink, Icon, Toast } from "@/components/ui";
+import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { loadSprintBook, type SprintBook } from "@/lib/sprints";
 import type { Milestone, Project, Task, TaskPerson } from "@/lib/api/types";
@@ -14,6 +16,9 @@ import { actionSummary, avatarTone, isOverdue, personInitials, taskDueText } fro
 // one row per task with a tick box, the title, the due day and who has it (or "Needs owner").
 // A row opens the same drawer as the board; the tick box moves the task between To do and Done.
 // Titles are plain text. The drawer's people list is read when the first row is opened.
+// A suggested task (the AI was unsure of it) has the pill "To confirm" in place of "Needs owner", is
+// not counted in "N tasks created, assigned to M people", and is accepted or dismissed from its drawer
+// (the summary then ends ", K to confirm" while K is above 0).
 export function ActionTasks({ initial }: { initial: Task[] }) {
   const today = useToday();
   const [tasks, setTasks] = useState(initial);
@@ -23,6 +28,15 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
   const [sprints, setSprints] = useState<SprintBook | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
   const [failed, setFailed] = useState<number | null>(null);
+  const [toast, flash] = useToast();
+  const suggestions = useSuggestedActions({
+    flash,
+    onAccepted: (next) => setTasks((all) => all.map((t) => (t.id === next.id ? next : t))),
+    onDismissed: (id) => {
+      setTasks((all) => all.filter((t) => t.id !== id));
+      setOpenId((now) => (now === id ? null : now));
+    },
+  });
 
   async function open(id: number) {
     setOpenId(id);
@@ -105,12 +119,13 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
                 </div>
                 {failed === task.id ? <div className="ai-due" role="alert">Could not update this task. Try again.</div> : null}
               </div>
+              {task.suggested ? <span className="tk-owner-pill">To confirm</span> : null}
               {task.assignee ? (
                 <span className="ai-who">
                   <span className={`avatar ${avatarTone(task.assignee.user_id)}`}>{personInitials(task.assignee)}</span>
                   {task.assignee.name}
                 </span>
-              ) : (
+              ) : task.suggested ? null : (
                 <span className="tk-owner-pill">Needs owner</span>
               )}
             </div>
@@ -125,6 +140,9 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
           projects={projects}
           milestones={milestones}
           sprints={sprints}
+          onAccept={(task) => void suggestions.accept(task)}
+          onDismiss={(task) => void suggestions.dismiss(task)}
+          suggestionBusy={suggestions.busyId !== null}
           onChange={(next) => setTasks((all) => all.map((t) => (t.id === next.id ? next : t)))}
           onDelete={(id) => {
             setTasks((all) => all.filter((t) => t.id !== id));
@@ -133,6 +151,7 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
           onClose={() => setOpenId(null)}
         />
       ) : null}
+      <Toast message={toast} />
     </>
   );
 }

@@ -60,11 +60,6 @@ The AI turns every action item into a task; the vague and conditional ones ("we 
 | `notifications.py`, `alerts.py`, `export*.py`, `sweeps.py`, `scheduler.py`, `web.py` | `grep` finds no read of `tasks` there |
 | `scripts/extraction_review.py`, `tests/eval/` | Evaluate the extraction prompt offline; they still run (the label `extract-v1` in the review script's HTML is its own) |
 
-## Lead-designed pieces (PR 2 builds them; not in the designer's file)
-* The evidence box shows the verbatim `quote` and its speaker, no time; the designer's paraphrase line is dropped.
-* "Show source" links to `/meetings/{id}?tab=transcript&line=N` (`ask-screens` builds the highlight; until it merges the link opens the Transcript tab).
-* Edit leaves the task suggested until Accept. A failed accept or dismiss shows "Could not update the task. Try again." and the row stays. The phone layout stacks the four buttons under the row text.
-
 ## Verification
 * pytest (Postgres 16, port 54346): `tests/test_suggested_tasks.py` (45: reason and confidence checks, quote location, who is suggested, re-run rules), `tests/test_suggested_tasks_api.py` (31: list, accept, dismiss, roles, mail, settings, evidence), `tests/test_suggested_exclusions.py` (8: one test per counting place), `tests/test_migrations.py` (0035 round trip, one head); the whole of `test_accounts`, route enumeration (`test_api_tasks`, `test_team_visibility`), `test_models`, `test_api` and the task, series, project, sprint, mail, integration and extraction suites pass. A mutation check (filters removed) failed ten of these tests, so they do bind.
 * Route enumeration: `POST /api/tasks/{id}/accept` is classified as a task write and is 404 for a non-reader and a teammate without access (`test_every_task_route_is_404_for_outsiders_and_teammates_without_access`).
@@ -84,3 +79,42 @@ Fixed on the branch: (1) Medium: only tasks made by the current extraction may t
 * A second assignee mail for an accepted task when the person was already mailed about the meeting (needs its own template and index).
 * Post an accepted task to Slack or the tracker (needs a rule for "once per task"; accepted tasks are skipped today).
 * Real model run: check how often `medium` and `low` are chosen and read the reasons (ledger `ai_runs`, `prompt_version` `extract-v2`) before the pilot relies on it.
+
+---
+
+# PR 2: the screens (`feature/suggested-tasks-screens`, stacked on PR 1; no migration, no config)
+
+## What shipped (PR 2)
+1. **Tasks screen, "Suggested tasks" section** (`components/app/suggested-tasks.tsx`, wired in `tasks-view.tsx`, data from `GET /api/tasks?suggested=true` in `app/tasks/page.tsx`): heading, "{N} to confirm" in amber, the designer's sub-line, and per row the title, the confidence pill (Medium amber, Low red, High green), the evidence box, the reason in amber, the assignee or "No owner", **Show source / Edit / Dismiss / Accept**. Hidden when none. Rows are oldest first (the designer's order; the API sends newest first).
+2. **Toasts:** "Task added to the board" (Accept), "Suggestion dismissed" (Dismiss).
+3. **Task drawer** (`task-drawer.tsx`): the amber box "Suggested task, medium confidence. {reason}" with Accept and Dismiss; "FROM THE MEETING" is now the evidence card (initials circle, speaker, the quote, "Show in transcript") for every task with a quote.
+4. **Meeting page, Action items** (`action-tasks.tsx`, `lib/tasks.ts actionSummary`): pill **"To confirm"** on a suggested row (in place of "Needs owner"), summary "N tasks created, assigned to M people, K to confirm" (tail only when K is above 0; a suggested task and its person are not counted), a drawer with the same Accept and Dismiss, and the toasts.
+5. **Settings > Tasks:** the switch **"Ask before adding unclear tasks"** with the designer's sub-line, saving all three values together (`settings-tasks.tsx`; also drawn off in the fallback card of `settings-planned-sections.tsx`).
+6. Shared `components/app/use-suggested.ts` (Accept and Dismiss, one at a time, the failure toast, a 404 drops the row), `lib/tasks.ts` helpers (`confidenceLabel`, `suggestedLead`, `transcriptHref`), `lib/api/client.ts` (`tasks.accept`, `tasks.list({ suggested })`), styles in `web/styles/pages.css` (`tk-sg-*`, `tk-conf-*`, `td-suggest-*`, `td-ev-*`).
+
+## Lead-designed, not in the designer's file (each labelled in the PR)
+* The evidence box and the drawer card show the **verbatim `quote` and its speaker, with no time** (none is stored); the designer's paraphrase line is dropped (U10). With no `quote_speaker` (an assignee of a private meeting's task) the box shows the quote alone.
+* **Show source** (and "Show in transcript") link to `/meetings/{id}?tab=transcript&line=N` (`quote_line` from the API). The meeting page opens the Transcript tab and highlights row N (`?tab=transcript&line=N`, built by the Ask Beyric screens PR, now on main). No Show source for someone who may not read the meeting.
+* **Edit** opens the drawer and the task stays suggested until Accept (U11).
+* A **failed** Accept or Dismiss shows the toast **"Could not update the task. Try again."** and the row stays (a 404 drops it).
+* **Phone layout:** the row's text first, then the four buttons stacked full width (`@media (max-width: 560px)`).
+* Accept and Dismiss follow `can_decide` and are disabled (not hidden) when it is false (a teammate who only reads the task; the owner of the meeting may decide, see PR 1 "Who may").
+* The drawer of a task whose list row has no `quote_speaker` (the Board lists carry it for suggested tasks only) asks for the one task (`GET /api/tasks/{id}`) to show who said the quote; a failed call leaves the quote without a speaker.
+
+## Deviations from the designer's file
+* **Row position of the Settings switch:** the file puts "Ask before adding unclear tasks" **second** (between "Create tasks from action items" and "Email assignees"); the spec and audit call it the "third row". Built as drawn.
+* The designer's drawer shows the paraphrase grey line under the evidence card; dropped (above). The designer's sample tasks carry a project and sprint (Client Portal, Sprint 13) while waiting; the server makes them unfiled until accepted, so the mock's drawer says "No project" and "Backlog" for them.
+* The design draws the Needs-owner pill only for a task that is not suggested; the same rule is used.
+
+## Verification (PR 2)
+* `npm run typecheck` clean, `npm run lint` no new warning (the 3 existing ones are in `scripts/parity-meeting-delete.mjs`), `npx vitest run`: 886 passed (28 new in `tests/suggested-tasks.test.tsx`, fed the real captures in `docs/fe-captures/suggested-tasks/`; three existing tests updated for the new quote card and the extra Settings switch).
+* **Parity shots** (`web/scripts/parity-shots.mjs`, design beside page, 1440, 768 and 390) built against `web/scripts/mock-api.mjs` and saved under `docs/ui/parity/after/`: `app-tasks`, `app-tasks-suggested-edit` (drawer), `app-tasks-suggested-accept` and `-dismiss` (toasts), `app-detail` (Action items), `app-settings`, `app-tasks-drawer`, each at the three widths (22 files). Read side by side at 1440: the section, the pills, the evidence boxes, the reasons, the buttons, the drawer box and the Action items rows match the file; differences are the ones listed above. At 390 the prototype itself is not responsive (it is squashed), so the phone layout is checked against the lead-designed rule only.
+* The shots use `--now 2026-11-02T10:00:00Z` as every earlier parity run does; with that fixed clock the server render and the browser disagree on "today" and React logs hydration error #418 on `/tasks`. Without `--now` the same page logs none (checked).
+* **Not covered:** the failed-accept toast and the "Show in transcript" highlight are unit-tested, not shot; no real browser run against the real API.
+
+## Operate / roll back
+Front end only. Revert the PR; nothing is stored by it. Needs PR 1 on the server (it reads `suggested`, `confidence`, `reason`, `quote_*` and calls `POST /api/tasks/{id}/accept`).
+
+## Follow-ups (PR 2)
+* Check "Show source" against a real transcript once the row highlight is live on the server.
+* A shot of the failed toast needs a mock switch (`/__mock/set`); add if wanted.

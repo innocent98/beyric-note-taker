@@ -19,6 +19,8 @@ export default async function TasksPage() {
   } catch (error) {
     if (error instanceof ApiError && error.status === 401) redirect("/login");
   }
+  // The suggested tasks (the board leaves them out): a failure draws no section, the board still works.
+  const suggested = await api.tasks.list({ suggested: true, limit: 500 }).then((list) => list.tasks, () => null);
   // The project tabs and milestone card: a failure leaves them out, the board still works.
   const projects = await api.projects.list().then((list) => list.projects, () => null);
   const milestones = await api.milestones.list().then((list) => list.milestones, () => []);
@@ -34,7 +36,7 @@ export default async function TasksPage() {
       unread={await getUnreadNotifications()} user={await getShellUser()}
       timeZone={await getTimeZone()}
     >
-      <TasksView initial={initial} projects={projects} milestones={milestones} sprints={sprints} canInviteToTeam={canInvite} />
+      <TasksView initial={initial} suggested={suggested} projects={projects} milestones={milestones} sprints={sprints} canInviteToTeam={canInvite} />
     </AppShell>
   );
 }

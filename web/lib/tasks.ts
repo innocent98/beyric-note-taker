@@ -122,11 +122,40 @@ export function personInitials(person: Pick<TaskPerson, "name">): string {
   return initials(person.name);
 }
 
-// "3 tasks created, assigned to 2 people": the line above the meeting page's task rows.
+// "3 tasks created, assigned to 2 people, 1 to confirm": the line above the meeting page's task
+// rows. A suggested task is not created yet, so it is counted only in the tail (shown when above 0),
+// and its person is not counted: the same numbers `GET /api/meetings/{id}/tasks` gives
+// (`assigned_people`, `to_confirm`).
 export function actionSummary(tasks: Task[]): string {
-  const people = new Set(tasks.filter((t) => t.assignee).map((t) => t.assignee!.user_id)).size;
-  const t = tasks.length;
-  return `${t} ${t === 1 ? "task" : "tasks"} created, assigned to ${people} ${people === 1 ? "person" : "people"}`;
+  const made = tasks.filter((t) => !t.suggested);
+  const people = new Set(made.filter((t) => t.assignee).map((t) => t.assignee!.user_id)).size;
+  const waiting = tasks.length - made.length;
+  const t = made.length;
+  return (
+    `${t} ${t === 1 ? "task" : "tasks"} created, assigned to ${people} ${people === 1 ? "person" : "people"}` +
+    (waiting > 0 ? `, ${waiting} to confirm` : "")
+  );
+}
+
+// The confidence pill of a suggested task: "Medium confidence" (the designer's CONF table; the class
+// that paints it is `tk-conf-medium`, `-low` or `-high` in styles/pages.css). A manual task and an
+// older one have none.
+export function confidenceLabel(confidence: Task["confidence"]): string {
+  return confidence ? `${confidence[0].toUpperCase()}${confidence.slice(1)} confidence` : "";
+}
+
+// The drawer's amber box opens with "Suggested task, medium confidence." (the designer's `confLower`).
+export function suggestedLead(task: Pick<Task, "confidence">): string {
+  return task.confidence ? `Suggested task, ${confidenceLabel(task.confidence).toLowerCase()}.` : "Suggested task.";
+}
+
+// Where "Show source" and "Show in transcript" go: the meeting's Transcript tab at the row that
+// holds the quote (the page `ask-screens` builds highlights it; until then it just opens the tab).
+// Null when the viewer may not open the meeting.
+export function transcriptHref(task: Pick<Task, "meeting" | "quote_line">): string | null {
+  if (!task.meeting) return null;
+  const line = task.quote_line ? `&line=${task.quote_line}` : "";
+  return `/meetings/${task.meeting.id}?tab=transcript${line}`;
 }
 
 // ---- projects and milestones (W4) ----

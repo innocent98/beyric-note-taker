@@ -34,7 +34,7 @@ describe("the task drawer", () => {
     expect((screen.getByLabelText("Due") as HTMLSelectElement).selectedOptions[0].text).toBe("Tomorrow");
     expect(screen.getByText("Today, Tue 3 Nov")).toBeTruthy();
     expect(screen.getByText("FROM THE MEETING")).toBeTruthy();
-    expect(screen.getByText(base.quote!)).toBeTruthy();
+    expect(screen.getByText(`“${base.quote!}”`)).toBeTruthy();
     expect(screen.getByRole("link", { name: /Google Meet nat-aaaa-bbb, 3 Nov/ }).getAttribute("href")).toBe("/meetings/1");
   });
 
@@ -121,7 +121,7 @@ describe("the task drawer", () => {
     const given = mine.tasks.find((t) => t.meeting === null)!;
     setup(given);
     expect(screen.getByText("FROM THE MEETING")).toBeTruthy();
-    expect(screen.getByText(given.quote!)).toBeTruthy();
+    expect(screen.getByText(`“${given.quote!}”`)).toBeTruthy();
     expect(screen.queryByRole("link")).toBeNull();
   });
 

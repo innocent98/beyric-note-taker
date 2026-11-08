@@ -294,6 +294,13 @@ const SCREENS = {
     true,
     [{ text: "Finish payment checkout", wait: 400 }],
   ],
+  // Suggested tasks (3C). The design's Tasks screen already has the section (the mock gives the same three
+  // tasks); Edit opens the drawer with the amber box; Accept and Dismiss show the toasts. The failed
+  // toast, the evidence of the Next side (the verbatim quote and its speaker, no time, no paraphrase line)
+  // and the phone layout of the four buttons are lead-designed: the design has no wording or layout for them.
+  "app-tasks-suggested-edit": [APP, [["Tasks", "first", 800], ["Edit", "first", 400]], "/tasks", true, [{ text: "Edit", wait: 400 }]],
+  "app-tasks-suggested-accept": [APP, [["Tasks", "first", 800], ["Accept", "first", 300]], "/tasks", true, [{ text: "Accept", wait: 400 }]],
+  "app-tasks-suggested-dismiss": [APP, [["Tasks", "first", 800], ["Dismiss", "first", 300]], "/tasks", true, [{ text: "Dismiss", wait: 400 }]],
   "app-tasks-review": [APP, [["Tasks", "first", 800], ["Review", "first", 400]], "/tasks", true, [{ text: "Review", wait: 400 }]],
   // Projects (W4). Recurring meetings is the checklist (the designer's links); the Sprint length
   // select and the two sprint figures are live (W9); the project tab on the board and the Check project line are the designer's.
