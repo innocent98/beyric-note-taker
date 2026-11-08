@@ -29,7 +29,7 @@ The designer's new "Ask Beyric" page: a question answered only from meetings the
 | **Where the answer's wording lives** | Only the model's `text` and `lead` (checked and made plain). Task points are code: `{title} ({due Fri 13 Nov, }{to do/in progress/done})` |
 
 ## Spec corrections (what the spec got wrong, and what was done)
-1. **"No migration" was impossible.** `ai_runs.kind` is guarded by a check constraint (`ck_ai_runs_kind`, `app/models.py` `AI_RUN_KINDS`) that did not allow `'ask'`, so `ai_runs.record(kind="ask")` would fail with a CHECK violation (as `translate` and `transcribe` needed 0023 and 0025). Migration **0034** widens it. **Merge-order note:** the spec gives 0034 to Suggested tasks (C1); whichever merges second renumbers (two lines: the revision ids). `tests/test_migrations.py::test_0033_follows_0032_and_is_the_only_head` pinned the head to 0033 and was loosened to `test_0033_follows_0032` (`test_single_head` already checks one head), so the next migration does not break it again
+1. **"No migration" was impossible.** `ai_runs.kind` is guarded by a check constraint (`ck_ai_runs_kind`, `app/models.py` `AI_RUN_KINDS`) that did not allow `'ask'`, so `ai_runs.record(kind="ask")` would fail with a CHECK violation (as `translate` and `transcribe` needed 0023 and 0025). Migration **0034** widens it. **Numbering (approved by the lead, 2026-11-08):** Ask Beyric takes 0034 chained after 0033; Suggested tasks (C1) moves to 0035. `tests/test_migrations.py::test_0033_follows_0032_and_is_the_only_head` pinned the head to 0033 and was loosened to `test_0033_follows_0032` (`test_single_head` already checks one head), so the next migration does not break it again
 2. **The error envelope is `{"error": {"code", "message"}}`**, the project's one shape, not the spec sketch's `{"detail": {...}}`.
 3. **Tasks with nothing to show** are `kind: "tasks"` with a lead that says so and no points (not `none`), because "I could not find that in your meetings" is the wrong thing to tell someone with no tasks.
 4. **A task point can have `cites: []`** (a task assigned to the person from a meeting they may not read: "assignee sees the quote only" rule; no link is made).
@@ -55,7 +55,7 @@ The designer's new "Ask Beyric" page: a question answered only from meetings the
 * **Live capture** (`scripts/capture_ask_api.py`: real app under uvicorn, real database and migrations, 31 exchanges). **The model was faked** (no key or network); retrieval, cites, checks, the cap, the ledger and every error body are the real code.
 
 ## Operate / roll back
-* Nothing to do on the server except the migration (runs with the normal deploy). Optional env: `ASK_MODEL`, `ASK_DAILY_LIMIT`. A restart of `api` applies them.
+* **Server steps before merge:** none by hand. Migration 0034 runs on deploy (it only swaps one check constraint; no data is touched). Optional env: `ASK_MODEL`, `ASK_DAILY_LIMIT`. A restart of `api` applies them.
 * **Cost:** one `gpt-6-luna` call per searching question: about 3 to 5 thousand tokens in, at most 700 out; at the cap of 30 a day that is bounded per person. Read it from `ai_runs where kind = 'ask'`.
 * **Roll back:** revert the PR. If it is reverted without running the 0034 downgrade, the database keeps the wider check and any `ask` rows, and nothing breaks; the downgrade deletes the `ask` rows before it restores the narrow check. To switch the feature off without a revert, set `ASK_DAILY_LIMIT=0`: every searching question answers 429 and tasks questions still work.
 
