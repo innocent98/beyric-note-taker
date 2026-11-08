@@ -297,6 +297,52 @@ const SCREENS = {
   // Sign-in field errors under the inputs (an empty submit), and the workspace step after the first sign-in.
   "signin-errors": [`${DESIGN}/Auth.dc.html#sign-in`, [["Sign in", "last"]], "/login", false, [{ click: "Sign in", exact: true }]],
   "setup-workspace": [`${DESIGN}/Auth.dc.html#setup`, [], "/setup", true],
+  // Ask Beyric (spec 2026-11-08 section 1). The prototype answers after 1.1 s with its own sample words, so
+  // the lead sentence and the chips differ; the layout, blocks and states are what is compared. The mock
+  // answers by the words typed (see mock-api.mjs): "pricing", "my tasks", "zebra", "fail", "limit", "gone", "long".
+  // Run app-ask-empty and app-ask-noscope against a mock started with `--ask empty` / `--ask scope-failed`.
+  "app-ask": [APP, [["Ask Beyric", "first", 600]], "/ask", true],
+  "app-ask-loading": [APP, [["Ask Beyric", "first", 600], ["What did we decide about pricing?", "first", 300]], "/ask", true, [{ text: "What did we decide about pricing?", wait: 300 }]],
+  "app-ask-answer": [APP, [["Ask Beyric", "first", 600], ["What did we decide about pricing?", "first", 1800]], "/ask", true, [{ text: "What did we decide about pricing?", wait: 1800 }]],
+  "app-ask-tasks": [
+    APP,
+    [["Ask Beyric", "first", 600], ["What did I commit to last week?", "first", 1800]],
+    "/ask",
+    true,
+    [{ text: "What did I commit to last week?", wait: 1800 }],
+  ],
+  "app-ask-none": [
+    APP,
+    [["Ask Beyric", "first", 600], { fill: "e.g. What did we decide about pricing?", value: "zebra", enter: true, wait: 1800 }],
+    "/ask",
+    true,
+    [{ fill: "e.g. What did we decide about pricing?", value: "zebra", enter: true, wait: 1800 }],
+  ],
+  // Lead-designed (no prototype): the failure card, Try again, the cap, the long chips, the empty page, no scope.
+  "app-ask-failed": [null, [], "/ask", true, [{ fill: "e.g. What did we decide about pricing?", value: "fail", enter: true, wait: 1800 }]],
+  "app-ask-retried": [
+    null,
+    [],
+    "/ask",
+    true,
+    [{ fill: "e.g. What did we decide about pricing?", value: "fail", enter: true, wait: 1800 }, { text: "Try again", wait: 1800 }],
+  ],
+  "app-ask-limit": [null, [], "/ask", true, [{ fill: "e.g. What did we decide about pricing?", value: "limit", enter: true, wait: 1800 }]],
+  "app-ask-long": [null, [], "/ask", true, [{ fill: "e.g. What did we decide about pricing?", value: "long", enter: true, wait: 1800 }]],
+  "app-ask-empty": [null, [], "/ask", true],
+  "app-ask-noscope": [null, [], "/ask", true],
+  // The chip: opens the Transcript tab at the cited row (the designer's openAt), highlighted. The design's own
+  // chip is "Beyric Monday planning · 00:12"; ours has the day instead of a time and a row number.
+  "app-ask-open-transcript": [
+    APP,
+    [["Ask Beyric", "first", 600], ["What did we decide about pricing?", "first", 1800], ["Beyric Monday planning · 00:12", "first", 1600]],
+    "/ask",
+    true,
+    [{ text: "What did we decide about pricing?", wait: 1800 }, { text: "Zoom 88205679674 · Mon 2 Nov", wait: 2200 }],
+  ],
+  "app-ask-gone": [null, [], "/ask", true, [{ fill: "e.g. What did we decide about pricing?", value: "gone", enter: true, wait: 1800 }, { text: "Launch review · Fri 30 Oct", wait: 1200 }]],
+  "app-detail-line": [null, [], "/meetings/8?tab=transcript&line=12", true],
+  "app-detail-line-out-of-range": [null, [], "/meetings/8?tab=transcript&line=99", true],
   "app-settings-language": [APP, [["Settings", "first"], DEFAULT_LANG("French", 300)], "/settings", true, [DEFAULT_LANG("French", 400)]],
 };
 

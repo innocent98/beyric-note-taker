@@ -32,6 +32,8 @@ import type { Meeting, NoteLanguage, RetryBlock, Share, Template, TeamMember } f
 import { LocalTime } from "@/components/app/local-time";
 import { MilestoneProposals, MilestoneRows, useMeetingMilestones } from "@/components/app/meeting-milestones";
 import { DELETED_FLAG } from "@/lib/deleted-flag";
+import { useScrollToRow } from "@/lib/transcript-scroll";
+import { parseTranscript } from "@/lib/transcript";
 import { durationLabel, initials, platformLabel, plural } from "@/lib/format";
 
 const AVATAR_TONES = ["avatar-a", "avatar-b", "avatar-c", "avatar-d", "avatar-e"] as const;
@@ -63,6 +65,7 @@ export function MeetingView({
   initial,
   templates,
   initialTab = "notes",
+  initialLine,
   defaultLanguage = "en",
   teamSize = 0,
   members = [],
@@ -71,6 +74,9 @@ export function MeetingView({
   initial: Meeting;
   templates: Template[];
   initialTab?: "notes" | "transcript";
+  // `?line=N`: the transcript row to scroll to and highlight (Ask Beyric's "Show in transcript").
+  // Out of range, or no transcript, and the tab simply opens.
+  initialLine?: number;
   // The account's default notes language (Settings): opened when that translation exists.
   defaultLanguage?: NoteLanguage;
   // How many people are on the owner's team (`GET /api/team` `member_count`; 0 when unknown). The
@@ -99,6 +105,8 @@ export function MeetingView({
   const [shareOpen, setShareOpen] = useState(false);
   const [shares, setShares] = useState<Share[]>(initialShares);
   const [toast, flashToast] = useToast(2600);
+  const highlightLine = initialTab === "transcript" && initial.transcript ? (initialLine ?? null) : null;
+  useScrollToRow(highlightLine, highlightLine !== null && highlightLine <= parseTranscript(initial.transcript ?? "").length);
   const translation = useTranslation(initial.id, initial.translations, defaultLanguage, meeting.notes);
 
   const refetch = useCallback(async () => {
@@ -325,7 +333,7 @@ export function MeetingView({
             <TranslationBanner view={translation} />
             {tab === "transcript" && m.transcript ? (
               <div role="tabpanel" id="panel-transcript" aria-labelledby="tab-transcript" lang={translation.shown}>
-                <TranscriptPanel text={shownTranscript ?? m.transcript} incomplete={m.speakers_incomplete} />
+                <TranscriptPanel text={shownTranscript ?? m.transcript} incomplete={m.speakers_incomplete} highlight={highlightLine} />
               </div>
             ) : (
               <div role="tabpanel" id="panel-notes" aria-labelledby="tab-notes" lang={translation.shown}>

@@ -94,7 +94,7 @@ Fixed on the branch: (1) Medium: only tasks made by the current extraction may t
 
 ## Lead-designed, not in the designer's file (each labelled in the PR)
 * The evidence box and the drawer card show the **verbatim `quote` and its speaker, with no time** (none is stored); the designer's paraphrase line is dropped (U10). With no `quote_speaker` (an assignee of a private meeting's task) the box shows the quote alone.
-* **Show source** (and "Show in transcript") link to `/meetings/{id}?tab=transcript&line=N` (`quote_line` from the API). The meeting page already opens the Transcript tab for `?tab=transcript`; the row highlight is `ask-screens`' piece, so until it merges the link just opens the tab. No Show source for someone who may not read the meeting.
+* **Show source** (and "Show in transcript") link to `/meetings/{id}?tab=transcript&line=N` (`quote_line` from the API). The meeting page opens the Transcript tab and highlights row N (`?tab=transcript&line=N`, built by the Ask Beyric screens PR, now on main). No Show source for someone who may not read the meeting.
 * **Edit** opens the drawer and the task stays suggested until Accept (U11).
 * A **failed** Accept or Dismiss shows the toast **"Could not update the task. Try again."** and the row stays (a 404 drops it).
 * **Phone layout:** the row's text first, then the four buttons stacked full width (`@media (max-width: 560px)`).
@@ -116,5 +116,5 @@ Fixed on the branch: (1) Medium: only tasks made by the current extraction may t
 Front end only. Revert the PR; nothing is stored by it. Needs PR 1 on the server (it reads `suggested`, `confidence`, `reason`, `quote_*` and calls `POST /api/tasks/{id}/accept`).
 
 ## Follow-ups (PR 2)
-* The row highlight of "Show in transcript" arrives with `ask-screens`; recheck the link then.
+* Check "Show source" against a real transcript once the row highlight is live on the server.
 * A shot of the failed toast needs a mock switch (`/__mock/set`); add if wanted.

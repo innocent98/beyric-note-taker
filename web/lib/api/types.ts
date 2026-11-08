@@ -108,3 +108,9 @@ export type AgendaSent = Schemas["AgendaSent"];
 export type QuestionChanges = Partial<Schemas["QuestionPatch"]>;
 export type MeetingSeriesResult = Schemas["MeetingSeriesOut"];
 export type ReminderPreferences = Schemas["ReminderPreferencesOut"];
+
+// Ask Beyric (docs/fe-integration-guide-ask-beyric.md): `GET /api/ask/scope` and `POST /api/ask`.
+export type AskCite = Schemas["CiteOut"];
+export type AskPoint = Schemas["PointOut"];
+export type AskAnswer = Schemas["AskOut"];
+export type AskScope = Schemas["ScopeOut"];

@@ -4,7 +4,7 @@ import { ShellNav } from "@/components/app/shell-nav";
 import { IconButton, NavLink } from "@/components/ui";
 import { initials } from "@/lib/format";
 
-export type NavSection = "meetings" | "tasks" | "projects" | "decisions" | "review" | "team" | "notifications" | "templates" | "vocabulary" | "settings";
+export type NavSection = "meetings" | "ask" | "tasks" | "projects" | "decisions" | "review" | "team" | "notifications" | "templates" | "vocabulary" | "settings";
 
 export type ShellUser = { name: string | null; email: string };
 
@@ -45,6 +45,7 @@ export function AppShell({
       <ShellNav>
         <nav className="nav" aria-label="Main">
           <NavLink href="/" label="Meetings" current={current === "meetings"} />
+          <NavLink href="/ask" label="Ask Beyric" current={current === "ask"} />
           <NavLink href="/tasks" label="Tasks" current={current === "tasks"} badge={tasksNew ?? 0} />
           <NavLink href="/projects" label="Projects" current={current === "projects"} />
           <NavLink href="/decisions" label="Decisions" current={current === "decisions"} />
