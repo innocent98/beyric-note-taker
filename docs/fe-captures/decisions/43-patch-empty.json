@@ -1,0 +1,26 @@
+{
+  "note": "Nothing to change: 422 `nothing_to_change`, and the decision is NOT marked as touched.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "nothing_to_change",
+        "message": "Send at least one of status, revisit_on or replaced_by_id."
+      }
+    }
+  }
+}

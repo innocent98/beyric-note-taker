@@ -180,13 +180,18 @@ def patch_decision(
     the meeting may: 403 `not_owner` for a teammate who can read it, 404 for someone who cannot.
     `replaced_by_id` must be another decision of the caller's log, only with status `replaced`
     (422 `replaced_by_needs_replaced`, `replaced_by_self`, `replaced_by_not_found`,
-    `replaced_by_cycle`). Moving a decision off `replaced` clears `replaced_by_id`. A change a
-    person made is never overwritten when the notes are read again."""
+    `replaced_by_cycle`). An empty body is 422 `nothing_to_change`; a revisit day outside 2000 to
+    2100 is 422 `validation_error`. Moving a decision off `replaced` clears `replaced_by_id`. A
+    change a person made is never overwritten when the notes are read again."""
     found = workspace.readable_decision(session, user, decision_id)
     if found is None:
         raise StarletteHTTPException(404, "No such decision")
     decision, meeting = found
     changes = {k: getattr(body, k) for k in body.model_fields_set}
+    if not changes:
+        raise services.Refused(
+            422, "nothing_to_change", "Send at least one of status, revisit_on or replaced_by_id."
+        )
     if changes.get("status", "") is None:
         raise services.Refused(422, "validation_error", "Status cannot be null.")
     try:

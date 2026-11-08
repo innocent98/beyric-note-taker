@@ -501,8 +501,9 @@ export interface paths {
          *     the meeting may: 403 `not_owner` for a teammate who can read it, 404 for someone who cannot.
          *     `replaced_by_id` must be another decision of the caller's log, only with status `replaced`
          *     (422 `replaced_by_needs_replaced`, `replaced_by_self`, `replaced_by_not_found`,
-         *     `replaced_by_cycle`). Moving a decision off `replaced` clears `replaced_by_id`. A change a
-         *     person made is never overwritten when the notes are read again.
+         *     `replaced_by_cycle`). An empty body is 422 `nothing_to_change`; a revisit day outside 2000 to
+         *     2100 is 422 `validation_error`. Moving a decision off `replaced` clears `replaced_by_id`. A
+         *     change a person made is never overwritten when the notes are read again.
          */
         patch: operations["patch_decision"];
         trace?: never;

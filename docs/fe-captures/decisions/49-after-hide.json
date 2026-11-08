@@ -1,5 +1,5 @@
 {
-  "note": "The pricing task was made a SUGGESTED task (by a direct database write, as if Ask before adding unclear tasks had held it): it is gone from `related_tasks` everywhere. Suggested tasks are never shown here.",
+  "note": "A hidden decision is in no group and no count.",
   "client": "dan",
   "request": {
     "method": "GET",
@@ -22,7 +22,7 @@
             "id": 2,
             "title": "Google Meet nat-pppp-rrr",
             "platform": "google_meet",
-            "created_at": "2026-11-08T16:54:13.167501Z"
+            "created_at": "2026-11-08T17:23:05.588120Z"
           },
           "decisions": [
             {
@@ -46,7 +46,7 @@
             "id": 1,
             "title": "Google Meet nat-aaaa-bbb",
             "platform": "google_meet",
-            "created_at": "2026-11-08T16:34:13.162482Z"
+            "created_at": "2026-11-08T17:03:05.583112Z"
           },
           "decisions": [
             {
@@ -64,31 +64,6 @@
               "can_edit": true
             },
             {
-              "id": 2,
-              "text": "Move the launch to 30 November.",
-              "status": "approved",
-              "decided_by": null,
-              "quote": null,
-              "quote_speaker": null,
-              "line": null,
-              "revisit_on": null,
-              "replaced_by": null,
-              "replaces": [
-                {
-                  "id": 3,
-                  "text": "Look at a lifetime deal at some point."
-                }
-              ],
-              "related_tasks": [
-                {
-                  "id": 2,
-                  "title": "Tell the customers about the new launch date",
-                  "status": "todo"
-                }
-              ],
-              "can_edit": true
-            },
-            {
               "id": 3,
               "text": "Look at a lifetime deal at some point.",
               "status": "replaced",
@@ -97,10 +72,7 @@
               "quote_speaker": "Amina",
               "line": 4,
               "revisit_on": null,
-              "replaced_by": {
-                "id": 2,
-                "text": "Move the launch to 30 November."
-              },
+              "replaced_by": null,
               "replaces": [],
               "related_tasks": [],
               "can_edit": true
@@ -111,8 +83,8 @@
       "has_more": false,
       "next_before_id": null,
       "counts": {
-        "all": 4,
-        "approved": 2,
+        "all": 3,
+        "approved": 1,
         "proposed": 0,
         "replaced": 1,
         "rejected": 1

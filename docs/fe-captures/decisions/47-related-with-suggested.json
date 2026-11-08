@@ -1,5 +1,5 @@
 {
-  "note": "The notes were read again and the stand-in model now says the opposite for every decision. All three decisions of this meeting had been changed by a person (`free` Rejected, `lifetime` Replaced, `launch` given and cleared a date), so none of them moves: status, date and replaced_by stay as the owner left them.",
+  "note": "The pricing task was made a SUGGESTED task (by a direct database write, as if Ask before adding unclear tasks had held it): it is gone from `related_tasks` everywhere. Suggested tasks are never shown here.",
   "client": "dan",
   "request": {
     "method": "GET",
@@ -22,7 +22,7 @@
             "id": 2,
             "title": "Google Meet nat-pppp-rrr",
             "platform": "google_meet",
-            "created_at": "2026-11-08T16:54:13.167501Z"
+            "created_at": "2026-11-08T17:23:05.588120Z"
           },
           "decisions": [
             {
@@ -46,7 +46,7 @@
             "id": 1,
             "title": "Google Meet nat-aaaa-bbb",
             "platform": "google_meet",
-            "created_at": "2026-11-08T16:34:13.162482Z"
+            "created_at": "2026-11-08T17:03:05.583112Z"
           },
           "decisions": [
             {
@@ -60,13 +60,7 @@
               "revisit_on": null,
               "replaced_by": null,
               "replaces": [],
-              "related_tasks": [
-                {
-                  "id": 1,
-                  "title": "Update the pricing page",
-                  "status": "todo"
-                }
-              ],
+              "related_tasks": [],
               "can_edit": true
             },
             {

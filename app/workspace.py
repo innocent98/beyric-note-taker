@@ -485,6 +485,8 @@ def backfill_tasks(session: Session, now: datetime, *, task_days: int = BACKFILL
 
 DECISIONS_DEFAULT_MEETINGS, DECISIONS_MAX_MEETINGS = 20, 50
 MAX_SEARCH_CHARS = 200
+# The key of the advisory lock that serialises naming a replacement (`update_decision`).
+DECISION_LINK_LOCK = 3600036
 REVIEW_LIMIT = 200
 
 
@@ -630,6 +632,19 @@ def update_decision(
     refused. The caller commits through this function."""
     if not owns(user, meeting):
         raise DecisionForbidden
+    # Two changes to one decision (or two owners naming each other) must not interleave: take the
+    # row locks in id order, and, to name a replacement, one lock that serialises every such change
+    # (a chain of three decisions cannot be closed into a loop by three requests at once).
+    target = None if isinstance(replaced_by_id, Unset) else replaced_by_id
+    if target is not None:
+        session.execute(select(func.pg_advisory_xact_lock(DECISION_LINK_LOCK)))
+    session.execute(
+        select(Decision.id)
+        .where(Decision.id.in_({decision.id, *([target] if target else [])}))
+        .order_by(Decision.id)
+        .with_for_update()
+    )
+    session.refresh(decision)  # what the lock waited for may have changed it
     final = decision.status if isinstance(status, Unset) else status
     if not isinstance(replaced_by_id, Unset) and replaced_by_id is not None:
         if final != "replaced":
@@ -650,7 +665,11 @@ def update_decision(
                     "replaced_by_cycle", "That decision is already replaced by this one."
                 )
             seen.add(at.id)
-            at = session.get(Decision, at.replaced_by_id) if at.replaced_by_id else None
+            at = (
+                session.get(Decision, at.replaced_by_id, populate_existing=True)
+                if at.replaced_by_id
+                else None
+            )
     if not isinstance(status, Unset):
         decision.status = status
         if status != "replaced":
