@@ -313,7 +313,7 @@ def test_a_suppressed_address_gets_the_bell_but_no_mail(session, meeting, owner)
     assert len(bells(session)) == 1 and mails(session) == []
 
 
-def test_the_sent_mail_renders_without_the_send_again_button(session, meeting):
+def test_the_sent_mail_renders_with_the_send_it_again_button(session, meeting):
     run(session, meeting, FakeVexa(TIMED_OUT), now=SEEN)
     (sent,) = mails(session)
     message = mail_templates.render_link(
@@ -321,4 +321,4 @@ def test_the_sent_mail_renders_without_the_send_again_button(session, meeting):
     )
     assert "The note taker could not join your meeting" in message.text
     assert "Google Meet abc-defg-hij at 12:07 UTC" in message.text
-    assert "Send it again" not in message.text
+    assert "Send it again" in message.text and "Send it again:\nhttp" in message.text

@@ -111,3 +111,73 @@ def error_text(recorded: str | None) -> str | None:
     if recorded.startswith("AuthRevoked"):
         return REVOKED_ERROR_TEXT
     return GENERIC_ERROR_TEXT
+
+
+# ---- "Not recorded" and Send now (plan C15b) ----
+
+# The skip reasons that mean the meeting was not recorded. `duplicate_meeting` is left out on
+# purpose: the runner only gives it when the owner's own bot is, or was, in that very meeting (a
+# link they pasted), so the meeting was recorded under that meeting and calling it "not recorded"
+# would be false. `needs_reconnect` is what `calendar_states` stores when the connection lapsed
+# (the spec calls it calendar_disconnected, which is accepted too).
+NOT_RECORDED_SKIP_REASONS = (
+    "hours_cap",
+    "user_limit",
+    "code_in_use",
+    "meeting_has_note_taker",
+    "needs_reconnect",
+    "calendar_disconnected",
+    "account_suspended",
+)
+# A suspended account cannot send anything (spec 7.7), so its row never offers Send now.
+NO_SEND_NOW_REASONS = frozenset({"account_suspended"})
+SEND_NOW_STATES = ("failed", "no_capacity", "skipped")
+
+NOT_RECORDED_REASON_TEXT = {
+    "not_recorded": "The note taker could not join before the 15 minutes were up.",
+    "error": "Something went wrong starting the note taker.",
+    "unsupported_link": "The note taker cannot join this kind of meeting link yet.",
+    "no_template": "Choose a notes template for calendar meetings, then send it again.",
+    "hours_cap": "Your recording hours are used up.",
+    "user_limit": "You already had the most note takers allowed at once.",
+    "code_in_use": "Your note taker was still in an earlier meeting on the same link.",
+    "meeting_has_note_taker": "A note taker was already in this meeting.",
+    "needs_reconnect": "Your calendar was disconnected.",
+    "calendar_disconnected": "Your calendar was disconnected.",
+    "account_suspended": "This account is suspended.",
+}
+NO_CAPACITY_TEXT = "The note taker was busy with other meetings."
+NOT_RECORDED_DEFAULT_TEXT = "The note taker did not join this meeting."
+
+
+def not_recorded_text(state: str, reason: str | None) -> str:
+    """Why a scheduled join produced no meeting, in one sentence a person can read. Never a code,
+    a link or a passcode."""
+    if state == "no_capacity":
+        return NO_CAPACITY_TEXT
+    return NOT_RECORDED_REASON_TEXT.get(reason or "", NOT_RECORDED_DEFAULT_TEXT)
+
+
+# What Send now answers once the bot is on its way.
+SENT_TEXT = "The note taker is on its way to this meeting."
+
+
+def is_not_recorded(join, now) -> bool:
+    """Whether a scheduled join (a `ScheduledJoin`) is one the "Not recorded" list shows: it never
+    produced a meeting, its moment has come (a row skipped hours ahead because the calendar lapsed
+    is not "not recorded" yet), and it ended in one of the states or reasons above."""
+    if join.meeting_id is not None or join.run_at > now:
+        return False
+    if join.state in ("failed", "no_capacity"):
+        return True
+    return join.state == "skipped" and join.skip_reason in NOT_RECORDED_SKIP_REASONS
+
+
+def can_send_now(join, now) -> bool:
+    """Whether Send now is on offer for a row on the lists: it is on the "Not recorded" list, the
+    meeting is still on, and the account is not suspended (spec 7.7)."""
+    return (
+        is_not_recorded(join, now)
+        and join.skip_reason not in NO_SEND_NOW_REASONS
+        and now <= join.ends_at
+    )

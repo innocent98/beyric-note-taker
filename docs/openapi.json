@@ -2720,6 +2720,89 @@
         "title": "NewTerm",
         "type": "object"
       },
+      "NotRecordedItem": {
+        "description": "One meeting the note taker did not get into. `reason_text` says why in words (show it as it\nis). `state` is for choosing the look: `no_capacity` (the note taker was busy), `failed` or\n`skipped`. `can_send_now` is true while the meeting is still on and the account may send; show\nthe Send now button only then. `join_id` is what `POST /api/scheduled-joins/{id}/send-now` takes\n(it is not an event id).",
+        "properties": {
+          "can_send_now": {
+            "title": "Can Send Now",
+            "type": "boolean"
+          },
+          "ends_at": {
+            "format": "date-time",
+            "title": "Ends At",
+            "type": "string"
+          },
+          "join_id": {
+            "title": "Join Id",
+            "type": "integer"
+          },
+          "platform": {
+            "enum": [
+              "google_meet",
+              "zoom",
+              "teams"
+            ],
+            "title": "Platform",
+            "type": "string"
+          },
+          "platform_label": {
+            "title": "Platform Label",
+            "type": "string"
+          },
+          "reason_text": {
+            "title": "Reason Text",
+            "type": "string"
+          },
+          "starts_at": {
+            "format": "date-time",
+            "title": "Starts At",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "failed",
+              "no_capacity",
+              "skipped"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "join_id",
+          "title",
+          "starts_at",
+          "ends_at",
+          "platform",
+          "platform_label",
+          "state",
+          "reason_text",
+          "can_send_now"
+        ],
+        "title": "NotRecordedItem",
+        "type": "object"
+      },
+      "NotRecordedOut": {
+        "description": "The last seven days, newest first, at most 100. A meeting the note taker did join and that\nthen failed (not let in, recording failed) is not here: it is an ordinary failed meeting on\nthe Meetings list.",
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NotRecordedItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "NotRecordedOut",
+        "type": "object"
+      },
       "NotificationList": {
         "properties": {
           "has_more": {
@@ -3548,6 +3631,30 @@
           "suggestions"
         ],
         "title": "ScopeOut",
+        "type": "object"
+      },
+      "SendNowOut": {
+        "description": "The note taker is on its way. `meeting_id` is the new meeting (the Meetings list and its\npage follow it as it is joined and written up). The same answer comes back if the button is\npressed twice.",
+        "properties": {
+          "join_id": {
+            "title": "Join Id",
+            "type": "integer"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "integer"
+          },
+          "status_text": {
+            "title": "Status Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "join_id",
+          "meeting_id",
+          "status_text"
+        ],
+        "title": "SendNowOut",
         "type": "object"
       },
       "SeriesCard": {
@@ -5817,6 +5924,11 @@
             "title": "Attendee Count",
             "type": "integer"
           },
+          "can_send_now": {
+            "default": false,
+            "title": "Can Send Now",
+            "type": "boolean"
+          },
           "ends_at": {
             "format": "date-time",
             "title": "Ends At",
@@ -5825,6 +5937,28 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "join_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Join Id"
+          },
+          "not_recorded_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Not Recorded Text"
           },
           "platform": {
             "anyOf": [
@@ -10797,6 +10931,58 @@
         ]
       }
     },
+    "/api/not-recorded": {
+      "get": {
+        "description": "The meetings of the last seven days the note taker did not get into, for the Meetings page\n(no CSRF header needed): the calendar's `failed` and `no_capacity` joins, and the skipped ones\nwhose reason means the meeting was not recorded (recording hours used up, too many note takers\nat once, the link still in use, a note taker from another account already there, the calendar\ndisconnected, a suspended account). Only the caller's own. Each item says why in plain words\nand whether Send now is on offer. Newest first.",
+        "operationId": "not_recorded",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotRecordedOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Not Recorded",
+        "tags": [
+          "calendar"
+        ]
+      }
+    },
     "/api/notifications": {
       "get": {
         "description": "The caller's notifications, newest first. For the next page pass `before_id` =\n`next_before_id`.",
@@ -11938,6 +12124,99 @@
         "summary": "Add Review Term",
         "tags": [
           "review"
+        ]
+      }
+    },
+    "/api/scheduled-joins/{join_id}/send-now": {
+      "post": {
+        "description": "Send the note taker to a meeting it did not get into (CSRF header needed, no body). `join_id`\ncomes from `GET /api/not-recorded` or an Upcoming row. Allowed while the meeting is still on,\nfor a join that is `failed`, `no_capacity` or `skipped` (not for a suspended account). The note\ntaker is sent through the same placement as every other bot, so the whole pre-flight runs again\nand nothing is bypassed: refusals come back with the same codes as pasting a link\n(403 `hours_cap_reached`, 409 `user_limit`, `already_in_meeting`, `meeting_has_note_taker`,\n`bot_busy`) and change nothing. 409 `meeting_ended` once the meeting is over, 409\n`cannot_send_now` for a join that is not in a sendable state (still scheduled, switched off,\ndone), 403 `account_suspended`, 409 `template_required` when no calendar template is chosen,\n502 `bot_send_failed` when the bot service did not take it, 404 `not_found` for a join that is\nnot the caller's. Pressing it twice answers 200 twice with the same `meeting_id` and sends one\nbot. The join's retry window restarts: 15 minutes from now.",
+        "operationId": "send_now_route",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "join_id",
+            "required": true,
+            "schema": {
+              "title": "Join Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendNowOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Gateway"
+          }
+        },
+        "summary": "Send Now Route",
+        "tags": [
+          "calendar"
         ]
       }
     },

@@ -1,0 +1,26 @@
+{
+  "note": "The bot host refused the bot (the fake host raises `VexaError`): 502 `bot_send_failed`; no meeting was made and the row is unchanged, so pressing again later works.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/scheduled-joins/1/send-now",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 502,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "bot_send_failed",
+        "message": "The bot could not be sent. Please try again in a moment."
+      }
+    }
+  }
+}

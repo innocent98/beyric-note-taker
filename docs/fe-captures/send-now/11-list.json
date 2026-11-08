@@ -1,0 +1,45 @@
+{
+  "note": "Two rows the real runner left: `missed` ended `failed` (its 15 minutes passed) and `second` is `no_capacity` (the one slot is taken by `first`). The runner's clock was moved four minutes ahead for that run; the rows are its own. The joined meeting `first` is not here: it is a meeting.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/not-recorded",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "items": [
+        {
+          "join_id": 3,
+          "title": "Design review",
+          "starts_at": "2026-11-08T21:20:00Z",
+          "ends_at": "2026-11-08T22:20:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "state": "no_capacity",
+          "reason_text": "The note taker was busy with other meetings.",
+          "can_send_now": true
+        },
+        {
+          "join_id": 1,
+          "title": "Weekly planning",
+          "starts_at": "2026-11-08T21:08:00Z",
+          "ends_at": "2026-11-08T22:08:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "state": "failed",
+          "reason_text": "The note taker could not join before the 15 minutes were up.",
+          "can_send_now": true
+        }
+      ]
+    }
+  }
+}

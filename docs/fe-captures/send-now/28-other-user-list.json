@@ -1,0 +1,22 @@
+{
+  "note": "Sees only their own: nothing.",
+  "client": "a different user",
+  "request": {
+    "method": "GET",
+    "path": "/api/not-recorded",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "items": []
+    }
+  }
+}

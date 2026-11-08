@@ -1,0 +1,26 @@
+{
+  "note": "The meeting is over: 409 `meeting_ended`.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/scheduled-joins/5/send-now",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "meeting_ended",
+        "message": "This meeting is already over, so the note taker cannot join it."
+      }
+    }
+  }
+}

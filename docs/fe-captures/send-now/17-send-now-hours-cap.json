@@ -1,0 +1,26 @@
+{
+  "note": "The recorded hours are used up (a usage row of 50 hours was inserted for this call, and the capture account, an admin, was made an ordinary one for it; both undone after): 403 `hours_cap_reached`. The hours check runs before the capacity check.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/scheduled-joins/1/send-now",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "hours_cap_reached",
+        "message": "You have used your 5 recorded hours for the pilot, so the note taker will not join new meetings. Write to us at hello@beyrictech.com if you need more."
+      }
+    }
+  }
+}

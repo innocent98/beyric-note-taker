@@ -303,6 +303,10 @@ def test_each_item_has_title_times_platform_and_the_join_answer(web, session, li
         "will_join": True,
         "will_join_text": "Will join",
         "reason_text": None,
+        # no scheduled join exists for an event added by hand: nothing to send again
+        "join_id": None,
+        "can_send_now": False,
+        "not_recorded_text": None,
     }
 
 
@@ -437,6 +441,9 @@ def test_upcoming_never_returns_attendee_addresses_description_or_zoom_passcode(
         "will_join",
         "will_join_text",
         "reason_text",
+        "join_id",
+        "can_send_now",
+        "not_recorded_text",
     }  # no description, location, attendees, link or passcode field exists to fill
 
 

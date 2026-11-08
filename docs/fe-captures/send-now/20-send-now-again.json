@@ -1,0 +1,25 @@
+{
+  "note": "The button pressed twice: the same 200 and the same `meeting_id`, no second bot. Bots the host was asked for so far: 2.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/scheduled-joins/1/send-now",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "join_id": 1,
+      "meeting_id": 2,
+      "status_text": "The note taker is on its way to this meeting."
+    }
+  }
+}

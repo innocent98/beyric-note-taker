@@ -27,15 +27,27 @@ from app import (
     calendar_text,
     gcal_sync,
     google_oauth,
+    send_now,
     services,
     titles,
 )
 from app.api_schemas import ErrorResponse
 from app.db import get_session
 from app.gcal_rules import JoinSettings, will_join
-from app.models import AppState, CalendarConnection, CalendarEvent, User, UserSettings
+from app.models import (
+    AppState,
+    CalendarConnection,
+    CalendarEvent,
+    ScheduledJoin,
+    User,
+    UserSettings,
+)
+from app.services import get_vexa
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
+# The two routes of the scheduled joins that do not live under `/calendar` (C15b): the list of
+# meetings the note taker did not get into, and the button that sends it again.
+joins_router = APIRouter(tags=["calendar"])
 
 ProviderName = Literal["google", "microsoft"]  # calendar_providers.ROUTE_PROVIDERS
 
@@ -44,6 +56,7 @@ CALLBACK_RESPONSES = {302: {"description": "Redirect"}, 404: {"model": ErrorResp
 STATE_RESPONSES = {404: {"model": ErrorResponse}}
 SETTINGS_RESPONSES = {code: {"model": ErrorResponse} for code in (404, 422)}
 OVERRIDE_RESPONSES = {code: {"model": ErrorResponse} for code in (404, 409, 422)}
+SEND_NOW_RESPONSES = {code: {"model": ErrorResponse} for code in (403, 404, 409, 502)}
 
 UPCOMING_DAYS = 7
 UPCOMING_LIMIT = 100
@@ -103,6 +116,13 @@ class UpcomingEvent(BaseModel):
     # `Cannot join` (no link, over, declined, ...). `reason_text` says why, or is null.
     will_join_text: str
     reason_text: str | None
+    # The scheduled join behind this event, or null when it has none (the event is not joined).
+    # `join_id` is the id Send now takes. `not_recorded_text` is set when the note taker did not
+    # get into this meeting (the same sentence as the Not recorded list); `can_send_now` is true
+    # when Send now would be accepted: show the button only then.
+    join_id: int | None = None
+    can_send_now: bool = False
+    not_recorded_text: str | None = None
 
 
 class CalendarOut(BaseModel):
@@ -297,8 +317,14 @@ def _join_settings(prefs: UserSettings | None, request: Request) -> JoinSettings
     )
 
 
-def _upcoming_item(row: CalendarEvent, join_settings: JoinSettings, now: datetime) -> UpcomingEvent:
+def _upcoming_item(
+    row: CalendarEvent,
+    join_settings: JoinSettings,
+    now: datetime,
+    join: ScheduledJoin | None = None,
+) -> UpcomingEvent:
     decision = will_join(row, row.override, join_settings, now=now)
+    not_recorded = join is not None and calendar_text.is_not_recorded(join, now)
     return UpcomingEvent(
         id=row.id,
         title=titles.clean_title(row.title),
@@ -310,7 +336,24 @@ def _upcoming_item(row: CalendarEvent, join_settings: JoinSettings, now: datetim
         will_join=decision.join,
         will_join_text=calendar_text.join_label(decision),
         reason_text=calendar_text.join_reason(decision),
+        join_id=join.id if join is not None else None,
+        can_send_now=join is not None and calendar_text.can_send_now(join, now),
+        not_recorded_text=(
+            calendar_text.not_recorded_text(join.state, join.skip_reason) if not_recorded else None
+        ),
     )
+
+
+def _joins_of(session: Session, user_id: int, event_ids: list[int]) -> dict[int, ScheduledJoin]:
+    """The caller's scheduled join for each of these events (one per event at most)."""
+    if not event_ids:
+        return {}
+    rows = session.scalars(
+        select(ScheduledJoin).where(
+            ScheduledJoin.user_id == user_id, ScheduledJoin.calendar_event_id.in_(event_ids)
+        )
+    )
+    return {row.calendar_event_id: row for row in rows}
 
 
 def _upcoming(
@@ -330,7 +373,8 @@ def _upcoming(
         .order_by(CalendarEvent.starts_at, CalendarEvent.id)
         .limit(UPCOMING_LIMIT)
     ).all()
-    return [_upcoming_item(row, join_settings, now) for row in rows]
+    joins = _joins_of(session, conn.user_id, [row.id for row in rows])
+    return [_upcoming_item(row, join_settings, now, joins.get(row.id)) for row in rows]
 
 
 def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut:
@@ -497,4 +541,126 @@ def calendar_event_override(
         now=now,
         settings=request.app.state.settings,
     )
-    return _upcoming_item(row, join_settings, now)
+    join = _joins_of(session, user.id, [row.id]).get(row.id)
+    return _upcoming_item(row, join_settings, now, join)
+
+
+# ---- not recorded, and Send now (plan C15b) ----
+
+NOT_RECORDED_DAYS = 7
+NOT_RECORDED_LIMIT = 100
+
+
+class NotRecordedItem(BaseModel):
+    """One meeting the note taker did not get into. `reason_text` says why in words (show it as it
+    is). `state` is for choosing the look: `no_capacity` (the note taker was busy), `failed` or
+    `skipped`. `can_send_now` is true while the meeting is still on and the account may send; show
+    the Send now button only then. `join_id` is what `POST /api/scheduled-joins/{id}/send-now` takes
+    (it is not an event id)."""
+
+    join_id: int
+    title: str
+    starts_at: datetime
+    ends_at: datetime
+    platform: Literal["google_meet", "zoom", "teams"]
+    platform_label: str
+    state: Literal["failed", "no_capacity", "skipped"]
+    reason_text: str
+    can_send_now: bool
+
+
+class NotRecordedOut(BaseModel):
+    """The last seven days, newest first, at most 100. A meeting the note taker did join and that
+    then failed (not let in, recording failed) is not here: it is an ordinary failed meeting on
+    the Meetings list."""
+
+    items: list[NotRecordedItem]
+
+
+class SendNowOut(BaseModel):
+    """The note taker is on its way. `meeting_id` is the new meeting (the Meetings list and its
+    page follow it as it is joined and written up). The same answer comes back if the button is
+    pressed twice."""
+
+    join_id: int
+    meeting_id: int
+    status_text: str
+
+
+def _not_recorded_item(join: ScheduledJoin, title: str | None, now: datetime) -> NotRecordedItem:
+    return NotRecordedItem(
+        join_id=join.id,
+        title=titles.clean_title(title) or titles.alert_name(None, join.platform, join.native_id),
+        starts_at=join.starts_at,
+        ends_at=join.ends_at,
+        platform=join.platform,
+        platform_label=calendar_text.PLATFORM_LABELS[join.platform],
+        state=join.state,
+        reason_text=calendar_text.not_recorded_text(join.state, join.skip_reason),
+        can_send_now=calendar_text.can_send_now(join, now),
+    )
+
+
+@joins_router.get("/not-recorded")
+def not_recorded(
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> NotRecordedOut:
+    """The meetings of the last seven days the note taker did not get into, for the Meetings page
+    (no CSRF header needed): the calendar's `failed` and `no_capacity` joins, and the skipped ones
+    whose reason means the meeting was not recorded (recording hours used up, too many note takers
+    at once, the link still in use, a note taker from another account already there, the calendar
+    disconnected, a suspended account). Only the caller's own. Each item says why in plain words
+    and whether Send now is on offer. Newest first."""
+    now = _now()
+    rows = session.execute(
+        select(ScheduledJoin, CalendarEvent.title)
+        .outerjoin(CalendarEvent, CalendarEvent.id == ScheduledJoin.calendar_event_id)
+        .where(
+            ScheduledJoin.user_id == user.id,
+            ScheduledJoin.meeting_id.is_(None),
+            ScheduledJoin.run_at <= now,
+            ScheduledJoin.starts_at > now - timedelta(days=NOT_RECORDED_DAYS),
+            (ScheduledJoin.state.in_(("failed", "no_capacity")))
+            | (
+                (ScheduledJoin.state == "skipped")
+                & ScheduledJoin.skip_reason.in_(calendar_text.NOT_RECORDED_SKIP_REASONS)
+            ),
+        )
+        .order_by(ScheduledJoin.starts_at.desc(), ScheduledJoin.id.desc())
+        .limit(NOT_RECORDED_LIMIT)
+    ).all()
+    return NotRecordedOut(items=[_not_recorded_item(join, title, now) for join, title in rows])
+
+
+@joins_router.post("/scheduled-joins/{join_id:id}/send-now", responses=SEND_NOW_RESPONSES)
+def send_now_route(
+    join_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+    vexa=Depends(get_vexa),
+) -> SendNowOut:
+    """Send the note taker to a meeting it did not get into (CSRF header needed, no body). `join_id`
+    comes from `GET /api/not-recorded` or an Upcoming row. Allowed while the meeting is still on,
+    for a join that is `failed`, `no_capacity` or `skipped` (not for a suspended account). The note
+    taker is sent through the same placement as every other bot, so the whole pre-flight runs again
+    and nothing is bypassed: refusals come back with the same codes as pasting a link
+    (403 `hours_cap_reached`, 409 `user_limit`, `already_in_meeting`, `meeting_has_note_taker`,
+    `bot_busy`) and change nothing. 409 `meeting_ended` once the meeting is over, 409
+    `cannot_send_now` for a join that is not in a sendable state (still scheduled, switched off,
+    done), 403 `account_suspended`, 409 `template_required` when no calendar template is chosen,
+    502 `bot_send_failed` when the bot service did not take it, 404 `not_found` for a join that is
+    not the caller's. Pressing it twice answers 200 twice with the same `meeting_id` and sends one
+    bot. The join's retry window restarts: 15 minutes from now."""
+    sent = send_now.send_now(
+        session,
+        vexa,
+        user,
+        join_id,
+        now=_now(),
+        settings=request.app.state.settings,
+    )
+    return SendNowOut(
+        join_id=sent.join_id, meeting_id=sent.meeting_id, status_text=calendar_text.SENT_TEXT
+    )

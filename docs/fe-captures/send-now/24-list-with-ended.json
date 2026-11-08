@@ -1,0 +1,45 @@
+{
+  "note": "A row for a meeting that is over (inserted directly): `can_send_now` is false and the item has no title from the calendar, so it is named by platform and code.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/not-recorded",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "items": [
+        {
+          "join_id": 3,
+          "title": "Design review",
+          "starts_at": "2026-11-08T21:20:00Z",
+          "ends_at": "2026-11-08T22:20:00Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "state": "no_capacity",
+          "reason_text": "The note taker was busy with other meetings.",
+          "can_send_now": true
+        },
+        {
+          "join_id": 5,
+          "title": "Google Meet eee-eeee-eee",
+          "starts_at": "2026-11-08T19:52:17.422193Z",
+          "ends_at": "2026-11-08T20:22:17.422193Z",
+          "platform": "google_meet",
+          "platform_label": "Google Meet",
+          "state": "failed",
+          "reason_text": "The note taker could not join before the 15 minutes were up.",
+          "can_send_now": false
+        }
+      ]
+    }
+  }
+}
