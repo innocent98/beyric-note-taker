@@ -35,7 +35,7 @@ The designer's new "Ask Beyric" page: a question answered only from meetings the
 3. **Tasks with nothing to show** are `kind: "tasks"` with a lead that says so and no points (not `none`), because "I could not find that in your meetings" is the wrong thing to tell someone with no tasks.
 4. **A task point can have `cites: []`** (a task assigned to the person from a meeting they may not read: "assignee sees the quote only" rule; no link is made).
 5. **`owner_name` is the owner's whole display name**; the FE takes the first name for the chip label. `shared` means "the meeting is shared with a team".
-6. **The name chip** ("What did {Name} say?") **skips the asker's own name** (matched on their name, first name or the part of their email before `@`) and "Unknown speaker" / "Speaker N": asking what you yourself said was not the point of the chip. Spec 1.8 item 1 says "most frequent speaker"; this is a refinement, easy to drop (`frequent_speaker`).
+6. **The name chip** ("What did {Name} say?", now the last of the data-built chips, see "Chips from the person's own data") **skips the asker's own name** (matched on their name, first name or the part of their email before `@`) and "Unknown speaker" / "Speaker N": asking what you yourself said was not the point of the chip. Spec 1.8 item 1 says "most frequent speaker"; this is a refinement, easy to drop (`frequent_speaker`).
 7. **Without a date phrase, the tasks path lists open tasks only; with one it lists every status** assigned in that period (the spec did not say).
 
 ## Review fixes (Opus review of #134, head 8f7770b)
@@ -48,6 +48,25 @@ The designer's new "Ask Beyric" page: a question answered only from meetings the
 | 5 | Low: "may" read as a month ("What may 2 people decide?" filtered to 2 May) | "may" is a month only after in / on / of / during / since / from / until / by / last / next / this (with a day beside it), or capitalised in the middle of a sentence with a day beside it ("2 May", "of May 2"). A sentence that starts with "May 2" is not read as a date. Every other month name is unchanged |
 | 6 | Low, **by design, accepted:** a crafted transcript in a shared meeting can steer a point's text, or attach it to another readable passage's id, so a chip can point to the wrong readable meeting | No code change: nothing leaks (chips are built from readable meetings only). The "Answers can be wrong. Check the sources." line is the mitigation. Also: a speaker label (cut at 40 characters) from a shared meeting becomes the name chip's text |
 | 7 | Nit: the full-text source used `coalesce(speaker_transcript, transcript)`, the page uses `or` | `coalesce(nullif(speaker_transcript, ''), transcript)`: an empty-string speaker transcript falls back like the page does |
+
+## Chips from the person's own data (follow-up PR `feature/ask-suggestions-from-data`, decided by Adebayo and the lead on 2026-11-08)
+**Why:** the five fixed chips (pricing, the launch, Monday...) were misleading: a person who never discussed pricing got a chip that could only answer "I could not find that". **What:** `scope().suggestions` (`ask.suggestions`) is built only from the person's own readable data, with no model call, at most 5, **none when they have no ready meeting**. The API contract (`suggestions: list[str]`) is unchanged, so no schema change and no front-end change (`web/components/app/ask-view.tsx` already hides an empty list and wraps any number of chips).
+
+| Order | Chip | Shown when |
+|---|---|---|
+| 1 | `Summarise the meeting on {Mon 2 Nov}` | the most recent ready readable meeting **with notes** whose day has one to three ready readable meetings (the summary rule reads those whole) |
+| 2 | `What did we decide on {Mon 2 Nov}?` | the most recent ready readable meeting with at least one unhidden decision |
+| 3 | `What did I commit to last week?` (else `this week`) | a confirmed task of theirs, from a meeting, was assigned in that window (the window with data; last week first) |
+| 4 | `What are my open tasks?` | they have an open, confirmed (not suggested) task assigned to them that they may see |
+| 5 | `What did {Name} say?` | one of the three most frequent other speakers in their last 10 ready meetings (the existing rule) is found by the search |
+
+**The guarantee is tested by running it, not assumed:** before a chip is offered, `_finds` runs the same retrieval the real question would (`is_task_question` is false, the date hint resolves, passages come back and, for a day chip, one of them is from the named meeting); a task chip is offered only if the very query the tasks path runs (`_task_query`) returns a row. A day is written as the date parser reads it (`Mon 2 Nov`) and checked to resolve to exactly that day: a meeting more than a year old, whose "2 Nov" would mean this year's, gets no day chip. A meeting title is never in a chip. A teammate's private meeting never makes a chip (every read goes through `visible_meetings`).
+
+**Two fixes the chips needed, found while building them:**
+1. **Date words were searched as words.** "Summarise the meeting on Mon 2 Nov" searched for `mon`, `2` and `nov` (prefix match: `2:*` matches any token starting with 2). `ask.strip_dates` now removes the dates `date_hint` reads (with a leading weekday abbreviation) before the question's stems are taken. This also improves typed questions like "29 Oct budget".
+2. **Suggested tasks (C1) are left out of Ask Beyric:** the tasks path, the task passages in search and the scope's task count now add `tasks.confirmed()` (a task waiting for its accept is not counted anywhere; this was the follow-up noted in the first SOP).
+
+**Cost:** building the chips runs up to six retrievals (date-narrowed for the day chips) on each `GET /api/ask/scope`; no model call, no `ai_runs` row (tested). Tests: every chip fed through `ask.answer` with a fake model does not come back as `none`, task chips are free and return points, the day chips find the right meeting by their date; no data gives no chip; a teammate's private meeting gives none (a shared one does); a suggested task gives no chip and is not listed; more than three meetings on a day, a meeting over a year old, a name made of stop words.
 
 ## What's involved
 | Path | Change |
@@ -74,7 +93,7 @@ The designer's new "Ask Beyric" page: a question answered only from meetings the
 * **Roll back:** revert the PR. If it is reverted without running the 0034 downgrade, the database keeps the wider check and any `ask` rows, and nothing breaks; the downgrade deletes the `ask` rows before it restores the narrow check. To switch the feature off without a revert, set `ASK_DAILY_LIMIT=0`: every searching question answers 429 and tasks questions still work.
 
 ## Follow-ups
-* **Suggested tasks (C1):** this module reads tasks in three places (`_task_answer`, the task passages in `retrieve`, the scope count). When `tasks.suggested` lands, an unconfirmed suggestion must be excluded from all three (the spec's list of "does not count" places names the Board and counts; add Ask Beyric).
+* **Suggested tasks (C1): done** in the chips follow-up below (the three task reads now use `tasks.confirmed()`).
 * **Decisions record (D):** decisions gain a verified `quote`; a decision with one should cite `transcript` with its line like a task does (`_meeting_passages`, `decision` branch).
 * A GIN index on the full-text expression when a person has more than a few hundred meetings (spec 1.3).
 * **Not stored on purpose:** history, feedback, the question. Privacy page copy is the lead's (two sentences in the PR body).

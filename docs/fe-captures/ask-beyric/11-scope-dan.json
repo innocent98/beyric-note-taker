@@ -1,5 +1,5 @@
 {
-  "note": "Dan reads his own two ready meetings (Design sync, shared; his private 1:1) = 2. Ada's Pricing review is private to Ada, so it is not counted, nor its decision. His tasks count is 1: the task on his private 1:1 (assigned to Ada) is on a meeting he can read.",
+  "note": "Dan reads his own two ready meetings (Design sync, shared; his private 1:1) = 2. Ada's Pricing review is private to Ada, so it is not counted, nor its decision. His tasks count is 1: the task on his private 1:1 (assigned to Ada) is on a meeting he can read. His chips: summarise his most recent meeting with notes and the frequent-speaker chip; no decision chip (he cannot read the one decision), no task chips (nothing assigned to him).",
   "client": "dan",
   "request": {
     "method": "GET",
@@ -20,11 +20,8 @@
       "decisions": 0,
       "tasks": 1,
       "suggestions": [
-        "What did we decide about pricing?",
-        "What did I commit to last week?",
-        "What did Ada Lovelace say?",
-        "When is the launch?",
-        "Which decisions were made on Monday?"
+        "Summarise the meeting on Wed 4 Nov",
+        "What did Ada Lovelace say?"
       ]
     }
   }

@@ -1,5 +1,5 @@
 {
-  "note": "Eve is on another team: nothing. No name chip (her meetings name no one), so four suggestions.",
+  "note": "Eve has no ready meeting to read: nothing, and no chips (`suggestions` is empty).",
   "client": "eve",
   "request": {
     "method": "GET",
@@ -19,12 +19,7 @@
       "meetings": 0,
       "decisions": 0,
       "tasks": 0,
-      "suggestions": [
-        "What did we decide about pricing?",
-        "What did I commit to last week?",
-        "When is the launch?",
-        "Which decisions were made on Monday?"
-      ]
+      "suggestions": []
     }
   }
 }

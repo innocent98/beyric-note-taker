@@ -195,6 +195,22 @@ _ISO = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 _WEEKDAY = re.compile(rf"\b(?:(last|next|this)\s+)?({'|'.join(_WEEKDAYS)})\b")
 
 
+_WD_PREFIX = r"(?:\b(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)\.?,?\s+)?"
+_DATE_PHRASES = [re.compile(_WD_PREFIX + p.pattern) for p in (_DAY_MONTH, _MONTH_DAY, _ISO)]
+
+
+def strip_dates(question: str) -> str:
+    """The question without the dates `date_hint` reads ("on Mon 2 Nov", "2026-10-29"), lower-cased:
+    their words ("mon", "2", "nov") are not words to search for."""
+    text = question
+    for pattern, _day in _MAY_PATTERNS:
+        text = pattern.sub("\x00", text)
+    text = re.sub(_WD_PREFIX + "\x00", " ", text, flags=re.I).replace("\x00", " ").lower()
+    for pattern in _DATE_PHRASES:
+        text = pattern.sub(" ", text)
+    return text
+
+
 @dataclass(frozen=True)
 class DateRange:
     """Local days `start` up to but not including `end`, and how the answer names them."""
@@ -522,7 +538,7 @@ def retrieve(
     session: Session, user: User, question: str, rng: DateRange | None, zone
 ) -> tuple[list[Passage], dict[int, Meeting]]:
     """The passages (at most 12, best first, each already cut) and the meetings they come from."""
-    stems = _stems(question)[:_WORD_CAP]
+    stems = _stems(strip_dates(question))[:_WORD_CAP]
     summarise = _summarise(question, not stems, rng)
     meetings, whole = candidates(session, user, stems, rng, zone, summarise)
     if not meetings:
@@ -539,7 +555,7 @@ def retrieve(
     task_by_meeting: dict[int, list[Task]] = {}
     for t in session.scalars(
         select(Task)
-        .where(Task.meeting_id.in_(ids), task_rules.visible(user))
+        .where(Task.meeting_id.in_(ids), task_rules.visible(user), task_rules.confirmed())
         .order_by(Task.position, Task.id)
     ):
         task_by_meeting.setdefault(t.meeting_id, []).append(t)
@@ -605,12 +621,20 @@ class _Cites:
 _STATUS_WORDS = {"todo": "to do", "doing": "in progress", "done": "done"}
 
 
-def _task_answer(session: Session, user: User, rng: DateRange | None, zone) -> Answer:
-    query = select(Task).where(task_rules.visible(user), Task.assignee_user_id == user.id)
+def _task_query(user: User, rng: DateRange | None):
+    """The person's own confirmed tasks that the tasks path lists: open ones, or, with a date
+    phrase, those assigned in that period in any status. A suggested task waits for its accept and
+    is not listed anywhere."""
+    query = select(Task).where(
+        task_rules.visible(user), task_rules.confirmed(), Task.assignee_user_id == user.id
+    )
     if rng is None:
-        query = query.where(Task.status != "done")
-    else:
-        query = query.where(Task.assigned_on >= rng.start, Task.assigned_on < rng.end)
+        return query.where(Task.status != "done")
+    return query.where(Task.assigned_on >= rng.start, Task.assigned_on < rng.end)
+
+
+def _task_answer(session: Session, user: User, rng: DateRange | None, zone) -> Answer:
+    query = _task_query(user, rng)
     total = session.scalar(select(func.count()).select_from(query.subquery())) or 0
     rows = list(
         session.scalars(
@@ -925,13 +949,6 @@ def answer(
 
 # ---- the scope line and the chips (no model) ----
 
-_FIXED = (
-    "What did we decide about pricing?",
-    "What did I commit to last week?",
-    None,  # "What did {Name} say?", built from the person's own meetings
-    "When is the launch?",
-    "Which decisions were made on Monday?",
-)
 _NOT_A_NAME = re.compile(
     rf"^(?:speaker\b|{re.escape(UNKNOWN_SPEAKER)}|unknown\b|participant\b)", re.I
 )
@@ -945,9 +962,9 @@ def _own_names(user: User) -> set[str]:
     return names
 
 
-def frequent_speaker(session: Session, user: User) -> str | None:
-    """The speaker named most often in the last 10 ready meetings the person may read, other
-    than the person themself; None when there is none."""
+def frequent_speakers(session: Session, user: User, limit: int = 3) -> list[str]:
+    """The speakers named most often in the last 10 ready meetings the person may read, other than
+    the person themself, most frequent first."""
     recent = session.scalars(
         visible_meetings(user)
         .where(Meeting.status == "ready")
@@ -962,7 +979,90 @@ def frequent_speaker(session: Session, user: User) -> str | None:
             name = titles.clean_title(row.speaker, 40) if row.speaker else ""
             if name and not _NOT_A_NAME.match(name) and normalise(name) not in mine:
                 counts[name] += 1
-    return counts.most_common(1)[0][0] if counts else None
+    return [name for name, _count in counts.most_common(limit)]
+
+
+# ---- the chips: only questions this person's own data can answer ----
+
+CHIP_SCAN = 30  # recent meetings looked at for a chip's meeting
+CHIP_TRIES = 6  # meetings tried per chip before giving up on it
+CHIP_NAMES = 3
+
+
+def _finds(session: Session, user: User, chip: str, today: date, zone, meeting_id: int | None):
+    """Whether the question would be searched (not the tasks path, not "nothing") and, when a
+    meeting is named, read from that meeting: the chip's own guarantee, tested by running the
+    retrieval the real question would run."""
+    if is_task_question(chip):
+        return False
+    rng = date_hint(chip, today)
+    passages, _ = retrieve(session, user, chip, rng, zone)
+    return any(p.meeting_id == meeting_id for p in passages) if meeting_id else bool(passages)
+
+
+def _day_chip(session, user, meetings, template, today, zone) -> str | None:
+    """`template` with the day of the first of `meetings` that it finds, written as the date
+    parser reads it, or None. No meeting title ever goes into a chip."""
+    for meeting in meetings[:CHIP_TRIES]:
+        day = meeting.created_at.astimezone(zone).date()
+        chip = template.format(day_label(day))
+        rng = date_hint(chip, today)
+        if rng is None or (rng.start, rng.end) != (day, day + timedelta(days=1)):
+            continue  # a day the parser would read as another one (more than a year back)
+        if _finds(session, user, chip, today, zone, meeting.id):
+            return chip
+    return None
+
+
+def suggestions(session: Session, user: User, now: datetime) -> list[str]:
+    """The chips under the question box, at most 5, built from the person's own readable data with
+    no model call, each shown only when it is guaranteed to be answerable; none without a ready
+    meeting. In order: summarise a day, what was decided on a day, what I committed to (last
+    week, else this week), my open tasks, what a frequent speaker said."""
+    zone = _zone_of(session, user)
+    today = now.astimezone(zone).date()
+    recent = list(
+        session.scalars(
+            visible_meetings(user)
+            .where(Meeting.status == "ready")
+            .order_by(Meeting.created_at.desc(), Meeting.id.desc())
+            .limit(CHIP_SCAN)
+        )
+    )
+    if not recent:
+        return []
+    chips: list[str | None] = []
+    with_notes = [m for m in recent if (m.notes or "").strip()]
+    chips.append(_day_chip(session, user, with_notes, "Summarise the meeting on {}", today, zone))
+    decided = set(
+        session.scalars(
+            select(Decision.meeting_id)
+            .where(Decision.meeting_id.in_([m.id for m in recent]), Decision.hidden_at.is_(None))
+            .distinct()
+        )
+    )
+    with_decisions = [m for m in recent if m.id in decided]
+    chips.append(_day_chip(session, user, with_decisions, "What did we decide on {}?", today, zone))
+    for window in ("last week", "this week"):
+        chip = f"What did I commit to {window}?"
+        rng = date_hint(chip, today)
+        mine = _task_query(user, rng).where(Task.meeting_id.is_not(None))
+        if (
+            rng
+            and is_task_question(chip)
+            and session.scalar(select(func.count()).select_from(mine.subquery()))
+        ):
+            chips.append(chip)
+            break
+    open_tasks = _task_query(user, None)
+    if session.scalar(select(func.count()).select_from(open_tasks.subquery())):
+        chips.append("What are my open tasks?")
+    for name in frequent_speakers(session, user, CHIP_NAMES):
+        chip = f"What did {name} say?"
+        if date_hint(chip, today) is None and _finds(session, user, chip, today, zone, None):
+            chips.append(chip)
+            break
+    return [c for c in chips if c]
 
 
 @dataclass(frozen=True)
@@ -973,7 +1073,7 @@ class Scope:
     suggestions: list[str]
 
 
-def scope(session: Session, user: User) -> Scope:
+def scope(session: Session, user: User, now: datetime | None = None) -> Scope:
     """What a question searches, by the one visibility rule: ready meetings the person may read,
     their unhidden decisions, and the tasks of them the person may see."""
     ready = select(Meeting.id).where(can_read_clause(user), Meeting.status == "ready")
@@ -990,14 +1090,9 @@ def scope(session: Session, user: User) -> Scope:
         session.scalar(
             select(func.count())
             .select_from(Task)
-            .where(Task.meeting_id.in_(ready), task_rules.visible(user))
+            .where(Task.meeting_id.in_(ready), task_rules.visible(user), task_rules.confirmed())
         )
         or 0
     )
-    name = frequent_speaker(session, user)
-    suggestions = [
-        text if text is not None else f"What did {name} say?"
-        for text in _FIXED
-        if text is not None or name
-    ]
-    return Scope(meetings, decisions, visible_tasks, suggestions)
+    chips = suggestions(session, user, now or datetime.now(UTC)) if meetings else []
+    return Scope(meetings, decisions, visible_tasks, chips)
