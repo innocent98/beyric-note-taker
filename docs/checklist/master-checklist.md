@@ -534,14 +534,14 @@ The new file (2321 lines against 2028) is about evidence and trust: a source lin
 - [ ] Suggested agenda, the lines that need no new data (B20 part): "Review the N overdue tasks", "Settle N open questions carried over", each with Add to agenda / Added, using `POST` and `DELETE /api/series/{id}/agenda`
 - [x] Decisions B34: "No decisions match." and "Remove from log" inside the row's expanded panel. Built 2026-11-07, same SOP
 - [ ] Decisions B26: the subtitle "Decisions made in your meetings, with their status and the tasks that carry them out." (change only when 3D ships, or the line promises a status that is not shown)
-- [ ] Sidebar "Ask Beyric" item between Meetings and Tasks (B9): only with 3F, or the page behind it says "Not available yet"
+- [x] Sidebar "Ask Beyric" item between Meetings and Tasks (B9): shipped enabled with the page (2026-11-08, PR on `feature/ask-beyric-screens`, SOP `docs/sop/2026-11-08-ask-beyric-screens.md`)
 - [ ] Parity shots for each, 1440 / 768 / 390, design beside page, into `docs/ui/parity/after/`
 
 ### 3B: Show in transcript (foundation for 3C, 3D and 3F)
 - [ ] Decision (a): address a transcript row by time or by the verified quote (`app/extraction.py:236` already checks every task quote against the transcript)
 - [ ] Check whether Vexa's `segments` or the audio chunk offsets give a time per turn (`app/vexa.py:274`, `app/notes.py:159`, `app/audio.py`); if so, store it with a migration and show the time on each transcript row (also closes A18)
-- [ ] Transcript rows get an anchor and a highlight (D:287: pale yellow `#FFF4D6`, smooth scroll), and a deep link such as `/meetings/{id}?tab=transcript&at=...` (B18b, B25)
-- [ ] Toast "That meeting is no longer available" for a deleted or unreadable meeting; the "still processing" case is undrawn (U13)
+- [x] Transcript rows get an anchor and a highlight (D:287: pale yellow `#FFF4D6`, smooth scroll), and the deep link `/meetings/{id}?tab=transcript&line=N` (B18b, B25). Built 2026-11-08, SOP `docs/sop/2026-11-08-ask-beyric-screens.md`; the API's `cite.line` is the same row count
+- [x] Toast "That meeting is no longer available" for a deleted or unreadable meeting (shown on the 404 page after a chip click, per spec 1.6; the "still processing" case is undrawn, U13). Built 2026-11-08
 
 ### 3C: Suggested tasks and "Ask before adding unclear tasks" (spec first: B12, B13, B21 to B24; needs an Opus review: touches task counts, mail and visibility)
 - [ ] Short spec (brainstorming): the rule for "unclear" (confidence from the model, `ModelAction.confidence` is already returned and thrown away, `app/extraction.py:176,204,335,468,506`), the reason text (not asked today: prompt change, bump `app/ai_versions.py`), what Accept and Dismiss do, who may do them (U9), mail (U5), what Edit does (U11)
@@ -569,8 +569,8 @@ The new file (2321 lines against 2028) is about evidence and trust: a source lin
 ### 3F: Ask Beyric (spec first, through brainstorming with Adebayo: B14 to B18, B9)
 - [ ] Spec: the open questions are listed in the audit ("Questions for the Ask Beyric spec", 11 items): what is searched (notes, transcripts, decisions, tasks, open questions), retrieval method (Postgres full-text, embeddings, or send recent text to the model), model and cost per question, a cap per person and per workspace, a new `ai_runs` kind `ask`, visibility (`app/visibility.py`: own and team-shared meetings only; a citation to an unreadable meeting must not exist), grounding (every citation checked in code, like `Task.quote`), history and deletion (`app/deletion.py`), privacy and terms lines, prompt-injection handling
 - [ ] Backend: question endpoint, retrieval, answer with citations, rate limit, cost ledger, tests for visibility
-- [ ] Screen to the file: title, subtitle, input and "Ask", five chips, scope line "Searches N meetings, N decisions and N tasks", answer card ("Searching your meetings...", lead, points, citation chips, "I could not find that in your meetings.", "Try asking about a person, a project, a decision or a date.")
-- [ ] The states the designer left out (U1 to U4): before the first question, error and rate limit, history, answer feedback or an "AI can be wrong" line: ask the designer, or build with his OK labelled lead-designed
+- [x] Screen to the file (built 2026-11-08, PR on `feature/ask-beyric-screens`, against the mock; hand-typed types until the backend PR lands): title, subtitle, input and "Ask", five chips, scope line "Searches N meetings, N decisions and N tasks", answer card ("Searching your meetings...", lead, points, citation chips, "I could not find that in your meetings.", "Try asking about a person, a project, a decision or a date.")
+- [x] The states the designer left out (U1 to U4, U7): built per spec 1.8 and labelled lead-designed in the SOP (no-meetings line, error with Try again, cap message, "Answers can be wrong. Check the sources.", single column on phone and tablet)
 - [ ] SOP, FE guide, parity shots, privacy copy check
 
 ### 3G: To put to the designer (undrawn, audit section 4)
