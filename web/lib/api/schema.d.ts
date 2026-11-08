@@ -1775,7 +1775,8 @@ export interface paths {
         /**
          * Delete Task
          * @description Delete a task. Owners and admins may delete any task they can see; a member only the tasks
-         *     they made. An AI task deleted here does not come back when the notes are read again.
+         *     they made, and the person who owns a meeting may also dismiss (delete) a suggested task from
+         *     it. An AI task deleted here does not come back when the notes are read again.
          */
         delete: operations["delete_task"];
         options?: never;
@@ -1803,8 +1804,9 @@ export interface paths {
          * Accept Task
          * @description Accept a suggested task: it joins the board, is filed into a project and sprint as a new
          *     task is, and its assignee is emailed as they would have been (when the meeting owner's "Email
-         *     assignees" is on and they were not already mailed about this meeting). Whoever may edit the task
-         *     may accept it (403 `team_forbidden` otherwise); a person who cannot read the meeting gets 404.
+         *     assignees" is on and they were not already mailed about this meeting). Whoever may edit the
+         *     task, or owns the meeting it came from, may accept it (403 `team_forbidden` otherwise); a
+         *     person who cannot read the meeting gets 404.
          *     Idempotent: accepting a task that was already accepted answers 200 with the task and sends
          *     nothing. 409 `not_suggested` for a task that never was a suggestion. To dismiss one, `DELETE`
          *     it.
@@ -3604,6 +3606,8 @@ export interface components {
             can_assign: boolean;
             /** Can Claim */
             can_claim: boolean;
+            /** Can Decide */
+            can_decide: boolean;
             /** Can Delete */
             can_delete: boolean;
             /** Can Edit */

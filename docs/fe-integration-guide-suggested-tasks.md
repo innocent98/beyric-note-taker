@@ -1,6 +1,6 @@
 # Frontend guide: Suggested tasks and "Ask before adding unclear tasks"
 
-**Module:** Tasks (spec `docs/superpowers/specs/2026-11-08-designer-v2-features-design.md`, section 2; audit rows B12, B13, B21 to B24). **Backend:** migration 0034, extraction `extract-v2`, `POST /api/tasks/{id}/accept`, `GET /api/tasks?suggested=`, `ask_before_unclear` in the Tasks settings.
+**Module:** Tasks (spec `docs/superpowers/specs/2026-11-08-designer-v2-features-design.md`, section 2; audit rows B12, B13, B21 to B24). **Backend:** migration 0035, extraction `extract-v2`, `POST /api/tasks/{id}/accept`, `GET /api/tasks?suggested=`, `ask_before_unclear` in the Tasks settings.
 
 **Every payload, status code and error string below is copied from `docs/fe-captures/suggested-tasks/`**, captured over real HTTP by `scripts/capture_suggested_tasks_api.py` against the running app (real migrations, auth, CSRF, roles, visibility, the worker's extraction step, the mail builder). The one thing that is **not real** is the model: this session had no OpenAI key, so the model's answer to the extraction is a stand-in written for the capture (it says which items are unclear and in what words). The FE can rely on the *shape* and on everything done with the answer; the real model's choices and wording come with the first live meeting. Names, addresses and passwords are placeholders (`<password placeholder>` in the files). The file number is given with each block as `[capture NN]`.
 
@@ -41,13 +41,13 @@ A suggested task from the owner's own view `[capture 13]` (first element of `tas
   "source": "ai",
   "assigned_on": "2026-11-08",
   "done_at": null,
-  "created_at": "2026-11-08T14:55:47.983859Z",
+  "created_at": "2026-11-08T15:33:58.561931Z",
   "from_meeting": true,
   "meeting": {
     "id": 1,
     "title": "Google Meet nat-aaaa-bbb",
     "platform": "google_meet",
-    "created_at": "2026-11-08T14:25:47.548940Z"
+    "created_at": "2026-11-08T15:03:58.139957Z"
   },
   "project_id": null,
   "milestone_id": null,
@@ -63,7 +63,8 @@ A suggested task from the owner's own view `[capture 13]` (first element of `tas
   "can_edit": true,
   "can_assign": true,
   "can_claim": true,
-  "can_delete": true
+  "can_delete": true,
+  "can_decide": true
 }
 ```
 
@@ -72,11 +73,12 @@ A suggested task from the owner's own view `[capture 13]` (first element of `tas
 | `suggested` | bool | Waiting for a person. False for every task that is on the board |
 | `confidence` | `"high"` \| `"medium"` \| `"low"` \| null | What the AI said. Null for a manual task and for any task made before this feature. A suggested task is always `medium` or `low` (the pill reads "Medium confidence" amber, "Low confidence" red; `high`, if ever shown, "High confidence" green) |
 | `reason` | string \| null | Why it is unclear, plain text, at most 120 characters. **Null is possible on a suggested task** (the AI gave none, or its reason held a link or markup and was dropped: the task above is an example). Draw the reason line only when it is not null. Never render it as HTML or a link |
-| `quote_speaker` | string \| null | Who said `quote`, from the transcript line that holds it |
-| `quote_line` | int \| null | The 1-based row of the meeting's **Transcript tab** that holds the quote (the rows `web/lib/transcript.ts` makes). **No time is stored or shown** |
+| `quote_speaker` | string \| null | Who said `quote`, from the transcript line that holds it. **Filled only for a suggested task and in `GET /api/tasks/{id}` and the accept answer**; on a Board or meeting list the other tasks have it null (a transcript is not read for every task of a long list) `[capture 12]` |
+| `quote_line` | int \| null | The 1-based row of the meeting's **Transcript tab** that holds the quote (the rows `web/lib/transcript.ts` makes). **No time is stored or shown**. Same rule as `quote_speaker` |
+| `can_decide` | bool | The caller may accept or dismiss it. **Only ever true for a suggested task.** Use it, not `can_edit` or `can_delete`, to enable Accept and Dismiss (section 8) |
 
 **Nesting and null traps**
-* `quote_speaker` and `quote_line` are **null whenever the caller may not read the meeting** (an assignee of a task from someone's private meeting gets the quote and nothing around it), and also when the quote was not found in the transcript. `[capture 20]` is that case: `meeting: null`, `quote` set, `quote_speaker: null`, `quote_line: null`. Draw the evidence box with the quote alone, no speaker line, and hide "Show source" (the meeting is not theirs to open).
+* `quote_speaker` and `quote_line` are **null whenever the caller may not read the meeting** (an assignee of a task from someone's private meeting gets the quote and nothing around it: **`reason` is null for them too**, because it can quote the speaker), and also when the quote was not found in the transcript. `[capture 20]` is that case: `meeting: null`, `quote` set, `reason: null`, `quote_speaker: null`, `quote_line: null`, `can_decide: false`. Draw the evidence box with the quote alone, no speaker line, and hide "Show source" (the meeting is not theirs to open).
 * `quote` itself can be null (`unverified: true`): then there is no evidence box at all.
 * `confidence` and `reason` are **on the task**, at the top level, on every endpoint (list, one task, a meeting's list, the meeting page's `tasks`, a series page's task lists). They are not nested.
 * After Accept, `suggested` is false but `confidence` and `reason` **stay** as they were (`[capture 30]`: `suggested: false`, `confidence: "medium"`, the reason still there). Do not use `confidence` to decide what is waiting; use `suggested`.
@@ -184,7 +186,8 @@ Auth: logged in, CSRF header as for every write. `[capture 30]` (Dan, owner of t
   "quote_speaker": "Amina",
   "quote_line": 3,
   "can_edit": true,
-  "can_delete": true
+  "can_delete": true,
+  "can_decide": false
 }
 ```
 
@@ -199,7 +202,7 @@ Errors (exact):
 
 | Status | When | Body |
 |---|---|---|
-| 403 | Caller can see the task but may not edit it (a member who is not an owner or admin of the task's team; see section 8) | ```json
+| 403 | Caller can see the task but may neither edit it nor own its meeting (a member who is not an owner or admin of the task's team; see section 8) | ```json
 {
   "error": {
     "code": "team_forbidden",
@@ -365,10 +368,11 @@ Do not add suggested tasks back into any of these; use the numbers as the API gi
 | Person | See it | Accept, Dismiss, Edit title |
 |---|---|---|
 | Owner or admin of the task's team, who can read the meeting | yes | yes |
-| A member who is not an owner or admin (also when it is their own task) | yes, if the task is theirs or they can read the meeting | **no: 403 `team_forbidden`** for Accept, Dismiss and a title edit `[capture 21, 22]` |
+| The person who **owns the meeting** the task came from, whatever their role | yes | **yes** to Accept and Dismiss (`can_decide` true); the other edits follow `can_edit` (not captured; unit-tested) |
+| A member who is not an owner or admin and does not own the meeting (also when it is their own task) | yes, if the task is theirs or they can read the meeting | **no: 403 `team_forbidden`** for Accept, Dismiss and a title edit `[capture 21, 22]` |
 | Anyone who cannot read the meeting and is not the assignee | **no: 404** | 404 `[capture 23, 24]` |
 
-The rule is "whoever may edit the task today" (no new permission). **Use `can_edit` and `can_delete` on the task** to decide whether to draw Accept, Dismiss and Edit as working buttons: for Chidi in `[capture 20]` both are false. The same rule covers a member who owns the meeting but sits on a team where they are not an admin: they cannot accept or dismiss either (not captured; follows from `can_edit`).
+The rule is "whoever may edit the task, or owns the meeting it came from". **Use `can_decide` on the task** to draw Accept and Dismiss as working buttons (Edit opens the drawer for anyone who can see the task; its fields follow `can_update`, `can_edit`, `can_assign`): for Chidi in `[capture 20]` it is false. A teammate who merely reads a shared meeting cannot decide (403 `team_forbidden`).
 
 ## 9. Settings: "Ask before adding unclear tasks"
 
@@ -474,6 +478,8 @@ There is nothing to poll for: suggestions appear when the worker has read a meet
 
 ## 13. What was not exercised live
 
+* **The owner-member rule** (a plain member who owns the meeting may accept and dismiss): unit-tested (`test_a_plain_member_who_owns_the_meeting_may_accept_and_dismiss_its_suggestions`), not captured.
+
 * **The model's real answer.** The capture uses a stand-in reply (see the top). The prompt `extract-v2` and the checks on `reason` are covered by unit tests (`tests/test_suggested_tasks.py`), not by a model call.
 * **Accept filing into a project and a sprint with a due date.** The capture's team has no project and the accepted task has no due date, so `project_id` and `sprint_id` stay null in `[capture 30]`. The filing is covered by `tests/test_suggested_tasks_api.py` (`test_accepting_files_the_task_mails_the_assignee_and_clears_the_flag`).
 * The series, project, milestone, sprint and team figures (section 7), the one-hour reminder and the summary box: the rule is tested (`tests/test_suggested_exclusions.py`); no capture of them was made.
@@ -489,6 +495,7 @@ There is nothing to poll for: suggestions appear when the worker has read a meet
 | Private-meeting assignee sees the quote without speaker or line | Live (20) |
 | Accept: 200, idempotent, mail queued once, rendered mail | Live (30, 31, 38, 39) |
 | Accept 403, 404, 409, CSRF | Live (21, 23, 25, 26, 27) |
+| A member who owns the meeting may accept and dismiss; a plain reader may not | **Not live** (unit-tested) |
 | Dismiss 204, then 404, tombstone survives a re-read | Live (35, 36, 37, 40, 41) |
 | Edit keeps it suggested; `suggested` is not a PATCH field | Live (28, 29) |
 | Meeting task list `to_confirm`, `assigned_people`, `tasks_count` | Live (15, 16, 17) |

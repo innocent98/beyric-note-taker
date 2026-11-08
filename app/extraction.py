@@ -59,9 +59,14 @@ _WEEKDAYS = {
 }  # fmt: skip
 _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 _EMPHASIS = re.compile(r"(\*\*|__|`)")
-# What a plain-text reason must not hold: HTML, Markdown (emphasis, code, a link) or a web address.
+# What a plain-text reason must not hold: HTML, Markdown (emphasis, code, a link), a web address or
+# script link, an email address or a phone number.
 # A reason with any of it is dropped whole, never cleaned: the model was told to write plain words.
-_MARKUP = re.compile(r"[<>`]|\*\*|__|\]\(|\[[^\]]*\]|https?:|www\.|mailto:", re.IGNORECASE)
+_MARKUP = re.compile(
+    r"[<>`]|\*\*|__|\]\(|\[[^\]]*\]|(?:https?|javascript|data|mailto):|www\."
+    r"|\S+@\S+|\+?\d[\d\s().-]{6,}\d",
+    re.IGNORECASE,
+)
 CONFIDENCES = ("high", "medium", "low")
 UNCLEAR = ("medium", "low")
 

@@ -35,13 +35,13 @@
           "source": "ai",
           "assigned_on": "2026-11-08",
           "done_at": null,
-          "created_at": "2026-11-08T14:55:47.983859Z",
+          "created_at": "2026-11-08T15:33:58.561931Z",
           "from_meeting": true,
           "meeting": {
             "id": 1,
             "title": "Google Meet nat-aaaa-bbb",
             "platform": "google_meet",
-            "created_at": "2026-11-08T14:25:47.548940Z"
+            "created_at": "2026-11-08T15:03:58.139957Z"
           },
           "project_id": null,
           "milestone_id": null,
@@ -51,13 +51,14 @@
           "suggested": false,
           "confidence": "high",
           "reason": null,
-          "quote_speaker": "Chidi",
-          "quote_line": 2,
+          "quote_speaker": null,
+          "quote_line": null,
           "can_update": true,
           "can_edit": true,
           "can_assign": true,
           "can_claim": false,
-          "can_delete": true
+          "can_delete": true,
+          "can_decide": false
         },
         {
           "id": 2,
@@ -77,13 +78,13 @@
           "source": "ai",
           "assigned_on": "2026-11-08",
           "done_at": null,
-          "created_at": "2026-11-08T14:55:47.983859Z",
+          "created_at": "2026-11-08T15:33:58.561931Z",
           "from_meeting": true,
           "meeting": {
             "id": 1,
             "title": "Google Meet nat-aaaa-bbb",
             "platform": "google_meet",
-            "created_at": "2026-11-08T14:25:47.548940Z"
+            "created_at": "2026-11-08T15:03:58.139957Z"
           },
           "project_id": null,
           "milestone_id": null,
@@ -99,7 +100,8 @@
           "can_edit": true,
           "can_assign": true,
           "can_claim": false,
-          "can_delete": true
+          "can_delete": true,
+          "can_decide": true
         },
         {
           "id": 3,
@@ -119,13 +121,13 @@
           "source": "ai",
           "assigned_on": "2026-11-08",
           "done_at": null,
-          "created_at": "2026-11-08T14:55:47.983859Z",
+          "created_at": "2026-11-08T15:33:58.561931Z",
           "from_meeting": true,
           "meeting": {
             "id": 1,
             "title": "Google Meet nat-aaaa-bbb",
             "platform": "google_meet",
-            "created_at": "2026-11-08T14:25:47.548940Z"
+            "created_at": "2026-11-08T15:03:58.139957Z"
           },
           "project_id": null,
           "milestone_id": null,
@@ -141,7 +143,8 @@
           "can_edit": true,
           "can_assign": true,
           "can_claim": false,
-          "can_delete": true
+          "can_delete": true,
+          "can_decide": true
         },
         {
           "id": 4,
@@ -157,13 +160,13 @@
           "source": "ai",
           "assigned_on": "2026-11-08",
           "done_at": null,
-          "created_at": "2026-11-08T14:55:47.983859Z",
+          "created_at": "2026-11-08T15:33:58.561931Z",
           "from_meeting": true,
           "meeting": {
             "id": 1,
             "title": "Google Meet nat-aaaa-bbb",
             "platform": "google_meet",
-            "created_at": "2026-11-08T14:25:47.548940Z"
+            "created_at": "2026-11-08T15:03:58.139957Z"
           },
           "project_id": null,
           "milestone_id": null,
@@ -179,7 +182,8 @@
           "can_edit": true,
           "can_assign": true,
           "can_claim": true,
-          "can_delete": true
+          "can_delete": true,
+          "can_decide": true
         },
         {
           "id": 5,
@@ -199,13 +203,13 @@
           "source": "ai",
           "assigned_on": "2026-11-08",
           "done_at": null,
-          "created_at": "2026-11-08T14:55:47.983859Z",
+          "created_at": "2026-11-08T15:33:58.561931Z",
           "from_meeting": true,
           "meeting": {
             "id": 1,
             "title": "Google Meet nat-aaaa-bbb",
             "platform": "google_meet",
-            "created_at": "2026-11-08T14:25:47.548940Z"
+            "created_at": "2026-11-08T15:03:58.139957Z"
           },
           "project_id": null,
           "milestone_id": null,
@@ -215,13 +219,14 @@
           "suggested": false,
           "confidence": "high",
           "reason": null,
-          "quote_speaker": "Dan",
-          "quote_line": 6,
+          "quote_speaker": null,
+          "quote_line": null,
           "can_update": true,
           "can_edit": true,
           "can_assign": true,
           "can_claim": false,
-          "can_delete": true
+          "can_delete": true,
+          "can_decide": false
         }
       ],
       "assigned_people": 2,

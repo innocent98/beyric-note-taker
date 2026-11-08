@@ -7,9 +7,6 @@ NOTES_PROMPT_VERSION = "notes-v1"
 # what the Tasks phase will run. v2 also asks for a plain `reason` on a medium or low item
 # (Suggested tasks).
 EXTRACT_PROMPT_VERSION = "extract-v2"
-# A meeting whose tasks were read with one of these never had a confidence stored for them: a re-run
-# of it (new notes, the on-demand button) does not turn its tasks into suggestions.
-LEGACY_EXTRACT_VERSIONS = ("extract-v1",)
 # The call W1 makes: review hints only, a smaller prompt and schema.
 EXTRACT_REVIEW_PROMPT_VERSION = "extract-review-v1"
 # Translating notes and transcript lines into French or Spanish (app/translation.py).

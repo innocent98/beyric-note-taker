@@ -4211,6 +4211,10 @@
             "title": "Can Claim",
             "type": "boolean"
           },
+          "can_decide": {
+            "title": "Can Decide",
+            "type": "boolean"
+          },
           "can_delete": {
             "title": "Can Delete",
             "type": "boolean"
@@ -4458,7 +4462,8 @@
           "can_edit",
           "can_assign",
           "can_claim",
-          "can_delete"
+          "can_delete",
+          "can_decide"
         ],
         "title": "TaskOut",
         "type": "object"
@@ -13192,7 +13197,7 @@
     },
     "/api/tasks/{task_id}": {
       "delete": {
-        "description": "Delete a task. Owners and admins may delete any task they can see; a member only the tasks\nthey made. An AI task deleted here does not come back when the notes are read again.",
+        "description": "Delete a task. Owners and admins may delete any task they can see; a member only the tasks\nthey made, and the person who owns a meeting may also dismiss (delete) a suggested task from\nit. An AI task deleted here does not come back when the notes are read again.",
         "operationId": "delete_task",
         "parameters": [
           {
@@ -13409,7 +13414,7 @@
     },
     "/api/tasks/{task_id}/accept": {
       "post": {
-        "description": "Accept a suggested task: it joins the board, is filed into a project and sprint as a new\ntask is, and its assignee is emailed as they would have been (when the meeting owner's \"Email\nassignees\" is on and they were not already mailed about this meeting). Whoever may edit the task\nmay accept it (403 `team_forbidden` otherwise); a person who cannot read the meeting gets 404.\nIdempotent: accepting a task that was already accepted answers 200 with the task and sends\nnothing. 409 `not_suggested` for a task that never was a suggestion. To dismiss one, `DELETE`\nit.",
+        "description": "Accept a suggested task: it joins the board, is filed into a project and sprint as a new\ntask is, and its assignee is emailed as they would have been (when the meeting owner's \"Email\nassignees\" is on and they were not already mailed about this meeting). Whoever may edit the\ntask, or owns the meeting it came from, may accept it (403 `team_forbidden` otherwise); a\nperson who cannot read the meeting gets 404.\nIdempotent: accepting a task that was already accepted answers 200 with the task and sends\nnothing. 409 `not_suggested` for a task that never was a suggestion. To dismiss one, `DELETE`\nit.",
         "operationId": "accept_task",
         "parameters": [
           {

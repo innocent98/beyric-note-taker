@@ -49,9 +49,14 @@ def _person(user: User, viewer: User) -> PersonOut:
     )
 
 
-def present(session: Session, viewer: User, rows: list[Task]) -> list[TaskOut]:
+def present(
+    session: Session, viewer: User, rows: list[Task], *, evidence: bool = False
+) -> list[TaskOut]:
     """The tasks as the screen shows them, with the assignee's name, the meeting when the viewer
-    may read it, and what the viewer may do. Two queries however many tasks."""
+    may read it, and what the viewer may do. Two queries however many tasks. Who said the quote
+    and on which transcript row (`quote_speaker`, `quote_line`) is worked out for a suggested task,
+    and for any task when `evidence` is set (one task asked for by id): reading a transcript for
+    every task of a long list would cost more than the board needs."""
     people = {
         u.id: u
         for u in session.scalars(
@@ -78,7 +83,7 @@ def present(session: Session, viewer: User, rows: list[Task]) -> list[TaskOut]:
         # Where the quote was said: only for a meeting the viewer may read (an assignee of a
         # private meeting's task gets the quote and nothing around it, spec 8.2).
         said = None
-        if meeting is not None and task.quote:
+        if meeting is not None and task.quote and (task.suggested or evidence):
             if meeting.id not in indexes:  # each transcript is read once per request
                 indexes[meeting.id] = TranscriptIndex(
                     meeting.speaker_transcript or meeting.transcript or ""
@@ -122,7 +127,9 @@ def present(session: Session, viewer: User, rows: list[Task]) -> list[TaskOut]:
                 check_project=task.check_project,
                 suggested=task.suggested,
                 confidence=task.confidence,
-                reason=task.reason,
+                # The model's reason may quote the speaker, so, like the speaker and the row, only
+                # for someone who may read the meeting.
+                reason=task.reason if meeting is not None else None,
                 quote_speaker=said[0] if said else None,
                 quote_line=said[1] if said else None,
                 can_update=allowed.update,
@@ -130,6 +137,8 @@ def present(session: Session, viewer: User, rows: list[Task]) -> list[TaskOut]:
                 can_assign=allowed.assign,
                 can_claim=allowed.claim,
                 can_delete=allowed.delete,
+                can_decide=task.suggested
+                and (allowed.edit or (meeting is not None and meeting.owner_user_id == viewer.id)),
             )
         )
     return out
@@ -244,7 +253,7 @@ def get_task(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TaskOut:
-    return present(session, user, [_task_or_404(session, user, task_id)])[0]
+    return present(session, user, [_task_or_404(session, user, task_id)], evidence=True)[0]
 
 
 @router.patch(
@@ -289,7 +298,8 @@ def delete_task(
     user: User = Depends(auth.current_user),
 ) -> Response:
     """Delete a task. Owners and admins may delete any task they can see; a member only the tasks
-    they made. An AI task deleted here does not come back when the notes are read again."""
+    they made, and the person who owns a meeting may also dismiss (delete) a suggested task from
+    it. An AI task deleted here does not come back when the notes are read again."""
     task = _task_or_404(session, user, task_id)
     try:
         tasks.delete(session, user, task)
@@ -314,8 +324,9 @@ def accept_task(
 ) -> TaskOut:
     """Accept a suggested task: it joins the board, is filed into a project and sprint as a new
     task is, and its assignee is emailed as they would have been (when the meeting owner's "Email
-    assignees" is on and they were not already mailed about this meeting). Whoever may edit the task
-    may accept it (403 `team_forbidden` otherwise); a person who cannot read the meeting gets 404.
+    assignees" is on and they were not already mailed about this meeting). Whoever may edit the
+    task, or owns the meeting it came from, may accept it (403 `team_forbidden` otherwise); a
+    person who cannot read the meeting gets 404.
     Idempotent: accepting a task that was already accepted answers 200 with the task and sends
     nothing. 409 `not_suggested` for a task that never was a suggestion. To dismiss one, `DELETE`
     it."""
@@ -333,7 +344,7 @@ def accept_task(
     if accepted and task.meeting_id is not None:
         _mail_accepted(session, task)
     session.commit()
-    return present(session, user, [task])[0]
+    return present(session, user, [task], evidence=True)[0]
 
 
 def _mail_accepted(session: Session, task: Task) -> None:
