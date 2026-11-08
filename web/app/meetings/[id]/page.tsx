@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cache } from "react";
 import { AppShell } from "@/components/app/shell";
+import { parseLine } from "@/lib/ask";
 import { MeetingView } from "@/components/app/meeting-view";
 import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
 
 type Props = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string | string[] }>;
+  searchParams: Promise<{ tab?: string | string[]; line?: string | string[] }>;
 };
 
 // Ids are 1 to 10 digits; anything else is a 404 without asking FastAPI (which would say the same).
@@ -29,8 +30,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function MeetingPage({ params, searchParams }: Props) {
   const id = parseId((await params).id);
-  // The Review screen's "Open transcript" lands on the transcript tab.
-  const { tab } = await searchParams;
+  // The Review screen's "Open transcript" lands on the transcript tab; Ask Beyric's source chips add
+  // `line` (the row to scroll to and highlight).
+  const { tab, line } = await searchParams;
   const api = await requireOwner();
   const [meeting, templates, language] = await Promise.all([
     fetchMeeting(id),
@@ -59,6 +61,7 @@ export default async function MeetingPage({ params, searchParams }: Props) {
         initial={meeting}
         templates={templates}
         initialTab={tab === "transcript" ? "transcript" : "notes"}
+        initialLine={parseLine(line)}
         defaultLanguage={language.default_language}
         teamSize={teamSize}
         members={members}

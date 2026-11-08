@@ -154,6 +154,7 @@
   --shadow-drawer-left: 12px 0 40px rgba(20, 25, 23, 0.18);  /* the navigation drawer on phones */
   --scrim-drawer: rgba(20, 25, 23, 0.32);
   --rule-group: #D9DEDB;      /* the line after a group label on the board */
+  --highlight-row: #FFF4D6;   /* the transcript row a link points at (D:287) */
   --drop-wash: #E1EEEA;       /* a board column a card is dragged over */
   --warning-line-strong: #E8C98A;
   --header-blur: rgba(255, 255, 255, 0.92);

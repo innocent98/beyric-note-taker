@@ -39,6 +39,7 @@ const { values } = parseArgs({
     language: { type: "string", default: "en" },
     decisions: { type: "string", default: "live" },
     review: { type: "string", default: "live" },
+    ask: { type: "string", default: "live" },
     "time-zone": { type: "string" },
     role: { type: "string", default: "owner" },
     overdue: { type: "boolean", default: false },
@@ -56,6 +57,14 @@ const { values } = parseArgs({
 // pick what those lists answer (the captures in docs/fe-captures/ai-workspace-w1/; `loading` answers
 // after 4 s, `failed` is a 500, `empty` has no item). Removing, checking and adding a term answer the
 // captures too; the terms "Dup" and "Beyric" answer the captured 409 and "Gone" a 404 (the item's meeting deleted).
+// Ask Beyric (spec docs/superpowers/specs/2026-11-08-designer-v2-features-design.md 1.7; the shapes are the
+// spec's, since the real API was being built at the same time: the error envelope is the one the running API
+// sends, `{"error": {"code", "message"}}`). `--ask live|empty|scope-failed`: `empty` is a person with no
+// ready meetings (zero counts), `scope-failed` makes GET /api/ask/scope a 500. Questions reach every state
+// by their words: "fail" is a 502 the first time (asking again answers), "limit" a 429 `ask_limit`, "rate" a 429 `ask_rate`,
+// "zebra" the "none" answer, "tasks" or "commit" the tasks path, "gone" a chip to a meeting that is not
+// there (999), "long" an answer with long chip labels, and "pricing" the full answer with transcript
+// chips (meeting 8 has 20 rows; a teammate's chip names its owner).
 // `--time-zone Africa/Lagos` starts the account with that zone chosen (without it GET
 // /api/settings/time-zone answers UTC, not set); PUT keeps what it is given, in memory.
 
@@ -382,7 +391,7 @@ let notifyEmail = true;
 let timeZone = values["time-zone"] ?? null;
 const mockUser = () => ({ email: "owner@example.test", name: "Adebayo Tosin", is_admin: false, email_verified: true, time_zone: timeZone });
 const wsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "ai-workspace-w1", `${name}.json`), "utf8")).response.body;
-const armed = { decisions: true, review: true }; // `retry-loading` fails once after each reset
+const armed = { decisions: true, review: true, ask: true }; // `retry-loading` fails once after each reset
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const readJson = (req) =>
@@ -499,8 +508,8 @@ const server = http.createServer(async (req, res) => {
   // states while the mock runs (the Next build proxies the browser's calls to one address, so one mock
   // has to serve every state).
   if (path === "/__mock/set") {
-    for (const key of ["decisions", "review"]) if (url.searchParams.has(key)) values[key] = url.searchParams.get(key);
-    return json(res, 200, { decisions: values.decisions, review: values.review });
+    for (const key of ["decisions", "review", "ask"]) if (url.searchParams.has(key)) values[key] = url.searchParams.get(key);
+    return json(res, 200, { decisions: values.decisions, review: values.review, ask: values.ask });
   }
   // Not part of the API: lets parity-shots.mjs start each translation screen from nothing.
   if (path === "/__mock/reset") {
@@ -508,7 +517,7 @@ const server = http.createServer(async (req, res) => {
     defaultLanguage = values.language;
     shares = [];
     shareId = 0;
-    armed.decisions = armed.review = true;
+    armed.decisions = armed.review = armed.ask = true;
     slackConnected = false;
     resetProjects();
     resetSprints();
@@ -953,6 +962,59 @@ const server = http.createServer(async (req, res) => {
       timeZone = data.time_zone;
     }
     return json(res, 200, { time_zone: timeZone ?? "UTC", is_set: timeZone !== null });
+  }
+  if (path === "/api/ask/scope" && method === "GET") {
+    if (values.ask === "scope-failed") return json(res, 500, { error: { code: "server_error", message: "Something went wrong on our side." } });
+    const none = values.ask === "empty";
+    return json(res, 200, {
+      meetings: none ? 0 : 12,
+      decisions: none ? 0 : 31,
+      tasks: none ? 0 : 44,
+      suggestions: ["What did we decide about pricing?", "What did I commit to last week?", "What did Daniel say?", "When is the launch?", "Which decisions were made on Monday?"],
+    });
+  }
+  if (path === "/api/ask" && method === "POST") {
+    const question = String(data?.question ?? "").trim();
+    if (!question || question.length > 300) return json(res, 422, { error: { code: "question_invalid", message: "Type a question of up to 300 characters." } });
+    await wait(900);
+    const q = question.toLowerCase();
+    const cite = (meeting_id, title, date_label, target, line, owner_name = null) => ({ meeting_id, title, date_label, owner_name, shared: owner_name !== null, target, line });
+    if (q.includes("fail") && armed.ask) {
+      armed.ask = false;
+      return json(res, 502, { error: { code: "ask_failed", message: "Beyric could not answer that. Try again." } });
+    }
+    if (q.includes("limit")) return json(res, 429, { error: { code: "ask_limit", message: "You have asked 30 questions today. Try again tomorrow." } });
+    if (q.includes("rate")) return json(res, 429, { error: { code: "ask_rate", message: "Slow down a little and try again in a minute." } });
+    if (q.includes("zebra") || values.ask === "empty") return json(res, 200, { kind: "none", lead: "I could not find that in your meetings.", points: [] });
+    if (q.includes("tasks") || q.includes("commit")) {
+      return json(res, 200, {
+        kind: "tasks",
+        lead: "You made 3 commitments in Beyric Monday planning on Mon 2 Nov. None of them are done yet.",
+        points: [
+          { text: "Finish payment checkout. Due Fri 6 Nov.", cites: [cite(1, "Beyric Monday planning", "Mon 2 Nov", "transcript", 1)] },
+          { text: "Support Daniel Okoro with testing during the week. Due Fri 6 Nov.", cites: [cite(1, "Beyric Monday planning", "Mon 2 Nov", "notes", null)] },
+          { text: "Share the meeting summary with the wider team. No due date.", cites: [cite(1, "Beyric Monday planning", "Mon 2 Nov", "notes", null)] },
+        ],
+      });
+    }
+    if (q.includes("gone")) {
+      return json(res, 200, { kind: "answer", lead: "This was covered in a meeting that is no longer there.", points: [{ text: "The launch date was set to December 8.", cites: [cite(999, "Launch review", "Fri 30 Oct", "transcript", 3)] }] });
+    }
+    if (q.includes("long")) {
+      return json(res, 200, { kind: "answer", lead: "Here is what the long titles look like on a narrow screen.", points: [{ text: "A source whose title and owner make a very long label.", cites: [cite(8, "Weekly product, design and engineering planning with the customer success team", "Mon 2 Nov", "transcript", 2, "Ojebola Grace"), cite(1, "Beyric Monday planning", "Mon 2 Nov", "notes", null)] }] });
+    }
+    if (q.includes("pric")) {
+      return json(res, 200, {
+        kind: "answer",
+        lead: "No pricing model has been chosen yet. It is planned for the next Monday planning, and it has come up in 3 meetings.",
+        points: [
+          { text: "Adebayo listed the options for a note taker built for internal use.", cites: [cite(8, "Zoom 88205679674", "Mon 2 Nov", "transcript", 10)] },
+          { text: "Customer interviews will happen once onboarding is stable.", cites: [cite(8, "Zoom 88205679674", "Mon 2 Nov", "transcript", 12), cite(9, "Zoom 99205679674", "Mon 2 Nov", "transcript", 15, "Daniel")] },
+          { text: "It is logged as a proposed decision.", cites: [cite(1, "Beyric Monday planning", "Mon 2 Nov", "notes", null)] },
+        ],
+      });
+    }
+    return json(res, 200, { kind: "answer", lead: "Here is what your meetings say about that.", points: [{ text: "It came up in the Monday planning.", cites: [cite(1, "Beyric Monday planning", "Mon 2 Nov", "notes", null)] }] });
   }
   if (path === "/api/decisions" && method === "GET") {
     // `retry-loading`: the first answer fails (the page draws "Could not load"), then each one is slow, so

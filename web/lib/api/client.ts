@@ -1,5 +1,7 @@
 import type {
   AgendaItem,
+  AskAnswer,
+  AskScope,
   AgendaSent,
   CalendarEvent,
   CalendarSettingsInput,
@@ -318,6 +320,12 @@ export function createApi(options: ApiOptions = {}) {
       // 204 and no body. 409 `last_template` for the only one (its message is for the person); a
       // second delete of the same template is a 404.
       remove: (id: number) => request<void>("DELETE", `/api/templates/${id}`, { write: true }),
+    },
+    // Ask Beyric: `scope` is the counts and the suggestion chips; `ask` answers one question (422
+    // `question_invalid`, 429 `ask_limit`, 502 `ask_failed` carry a message written for the person).
+    ask: {
+      scope: () => request<AskScope>("GET", "/api/ask/scope"),
+      ask: (question: string) => request<AskAnswer>("POST", "/api/ask", { body: { question }, write: true }),
     },
     // GET /api/decisions groups by meeting; `limit` counts meetings. Hiding never edits the notes.
     decisions: {
