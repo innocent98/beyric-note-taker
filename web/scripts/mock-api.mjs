@@ -57,6 +57,8 @@ const { values } = parseArgs({
 // pick what those lists answer (the captures in docs/fe-captures/ai-workspace-w1/; `loading` answers
 // after 4 s, `failed` is a 500, `empty` has no item). Removing, checking and adding a term answer the
 // captures too; the terms "Dup" and "Beyric" answer the captured 409 and "Gone" a 404 (the item's meeting deleted).
+// The Decisions list is the designer's own sample (13 decisions, same words, statuses, deciders and related tasks), kept
+// in memory: a PATCH changes it, Remove deletes, `/__mock/reset` restores it; `--decisions teammate` answers `can_edit: false`.
 // Ask Beyric (spec docs/superpowers/specs/2026-11-08-designer-v2-features-design.md 1.7; the shapes are the
 // spec's, since the real API was being built at the same time: the error envelope is the one the running API
 // sends, `{"error": {"code", "message"}}`). `--ask live|empty|scope-failed`: `empty` is a person with no
@@ -394,6 +396,86 @@ const wsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "ai-workspa
 const armed = { decisions: true, review: true, ask: true }; // `retry-loading` fails once after each reset
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// ---- the Decisions record (docs/fe-captures/decisions/, the designer's sample of D:1559) ----
+// The decisions of the designer's sample: same words, statuses, deciders and related tasks, so the page and the
+// prototype can be put side by side. `today` is the prototype's own day (Mon 2 Nov 2026), so the week of the
+// banner is 2 to 8 Nov. Texts, quotes and tasks are the sample's; the captures give the shapes.
+const DEC_MEETINGS = {
+  1: { id: 1, title: "Beyric Monday planning", platform: "google_meet", created_at: "2026-11-02T08:00:00Z" },
+  8: { id: 8, title: "Zoom 88205679674", platform: "zoom", created_at: "2026-11-02T07:30:00Z" },
+  21: { id: 21, title: "Beyric Friday review", platform: "google_meet", created_at: "2026-10-30T14:00:00Z" },
+  22: { id: 22, title: "Beyric Monday planning", platform: "google_meet", created_at: "2026-10-26T14:00:00Z" },
+};
+const DEC_TASKS = {
+  t1: ["Finish checking web and mobile data sync, and test both apps", "todo"],
+  t2: ["Post this week's specific tasks in Slack after testing", "todo"],
+  t3: ["Specify and log planned design refinements and empty states on the tracker", "todo"],
+  t5: ["Finish payment checkout", "todo"],
+  t9: ["Set up Slack channels for the product team", "doing"],
+  t11: ["Implement role-based permissions", "done"],
+  t12: ["Update onboarding screens", "done"],
+  t13: ["Measure transcript accuracy against the September 12 meeting", "todo"],
+  t14: ["Decide how sending the note taker can be automated", "todo"],
+};
+const decisionSeed = () =>
+  [
+    [1, 1, "Use Slack for official work discussions and updates going forward.", "approved", "Kemi Adeyemi", ["t2", "t9"], null, "I want all work updates in Slack from now on.", 4],
+    [2, 1, "Keep the Monday planning and Friday review cadence.", "approved", "Kemi Adeyemi", [], null, null, null],
+    [3, 1, "Finish payment checkout this week; Tosin will own it.", "approved", "Adebayo Tosin", ["t5"], "2026-11-06", "I will own the payment checkout this week.", 6],
+    [4, 1, "Prepare for the December 8 launch.", "approved", "Kemi Adeyemi", ["t1", "t3", "t5"], "2026-11-30", "We are preparing for the December 8 launch.", 8],
+    [5, 1, "Decide the pricing model at next week's planning.", "proposed", "Kemi Adeyemi", [], "2026-11-09", "Maybe we decide the pricing model next week.", 10],
+    [6, 8, "Beyric Note Taker is intended for internal use.", "approved", "Adebayo", ["t13", "t14"], null, "This is intended for internal use only.", 2],
+    [7, 8, "The application would be tested during this meeting.", "approved", "Adebayo", ["t13"], null, "We will test the application during this meeting.", 3],
+    [8, 21, "Launch to existing customers first, then open public signups.", "approved", "Kemi Adeyemi", [], "2026-11-16", null, null],
+    [10, 21, "Workspace approvals for large teams will be reviewed manually during the pilot.", "approved", "Adebayo Tosin", [], null, null, null],
+    [11, 21, "Offer a lifetime deal at launch.", "rejected", "Kemi Adeyemi", [], null, null, null],
+    [9, 22, "Launch the Client Portal on Mon 30 Nov 2026.", "replaced", "Kemi Adeyemi", [], null, null, null, 4],
+    [12, 22, "Role-based permissions are required before launch.", "approved", "Adebayo Tosin", ["t11"], null, null, null],
+    [13, 22, "Use email verification for every new account.", "approved", "Daniel Okoro", ["t12"], null, null, null],
+  ].map(([id, meeting_id, text, status, decided_by, tasks, revisit_on, quote, line]) => ({
+    id, meeting_id, text, status, decided_by, quote, quote_speaker: quote ? decided_by : null, line, revisit_on,
+    replaced_by: null, replaces: [], can_edit: true,
+    related_tasks: tasks.map((key) => ({ id: Number(key.slice(1)), title: DEC_TASKS[key][0], status: DEC_TASKS[key][1] })),
+    _replaced_by: id === 9 ? 4 : null,
+  }));
+let decisionRows = decisionSeed();
+const decisionOut = (row) => {
+  const target = row._replaced_by ? decisionRows.find((d) => d.id === row._replaced_by) : null;
+  const rest = { ...row };
+  delete rest._replaced_by;
+  delete rest.meeting_id;
+  return {
+    ...rest,
+    replaced_by: target && row.status === "replaced" ? { id: target.id, text: target.text } : null,
+    replaces: decisionRows.filter((d) => d._replaced_by === row.id && d.status === "replaced").map((d) => ({ id: d.id, text: d.text })),
+  };
+};
+const decisionCounts = () => {
+  const counts = { all: decisionRows.length, approved: 0, proposed: 0, replaced: 0, rejected: 0 };
+  for (const d of decisionRows) counts[d.status] += 1;
+  return counts;
+};
+const decisionsDue = () =>
+  decisionRows.filter((d) => ["approved", "proposed"].includes(d.status) && d.revisit_on >= "2026-11-02" && d.revisit_on <= "2026-11-08").length;
+function decisionList(url) {
+  const q = (url.searchParams.get("q") ?? "").toLowerCase();
+  const status = url.searchParams.get("status");
+  const byMeeting = new Map();
+  for (const d of decisionRows) {
+    const meeting = DEC_MEETINGS[d.meeting_id];
+    if (status && d.status !== status) continue;
+    if (q && !d.text.toLowerCase().includes(q) && !meeting.title.toLowerCase().includes(q)) continue;
+    if (!byMeeting.has(meeting.id)) byMeeting.set(meeting.id, []);
+    byMeeting.get(meeting.id).push(decisionOut(d));
+  }
+  const groups = [...byMeeting.entries()]
+    .sort((a, b) => b[0] - a[0] || 0)
+    .map(([id, decisions]) => ({ meeting: DEC_MEETINGS[id], decisions }));
+  // newest meeting first: by day, then by id
+  groups.sort((a, b) => b.meeting.created_at.localeCompare(a.meeting.created_at) || b.meeting.id - a.meeting.id);
+  return { groups, has_more: false, next_before_id: null, counts: decisionCounts(), due_this_week: decisionsDue() };
+}
+
 const readJson = (req) =>
   new Promise((resolve) => {
     const chunks = [];
@@ -518,6 +600,7 @@ const server = http.createServer(async (req, res) => {
     shares = [];
     shareId = 0;
     armed.decisions = armed.review = armed.ask = true;
+    decisionRows = decisionSeed();
     slackConnected = false;
     resetProjects();
     resetSprints();
@@ -1025,12 +1108,26 @@ const server = http.createServer(async (req, res) => {
     }
     if (values.decisions === "failed") return json(res, 500, { error: { code: "server_error", message: "Something went wrong on our side." } });
     if (values.decisions === "loading" || values.decisions === "retry-loading") await wait(4000);
-    if (values.decisions === "empty") return json(res, 200, { groups: [], has_more: false, next_before_id: null });
-    // The search "zebra" answers the captured no-match list (docs/fe-captures/ai-workspace-w1/16-...).
-    if (url.searchParams.get("q") === "zebra") return json(res, 200, wsCapture("16-decisions-search-none"));
-    return json(res, 200, wsCapture("13-decisions"));
+    if (values.decisions === "empty") {
+      return json(res, 200, { groups: [], has_more: false, next_before_id: null, counts: { all: 0, approved: 0, proposed: 0, replaced: 0, rejected: 0 }, due_this_week: 0 });
+    }
+    const list = decisionList(url);
+    if (values.decisions === "teammate") for (const g of list.groups) for (const d of g.decisions) d.can_edit = false;
+    return json(res, 200, list);
+  }
+  if (/^\/api\/decisions\/\d+$/.test(path) && method === "PATCH") {
+    const row = decisionRows.find((d) => d.id === Number(path.split("/").pop()));
+    if (!row) return json(res, 404, { error: { code: "not_found", message: "No such decision" } });
+    if (data?.status) {
+      row.status = data.status;
+      if (data.status !== "replaced") row._replaced_by = null;
+    }
+    if ("revisit_on" in (data ?? {})) row.revisit_on = data.revisit_on;
+    if ("replaced_by_id" in (data ?? {})) row._replaced_by = data.replaced_by_id;
+    return json(res, 200, decisionOut(row));
   }
   if (/^\/api\/decisions\/\d+\/hide$/.test(path) && method === "POST") {
+    decisionRows = decisionRows.filter((d) => d.id !== Number(path.split("/")[3]));
     res.writeHead(204);
     return res.end();
   }

@@ -7,7 +7,10 @@ import type {
   CalendarSettingsInput,
   CalendarState,
   ConnectStart,
+  Decision,
+  DecisionChanges,
   DecisionList,
+  DecisionStatus,
   EmailPreferences,
   DisconnectResult,
   RecurringState,
@@ -327,10 +330,14 @@ export function createApi(options: ApiOptions = {}) {
       scope: () => request<AskScope>("GET", "/api/ask/scope"),
       ask: (question: string) => request<AskAnswer>("POST", "/api/ask", { body: { question }, write: true }),
     },
-    // GET /api/decisions groups by meeting; `limit` counts meetings. Hiding never edits the notes.
+    // GET /api/decisions groups by meeting; `limit` counts meetings; `status` is one tab. Hiding never
+    // edits the notes. `update` is the owner's only (403 `not_owner`, 404 for a reader of nothing, 422
+    // `replaced_by_*`) and answers the whole decision (docs/fe-integration-guide-decisions.md).
     decisions: {
-      list: (query: { q?: string; limit?: number; before_id?: number } = {}) =>
+      list: (query: { q?: string; status?: DecisionStatus; limit?: number; before_id?: number } = {}) =>
         request<DecisionList>("GET", "/api/decisions", { query }),
+      update: (id: number, body: DecisionChanges) =>
+        request<Decision>("PATCH", `/api/decisions/${id}`, { body, write: true }),
       hide: (id: number) => request<void>("POST", `/api/decisions/${id}/hide`, { write: true }),
     },
     // Tasks (docs/fe-integration-guide-tasks.md). `list` is the board: `assignee` is me, none or a

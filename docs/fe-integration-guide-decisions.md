@@ -295,11 +295,11 @@ Rules the FE can rely on:
 | A revisit day that is not a date `[capture 41]` | 422 | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "revisit_on", "message": "Input should be a valid date or datetime, invalid character in year"}]}}` |
 | An unknown field `[capture 42]` | 422 | `{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "text", "message": "Extra inputs are not permitted"}]}}` |
 
-The 404 text for a decision that is missing, hidden or unreadable is the same on purpose. A teammate never needs to see the 403: render no select for them (`can_edit: false`). If it happens anyway (their access changed meanwhile), show the toast **"Could not update the decision. Try again."** (lead-designed wording) and leave the row as it was.
+The 404 text for a decision that is missing, hidden or unreadable is the same on purpose. A teammate never needs to see the 403: render no select for them (`can_edit: false`). If it happens anyway (their access changed meanwhile), show the page's error line **"Could not update the decision. Try again."** (lead-designed wording) and leave the row as it was.
 
 ### Toasts
 
-On a 200 for a status change show **"Status changed to {Approved}"** (the designer's words; the label is the new status). A failed change shows the error toast above; the select goes back to its old value.
+On a 200 for a status change show **"Status changed to {Approved}"** (the designer's words; the label is the new status). A failed change shows the error line above; the select goes back to its old value.
 
 ## 5. Evidence, "Show in transcript", "No transcript is available"
 

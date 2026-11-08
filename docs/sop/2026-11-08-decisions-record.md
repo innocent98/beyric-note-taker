@@ -1,6 +1,6 @@
 # SOP: Decisions as a record (audit B26 to B34, U6, U8, U9, U12)
 
-Spec: `docs/superpowers/specs/2026-11-08-designer-v2-features-design.md`, section 3 (approved by delegation, 2026-11-08). **PR 1 (backend):** branch `feature/decisions-record-backend` (number in the PR list). **PR 2 (screens):** `feature/decisions-record-screens`, added to this SOP when it ships. **Migration 0036.** FE guide: `docs/fe-integration-guide-decisions.md`; captures `docs/fe-captures/decisions/` (`scripts/capture_decisions_api.py`).
+Spec: `docs/superpowers/specs/2026-11-08-designer-v2-features-design.md`, section 3 (approved by delegation, 2026-11-08). **PR 1 (backend):** branch `feature/decisions-record-backend` (number in the PR list). **PR 2 (screens):** `feature/decisions-record-screens` (stacked on PR 1; section "PR 2: the screens" below). **Migration 0036.** FE guide: `docs/fe-integration-guide-decisions.md`; captures `docs/fe-captures/decisions/` (`scripts/capture_decisions_api.py`).
 
 ## What shipped (PR 1)
 1. **Migration 0036:** `decisions.status` (`approved | proposed | replaced | rejected`, check constraint, default `approved`), `decided_by` (varchar 100), `quote` (varchar 300), `revisit_on` (date), `replaced_by_id` (self reference, `on delete set null`), `edited_at` (timestamptz, see below), and table `decision_tasks (decision_id, task_id)` (composite key, both foreign keys `on delete cascade`). No row is rewritten: every old decision reads as Approved with no decider and no evidence.
@@ -58,3 +58,51 @@ The designer's file turns Decisions from a flat list into a tracked record (stat
 * `replaced_by` choices are built by the FE from the decisions it already loaded (most recent 30); no dedicated endpoint.
 * Revisit dates have no reminder (U6, decided: none).
 * The real model's behaviour for the new fields is unchecked until the first live meeting; the AI1 eval does not yet score decisions.
+
+---
+
+# PR 2: the screens (parity D:802-870)
+
+Stacked on PR 1 (`feature/decisions-record-backend`); retarget to `main` once PR 1 is merged. Web only: no migration, no API change.
+
+## What shipped (PR 2)
+`web/components/app/decisions-view.tsx` is the designer's Decisions screen: tabs All / Approved / Proposed / Replaced / Rejected with counts over the whole log, the amber "N decision is / decisions are due to be revisited this week." banner, a status pill on every row (Approved green, Proposed amber, Replaced grey, Rejected red; replaced and rejected text greyed), a meta line ("Decided by {name} · N related task(s) · Revisit {day}", each part only when there is one), and an expandable row: **Status** select, **Revisit on**, **Decided by**, the evidence box with **Show in transcript** (`/meetings/{id}?tab=transcript&line=N`) or "No transcript is available for this meeting.", **Related tasks**, **Replaced by / Replaces** links, and **Remove from log** with its ask. Subtitle (B26): "Decisions made in your meetings, with their status and the tasks that carry them out." "No decisions match." for a tab or search with nothing; "No decisions yet." (only the empty box, no tabs or search) for an empty log. Words in `web/lib/decisions.ts`; styles in `web/styles/pages.css` (`.dec-*`).
+
+## Parity (1440 / 768 / 390, design on the left, page on the right)
+Shots in `docs/ui/parity/after/app-decisions*-{1440,768,390}.jpg`, made with `web/scripts/parity-shots.mjs` against `web/scripts/mock-api.mjs`, which now serves **the designer's own sample** of 13 decisions (same words, statuses, deciders, revisit days and related tasks), stateful (PATCH and Remove change it, `/__mock/reset` restores it; `--decisions teammate` answers `can_edit: false`).
+
+| Piece | Design | Page | Shot |
+|---|---|---|---|
+| Subtitle, tabs with counts, search box beside them | D:806-820 | same words, sizes, colours (segmented control, 30 px tabs, 280 px search) | `app-decisions` |
+| Amber revisit banner | D:822 | same box, icon and words | `app-decisions` |
+| Group header, "Open notes" | D:823-827 | unchanged | `app-decisions` |
+| Row: 88 px pill column, text, meta line, chevron | D:830-835 | same grid, pill colours, greyed text | `app-decisions`, `-tab-proposed` |
+| Open row: Status, Revisit on, Decided by | D:837-841 | same panel and three-column row; **Revisit on is a date input** (lead-designed) | `-open`, `-open-links` |
+| Evidence box, "Show in transcript" | D:842-847 | same box; **no time** (none stored) | `-open`, `-open-links` |
+| "No transcript is available for this meeting." | D:848 | same words | `-open-noevidence` |
+| Related tasks (dot, title, state; opens the task) | D:849-855 | same rows; opens the board's task drawer | `-open`, `-open-links` |
+| Replaced by / Replaces | D:856-857 | same lines and link style | `-open-links`, `-open-replaced` |
+| Remove from log, ask, toast | D:858-866 | unchanged words, inside the row | `-confirm`, `-removed` |
+| "Status changed to {Rejected}" toast | D:1955 | same | `-status-changed` |
+| "No decisions match." | D:868 | same | `-nomatch` |
+
+Differences that remain are the app's own chrome (the sidebar's Notifications item and badges, which exist in the app and not in the prototype) and the sample's times in the evidence box, which the page does not show.
+
+## Lead-designed, not in the designer's file
+| Piece | What was built |
+|---|---|
+| Revisit on field (U8) | A real `input type=date` in the select's shape (34 px, same border), plus a quiet **No date** button that clears it (shown only when a day is set). The design's select of four fixed days is sample data |
+| Replaced by select | Choosing Replaced offers an optional "Replaced by" select (No decision chosen, then the person's other decisions, at most 30, read once from the list API); not drawn in the file |
+| Teammate view | Status and Revisit on as plain text in the same layout (no select), "Decided by" and the rest unchanged |
+| Failure message | "Could not update the decision. Try again." in the page's error line; the select goes back to the old value |
+| Task that cannot be opened | "Could not open this task. Try again." |
+| Tab strip and panel on a phone (U7) | At 640 px and under the tabs scroll sideways and the open row's panel runs the full width of the row; the file has no `@media` |
+| "Replaced by:" / "Replaces:" links | The API has no "get one decision", so the link searches the decision's words (cut to 200 characters), tab All, and opens that row |
+| Empty log | Tabs, search and banner are left out (the design draws them only when there is a list) |
+
+## Verification
+`web/tests/decisions-record.test.tsx` (23, fed by the captured bodies in `docs/fe-captures/decisions/`): tabs and counts, a tab asks the API for one status, empty tab and empty log, the banner words, pills and meta line, greyed rows, the open row (select options, date field, evidence link, related tasks, remove), no-evidence and no-decider cases, a quote without a link, status change (PATCH, toast, pill and counts move), a row leaves a tab it no longer belongs to, revisit set and cleared with the banner following, Replaced by choices and the other side's "Replaces", failure line, a 404 drops the row, a teammate sees text only, the links search, a related task opens the drawer, the week rule. The existing `decisions-view` tests were updated for the new subtitle and the tab group. `npm run lint`, `typecheck` and `vitest run` pass.
+
+## Follow-ups
+* The Replaced by select's choices come from the first 10 meetings of the list; a decision from an older meeting cannot be chosen from the screen yet (the server accepts any in the log).
+* No keyboard shortcut or focus move after a tab change; the tabs are plain buttons with `role=tab`.
