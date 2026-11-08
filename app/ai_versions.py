@@ -11,3 +11,5 @@ EXTRACT_PROMPT_VERSION = "extract-v2"
 EXTRACT_REVIEW_PROMPT_VERSION = "extract-review-v1"
 # Translating notes and transcript lines into French or Spanish (app/translation.py).
 TRANSLATE_PROMPT_VERSION = "translate-v1"
+# Ask Beyric: answering a question from the passages of the asker's own meetings (app/ask.py).
+ASK_PROMPT_VERSION = "ask-v1"

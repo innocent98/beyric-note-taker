@@ -1,0 +1,42 @@
+{
+  "note": "A teammate's meeting shared with the team: `owner_name` is the owner's display name and `shared` is true.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "Tell me about the Zanzibar logo"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "answer",
+      "lead": "Here is what your meetings say.",
+      "points": [
+        {
+          "text": "The answer drawn from the first passage.",
+          "cites": [
+            {
+              "meeting_id": 2,
+              "title": "Design sync",
+              "date_label": "Tue 3 Nov",
+              "owner_name": "Dan Okoro",
+              "shared": true,
+              "target": "notes",
+              "line": null
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

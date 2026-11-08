@@ -78,7 +78,7 @@ The AI turns every action item into a task; the vague and conditional ones ("we 
 * The setting can be turned off per person (Settings > Tasks) or by `update user_settings set ask_before_unclear = false` for everyone; waiting tasks stay waiting until handled.
 
 ## Review round (Opus review of #135, head 8ebfac0)
-Fixed on the branch: (1) Medium: only tasks made by the current extraction may turn suggested (above); (2) accept sets `edited_at`; (3) the Slack and Linear statement is now true (above); (4) `reason` is null for someone who may not read the meeting and the reason check also drops email addresses, phone numbers and `javascript:` or `data:` links; (5) the transcript index is built only for suggested tasks and single-task answers. Also from the lead: the owner of a meeting may accept and dismiss its suggestions (above). **Migration renumbered 0034 to 0035** (Ask Beyric took 0034); chained after 0033 until #134 merges.
+Fixed on the branch: (1) Medium: only tasks made by the current extraction may turn suggested (above); (2) accept sets `edited_at`; (3) the Slack and Linear statement is now true (above); (4) `reason` is null for someone who may not read the meeting and the reason check also drops email addresses, phone numbers and `javascript:` or `data:` links; (5) the transcript index is built only for suggested tasks and single-task answers. Also from the lead: the owner of a meeting may accept and dismiss its suggestions (above). **Migration renumbered 0034 to 0035** (Ask Beyric took 0034); chained after 0034 (Ask Beyric).
 
 ## Follow-ups
 * A second assignee mail for an accepted task when the person was already mailed about the meeting (needs its own template and index).

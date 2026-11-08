@@ -1,0 +1,28 @@
+{
+  "note": "More than 20 questions in a minute (the free ones count too): 429 `ask_rate`, a different code from the daily cap. Wait a minute and ask again.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "my tasks"
+    }
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "ask_rate",
+        "message": "Slow down a little and try again in a minute."
+      }
+    }
+  }
+}

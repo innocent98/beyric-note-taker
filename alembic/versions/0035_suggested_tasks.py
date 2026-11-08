@@ -8,7 +8,7 @@ hand) and `tasks.reason` is the model's plain words on why an unclear item is un
 everyone. No row is rewritten: old tasks keep `suggested` false and `confidence` null.
 
 Revision ID: 0035
-Revises: 0033
+Revises: 0034
 Create Date: 2026-11-08
 """
 
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0035"
-down_revision = "0033"
+down_revision = "0034"
 branch_labels = None
 depends_on = None
 

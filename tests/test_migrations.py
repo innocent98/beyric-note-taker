@@ -1205,6 +1205,7 @@ def test_0032_follows_0030():
 
 
 def test_0033_follows_0032():
+    # "one head" is `test_single_head`; pinning the head here broke with every later migration.
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0033").down_revision == "0032"
 
@@ -1245,10 +1246,9 @@ def test_0033_round_trips_and_keeps_slack_rows(scratch_url):
     engine.dispose()
 
 
-def test_0035_is_the_only_head_and_chains_after_0033_or_the_ask_migration():
+def test_0035_follows_0034():
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
-    assert script.get_revision("0035").down_revision in {"0033", "0034"}
-    assert script.get_heads() == ["0035"]
+    assert script.get_revision("0035").down_revision == "0034"
 
 
 def test_0035_round_trips_and_keeps_tasks_and_settings(scratch_url):
@@ -1287,3 +1287,30 @@ def test_0035_round_trips_and_keeps_tasks_and_settings(scratch_url):
     assert _rows(engine, "select title from tasks") == [("Old task",)]
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0034_lets_the_ledger_hold_ask_calls_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0034")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('ask', 'gpt-6-luna')"))
+        conn.execute(
+            text("insert into ai_runs (kind, model, status) values ('ask', 'm', 'pending')")
+        )
+        conn.execute(text("insert into ai_runs (kind, model) values ('translate', 'm')"))
+    command.downgrade(cfg, "0033")
+    assert _rows(engine, "select kind from ai_runs order by id") == [("translate",)]
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('ask', 'm')"))
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text("insert into ai_runs (kind, model, status) values ('notes', 'm', 'pending')")
+        )
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0034_follows_0033():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0034").down_revision == "0033"

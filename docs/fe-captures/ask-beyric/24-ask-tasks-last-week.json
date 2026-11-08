@@ -1,0 +1,56 @@
+{
+  "note": "A date phrase filters by the day the task was assigned (the meeting's day), all statuses (the done one is listed here). The seed sets `assigned_on` to a day of the week before the run, so this answer holds whenever the script runs.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "What did I commit to last week?"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "tasks",
+      "lead": "You have 2 tasks assigned to you last week.",
+      "points": [
+        {
+          "text": "Send the pricing sheet (due Fri 13 Nov, to do)",
+          "cites": [
+            {
+              "meeting_id": 1,
+              "title": "Pricing review",
+              "date_label": "Mon 2 Nov",
+              "owner_name": null,
+              "shared": false,
+              "target": "transcript",
+              "line": 4
+            }
+          ]
+        },
+        {
+          "text": "Book the launch venue (done)",
+          "cites": [
+            {
+              "meeting_id": 1,
+              "title": "Pricing review",
+              "date_label": "Mon 2 Nov",
+              "owner_name": null,
+              "shared": false,
+              "target": "notes",
+              "line": null
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
