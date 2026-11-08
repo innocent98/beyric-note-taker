@@ -44,7 +44,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import calendar_text, join_runner, placement, services
 from app.config import Settings
-from app.models import CalendarEvent, Meeting, ScheduledJoin, User
+from app.models import CalendarEvent, Meeting, ScheduledJoin, Template, User, UserSettings
 from app.placement import PlacementRefused, PlacementRequest, place_bot
 from app.vexa import UnsupportedMeetingUrl, VexaClient, VexaError
 
@@ -58,8 +58,10 @@ NOT_SENDABLE_TEXT = {
     "dispatching": "The note taker is already getting ready for this meeting.",
     "completed": "The note taker already joined this meeting.",
     "cancelled": "This meeting is switched off, so the note taker will not join it.",
+    "skipped": "This meeting was not missed, so there is nothing to send again.",
 }
 ENDED_TEXT = "This meeting is already over, so the note taker cannot join it."
+NOT_STARTED_TEXT = "This meeting has not started yet."
 SEND_FAILED_TEXT = "The bot could not be sent. Please try again in a moment."
 NO_TEMPLATE_TEXT = "Choose a notes template for calendar meetings in Settings, then try again."
 UNSUPPORTED_TEXT = "The note taker cannot join this kind of meeting link yet."
@@ -133,6 +135,9 @@ def _attempt(
     if refusal is not None:
         session.rollback()
         raise refusal
+    if not _has_template(session, join):
+        session.rollback()
+        raise services.Refused(409, "template_required", NO_TEMPLATE_TEXT)
     request = PlacementRequest(
         user_id=join.user_id,
         platform=join.platform,
@@ -141,6 +146,9 @@ def _attempt(
         template_id=join.template_id,
         source=join.source,
         title=_event_title(session, join),
+        # As the runner does: a bot of the owner's that an earlier killed send left on this code is
+        # adopted instead of answering that someone else's note taker is there.
+        adopt_orphan=True,
     )
     row_id = join.id
 
@@ -177,9 +185,32 @@ def _attempt(
         raise services.Refused(502, "bot_send_failed", SEND_FAILED_TEXT) from None
     except UnsupportedMeetingUrl:  # a link the host cannot join (Teams until T1)
         raise services.Refused(409, "unsupported_link", UNSUPPORTED_TEXT) from None
-    except ValueError:  # no calendar template: nothing the person did, but they can fix it
-        raise services.Refused(409, "template_required", NO_TEMPLATE_TEXT) from None
+    except ValueError:
+        # Anything `place_bot` rejects as a caller bug (the template was checked above): not a
+        # refusal for a person to read. Let go of the row locks, then let it be a 500.
+        session.rollback()
+        raise
     return Sent(row_id, meeting.id)
+
+
+def _has_template(session: Session, join: ScheduledJoin) -> bool:
+    """Whether the notes can be written: the join's own template, else the person's calendar
+    template, and it is theirs (what `placement._resolve` needs)."""
+    template_id = join.template_id
+    if template_id is None:
+        template_id = session.scalar(
+            select(UserSettings.calendar_template_id).where(UserSettings.user_id == join.user_id)
+        )
+    if template_id is None:
+        return False
+    return (
+        session.scalar(
+            select(Template.id).where(
+                Template.id == template_id, Template.owner_user_id == join.user_id
+            )
+        )
+        is not None
+    )
 
 
 def _event_title(session: Session, join: ScheduledJoin) -> str | None:
@@ -195,13 +226,16 @@ def _not_sendable(
 ) -> services.Refused | None:
     """What stops a send before the pre-flight, or None. Read under the row lock."""
     status = session.scalar(select(User.status).where(User.id == user.id))
-    if status != "active" or join.skip_reason in calendar_text.NO_SEND_NOW_REASONS:
+    block = calendar_text.send_now_block(join, now)
+    if status != "active" or block == "account_suspended":
         return services.placement_refusal(PlacementRefused("account_suspended"))
-    if join.state not in calendar_text.SEND_NOW_STATES:
+    if block == "not_sendable":
         return services.Refused(
             409, "cannot_send_now", NOT_SENDABLE_TEXT.get(join.state, "This cannot be sent again.")
         )
-    if now > join.ends_at:
+    if block == "not_started":
+        return services.Refused(409, "not_started", NOT_STARTED_TEXT)
+    if block == "meeting_ended":
         return services.Refused(409, "meeting_ended", ENDED_TEXT)
     if join_runner._another_live_join_on_the_code(session, join):
         return services.placement_refusal(PlacementRefused("already_in_meeting"))

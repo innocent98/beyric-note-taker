@@ -39,8 +39,8 @@ first, at most 100. No parameters. Capture `11-list`:
     {
       "join_id": 3,
       "title": "Design review",
-      "starts_at": "2026-11-08T21:20:00Z",
-      "ends_at": "2026-11-08T22:20:00Z",
+      "starts_at": "2026-11-08T21:32:00Z",
+      "ends_at": "2026-11-08T22:32:00Z",
       "platform": "google_meet",
       "platform_label": "Google Meet",
       "state": "no_capacity",
@@ -50,8 +50,8 @@ first, at most 100. No parameters. Capture `11-list`:
     {
       "join_id": 1,
       "title": "Weekly planning",
-      "starts_at": "2026-11-08T21:08:00Z",
-      "ends_at": "2026-11-08T22:08:00Z",
+      "starts_at": "2026-11-08T21:20:00Z",
+      "ends_at": "2026-11-08T22:20:00Z",
       "platform": "google_meet",
       "platform_label": "Google Meet",
       "state": "failed",
@@ -76,10 +76,12 @@ Nothing recorded yet is `{"items": []}` (`06-list-empty`). Another person's rows
 What is on the list: `failed` and `no_capacity` joins, and `skipped` ones whose reason means the
 meeting was not recorded (hours used up, too many note takers at once, the link still in use by an
 earlier meeting, a note taker from another account already there, the calendar disconnected, a
-suspended account). A join the note taker **did** get into and that then failed (not let in, the
-recording failed) is **not** here: it is an ordinary failed meeting on the Meetings list with its
-own Send it again. A meeting where the person's own note taker is already in the same meeting
-(a pasted link) is not listed either: it was recorded.
+suspended account, or a note taker of the person's already in that meeting from a link they
+pasted: `duplicate_meeting`, whose text says so, and Send now is still allowed on it: placement
+refuses with its own words while that bot is there). A row only appears once its moment has come
+(a meeting days ahead is never listed). A join the note taker **did** get into and that then
+failed (not let in, the recording failed) is **not** here: it is an ordinary failed meeting on the
+Meetings list with its own Send it again.
 
 ### `POST /api/scheduled-joins/{join_id}/send-now`
 
@@ -113,7 +115,8 @@ as the toast or the row's note and leave the button there so the person can try 
 |---|---|---|---|---|
 | 409 | `bot_busy` | The note taker is busy right now. Try again in a few minutes. | `13`, `21` | The one note taker is in another meeting. |
 | 403 | `hours_cap_reached` | You have used your 5 recorded hours for the pilot, so the note taker will not join new meetings. Write to us at hello@beyrictech.com if you need more. | `17` | The recorded hours are used up. The number of hours is the person's own cap. |
-| 409 | `cannot_send_now` | The note taker is already getting ready for this meeting. | `15` | The join is still `scheduled` (the scheduler will join it). Other messages for this code, from `app/send_now.py`: "This meeting is switched off, so the note taker will not join it." (switched off) and "The note taker already joined this meeting." (done). **NOT LIVE** for these two: only the first text was captured. |
+| 409 | `cannot_send_now` | The note taker is already getting ready for this meeting. | `15` | The join is still `scheduled` (the scheduler will join it). Other messages for this code, from `app/send_now.py`: "This meeting is switched off, so the note taker will not join it." (switched off), "The note taker already joined this meeting." (done) and "This meeting was not missed, so there is nothing to send again." (a skip nothing can fix). **NOT LIVE** for these three: only the first text was captured. |
+| 409 | `not_started` | This meeting has not started yet. | `31` (**NOT LIVE**: the row was inserted directly) | The meeting's moment has not come (for instance a join a lapsed calendar left `skipped`, days ahead). `can_send_now` is false for such a row too: the lists and the route use one rule. |
 | 409 | `meeting_ended` | This meeting is already over, so the note taker cannot join it. | `25` | `now` is after the meeting's end. |
 | 502 | `bot_send_failed` | The bot could not be sent. Please try again in a moment. | `18` | The bot service did not take the bot. Nothing was recorded. |
 | 404 | `not_found` | No such meeting | `16`, `29` | A join that does not exist or is not the caller's (the two look the same). |
@@ -213,6 +216,7 @@ None needed for Send now. After a success the new meeting follows the Meetings l
 | Send now `bot_send_failed` (host refuses) | verified live against the fake host (`18`) |
 | Send now success, new meeting, row leaves the list | verified live against the fake host (`19`, `22`, `23`) |
 | Pressed twice: same answer, one bot; two simultaneous presses: one bot | repeat verified live (`20`); the simultaneous case is a test (`tests/test_send_now.py`), not a capture |
+| `not_started` | verified on a row **inserted directly** (`31`); a test covers a future `skipped / needs_reconnect`, `failed` and `no_capacity` join |
 | `meeting_ended` | verified live on a row **inserted directly** (`24`, `25`): the runner only ends a row this way at its deadline, 15 minutes after a start |
 | `cannot_send_now` for a `scheduled` join | verified live (`15`); the "switched off" and "done" texts are tests only |
 | Another person's join: 404 | verified live (`29`) |

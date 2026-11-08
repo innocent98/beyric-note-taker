@@ -20,8 +20,8 @@
         {
           "join_id": 3,
           "title": "Design review",
-          "starts_at": "2026-11-08T21:20:00Z",
-          "ends_at": "2026-11-08T22:20:00Z",
+          "starts_at": "2026-11-08T21:32:00Z",
+          "ends_at": "2026-11-08T22:32:00Z",
           "platform": "google_meet",
           "platform_label": "Google Meet",
           "state": "no_capacity",
@@ -31,8 +31,8 @@
         {
           "join_id": 1,
           "title": "Weekly planning",
-          "starts_at": "2026-11-08T21:08:00Z",
-          "ends_at": "2026-11-08T22:08:00Z",
+          "starts_at": "2026-11-08T21:20:00Z",
+          "ends_at": "2026-11-08T22:20:00Z",
           "platform": "google_meet",
           "platform_label": "Google Meet",
           "state": "failed",

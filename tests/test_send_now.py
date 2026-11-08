@@ -417,6 +417,14 @@ def test_not_recorded_lists_failed_no_capacity_and_the_listed_skip_reasons_for_s
             code="eee-eeee-eee",
             start=-50,
         ),
+        "duplicate": join_row(  # spec 7.7 lists it: Send now is allowed, placement may still refuse
+            session,
+            owner_world,
+            state="skipped",
+            reason="duplicate_meeting",
+            code="hhh-hhhh-hhh",
+            start=-15,
+        ),
         "old_but_in_window": join_row(
             session, owner_world, code="fff-ffff-fff", start=-6 * 24 * 60, length=30
         ),
@@ -424,14 +432,6 @@ def test_not_recorded_lists_failed_no_capacity_and_the_listed_skip_reasons_for_s
     skipped_out = [
         join_row(  # eight days ago
             session, owner_world, code="ggg-gggg-ggg", start=-8 * 24 * 60, length=30
-        ),
-        join_row(  # the owner's own bot is in that meeting: it IS recorded
-            session,
-            owner_world,
-            state="skipped",
-            reason="duplicate_meeting",
-            code="hhh-hhhh-hhh",
-            start=-15,
         ),
         join_row(
             session, owner_world, state="cancelled", reason="override_off", code="iii-iii-iii"
@@ -452,6 +452,7 @@ def test_not_recorded_lists_failed_no_capacity_and_the_listed_skip_reasons_for_s
     ids = [item["join_id"] for item in body["items"]]
     assert ids == [  # newest first
         kept["failed"].id,
+        kept["duplicate"].id,
         kept["capacity"].id,
         kept["hours"].id,
         kept["disconnected"].id,
@@ -468,6 +469,7 @@ def test_not_recorded_lists_failed_no_capacity_and_the_listed_skip_reasons_for_s
         items[kept["capacity"].id]["reason_text"] == "The note taker was busy with other meetings."
     )
     assert items[kept["hours"].id]["reason_text"] == "Your recording hours are used up."
+    assert items[kept["duplicate"].id]["can_send_now"] is True
     assert items[kept["suspended"].id]["can_send_now"] is False
     assert items[kept["old_but_in_window"].id]["can_send_now"] is False  # over
     text = str(body)
@@ -537,3 +539,138 @@ def test_the_could_not_join_mail_has_a_send_it_again_button_that_opens_the_meeti
     # a link into the signed-in app: no token, no query, nothing that acts when it is opened
     for part in (message.html, message.text):
         assert "token" not in part.lower() and "/?" not in part
+
+
+# ---- review of #145: one rule, a meeting that has not started, the narrow errors, the race ----
+
+
+@pytest.mark.parametrize(
+    ("state", "reason"),
+    [("skipped", "needs_reconnect"), ("failed", "not_recorded"), ("no_capacity", None)],
+)
+def test_a_meeting_that_has_not_started_cannot_be_sent_now(
+    web, session, host, owner_world, state, reason
+):
+    """A lapsed calendar marks future joins `skipped / needs_reconnect` and the Upcoming rows carry
+    their ids: the server must refuse them itself, however far ahead the meeting is."""
+    join = join_row(
+        session, owner_world, state=state, reason=reason, start=3 * 24 * 60, run_before=1
+    )
+    body = error_of(web.post(SEND.format(join.id)), 409, "not_started")
+    assert body["message"] == "This meeting has not started yet."
+    assert host.bots_sent == 0
+    row = fresh(session, join)
+    assert (row.state, row.skip_reason, row.meeting_id) == (state, reason, None)
+
+
+def test_the_server_and_the_lists_use_one_rule(web, session, host, owner_world):
+    """`can_send_now` on the lists is exactly what the route accepts, row by row."""
+    rows = [
+        join_row(session, owner_world, code="aaa-aaaa-aaa", start=-10),
+        join_row(session, owner_world, state="no_capacity", reason=None, code="bbb-bbbb-bbb"),
+        join_row(
+            session,
+            owner_world,
+            state="skipped",
+            reason="needs_reconnect",
+            code="ccc-cccc-ccc",
+            start=300,
+        ),
+        join_row(
+            session,
+            owner_world,
+            state="skipped",
+            reason="account_suspended",
+            code="ddd-dddd-ddd",
+        ),
+        join_row(session, owner_world, code="eee-eeee-eee", start=-90, length=30),
+        join_row(session, owner_world, state="scheduled", reason=None, code="fff-ffff-fff"),
+        join_row(
+            session,
+            owner_world,
+            state="skipped",
+            reason="duplicate_meeting",
+            code="ggg-gggg-ggg",
+        ),
+    ]
+    listed = {item["join_id"]: item["can_send_now"] for item in web.get(LIST).json()["items"]}
+    for row in rows:
+        offered = listed.get(row.id, False)
+        host.live.clear()  # a free slot each time: only the rule is under test
+        for meeting in session.scalars(select(Meeting)):
+            meeting.status = "ready"
+        session.commit()
+        answer = web.post(SEND.format(row.id))
+        assert (answer.status_code == 200) == offered, (row.state, row.skip_reason, answer.text)
+    assert host.bots_sent == sum(listed.values())
+
+
+def test_a_duplicate_meeting_row_is_listed_and_placement_still_refuses_while_the_bot_is_there(
+    web, session, host, owner_world
+):
+    other_meeting(session, owner_world, "abc-defg-hij")
+    join = join_row(session, owner_world, state="skipped", reason="duplicate_meeting")
+    [item] = web.get(LIST).json()["items"]
+    assert item["join_id"] == join.id and item["can_send_now"] is True
+    assert item["reason_text"] == "A note taker was already in this meeting from a link you pasted."
+    error_of(web.post(SEND.format(join.id)), 409, "already_in_meeting")
+    assert host.bots_sent == 0
+
+
+def test_an_orphan_bot_of_the_owners_is_adopted_not_called_someone_elses(
+    web, session, host, owner_world
+):
+    """A killed earlier send left the owner's own bot on the code with no meeting row for it."""
+    host.seed_live_bot("google_meet", "abc-defg-hij")
+    join = join_row(session, owner_world)
+    answer = web.post(SEND.format(join.id))
+    assert answer.status_code == 200, answer.text
+    meeting = session.get(Meeting, answer.json()["meeting_id"])
+    assert meeting.vexa_meeting_id == "1" and host.bots_sent == 0  # adopted, nothing new sent
+
+
+def test_an_unexpected_value_error_is_not_a_template_problem_and_frees_the_locks(
+    engine, web, session, host, owner_world, monkeypatch
+):
+    from app import send_now
+
+    def broken(*args, **kwargs):
+        raise ValueError("no such user")
+
+    monkeypatch.setattr(send_now, "place_bot", broken)
+    join = join_row(session, owner_world)
+    with pytest.raises(ValueError, match="no such user"):
+        web.post(SEND.format(join.id))  # a caller bug is a 500, never `template_required`
+    with sessionmaker(bind=engine)() as other:  # the row lock was let go: nobody waits for it
+        locked = other.scalars(
+            select(ScheduledJoin).where(ScheduledJoin.id == join.id).with_for_update(nowait=True)
+        ).one()
+        assert locked.state == "failed"
+
+
+def test_a_runner_tick_in_the_middle_of_a_send_does_not_place_a_second_bot(
+    engine, send_settings, google, host, fake_openai, session, owner_world
+):
+    """The click holds the row and the event while the host takes the bot; a runner tick that runs
+    right then finds the row held and leaves it, so exactly one bot is sent."""
+    join = join_row(session, owner_world, state="no_capacity", reason=None)
+    app = build_app(engine, send_settings, google, host, fake_openai)
+    client = browser(app)
+    inside = threading.Event()
+    host.on_send = inside.set
+    host.send_delay = 0.8
+    answers = []
+    thread = threading.Thread(target=lambda: answers.append(client.post(SEND.format(join.id))))
+    thread.start()
+    assert inside.wait(timeout=10)  # the click is inside the send, holding the row
+    with sessionmaker(bind=engine)() as runner_session:
+        outcomes = join_runner.run_due_joins(
+            runner_session, host, None, now=now(), settings=send_settings
+        )
+    thread.join(timeout=30)
+    assert outcomes == []
+    assert answers[0].status_code == 200
+    assert host.bots_sent == 1 and host.peak_in_flight == 1
+    with sessionmaker(bind=engine)() as check:
+        assert check.scalar(select(func.count(Meeting.id))) == 1
+        assert check.get(ScheduledJoin, join.id).state == "joined"

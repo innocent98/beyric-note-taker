@@ -618,7 +618,6 @@ def not_recorded(
         .outerjoin(CalendarEvent, CalendarEvent.id == ScheduledJoin.calendar_event_id)
         .where(
             ScheduledJoin.user_id == user.id,
-            ScheduledJoin.meeting_id.is_(None),
             ScheduledJoin.run_at <= now,
             ScheduledJoin.starts_at > now - timedelta(days=NOT_RECORDED_DAYS),
             (ScheduledJoin.state.in_(("failed", "no_capacity")))

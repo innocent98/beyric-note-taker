@@ -20,7 +20,7 @@ What is NOT real, said in each file's note where it matters:
 - The runner's clock for the "not recorded" row is moved forward four minutes (the runner takes
   its clock as an argument) so that a meeting that started 14 minutes ago passes its 15-minute
   deadline; the row it writes is the runner's own.
-- One row (a meeting that ended) is inserted directly: the runner only ends a row this way at its
+- Two rows (a meeting that ended, and one three days ahead) are inserted directly: the runner only ends a row this way at its
   deadline, 15 minutes after a start, while the meeting is still on for longer.
 """
 
@@ -372,6 +372,34 @@ def run(app, server_base, engine, settings, google, host) -> None:
             "send_it_again_href": link.group(1) if link else None,
             "text_version": message.text,
         },
+    )
+    # A meeting that has not started (reviewed in #145): a lapsed calendar marks future joins skipped,
+    # and Upcoming carries their ids. Inserted directly, as the lapse itself is not reproduced here.
+    with Session(engine) as session:
+        admin = session.scalars(select(User).where(User.email == base.ADMIN_EMAIL)).one()
+        later_start = datetime.now(UTC) + timedelta(days=3)
+        ahead = ScheduledJoin(
+            user_id=admin.id,
+            platform="google_meet",
+            native_id="fff-ffff-fff",
+            meeting_url="https://meet.google.com/fff-ffff-fff",
+            starts_at=later_start,
+            ends_at=later_start + timedelta(minutes=30),
+            run_at=later_start - timedelta(minutes=1),
+            state="skipped",
+            skip_reason="needs_reconnect",
+            deadline_at=later_start + timedelta(minutes=15),
+            template_id=made["id"],
+        )
+        session.add(ahead)
+        session.commit()
+        ahead_id = ahead.id
+    user.call(
+        "send-now-not-started",
+        "POST",
+        f"/api/scheduled-joins/{ahead_id}/send-now",
+        note="NOT reached live: the row is inserted directly (a skipped join three days ahead, as a "
+        "lapsed calendar leaves them). 409 `not_started`; nothing changes.",
     )
     print("bots sent in total:", host.bots_sent)
 
