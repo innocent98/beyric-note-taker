@@ -1,0 +1,31 @@
+{
+  "note": "Dan reads his own two ready meetings (Design sync, shared; his private 1:1) = 2. Ada's Pricing review is private to Ada, so it is not counted, nor its decision. His tasks count is 1: the task on his private 1:1 (assigned to Ada) is on a meeting he can read.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/ask/scope",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "meetings": 2,
+      "decisions": 0,
+      "tasks": 1,
+      "suggestions": [
+        "What did we decide about pricing?",
+        "What did I commit to last week?",
+        "What did Ada Lovelace say?",
+        "When is the launch?",
+        "Which decisions were made on Monday?"
+      ]
+    }
+  }
+}

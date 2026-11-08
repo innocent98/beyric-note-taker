@@ -5,14 +5,27 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
 
-__all__ = ["SessionLocal", "get_rate_session", "get_session", "make_session_factory", "text"]
+__all__ = [
+    "SessionLocal",
+    "get_rate_session",
+    "get_session",
+    "make_engine",
+    "make_session_factory",
+    "text",
+]
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
-SessionLocal = make_session_factory(create_engine(get_settings().database_url, pool_pre_ping=True))
+def make_engine(url: str, **options) -> Engine:
+    """An engine that never puts statement parameters in an error message: a failed query is logged
+    with its SQL text only. Parameters can hold what a person typed (Ask Beyric's search words)."""
+    return create_engine(url, pool_pre_ping=True, hide_parameters=True, **options)
+
+
+SessionLocal = make_session_factory(make_engine(get_settings().database_url))
 
 
 def get_session() -> Iterator[Session]:
@@ -25,7 +38,7 @@ def get_session() -> Iterator[Session]:
 # transaction): from the same pool, enough requests at once would all hold one connection and wait
 # for a second. A separate small pool cannot be starved by requests, and its calls never nest.
 RateSessionLocal = make_session_factory(
-    create_engine(get_settings().database_url, pool_pre_ping=True, pool_size=5, max_overflow=5)
+    make_engine(get_settings().database_url, pool_size=5, max_overflow=5)
 )
 
 

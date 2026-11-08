@@ -584,6 +584,50 @@
         "title": "AgendaSent",
         "type": "object"
       },
+      "AskIn": {
+        "properties": {
+          "question": {
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "title": "AskIn",
+        "type": "object"
+      },
+      "AskOut": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "answer",
+              "tasks",
+              "none"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "lead": {
+            "title": "Lead",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PointOut"
+            },
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "lead",
+          "points"
+        ],
+        "title": "AskOut",
+        "type": "object"
+      },
       "AttendeeOut": {
         "properties": {
           "is_teammate": {
@@ -810,6 +854,67 @@
           "can_update"
         ],
         "title": "CarriedQuestion",
+        "type": "object"
+      },
+      "CiteOut": {
+        "properties": {
+          "date_label": {
+            "title": "Date Label",
+            "type": "string"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "meeting_id": {
+            "title": "Meeting Id",
+            "type": "integer"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "shared": {
+            "title": "Shared",
+            "type": "boolean"
+          },
+          "target": {
+            "enum": [
+              "transcript",
+              "notes"
+            ],
+            "title": "Target",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "meeting_id",
+          "title",
+          "date_label",
+          "owner_name",
+          "shared",
+          "target",
+          "line"
+        ],
+        "title": "CiteOut",
         "type": "object"
       },
       "ConnectIn": {
@@ -2611,6 +2716,27 @@
         "title": "PilotOut",
         "type": "object"
       },
+      "PointOut": {
+        "properties": {
+          "cites": {
+            "items": {
+              "$ref": "#/components/schemas/CiteOut"
+            },
+            "title": "Cites",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "cites"
+        ],
+        "title": "PointOut",
+        "type": "object"
+      },
       "ProjectIn": {
         "additionalProperties": false,
         "properties": {
@@ -3121,6 +3247,37 @@
           "term"
         ],
         "title": "ReviewTermOut",
+        "type": "object"
+      },
+      "ScopeOut": {
+        "properties": {
+          "decisions": {
+            "title": "Decisions",
+            "type": "integer"
+          },
+          "meetings": {
+            "title": "Meetings",
+            "type": "integer"
+          },
+          "suggestions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          },
+          "tasks": {
+            "title": "Tasks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "meetings",
+          "decisions",
+          "tasks",
+          "suggestions"
+        ],
+        "title": "ScopeOut",
         "type": "object"
       },
       "SeriesCard": {
@@ -6293,6 +6450,140 @@
         "summary": "Invite",
         "tags": [
           "admin"
+        ]
+      }
+    },
+    "/api/ask": {
+      "post": {
+        "description": "Answer a question from the meetings the caller may read. `kind` `tasks`: the caller's own\ntasks (no model, free). `answer`: points, each with source chips. `none`: nothing found.",
+        "operationId": "ask_question",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`question_invalid`: empty or too long"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`ask_limit`: the daily cap is spent; `ask_rate`: more than 20 questions in a minute"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`ask_failed`: the model gave no usable answer"
+          }
+        },
+        "summary": "Ask Question",
+        "tags": [
+          "ask"
+        ]
+      }
+    },
+    "/api/ask/scope": {
+      "get": {
+        "description": "What a question searches: the ready meetings the caller may read, their decisions and\ntasks, and the question chips. No model call.",
+        "operationId": "ask_scope",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScopeOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Ask Scope",
+        "tags": [
+          "ask"
         ]
       }
     },

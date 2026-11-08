@@ -1,0 +1,28 @@
+{
+  "note": "Blank: 422 `question_invalid`.",
+  "client": "ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "   "
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "question_invalid",
+        "message": "Type a question of up to 300 characters."
+      }
+    }
+  }
+}

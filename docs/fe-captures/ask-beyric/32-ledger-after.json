@@ -1,0 +1,71 @@
+{
+  "note": "The ledger rows these questions left (`ai_runs`, kind `ask`). No question or answer text is stored; free questions leave no row.",
+  "content": [
+    {
+      "kind": "ask",
+      "model": "gpt-6-luna",
+      "prompt_version": "ask-v1",
+      "input_tokens": 1800,
+      "output_tokens": 120,
+      "status": "ok",
+      "error": null,
+      "has_user": true,
+      "meeting_id": null
+    },
+    {
+      "kind": "ask",
+      "model": "gpt-6-luna",
+      "prompt_version": "ask-v1",
+      "input_tokens": 1800,
+      "output_tokens": 120,
+      "status": "ok",
+      "error": null,
+      "has_user": true,
+      "meeting_id": null
+    },
+    {
+      "kind": "ask",
+      "model": "gpt-6-luna",
+      "prompt_version": "ask-v1",
+      "input_tokens": 1800,
+      "output_tokens": 120,
+      "status": "ok",
+      "error": null,
+      "has_user": true,
+      "meeting_id": null
+    },
+    {
+      "kind": "ask",
+      "model": "gpt-6-luna",
+      "prompt_version": "ask-v1",
+      "input_tokens": 1800,
+      "output_tokens": 120,
+      "status": "ok",
+      "error": null,
+      "has_user": true,
+      "meeting_id": null
+    },
+    {
+      "kind": "ask",
+      "model": "gpt-6-luna",
+      "prompt_version": "ask-v1",
+      "input_tokens": 1800,
+      "output_tokens": 120,
+      "status": "ok",
+      "error": null,
+      "has_user": true,
+      "meeting_id": null
+    },
+    {
+      "kind": "ask",
+      "model": "gpt-6-luna",
+      "prompt_version": "ask-v1",
+      "input_tokens": 1800,
+      "output_tokens": 120,
+      "status": "failed",
+      "error": "JSONDecodeError",
+      "has_user": true,
+      "meeting_id": null
+    }
+  ]
+}

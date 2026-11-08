@@ -1,0 +1,27 @@
+{
+  "note": "No tasks: still `tasks`, with a lead that says so, and no points.",
+  "client": "eve",
+  "request": {
+    "method": "POST",
+    "path": "/api/ask",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "question": "my tasks"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "kind": "tasks",
+      "lead": "You have no open tasks assigned to you.",
+      "points": []
+    }
+  }
+}
