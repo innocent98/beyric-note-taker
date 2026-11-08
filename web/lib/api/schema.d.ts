@@ -4714,7 +4714,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description `ask_limit`: the daily cap is spent */
+            /** @description `ask_limit`: the daily cap is spent; `ask_rate`: more than 20 questions in a minute */
             429: {
                 headers: {
                     [name: string]: unknown;

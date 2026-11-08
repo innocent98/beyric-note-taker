@@ -6,6 +6,7 @@ Nothing re-extracts old meetings by itself when it changes: put the ones you wan
 `extraction_status = 'pending'` (`workspace.mark_pending`).
 """
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.ai_versions import (
@@ -27,6 +28,7 @@ __all__ = [
     "TRANSLATE_PROMPT_VERSION",
     "record",
     "record_usage",
+    "settle",
 ]
 
 _VERSION_OF_KIND = {
@@ -100,4 +102,28 @@ def record_usage(
         input_tokens=total(0),
         output_tokens=total(1),
         user_id=user_id,
+    )
+
+
+def settle(
+    session: Session,
+    run_id: int,
+    *,
+    status: str,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    error: BaseException | None = None,
+) -> None:
+    """Finish a `pending` row (written before a long model call, so that nothing is held while it
+    runs and a crash still leaves a row that counts): its outcome, tokens and error class name.
+    The caller commits."""
+    session.execute(
+        update(AiRun)
+        .where(AiRun.id == run_id)
+        .values(
+            status=status,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            error=type(error.__cause__ or error).__name__ if error is not None else None,
+        )
     )

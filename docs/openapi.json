@@ -6432,7 +6432,7 @@
                 }
               }
             },
-            "description": "`ask_limit`: the daily cap is spent"
+            "description": "`ask_limit`: the daily cap is spent; `ask_rate`: more than 20 questions in a minute"
           },
           "502": {
             "content": {

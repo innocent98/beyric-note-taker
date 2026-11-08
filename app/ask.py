@@ -177,7 +177,17 @@ _MONTHS = {
     )
     for name in names
 }
-_MONTH = "|".join(sorted(_MONTHS, key=len, reverse=True))
+# "may" is also a verb ("What may 2 people decide?"), so it is read as a month only in the two cases
+# `_MAY_PATTERNS` below allow; every other month name is a month wherever it stands.
+_MONTH = "|".join(sorted((m for m in _MONTHS if m != "may"), key=len, reverse=True))
+_AFTER = r"(?:in|on|of|during|since|from|until|by|last|next|this)"
+_MAY_PATTERNS = (  # (pattern, group holding the day)
+    (re.compile(rf"\b{_AFTER}\s+may\s+(\d{{1,2}})(?:st|nd|rd|th)?\b", re.I), 1),
+    (re.compile(rf"\b{_AFTER}\s+(\d{{1,2}})(?:st|nd|rd|th)?\s+may\b", re.I), 1),
+    # Capitalised in the middle of a sentence, with a day beside it: "the meeting of 2 May".
+    (re.compile(r"(?<=\s)May\s+(\d{1,2})(?:st|nd|rd|th)?\b"), 1),
+    (re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+May\b"), 1),
+)
 _WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 _DAY_MONTH = re.compile(rf"\b(\d{{1,2}})(?:st|nd|rd|th)?\s+({_MONTH})\b")
 _MONTH_DAY = re.compile(rf"\b({_MONTH})\s+(\d{{1,2}})(?:st|nd|rd|th)?\b")
@@ -233,9 +243,14 @@ def date_hint(question: str, today: date) -> DateRange | None:
             back = 7
         day = today - timedelta(days=back)
         found.add(DateRange(day, day + timedelta(days=1), f"on {day_label(day)}"))
-    candidates = [(int(m.group(1)), _MONTHS[m.group(2)]) for m in _DAY_MONTH.finditer(text)] + [
-        (int(m.group(2)), _MONTHS[m.group(1)]) for m in _MONTH_DAY.finditer(text)
-    ]
+    may_days = {
+        int(m.group(day)) for pattern, day in _MAY_PATTERNS for m in pattern.finditer(question)
+    }
+    candidates = (
+        [(d, 5) for d in sorted(may_days)]
+        + [(int(m.group(1)), _MONTHS[m.group(2)]) for m in _DAY_MONTH.finditer(text)]
+        + [(int(m.group(2)), _MONTHS[m.group(1)]) for m in _MONTH_DAY.finditer(text)]
+    )
     for day_number, month in candidates:
         day = _recent_day(today, month, day_number)
         if day is None:
@@ -476,7 +491,9 @@ def candidates(
         doc = func.to_tsvector(
             "simple",
             func.concat_ws(
-                " ", Meeting.notes, func.coalesce(Meeting.speaker_transcript, Meeting.transcript)
+                " ",
+                Meeting.notes,
+                func.coalesce(func.nullif(Meeting.speaker_transcript, ""), Meeting.transcript),
             ),
         )
         query = func.to_tsquery("simple", " | ".join(f"{s}:*" for s in stems))
@@ -848,46 +865,58 @@ def answer(
     if not passages:
         return Answer("none", NOTHING_FOUND)
     settings = get_settings()
-    _lock_account(session, user.id)
-    limit = settings.ask_daily_limit
-    if daily_count(session, user.id, now) >= limit:
+    user_id, model, limit = user.id, settings.ask_model, settings.ask_daily_limit
+    cites = _Cites(session, user, meetings, zone)  # reads the owners' names now, not after the call
+    asked = _user_message(question, passages)
+    if client is None:
+        client = OpenAI(api_key=settings.openai_api_key, max_retries=0, timeout=ASK_TIMEOUT)
+    # The cap is checked and a `pending` ledger row written in one short transaction under the
+    # account's lock, which the commit releases together with the connection. Nothing is held while
+    # the model runs (30 s, up to ~60 s with the retry): a pool of 15 connections could not carry
+    # that for a dozen people asking at once. A crash during the call leaves the pending row, and
+    # it counts (`daily_count` counts every status).
+    _lock_account(session, user_id)
+    if daily_count(session, user_id, now) >= limit:
         session.rollback()
         raise Refused(
             429, "ask_limit", f"You have asked {limit} questions today. Try again tomorrow."
         )
-    cites = _Cites(session, user, meetings, zone)
-    if client is None:
-        client = OpenAI(api_key=settings.openai_api_key, max_retries=0, timeout=ASK_TIMEOUT)
-    model = settings.ask_model
+    pending = ai_runs.record(
+        session,
+        None,
+        "ask",
+        model,
+        status="pending",
+        prompt_version=ASK_PROMPT_VERSION,
+        user_id=user_id,
+    )
+    pending.created_at = now  # the cap counts from this stamp
+    run_id = pending.id
+    session.commit()
     reply: _Reply | None = None
     failure: BaseException | None = None
     result: Answer | None = None
     try:
-        reply = _call(client, model, _user_message(question, passages))
+        reply = _call(client, model, asked)
         result = check_reply(reply.text, passages, cites)
     except AskFailed as exc:
         failure = exc
     except Exception as exc:  # a reply shaped in a way nothing expected
         failure = AskFailed("unexpected")
         failure.__cause__ = exc
-    run = ai_runs.record(
+    ai_runs.settle(
         session,
-        None,
-        "ask",
-        model,
+        run_id,
+        status="failed" if failure else "ok",
         input_tokens=reply.input_tokens if reply else None,
         output_tokens=reply.output_tokens if reply else None,
-        status="failed" if failure else "ok",
         error=failure,
-        prompt_version=ASK_PROMPT_VERSION,
-        user_id=user.id,
     )
-    run.created_at = now  # the cap counts from this stamp
     session.commit()
     if failure is not None or result is None:
         logger.warning(
             "ask failed for user %s (%s)",
-            user.id,
+            user_id,
             type(failure.__cause__ or failure).__name__ if failure else "none",
         )
         raise Refused(502, "ask_failed", FAILED)

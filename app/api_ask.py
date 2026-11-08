@@ -7,7 +7,7 @@ caller may read (`app/ask.py`); the question and the answer are never stored or 
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from app import ask, auth, services
 from app.api_schemas import ErrorResponse
 from app.db import get_session
 from app.models import User
+from app.services import Refused
 
 router = APIRouter()
 
@@ -83,7 +84,11 @@ def ask_scope(
     tags=["ask"],
     responses={
         422: {"model": ErrorResponse, "description": "`question_invalid`: empty or too long"},
-        429: {"model": ErrorResponse, "description": "`ask_limit`: the daily cap is spent"},
+        429: {
+            "model": ErrorResponse,
+            "description": "`ask_limit`: the daily cap is spent; `ask_rate`: more than 20 "
+            "questions in a minute",
+        },
         502: {
             "model": ErrorResponse,
             "description": "`ask_failed`: the model gave no usable answer",
@@ -92,12 +97,15 @@ def ask_scope(
 )
 def ask_question(
     body: AskIn,
+    request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
     client=Depends(services.get_openai_client),
 ) -> AskOut:
     """Answer a question from the meetings the caller may read. `kind` `tasks`: the caller's own
     tasks (no model, free). `answer`: points, each with source chips. `none`: nothing found."""
+    if not request.app.state.public_limits.ask_rate.hit(f"user:{user.id}"):
+        raise Refused(429, "ask_rate", "Slow down a little and try again in a minute.")
     result = ask.answer(session, user, body.question, client=client)
     return AskOut(
         kind=result.kind,

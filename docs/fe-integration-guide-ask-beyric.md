@@ -249,11 +249,12 @@ The same question from the meeting's owner (capture `18-ask-private-owner.json`)
 | 422 | `question_invalid` | Blank, or longer than 300 characters after trimming | ``{"error": {"code": "question_invalid", "message": "Type a question of up to 300 characters."}}`` |
 | 422 | `validation_error` | The body is not `{"question": string}` (`fields` names the field) | ``{"error": {"code": "validation_error", "message": "Some fields are missing or not valid.", "fields": [{"field": "question", "message": "Input should be a valid string"}]}}`` |
 | 429 | `ask_limit` | The person's daily cap is spent | ``{"error": {"code": "ask_limit", "message": "You have asked 5 questions today. Try again tomorrow."}}`` |
+| 429 | `ask_rate` | More than 20 questions in a minute (the free ones count too) | ``{"error": {"code": "ask_rate", "message": "Slow down a little and try again in a minute."}}`` |
 | 502 | `ask_failed` | The model gave no usable reply (not JSON, cut off, an error, a timeout) | ``{"error": {"code": "ask_failed", "message": "Beyric could not answer that. Try again."}}`` |
 | 403 | `csrf_rejected` | No or wrong `X-CSRF-Token` | ``{"error": {"code": "csrf_rejected", "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."}}`` |
 | 401 | `not_authenticated` | Not logged in | ``{"error": {"code": "not_authenticated", "message": "Log in first."}}`` |
 
-Full bodies: captures `26`, `27`, `28`, `29`, `22`, `21`, `30`, `09`. The 422 for a body that is the wrong shape (capture 28):
+Full bodies: captures `26`, `27`, `28`, `29`, `22`, `31`, `21`, `30`, `09`. The 422 for a body that is the wrong shape (capture 28):
 
 ```json
 {
@@ -270,7 +271,7 @@ Full bodies: captures `26`, `27`, `28`, `29`, `22`, `21`, `30`, `09`. The 422 fo
 }
 ```
 
-The 429 message says the **cap**, not a count: it is 30 in production (`ASK_DAILY_LIMIT`); the capture ran with 5, so it reads "5". The FE shows the message as it comes.
+**Two different 429s: tell them apart by `code`.** `ask_rate` is a per-minute brake (20 questions a minute, free ones included): show its message and let the person ask again in a minute. `ask_limit` is the daily cap: no retry. The `ask_limit` message says the **cap**, not a count: it is 30 in production (`ASK_DAILY_LIMIT`); the capture ran with 5, so it reads "5". The FE shows the message as it comes.
 
 ## Field-nesting traps
 
@@ -287,7 +288,7 @@ The 429 message says the **cap**, not a count: it is 30 in production (`ASK_DAIL
 There is nothing to poll. One `POST` does all the work and answers when it is done.
 
 * **A search question can take a while.** The model call has a 30-second timeout and one retry on a connection error, so the worst case is about 60 seconds. Show "Searching your meetings..." and **do not time the request out before about 65 seconds**. A question that finds nothing, and every `tasks` question, answers at once.
-* One request at a time per person is enough: the server serialises one person's model-calling questions anyway (so two clicks cannot both pass the cap). Disable Ask while a question is running.
+* One request at a time per person is enough: the server serialises one person's questions anyway (so two clicks cannot both pass the cap). Disable Ask while a question is running.
 
 ## UX consequences the FE must surface
 
@@ -307,13 +308,14 @@ There is nothing to poll. One `POST` does all the work and answers when it is do
 | Search answer, chip fields, shared meeting chip with `owner_name` and `shared: true` (13, 16) | live |
 | Transcript cite with `line` (15) and task cite with `line` (23) | live |
 | A teammate's private meeting never reaches the passages or the answer (17, 18) | live |
-| Nothing retrieved is free and makes no model call (19, 31: no ledger row) | live |
+| Nothing retrieved is free and makes no model call (19, 32: no ledger row) | live |
 | `found: false` is `none` (20) | live, **model faked** to say it |
-| Unusable reply is 502 `ask_failed`, counted (21, 31) | live, **model faked** to return text that is not JSON |
+| Unusable reply is 502 `ask_failed`, counted (21, 32) | live, **model faked** to return text that is not JSON |
 | Cap reached is 429 `ask_limit` (22) | live, with the cap set to 5 (`ASK_DAILY_LIMIT=5`); the 30 default is unit-tested (`tests/test_ask.py::test_the_31st_question_is_429_and_the_message_says_how_many`) |
 | Tasks path: list, date phrase, no tasks, a point with no chips; free over the cap (23 to 25) | live |
 | 422 `question_invalid` and `validation_error`, 403 CSRF, 401 (08, 09, 26 to 30) | live |
-| The ledger keeps no text (31) | live |
+| Per-minute limit, 429 `ask_rate` (31) | live (20 free questions, then the refusal); the window is unit-tested with the default of 20 in `tests/test_ask.py` |
+| The ledger keeps no text (32) | live |
 | The words of a **real** model's answer, a real timeout, the retry on a connection error | **NOT LIVE**: no key or network in the capture. Covered with a fake model in `tests/test_ask.py` (retry, errors, bad JSON, unknown ids, long text, HTML and Markdown) |
 | Unknown passage ids dropped, point with no cite dropped, long text cut, HTML and Markdown made plain | **NOT LIVE** (needs a model that misbehaves): `tests/test_ask.py` |
 | The rolling 24 hours (a question 25 hours ago does not count) | **NOT LIVE** (needs a 24-hour wait): `tests/test_ask.py::test_the_cap_is_rolling_24_hours_and_per_person` |

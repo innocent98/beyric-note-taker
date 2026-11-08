@@ -1252,11 +1252,18 @@ def test_0034_lets_the_ledger_hold_ask_calls_and_downgrades_cleanly(scratch_url)
     engine = create_engine(scratch_url)
     with engine.begin() as conn:
         conn.execute(text("insert into ai_runs (kind, model) values ('ask', 'gpt-6-luna')"))
+        conn.execute(
+            text("insert into ai_runs (kind, model, status) values ('ask', 'm', 'pending')")
+        )
         conn.execute(text("insert into ai_runs (kind, model) values ('translate', 'm')"))
     command.downgrade(cfg, "0033")
     assert _rows(engine, "select kind from ai_runs order by id") == [("translate",)]
     with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
         conn.execute(text("insert into ai_runs (kind, model) values ('ask', 'm')"))
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text("insert into ai_runs (kind, model, status) values ('notes', 'm', 'pending')")
+        )
     command.upgrade(cfg, "head")
     engine.dispose()
 

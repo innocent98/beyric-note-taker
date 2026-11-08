@@ -9,10 +9,13 @@ from types import SimpleNamespace
 
 import openai
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select, text
+from sqlalchemy.orm import Session
 
-from app import ask, services, teams
+from app import ask, db, services, teams
+from app.limits import Limit, PublicLimits
 from app.models import AiRun, Decision, Task, UserSettings
+from tests.conftest import TEST_DATABASE_URL
 from tests.test_api import (  # noqa: F401  (fixtures used by name)
     Api,
     anon,
@@ -85,7 +88,7 @@ class FakeAsk:
     def _create(self, **kwargs):
         self.calls.append(kwargs)
         out = self.reply(passage_ids(kwargs), len(self.calls))
-        if isinstance(out, Exception):
+        if isinstance(out, BaseException):
             raise out
         finish = "stop"
         if isinstance(out, tuple):
@@ -116,6 +119,9 @@ def passages_of(call) -> dict[str, str]:
 def model(app):
     fake = FakeAsk()
     app.dependency_overrides[services.get_openai_client] = lambda: fake
+    # The per-minute limit has its own tests; the cap tests ask more than 20 times in a test.
+    limits = app.state.public_limits
+    limits.ask_rate = Limit(limits.store, "ask_rate", 1000, 60.0)
     return fake
 
 
@@ -532,8 +538,8 @@ def test_html_markdown_and_links_arrive_as_plain_text(api, session, template, mo
     first, second = [p["text"] for p in body["points"]]
     assert first == "Heading see [link removed] and code u"
     assert second == "a bullet with a break"
-    for text in (body["lead"], first, second):
-        assert not re.search(r"[<>`*]|\]\(|https?:", text)
+    for shown in (body["lead"], first, second):
+        assert not re.search(r"[<>`*]|\]\(|https?:", shown)
 
 
 def test_a_missing_lead_gets_a_fixed_sentence(api, session, template, model):
@@ -1106,3 +1112,159 @@ def test_a_decision_with_the_words_of_a_notes_bullet_is_not_sent_twice(
     session.commit()
     post(api, "designer")
     assert list(passages_of(model.calls[0]).values()) == ["Decisions: Hire a designer"]
+
+
+# ---- nothing is held while the model runs; a crash still counts ----
+
+
+def test_no_transaction_or_account_lock_is_held_while_the_model_runs(
+    engine, session, template, owner
+):
+    meeting(session, template)
+    seen = {}
+
+    def reply(ids, n):
+        seen["in_transaction"] = session.in_transaction()
+        with Session(engine) as other:
+            seen["rows"] = [(r.status, r.user_id) for r in other.scalars(select(AiRun))]
+            key = 0x6173_0000_0000_0000 | owner.id
+            seen["lock_free"] = other.scalar(select(func.pg_try_advisory_xact_lock(key)))
+        return FakeAsk.first_passage(ids, n)
+
+    result = ask.answer(session, owner, "pricing", now=NOW, client=FakeAsk(reply))
+    assert result.kind == "answer"
+    assert seen["in_transaction"] is False  # the connection is back in the pool
+    assert seen["lock_free"] is True
+    assert seen["rows"] == [("pending", owner.id)]  # the question already counts
+    assert [(r.status, r.input_tokens) for r in runs(session)] == [("ok", 1500)]
+
+
+class Crash(BaseException):
+    """The worker is killed mid-call: not an `Exception`, so no handler settles the row."""
+
+
+def test_a_crash_during_the_call_leaves_a_pending_row_that_still_counts(
+    engine, session, template, owner, monkeypatch
+):
+    meeting(session, template)
+    with pytest.raises(Crash):
+        ask.answer(session, owner, "pricing", now=NOW, client=FakeAsk(lambda ids, n: Crash()))
+    with Session(engine) as other:
+        assert [r.status for r in runs(other)] == ["pending"]
+        assert ask.daily_count(other, owner.id, NOW) == 1
+    monkeypatch.setattr(ask, "get_settings", lambda: make_settings(ask_daily_limit=1))
+    with pytest.raises(ask.Refused) as refused:
+        ask.answer(session, owner, "pricing", now=NOW, client=FakeAsk())
+    assert refused.value.code == "ask_limit"
+
+
+def test_a_failed_call_settles_its_pending_row_as_failed(session, template, owner):
+    meeting(session, template)
+    with pytest.raises(ask.Refused):
+        ask.answer(session, owner, "pricing", now=NOW, client=FakeAsk(lambda ids, n: "garbage"))
+    [run] = runs(session)
+    assert (run.status, run.error, run.input_tokens) == ("failed", "JSONDecodeError", 1500)
+
+
+def test_a_cut_off_reply_still_records_its_tokens(session, template, owner):
+    meeting(session, template)
+    cut = FakeAsk(lambda ids, n: ('{"lead": "x', "length"))
+    with pytest.raises(ask.Refused):
+        ask.answer(session, owner, "pricing", now=NOW, client=cut)
+    [run] = runs(session)
+    assert run.status == "failed" and run.input_tokens is None  # known gap, see the SOP
+
+
+# ---- the engine never logs a question's words ----
+
+
+def test_a_failed_query_does_not_carry_the_questions_words_into_its_message():
+    engine = db.make_engine(TEST_DATABASE_URL)
+    try:
+        assert engine.hide_parameters is True
+        with Session(engine) as probe:
+            with pytest.raises(Exception) as caught:  # noqa: B017  (any database error will do)
+                probe.execute(
+                    text("select :q || cast(1 / :zero as text)"),
+                    {"q": "zebra pric launch", "zero": 0},
+                )
+        assert "zebra" not in str(caught.value) and "launch" not in str(caught.value)
+        assert "select" in str(caught.value)  # the SQL itself is still there to debug with
+    finally:
+        engine.dispose()
+
+
+def test_the_apps_own_engines_hide_parameters():
+    assert db.SessionLocal.kw["bind"].hide_parameters is True
+    assert db.RateSessionLocal.kw["bind"].hide_parameters is True
+
+
+# ---- the per-minute limit ----
+
+
+def test_the_default_limit_is_20_questions_a_minute():
+    assert PublicLimits().ask_rate._limit == 20 and PublicLimits().ask_rate._window == 60.0
+
+
+def test_the_21st_question_in_a_minute_is_429_ask_rate_even_when_it_is_free(api, app):
+    for n in range(20):
+        assert post(api, "what are my tasks").status_code == 200, n
+    error = error_of(post(api, "what are my tasks"), 429, "ask_rate")
+    assert error["message"] == "Slow down a little and try again in a minute."
+
+
+def test_the_per_minute_limit_is_per_person(api, app, session, stranger):
+    for _ in range(20):
+        post(api, "my tasks")
+    error_of(post(api, "my tasks"), 429, "ask_rate")
+    other = sign_in(app, "other@example.test")
+    assert post(other, "my tasks").status_code == 200
+
+
+# ---- "may" ----
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "What may 2 people decide?",
+        "you may 3 times",
+        "who may 12 attendees invite",
+        "May 2 pricing",  # the first word: a sentence start, not read as a date
+        "meeting may be moved",
+    ],
+)
+def test_may_the_verb_is_not_a_month(question):
+    assert ask.date_hint(question, TODAY) is None
+
+
+@pytest.mark.parametrize(
+    "question",
+    [
+        "the meeting on May 2",
+        "what happened in may 2",
+        "since 2 may",
+        "anything from 2nd May",
+        "Pricing on 2 May",
+        "what was said in the meeting of May 2",
+    ],
+)
+def test_may_the_month_is_read_when_the_words_around_it_say_so(question):
+    rng = ask.date_hint(question, TODAY)
+    assert (rng.start, rng.end) == (date(2026, 5, 2), date(2026, 5, 3))
+
+
+# ---- the full-text source is the displayed transcript ----
+
+
+def test_an_empty_speaker_transcript_falls_back_to_the_plain_transcript_like_the_page(
+    api, session, template, model
+):
+    meeting(
+        session,
+        template,
+        notes="## Summary\nNothing.",
+        speaker_transcript="",
+        transcript="the zebra crossing was discussed",
+    )
+    assert post(api, "zebra").json()["kind"] == "answer"

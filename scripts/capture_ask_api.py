@@ -348,6 +348,15 @@ def run(base: str, ids: dict, engine, model: FakeModel) -> None:
     ada.call("ask-not-a-string", "POST", "/api/ask", body={"question": 5}, note="A body that is not the shape: the ordinary 422 `validation_error` with `fields`.")  # fmt: skip
     ada.call("ask-missing-question", "POST", "/api/ask", body={}, note="Same.")  # fmt: skip
     ada.call("ask-no-csrf", "POST", "/api/ask", body={"question": "pricing"}, csrf=None, note="No CSRF token: 403 `csrf_rejected`.")  # fmt: skip
+    # Fill the per-minute limit (20 questions a minute, free ones included) with unrecorded task
+    # questions until it refuses, then record one more refusal.
+    for _ in range(30):
+        filler = ada.http.post(
+            "/api/ask", json={"question": "my tasks"}, headers={"X-CSRF-Token": ada.csrf}
+        )
+        if filler.status_code == 429:
+            break
+    ada.call("ask-rate-limited", "POST", "/api/ask", body={"question": "my tasks"}, note="More than 20 questions in a minute (the free ones count too): 429 `ask_rate`, a different code from the daily cap. Wait a minute and ask again.")  # fmt: skip
     note_file("ledger-after", "The ledger rows these questions left (`ai_runs`, kind `ask`). No question or answer text is stored; free questions leave no row.", ledger(engine))  # fmt: skip
 
 
