@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app/shell";
-import { CalendarBand } from "@/components/app/calendar-upcoming";
+import { MeetingsCalendar } from "@/components/app/meetings-calendar";
 import { MeetingList } from "@/components/app/meeting-list";
 import { NewMeetingForm } from "@/components/app/new-meeting-form";
 import { RecurringCards } from "@/components/app/recurring-cards";
@@ -8,7 +8,7 @@ import { Landing, LandingFooter, LandingHeader } from "@/components/landing/land
 import { JsonLd, organizationJsonLd, softwareJsonLd } from "@/components/site/json-ld";
 import { Alert, PageHead } from "@/components/ui";
 import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, getSession, load, serverApi } from "@/lib/api/server";
-import type { CalendarState } from "@/lib/api/types";
+import type { CalendarState, NotRecordedItem } from "@/lib/api/types";
 
 // `/` is two pages: the landing page for a visitor who is not logged in (indexed, in the sitemap),
 // and the owner's Meetings page for the owner (never indexed). GET /api/session says which.
@@ -51,11 +51,21 @@ async function getCalendar(api: Awaited<ReturnType<typeof serverApi>>): Promise<
   }
 }
 
+// Not recorded is optional too: no list is drawn when it cannot be read.
+async function getNotRecorded(api: Awaited<ReturnType<typeof serverApi>>): Promise<NotRecordedItem[]> {
+  try {
+    return (await api.calendar.notRecorded()).items;
+  } catch {
+    return [];
+  }
+}
+
 async function MeetingsPage() {
   const api = await serverApi();
-  const [[list, templates], calendar] = await Promise.all([
+  const [[list, templates], calendar, notRecorded] = await Promise.all([
     load(Promise.all([api.meetings.list(), api.templates.list()])),
     getCalendar(api),
+    getNotRecorded(api),
   ]);
   const busy = list.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
   return (
@@ -70,7 +80,7 @@ async function MeetingsPage() {
       <div className="stack">
         <PageHead title="Meetings" subtitle="Send the note taker to a call and find your notes here afterwards." />
         <NewMeetingForm templates={templates} busy={busy} />
-        <CalendarBand state={calendar} />
+        <MeetingsCalendar state={calendar} notRecorded={notRecorded} />
         <RecurringCards />
         <MeetingList initial={list} templates={templates} />
       </div>

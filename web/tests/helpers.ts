@@ -136,6 +136,16 @@ export function calendarBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/calendar-state", file))).response.body as T;
 }
 
+// A capture from Send now and Not recorded (docs/fe-captures/send-now/<file>): the answer, and the
+// `ApiError` arguments of a failing one.
+export function sendNowBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/send-now", file))).response.body as T;
+}
+export function sendNowError(file: string): { status: number; code: string; message: string } {
+  const { response } = JSON.parse(read(join(REPO, "docs/fe-captures/send-now", file)));
+  return { status: response.status, ...response.body.error };
+}
+
 // A capture from the calendar connect routes (docs/fe-captures/calendar-connect/<file>).
 export function connectBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/calendar-connect", file))).response.body as T;
