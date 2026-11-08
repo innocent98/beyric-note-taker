@@ -1,6 +1,7 @@
+import uuid
 from functools import lru_cache
 
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,14 +28,74 @@ class Settings(BaseSettings):
             raise ValueError(f"BOT_PROVIDER is {value!r}; it must be one of: {known}")
         return name
 
+    @field_validator("skribby_region")
+    @classmethod
+    def _known_skribby_region(cls, value: str) -> str:
+        region = value.strip().lower() or "eu"
+        if region not in ("eu", "jp"):
+            raise ValueError(f"SKRIBBY_REGION is {value!r}; it must be eu or jp")
+        return region
+
+    @field_validator("skribby_account_id")
+    @classmethod
+    def _skribby_account_id_is_a_uuid(cls, value: str) -> str:
+        value = value.strip()
+        if value:
+            try:
+                value = str(uuid.UUID(value))
+            except ValueError:
+                raise ValueError("SKRIBBY_ACCOUNT_ID must be the account's id (a UUID)") from None
+        return value
+
+    @model_validator(mode="after")
+    def _skribby_needs_its_key(self):
+        """A process told to use Skribby with no key would fail at the first meeting; stop it at
+        startup instead, naming the setting (never printing any key)."""
+        if self.bot_provider == "skribby" and not self.skribby_api_key.strip():
+            raise ValueError("BOT_PROVIDER is 'skribby' but SKRIBBY_API_KEY is not set")
+        return self
+
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/notetaker"
 
-    # Which bot provider puts the bot in meetings (`app/bot_provider.py`). Only `vexa` exists
-    # today; an unknown value stops the process at startup instead of failing at the first meeting.
+    # Which bot provider puts the bot in meetings (`app/bot_provider.py`): `vexa` (the default, the
+    # self-hosted Vexa) or `skribby` (the hosted Skribby, `app/skribby.py`). An unknown value, or
+    # `skribby` without its key, stops the process at startup instead of failing at the first
+    # meeting.
     bot_provider: str = "vexa"
+    # Skribby (only read when `bot_provider` is `skribby`, or when a meeting that Skribby ran is
+    # still being worked on). The key is never logged or shown: `repr=False` keeps it out of the
+    # settings' own repr.
+    skribby_api_key: str = Field(default="", repr=False)
+    # The id of an Authenticated Account made in Skribby's dashboard (the Google account the bot
+    # signs in as). Empty = the bot joins as a guest named `skribby_bot_name`.
+    skribby_account_id: str = ""
+    # What the signed-in bot is called in a meeting (the Google account's own name; Skribby ignores
+    # `bot_name` once it is signed in). Used only in the owner's "Admit '...'" line. Optional.
+    skribby_account_name: str = ""
+    # The two Skribby regions keep their data apart: `eu` (default) or `jp`.
+    skribby_region: str = "eu"
+    # What a guest bot is called in a meeting. Skribby's naming guide says names that sound like a
+    # recorder ("Bot", "Notetaker", "Recording", "AI") raise Google's bot detection, and a name
+    # that sounds like a person or a service desk does not.
+    skribby_bot_name: str = "Beyric Meeting Support"
+    # Skribby transcribes the call too; its text is only used to know who spoke when (our own
+    # transcription still writes the transcript). `groq/whisper-large-v3-turbo` is on the Free
+    # plan and the cheapest (0.04 USD an hour); `none` turns it off and with it the speaker names.
+    skribby_transcription_model: str = "groq/whisper-large-v3-turbo"
     vexa_base_url: str = "http://localhost:8056"
     vexa_api_key: str = ""
     bot_name: str = "Beyric Note Taker (recording)"
+
+    @property
+    def shown_bot_name(self) -> str:
+        """The name the host sees in the meeting for the provider in use, for the owner's
+        "Admit '...'" line."""
+        if self.bot_provider == "skribby":
+            if self.skribby_account_id:
+                return self.skribby_account_name.strip() or self.skribby_bot_name
+            return self.skribby_bot_name
+        return self.bot_name
+
     poll_interval_seconds: int = 30
     # How long the bot may sit in a call with no one else speaking before it leaves on its own
     # (Vexa `automatic_leave.max_time_left_alone`). It is a silence rule, not a headcount, so a

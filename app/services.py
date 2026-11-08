@@ -36,7 +36,13 @@ from app import (
     visibility,
     workspace,
 )
-from app.bot_provider import BotDuplicate, BotProvider, BotProviderError, build_provider
+from app.bot_provider import (
+    BotDuplicate,
+    BotProvider,
+    BotProviderError,
+    build_provider,
+    provider_for,
+)
 from app.config import Settings, get_settings
 from app.meeting_url import UnsupportedMeetingUrl, parse_meeting_url
 from app.models import (
@@ -288,7 +294,7 @@ def status_text(meeting: Meeting, now: datetime | None = None) -> str:
         if text:
             if bot_state_is_stale(meeting, now):
                 return BOT_STATE_UNSURE_TEXT
-            return text.format(bot=get_settings().bot_name)
+            return text.format(bot=get_settings().shown_bot_name)
         if meeting.terminal_seen_at is not None and reason not in JOIN_FAILURE_MARKS:
             return CALL_ENDED_TEXT  # Vexa said the call is over and the recording is being made
         return "Bot sent"
@@ -604,7 +610,7 @@ def _stop_bot_or_refuse(session: Session, vexa, meeting: Meeting) -> None:
         logger.info("meeting %s: the bot at its code is a newer meeting's, left alone", meeting.id)
         return  # this meeting's own bot is already gone; its owner carries on
     try:
-        vexa.stop_bot(meeting.platform, meeting.native_id)
+        provider_for(vexa, meeting.bot_provider).stop_bot(meeting.platform, meeting.native_id)
     except (BotProviderError, ValueError) as exc:
         session.rollback()
         logger.warning("meeting %s: stop_bot failed (%s)", meeting.id, type(exc).__name__)
@@ -673,11 +679,12 @@ def delete_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Non
         if locked.audio_deleted_at is None:
             # Settle Vexa's side the way account deletion does: a cancelled meeting never had the
             # recording id stored, so ask Vexa for it (waiting out its grace) before it is lost.
+            holder = provider_for(vexa, locked.bot_provider)  # the one that ran this meeting
             recording_id = deletion.recording_to_delete(
-                session, vexa, locked, datetime.now(UTC), set()
+                session, holder, locked, datetime.now(UTC), set()
             )
             if recording_id is not None:
-                vexa.delete_recording(recording_id)
+                holder.delete_recording(recording_id)
     except (BotProviderError, ValueError) as exc:
         session.rollback()
         logger.warning("meeting %s: Vexa cleanup failed (%s)", meeting_id, type(exc).__name__)
@@ -841,7 +848,7 @@ def _send_refused_meeting_again(session: Session, vexa: BotProvider, meeting: Me
         vexa,
         platform=locked.platform,
         native_id=locked.native_id,
-        vexa_id=int(locked.vexa_meeting_id) if locked.vexa_meeting_id else None,
+        vexa_id=locked.vexa_meeting_id or None,  # text: a Skribby bot's id is a UUID
     )
     return locked
 

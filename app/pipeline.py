@@ -38,6 +38,8 @@ from app.bot_provider import (
     BotProviderError,
     BotSendUncertain,
     build_provider,
+    provider_for,
+    provider_name,
 )
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
@@ -373,6 +375,7 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     meeting.join_attempts += 1
     meeting.status, meeting.step, meeting.failure_reason = "bot_sent", "waiting", None
     meeting.vexa_meeting_id = None if vexa_id is None else str(vexa_id)
+    meeting.bot_provider = provider_name(vexa)  # a hand retry goes to the provider in use now
     meeting.vexa_recording_id = None
     meeting.completion_reason = SEND_UNCONFIRMED if unconfirmed else None
     meeting.terminal_seen_at = None
@@ -853,13 +856,15 @@ def advance_meeting(
     `failed` with a plain reason, or untouched when the problem is temporary.
     """
     now = now or datetime.now(UTC)
-    vexa = vexa or build_provider()
+    default = vexa or build_provider()  # the setting's provider (or the caller's, in a test)
     meeting = _lock(session, meeting_id)
     try:
         while meeting is not None and meeting.status in ("bot_sent", "processing"):
             if _owner_deleted(session, meeting):
                 session.rollback()  # looked at on every step, so a deletion mid-run stops it
                 return
+            # The provider that ran THIS meeting, whatever the setting says now.
+            vexa = provider_for(default, meeting.bot_provider)
             if meeting.step == "waiting":
                 proceed = _poll(session, meeting, vexa, now)
                 if proceed:
@@ -944,9 +949,11 @@ def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
     """Delete audio of finished meetings older than the retention period, here and in Vexa.
 
     The transcript and notes are kept. `audio_deleted_at` is set only once the local folder is
-    gone and, when Vexa's recording id is known, Vexa's copy is gone too (`DELETE
-    /recordings/{id}`; Vexa answers 404 for one already deleted). A Vexa failure leaves the
-    meeting unmarked so the next pass tries again. Returns how many meetings were cleared.
+    gone and, when the provider's recording id is known, the provider's copy is gone too (Vexa:
+    `DELETE /recordings/{id}`, 404 for one already deleted; Skribby: `DELETE /bot/{id}`, which also
+    removes the transcript and the record of the bot, and is called for a bot with no recording
+    too). A provider failure leaves the meeting unmarked so the next pass tries again. Returns how
+    many meetings were cleared.
     """
     cutoff = now - timedelta(days=get_settings().audio_retention_days)
     expired = session.scalars(
@@ -957,6 +964,7 @@ def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
         )
     ).all()
     cleared = 0
+    default = vexa
     for meeting in expired:
         folder = audio_path(meeting.id).parent
         try:
@@ -965,13 +973,19 @@ def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
         except OSError as exc:
             logger.error("meeting %s: could not delete audio (%s)", meeting.id, type(exc).__name__)
             continue
-        if meeting.vexa_recording_id is not None:
+        if meeting.vexa_recording_id is not None or meeting.vexa_meeting_id:
             try:
-                vexa = vexa or build_provider()
-                vexa.delete_recording(meeting.vexa_recording_id)
+                # The provider that holds this meeting's copy, whatever the setting says now.
+                provider = provider_for(default or build_provider(), meeting.bot_provider)
+                if meeting.vexa_recording_id is not None:
+                    provider.delete_recording(meeting.vexa_recording_id)
+                elif hasattr(type(provider), "delete_bot_record"):
+                    # No recording, but a hosted provider still keeps a record of the bot (the
+                    # link, the name, its timeline): a bot that was never let in, say.
+                    provider.delete_bot_record(meeting.vexa_meeting_id)
             except BotProviderError as exc:
                 logger.warning(
-                    "meeting %s: could not delete Vexa's copy (%s); will retry",
+                    "meeting %s: could not delete the provider's copy (%s); will retry",
                     meeting.id,
                     type(exc).__name__,
                 )

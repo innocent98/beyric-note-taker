@@ -1502,3 +1502,26 @@ def test_0037_round_trips_and_widens_the_ledger_to_topics(scratch_url):
         conn.execute(text("insert into ai_runs (kind, model) values ('topics', 'm')"))
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0038_adds_bot_provider_to_meetings_filling_old_rows_with_vexa_and_drops_it(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0037")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:  # a meeting made before the column existed, as on the live DB
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
+                "select u.id, 'https://meet.google.com/abc-defg-hij', 'google_meet', "
+                "'abc-defg-hij', t.id from users u, templates t "
+                "where u.is_admin and t.name = 'General'"
+            )
+        )
+    command.upgrade(cfg, "0038")
+    columns = {c["name"]: c for c in inspect(engine).get_columns("meetings")}
+    assert columns["bot_provider"]["nullable"] is False
+    assert _rows(engine, "select bot_provider from meetings") == [("vexa",)]
+    command.downgrade(cfg, "0037")
+    assert "bot_provider" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    command.upgrade(cfg, "head")
+    engine.dispose()

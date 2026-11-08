@@ -670,7 +670,10 @@ class Meeting(Base):
     platform: Mapped[str] = mapped_column(String(32))
     native_id: Mapped[str] = mapped_column(String(200))
     template_id: Mapped[int] = mapped_column(ForeignKey("templates.id"))
+    # The provider's id for the bot (`vexa_meeting_id` keeps its name; it holds a Skribby bot's
+    # UUID as text too) and which provider ran it. Old rows are `vexa`.
     vexa_meeting_id: Mapped[str | None] = mapped_column(String(100))
+    bot_provider: Mapped[str] = mapped_column(String(32), default="vexa", server_default="vexa")
     status: Mapped[str] = mapped_column(String(16), default="bot_sent", server_default="bot_sent")
     step: Mapped[str] = mapped_column(String(16), default="waiting", server_default="waiting")
     failure_reason: Mapped[str | None] = mapped_column(Text)

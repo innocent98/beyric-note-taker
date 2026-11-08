@@ -56,9 +56,11 @@ from sqlalchemy.orm import Session
 from app import titles, usage
 from app.bot_provider import (
     BotDuplicate,
+    BotId,
     BotProvider,
     BotProviderError,
     BotSendUncertain,
+    provider_name,
     run_within,
 )
 from app.config import Settings, get_settings
@@ -299,6 +301,7 @@ def place_bot(
         native_id=req.native_id,
         template_id=template_id,
         vexa_meeting_id=None if vexa_id is None else str(vexa_id),
+        bot_provider=provider_name(vexa),
         started_polling_at=now,
         source=req.source,
         title=titles.event_title(req.title),
@@ -323,7 +326,7 @@ def place_bot(
     return meeting
 
 
-def _orphan_to_adopt(session: Session, vexa: BotProvider, req: PlacementRequest) -> int:
+def _orphan_to_adopt(session: Session, vexa: BotProvider, req: PlacementRequest) -> BotId:
     """The Vexa id of the live bot on the code, or `PlacementRefused("code_busy")` (after a
     rollback) when there is none to adopt: it is leaving, finished, unknown, or some row's."""
     from app.pipeline import ADOPTABLE_STATES  # imports this module, so not at the top
@@ -352,7 +355,7 @@ def _orphan_to_adopt(session: Session, vexa: BotProvider, req: PlacementRequest)
 
 
 def commit_or_stop(
-    session: Session, vexa: BotProvider, *, platform: str, native_id: str, vexa_id: int | None
+    session: Session, vexa: BotProvider, *, platform: str, native_id: str, vexa_id: BotId | None
 ) -> None:
     """Commit a meeting row that points at the bot `vexa_id` (None: an unconfirmed start). If the
     commit fails, roll back FIRST (the lock is gone from then on), then stop that bot, unless the
@@ -404,7 +407,7 @@ def _stop_if_the_code_is_free(
         session.rollback()  # releases the lock
 
 
-def _is_recorded(session: Session, platform: str, native_id: str, vexa_id: int) -> bool:
+def _is_recorded(session: Session, platform: str, native_id: str, vexa_id: BotId) -> bool:
     try:
         return (
             session.scalar(

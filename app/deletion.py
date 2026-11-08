@@ -42,7 +42,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app import placement, teams
-from app.bot_provider import BotNotFound
+from app.bot_provider import BotNotFound, provider_for
 from app.models import (
     AuthToken,
     MailOutbox,
@@ -120,13 +120,16 @@ def purge_user(
         for meeting in meetings:
             if meeting.status == "bot_sent":
                 if placement.may_stop_bot(session, meeting):  # never another meeting's bot
-                    vexa.stop_bot(meeting.platform, meeting.native_id)
+                    provider_for(vexa, meeting.bot_provider).stop_bot(
+                        meeting.platform, meeting.native_id
+                    )
                 stopped.add(meeting.id)
         for meeting in meetings:
             if meeting.audio_deleted_at is None:
-                recording_id = recording_to_delete(session, vexa, meeting, now, stopped)
+                holder = provider_for(vexa, meeting.bot_provider)  # the one that ran the meeting
+                recording_id = recording_to_delete(session, holder, meeting, now, stopped)
                 if recording_id is not None:
-                    vexa.delete_recording(recording_id)
+                    holder.delete_recording(recording_id)
     for meeting in meetings:
         shutil.rmtree(audio_path(meeting.id).parent, ignore_errors=True)
     email, user_id = user.email, user.id
