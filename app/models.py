@@ -60,7 +60,7 @@ JOIN_STATES = (
 )
 # A join in one of these states holds its meeting code: only one bot per code at a time.
 LIVE_JOIN_STATES = ("dispatching", "no_capacity", "joined")
-AI_RUN_KINDS = ("extract", "translate", "notes", "label", "transcribe")
+AI_RUN_KINDS = ("extract", "translate", "notes", "label", "transcribe", "ask")
 AI_RUN_STATUSES = ("ok", "failed")
 # `pending` waits for the worker (or for a retry), `running` is being worked on, `done` is finished,
 # `failed` gave up after the retries, `skipped` means only the decisions were read from the notes

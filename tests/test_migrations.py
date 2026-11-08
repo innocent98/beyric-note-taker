@@ -1204,10 +1204,10 @@ def test_0032_follows_0030():
     assert script.get_revision("0032").down_revision == "0030"
 
 
-def test_0033_follows_0032_and_is_the_only_head():
+def test_0033_follows_0032():
+    # "one head" is `test_single_head`; pinning the head here broke with every later migration.
     script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
     assert script.get_revision("0033").down_revision == "0032"
-    assert script.get_heads() == ["0033"]
 
 
 def test_0033_round_trips_and_keeps_slack_rows(scratch_url):
@@ -1244,3 +1244,23 @@ def test_0033_round_trips_and_keeps_slack_rows(scratch_url):
     assert _rows(engine, "select kind from integrations") == [("slack_webhook",)]
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0034_lets_the_ledger_hold_ask_calls_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0034")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('ask', 'gpt-6-luna')"))
+        conn.execute(text("insert into ai_runs (kind, model) values ('translate', 'm')"))
+    command.downgrade(cfg, "0033")
+    assert _rows(engine, "select kind from ai_runs order by id") == [("translate",)]
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('ask', 'm')"))
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0034_follows_0033():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0034").down_revision == "0033"

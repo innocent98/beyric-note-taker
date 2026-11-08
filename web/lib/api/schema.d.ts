@@ -182,6 +182,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/ask": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Question
+         * @description Answer a question from the meetings the caller may read. `kind` `tasks`: the caller's own
+         *     tasks (no model, free). `answer`: points, each with source chips. `none`: nothing found.
+         */
+        post: operations["ask_question"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/ask/scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ask Scope
+         * @description What a question searches: the ready meetings the caller may read, their decisions and
+         *     tasks, and the question chips. No model call.
+         */
+        get: operations["ask_scope"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/google/callback": {
         parameters: {
             query?: never;
@@ -2318,6 +2360,23 @@ export interface components {
             /** Names */
             names: string[];
         };
+        /** AskIn */
+        AskIn: {
+            /** Question */
+            question: string;
+        };
+        /** AskOut */
+        AskOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "answer" | "tasks" | "none";
+            /** Lead */
+            lead: string;
+            /** Points */
+            points: components["schemas"]["PointOut"][];
+        };
         /** AttendeeOut */
         AttendeeOut: {
             /** Is Teammate */
@@ -2402,6 +2461,26 @@ export interface components {
             meeting: components["schemas"]["MeetingRef"] | null;
             /** Text */
             text: string;
+        };
+        /** CiteOut */
+        CiteOut: {
+            /** Date Label */
+            date_label: string;
+            /** Line */
+            line: number | null;
+            /** Meeting Id */
+            meeting_id: number;
+            /** Owner Name */
+            owner_name: string | null;
+            /** Shared */
+            shared: boolean;
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "transcript" | "notes";
+            /** Title */
+            title: string;
         };
         /**
          * ConnectIn
@@ -3042,6 +3121,13 @@ export interface components {
              */
             state: "open" | "full" | "closed";
         };
+        /** PointOut */
+        PointOut: {
+            /** Cites */
+            cites: components["schemas"]["CiteOut"][];
+            /** Text */
+            text: string;
+        };
         /** ProjectIn */
         ProjectIn: {
             /** Color */
@@ -3223,6 +3309,17 @@ export interface components {
         ReviewTermOut: {
             item: components["schemas"]["ReviewItemOut"];
             term: components["schemas"]["TermOut"];
+        };
+        /** ScopeOut */
+        ScopeOut: {
+            /** Decisions */
+            decisions: number;
+            /** Meetings */
+            meetings: number;
+            /** Suggestions */
+            suggestions: string[];
+            /** Tasks */
+            tasks: number;
         };
         /**
          * SeriesCard
@@ -4550,6 +4647,122 @@ export interface operations {
             };
             /** @description Conflict */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ask_question: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AskOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `question_invalid`: empty or too long */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ask_limit`: the daily cap is spent */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `ask_failed`: the model gave no usable answer */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ask_scope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScopeOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

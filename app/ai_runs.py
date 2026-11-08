@@ -9,6 +9,7 @@ Nothing re-extracts old meetings by itself when it changes: put the ones you wan
 from sqlalchemy.orm import Session
 
 from app.ai_versions import (
+    ASK_PROMPT_VERSION,
     EXTRACT_PROMPT_VERSION,
     EXTRACT_REVIEW_PROMPT_VERSION,
     LABEL_PROMPT_VERSION,
@@ -18,6 +19,7 @@ from app.ai_versions import (
 from app.models import AiRun
 
 __all__ = [
+    "ASK_PROMPT_VERSION",
     "EXTRACT_PROMPT_VERSION",
     "EXTRACT_REVIEW_PROMPT_VERSION",
     "LABEL_PROMPT_VERSION",
@@ -32,6 +34,7 @@ _VERSION_OF_KIND = {
     "translate": TRANSLATE_PROMPT_VERSION,
     "notes": NOTES_PROMPT_VERSION,
     "label": LABEL_PROMPT_VERSION,
+    "ask": ASK_PROMPT_VERSION,
 }
 
 

@@ -1,0 +1,31 @@
+{
+  "note": "Ada: Pricing review (hers) and Design sync (Dan's, shared) are ready and readable = 2 meetings. The not-ready meeting and Dan's private 1:1 are not counted. Decisions: 1 (the hidden one is not counted). Tasks: 2 (her two on Pricing review; the one on Dan's private meeting is on a meeting she cannot read, so it is not counted). `suggestions` has the name chip: the most frequent speaker other than Ada.",
+  "client": "ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/ask/scope",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "meetings": 2,
+      "decisions": 1,
+      "tasks": 2,
+      "suggestions": [
+        "What did we decide about pricing?",
+        "What did I commit to last week?",
+        "What did Daniel Okoro say?",
+        "When is the launch?",
+        "Which decisions were made on Monday?"
+      ]
+    }
+  }
+}

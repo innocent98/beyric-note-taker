@@ -18,7 +18,7 @@
 | 2 Pilot, accounts and calendar (Phase 0, A, C, O, I, D, V, plan B) | 73 | 66 | 1 | spikes P0.x, C15b to C18, ICS, Teams, Outlook, Phase I, D, V, plan B, live checks |
 | PWA share target | 5 | 2 | 0 | Adebayo's phone test, one decision |
 | AI workspace W0 to W10 | 105 | 10 | 0 | Resend webhook and real send, real-model translation run, server backfill, series-project link, sprint line, W8b chips |
-| UI parity batch 3 and Ask Beyric | 6 | 32 | 0 | the next build scope (another session maintains it) |
+| UI parity batch 3 and Ask Beyric | 8 | 30 | 0 | the next build scope (another session maintains it) |
 | UI parity batch 2 | 6 | 9 | 0 | A41, Could-not-join wiring, three backend gaps, AES-256 line, reshoot |
 | Deferred follow-ups (merge queue, older, known gaps, backlog, CI, template, time zone) | 39 | 43 | 3 | decisions, live checks, Adebayo's to-dos, hardening ideas |
 
@@ -567,8 +567,8 @@ The new file (2321 lines against 2028) is about evidence and trust: a source lin
 - [ ] SOP, FE guide, parity shots
 
 ### 3F: Ask Beyric (spec first, through brainstorming with Adebayo: B14 to B18, B9)
-- [ ] Spec: the open questions are listed in the audit ("Questions for the Ask Beyric spec", 11 items): what is searched (notes, transcripts, decisions, tasks, open questions), retrieval method (Postgres full-text, embeddings, or send recent text to the model), model and cost per question, a cap per person and per workspace, a new `ai_runs` kind `ask`, visibility (`app/visibility.py`: own and team-shared meetings only; a citation to an unreadable meeting must not exist), grounding (every citation checked in code, like `Task.quote`), history and deletion (`app/deletion.py`), privacy and terms lines, prompt-injection handling
-- [ ] Backend: question endpoint, retrieval, answer with citations, rate limit, cost ledger, tests for visibility
+- [x] Spec (2026-11-08, PR #132 `docs/superpowers/specs/2026-11-08-designer-v2-features-design.md` section 1): the open questions are listed in the audit ("Questions for the Ask Beyric spec", 11 items): what is searched (notes, transcripts, decisions, tasks, open questions), retrieval method (Postgres full-text, embeddings, or send recent text to the model), model and cost per question, a cap per person and per workspace, a new `ai_runs` kind `ask`, visibility (`app/visibility.py`: own and team-shared meetings only; a citation to an unreadable meeting must not exist), grounding (every citation checked in code, like `Task.quote`), history and deletion (`app/deletion.py`), privacy and terms lines, prompt-injection handling
+- [x] Backend: question endpoint, retrieval, answer with citations, rate limit, cost ledger, tests for visibility. Built 2026-11-08, PR `feature/ask-beyric-backend` (migration 0034 widens the `ai_runs` kind check; SOP `docs/sop/2026-11-08-ask-beyric-backend.md`; FE guide `docs/fe-integration-guide-ask-beyric.md`). Not yet merged or deployed
 - [ ] Screen to the file: title, subtitle, input and "Ask", five chips, scope line "Searches N meetings, N decisions and N tasks", answer card ("Searching your meetings...", lead, points, citation chips, "I could not find that in your meetings.", "Try asking about a person, a project, a decision or a date.")
 - [ ] The states the designer left out (U1 to U4): before the first question, error and rate limit, history, answer feedback or an "AI can be wrong" line: ask the designer, or build with his OK labelled lead-designed
 - [ ] SOP, FE guide, parity shots, privacy copy check
