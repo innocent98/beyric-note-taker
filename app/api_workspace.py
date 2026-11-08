@@ -9,14 +9,20 @@ in a request.
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, services, workspace
+from app import auth, services, tasks, workspace
 from app.api_schemas import (
+    DecisionCounts,
     DecisionGroup,
     DecisionList,
     DecisionOut,
+    DecisionPatch,
+    DecisionRef,
+    DecisionStatus,
+    DecisionTaskRef,
     ErrorResponse,
     MeetingRef,
     ReviewItemOut,
@@ -26,7 +32,9 @@ from app.api_schemas import (
     TermOut,
 )
 from app.db import get_session
-from app.models import Meeting, ReviewItem, User
+from app.extraction import TranscriptIndex
+from app.models import Decision, DecisionTask, Meeting, ReviewItem, Task, User
+from app.visibility import can_read_clause, owns
 
 router = APIRouter()
 
@@ -50,9 +58,85 @@ def _item(item: ReviewItem, meeting: Meeting) -> ReviewItemOut:
     )
 
 
-@router.get("/decisions", tags=["decisions"])
+def _present_decisions(
+    session: Session, user: User, rows: list[tuple[Decision, Meeting]]
+) -> list[DecisionOut]:
+    """The API shape of decisions the caller may read, with what they link to: only the tasks the
+    caller may see (never a suggested one), only the decisions they may read, and where the quote
+    was said in the transcript the meeting page shows. A few queries for the whole page."""
+    ids = [decision.id for decision, _ in rows]
+    related: dict[int, list[DecisionTaskRef]] = {i: [] for i in ids}
+    if ids:
+        linked = session.execute(
+            select(DecisionTask.decision_id, Task)
+            .join(Task, Task.id == DecisionTask.task_id)
+            .where(DecisionTask.decision_id.in_(ids), tasks.visible(user), tasks.confirmed())
+            .order_by(DecisionTask.decision_id, Task.position, Task.id)
+        )
+        for decision_id, task in linked:
+            related[decision_id].append(
+                DecisionTaskRef(id=task.id, title=task.title, status=task.status)
+            )
+    named = {d.replaced_by_id for d, _ in rows if d.replaced_by_id}
+    readable = (
+        {
+            d.id: d
+            for d in session.scalars(
+                select(Decision)
+                .join(Meeting)
+                .where(
+                    Decision.hidden_at.is_(None),
+                    can_read_clause(user),
+                    (Decision.id.in_(named)) | (Decision.replaced_by_id.in_(ids)),
+                )
+                .order_by(Decision.meeting_id.desc(), Decision.position)
+            )
+        }
+        if ids
+        else {}
+    )
+    replaces: dict[int, list[DecisionRef]] = {i: [] for i in ids}
+    for other in readable.values():
+        if other.replaced_by_id in replaces and other.status == "replaced":
+            replaces[other.replaced_by_id].append(DecisionRef(id=other.id, text=other.text))
+    indexes: dict[int, TranscriptIndex] = {}
+    out = []
+    for decision, meeting in rows:
+        said = None
+        if decision.quote:
+            if meeting.id not in indexes:  # each transcript is read once per request
+                indexes[meeting.id] = TranscriptIndex(
+                    meeting.speaker_transcript or meeting.transcript or ""
+                )
+            said = indexes[meeting.id].locate(decision.quote)
+        target = readable.get(decision.replaced_by_id) if decision.replaced_by_id else None
+        out.append(
+            DecisionOut(
+                id=decision.id,
+                text=decision.text,
+                status=decision.status,
+                decided_by=decision.decided_by,
+                quote=decision.quote,
+                quote_speaker=said[0] if said else None,
+                line=said[1] if said else None,
+                revisit_on=decision.revisit_on,
+                replaced_by=(
+                    DecisionRef(id=target.id, text=target.text)
+                    if target is not None and decision.status == "replaced"
+                    else None
+                ),
+                replaces=replaces[decision.id],
+                related_tasks=related[decision.id],
+                can_edit=owns(user, meeting),
+            )
+        )
+    return out
+
+
+@router.get("/decisions", tags=["decisions"], responses={422: {"model": ErrorResponse}})
 def list_decisions(
     q: str | None = Query(None, max_length=workspace.MAX_SEARCH_CHARS),
+    status: DecisionStatus | None = None,
     limit: int = Query(
         workspace.DECISIONS_DEFAULT_MEETINGS, ge=1, le=workspace.DECISIONS_MAX_MEETINGS
     ),
@@ -62,20 +146,69 @@ def list_decisions(
 ) -> DecisionList:
     """Everything the caller's meetings decided, newest meeting first, grouped by meeting. `q`
     matches a decision's words or its meeting's title (a title match shows all of that meeting's
-    decisions). `limit` counts meetings, not decisions. For the next page pass `before_id` =
-    `next_before_id`. A decision the caller hid is not listed."""
-    groups, more = workspace.list_decisions(session, user, q, limit, before_id)
+    decisions). `status` keeps one tab's decisions. `limit` counts meetings, not decisions. For
+    the next page pass `before_id` = `next_before_id`. A decision the caller hid is not listed.
+    `counts` and `due_this_week` are over the whole log, whatever `q` and `status` say."""
+    groups, more = workspace.list_decisions(session, user, q, limit, before_id, status)
+    flat = [(decision, meeting) for meeting, decisions in groups for decision in decisions]
+    shown = iter(_present_decisions(session, user, flat))
     return DecisionList(
         groups=[
-            DecisionGroup(
-                meeting=_ref(meeting),
-                decisions=[DecisionOut(id=d.id, text=d.text) for d in decisions],
-            )
+            DecisionGroup(meeting=_ref(meeting), decisions=[next(shown) for _ in decisions])
             for meeting, decisions in groups
         ],
         has_more=more,
         next_before_id=groups[-1][0].id if more else None,
+        counts=DecisionCounts(**workspace.decision_counts(session, user)),
+        due_this_week=workspace.due_this_week(session, user),
     )
+
+
+@router.patch(
+    "/decisions/{decision_id:id}",
+    tags=["decisions"],
+    responses={403: {"model": ErrorResponse, "description": "`not_owner`"}}
+    | {code: {"model": ErrorResponse} for code in (404, 422)},
+)
+def patch_decision(
+    decision_id: int,
+    body: DecisionPatch,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> DecisionOut:
+    """Change a decision's status, revisit date or what replaced it. Only the person who recorded
+    the meeting may: 403 `not_owner` for a teammate who can read it, 404 for someone who cannot.
+    `replaced_by_id` must be another decision of the caller's log, only with status `replaced`
+    (422 `replaced_by_needs_replaced`, `replaced_by_self`, `replaced_by_not_found`,
+    `replaced_by_cycle`). An empty body is 422 `nothing_to_change`; a revisit day outside 2000 to
+    2100 is 422 `validation_error`. Moving a decision off `replaced` clears `replaced_by_id`. A
+    change a person made is never overwritten when the notes are read again."""
+    found = workspace.readable_decision(session, user, decision_id)
+    if found is None:
+        raise StarletteHTTPException(404, "No such decision")
+    decision, meeting = found
+    changes = {k: getattr(body, k) for k in body.model_fields_set}
+    if not changes:
+        raise services.Refused(
+            422, "nothing_to_change", "Send at least one of status, revisit_on or replaced_by_id."
+        )
+    if changes.get("status", "") is None:
+        raise services.Refused(422, "validation_error", "Status cannot be null.")
+    try:
+        workspace.update_decision(
+            session,
+            user,
+            decision,
+            meeting,
+            **{k: v for k, v in changes.items()},
+        )
+    except workspace.DecisionForbidden:
+        raise services.Refused(
+            403, "not_owner", "Only the person who recorded the meeting can change this."
+        ) from None
+    except workspace.DecisionInvalid as exc:
+        raise services.Refused(422, exc.code, exc.message) from None
+    return _present_decisions(session, user, [(decision, meeting)])[0]
 
 
 @router.post(

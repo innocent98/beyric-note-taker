@@ -1,0 +1,49 @@
+{
+  "note": "The decisions table as the extraction left it. Decision 2: the model's `decided_by` (a speaker who is not in the transcript) and `quote` (words nobody said) were dropped by the checks, and the related action 7 (no such action) was dropped.",
+  "content": [
+    {
+      "id": 1,
+      "meeting_id": 1,
+      "text": "Keep the free plan for two more months.",
+      "status": "approved",
+      "decided_by": "Dan",
+      "quote": "I think we should keep the free plan for two more months.",
+      "revisit_on": null,
+      "replaced_by_id": null,
+      "hidden": false
+    },
+    {
+      "id": 2,
+      "meeting_id": 1,
+      "text": "Move the launch to 30 November.",
+      "status": "approved",
+      "decided_by": null,
+      "quote": null,
+      "revisit_on": null,
+      "replaced_by_id": null,
+      "hidden": false
+    },
+    {
+      "id": 3,
+      "meeting_id": 1,
+      "text": "Look at a lifetime deal at some point.",
+      "status": "proposed",
+      "decided_by": "Amina",
+      "quote": "I suggest we also look at a lifetime deal, maybe later.",
+      "revisit_on": null,
+      "replaced_by_id": null,
+      "hidden": false
+    },
+    {
+      "id": 4,
+      "meeting_id": 2,
+      "text": "Let the contractor go at the end of the month.",
+      "status": "approved",
+      "decided_by": null,
+      "quote": null,
+      "revisit_on": null,
+      "replaced_by_id": null,
+      "hidden": false
+    }
+  ]
+}

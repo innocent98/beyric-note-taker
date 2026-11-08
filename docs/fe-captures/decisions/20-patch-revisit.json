@@ -1,0 +1,42 @@
+{
+  "note": "A revisit date of today: the banner counts it (`due_this_week`, below).",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "revisit_on": "2026-11-08"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "text": "Move the launch to 30 November.",
+      "status": "approved",
+      "decided_by": null,
+      "quote": null,
+      "quote_speaker": null,
+      "line": null,
+      "revisit_on": "2026-11-08",
+      "replaced_by": null,
+      "replaces": [],
+      "related_tasks": [
+        {
+          "id": 2,
+          "title": "Tell the customers about the new launch date",
+          "status": "todo"
+        }
+      ],
+      "can_edit": true
+    }
+  }
+}

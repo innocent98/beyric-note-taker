@@ -1,0 +1,29 @@
+{
+  "note": "`lifetime` is already replaced by `launch`: a cycle, 422.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "replaced",
+      "replaced_by_id": 3
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "replaced_by_cycle",
+        "message": "That decision is already replaced by this one."
+      }
+    }
+  }
+}

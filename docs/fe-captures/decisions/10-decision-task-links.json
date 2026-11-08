@@ -1,0 +1,13 @@
+{
+  "note": "`decision_tasks` after the extraction (decision id, task id).",
+  "content": [
+    {
+      "decision_id": 1,
+      "task_id": 1
+    },
+    {
+      "decision_id": 2,
+      "task_id": 2
+    }
+  ]
+}

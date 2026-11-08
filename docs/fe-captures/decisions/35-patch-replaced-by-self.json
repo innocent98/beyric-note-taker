@@ -1,0 +1,29 @@
+{
+  "note": "Itself: 422.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "replaced",
+      "replaced_by_id": 2
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "replaced_by_self",
+        "message": "A decision cannot be replaced by itself."
+      }
+    }
+  }
+}

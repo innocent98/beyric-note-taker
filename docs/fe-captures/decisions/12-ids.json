@@ -1,0 +1,9 @@
+{
+  "note": "Decision ids used below.",
+  "content": {
+    "free": 1,
+    "launch": 2,
+    "lifetime": 3,
+    "contractor": 4
+  }
+}

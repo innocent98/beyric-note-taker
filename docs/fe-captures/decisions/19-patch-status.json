@@ -1,0 +1,42 @@
+{
+  "note": "The owner changes the status. 200 with the whole decision (`can_edit` true).",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "rejected"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 1,
+      "text": "Keep the free plan for two more months.",
+      "status": "rejected",
+      "decided_by": "Dan",
+      "quote": "I think we should keep the free plan for two more months.",
+      "quote_speaker": "Dan",
+      "line": 1,
+      "revisit_on": null,
+      "replaced_by": null,
+      "replaces": [],
+      "related_tasks": [
+        {
+          "id": 1,
+          "title": "Update the pricing page",
+          "status": "todo"
+        }
+      ],
+      "can_edit": true
+    }
+  }
+}

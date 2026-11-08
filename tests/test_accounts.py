@@ -687,6 +687,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/shares": {"recipients": [{"email": "x@example.test"}], "language": "en"},
             "/override": {"override": False},
             "/api/tasks/{task_id}": {"status": "done"},
+            "/api/decisions/{decision_id}": {"status": "rejected"},
             "/api/series/{series_id}": {"title": "x"},
             "/api/series/{series_id}/agenda": {"text": "x"},
             "/api/series/{series_id}/project": {"project_id": project.id},

@@ -1,0 +1,29 @@
+{
+  "note": "No such decision in the caller's log: 422 `replaced_by_not_found`.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "replaced",
+      "replaced_by_id": 999999
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "replaced_by_not_found",
+        "message": "That decision is not in your log."
+      }
+    }
+  }
+}

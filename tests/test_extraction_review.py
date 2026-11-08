@@ -210,6 +210,7 @@ def test_the_page_shows_the_transcript_and_each_extracted_item(session, user):
         "action_items",
         "review",
         "milestones",
+        "decisions",
     ]
 
 

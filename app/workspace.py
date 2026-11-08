@@ -12,7 +12,7 @@ import logging
 from datetime import UTC, date, datetime, timedelta
 from typing import NamedTuple
 
-from sqlalchemy import and_, exists, func, or_, select, update
+from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import ai_runs, filing, integrations, mail, projects, tasks, teams, timezones, titles
@@ -26,8 +26,18 @@ from app.extraction import (
     fingerprint,
     parse_notes,
 )
-from app.models import Decision, Meeting, OpenQuestion, ReviewItem, User, UserSettings
-from app.visibility import can_read_clause
+from app.models import (
+    DECISION_STATUSES,
+    Decision,
+    DecisionTask,
+    Meeting,
+    OpenQuestion,
+    ReviewItem,
+    Task,
+    User,
+    UserSettings,
+)
+from app.visibility import can_read_clause, owns
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +149,43 @@ def _ask_the_model(
     return checked
 
 
+def _write_decisions(
+    session: Session,
+    meeting_id: int,
+    parsed: ParsedNotes,
+    checked: CheckedExtraction,
+    live: list[Task],
+) -> None:
+    """Put what the model said about each decision bullet (and the code checked) on its row: who
+    decided it, the words that show it, whether it was only proposed, and the tasks that carry it
+    out. Rows are found by fingerprint, as the lists are. A status, revisit date or replaced-by a
+    person set is never touched (`edited_at`): only a decision no person has changed takes the
+    model's `approved` / `proposed`. The links are rewritten from this answer every time. A
+    failed check arrives as None and is stored as nothing. The caller commits."""
+    rows = {
+        row.fingerprint: row
+        for row in session.scalars(select(Decision).where(Decision.meeting_id == meeting_id))
+    }
+    by_action = {task.ai_fingerprint: task for task in live if task.deleted_at is None}
+    action_keys = [fingerprint(text) for text in parsed.action_items]
+    if rows:
+        session.execute(delete(DecisionTask).where(DecisionTask.decision_id.in_(
+            [row.id for row in rows.values()]
+        )))  # fmt: skip
+    for item in checked.decisions:
+        row = rows.get(fingerprint(parsed.decisions[item.index]))
+        if row is None:
+            continue
+        row.decided_by, row.quote = item.decided_by, item.quote
+        if row.edited_at is None and row.status in ("approved", "proposed"):
+            row.status = "proposed" if item.proposed else "approved"
+        for index in item.related_actions:
+            task = by_action.get(action_keys[index])
+            if task is not None:
+                session.add(DecisionTask(decision_id=row.id, task_id=task.id))
+    session.flush()
+
+
 def _configured_model() -> str:
     from app.config import get_settings
 
@@ -235,7 +282,9 @@ def run_extraction(
         fresh = tasks.fresh_fingerprints(first_pass, known, never_answered, stamp)
     session.commit()  # no row lock or open transaction while the model is being asked
 
-    full = make_tasks and bool(parsed.action_items)
+    # The one call also reads the decisions (`extract-v3`), so a meeting with decisions and no
+    # action items is asked about too.
+    full = make_tasks and bool(parsed.action_items or parsed.decisions)
     checked = None
     if full or parsed.please_check:
         roster = [m.display_name for m in members]
@@ -287,6 +336,7 @@ def run_extraction(
             session, meeting, team_id, parsed.action_items, checked.action_items, members, day,
             quiet=quiet, suggest=suggest, fresh=fresh,
         )  # fmt: skip
+        _write_decisions(session, meeting_id, parsed, checked, live)
         # Dates the meeting stated for a launch or deadline: proposals only, a person confirms.
         projects.propose(
             session, meeting, team_id, checked.milestones,
@@ -435,6 +485,8 @@ def backfill_tasks(session: Session, now: datetime, *, task_days: int = BACKFILL
 
 DECISIONS_DEFAULT_MEETINGS, DECISIONS_MAX_MEETINGS = 20, 50
 MAX_SEARCH_CHARS = 200
+# The key of the advisory lock that serialises naming a replacement (`update_decision`).
+DECISION_LINK_LOCK = 3600036
 REVIEW_LIMIT = 200
 
 
@@ -445,7 +497,12 @@ def _contains(text: str):
 
 
 def list_decisions(
-    session: Session, user: User, query: str | None, limit: int, before_id: int | None
+    session: Session,
+    user: User,
+    query: str | None,
+    limit: int,
+    before_id: int | None,
+    status: str | None = None,
 ) -> tuple[list[tuple[Meeting, list[Decision]]], bool]:
     """The decisions of the meetings the caller may read (their own and those shared with their
     team: `visibility`), newest meeting first, grouped by meeting, hidden ones left out.
@@ -453,8 +510,10 @@ def list_decisions(
     A search matches the decision's words or its meeting's title (the calendar title, or the
     meeting code); a title match brings every decision of that meeting. Returns the groups of up
     to `limit` meetings and whether there are more; `before_id` is the last meeting id of the
-    previous page."""
+    previous page. `status` keeps only decisions with that status (a tab of the screen)."""
     shown = [can_read_clause(user), Decision.hidden_at.is_(None)]
+    if status is not None:
+        shown.append(Decision.status == status)
     if query and query.strip():
         pattern = _contains(query.strip())
         shown.append(
@@ -480,6 +539,147 @@ def list_decisions(
     for decision in decisions:
         by_meeting[decision.meeting_id].append(decision)
     return [(m, by_meeting[m.id]) for m in meetings], more
+
+
+def decision_counts(session: Session, user: User) -> dict[str, int]:
+    """How many decisions the caller's log holds, in all and per status (the tab counts). Hidden
+    ones are not in the log; a search or a tab does not change these."""
+    rows = session.execute(
+        select(Decision.status, func.count())
+        .join(Meeting)
+        .where(can_read_clause(user), Decision.hidden_at.is_(None))
+        .group_by(Decision.status)
+    )
+    counts = {status: 0 for status in DECISION_STATUSES}
+    counts.update({status: count for status, count in rows})
+    return {"all": sum(counts.values()), **counts}
+
+
+def week_of(day: date) -> tuple[date, date]:
+    """The Monday and the Sunday of the week `day` is in."""
+    monday = day - timedelta(days=day.weekday())
+    return monday, monday + timedelta(days=6)
+
+
+def due_this_week(session: Session, user: User, now: datetime | None = None) -> int:
+    """How many approved or proposed decisions the caller may read have a revisit date in this
+    week (Monday to Sunday) of the caller's own time zone. Not a notification: the banner only."""
+    zone = session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user.id))
+    today = timezones.localise(now or datetime.now(UTC), zone)[0].date()
+    monday, sunday = week_of(today)
+    return session.scalar(
+        select(func.count())
+        .select_from(Decision)
+        .join(Meeting)
+        .where(
+            can_read_clause(user),
+            Decision.hidden_at.is_(None),
+            Decision.status.in_(("approved", "proposed")),
+            Decision.revisit_on.between(monday, sunday),
+        )
+    )
+
+
+def readable_decision(
+    session: Session, user: User, decision_id: int
+) -> tuple[Decision, Meeting] | None:
+    """A decision in the caller's log (they may read its meeting, it is not hidden) with its
+    meeting, or None."""
+    row = session.execute(
+        select(Decision, Meeting)
+        .join(Meeting)
+        .where(Decision.id == decision_id, can_read_clause(user), Decision.hidden_at.is_(None))
+    ).first()
+    return (row[0], row[1]) if row else None
+
+
+class DecisionForbidden(Exception):
+    """The caller can read the decision but did not record the meeting (403 `not_owner`)."""
+
+
+class DecisionInvalid(Exception):
+    """The change is not valid; `code` and `message` are safe to show."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code, self.message = code, message
+
+
+class Unset:
+    """Marks "the caller said nothing" where `None` is an answer (no revisit date)."""
+
+
+UNSET = Unset()
+
+
+def update_decision(
+    session: Session,
+    user: User,
+    decision: Decision,
+    meeting: Meeting,
+    *,
+    status: str | Unset = UNSET,
+    revisit_on: date | None | Unset = UNSET,
+    replaced_by_id: int | None | Unset = UNSET,
+) -> None:
+    """Change a decision's status, revisit date or what replaced it. Only the owner of the meeting
+    may (`DecisionForbidden`; reading is shared, writing is the owner's, `app/visibility.py`). A
+    status chosen by a person is final for the extraction: it is never overwritten.
+
+    `replaced_by_id` is a decision the caller may read (not hidden), not this one, that does not
+    already lead back here. It only means something when the decision is `replaced`: moving a
+    decision to another status clears it, and naming one for a decision that is not `replaced` is
+    refused. The caller commits through this function."""
+    if not owns(user, meeting):
+        raise DecisionForbidden
+    # Two changes to one decision (or two owners naming each other) must not interleave: take the
+    # row locks in id order, and, to name a replacement, one lock that serialises every such change
+    # (a chain of three decisions cannot be closed into a loop by three requests at once).
+    target = None if isinstance(replaced_by_id, Unset) else replaced_by_id
+    if target is not None:
+        session.execute(select(func.pg_advisory_xact_lock(DECISION_LINK_LOCK)))
+    session.execute(
+        select(Decision.id)
+        .where(Decision.id.in_({decision.id, *([target] if target else [])}))
+        .order_by(Decision.id)
+        .with_for_update()
+    )
+    session.refresh(decision)  # what the lock waited for may have changed it
+    final = decision.status if isinstance(status, Unset) else status
+    if not isinstance(replaced_by_id, Unset) and replaced_by_id is not None:
+        if final != "replaced":
+            raise DecisionInvalid(
+                "replaced_by_needs_replaced",
+                "Choose Replaced before naming the decision that replaced this one.",
+            )
+        if replaced_by_id == decision.id:
+            raise DecisionInvalid("replaced_by_self", "A decision cannot be replaced by itself.")
+        found = readable_decision(session, user, replaced_by_id)
+        if found is None:
+            raise DecisionInvalid("replaced_by_not_found", "That decision is not in your log.")
+        # Following the chain from the new one must never come back to this decision.
+        seen, at = {decision.id}, found[0]
+        while at is not None:
+            if at.id in seen:
+                raise DecisionInvalid(
+                    "replaced_by_cycle", "That decision is already replaced by this one."
+                )
+            seen.add(at.id)
+            at = (
+                session.get(Decision, at.replaced_by_id, populate_existing=True)
+                if at.replaced_by_id
+                else None
+            )
+    if not isinstance(status, Unset):
+        decision.status = status
+        if status != "replaced":
+            decision.replaced_by_id = None
+    if not isinstance(revisit_on, Unset):
+        decision.revisit_on = revisit_on
+    if not isinstance(replaced_by_id, Unset):
+        decision.replaced_by_id = replaced_by_id if final == "replaced" else None
+    decision.edited_at = datetime.now(UTC)
+    session.commit()
 
 
 def hide_decision(session: Session, user: User, decision_id: int) -> bool:

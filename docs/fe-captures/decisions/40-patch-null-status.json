@@ -1,0 +1,28 @@
+{
+  "note": "",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": null
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Status cannot be null."
+      }
+    }
+  }
+}

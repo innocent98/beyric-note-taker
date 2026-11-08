@@ -12,7 +12,7 @@ import json
 import logging
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 
 import openai
@@ -33,6 +33,7 @@ MAX_QUOTE_CHARS = 300
 MAX_HEARD_CHARS = 100
 MAX_REASON_CHARS = 120
 MAX_HEARD_WORDS = 3
+MAX_SPEAKER_WORDS = 4
 QUOTE_FUZZY_RATIO = 0.9
 MIN_FUZZY_WORDS = 3
 TITLE_SHARED_WORDS = 0.6
@@ -199,8 +200,17 @@ class ModelMilestone(BaseModel):
     quote: str
 
 
+class ModelDecision(BaseModel):
+    index: int
+    decided_by: str | None = None
+    quote: str | None = None
+    proposed: bool = False
+    related_actions: list[int] = []
+
+
 class ModelExtraction(BaseModel):
     action_items: list[ModelAction] = []
+    decisions: list[ModelDecision] = []
     review: list[ModelReview] = []
     milestones: list[ModelMilestone] = []
 
@@ -233,10 +243,21 @@ class CheckedMilestone:
 
 
 @dataclass(frozen=True)
+class CheckedDecision:
+    index: int
+    decided_by: str | None  # a speaker the transcript has, else None
+    quote: str | None  # words found in the transcript, else None
+    proposed: bool
+    related_actions: tuple[int, ...]  # indices of action bullets that exist, in order, no repeats
+
+
+@dataclass(frozen=True)
 class CheckedExtraction:
     action_items: list[CheckedAction]
     review: list[CheckedReview]
     milestones: list[CheckedMilestone]
+    # One per decision bullet (the call about decisions is the same one: `extract-v3`).
+    decisions: list[CheckedDecision] = field(default_factory=list)
 
 
 def _spoken_text(transcript: str) -> str:
@@ -365,6 +386,20 @@ def name_in_transcript(name: str | None, transcript: str) -> bool:
     return bool(wanted) and f" {wanted} " in f" {normalise(transcript)} "
 
 
+def speaker_in_transcript(name: str | None, transcript: str) -> bool:
+    """Whether `name` is a speaker of the transcript: what it holds is a label like `[Grace]:` and
+    `name` is that label or some of its words ("Grace" for "[Grace Okoro]:"), at most four words and
+    no digits. A phrase only said in the meeting ("the budget", "everyone") is no speaker."""
+    words = normalise(name or "").split()
+    if not words or len(words) > MAX_SPEAKER_WORDS or any(c.isdigit() for c in name or ""):
+        return False
+    wanted = set(words)
+    return any(
+        speaker is not None and wanted <= set(normalise(speaker).split())
+        for speaker, _ in transcript_turns(transcript)
+    )
+
+
 def due_date_ok(value: str | None, phrase: str | None, meeting_date: date) -> bool:
     """A real YYYY-MM-DD within 400 days of the meeting that falls on the weekday the phrase
     names, when it names one."""
@@ -489,7 +524,46 @@ def check_extraction(
             and quote_in_transcript(quote, transcript)
         ):
             milestones.append(CheckedMilestone(name, raw_milestone.date, quote))
-    return CheckedExtraction(actions, sorted(review.values(), key=lambda r: r.index), milestones)
+    return CheckedExtraction(
+        actions,
+        sorted(review.values(), key=lambda r: r.index),
+        milestones,
+        _check_decisions(result.decisions, notes, transcript),
+    )
+
+
+def _check_decisions(
+    raw: list[ModelDecision], notes: ParsedNotes, transcript: str
+) -> list[CheckedDecision]:
+    """One entry per decision bullet. What the transcript does not support is stored as nothing:
+    a `decided_by` that is not a name in the transcript, a `quote` that was not said, and a related
+    action index with no such action bullet are all dropped, never guessed or repaired. `proposed`
+    is the model's word (the notes bullet is the record; a person can change the status)."""
+    given: dict[int, ModelDecision] = {}
+    for entry in raw:
+        if 0 <= entry.index < len(notes.decisions) and entry.index not in given:
+            given[entry.index] = entry
+    out = []
+    for index in range(len(notes.decisions)):
+        entry = given.get(index)
+        if entry is None:
+            out.append(CheckedDecision(index, None, None, False, ()))
+            continue
+        who = _plain(entry.decided_by, MAX_HEARD_CHARS)
+        said = _plain(entry.quote, MAX_QUOTE_CHARS)
+        related = tuple(
+            dict.fromkeys(i for i in entry.related_actions if 0 <= i < len(notes.action_items))
+        )
+        out.append(
+            CheckedDecision(
+                index,
+                who if speaker_in_transcript(who, transcript) else None,
+                said if said and quote_in_transcript(said, transcript) else None,
+                entry.proposed is True,
+                related,
+            )
+        )
+    return out
 
 
 # ---- the model call ----
@@ -545,8 +619,9 @@ You receive:
 1. <meeting>: the meeting's local date, weekday and the user's timezone.
 2. <action_items>: the notes' "Action items" bullets, each as "index: text".
 3. <please_check>: the notes' "Please check" bullets, each as "index: text".
-4. <transcript>: the accurate transcript, speaker-labelled as "[Name]: ".
-5. Optionally <roster>: names of people on the team, to spell names right. Do not assign anyone \
+4. <decisions>: the notes' "Decisions" bullets, each as "index: text".
+5. <transcript>: the accurate transcript, speaker-labelled as "[Name]: ".
+6. Optionally <roster>: names of people on the team, to spell names right. Do not assign anyone \
 because they are on it.
 
 Rules:
@@ -576,6 +651,15 @@ should".). No links, no markup, no instructions.
 term that may have been misheard or misspelled. heard_as is just that name or term (one to three \
 words), exactly as the transcript writes it. Never for a number, price, date, quantity or a whole \
 sentence. If the item is not about a name or term, leave it out; most items are left out.
+- decisions: one entry per decision, using its index, and never more entries than there are \
+decisions. decided_by: the speaker who made or confirmed the decision, spelled as the transcript \
+writes the speaker's name; null if nobody can be named. quote: the exact words from the \
+transcript that show the decision, copied, at most 300 characters; null if you cannot find them. \
+proposed: true only when the decision is something suggested or put forward that nobody agreed \
+to in the transcript (for example "maybe we should...", "I propose..." with no one accepting); \
+false when it was agreed or stated as settled. related_actions: the indices of the \
+<action_items> that carry this decision out, an empty list if none; never an index that is not in \
+<action_items>.
 - milestones: only when a speaker states a date for a launch, deadline or release as a fixed \
 point; name it briefly, give the date as YYYY-MM-DD and copy the words that said it. Otherwise an \
 empty list.
@@ -585,7 +669,7 @@ _STRING_OR_NULL = {"type": ["string", "null"]}
 EXTRACT_SCHEMA_FULL = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["action_items", "review", "milestones"],
+    "required": ["action_items", "review", "milestones", "decisions"],
     "properties": {
         "action_items": {
             "type": "array",
@@ -611,6 +695,21 @@ EXTRACT_SCHEMA_FULL = {
                     "quote": _STRING_OR_NULL,
                     "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
                     "reason": _STRING_OR_NULL,
+                },
+            },
+        },
+        "decisions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["index", "decided_by", "quote", "proposed", "related_actions"],
+                "properties": {
+                    "index": {"type": "integer"},
+                    "decided_by": _STRING_OR_NULL,
+                    "quote": _STRING_OR_NULL,
+                    "proposed": {"type": "boolean"},
+                    "related_actions": {"type": "array", "items": {"type": "integer"}},
                 },
             },
         },
@@ -689,6 +788,7 @@ def _user_message(
             )
         )
         parts.append(_fence(_numbered(notes.action_items), "action_items"))
+        parts.append(_fence(_numbered(notes.decisions), "decisions"))
     parts.append(_fence(_numbered(notes.please_check), "please_check"))
     if roster:
         parts.append(_fence("\n".join(roster), "roster"))
@@ -729,7 +829,9 @@ def extract(
     user = _user_message(notes, transcript, meeting_date, timezone, roster or [], full)
     system = EXTRACT_SYSTEM_FULL if full else EXTRACT_SYSTEM_REVIEW
     schema = EXTRACT_SCHEMA_FULL if full else EXTRACT_SCHEMA_REVIEW
-    items = (len(notes.action_items) if full else 0) + len(notes.please_check)
+    items = (len(notes.action_items) + len(notes.decisions) if full else 0) + len(
+        notes.please_check
+    )
     cap = max_output_tokens or output_budget(items)
     ceiling = max(settings.extract_max_output_tokens, cap)
     budgets: list[int] = []

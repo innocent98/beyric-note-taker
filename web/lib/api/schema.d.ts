@@ -469,8 +469,9 @@ export interface paths {
          * List Decisions
          * @description Everything the caller's meetings decided, newest meeting first, grouped by meeting. `q`
          *     matches a decision's words or its meeting's title (a title match shows all of that meeting's
-         *     decisions). `limit` counts meetings, not decisions. For the next page pass `before_id` =
-         *     `next_before_id`. A decision the caller hid is not listed.
+         *     decisions). `status` keeps one tab's decisions. `limit` counts meetings, not decisions. For
+         *     the next page pass `before_id` = `next_before_id`. A decision the caller hid is not listed.
+         *     `counts` and `due_this_week` are over the whole log, whatever `q` and `status` say.
          */
         get: operations["list_decisions"];
         put?: never;
@@ -479,6 +480,32 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/decisions/{decision_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Patch Decision
+         * @description Change a decision's status, revisit date or what replaced it. Only the person who recorded
+         *     the meeting may: 403 `not_owner` for a teammate who can read it, 404 for someone who cannot.
+         *     `replaced_by_id` must be another decision of the caller's log, only with status `replaced`
+         *     (422 `replaced_by_needs_replaced`, `replaced_by_self`, `replaced_by_not_found`,
+         *     `replaced_by_cycle`). An empty body is 422 `nothing_to_change`; a revisit day outside 2000 to
+         *     2100 is 422 `validation_error`. Moving a decision off `replaced` clears `replaced_by_id`. A
+         *     change a person made is never overwritten when the notes are read again.
+         */
+        patch: operations["patch_decision"];
         trace?: never;
     };
     "/api/decisions/{decision_id}/hide": {
@@ -2542,6 +2569,22 @@ export interface components {
             /** Show Unverified Notice */
             show_unverified_notice: boolean;
         };
+        /**
+         * DecisionCounts
+         * @description The tab counts: over the caller's whole log, whatever tab or search is showing.
+         */
+        DecisionCounts: {
+            /** All */
+            all: number;
+            /** Approved */
+            approved: number;
+            /** Proposed */
+            proposed: number;
+            /** Rejected */
+            rejected: number;
+            /** Replaced */
+            replaced: number;
+        };
         /** DecisionGroup */
         DecisionGroup: {
             /** Decisions */
@@ -2550,6 +2593,9 @@ export interface components {
         };
         /** DecisionList */
         DecisionList: {
+            counts: components["schemas"]["DecisionCounts"];
+            /** Due This Week */
+            due_this_week: number;
             /** Groups */
             groups: components["schemas"]["DecisionGroup"][];
             /** Has More */
@@ -2559,10 +2605,70 @@ export interface components {
         };
         /** DecisionOut */
         DecisionOut: {
+            /** Can Edit */
+            can_edit: boolean;
+            /** Decided By */
+            decided_by: string | null;
+            /** Id */
+            id: number;
+            /** Line */
+            line: number | null;
+            /** Quote */
+            quote: string | null;
+            /** Quote Speaker */
+            quote_speaker: string | null;
+            /** Related Tasks */
+            related_tasks: components["schemas"]["DecisionTaskRef"][];
+            replaced_by: components["schemas"]["DecisionRef"] | null;
+            /** Replaces */
+            replaces: components["schemas"]["DecisionRef"][];
+            /** Revisit On */
+            revisit_on: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "approved" | "proposed" | "replaced" | "rejected";
+            /** Text */
+            text: string;
+        };
+        /**
+         * DecisionPatch
+         * @description A partial change: send only the fields that change. `revisit_on` and `replaced_by_id` set to
+         *     null clear them. `status` cannot be null.
+         */
+        DecisionPatch: {
+            /** Replaced By Id */
+            replaced_by_id?: number | null;
+            /** Revisit On */
+            revisit_on?: string | null;
+            /** Status */
+            status?: ("approved" | "proposed" | "replaced" | "rejected") | null;
+        };
+        /**
+         * DecisionRef
+         * @description Another decision the caller may read, named by its words.
+         */
+        DecisionRef: {
             /** Id */
             id: number;
             /** Text */
             text: string;
+        };
+        /**
+         * DecisionTaskRef
+         * @description A task that carries a decision out. Only tasks the caller may see, never a suggested one.
+         */
+        DecisionTaskRef: {
+            /** Id */
+            id: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "todo" | "doing" | "done";
+            /** Title */
+            title: string;
         };
         /**
          * DisconnectOut
@@ -5390,6 +5496,7 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string | null;
+                status?: ("approved" | "proposed" | "replaced" | "rejected") | null;
                 limit?: number;
                 before_id?: number | null;
             };
@@ -5426,7 +5533,69 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Malformed request */
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    patch_decision: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                decision_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_owner` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;

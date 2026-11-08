@@ -48,7 +48,13 @@ describe("decisions", () => {
   });
 
   it("says there are no decisions yet when nothing has been read from any notes", () => {
-    render(<DecisionsView initial={{ groups: [], has_more: false, next_before_id: null }} />);
+    render(<DecisionsView initial={{
+          groups: [],
+          has_more: false,
+          next_before_id: null,
+          counts: { all: 0, approved: 0, proposed: 0, replaced: 0, rejected: 0 },
+          due_this_week: 0,
+        }} />);
     expect(screen.getByText("No decisions yet.")).toBeTruthy();
     expect(screen.getByText("Decisions made in your meetings will appear here after each meeting ends.")).toBeTruthy();
   });

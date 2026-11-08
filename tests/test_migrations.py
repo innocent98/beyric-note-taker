@@ -1278,7 +1278,7 @@ def test_0035_round_trips_and_keeps_tasks_and_settings(scratch_url):
         conn.execute(text("update tasks set confidence = 'certain'"))
     with engine.begin() as conn:
         conn.execute(text("update tasks set confidence = 'low', reason = 'Said as someone should'"))
-    command.downgrade(cfg, "-1")  # only this migration
+    command.downgrade(cfg, "0034")  # this migration (and the ones after it)
     columns = {c["name"] for c in inspect(engine).get_columns("tasks")}
     assert not columns & {"suggested", "confidence", "reason"}
     assert "ask_before_unclear" not in {
@@ -1286,6 +1286,125 @@ def test_0035_round_trips_and_keeps_tasks_and_settings(scratch_url):
     }
     assert _rows(engine, "select title from tasks") == [("Old task",)]
     command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0036_follows_0035():
+    script = ScriptDirectory.from_config(alembic_config("postgresql://unused"))
+    assert script.get_revision("0036").down_revision == "0035"
+
+
+def test_0036_round_trips_and_old_decisions_read_as_approved(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0035")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
+        conn.execute(
+            text(
+                "insert into templates (owner_user_id, name, instructions) "
+                "select id, 'T', 'x' from users where email = 'a@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id, "
+                "status, step) select u.id, 'u', 'zoom', '1', t.id, 'ready', 'done' "
+                "from users u join templates t on t.owner_user_id = u.id "
+                "where u.email = 'a@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into decisions (meeting_id, text, position, fingerprint) "
+                "select id, 'Old decision', 0, 'fp' from meetings"
+            )
+        )
+    command.upgrade(cfg, "head")
+    assert _rows(
+        engine,
+        "select status, decided_by, quote, revisit_on, replaced_by_id, edited_at from decisions",
+    ) == [("approved", None, None, None, None, None)]
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(text("update decisions set status = 'done'"))
+    with engine.begin() as conn:
+        conn.execute(text("update decisions set status = 'proposed'"))
+        conn.execute(
+            text(
+                "insert into decisions (meeting_id, text, position, fingerprint, "
+                "status, replaced_by_id) select meeting_id, 'New', 1, 'fp2', 'replaced', id "
+                "from decisions"
+            )
+        )
+    # deleting the decision that replaced another leaves it with no link, not deleted
+    with engine.begin() as conn:
+        conn.execute(text("delete from decisions where fingerprint = 'fp'"))
+    assert _rows(engine, "select text, replaced_by_id from decisions") == [("New", None)]
+    assert "decision_tasks" in inspect(engine).get_table_names()
+    command.downgrade(cfg, "0035")
+    columns = {c["name"] for c in inspect(engine).get_columns("decisions")}
+    assert not columns & {
+        "status",
+        "decided_by",
+        "quote",
+        "revisit_on",
+        "replaced_by_id",
+        "edited_at",
+    }
+    assert "decision_tasks" not in inspect(engine).get_table_names()
+    assert _rows(engine, "select text from decisions") == [("New",)]
+    command.upgrade(cfg, "head")
+    engine.dispose()
+
+
+def test_0036_link_rows_go_with_either_side(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "head")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
+        conn.execute(
+            text("insert into teams (name, owner_user_id) select 'T', id from users limit 1")
+        )
+        conn.execute(
+            text(
+                "insert into templates (owner_user_id, name, instructions) "
+                "select id, 'T', 'x' from users where email = 'a@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id, "
+                "status, step) select u.id, 'u', 'zoom', '1', t.id, 'ready', 'done' "
+                "from users u join templates t on t.owner_user_id = u.id "
+                "where u.email = 'a@example.test'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into decisions (meeting_id, text, position, fingerprint) "
+                "select id, 'D', 0, 'fp' from meetings"
+            )
+        )
+        conn.execute(
+            text("insert into tasks (team_id, title) select id, 'Task' from teams limit 1")
+        )
+        conn.execute(
+            text(
+                "insert into decision_tasks (decision_id, task_id) "
+                "select d.id, t.id from decisions d, tasks t"
+            )
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # the pair is the key
+        conn.execute(
+            text(
+                "insert into decision_tasks (decision_id, task_id) "
+                "select d.id, t.id from decisions d, tasks t"
+            )
+        )
+    with engine.begin() as conn:
+        conn.execute(text("delete from tasks"))
+    assert _rows(engine, "select count(*) from decision_tasks") == [(0,)]
     engine.dispose()
 
 

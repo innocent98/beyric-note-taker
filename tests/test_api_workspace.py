@@ -57,7 +57,7 @@ def test_decisions_are_grouped_by_meeting_newest_first(api, session, template):
         "We hire two engineers.",
         "Budget is capped at £4,000.",
     ]
-    assert set(first["decisions"][0]) == {"id", "text"}
+    assert {"id", "text", "status", "can_edit"} <= set(first["decisions"][0])
     assert (body["has_more"], body["next_before_id"]) == (False, None)
 
 
@@ -253,6 +253,7 @@ def test_the_workspace_routes_are_exactly_these(app):
     ours = {(m, p) for m, p in api_routes(app) if p.startswith(("/api/decisions", "/api/review"))}
     assert ours == {
         ("GET", "/api/decisions"),
+        ("PATCH", "/api/decisions/{decision_id}"),
         ("POST", "/api/decisions/{decision_id}/hide"),
         ("GET", "/api/review"),
         ("POST", "/api/review/{item_id}/check"),

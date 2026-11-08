@@ -1,0 +1,28 @@
+{
+  "note": "...and cannot be changed: 404.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/2",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "status": "approved"
+    }
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such decision"
+      }
+    }
+  }
+}

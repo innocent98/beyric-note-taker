@@ -1,0 +1,28 @@
+{
+  "note": "`free` is Rejected: naming a replacement needs status Replaced. 422.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "replaced_by_id": 2
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "replaced_by_needs_replaced",
+        "message": "Choose Replaced before naming the decision that replaced this one."
+      }
+    }
+  }
+}

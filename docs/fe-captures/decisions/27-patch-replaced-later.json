@@ -1,0 +1,39 @@
+{
+  "note": "...and one chosen afterwards.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/decisions/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "replaced_by_id": 2
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "text": "Look at a lifetime deal at some point.",
+      "status": "replaced",
+      "decided_by": "Amina",
+      "quote": "I suggest we also look at a lifetime deal, maybe later.",
+      "quote_speaker": "Amina",
+      "line": 4,
+      "revisit_on": null,
+      "replaced_by": {
+        "id": 2,
+        "text": "Move the launch to 30 November."
+      },
+      "replaces": [],
+      "related_tasks": [],
+      "can_edit": true
+    }
+  }
+}
