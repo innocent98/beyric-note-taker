@@ -1110,7 +1110,7 @@ def test_the_script_refuses_to_delete_the_last_admin_and_asks_first(
     make_user(session, ADMIN, admin=True)
     user, *_ = full_account(session, audio_dir)
     monkeypatch.setattr(delete_user, "SessionLocal", lambda: _Same(session))
-    monkeypatch.setattr(delete_user, "VexaClient", lambda: FakeVexa())
+    monkeypatch.setattr(delete_user, "build_provider", lambda: FakeVexa())
     assert delete_user.run([ADMIN, "--yes"]) == 1
     assert "last admin" in capsys.readouterr().err
     monkeypatch.setattr("builtins.input", lambda prompt="": "no")
@@ -1225,7 +1225,7 @@ def test_the_script_checks_for_the_last_admin_under_the_admin_lock_after_confirm
         lambda db, user: seen.append(("check", user.id)) or real_check(db, user),
     )
     monkeypatch.setattr(delete_user, "SessionLocal", lambda: _Same(session))
-    monkeypatch.setattr(delete_user, "VexaClient", lambda: FakeVexa())
+    monkeypatch.setattr(delete_user, "build_provider", lambda: FakeVexa())
     assert delete_user.run([second.email, "--yes"]) == 0
     assert ("lock", admin_module.ADMIN_LOCK) in seen
     assert seen.index(("lock", admin_module.ADMIN_LOCK)) < max(

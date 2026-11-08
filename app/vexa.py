@@ -1,31 +1,54 @@
-"""Client for the self-hosted Vexa meeting-bot API."""
+"""Client for the self-hosted Vexa meeting-bot API, and `VexaProvider`, its `BotProvider` face.
+
+The app talks to `app/bot_provider.py`'s interface; this module is the one place that knows Vexa's
+HTTP API. The errors below are Vexa-named subclasses of the neutral ones, so a log line still says
+`VexaSendUncertain` and callers catch the neutral class. The link parsing moved to
+`app/meeting_url.py` and the shared types to `app/bot_provider.py`; both are re-exported here, so
+`from app.vexa import ...` keeps working.
+"""
 
 import re
-import threading
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
 
+from app.bot_provider import (
+    SEND_DEADLINE_SECONDS,
+    BotDuplicate,
+    BotMeeting,
+    BotNotFound,
+    BotProviderError,
+    BotSendUncertain,
+    run_within,
+)
 from app.config import get_settings
+from app.meeting_url import (  # noqa: F401  (re-exported)
+    MEET_PATH,
+    ZOOM_PATH,
+    UnsupportedMeetingUrl,
+    _parse,
+    canonical_meeting_url,
+    parse_meeting_url,
+)
 
-ZOOM_PATH = re.compile(r"^/(?:j|wc/join)/(\d+)/?$")
 MAX_REDIRECTS = 5
-MEET_PATH = re.compile(r"^/([a-z]{3}-[a-z]{4}-[a-z]{3})/?$")
+
+# The same class as `BotMeeting`; the old name stays for the code and tests that use it.
+VexaMeeting = BotMeeting
+_within = run_within
 
 
-class VexaError(Exception):
+class VexaError(BotProviderError):
     """HTTP failure or connection problem talking to Vexa. Treat as retryable."""
 
 
-class VexaDuplicateBot(VexaError):
+class VexaDuplicateBot(VexaError, BotDuplicate):
     """Vexa refused a bot because the meeting already has one (HTTP 409; assumed, not yet captured
     from a live host). There is no bot of ours to stop: the one there belongs to someone else."""
 
 
-class VexaSendUncertain(VexaError):
+class VexaSendUncertain(VexaError, BotSendUncertain):
     """`send_bot` did not get a clear answer: the request timed out after it was sent, the
     connection broke, the deadline ran out, Vexa answered 5xx (a gateway can time out after the bot
     manager acted), or said yes in a body we could not read. The bot MAY be in the meeting or
@@ -35,31 +58,9 @@ class VexaSendUncertain(VexaError):
     plain `VexaError`, nothing was sent."""
 
 
-class VexaNotFound(VexaError):
+class VexaNotFound(VexaError, BotNotFound):
     """Vexa answered 404 for a meeting: it does not know it. Still a `VexaError`, so every caller
     that retries is unchanged; `app/deletion.py` reads it as "nothing there to wait for"."""
-
-
-class UnsupportedMeetingUrl(ValueError):
-    """The URL is not a Google Meet or Zoom meeting link."""
-
-
-@dataclass
-class VexaMeeting:
-    status: str
-    segments: list[dict[str, Any]] = field(default_factory=list)
-    recording_id: int | None = None
-    media_id: int | None = None
-    recording_status: str | None = None
-    completion_reason: str | None = None
-    # Vexa's own words for why the bot failed, e.g. "[Zoom Web] zoom_requires_rtms: ...".
-    failure_reason: str | None = None
-    # Vexa's id for this meeting (the one `send_bot` returns), when the body carries one.
-    vexa_id: int | None = None
-    # The bot has stood in the waiting room (`awaiting_admission` in Vexa's own transition
-    # history). Vexa raises `needs_help` there as a warning that its lobby budget is running out,
-    # which is not a prompt the bot is stuck on.
-    reached_lobby: bool = False
 
 
 MAX_FAILURE_REASON_CHARS = 300
@@ -89,48 +90,6 @@ def _failure_reason(data: dict) -> str | None:
     return reason.strip()[:MAX_FAILURE_REASON_CHARS]
 
 
-def _parse(url: str) -> tuple[str, str, str]:
-    """Return (platform, native_id, canonical_url), rejecting ambiguous input."""
-    if not isinstance(url, str):
-        raise UnsupportedMeetingUrl("not a string")
-    url = url.strip()
-    if "\\" in url or any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in url):
-        raise UnsupportedMeetingUrl("unsupported characters in meeting URL")
-    try:
-        parts = urlsplit(url)
-        host = (parts.hostname or "").lower()
-        port = parts.port
-    except ValueError as exc:
-        raise UnsupportedMeetingUrl("malformed meeting URL") from exc
-    if parts.scheme not in ("http", "https") or "@" in parts.netloc or port is not None:
-        raise UnsupportedMeetingUrl("unsupported meeting URL")
-    if host == "zoom.us" or host.endswith(".zoom.us"):
-        match = ZOOM_PATH.match(parts.path)
-        if match:
-            canonical = f"https://{host}{parts.path}"
-            pwd = parse_qs(parts.query).get("pwd")
-            if pwd and pwd[0]:
-                canonical += "?" + urlencode({"pwd": pwd[0]})
-            return "zoom", match.group(1), canonical
-    elif host == "meet.google.com":
-        match = MEET_PATH.match(parts.path)
-        if match:
-            return "google_meet", match.group(1), f"https://{host}{parts.path}"
-    raise UnsupportedMeetingUrl("unsupported meeting URL")
-
-
-def parse_meeting_url(url: str) -> tuple[str, str]:
-    """Return (platform, native_meeting_id) for a Zoom or Google Meet URL."""
-    platform, native_id, _ = _parse(url)
-    return platform, native_id
-
-
-def canonical_meeting_url(url: str) -> str:
-    """The URL the bot is sent to: https, rebuilt from its parsed parts, the Zoom passcode kept and
-    every other query parameter dropped. Raises `UnsupportedMeetingUrl` like `parse_meeting_url`."""
-    return _parse(url)[2]
-
-
 def _list_of_dicts(container: dict, key: str) -> list[dict[str, Any]]:
     """`container[key]` as a list of objects. Absent or null is an empty list; any other shape
     means Vexa changed its response, which we refuse to guess about."""
@@ -151,32 +110,7 @@ def _optional_int(container: dict, key: str) -> int | None:
     return value
 
 
-def _within(seconds: float, call):
-    """Run `call()` and give its result, or raise `TimeoutError` once `seconds` have gone by. The
-    call runs in a worker thread the caller stops waiting for at the limit (as `ics_fetch` does):
-    httpx has no limit on the whole call, only per phase."""
-    box: dict[str, Any] = {}
-
-    def run() -> None:
-        try:
-            box["value"] = call()
-        except BaseException as exc:  # handed to the caller, which re-raises it
-            box["error"] = exc
-
-    worker = threading.Thread(target=run, daemon=True)
-    worker.start()
-    worker.join(seconds)
-    if worker.is_alive():
-        raise TimeoutError("took longer than the deadline")
-    if "error" in box:
-        raise box["error"]
-    return box["value"]
-
-
-# `send_bot` is held across by the placement lock, and httpx's timeout is per phase (connect,
-# write, each read), so a host that trickles bytes could keep one send going for minutes. This is
-# the whole-call limit; the lock, and the database connection under it, are never held longer.
-SEND_DEADLINE_SECONDS = 30.0
+# The connect phase of a send is shorter than the rest: a host that is not there is known quickly.
 SEND_CONNECT_SECONDS = 5.0
 
 
@@ -345,3 +279,32 @@ class VexaClient:
         except (httpx.HTTPError, OSError) as exc:
             path.unlink(missing_ok=True)
             raise VexaError(f"download_audio failed: {exc}") from exc
+
+
+class VexaProvider:
+    """`VexaClient` behind the `BotProvider` interface. It adds nothing: every call goes to the
+    client unchanged, so the HTTP requests, the errors, the timeouts, the send deadline and the
+    one-bot-per-meeting-code rule are the client's own. The client is the only object that knows
+    Vexa's URLs; this wrapper is where a Vexa-only feature would live without leaking into the
+    interface."""
+
+    def __init__(self, client: VexaClient | None = None) -> None:
+        self._client = client or VexaClient()
+
+    def send_bot(self, meeting_url: str) -> int:
+        return self._client.send_bot(meeting_url)
+
+    def get_meeting(self, platform: str, native_id: str) -> BotMeeting:
+        return self._client.get_meeting(platform, native_id)
+
+    def get_meeting_by_id(self, vexa_meeting_id: str | int) -> BotMeeting:
+        return self._client.get_meeting_by_id(vexa_meeting_id)
+
+    def stop_bot(self, platform: str, native_id: str) -> None:
+        self._client.stop_bot(platform, native_id)
+
+    def delete_recording(self, recording_id: int) -> None:
+        self._client.delete_recording(recording_id)
+
+    def download_audio(self, recording_id: int, media_id: int, path: Path) -> None:
+        self._client.download_audio(recording_id, media_id, path)

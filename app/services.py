@@ -36,7 +36,9 @@ from app import (
     visibility,
     workspace,
 )
+from app.bot_provider import BotDuplicate, BotProvider, BotProviderError, build_provider
 from app.config import Settings, get_settings
+from app.meeting_url import UnsupportedMeetingUrl, parse_meeting_url
 from app.models import (
     AppState,
     MailOutbox,
@@ -63,13 +65,6 @@ from app.pipeline import (
     send_again,
 )
 from app.placement import PlacementRefused, PlacementRequest
-from app.vexa import (
-    UnsupportedMeetingUrl,
-    VexaClient,
-    VexaDuplicateBot,
-    VexaError,
-    parse_meeting_url,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -140,8 +135,15 @@ class Refused(Exception):
 # ---- dependencies the tests replace ----
 
 
-def get_vexa() -> VexaClient:
-    return VexaClient()
+def get_bot_provider() -> BotProvider:
+    """The provider the `BOT_PROVIDER` setting names. The routes depend on this; tests replace it
+    with `app.dependency_overrides`."""
+    return build_provider()
+
+
+# The name tests and capture scripts override by. The same function object, so an override of
+# either name replaces the other.
+get_vexa = get_bot_provider
 
 
 def get_openai_client():
@@ -482,7 +484,7 @@ def _send_failed() -> Refused:
 
 def create_meeting(
     session: Session,
-    vexa: VexaClient,
+    vexa: BotProvider,
     user: User,
     url: str,
     template_id: int | None,
@@ -530,7 +532,7 @@ def _create_meeting(
         return placement.place_bot(session, vexa, request, now=datetime.now(UTC), settings=settings)
     except PlacementRefused as exc:
         raise placement_refusal(exc) from None
-    except VexaError as exc:
+    except BotProviderError as exc:
         logger.warning("send_bot failed (%s)", type(exc).__name__)
         raise _send_failed() from None
 
@@ -603,7 +605,7 @@ def _stop_bot_or_refuse(session: Session, vexa, meeting: Meeting) -> None:
         return  # this meeting's own bot is already gone; its owner carries on
     try:
         vexa.stop_bot(meeting.platform, meeting.native_id)
-    except (VexaError, ValueError) as exc:
+    except (BotProviderError, ValueError) as exc:
         session.rollback()
         logger.warning("meeting %s: stop_bot failed (%s)", meeting.id, type(exc).__name__)
         raise Refused(
@@ -611,7 +613,7 @@ def _stop_bot_or_refuse(session: Session, vexa, meeting: Meeting) -> None:
         ) from None
 
 
-def cancel_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meeting:
+def cancel_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Meeting:
     """Take the bot out of a meeting it has not finished recording. No OpenAI call is made."""
     locked = _lock_meeting(session, meeting)
     if locked.status != "bot_sent":
@@ -643,7 +645,7 @@ def cancel_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meet
     return locked
 
 
-def delete_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> None:
+def delete_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> None:
     """Delete a meeting and everything derived from it (spec 3.3), for good.
 
     Refused (409 `meeting_active`) while the bot is in the call or the notes are being written:
@@ -676,7 +678,7 @@ def delete_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> None
             )
             if recording_id is not None:
                 vexa.delete_recording(recording_id)
-    except (VexaError, ValueError) as exc:
+    except (BotProviderError, ValueError) as exc:
         session.rollback()
         logger.warning("meeting %s: Vexa cleanup failed (%s)", meeting_id, type(exc).__name__)
         raise Refused(
@@ -758,7 +760,7 @@ def _check_endable(meeting: Meeting) -> None:
         raise _not_endable()
 
 
-def end_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meeting:
+def end_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Meeting:
     """Take the bot out of the call and let the pipeline write the notes from what it recorded.
 
     Unlike `cancel_meeting` nothing is discarded: the meeting stays `bot_sent`, marked
@@ -780,7 +782,7 @@ def end_meeting(session: Session, vexa: VexaClient, meeting: Meeting) -> Meeting
     return locked
 
 
-def retry_meeting(session: Session, meeting: Meeting, vexa: VexaClient | None = None) -> Meeting:
+def retry_meeting(session: Session, meeting: Meeting, vexa: BotProvider | None = None) -> Meeting:
     now = datetime.now(UTC)
     refused = is_join_failure(meeting)
     if retry_block(meeting, now) is not None:
@@ -792,7 +794,7 @@ def retry_meeting(session: Session, meeting: Meeting, vexa: VexaClient | None = 
             else "This meeting cannot be retried.",
         )
     if refused:
-        return _send_refused_meeting_again(session, vexa or get_vexa(), meeting)
+        return _send_refused_meeting_again(session, vexa or get_bot_provider(), meeting)
     # The step is kept. A fresh polling start keeps the time limit from failing it at once.
     meeting.status, meeting.failure_reason = "processing", None
     meeting.started_polling_at = now
@@ -800,7 +802,7 @@ def retry_meeting(session: Session, meeting: Meeting, vexa: VexaClient | None = 
     return meeting
 
 
-def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Meeting) -> Meeting:
+def _send_refused_meeting_again(session: Session, vexa: BotProvider, meeting: Meeting) -> Meeting:
     """Send a new bot to a meeting Google refused. It goes through the same pre-flight as a new
     meeting (hours, the user's bots, a bot already in that meeting, room on the host) under the
     same placement lock, so a retry can never take a slot a new meeting was promised."""
@@ -826,7 +828,7 @@ def _send_refused_meeting_again(session: Session, vexa: VexaClient, meeting: Mee
         raise placement_refusal(exc) from None
     try:
         sent = send_again(locked, vexa, raise_duplicate=True)
-    except VexaDuplicateBot:  # a bot that is not ours is in that meeting
+    except BotDuplicate:  # a bot that is not ours is in that meeting
         session.rollback()
         raise placement_refusal(PlacementRefused("meeting_has_note_taker")) from None
     if not sent:

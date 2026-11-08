@@ -13,8 +13,9 @@ from app.models import User
 from app.pipeline import MAX_JOIN_ATTEMPTS, REMOVAL_REASONS, is_join_failure
 from app.services import (
     Refused,
+    get_bot_provider,
     get_openai_client,
-    get_vexa,
+    get_vexa,  # noqa: F401  (the old name; tests import it from here)
     owned_meeting_or_404,
     parse_id,
     render_markdown,
@@ -129,7 +130,7 @@ def create_meeting(
     template_id: str = Form(""),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_vexa),
+    vexa=Depends(get_bot_provider),
 ):
     try:
         meeting = services.create_meeting(
@@ -194,7 +195,7 @@ def cancel(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_vexa),
+    vexa=Depends(get_bot_provider),
 ):
     meeting = owned_meeting_or_404(session, user, meeting_id)
     try:
@@ -210,7 +211,7 @@ def end(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_vexa),
+    vexa=Depends(get_bot_provider),
 ):
     meeting = owned_meeting_or_404(session, user, meeting_id)
     try:
@@ -226,7 +227,7 @@ def retry(
     request: Request,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
-    vexa=Depends(get_vexa),
+    vexa=Depends(get_bot_provider),
 ):
     meeting = owned_meeting_or_404(session, user, meeting_id)
     try:

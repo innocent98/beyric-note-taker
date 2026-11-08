@@ -13,7 +13,7 @@ from datetime import UTC, date, datetime
 from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.vexa import UnsupportedMeetingUrl, canonical_meeting_url, parse_meeting_url
+from app.meeting_url import UnsupportedMeetingUrl, canonical_meeting_url, parse_meeting_url
 
 # A cancelled event in an incremental sync can come back as just `{"id", "status"}`, with no times.
 # It parses to this instant for both ends; only its id and status mean anything.
