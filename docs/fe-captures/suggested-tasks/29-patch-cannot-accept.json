@@ -1,0 +1,34 @@
+{
+  "note": "Accepting is `POST .../accept`, not a field of PATCH: 422.",
+  "client": "dan",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/tasks/3",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "suggested": false
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "suggested",
+            "message": "Extra inputs are not permitted"
+          }
+        ]
+      }
+    }
+  }
+}

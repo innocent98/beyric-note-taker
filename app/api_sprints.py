@@ -39,7 +39,7 @@ def _counts(
 ) -> dict[int, tuple[int, int]]:
     rows = session.execute(
         select(Task.sprint_id, func.count(), func.count().filter(Task.status == "done"))
-        .where(Task.sprint_id.in_(ids), tasks.visible(user), task_filter)
+        .where(Task.sprint_id.in_(ids), tasks.visible(user), tasks.confirmed(), task_filter)
         .group_by(Task.sprint_id)
     )
     return {sid: (total, done) for sid, total, done in rows}
@@ -170,6 +170,7 @@ def close_sprint(
             Task.sprint_id == sprint.id,
             Task.status != "done",
             tasks.visible(user),
+            tasks.confirmed(),
         )
     )
     today = sprints.team_today(session, team, now)

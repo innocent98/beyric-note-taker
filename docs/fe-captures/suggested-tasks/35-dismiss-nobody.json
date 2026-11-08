@@ -1,0 +1,20 @@
+{
+  "note": "Dismiss is the existing DELETE: 204, no body.",
+  "client": "dan",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/tasks/4",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 204,
+    "headers": {
+      "cache-control": "no-store"
+    },
+    "body": null
+  }
+}

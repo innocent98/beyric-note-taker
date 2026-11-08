@@ -179,6 +179,7 @@ def open_task_counts(session: Session, team_id: int) -> dict[int, int]:
             Task.assignee_user_id.is_not(None),
             Task.status != "done",
             Task.deleted_at.is_(None),
+            Task.suggested.is_(False),
         )
         .group_by(Task.assignee_user_id)
     )

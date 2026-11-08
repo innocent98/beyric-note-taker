@@ -8,6 +8,11 @@ Three things live here and are kept apart on purpose:
 * **Reconciling a re-run** (`reconcile`) keeps what a person did. Same bullet, same row; a task a
   person touched is never overwritten or removed; a deleted AI task stays as a tombstone so the
   same bullet does not bring it back.
+* **Suggested tasks** (`Task.suggested`): an action item the model rated `medium` or `low` waits
+  for a person when "Ask before adding unclear tasks" is on. It is made unfiled and counted nowhere
+  (`confirmed`), mailed to nobody, and a person accepts it (`accept`, which files it and lets the
+  assignee mail go) or dismisses it (`delete`, which keeps the tombstone). A re-run never flips an
+  accepted task back and never brings a dismissed one back.
 * **Who may see and change a task** (`visible`, `permissions`, `update`, ...). A task is visible to
   its assignee, to whoever can read the meeting it came from (`app/visibility.py`), and, for a
   manual task, to the team. A task nobody may see is "no such task" (404, never 403). A task the
@@ -19,13 +24,13 @@ the API, turns either into a link.
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app import filing, sprints, teams, titles
-from app.extraction import CheckedAction, fingerprint, normalise
+from app.extraction import UNCLEAR, CheckedAction, fingerprint, normalise
 from app.models import Meeting, Milestone, Project, Task, TeamMember, User
 from app.visibility import can_read_clause
 
@@ -123,6 +128,50 @@ def add_alias(session: Session, team_id: int, user_id: int, spoken: str) -> None
 # ---- reading a run into tasks (spec 3.3) ----
 
 
+def confirmed():
+    """The `where` condition that leaves out suggested tasks: every board list, count, progress
+    figure and mail section uses it (the design leaves a task out until it is accepted)."""
+    return Task.suggested.is_(False)
+
+
+# How long after its first pass a never-answered meeting's parser tasks still count as made by the
+# same extraction (the attempts are minutes apart, three at most).
+PROVISIONAL_FOR = timedelta(hours=1)
+
+
+def fingerprints_of(session: Session, meeting_id: int) -> frozenset[str]:
+    """The fingerprints of the AI tasks a meeting already has (before a first pass)."""
+    return frozenset(
+        fp
+        for fp in session.scalars(
+            select(Task.ai_fingerprint).where(Task.meeting_id == meeting_id, Task.source == "ai")
+        )
+        if fp
+    )
+
+
+def fresh_fingerprints(
+    first_pass: list[Task], known: frozenset[str], never_answered: bool, now: datetime
+) -> frozenset[str]:
+    """Which tasks of the first pass belong to this extraction and may still turn suggested when
+    the model rates them unclear: those this pass made, and, for a meeting no answer was ever
+    written for, the unrated ones an earlier attempt made a short while ago. Never a task an
+    answered run made (its assignee was mailed), nor an old meeting's (a week-old task)."""
+    out = {
+        t.ai_fingerprint for t in first_pass if t.ai_fingerprint and t.ai_fingerprint not in known
+    }
+    if never_answered:
+        out |= {
+            t.ai_fingerprint
+            for t in first_pass
+            if t.ai_fingerprint
+            and t.confidence is None
+            and t.created_at is not None
+            and now - t.created_at < PROVISIONAL_FOR
+        }
+    return frozenset(out)
+
+
 def touched(task: Task) -> bool:
     """A person did something to it (edited, moved, assigned, ticked): a re-run leaves it alone."""
     return task.edited_at is not None or task.status != "todo"
@@ -143,6 +192,8 @@ def reconcile(
     *,
     quiet: bool,
     refresh: bool = True,
+    suggest: bool = False,
+    fresh: frozenset[str] = frozenset(),
 ) -> list[Task]:
     """Make the meeting's AI tasks match its action `bullets`, keyed by fingerprint. `items` are
     the checked results, one per bullet and in the same order. Returns the live AI tasks.
@@ -153,6 +204,15 @@ def reconcile(
     * `refresh=False` (the pass before the model is asked) only adds and removes: it never
       overwrites what an earlier answer from the model refined;
     * new: created, "New" unless the meeting is `quiet` (backfill), owner matched by code.
+
+    `suggest` is "Ask before adding unclear tasks": an item the model rated `medium` or `low` is
+    then made as a suggested task, unfiled. The model's answer comes after the notes parser's tasks
+    exist, so a task the parser made **in this extraction** (its fingerprint is in `fresh`: made by
+    this attempt's first pass, or by an earlier attempt of a meeting never answered yet) and that
+    is still unrated may turn suggested when the model rates it unclear, and is unfiled then
+    (accepting files it). No other task ever turns suggested: not one that an answered run made
+    (and mailed) and left unrated, not one of an older meeting, not one a person touched. A
+    suggested task is never turned back by a later run: only a person does either.
     The caller commits."""
     existing = {
         task.ai_fingerprint: task
@@ -188,6 +248,14 @@ def reconcile(
             if task is not None:
                 kept.append(task)
             continue
+        waiting = suggest and item.confidence in UNCLEAR
+        # Held back, unfiled: new and unclear, or first rated unclear, or already waiting.
+        hold = (
+            waiting
+            if task is None
+            else task.suggested
+            or (task.confidence is None and waiting and task.ai_fingerprint in fresh)
+        )
         fields = {
             "title": item.title[:MAX_TITLE_CHARS],
             "spoken_owner": item.spoken_owner,
@@ -199,15 +267,20 @@ def reconcile(
             "position": position,
             "assigned_on": day,
         }
-        placed = filing.file_task(
-            team_projects,
-            series_project_id=series_project,
-            text=filing.filing_text(meeting_name, fields["title"], item.quote),
-        )
-        fields["project_id"], fields["check_project"] = placed.project_id, placed.check
-        # Filed into a sprint by its due date (spec 6.4); a task a person touched is never here.
-        fields["sprint_id"] = placer.sprint_for(placed.project_id, fields["due_date"])
+        if hold:
+            fields["project_id"], fields["check_project"], fields["sprint_id"] = None, False, None
+        else:
+            placed = filing.file_task(
+                team_projects,
+                series_project_id=series_project,
+                text=filing.filing_text(meeting_name, fields["title"], item.quote),
+            )
+            fields["project_id"], fields["check_project"] = placed.project_id, placed.check
+            # Filed into a sprint by its due date (spec 6.4); a task a person touched is never here.
+            fields["sprint_id"] = placer.sprint_for(placed.project_id, fields["due_date"])
         fields["carried"] = False
+        if task is None or task.confidence is None:  # rated once: what the model first said stays
+            fields["confidence"], fields["reason"] = item.confidence, item.reason
         if task is None:
             task = Task(
                 team_id=team_id,
@@ -216,12 +289,15 @@ def reconcile(
                 ai_fingerprint=key,
                 status="todo",
                 is_new=not quiet,
+                suggested=hold,
                 **fields,
             )
             session.add(task)
         else:
             for name, value in fields.items():
                 setattr(task, name, value)
+            if hold:
+                task.suggested = True
         kept.append(task)
     session.flush()
     return kept
@@ -229,8 +305,8 @@ def reconcile(
 
 def new_assignees(tasks: list[Task], owner_id: int) -> list[int]:
     """Who is to be told about these tasks: each person they are assigned to, once, never the
-    meeting's owner (for their own tasks) and never anyone for a task a person has taken over
-    or finished."""
+    meeting's owner (for their own tasks), never anyone for a task a person has taken over or
+    finished, and never anyone for a suggested task (accepting it is what tells them)."""
     seen: list[int] = []
     for task in tasks:
         who = task.assignee_user_id
@@ -239,6 +315,7 @@ def new_assignees(tasks: list[Task], owner_id: int) -> list[int]:
             or who == owner_id
             or task.status != "todo"
             or task.deleted_at
+            or task.suggested
             or not task.is_new
         ):
             continue
@@ -326,12 +403,14 @@ def list_tasks(
     project: str | None = None,
     milestone: int | None = None,
     sprint: str | None = None,
+    suggested: bool = False,
 ) -> tuple[list[Task], bool]:
     """The tasks the caller may see, newest first. `assignee` is `me`, `none` (Needs owner) or a
     user id; `project` is `none` (no project) or a project id; `milestone` is a milestone id;
-    `sprint` is `none` (Backlog), `current`, `next` or a sprint id. Returns up to `limit` and
-    whether there are more."""
-    query = select(Task).where(visible(user))
+    `sprint` is `none` (Backlog), `current`, `next` or a sprint id. Suggested tasks are left out
+    (the Board and the Backlog); `suggested=True` lists only those instead (the Suggested tasks
+    section). Returns up to `limit` and whether there are more."""
+    query = select(Task).where(visible(user), Task.suggested.is_(suggested))
     if assignee == "me":
         query = query.where(Task.assignee_user_id == user.id)
     elif assignee == "none":
@@ -369,12 +448,13 @@ def meeting_tasks(session: Session, user: User, meeting_id: int) -> list[Task]:
 
 
 def counts_for_meetings(session: Session, user: User, meeting_ids: list[int]) -> dict[int, int]:
-    """How many tasks each meeting has (for the meetings list: "8 tasks"), those the caller sees."""
+    """How many tasks each meeting has (for the meetings list: "8 tasks"), those the caller sees,
+    suggested ones not counted."""
     if not meeting_ids:
         return {}
     rows = session.execute(
         select(Task.meeting_id, func.count())
-        .where(Task.meeting_id.in_(meeting_ids), visible(user))
+        .where(Task.meeting_id.in_(meeting_ids), visible(user), confirmed())
         .group_by(Task.meeting_id)
     )
     return {meeting_id: count for meeting_id, count in rows}
@@ -383,7 +463,7 @@ def counts_for_meetings(session: Session, user: User, meeting_ids: list[int]) ->
 def attention(session: Session, user: User) -> dict[str, int]:
     """The "needs attention" counts over every open task the caller sees: tasks with no owner, and
     tasks whose quote could not be found in the transcript, and tasks filed by a guess."""
-    open_ = and_(visible(user), Task.status != "done")
+    open_ = and_(visible(user), Task.status != "done", confirmed())
     needs_owner = session.scalar(
         select(func.count()).select_from(Task).where(open_, Task.assignee_user_id.is_(None))
     )
@@ -401,7 +481,7 @@ def new_count(session: Session, user: User) -> int:
     return session.scalar(
         select(func.count())
         .select_from(Task)
-        .where(visible(user), Task.is_new.is_(True), Task.status != "done")
+        .where(visible(user), Task.is_new.is_(True), Task.status != "done", confirmed())
     )
 
 
@@ -563,13 +643,80 @@ def update(session: Session, user: User, task: Task, changes: dict, now: datetim
 
 def delete(session: Session, user: User, task: Task) -> None:
     """Delete a task. A manual task is removed; an AI task is kept as a tombstone with its words
-    cleared, so the same bullet does not bring it back when the notes are read again. Commits."""
-    if not permissions(task, user, membership(session, user)).delete:
+    cleared, so the same bullet does not bring it back when the notes are read again (this is how a
+    suggested task is dismissed: the person who owns its meeting may dismiss it too). Commits."""
+    if not (
+        permissions(task, user, membership(session, user)).delete
+        or (task.suggested and owns_meeting_of(session, user, task))
+    ):
         raise TaskForbidden
     if task.source == "ai" and task.ai_fingerprint:
         task.deleted_at = datetime.now(UTC)
         task.title, task.quote, task.spoken_owner, task.due_phrase = "", None, None, None
+        task.reason = None
         task.assignee_user_id, task.due_date, task.is_new = None, None, False
     else:
         session.delete(task)
     session.commit()
+
+
+def owns_meeting_of(session: Session, user: User, task: Task) -> bool:
+    """Whether the caller recorded the meeting the task came from (the owner of a meeting may decide
+    its suggestions whatever their role on the team)."""
+    return (
+        task.meeting_id is not None
+        and session.scalar(select(Meeting.owner_user_id).where(Meeting.id == task.meeting_id))
+        == user.id
+    )
+
+
+def can_decide(session: Session, user: User, task: Task) -> bool:
+    """Whether the caller may accept or dismiss this suggested task: whoever may edit it, or the
+    person who owns its meeting. A teammate who may merely read it may not."""
+    return permissions(task, user, membership(session, user)).edit or owns_meeting_of(
+        session, user, task
+    )
+
+
+class NotSuggested(Exception):
+    """The task was never waiting for a decision (409 `not_suggested`)."""
+
+
+def accept(session: Session, user: User, task: Task, now: datetime | None = None) -> bool:
+    """Accept a suggested task: it becomes a task, filed as creation files one (a project by the
+    series link or the keywords, a sprint by its due date, unless a person already chose them).
+    Whoever may edit the task, or owns its meeting, may accept it (`TaskForbidden` otherwise).
+    Accepting counts as a person's touch (`edited_at`): a later re-run leaves the task alone, does
+    not file it again and, if the notes are reworded, does not delete it and ask again.
+
+    Idempotent: the row is locked and read again, so a second click (or a second tab) finds it
+    already accepted. That answers True only for the call that did it, so the caller sends the
+    assignee mail once, and False for a task that is not waiting any more but was rated unclear
+    (an accepted one). A task that never was a suggestion (a clear commitment, a manual task, one
+    made before suggestions) raises `NotSuggested`. Does not commit: the mail goes in the same
+    transaction."""
+    if not can_decide(session, user, task):
+        raise TaskForbidden
+    session.refresh(task, with_for_update=True)
+    if task.deleted_at is not None:
+        raise NotSuggested
+    if not task.suggested:
+        if task.source == "ai" and task.confidence in UNCLEAR:
+            return False
+        raise NotSuggested
+    task.suggested = False
+    task.edited_at = now or datetime.now(UTC)
+    meeting = session.get(Meeting, task.meeting_id) if task.meeting_id else None
+    if meeting is not None and task.project_id is None:
+        placed = filing.file_task(
+            filing.team_projects(session, task.team_id),
+            series_project_id=filing.series_project(session, meeting),
+            text=filing.filing_text(titles.meeting_name(meeting), task.title, task.quote),
+        )
+        task.project_id, task.check_project = placed.project_id, placed.check
+    if task.sprint_id is None and not task.carried:
+        task.sprint_id = sprints.Placer(session, task.team_id).sprint_for(
+            task.project_id, task.due_date
+        )
+    session.flush()
+    return True

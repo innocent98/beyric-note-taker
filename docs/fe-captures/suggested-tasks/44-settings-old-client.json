@@ -1,0 +1,28 @@
+{
+  "note": "A client that does not send the new field leaves it as it was (still false).",
+  "client": "dan",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/tasks",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "auto_create_tasks": true,
+      "email_assignees": false
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "auto_create_tasks": true,
+      "email_assignees": false,
+      "ask_before_unclear": false
+    }
+  }
+}

@@ -1,0 +1,133 @@
+{
+  "note": "The Board and Backlog list: the three suggested tasks are NOT here (default `suggested=false`). `attention` counts none of them either.",
+  "client": "dan",
+  "request": {
+    "method": "GET",
+    "path": "/api/tasks",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "tasks": [
+        {
+          "id": 5,
+          "title": "Book the venue",
+          "status": "todo",
+          "assignee": {
+            "user_id": 2,
+            "name": "Dan Okoro",
+            "is_you": true
+          },
+          "spoken_owner": "Dan",
+          "due_date": "2026-11-06",
+          "due_phrase": "this week",
+          "quote": "I'll book the venue myself this week.",
+          "is_new": true,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-08",
+          "done_at": null,
+          "created_at": "2026-11-08T15:33:58.561931Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet nat-aaaa-bbb",
+            "platform": "google_meet",
+            "created_at": "2026-11-08T15:03:58.139957Z"
+          },
+          "project_id": null,
+          "milestone_id": null,
+          "sprint_id": 1,
+          "carried": false,
+          "check_project": false,
+          "suggested": false,
+          "confidence": "high",
+          "reason": null,
+          "quote_speaker": null,
+          "quote_line": null,
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": false,
+          "can_delete": true,
+          "can_decide": false
+        },
+        {
+          "id": 1,
+          "title": "Finish the checkout page",
+          "status": "todo",
+          "assignee": {
+            "user_id": 3,
+            "name": "Chidi Eze",
+            "is_you": false
+          },
+          "spoken_owner": "Chidi",
+          "due_date": "2026-11-06",
+          "due_phrase": "before Friday",
+          "quote": "Yes, I'll finish the checkout page before Friday.",
+          "is_new": true,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-08",
+          "done_at": null,
+          "created_at": "2026-11-08T15:33:58.561931Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet nat-aaaa-bbb",
+            "platform": "google_meet",
+            "created_at": "2026-11-08T15:03:58.139957Z"
+          },
+          "project_id": null,
+          "milestone_id": null,
+          "sprint_id": 1,
+          "carried": false,
+          "check_project": false,
+          "suggested": false,
+          "confidence": "high",
+          "reason": null,
+          "quote_speaker": null,
+          "quote_line": null,
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": false,
+          "can_delete": true,
+          "can_decide": false
+        }
+      ],
+      "people": [
+        {
+          "user_id": 2,
+          "name": "Dan Okoro",
+          "is_you": true
+        },
+        {
+          "user_id": 3,
+          "name": "Chidi Eze",
+          "is_you": false
+        },
+        {
+          "user_id": 4,
+          "name": "Amina Bello",
+          "is_you": false
+        }
+      ],
+      "attention": {
+        "needs_owner": 0,
+        "unverified": 0,
+        "check_project": 0
+      },
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

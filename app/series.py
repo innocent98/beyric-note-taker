@@ -563,12 +563,15 @@ def _series_meeting_ids(series: Series):
 
 
 def unfinished_tasks(session: Session, viewer: User, series: Series) -> list[Task]:
-    """Tasks of the series' meetings that are not done, that the viewer may see, oldest first."""
+    """Tasks of the series' meetings that are not done, that the viewer may see, oldest first.
+    A suggested task is not one yet, so it is left out (and so of the reminder mails built on this).
+    """
     return list(
         session.scalars(
             select(Task)
             .where(
                 tasks.visible(viewer),
+                tasks.confirmed(),
                 Task.meeting_id.in_(_series_meeting_ids(series)),
                 Task.status != "done",
             )
@@ -589,6 +592,7 @@ def finished_since(
         select(Task)
         .where(
             tasks.visible(viewer),
+            tasks.confirmed(),
             Task.meeting_id.in_(_series_meeting_ids(series)),
             Task.status == "done",
             Task.done_at.is_not(None),
@@ -639,7 +643,12 @@ def counts_for(
         session.execute(
             select(Meeting.series_id, func.count(Task.id))
             .join(Task, Task.meeting_id == Meeting.id)
-            .where(tasks.visible(viewer), Meeting.series_id.in_(ids), Task.status != "done")
+            .where(
+                tasks.visible(viewer),
+                tasks.confirmed(),
+                Meeting.series_id.in_(ids),
+                Task.status != "done",
+            )
             .group_by(Meeting.series_id)
         ).all()
     )

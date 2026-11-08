@@ -2175,11 +2175,16 @@
             },
             "title": "Tasks",
             "type": "array"
+          },
+          "to_confirm": {
+            "title": "To Confirm",
+            "type": "integer"
           }
         },
         "required": [
           "tasks",
           "assigned_people",
+          "to_confirm",
           "extraction_status"
         ],
         "title": "MeetingTasks",
@@ -4363,6 +4368,10 @@
             "title": "Can Claim",
             "type": "boolean"
           },
+          "can_decide": {
+            "title": "Can Decide",
+            "type": "boolean"
+          },
           "can_delete": {
             "title": "Can Delete",
             "type": "boolean"
@@ -4382,6 +4391,22 @@
           "check_project": {
             "title": "Check Project",
             "type": "boolean"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "enum": [
+                  "high",
+                  "medium",
+                  "low"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
           },
           "created_at": {
             "format": "date-time",
@@ -4478,6 +4503,39 @@
             ],
             "title": "Quote"
           },
+          "quote_line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Line"
+          },
+          "quote_speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote Speaker"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "source": {
             "enum": [
               "ai",
@@ -4517,6 +4575,10 @@
             "title": "Status",
             "type": "string"
           },
+          "suggested": {
+            "title": "Suggested",
+            "type": "boolean"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -4548,11 +4610,17 @@
           "sprint_id",
           "carried",
           "check_project",
+          "suggested",
+          "confidence",
+          "reason",
+          "quote_speaker",
+          "quote_line",
           "can_update",
           "can_edit",
           "can_assign",
           "can_claim",
-          "can_delete"
+          "can_delete",
+          "can_decide"
         ],
         "title": "TaskOut",
         "type": "object"
@@ -4665,6 +4733,17 @@
       "TasksSettingsIn": {
         "additionalProperties": false,
         "properties": {
+          "ask_before_unclear": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ask Before Unclear"
+          },
           "auto_create_tasks": {
             "title": "Auto Create Tasks",
             "type": "boolean"
@@ -4683,6 +4762,10 @@
       },
       "TasksSettingsOut": {
         "properties": {
+          "ask_before_unclear": {
+            "title": "Ask Before Unclear",
+            "type": "boolean"
+          },
           "auto_create_tasks": {
             "title": "Auto Create Tasks",
             "type": "boolean"
@@ -4694,7 +4777,8 @@
         },
         "required": [
           "auto_create_tasks",
-          "email_assignees"
+          "email_assignees",
+          "ask_before_unclear"
         ],
         "title": "TasksSettingsOut",
         "type": "object"
@@ -12609,7 +12693,7 @@
     },
     "/api/settings/tasks": {
       "get": {
-        "description": "The two switches of Settings > Tasks (both on by default, also for an account with no\nsettings row yet).",
+        "description": "The three switches of Settings > Tasks (all on by default, also for an account with no\nsettings row yet).",
         "operationId": "read_tasks_settings",
         "responses": {
           "200": {
@@ -12659,7 +12743,7 @@
         ]
       },
       "put": {
-        "description": "Set both switches. They are read when a meeting is read (tasks) and when the mail is sent\n(assignees), so turning email off also stops mail already queued.",
+        "description": "Set the switches. They are read when a meeting is read (tasks, and which are suggestions) and\nwhen the mail is sent (assignees), so turning email off also stops mail already queued.\n`ask_before_unclear` may be left out: it then stays as it is (a client from before it existed).\nTurning it off does not touch the tasks already waiting under Suggested tasks.",
         "operationId": "write_tasks_settings",
         "requestBody": {
           "content": {
@@ -13152,7 +13236,7 @@
     },
     "/api/tasks": {
       "get": {
-        "description": "The tasks the caller can see: those assigned to them, those from meetings they can read,\nand their team's manual tasks. Newest first; for the next page pass `before_id` =\n`next_before_id`. `attention` counts every open task the caller sees, whatever the filter.",
+        "description": "The tasks the caller can see: those assigned to them, those from meetings they can read,\nand their team's manual tasks. Newest first; for the next page pass `before_id` =\n`next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a\nsuggested task is in no count.",
         "operationId": "list_tasks",
         "parameters": [
           {
@@ -13193,6 +13277,18 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "description": "`false` (the default): the Board and Backlog tasks, suggested ones left out. `true`: only the suggested tasks (the Suggested tasks section).",
+            "in": "query",
+            "name": "suggested",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "`false` (the default): the Board and Backlog tasks, suggested ones left out. `true`: only the suggested tasks (the Suggested tasks section).",
+              "title": "Suggested",
+              "type": "boolean"
             }
           },
           {
@@ -13392,7 +13488,7 @@
     },
     "/api/tasks/{task_id}": {
       "delete": {
-        "description": "Delete a task. Owners and admins may delete any task they can see; a member only the tasks\nthey made. An AI task deleted here does not come back when the notes are read again.",
+        "description": "Delete a task. Owners and admins may delete any task they can see; a member only the tasks\nthey made, and the person who owns a meeting may also dismiss (delete) a suggested task from\nit. An AI task deleted here does not come back when the notes are read again.",
         "operationId": "delete_task",
         "parameters": [
           {
@@ -13602,6 +13698,89 @@
           }
         },
         "summary": "Patch Task",
+        "tags": [
+          "tasks"
+        ]
+      }
+    },
+    "/api/tasks/{task_id}/accept": {
+      "post": {
+        "description": "Accept a suggested task: it joins the board, is filed into a project and sprint as a new\ntask is, and its assignee is emailed as they would have been (when the meeting owner's \"Email\nassignees\" is on and they were not already mailed about this meeting). Whoever may edit the\ntask, or owns the meeting it came from, may accept it (403 `team_forbidden` otherwise); a\nperson who cannot read the meeting gets 404.\nIdempotent: accepting a task that was already accepted answers 200 with the task and sends\nnothing. 409 `not_suggested` for a task that never was a suggestion. To dismiss one, `DELETE`\nit.",
+        "operationId": "accept_task",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "title": "Task Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_suggested`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Accept Task",
         "tags": [
           "tasks"
         ]

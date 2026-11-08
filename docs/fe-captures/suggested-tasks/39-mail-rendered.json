@@ -1,0 +1,15 @@
+{
+  "note": "What the mail provider would be handed (CAPTURING MAILER, not Resend).",
+  "content": [
+    {
+      "to": "chidi@example.test",
+      "subject": "You have 1 new task: A meeting of Dan Okoro",
+      "text": "A meeting of Dan Okoro · 08 Nov 2026\n\nYou have 1 new task\n\nHi Chidi, this action item from today's meeting was assigned to you.\n\n- Finish the checkout page (Due Fri 6 Nov)\n\nOpen my tasks:\nhttps://notes.example.test/tasks\n\nNot yours? Open the task to reassign it.\n\nYou received this because you are on the Beyric team.\nEmail preferences: https://notes.example.test/settings#email-preferences"
+    },
+    {
+      "to": "amina@example.test",
+      "subject": "You have 1 new task: A meeting of Dan Okoro",
+      "text": "A meeting of Dan Okoro · 08 Nov 2026\n\nYou have 1 new task\n\nHi Amina, this action item from today's meeting was assigned to you.\n\n- Look into the analytics setup\n\nOpen my tasks:\nhttps://notes.example.test/tasks\n\nNot yours? Open the task to reassign it.\n\nYou received this because you are on the Beyric team.\nEmail preferences: https://notes.example.test/settings#email-preferences"
+    }
+  ]
+}
