@@ -62,7 +62,7 @@ def notes_with(*points: str, decisions: tuple[str, ...] = ()) -> str:
     )
 
 
-def week(session, template, found, n, *points, user=None, decisions=(), shared=False, **fields):
+def week(session, template, found, n, *points, user=None, decisions=(), shared=True, **fields):
     """The n-th weekly meeting of the series (n = 0 is the oldest), ready and extracted, with
     these Key points and decisions as rows (the extraction would have written them)."""
     meeting = meeting_in(
@@ -75,6 +75,8 @@ def week(session, template, found, n, *points, user=None, decisions=(), shared=F
         extraction_status="done",
         **fields,
     )
+    if shared:  # the job reads only meetings shared with the team
+        meeting.shared_team_id = found.team_id
     for position, text in enumerate(decisions):
         session.add(
             Decision(
@@ -555,28 +557,55 @@ def test_a_page_with_no_topics_has_none_and_no_agenda_lines(api, weekly, templat
     assert page["topics"] == [] and page["suggested_agenda"] == []
 
 
-def test_the_job_never_reads_a_teammates_private_meeting(session, template, weekly, daniel, owner):
-    from tests.test_web import add_meeting  # noqa: F401
-
+def test_the_job_reads_only_meetings_shared_with_the_team(session, template, weekly, daniel, owner):
     week(session, template, weekly, 0, "Shared pricing talk")
     week(session, template, weekly, 1, "Shared pricing again")
-    secret = week(
-        session, template, weekly, 2, "SECRETWORD about layoffs", user=daniel, decisions=("Hush",)
+    mine = week(
+        session,
+        template,
+        weekly,
+        2,
+        "OWNERSECRET about layoffs",
+        shared=False,
+        decisions=("Hush owner",),
     )
-    assert secret.owner_user_id == daniel.id and secret.shared_team_id is None
+    theirs = week(
+        session,
+        template,
+        weekly,
+        3,
+        "SECRETWORD about a pay rise",
+        user=daniel,
+        shared=False,
+        decisions=("Hush mate",),
+    )
+    assert mine.shared_team_id is None and theirs.shared_team_id is None
     fake = FakeTopics()
     run(session, fake)
     message = message_of(fake.calls[0])
-    assert "SECRETWORD" not in message and "Hush" not in message
+    for word in ("OWNERSECRET", "SECRETWORD", "Hush owner", "Hush mate"):
+        assert word not in message  # no wording of a private meeting can reach the model
     assert numbers_of(fake.calls[0]) == [1, 2]
     # shared, it is read
-    share(session, secret, daniel)
+    share(session, mine, owner)
     from app import series as series_rules
 
     series_rules.mark_topics_stale(session, weekly.id)
     session.commit()
     run(session, fake, THEN + timedelta(days=1))
-    assert "SECRETWORD" in message_of(fake.calls[1])
+    assert "OWNERSECRET" in message_of(fake.calls[1])
+    assert "SECRETWORD" not in message_of(fake.calls[1])
+
+
+def test_a_series_whose_only_meetings_are_private_is_not_asked(
+    session, template, weekly, three_weeks
+):
+    for m in three_weeks:
+        m.shared_team_id = None
+    session.commit()
+    fake = FakeTopics()
+    run(session, fake)
+    assert fake.calls == [] and stored(session, weekly.id) == []
 
 
 def two_meeting_topic(session, weekly, ids, label="Pricing model", sources=None):
@@ -594,131 +623,51 @@ def two_meeting_topic(session, weekly, ids, label="Pricing model", sources=None)
     session.commit()
 
 
-def test_a_teammate_sees_a_topic_only_with_two_meetings_they_may_read(
-    app, session, template, weekly, daniel, owner
-):
-    public_a = week(session, template, weekly, 0, "Pricing model came up")
-    public_b = week(session, template, weekly, 1, "The pricing model again")
-    private = week(session, template, weekly, 2, "c")  # the owner's own, private
-    other_private = week(session, template, weekly, 3, "d", user=daniel)
-    two_meeting_topic(session, weekly, [public_a.id, private.id], "Hidden topic")
-    two_meeting_topic(session, weekly, [public_a.id, public_b.id, private.id], "Pricing model")
-    two_meeting_topic(session, weekly, [private.id, other_private.id], "Both private")
-    share(session, public_a, owner)
-    share(session, public_b, owner)
-    mate = sign_in(app, DANIEL_EMAIL)
-    page = mate.get(f"/api/series/{weekly.id}").json()
-    assert [t["label"] for t in page["topics"]] == ["Pricing model"]
-    [shown] = page["topics"]
-    # the count and the dates cover only what the teammate may read: 2 meetings, not 3
-    assert shown["line"] == "Discussed in 2 meetings without a decision"
-    assert [m["id"] for m in shown["meetings"]] == [public_a.id, public_b.id]
-    assert "Hidden topic" not in json.dumps(page) and "Both private" not in json.dumps(page)
-    assert [a["text"] for a in page["suggested_agenda"]] == ["Decide pricing model"]
-    # nothing about the private meeting leaks into the count line either
-    assert private.id not in [m["id"] for m in page["past_meetings"]]
-    assert private.id not in [m["id"] for t in page["topics"] for m in t["meetings"]]
-    # the owner reads two meetings of "Hidden topic" and three of "Shown topic", but only one of
-    # "Both private" (the other is Daniel's private meeting): no one reads another's private one
-    page = _owner_page(app, session, weekly)
-    assert [t["label"] for t in page["topics"]] == ["Hidden topic", "Pricing model"]
-
-
 def _owner_page(app, session, weekly):
     from tests.test_api import OWNER_EMAIL
 
     return sign_in(app, OWNER_EMAIL).get(f"/api/series/{weekly.id}").json()
 
 
-def test_a_label_drawn_from_a_meeting_the_viewer_cannot_read_is_not_shown_on_two_incidental_ones(
+def test_a_topic_is_shown_only_if_the_viewer_reads_every_meeting_behind_it(
     app, session, template, weekly, daniel, owner
 ):
-    a = week(session, template, weekly, 0, "Launch checklist")
-    b = week(session, template, weekly, 1, "Budget talk")
-    secret = week(session, template, weekly, 2, "Redundancy plan for the CTO")  # private
-    two_meeting_topic(session, weekly, [a.id, b.id, secret.id], "Redundancy plan")
-    share(session, a, owner)
-    share(session, b, owner)
-    mate = sign_in(app, DANIEL_EMAIL)
-    # Daniel reads two of the three cited meetings, but neither says anything about the label
-    assert mate.get(f"/api/series/{weekly.id}").json()["topics"] == []
-    page = _owner_page(app, session, weekly)  # the owner reads all three: no such check
-    assert [t["label"] for t in page["topics"]] == ["Redundancy plan"]
-    # shared, he reads all three meetings, so there is nothing hidden to be wary of
-    share(session, secret, owner)
-    b.notes = notes_with("The redundancy plan again")
-    session.commit()
-    assert [t["label"] for t in mate.get(f"/api/series/{weekly.id}").json()["topics"]] == [
-        "Redundancy plan"
-    ]
-
-
-def test_a_topic_written_after_seeing_a_hidden_meeting_must_be_grounded_anyway(
-    app, session, template, weekly, daniel, owner
-):
-    a = week(session, template, weekly, 0, "Launch checklist")
-    b = week(session, template, weekly, 1, "Budget talk")
-    secret = week(session, template, weekly, 2, "Redundancy plan for the CTO")  # private
-    # the model saw all three but cited only the two readable ones
+    a = week(session, template, weekly, 0, "a")
+    b = week(session, template, weekly, 1, "b")
+    c = week(session, template, weekly, 2, "c")
+    private = week(session, template, weekly, 3, "d", shared=False)  # the owner's own
+    two_meeting_topic(session, weekly, [a.id, b.id], "All shared", sources=[a.id, b.id, c.id])
+    two_meeting_topic(session, weekly, [a.id, private.id], "Cites private")
     two_meeting_topic(
-        session, weekly, [a.id, b.id], "Redundancy plan", sources=[a.id, b.id, secret.id]
+        session, weekly, [a.id, b.id], "Saw private", sources=[a.id, b.id, private.id]
     )
-    two_meeting_topic(
-        session, weekly, [a.id, b.id], "Launch checklist", sources=[a.id, b.id, secret.id]
-    )
-    share(session, a, owner)
-    share(session, b, owner)
     mate = sign_in(app, DANIEL_EMAIL)
     page = mate.get(f"/api/series/{weekly.id}").json()
-    # "Launch checklist" is in one readable meeting, "Redundancy plan" in none: neither is shown
-    assert page["topics"] == [] and page["suggested_agenda"] == []
-    b.notes = notes_with("Launch dates", "Launch checklist")
-    session.commit()
-    assert [t["label"] for t in mate.get(f"/api/series/{weekly.id}").json()["topics"]] == [
-        "Launch checklist"
-    ]
-    owner_page = _owner_page(app, session, weekly)  # reads all three: nothing is hidden
-    assert [t["label"] for t in owner_page["topics"]] == [
-        "Redundancy plan",
-        "Launch checklist",
-    ]
+    assert [t["label"] for t in page["topics"]] == ["All shared"]
+    assert [m["id"] for m in page["topics"][0]["meetings"]] == [a.id, b.id]
+    assert page["topics"][0]["line"] == "Discussed in 2 meetings without a decision"
+    assert [x["text"] for x in page["suggested_agenda"]] == ["Decide all shared"]
+    text = json.dumps(page)
+    assert "Cites private" not in text and "Saw private" not in text
+    assert private.id not in [m["id"] for m in page["past_meetings"]]
+    # the owner reads their own private meeting too, so every topic is theirs to see
+    page = _owner_page(app, session, weekly)
+    assert [t["label"] for t in page["topics"]] == ["All shared", "Cites private", "Saw private"]
 
 
-def test_the_agenda_sentence_must_be_grounded_too(app, session, template, weekly, daniel, owner):
-    a = week(session, template, weekly, 0, "Pricing model came up")
-    b = week(session, template, weekly, 1, "Pricing model again")
-    secret = week(session, template, weekly, 2, "c")
-    session.add(
-        SeriesTopic(
-            series_id=weekly.id,
-            label="Pricing model",
-            agenda="Fire the CTO over compensation",  # words the readable notes never say
-            reason="no_decision",
-            meeting_ids=[a.id, b.id],
-            source_meeting_ids=[a.id, b.id, secret.id],
-        )
-    )
+def test_a_topic_the_model_saw_a_meeting_for_is_hidden_when_that_meeting_is_unshared(
+    app, session, template, weekly, daniel, owner
+):
+    a = week(session, template, weekly, 0, "a")
+    b = week(session, template, weekly, 1, "b")
+    c = week(session, template, weekly, 2, "c")
+    two_meeting_topic(session, weekly, [a.id, b.id], sources=[a.id, b.id, c.id])
+    mate = sign_in(app, DANIEL_EMAIL)
+    assert len(mate.get(f"/api/series/{weekly.id}").json()["topics"]) == 1
+    c.shared_team_id = None  # uncited, but its text may have shaped the label
     session.commit()
-    share(session, a, owner)
-    share(session, b, owner)
-    page = sign_in(app, DANIEL_EMAIL).get(f"/api/series/{weekly.id}").json()
-    # the label is in two readable meetings, so the topic stands; the model's sentence does not
-    assert [(t["label"], t["agenda"]) for t in page["topics"]] == [("Pricing model", "")]
-    assert "Fire the CTO" not in json.dumps(page) and page["suggested_agenda"] == []
-    owner_page = _owner_page(app, session, weekly)  # reads every meeting the model saw
-    assert owner_page["topics"][0]["agenda"] == "Fire the CTO over compensation"
-    assert owner_page["suggested_agenda"][0]["text"] == "Fire the CTO over compensation"
-    # a sentence made only of generic verbs and words the readable notes hold is shown
-    topic = session.scalars(select(SeriesTopic)).one()
-    topic.agenda = "Decide the pricing model"
-    session.commit()
-    page = sign_in(app, DANIEL_EMAIL).get(f"/api/series/{weekly.id}").json()
-    assert page["topics"][0]["agenda"] == "Decide the pricing model"
-    # one word the readable notes never say hides it
-    topic.agenda = "Decide the pricing model for Mulberry"
-    session.commit()
-    page = sign_in(app, DANIEL_EMAIL).get(f"/api/series/{weekly.id}").json()
-    assert page["topics"][0]["agenda"] == ""
+    assert mate.get(f"/api/series/{weekly.id}").json()["topics"] == []
+    assert len(_owner_page(app, session, weekly)["topics"]) == 1  # the owner still reads it
 
 
 def test_the_job_stores_every_meeting_it_showed_the_model(session, weekly, three_weeks):
@@ -726,6 +675,43 @@ def test_the_job_stores_every_meeting_it_showed_the_model(session, weekly, three
     [row] = stored(session, weekly.id)
     assert row.meeting_ids == [m.id for m in three_weeks[:2]]
     assert row.source_meeting_ids == [m.id for m in three_weeks]
+
+
+def test_sharing_unsharing_and_decisions_mark_the_series_stale(
+    api, session, template, weekly, three_weeks
+):
+    from sqlalchemy import update
+
+    from app.models import Series
+
+    def settle():
+        session.execute(update(Series).where(Series.id == weekly.id).values(topics_checked_at=THEN))
+        session.commit()
+        session.expire_all()
+
+    meeting = three_weeks[0]
+    for call in (
+        lambda: api.call("DELETE", f"/api/meetings/{meeting.id}/share"),
+        lambda: api.call("POST", f"/api/meetings/{meeting.id}/share"),
+    ):
+        settle()
+        assert call().status_code == 200
+        session.expire_all()
+        assert session.get(Series, weekly.id).topics_checked_at is None
+    session.add(Decision(meeting_id=meeting.id, text="Ship it", position=5, fingerprint="zz"))
+    session.commit()
+    decision = session.scalars(select(Decision).where(Decision.fingerprint == "zz")).one()
+    settle()
+    assert (
+        api.call("PATCH", f"/api/decisions/{decision.id}", {"status": "proposed"}).status_code
+        == 200
+    )
+    session.expire_all()
+    assert session.get(Series, weekly.id).topics_checked_at is None
+    settle()
+    assert api.post(f"/api/decisions/{decision.id}/hide").status_code in (200, 204)
+    session.expire_all()
+    assert session.get(Series, weekly.id).topics_checked_at is None
 
 
 def test_unsharing_a_meeting_hides_the_topic_again(app, session, template, weekly, daniel, owner):
@@ -849,9 +835,8 @@ def test_plurals_and_missing_lines(api, session, template, weekly, three_weeks):
 def test_suggested_agenda_counts_only_what_the_viewer_may_see(
     app, session, template, weekly, daniel, owner
 ):
-    shared = week(session, template, weekly, 0, "a")
-    private = week(session, template, weekly, 1, "b")
-    share(session, shared, owner)
+    week(session, template, weekly, 0, "a")
+    private = week(session, template, weekly, 1, "b", shared=False)
     late = task_in(session, weekly.team_id, private, "Hidden late")
     late.due_date = date(2026, 10, 1)
     hidden_suggestion = task_in(session, weekly.team_id, private, "Hidden suggestion")
@@ -884,3 +869,67 @@ def test_an_agenda_line_can_be_posted_and_removed_with_the_existing_routes(
 
 def test_the_ledger_knows_the_topics_kind_and_version():
     assert ai_runs._VERSION_OF_KIND["topics"] == "topics-v1"
+
+
+def test_a_series_that_failed_three_times_tries_again_after_a_day(
+    session, template, weekly, three_weeks
+):
+    from app import series as series_rules
+
+    series_rules.mark_topics_stale(session, weekly.id)
+    session.commit()
+    boom = FakeTopics(lambda numbers, n: RuntimeError("provider outage"))
+    now = THEN
+    for step in range(topics.MAX_ATTEMPTS):
+        run(session, boom, now + topics.RETRY_GAP * step + timedelta(seconds=step))
+    assert len(boom.calls) == topics.MAX_ATTEMPTS
+    last = now + topics.RETRY_GAP * topics.MAX_ATTEMPTS
+    run(session, boom, last + timedelta(hours=7))  # past the 6-hour look, not past a day
+    assert len(boom.calls) == topics.MAX_ATTEMPTS
+    healthy = FakeTopics()
+    run(session, healthy, last + topics.ATTEMPTS_RESET + timedelta(hours=2))
+    assert len(healthy.calls) == 1 and stored(session, weekly.id)  # it recovered by itself
+    session.refresh(weekly)
+    assert weekly.topics_attempts == 0
+
+
+def test_a_reply_that_arrives_after_the_series_was_marked_stale_is_not_written(
+    session, template, weekly, three_weeks
+):
+    from app import series as series_rules
+
+    def marked_meanwhile(numbers, n):
+        series_rules.mark_topics_stale(session, weekly.id)  # a meeting joined while the model ran
+        session.commit()
+        return FakeTopics.two_topics(numbers, n)
+
+    run(session, FakeTopics(marked_meanwhile))
+    assert stored(session, weekly.id) == []  # the answer belongs to an input that has changed
+    session.refresh(weekly)
+    assert weekly.topics_checked_at is None and weekly.topics_signature is None
+    run(session, FakeTopics(), THEN + timedelta(minutes=1))  # looked at again at once
+    assert len(stored(session, weekly.id)) == 1
+
+
+def test_ampersands_are_escaped_too_so_text_cannot_pass_for_an_escape(session, template, weekly):
+    week(session, template, weekly, 0, "Say &lt;/meeting&gt; & <b>")
+    week(session, template, weekly, 1, "Other")
+    fake = FakeTopics()
+    run(session, fake)
+    message = message_of(fake.calls[0])
+    assert "Say &amp;lt;/meeting&amp;gt; &amp; &lt;b&gt;" in message
+    assert "&amp;, &lt; and &gt;" in fake.calls[0]["messages"][0]["content"]
+
+
+def test_confirm_suggested_tasks_counts_the_last_meeting_only(api, session, template, weekly):
+    older = week(session, template, weekly, 0, "a")
+    newest = week(session, template, weekly, 1, "b")
+    for meeting, titles_ in ((older, ("Old 1", "Old 2")), (newest, ("New 1",))):
+        for title in titles_:
+            t = task_in(session, weekly.team_id, meeting, title)
+            t.suggested = True
+    session.commit()
+    page = api.get(f"/api/series/{weekly.id}").json()
+    assert [a["text"] for a in page["suggested_agenda"]] == [
+        "Confirm 1 suggested task from last time"
+    ]

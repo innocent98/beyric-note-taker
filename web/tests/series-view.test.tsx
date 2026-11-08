@@ -53,6 +53,7 @@ const topicsCapture = (file: string) =>
     .body as SeriesPage;
 const withTopics = topicsCapture("13-series-ada.json");
 const teammateTopics = topicsCapture("14-series-dan.json");
+const teammateAfterUnshare = topicsCapture("21-series-dan-after-unshare.json");
 
 beforeEach(() => {
   cleanup();
@@ -459,7 +460,7 @@ describe("Keeps coming up and Suggested agenda (captured pages)", () => {
     expect(
       screen.getByText("Raised in 2 meetings, still no owner or date"),
     ).toBeTruthy();
-    expect(screen.getByText("Mon 26 Oct and Wed 4 Nov 2026")).toBeTruthy();
+    expect(screen.getByText("Mon 26 Oct and Mon 2 Nov 2026")).toBeTruthy();
   });
 
   it("numbers the suggested lines in the order received, each with Add to agenda", () => {
@@ -488,13 +489,19 @@ describe("Keeps coming up and Suggested agenda (captured pages)", () => {
     expect(screen.queryByRole("progressbar")).toBeNull();
   });
 
-  it("shows only the topics the server sent a teammate", () => {
+  it("draws what the server sent a teammate: the same topics, without the line he has no tasks for", () => {
     render(<SeriesView initial={teammateTopics} />);
     expect(screen.getByText("Pricing model")).toBeTruthy();
-    expect(screen.queryByText("Compensation review")).toBeNull();
-    expect(
-      screen.queryByText("Give the compensation review an owner"),
-    ).toBeNull();
+    expect(screen.getByText("Compensation review")).toBeTruthy();
+    expect(screen.queryByText(/suggested task/)).toBeNull();
+    expect(document.querySelectorAll(".sr-sug").length).toBe(4);
+  });
+
+  it("draws neither block, and nothing about why, when the server sent a teammate no topics and no lines", () => {
+    render(<SeriesView initial={teammateAfterUnshare} />);
+    expect(h2s()).not.toContain("Keeps coming up");
+    expect(h2s()).not.toContain("Suggested agenda");
+    expect(screen.queryByText(/hidden|unshared|private/i)).toBeNull();
   });
 
   it("Add to agenda posts the line's exact text and the row becomes Added; a second click removes it", async () => {

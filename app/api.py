@@ -578,6 +578,8 @@ def share_meeting(
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
     team = teams.ensure_team(session, user)
     meeting.shared_team_id = team.id
+    if meeting.series_id is not None:
+        series_rules.mark_topics_stale(session, meeting.series_id)  # the repeat topics may change
     session.commit()
     return _detail(meeting, session, user)
 
@@ -598,6 +600,8 @@ def unshare_meeting(
     else. Doing it twice is fine."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
     meeting.shared_team_id = None
+    if meeting.series_id is not None:
+        series_rules.mark_topics_stale(session, meeting.series_id)  # the repeat topics may change
     session.commit()
     return _detail(meeting, session, user)
 

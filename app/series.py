@@ -48,7 +48,6 @@ from app.models import (
 )
 from app.notes_document import parse_transcript
 from app.visibility import can_read_clause, owns, visible_meetings
-from app.words import stems
 
 logger = logging.getLogger(__name__)
 
@@ -850,54 +849,17 @@ class TopicView:
     meetings: list[Meeting]
 
 
-MIN_GROUNDED = 2  # readable meetings that must carry a topic's label when some meetings are hidden
-
-
-def _notes_text(meeting: Meeting) -> str:
-    """What the meeting's notes say (its Key points and decisions): the text the topic job reads."""
-    from app.extraction import key_points, parse_notes
-
-    if not meeting.notes:
-        return ""
-    return " ".join([*key_points(meeting.notes), *parse_notes(meeting.notes).decisions])
-
-
-# Words an agenda sentence may carry that no meeting need have said ("Decide the pricing model").
-GENERIC_AGENDA_WORDS = frozenset(
-    stems(
-        "decide discuss agree review settle confirm finalise finalize fix set assign resolve plan"
-    )
-)
-
-
-def _label_grounded(row: SeriesTopic, texts: list[set[str]]) -> bool:
-    """Every content word of the label is in the notes of at least `MIN_GROUNDED` of the viewer's
-    readable meetings. A label with no content words is grounded nowhere."""
-    label = set(stems(row.label))
-    return bool(label) and sum(1 for words in texts if label <= words) >= MIN_GROUNDED
-
-
-def _agenda_grounded(row: SeriesTopic, texts: list[set[str]]) -> bool:
-    """Every content word of the agenda sentence, other than generic directive verbs, is in the
-    viewer's readable notes (together). A sentence of only generic words is not grounded."""
-    words = set(stems(row.agenda)) - GENERIC_AGENDA_WORDS
-    return bool(words) and words <= set().union(*texts)
-
-
 def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView]:
     """The stored topics of the series that the viewer may be shown. No model call: rows only.
 
-    A topic's label and agenda sentence were written from the meetings in its `meeting_ids`, some
-    of which may be a teammate's private meeting, so each topic's meetings are filtered through
-    `visible_meetings(viewer)` (and must still belong to the series) and a topic the viewer can
-    read fewer than two of is hidden: its words must never reach someone who cannot read the
-    meetings behind it. The model's choice of which meetings to cite is not access control: the
-    job stores every meeting it was *shown* (`source_meeting_ids`), and when the viewer cannot read
-    all of those the topic is shown only if its label is grounded in the notes of the meetings they
-    can read (`_label_grounded`), and its agenda sentence only if every word of it but the generic
-    directive verbs is too (`_agenda_grounded`; else `agenda` is "" and no line is offered).
-    Fail closed: a paraphrase the readable notes do not echo is not shown to that viewer.
-    """
+    The job reads only meetings shared with the team (`topics.source_meetings`), so every
+    reader of the series could read every word's source when it was written. Sharing can change
+    after that, so this is the guard: a topic is shown only if the viewer can **still read every
+    meeting behind it**, the cited ones (`meeting_ids`) and every one the model was shown
+    (`source_meeting_ids`), and each must still be a ready meeting of this series. If one was
+    unshared, moved or deleted the topic is hidden (the job recomputes soon after: sharing marks
+    the series stale). Text the model wrote must never reach someone who cannot read what it was
+    written from. `meetings` are the cited meetings, oldest first."""
     rows = list(
         session.scalars(
             select(SeriesTopic)
@@ -924,20 +886,11 @@ def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView
     }
     out = []
     for row in rows:
-        seen = [readable[i] for i in dict.fromkeys(row.meeting_ids) if i in readable]
-        if len(seen) < 2:
+        cited = list(dict.fromkeys(row.meeting_ids))
+        if len(cited) < 2 or not ids_of(row) <= readable.keys():
             continue
-        agenda = row.agenda
-        if any(i not in readable for i in ids_of(row)):
-            texts = [
-                set(stems(_notes_text(readable[i]))) for i in sorted(ids_of(row)) if i in readable
-            ]
-            if not _label_grounded(row, texts):
-                continue
-            if not _agenda_grounded(row, texts):
-                agenda = ""  # the label stands; the model's sentence is not shown to this viewer
-        seen.sort(key=lambda m: (m.created_at, m.id))
-        out.append(TopicView(row.id, row.label, agenda, row.reason, seen))
+        seen = sorted((readable[i] for i in cited), key=lambda m: (m.created_at, m.id))
+        out.append(TopicView(row.id, row.label, row.agenda, row.reason, seen))
     return out
 
 
@@ -964,17 +917,17 @@ def topic_dates(days: list[date]) -> str:
 
 
 def suggested_task_count(session: Session, viewer: User, series: Series) -> int:
-    """Suggested tasks (waiting for someone to accept them) of the series' meetings that the
-    viewer may see. They are in no other count."""
+    """Suggested tasks (waiting for someone to accept them) of the series' **last** meeting that the
+    viewer may read, and may see: "Confirm N suggested tasks from last time". They are in no other
+    count."""
+    last = next(iter(meetings_of(session, series, viewer, limit=1)), None)
+    if last is None:
+        return 0
     return (
         session.scalar(
             select(func.count())
             .select_from(Task)
-            .where(
-                tasks.visible(viewer),
-                Task.suggested.is_(True),
-                Task.meeting_id.in_(_series_meeting_ids(series)),
-            )
+            .where(tasks.visible(viewer), Task.suggested.is_(True), Task.meeting_id == last.id)
         )
         or 0
     )
@@ -992,7 +945,7 @@ def agenda_suggestions(
     suggested tasks to confirm. A line with nothing behind it is left out. `today` is the viewer's
     day, and `unfinished` must already be what the viewer may see (suggested tasks are not in it).
     """
-    lines: list[tuple[str, str]] = [("topic", t.agenda) for t in topics if t.agenda]
+    lines: list[tuple[str, str]] = [("topic", t.agenda) for t in topics]
     overdue = sum(1 for t in unfinished if t.due_date is not None and t.due_date < today)
     if overdue:
         lines.append(

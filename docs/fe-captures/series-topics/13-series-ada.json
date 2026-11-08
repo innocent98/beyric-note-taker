@@ -1,5 +1,5 @@
 {
-  "note": "Ada (the series' owner) reads two topics: \"Pricing model\" across three meetings, and \"Compensation review\" across a shared meeting and her own private one. `line` is the sub-line, written by the server; `dates_text` is in her zone, oldest first. `suggested_agenda` lists the topics' agenda sentences first, then the overdue task, the carried question and the suggested task to confirm.",
+  "note": "Ada (the series' owner): two topics, both from shared meetings. `line` is the sub-line, written by the server; `dates_text` is in her zone, oldest first. `suggested_agenda` lists the topics' agenda sentences first, then the overdue task, the carried question and the suggested task to confirm (counted over the series' LAST meeting that she may read: her own private one, which holds one).",
   "client": "ada",
   "request": {
     "method": "GET",
@@ -45,7 +45,7 @@
           "source": "ai",
           "assigned_on": "2026-10-26",
           "done_at": null,
-          "created_at": "2026-11-08T19:33:45.919239Z",
+          "created_at": "2026-11-08T19:53:39.681204Z",
           "from_meeting": true,
           "meeting": {
             "id": 3,
@@ -122,7 +122,7 @@
           "agenda": "Give the compensation review an owner",
           "reason": "no_owner",
           "line": "Raised in 2 meetings, still no owner or date",
-          "dates_text": "Mon 26 Oct and Wed 4 Nov 2026",
+          "dates_text": "Mon 26 Oct and Mon 2 Nov 2026",
           "meetings": [
             {
               "id": 2,
@@ -131,10 +131,10 @@
               "created_at": "2026-10-26T10:00:00Z"
             },
             {
-              "id": 4,
-              "title": "Ada private notes",
+              "id": 3,
+              "title": "Monday planning",
               "platform": "google_meet",
-              "created_at": "2026-11-04T10:00:00Z"
+              "created_at": "2026-11-02T10:00:00Z"
             }
           ]
         }
