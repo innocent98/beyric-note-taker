@@ -23,11 +23,12 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import db, gcal_sync, microsoft_alerts, vault
+from app import db, gcal_sync, graph_http, microsoft_alerts, vault
 from app.calendar_source import (
     AuthRevoked,
     CalendarSource,
     RefreshTokenUnreadable,
+    SyncBatch,
     TransientError,
 )
 from app.graph_client import (
@@ -303,6 +304,13 @@ def test_next_links_are_followed_to_the_last_page(world, store, conn):
 
 
 EVIL_LINKS = [
+    "https://graph.microsoft.com/v1.0/../beta/me/calendarView",
+    "https://graph.microsoft.com/v1.0/%2e%2e/beta/me",
+    "https://graph.microsoft.com/v1.0/%2E%2E/beta/me",
+    "https://graph.microsoft.com/v1.0/%252e%252e/beta/me",
+    "https://graph.microsoft.com/v1.0/./me/calendarView",
+    "https://graph.microsoft.com/v1.0/me/..",
+    "https://graph.microsoft.com/v1.0/me/%2e./x",
     "https://evil.example/v1.0/me/calendarView?x=1",
     "http://graph.microsoft.com/v1.0/me/calendarView",
     "https://graph.microsoft.com@evil.example/v1.0/me/calendarView",
@@ -472,9 +480,7 @@ def test_get_event_asks_for_one_event_with_the_same_preferences(world, store, co
     assert parse_qs(request.url.query.decode()) == {"$select": [SELECT]}
 
 
-@pytest.mark.parametrize(
-    "event_id", ["a/b", "a?b=c", "a#frag", "a%2Fb", "a b", "..%2f", "a\\b", "é"]
-)
+@pytest.mark.parametrize("event_id", ["a/b", "a?b=c", "a#frag", "a%2Fb", "a b", "a\\b", "é"])
 def test_an_event_id_is_quoted_into_one_path_segment(world, store, conn, event_id):
     world.pages = [httpx.Response(200, json=event(event_id))]
     make_source(world, store).get_event(conn, event_id)
@@ -1022,9 +1028,289 @@ def test_the_scheduler_gets_one_sync_job_per_enabled_provider_and_the_runner_sha
 
     fake = FakeScheduler()
     gcal_sync.register_calendar_sync(fake, SETTINGS)
-    assert fake.jobs == [("calendar_sync", "sync"), ("calendar_sync_microsoft", "sync")]
+    assert fake.jobs == [
+        ("calendar_sync", "sync"),
+        ("calendar_sync_microsoft", "sync"),
+        ("microsoft_secret_reminder", "sync"),
+    ]
     off = SETTINGS.model_copy(update={"microsoft_calendar_enabled": False})
     fake = FakeScheduler()
     gcal_sync.register_calendar_sync(fake, off)
     assert fake.jobs == [("calendar_sync", "sync")]  # nothing Microsoft while the flag is off
     assert callable(sched.register_jobs)
+
+
+# ---- review fixes (Opus review of #153) ----
+
+
+def test_dot_segments_are_refused_but_a_dotted_query_is_fine():
+    assert graph_http.under_graph_base("https://graph.microsoft.com/v1.0/me/calendarView?a=../b")
+    assert graph_http.under_graph_base(
+        "https://graph.microsoft.com/v1.0/me/calendarView?$skiptoken=a%2E%2Eb&x=1#frag"
+    )
+    assert not graph_http.under_graph_base("https://graph.microsoft.com/v1.0/../beta/me")
+    with pytest.raises(ValueError):  # `get` refuses it before a request
+        graph_http.get("t", "https://graph.microsoft.com/v1.0/%2e%2e/beta/me")
+
+
+def runner_world(session, conn):
+    """A Zoom event materialised for the Outlook connection, starting at 10:00, with its join."""
+    from app.models import AppState, Template
+
+    session.add(AppState(id=1, autojoin_started_at=datetime(2026, 1, 1, tzinfo=UTC)))
+    template = Template(owner_user_id=conn.user_id, name="General", instructions="Notes.")
+    session.add(template)
+    session.flush()
+    prefs = session.get(UserSettings, conn.user_id)
+    prefs.calendar_template_id = template.id
+    session.commit()
+    start = datetime(2026, 11, 9, 10, 0, tzinfo=UTC)
+    raw = fixture_event("zoom_in_body", "e-zoom", start)
+    gcal_sync.apply_batch(
+        session,
+        conn,
+        SyncBatch([raw], None, complete=True, full=True),
+        prefs,
+        now=start - timedelta(minutes=10),
+        settings=RUNNER_SETTINGS,
+    )
+    session.expire_all()
+    return start, session.scalars(select(ScheduledJoin)).one()
+
+
+RUNNER_SETTINGS = make_settings(
+    autojoin_lead_seconds=60, bot_max_local=1, user_bot_limit=2, teams_join_enabled=False
+)
+
+
+@pytest.fixture
+def host():
+    from tests.fakes.vexa_host import FakeVexaHost
+
+    return FakeVexaHost()
+
+
+@pytest.fixture(autouse=True)
+def alert_settings(monkeypatch):
+    from app import alerts
+
+    monkeypatch.setattr(
+        alerts, "get_settings", lambda: make_settings(admin_alert_email="o@example.test")
+    )
+
+
+def test_an_outlook_event_deleted_before_it_starts_is_cancelled_by_the_runner_and_no_bot_goes(
+    world, store, conn, session, host
+):
+    """The re-check asks Graph, Graph says ErrorItemNotFound, and the join is cancelled: the
+    cancelled stub must be one the Graph parser can read (Google's shape would be skipped)."""
+    from app.join_runner import run_due_joins
+
+    start, join = runner_world(session, conn)
+    assert join.state == "scheduled" and join.platform == "zoom"
+    world.pages = [httpx.Response(404, json={"error": {"code": "ErrorItemNotFound"}})]
+    source = make_source(world, store)
+    run_due_joins(session, host, source, now=start - timedelta(minutes=2), settings=RUNNER_SETTINGS)
+    run_due_joins(
+        session, host, source, now=start - timedelta(seconds=30), settings=RUNNER_SETTINGS
+    )
+    session.expire_all()
+    fresh = session.get(ScheduledJoin, join.id)
+    assert (fresh.state, fresh.skip_reason) == ("cancelled", "cancelled")
+    assert host.bots_sent == 0
+    [asked] = world.graph()
+    assert asked.url.raw_path.startswith(b"/v1.0/me/events/")
+
+
+def test_a_mailbox_level_404_at_the_runner_never_cancels_a_real_join(
+    world, store, conn, session, host
+):
+    from app.join_runner import run_due_joins
+
+    start, join = runner_world(session, conn)
+    world.pages = [httpx.Response(404, json={"error": {"code": "MailboxNotEnabledForRESTAPI"}})]
+    source = make_source(world, store)
+    run_due_joins(session, host, source, now=start - timedelta(minutes=2), settings=RUNNER_SETTINGS)
+    session.expire_all()
+    assert session.get(ScheduledJoin, join.id).state == "scheduled"  # not cancelled
+    assert host.bots_sent == 0  # and time is not up yet
+
+
+def test_the_cancelled_stub_is_read_as_cancelled_by_each_provider():
+    from app import calendar_providers
+    from app.graph_events import parse_event
+
+    google = calendar_providers.cancelled_stub("google", "x")
+    assert google == {"id": "x", "status": "cancelled"}
+    graph = calendar_providers.cancelled_stub("microsoft", "x")
+    assert parse_event(graph).status == "cancelled" and parse_event(graph).source_event_id == "x"
+    assert calendar_providers.cancelled_stub("ics", "x") == google  # no row: Google's shape
+
+
+@pytest.mark.parametrize(
+    "answer,gone",
+    [
+        (httpx.Response(404, json={"error": {"code": "ErrorItemNotFound"}}), True),
+        (httpx.Response(410), True),
+        (httpx.Response(404, json={"error": {"code": "MailboxNotEnabledForRESTAPI"}}), False),
+        (httpx.Response(404, json={"error": {"code": "MailboxNotSupportedForRESTAPI"}}), False),
+        (httpx.Response(404), False),
+        (httpx.Response(404, text="<html>not json</html>"), False),
+    ],
+    ids=[
+        "item not found",
+        "410",
+        "mailbox not enabled",
+        "mailbox not supported",
+        "bare 404",
+        "html 404",
+    ],
+)
+def test_only_an_item_not_found_or_a_410_means_the_event_is_gone(world, store, conn, answer, gone):
+    world.pages = [answer]
+    source = make_source(world, store)
+    if gone:
+        assert source.get_event(conn, "evt") is None
+    else:
+        with pytest.raises(TransientError) as raised:
+            source.get_event(conn, "evt")
+        assert not isinstance(raised.value, AuthRevoked) and "404" in str(raised.value)
+
+
+def test_a_refused_grant_drops_the_cached_token_so_the_next_call_mints_again(world, store, conn):
+    source = make_source(world, store)
+    world.pages = [page(event("a"))]
+    source.sync(conn, now=NOW, full=True)
+    assert world.minted == 1
+    world.pages = [httpx.Response(403, json={"error": {"code": "ErrorAccessDenied"}})]
+    with pytest.raises(AuthRevoked):
+        source.sync(conn, now=NOW, full=True)
+    world.pages = [page(event("a"))]
+    world.refresh_answers = [world.refresh_ok(2)]
+    source.sync(conn, now=NOW, full=True)
+    assert world.minted == 2  # not read with the token of the refused grant
+
+
+def test_a_second_401_also_drops_the_cached_token(world, store, conn):
+    source = make_source(world, store)
+    world.refresh_answers = [world.refresh_ok(1), world.refresh_ok(2), world.refresh_ok(3)]
+    world.pages = [httpx.Response(401)]
+    with pytest.raises(AuthRevoked):
+        source.sync(conn, now=NOW, full=True)
+    minted_after_failure = world.minted
+    world.pages = [page(event("a"))]
+    source.sync(conn, now=NOW, full=True)
+    assert world.minted == minted_after_failure + 1
+
+
+def test_a_token_minted_for_one_identity_is_never_used_for_the_next(world, store, conn, session):
+    """A reconnect over the same row (another Microsoft identity, or just a fresh connect) changes
+    who the connection is: the cached access token of the old identity must not be read."""
+    cache = make_cache(world, store)
+    world.refresh_answers = [world.refresh_ok(1), world.refresh_ok(2)]
+    assert cache.get(conn) == "ACCESS-TOKEN-1"
+    assert cache.get(conn) == "ACCESS-TOKEN-1"  # same identity: cached
+    row = session.get(CalendarConnection, conn.id)
+    row.account_subject = "oid-of-another-person"
+    row.connected_at = NOW
+    session.commit()
+    session.refresh(conn)
+    assert cache.get(conn) == "ACCESS-TOKEN-2"
+    assert world.minted == 2
+
+
+def test_graph_calls_for_one_connection_never_overlap(conn, store):
+    """The sync thread and the runner's re-check share a source: one call at a time."""
+    import time
+
+    state = {"now": 0, "max": 0}
+    guard = threading.Lock()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "login.microsoftonline.com":
+            return FakeGraphWorld.refresh_ok(1)
+        with guard:
+            state["now"] += 1
+            state["max"] = max(state["max"], state["now"])
+        time.sleep(0.05)
+        with guard:
+            state["now"] -= 1
+        return httpx.Response(200, json=event("x"))
+
+    transport = httpx.MockTransport(handler)
+    cache = MicrosoftTokenCache(settings=SETTINGS, transport=transport, store=store)
+    source = MicrosoftSource(SETTINGS, cache=cache, transport=transport)
+    threads = [threading.Thread(target=lambda: source.get_event(conn, "x")) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert state["max"] == 1
+
+
+def test_the_secret_reminder_has_its_own_hourly_job_that_needs_no_due_connection(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        microsoft_alerts, "secret_expiring", lambda settings, now: calls.append(now)
+    )
+
+    class FakeScheduler:
+        def __init__(self) -> None:
+            self.jobs: dict[str, tuple] = {}
+
+        def register(self, name, seconds, fn, loop="dispatch"):
+            self.jobs[name] = (seconds, fn, loop)
+
+    near = SETTINGS.model_copy(update={"microsoft_secret_expires_on": "2026-12-01"})
+    fake = FakeScheduler()
+    gcal_sync.register_calendar_sync(fake, near)
+    seconds, job, loop = fake.jobs["microsoft_secret_reminder"]
+    assert (seconds, loop) == (3600, "sync")
+    job(None, NOW)  # no session, no connection: still reminds
+    assert calls == [NOW]
+    far = SETTINGS.model_copy(update={"microsoft_secret_expires_on": "2027-06-01"})
+    calls.clear()
+    microsoft_alerts.remind_if_due(far, NOW)
+    microsoft_alerts.remind_if_due(SETTINGS, NOW)
+    assert calls == []
+    off = near.model_copy(update={"microsoft_calendar_enabled": False})
+    fake = FakeScheduler()
+    gcal_sync.register_calendar_sync(fake, off)
+    assert "microsoft_secret_reminder" not in fake.jobs  # nothing Microsoft while the flag is off
+
+
+def test_a_tiny_stated_lifetime_does_not_cause_a_refresh_on_every_call(world, store, conn):
+    body = doc("microsoft", "refresh_response")
+    body["expires_in"] = 30
+    world.refresh_answers = [httpx.Response(200, json=body)]
+    clock = Clock()
+    cache = make_cache(world, store, clock)
+    cache.get(conn)
+    for _ in range(5):
+        clock.advance(seconds=20)
+        cache.get(conn)
+    assert world.minted == 1  # a stated 30 s is treated as at least ten minutes
+
+
+def test_a_removed_connection_is_logged_as_removed_not_as_a_lost_race(
+    world, store, conn, engine, caplog
+):
+    caplog.set_level(logging.DEBUG)
+
+    def disconnect_meanwhile():
+        with Session(engine) as other:
+            row = other.get(CalendarConnection, conn.id)
+            row.refresh_token_enc, row.key_version = None, None
+            other.commit()
+
+    world.on_refresh = disconnect_meanwhile
+    assert make_cache(world, store).get(conn) == "ACCESS-TOKEN-1"
+    assert "the connection was removed" in caplog.text and "another writer won" not in caplog.text
+
+
+def test_an_event_id_that_decodes_to_a_dot_segment_is_refused_before_any_request(
+    world, store, conn
+):
+    with pytest.raises(ValueError):
+        make_source(world, store).get_event(conn, "..%2f")
+    assert world.requests == []

@@ -43,6 +43,12 @@ Same seven checks as Google's connect, with Microsoft's differences: identity is
 ## Operate / roll back
 **Server steps before merge: none** while the flag stays false. At switch-on (not part of this PR): set `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_AUTHORITY=consumers`, `MICROSOFT_CALENDAR_ENABLED=true` (optionally `MICROSOFT_ALLOWED_TENANTS`, `MICROSOFT_SECRET_EXPIRES_ON`, `MICROSOFT_ORGANIZER_DOMAIN_TRUST`), recreate `web` and `scheduler`, **and M4 must be deployed first** (without it `make_source` raises when the scheduler builds its sources). Roll back by reverting the PR: a Microsoft row left behind is inert (no migration, nothing reads it without the flag).
 
+## Opus review fixes (2026-11-09, review of #152)
+- **Disconnect no longer touches the other calendar** (the Medium finding). `calendar_connect.disconnect` and `_drop_old_account` used to delete events, joins and calendar notifications by `user_id`; a `microsoft/disconnect` while only Google was connected (it works with the flag off), or a Meet-only Google disconnect beside a live Outlook calendar, wiped the other provider's rows and left it `connected` with its sync token. Now, when another calendar of the user is live, only THIS connection's events and the joins of those events go and the notifications stay; with no other live calendar the old whole-user cleanup is kept (it also removes instant-Meet joins and joins whose event aged out). `_drop_old_account` deletes the replaced connection's unstarted joins only (orphan joins only when no other calendar is live). Both reviewer scenarios and the replacement case are tests.
+- **A switched-on provider with no source** is skipped with a log line in `build_sources` instead of crashing the scheduler (until M4 supplies it).
+- `_commit` takes the caller's error code, so a Microsoft collision ends on `microsoft_failed`, never `google_failed`.
+- Test: the same `oid` under a different `tid` is `different_account` (the `tenant_id` comparison now has a test).
+
 ## Follow-ups
 - M4: the Graph source and token cache (compare-and-swap rotation), the expired-secret alert (`ClientMisconfigured.secret_expired` at the callback is logged only; M4 raises the admin alert), the `nextLink` rule using `under_graph_base`.
 - M6: `microsoft_enabled` on `GET /api/calendar`, the buttons, the callback error words (`microsoft_denied`, `microsoft_failed`, `no_mailbox`, `tenant_not_allowed`, `different_account`, `already_connected`), the Microsoft disconnect note.
