@@ -45,7 +45,7 @@ from app.bot_provider import (
     provider_for,
 )
 from app.config import Settings, get_settings
-from app.meeting_url import UnsupportedMeetingUrl, parse_meeting_url
+from app.meeting_url import UnsupportedMeetingUrl, canonical_meeting_url, parse_meeting_url
 from app.models import (
     AppState,
     MailOutbox,
@@ -129,6 +129,9 @@ STATUS_TONES = {
     "processing": "info",
     "bot_sent": "warning",
 }
+
+
+TEAMS_OFF_TEXT = "Microsoft Teams meetings cannot be joined yet"
 
 
 class Refused(Exception):
@@ -521,10 +524,14 @@ def _create_meeting(
         raise Refused(
             400,
             "invalid_meeting_url",
-            "That is not a Google Meet or Zoom link. Paste the full meeting link.",
+            "That is not a Google Meet, Zoom or Microsoft Teams link. Paste the full meeting link.",
         ) from None
-    if platform == "teams" and not settings.teams_join_enabled:  # the provider cannot join Teams
-        raise Refused(400, "unsupported_link", "Microsoft Teams meetings cannot be joined yet")
+    if platform == "teams":
+        if not settings.teams_join_enabled:  # the provider cannot join Teams
+            raise Refused(400, "unsupported_link", TEAMS_OFF_TEXT)
+        url = canonical_meeting_url(
+            url
+        )  # a Safe Links wrapper (its data= can name the reader) goes
     template = _own_template(session, user.id, template_id)
     if template is None:  # also a template that is someone else's: it looks like a missing one
         raise Refused(400, "template_required", "Choose a template for the notes.")
@@ -823,6 +830,9 @@ def _send_refused_meeting_again(session: Session, vexa: BotProvider, meeting: Me
     if retry_block(locked, now) is not None:
         session.rollback()
         raise Refused(409, "not_retryable", "This meeting cannot be retried.")
+    if locked.platform == "teams" and not get_settings().teams_join_enabled:
+        session.rollback()  # a Teams meeting from when Skribby was the provider
+        raise Refused(409, "unsupported_link", TEAMS_OFF_TEXT)
     owner = session.get(User, locked.owner_user_id)
     try:
         placement.reserve_slot(

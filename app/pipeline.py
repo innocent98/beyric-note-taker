@@ -45,6 +45,7 @@ from app.bot_provider import (
     provider_region,
 )
 from app.config import get_settings
+from app.meeting_url import UnsupportedMeetingUrl
 from app.models import Meeting, Template, User, VocabularyTerm
 from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
@@ -413,6 +414,9 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
         vexa_id, unconfirmed = None, True
     except BotProviderError as exc:
         logger.warning("meeting %s: resending the bot failed (%s)", meeting.id, type(exc).__name__)
+        return False
+    except UnsupportedMeetingUrl:  # a link this provider cannot join (Teams under Vexa)
+        logger.warning("meeting %s: the provider cannot join this link", meeting.id)
         return False
     _delete_replaced_record(meeting, vexa)  # before its id is lost to the new bot's
     meeting.join_attempts += 1

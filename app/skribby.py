@@ -48,6 +48,7 @@ from app.bot_provider import (
     BotProviderNotConfigured,
     BotSendUncertain,
     run_within,
+    scrub_links,
 )
 from app.meeting_url import _parse
 
@@ -541,7 +542,7 @@ class SkribbyClient:
                 message = " ".join(parts)[:300]
         except ValueError:
             pass
-        message = re.sub(r"https?://\S+", "[link]", message)  # a link can carry a passcode
+        message = scrub_links(message)  # a link can carry a passcode
         detail = f": {self._scrub(message)}" if message else ""
         return SkribbyError(f"{what} failed: HTTP {status}{detail}")
 

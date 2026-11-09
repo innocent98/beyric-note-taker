@@ -21,8 +21,13 @@ Skribby's docs (`docs/spike/primary-pages-2026-11-07/skribby-guide-meeting-urls.
 | Vexa (`app/vexa.py`) | `send_bot` raises `UnsupportedMeetingUrl` for a Teams link before any request; `stop_bot` still raises `ValueError` for the platform. |
 | Switch (`app/config.py`) | `teams_join_enabled` is now `bool | None`: unset follows the provider (**on with `BOT_PROVIDER=skribby`, off with Vexa**); `TEAMS_JOIN_ENABLED=false` turns it off under Skribby; `true` under Vexa is ignored (the bot could not join). Alternative rejected: a new setting, because every reader already uses this one. |
 | Calendar (`app/gcal_events.py`) | The old "recognise Teams but give no code" fallback is gone: a Teams link is classified by `parse_meeting_url` like any other, so the event carries platform `teams` and a code, and `gcal_rules` stops answering `teams_unsupported` when the switch is on. The join runner then places it like a Meet or Zoom event. A Teams-looking link that does not parse is treated as no link. The Outlook (Graph) normaliser reuses the same classifier, so it too now carries a Teams code. |
-| Pasted link (`app/services.py`) | With the switch off, a Teams link is refused 400 `unsupported_link`, "Microsoft Teams meetings cannot be joined yet" (words that already exist in `app/calendar_text.py`), before any row is written. |
+| Hand retry | A Teams meeting retried while the provider cannot join Teams (made under Skribby, Vexa back in use) is refused 409 `unsupported_link` with the same sentence before anything is sent; `send_again` also turns `UnsupportedMeetingUrl` into a plain failed send instead of a 500. |
+| Pasted link (`app/services.py`) | The "not a link" refusal now reads "That is not a Google Meet, Zoom or Microsoft Teams link. Paste the full meeting link." With the switch off, a Teams link is refused 400 `unsupported_link`, "Microsoft Teams meetings cannot be joined yet" (words that already exist in `app/calendar_text.py`), before any row is written. |
 | Platform lists | `api_schemas.Platform`, `api_series._platform`, `series_mail` (label and `JOIN_HOSTS`), `api._platform_label`, `mail_templates._platform_label`, `titles._fallback` (a Teams meeting without a title is "Microsoft Teams", not the code), web `platformLabel`. |
+
+## Known gap (M1, not fixed)
+
+A `meetup-join` link and a `/meet/<digits>` link of the **same** Teams meeting give **different** codes (`tests/test_meeting_url.py::test_the_long_and_the_short_link_of_one_meeting_give_different_codes` records it). Two calendars holding different forms could send two bots, and the one-bot-per-code check cannot see it. Closing it needs a real Microsoft Graph capture (the `onlineMeeting` object that ties the two forms together): do it with the Outlook M0 run.
 
 ## Verification
 

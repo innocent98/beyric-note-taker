@@ -66,12 +66,27 @@ class BotProviderError(Exception):
     """HTTP failure or connection problem talking to a bot provider. Treat as retryable."""
 
 
+_LINKS = re.compile(
+    r"https?://\S+|\b(?:[a-z0-9-]+\.)*(?:teams\.microsoft\.com|teams\.live\.com|zoom\.us"
+    r"|meet\.google\.com)\S*",
+    re.IGNORECASE,
+)
+_PASSCODES = re.compile(r"\b(pwd|password|p|context)=[^\s&\"']+", re.IGNORECASE)
+
+
+def scrub_links(text: str) -> str:
+    """`text` with every meeting link replaced by `[link]` (any scheme case, or none) and any
+    leftover `pwd=`, `password=`, `p=` or `context=` value hidden: a meeting link can carry a
+    Zoom or Teams passcode or a tenant id."""
+    return _PASSCODES.sub(r"\1=[redacted]", _LINKS.sub("[link]", text))
+
+
 def describe_failure(exc: BaseException) -> str:
     """A provider failure for a log line: its type and its own words, cut short, with every web
     address replaced (a meeting link can carry a Zoom passcode or a Teams passcode). Provider
     errors are written without the API key; this is only for the reason, which the type alone
     hides."""
-    text = re.sub(r"https?://\S+", "[link]", str(exc))
+    text = scrub_links(str(exc))
     return f"{type(exc).__name__}: {text[:300]}" if text else type(exc).__name__
 
 

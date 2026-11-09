@@ -123,3 +123,37 @@ def test_meet_and_zoom_are_unchanged():
     assert canonical_meeting_url("https://zoom.us/j/123456789?pwd=a&x=1") == (
         "https://zoom.us/j/123456789?pwd=a"
     )
+
+
+@pytest.mark.parametrize(
+    "thread",
+    [
+        "x",
+        "..%2f..%2fetc",
+        "19%3ameeting_a..b%40thread.v2",
+        "meeting_PLACEHOLDER%40thread.v2",  # no 19: prefix
+        "19%3ameeting_PLACEHOLDER",  # no @thread
+        "19%3ameeting_PLACEHOLDER%40evil.example",
+    ],
+)
+def test_a_meetup_join_thread_id_must_look_like_teams_own(thread):
+    with pytest.raises(UnsupportedMeetingUrl):
+        parse_meeting_url(f"https://teams.microsoft.com/l/meetup-join/{thread}/0")
+
+
+@pytest.mark.parametrize(
+    "inner", ["https://zoom.us/j/123456789?pwd=abc", "https://meet.google.com/abc-defg-hij"]
+)
+def test_a_safe_links_wrapper_around_zoom_or_meet_is_refused(inner):
+    from urllib.parse import quote
+
+    wrapped = "https://eur01.safelinks.protection.outlook.com/?url=" + quote(inner, safe="")
+    with pytest.raises(UnsupportedMeetingUrl):
+        parse_meeting_url(wrapped)
+
+
+def test_the_long_and_the_short_link_of_one_meeting_give_different_codes():
+    """KNOWN GAP (SOP, M1): the two forms of one Teams meeting have different identities, so two
+    calendars holding different forms could send two bots. Only a real Graph capture can tie them
+    together. This test records today's behaviour; if it ever fails, the gap has been closed."""
+    assert code(JOIN) != code(SHORT)

@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app import auth
+from app import auth, services
 from app.db import get_session
 from app.models import AiRun, AppState, Decision, Meeting, ReviewItem, Template, VocabularyTerm
 from app.pipeline import REASON_CANCELLED, REASON_JOIN_REFUSED, REASON_NO_SPEECH
@@ -707,6 +707,45 @@ def test_retry_of_a_refused_meeting_sends_a_new_bot(api, session, template, fake
     assert fake_vexa.sent == [MEET] and body["join_attempts"] == 3
 
 
+def teams_meeting_to_retry(session, template):
+    return add_meeting(
+        session,
+        template,
+        url="https://teams.microsoft.com/meet/1234567890123?p=placeholder",
+        platform="teams",
+        native_id="teams-0123456789abcdef01234567",
+        status="failed",
+        failure_reason=REASON_JOIN_REFUSED,
+        completion_reason="google_meet_join_refused",
+        terminal_seen_at=datetime.now(UTC) - timedelta(minutes=30),
+        join_attempts=1,
+    )
+
+
+def test_retry_of_a_teams_meeting_is_a_plain_refusal_while_the_provider_cannot_join_teams(
+    api, session, template, fake_vexa
+):
+    meeting = teams_meeting_to_retry(session, template)  # made while Skribby was the provider
+    error = error_of(api.post(f"/api/meetings/{meeting.id}/retry"), 409, "unsupported_link")
+    assert error["message"] == "Microsoft Teams meetings cannot be joined yet"
+    assert fake_vexa.sent == []
+    session.refresh(meeting)
+    assert meeting.status == "failed"  # untouched
+
+
+def test_retry_of_a_teams_meeting_sends_a_new_bot_when_the_provider_can(
+    api, session, template, fake_vexa, monkeypatch
+):
+    from tests.test_web import make_settings
+
+    on = make_settings(bot_provider="skribby", skribby_api_key="placeholder-key")
+    monkeypatch.setattr(services, "get_settings", lambda: on)
+    meeting = teams_meeting_to_retry(session, template)
+    response = api.post(f"/api/meetings/{meeting.id}/retry")
+    assert response.status_code == 200, response.text
+    assert fake_vexa.sent == [meeting.url]
+
+
 @pytest.mark.parametrize(
     "path", ["/api/meetings/999", "/api/meetings/0", "/api/meetings/2147483648"]
 )
@@ -745,7 +784,8 @@ def test_create_trims_the_link(api, template, fake_vexa):
 def test_create_refuses_a_link_that_is_not_meet_or_zoom(api, template, fake_vexa, session, url):
     error = error_of(create(api, template, url=url), 400, "invalid_meeting_url")
     assert (
-        error["message"] == "That is not a Google Meet or Zoom link. Paste the full meeting link."
+        error["message"]
+        == "That is not a Google Meet, Zoom or Microsoft Teams link. Paste the full meeting link."
     )
     assert fake_vexa.sent == [] and session.scalars(select(Meeting)).first() is None
 
@@ -780,6 +820,27 @@ def test_create_sends_a_bot_to_a_teams_link_when_the_provider_can(
     # the same meeting again, however the link is written: one bot per meeting code
     again = create(api, template, url=TEAMS.split("?")[0])
     assert again.status_code == 409
+
+
+def test_a_pasted_safe_links_wrapper_is_stored_as_the_inner_teams_link(
+    api, template, fake_vexa, session, monkeypatch
+):
+    from urllib.parse import quote
+
+    from tests.test_web import make_settings
+
+    monkeypatch.setattr(
+        api.client.app.state,
+        "settings",
+        make_settings(bot_provider="skribby", skribby_api_key="placeholder-key"),
+    )
+    wrapped = (
+        "https://eur01.safelinks.protection.outlook.com/?url="
+        f"{quote(TEAMS, safe='')}&data=05%7c02%7cpat%40example.test%7cplaceholder"
+    )
+    body = create(api, template, url=wrapped).json()
+    assert fake_vexa.sent == [TEAMS]
+    assert session.get(Meeting, body["id"]).url == TEAMS  # no wrapper, no reader's address
 
 
 def test_create_needs_a_real_template(api, template, fake_vexa):

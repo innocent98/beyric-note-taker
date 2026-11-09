@@ -12,6 +12,9 @@ MEET_PATH = re.compile(r"^/([a-z]{3}-[a-z]{4}-[a-z]{3})/?$")
 # Teams: `/l/meetup-join/<thread id>/<n>` (the thread id is percent-encoded, sometimes raw) and the
 # newer short `/meet/<digits>`.
 TEAMS_JOIN_PATH = re.compile(r"^/l/meetup-join/([A-Za-z0-9%._:@~-]+)(?:/[0-9]{1,4})?/?$")
+# The thread id (decoded) must have Teams' own shape, `19:meeting_<token>@thread.v2`, so junk
+# does not become a meeting code.
+TEAMS_THREAD = re.compile(r"^19:[A-Za-z0-9_=-]+@thread\.[A-Za-z0-9]+$")
 TEAMS_MEET_PATH = re.compile(r"^/meet/([0-9]{6,20})/?$")
 # The query of a Teams link is kept exactly as written (it carries the tenant and organiser context
 # or the `p` passcode, percent-encoded): only these characters may be in it.
@@ -38,7 +41,10 @@ def _teams(host: str, parts, url: str) -> tuple[str, str, str] | None:
     if len(url) > MAX_TEAMS_URL_CHARS or not TEAMS_QUERY.match(parts.query):
         raise UnsupportedMeetingUrl("unsupported meeting URL")
     if host == "teams.microsoft.com" and (m := TEAMS_JOIN_PATH.match(parts.path)):
-        identity = f"teams.microsoft.com/meetup-join/{unquote(m.group(1))}"
+        thread = unquote(m.group(1))
+        if not TEAMS_THREAD.match(thread):
+            raise UnsupportedMeetingUrl("unsupported meeting URL")
+        identity = f"teams.microsoft.com/meetup-join/{thread}"
     elif host in ("teams.microsoft.com", "teams.live.com") and (
         m := TEAMS_MEET_PATH.match(parts.path)
     ):
@@ -83,7 +89,10 @@ def _parse(url: str, _wrapped: bool = False) -> tuple[str, str, str]:
             return found
     elif not _wrapped and SAFELINKS_HOST.match(host) and parts.path in ("", "/"):
         # Outlook's Safe Links wrapper: read the Teams link inside (Skribby would unwrap it, but the
-        # code and the dedupe need the inner link), and send that inner link.
+        # code and the dedupe need the inner link), and send that inner link. One level here: a
+        # wrapper inside a wrapper is refused. (Outlook's own event reader, `graph_events`,
+        # unwraps its first level itself before calling this, so from an Outlook event a link
+        # wrapped twice is read; a pasted one is not.)
         inner = parse_qs(parts.query).get("url")
         if inner and inner[0]:
             found = _parse(inner[0], _wrapped=True)

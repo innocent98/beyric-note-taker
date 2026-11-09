@@ -431,6 +431,25 @@ def test_only_a_meet_bot_signs_in_with_the_google_account(httpx_mock, link, serv
     assert ("authentication" in body) is signs_in
 
 
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "bad HTTPS://US05WEB.ZOOM.US/j/123456789?PWD=sekrit here",
+        "bad us05web.zoom.us/j/123456789 here and pwd=sekrit",
+        "bad teams.microsoft.com/meet/1234567890123?p=sekrit here",
+        "bad meet.google.com/abc-defg-hij and context=sekrit",
+        "bad password=sekrit",
+    ],
+)
+def test_a_failure_reason_never_keeps_a_link_or_a_passcode(reason):
+    from app.bot_provider import describe_failure
+
+    text = describe_failure(SkribbyError(f"send_bot failed: HTTP 400: {reason}"))
+    assert "sekrit" not in text.lower() and "zoom.us" not in text.lower()
+    assert "teams.microsoft" not in text and "meet.google" not in text
+    assert text.startswith("SkribbyError: send_bot failed: HTTP 400: bad ")
+
+
 def test_a_refusal_names_skribbys_reason_without_the_link_or_the_key(httpx_mock):
     link = "https://us05web.zoom.us/j/123456789?pwd=sekrit"
     httpx_mock.add_response(
