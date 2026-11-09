@@ -32,6 +32,36 @@ class Settings(BaseSettings):
             raise ValueError(f"BOT_PROVIDER is {value!r}; it must be one of: {known}")
         return name
 
+    @field_validator("transcript_source", mode="before")
+    @classmethod
+    def _blank_transcript_source_is_the_default(cls, value):
+        """An empty `TRANSCRIPT_SOURCE=` line means "not set": our own transcription."""
+        if isinstance(value, str) and not value.strip():
+            return "own"
+        return value
+
+    @field_validator("transcript_source")
+    @classmethod
+    def _known_transcript_source(cls, value: str) -> str:
+        name = value.strip().lower()
+        if name not in ("own", "skribby"):
+            raise ValueError(f"TRANSCRIPT_SOURCE is {value!r}; it must be own or skribby")
+        return name
+
+    @field_validator("transcript_shadow_percent", mode="before")
+    @classmethod
+    def _blank_shadow_percent_is_zero(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return 0
+        return value
+
+    @field_validator("transcript_shadow_percent")
+    @classmethod
+    def _shadow_percent_in_range(cls, value: int) -> int:
+        if not 0 <= value <= 100:
+            raise ValueError(f"TRANSCRIPT_SHADOW_PERCENT is {value}; it must be from 0 to 100")
+        return value
+
     @field_validator("skribby_region")
     @classmethod
     def _known_skribby_region(cls, value: str) -> str:
@@ -139,9 +169,20 @@ class Settings(BaseSettings):
     # the host). Optional.
     skribby_download_hosts: str = ""
     # Skribby transcribes the call too; its text is only used to know who spoke when (our own
-    # transcription still writes the transcript). `groq/whisper-large-v3-turbo` is on the Free
-    # plan and the cheapest (0.04 USD an hour); `none` turns it off and with it the speaker names.
+    # transcription still writes the transcript), unless `transcript_source` is `skribby`, when
+    # this model's text IS the transcript (`soniox/stt-async-v5`, 0.10 USD an hour, has speaker
+    # diarization). `groq/whisper-large-v3-turbo` is on the Free plan and the cheapest (0.04 USD an
+    # hour); `none` turns it off and with it the speaker names.
     skribby_transcription_model: str = "groq/whisper-large-v3-turbo"
+    # What the notes are made from. `own` (the default, and today's behaviour): our OpenAI
+    # transcription of the audio. `skribby`: the bot provider's own transcript, for meetings a
+    # Skribby bot ran, falling back to ours when it is missing or too short
+    # (`app/transcript_source.py`). Anything else stops the process at startup.
+    transcript_source: str = "own"
+    # In `skribby` mode: the share of meetings (0 to 100, chosen by meeting id) for which our own
+    # transcription is ALSO run, only to compare numbers with Skribby's and then thrown away
+    # (`transcript_shadow_metrics`). Costs OpenAI transcription for that share. 0 = never.
+    transcript_shadow_percent: int = 0
     vexa_base_url: str = "http://localhost:8056"
     vexa_api_key: str = Field(default="", repr=False)
     bot_name: str = "Beyric Note Taker (recording)"

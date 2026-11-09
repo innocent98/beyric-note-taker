@@ -7,6 +7,7 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -688,6 +689,10 @@ class Meeting(Base):
     step: Mapped[str] = mapped_column(String(16), default="waiting", server_default="waiting")
     failure_reason: Mapped[str | None] = mapped_column(Text)
     transcript: Mapped[str | None] = mapped_column(Text)
+    # What `transcript` was made from: `own` (our OpenAI transcription of the audio) or `skribby`
+    # (the bot provider's transcript, `TRANSCRIPT_SOURCE=skribby`). Null before the transcript is
+    # saved and for meetings made before this column existed (they were all `own`).
+    transcript_source: Mapped[str | None] = mapped_column(String(16))
     speaker_transcript: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
     started_polling_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -1457,3 +1462,29 @@ class TrackerIssue(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     __table_args__ = (Index("ix_tracker_issues_team_created", "team_id", "created_at"),)
+
+
+class TranscriptShadowMetric(Base):
+    """Numbers from one meeting where, in `TRANSCRIPT_SOURCE=skribby`, our own transcription was
+    ALSO run (a sampled check, `TRANSCRIPT_SHADOW_PERCENT`) and then thrown away, so the two can be
+    compared over many meetings. Numbers only: never transcript text, a name or an email. The
+    meeting is the one link, and the row goes with the meeting (a deleted meeting or account leaves
+    nothing here)."""
+
+    __tablename__ = "transcript_shadow_metrics"
+    __table_args__ = (UniqueConstraint("meeting_id", name="uq_transcript_shadow_metrics_meeting"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
+    skribby_words: Mapped[int] = mapped_column(Integer)
+    own_words: Mapped[int] = mapped_column(Integer)
+    shared_words: Mapped[int] = mapped_column(Integer)
+    # shared_words over the larger of the two counts, 0 to 1 (1 = the same words).
+    shared_share: Mapped[float] = mapped_column(Float)
+    skribby_speakers: Mapped[int] = mapped_column(Integer)
+    unnamed_segments: Mapped[int] = mapped_column(Integer)
+    segments: Mapped[int] = mapped_column(Integer)
+    audio_seconds: Mapped[int] = mapped_column(Integer)
+    # Which one the notes were made from: `skribby`, or `own` when Skribby's was not used.
+    notes_source: Mapped[str] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

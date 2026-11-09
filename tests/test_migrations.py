@@ -1542,3 +1542,62 @@ def test_0038_adds_bot_provider_to_meetings_filling_old_rows_with_vexa_and_drops
     )
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0039_follows_0038():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0039").down_revision == "0038"
+
+
+def test_0039_adds_transcript_source_and_the_shadow_table_and_round_trips(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0038")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:  # a finished meeting made before the column existed
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id, "
+                "transcript) select u.id, 'https://meet.google.com/abc-defg-hij', 'google_meet', "
+                "'abc-defg-hij', t.id, 'old text' from users u, templates t "
+                "where u.is_admin and t.name = 'General'"
+            )
+        )
+    command.upgrade(cfg, "0039")
+    columns = {c["name"]: c for c in inspect(engine).get_columns("meetings")}
+    assert columns["transcript_source"]["nullable"] is True
+    assert _rows(engine, "select transcript, transcript_source from meetings") == [
+        ("old text", None)  # nothing is guessed for an old meeting
+    ]
+    shadow = {c["name"]: c for c in inspect(engine).get_columns("transcript_shadow_metrics")}
+    assert set(shadow) == {
+        "id", "meeting_id", "skribby_words", "own_words", "shared_words", "shared_share",
+        "skribby_speakers", "unnamed_segments", "segments", "audio_seconds", "notes_source",
+        "created_at",
+    }  # fmt: skip
+    assert all(not c["nullable"] for c in shadow.values())
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into transcript_shadow_metrics (meeting_id, skribby_words, own_words, "
+                "shared_words, shared_share, skribby_speakers, unnamed_segments, segments, "
+                "audio_seconds, notes_source) select id, 10, 12, 9, 0.75, 2, 0, 3, 600, 'skribby' "
+                "from meetings"
+            )
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # one row per meeting
+        conn.execute(
+            text(
+                "insert into transcript_shadow_metrics (meeting_id, skribby_words, own_words, "
+                "shared_words, shared_share, skribby_speakers, unnamed_segments, segments, "
+                "audio_seconds, notes_source) select id, 1, 1, 1, 1.0, 1, 0, 1, 60, 'own' "
+                "from meetings"
+            )
+        )
+    with engine.begin() as conn:  # the numbers go with the meeting
+        conn.execute(text("delete from meetings"))
+    assert _rows(engine, "select count(*) from transcript_shadow_metrics") == [(0,)]
+    command.downgrade(cfg, "0038")
+    assert "transcript_source" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    assert "transcript_shadow_metrics" not in inspect(engine).get_table_names()
+    command.upgrade(cfg, "head")
+    engine.dispose()

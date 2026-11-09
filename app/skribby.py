@@ -52,6 +52,7 @@ from app.bot_provider import (
     scrub_links,
 )
 from app.meeting_url import _parse
+from app.transcribe import _keywords
 
 logger = logging.getLogger(__name__)
 
@@ -657,7 +658,13 @@ class SkribbyClient:
 
     # -- the calls --
 
-    def payload(self, platform: str, code: str, canonical_url: str) -> dict[str, Any]:
+    def payload(
+        self,
+        platform: str,
+        code: str,
+        canonical_url: str,
+        vocabulary: list[str] | None = None,
+    ) -> dict[str, Any]:
         stop_options: dict[str, Any] = {
             "waiting_room_timeout": WAITING_ROOM_MINUTES,
             # The ghost-bot backstop. Skribby counts it from when the bot is in, our give-up from
@@ -690,6 +697,13 @@ class SkribbyClient:
         # authentication page); neither is ours, so both join as guests.
         if self._account_id and platform == "google_meet":
             body["authentication"] = {"account_id": self._account_id, "always_authenticate": True}
+        # The owner's own words and names, for the transcription model to spell right. Skribby's
+        # create-bot page: `custom_vocabulary` (string[]), "Only supported on certain models" and
+        # no stated limits, so our own cap (`app.transcribe` keywords: 50 terms, 100 characters)
+        # applies. Not sent when transcription is off (`none`): nothing would read it.
+        terms = _keywords(vocabulary or [])
+        if terms and self._model != "none":
+            body["custom_vocabulary"] = terms
         return body
 
     def create(self, payload: dict[str, Any]) -> str:
@@ -1038,9 +1052,12 @@ class SkribbyProvider:
 
     # ---- the BotProvider interface ----
 
-    def send_bot(self, meeting_url: str) -> str:
+    # The owner's vocabulary can be passed to `send_bot` (`vocabulary=`): callers check this.
+    accepts_vocabulary = True
+
+    def send_bot(self, meeting_url: str, vocabulary: list[str] | None = None) -> str:
         platform, code, canonical = _parse(meeting_url)  # UnsupportedMeetingUrl for a bad link
-        payload = self._client.payload(platform, code, canonical)
+        payload = self._client.payload(platform, code, canonical, vocabulary)
         lock = threading.Lock()
         state: dict[str, Any] = {"started": False, "bot_id": None, "abandoned": False}
 

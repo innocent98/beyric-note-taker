@@ -28,6 +28,7 @@ from app import (
     series,
     teams,
     titles,
+    transcript_source,
     usage,
     workspace,
 )
@@ -46,7 +47,7 @@ from app.bot_provider import (
 )
 from app.config import get_settings
 from app.meeting_url import UnsupportedMeetingUrl
-from app.models import Meeting, Template, User, VocabularyTerm
+from app.models import Meeting, Template, TranscriptShadowMetric, User, VocabularyTerm
 from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
 
@@ -403,7 +404,12 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     meeting) is raised when `raise_duplicate`, else it is a plain failure."""
     unconfirmed = False
     try:
-        vexa_id = vexa.send_bot(meeting.url)
+        vexa_id = vexa.send_bot(
+            meeting.url,
+            **transcript_source.send_options(
+                object_session(meeting), vexa, meeting.owner_user_id, get_settings()
+            ),
+        )
     except BotDuplicate:
         logger.warning("meeting %s: Vexa has another bot in that meeting", meeting.id)
         if raise_duplicate:
@@ -770,7 +776,94 @@ def _terms(session: Session, owner_user_id: int) -> list[str]:
     )
 
 
-def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> bool:
+def _skribby_mode(meeting: Meeting) -> bool:
+    """Whether this meeting's notes are to be made from Skribby's own transcript: the setting says
+    so AND Skribby ran the meeting (a Vexa meeting always uses our transcription)."""
+    return (
+        get_settings().transcript_source == transcript_source.SKRIBBY
+        and meeting.bot_provider == "skribby"
+    )
+
+
+def _skribby_segments(vexa, meeting: Meeting) -> list[dict] | None:
+    """Skribby's segments for this meeting, or None when they could not be fetched (the provider
+    is down, no longer has the meeting, or anything else). Never raises: a failed fetch is the
+    fallback to our own transcription, never a failed meeting. Logged by error type only."""
+    try:
+        return list(_lookup(vexa, meeting).segments or [])
+    except Exception as exc:
+        logger.warning(
+            "meeting %s: Skribby's transcript could not be fetched (%s)",
+            meeting.id,
+            type(exc).__name__,
+        )
+        return None
+
+
+def _record_shadow(
+    session: Session,
+    meeting_id: int,
+    found: transcript_source.Candidate | None,
+    own_text: str,
+    seconds: int,
+    notes_source: str,
+) -> None:
+    """Keep the NUMBERS of a Skribby-versus-ours comparison (never either text) and drop both. In
+    the caller's transaction."""
+    overlap = transcript_source.overlap(found.spoken if found else "", own_text)
+    session.add(
+        TranscriptShadowMetric(
+            meeting_id=meeting_id,
+            skribby_words=overlap.skribby_words,
+            own_words=overlap.own_words,
+            shared_words=overlap.shared_words,
+            shared_share=overlap.share,
+            skribby_speakers=found.speakers if found else 0,
+            unnamed_segments=found.unnamed_segments if found else 0,
+            segments=found.segments if found else 0,
+            audio_seconds=seconds,
+            notes_source=notes_source,
+        )
+    )
+
+
+def _shadow_run(
+    session: Session,
+    meeting_id: int,
+    owner_user_id: int,
+    found: transcript_source.Candidate,
+    recording,
+    terms: list[str],
+    openai_client,
+) -> None:
+    """The sampled check: transcribe the audio ourselves as `own` mode would, keep only the
+    numbers, throw the text away. Its OpenAI cost goes through the ledger like any transcription.
+    Best effort, the notes never wait on it and it never fails the meeting: any error is logged by
+    type and the check is simply missing for this meeting."""
+    try:
+        if _lock(session, meeting_id) is None:
+            return  # another worker has the meeting: not worth waiting for
+        text = transcribe_chunks(recording.chunks, terms, client=openai_client)
+        ai_runs.record(
+            session,
+            meeting_id,
+            "transcribe",
+            get_settings().transcription_model,
+            audio_seconds=recording.seconds,
+            user_id=owner_user_id,
+        )
+        _record_shadow(
+            session, meeting_id, found, text, recording.seconds, transcript_source.SKRIBBY
+        )
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.warning(
+            "meeting %s: the shadow check was not made (%s)", meeting_id, type(exc).__name__
+        )
+
+
+def _step_transcribing(session: Session, meeting: Meeting, vexa, openai_client) -> bool:
     if meeting.transcript is None:
         folder = audio_path(meeting.id).parent
         recording = audio.prepare_recording(
@@ -785,6 +878,49 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
         session.commit()
         if _lock(session, meeting.id) is None:
             return False
+        meeting_id, owner_id = meeting.id, meeting.owner_user_id
+        found, fetched = None, False
+        if _skribby_mode(meeting):
+            segments = _skribby_segments(vexa, meeting)
+            fetched = segments is not None
+            found = transcript_source.candidate(segments or [])
+            why_not = transcript_source.fallback_reason(found, recording.seconds, MIN_WORDS)
+            if why_not is None:
+                # Skribby's transcript is the transcript: our transcription and the model-based
+                # speaker labelling are skipped (it already carries the names). Saved, with the
+                # names, in this one commit, BEFORE the provider's copy is deleted (that is the
+                # speakers step's, after this commit).
+                meeting.transcript = found.text
+                meeting.speaker_transcript = found.text
+                meeting.speakers_incomplete = not found.complete
+                meeting.transcript_source = transcript_source.SKRIBBY
+                logger.info(
+                    "meeting %s: transcript from skribby (%d words, %d speakers, %d unnamed)",
+                    meeting_id,
+                    found.words,
+                    found.speakers,
+                    found.unnamed_segments,
+                )
+                meeting.step = "speakers"
+                session.commit()
+                if transcript_source.shadow_selected(
+                    meeting_id, get_settings().transcript_shadow_percent
+                ):
+                    _shadow_run(
+                        session,
+                        meeting_id,
+                        owner_id,
+                        found,
+                        recording,
+                        _terms(session, owner_id),
+                        openai_client,
+                    )
+                return True
+            logger.info(
+                "meeting %s: Skribby's transcript not used (%s); transcribing ourselves",
+                meeting_id,
+                why_not,
+            )
         text = transcribe_chunks(
             recording.chunks, _terms(session, meeting.owner_user_id), client=openai_client
         )
@@ -799,11 +935,23 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
             audio_seconds=recording.seconds,
             user_id=meeting.owner_user_id,
         )
+        if (
+            _skribby_mode(meeting)
+            and fetched
+            and transcript_source.shadow_selected(
+                meeting.id, get_settings().transcript_shadow_percent
+            )
+        ):
+            # Skribby's was not used, and ours is already made: the comparison costs nothing more.
+            _record_shadow(
+                session, meeting.id, found, text, recording.seconds, transcript_source.OWN
+            )
         if len(text.split()) < MIN_WORDS:
             # The audio check only looks at peak volume, so noise can slip through.
             _fail(session, meeting, REASON_NO_SPEECH)
             return False
         meeting.transcript = text
+        meeting.transcript_source = transcript_source.OWN
     meeting.step = "speakers"
     session.commit()
     return True
@@ -1047,7 +1195,7 @@ def advance_meeting(
             elif meeting.step == "audio":
                 proceed = _step_audio(session, meeting, vexa)
             elif meeting.step == "transcribing":
-                proceed = _step_transcribing(session, meeting, openai_client)
+                proceed = _step_transcribing(session, meeting, vexa, openai_client)
             elif meeting.step == "speakers":
                 proceed = _step_speakers(session, meeting, vexa, openai_client)
             elif meeting.step == "notes":
