@@ -1,0 +1,10 @@
+{
+  "ver": "2.0",
+  "iss": "https://login.microsoftonline.com/00000000-0000-0000-0000-0000000000aa/v2.0",
+  "aud": "CLIENT-ID-PLACEHOLDER",
+  "tid": "00000000-0000-0000-0000-0000000000aa",
+  "oid": "00000000-0000-0000-0000-000000000002",
+  "sub": "SUB-PLACEHOLDER-work",
+  "preferred_username": "person-2@example.test",
+  "name": "Person Two"
+}

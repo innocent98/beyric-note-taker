@@ -23,7 +23,13 @@ class SyncTokenExpired(CalendarSourceError):
 
 class AuthRevoked(CalendarSourceError):
     """The user's grant is gone or too narrow (a revoked or expired refresh token, a missing
-    scope). Only a reconnect helps: the caller marks the connection `needs_reconnect`."""
+    scope). Only a reconnect helps: the caller marks the connection `needs_reconnect`.
+    `expired` says the grant lapsed from disuse (Microsoft's idle refresh-token expiry) rather
+    than being withdrawn; it only changes the reason shown to the user."""
+
+    def __init__(self, *args: object, expired: bool = False) -> None:
+        super().__init__(*args)
+        self.expired = expired
 
 
 class RefreshTokenUnreadable(AuthRevoked):

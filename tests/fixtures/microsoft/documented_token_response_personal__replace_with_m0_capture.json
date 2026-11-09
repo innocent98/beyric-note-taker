@@ -1,0 +1,8 @@
+{
+  "token_type": "Bearer",
+  "scope": "Calendars.Read User.Read profile openid email",
+  "expires_in": 3599,
+  "ext_expires_in": 3599,
+  "access_token": "ACCESS-TOKEN-PLACEHOLDER-one",
+  "refresh_token": "REFRESH-TOKEN-PLACEHOLDER-one"
+}

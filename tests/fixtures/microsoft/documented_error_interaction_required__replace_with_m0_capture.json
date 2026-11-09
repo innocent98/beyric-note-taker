@@ -1,0 +1,8 @@
+{
+  "error": "interaction_required",
+  "error_description": "AADSTS50076: ERROR-DESCRIPTION-SENTINEL MFA needed.",
+  "error_codes": [
+    50076
+  ],
+  "trace_id": "TRACE-SENTINEL"
+}

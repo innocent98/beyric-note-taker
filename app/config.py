@@ -1,4 +1,6 @@
+import re
 import uuid
+from datetime import date
 from functools import lru_cache
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
@@ -6,7 +8,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # `hide_input_in_errors`: a start-up validation error must never print the settings it was given
+    # (they hold the secrets below; their `repr` is hidden too, `Field(repr=False)`).
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", hide_input_in_errors=True)
 
     @field_validator("bot_provider", mode="before")
     @classmethod
@@ -46,6 +50,49 @@ class Settings(BaseSettings):
             except ValueError:
                 raise ValueError("SKRIBBY_ACCOUNT_ID must be the account's id (a UUID)") from None
         return value
+
+    @field_validator("microsoft_authority")
+    @classmethod
+    def _known_microsoft_authority(cls, value: str) -> str:
+        """Only the two audiences the registration can serve are accepted (Outlook spec 3.2): a
+        stray value would send people to an endpoint we never designed for."""
+        authority = value.strip().lower() or "consumers"
+        if authority not in ("consumers", "common"):
+            raise ValueError(f"MICROSOFT_AUTHORITY is {value!r}; it must be consumers or common")
+        return authority
+
+    @field_validator("microsoft_allowed_tenants")
+    @classmethod
+    def _microsoft_tenants_are_guids(cls, value: str) -> str:
+        """A comma separated list of directory (tenant) ids, lower-cased. Anything that is not a
+        GUID is refused at start: a typo here would silently admit or block a whole organisation."""
+        ids = []
+        for part in value.split(","):
+            part = part.strip().lower()
+            if not part:
+                continue
+            if not re.fullmatch(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", part):
+                raise ValueError(
+                    "MICROSOFT_ALLOWED_TENANTS must be tenant ids (GUIDs), comma separated"
+                )
+            ids.append(part)
+        return ",".join(dict.fromkeys(ids))
+
+    @field_validator("microsoft_secret_expires_on")
+    @classmethod
+    def _microsoft_secret_expiry_is_a_date(cls, value: str) -> str:
+        value = value.strip()
+        if value:
+            try:
+                date.fromisoformat(value)
+            except ValueError:
+                raise ValueError("MICROSOFT_SECRET_EXPIRES_ON must be a date, YYYY-MM-DD") from None
+        return value
+
+    @property
+    def microsoft_allowed_tenant_ids(self) -> frozenset[str]:
+        """The tenants a Microsoft connection may come from; empty means any."""
+        return frozenset(t for t in self.microsoft_allowed_tenants.split(",") if t)
 
     @model_validator(mode="after")
     def _skribby_needs_its_key(self):
@@ -88,7 +135,7 @@ class Settings(BaseSettings):
     # plan and the cheapest (0.04 USD an hour); `none` turns it off and with it the speaker names.
     skribby_transcription_model: str = "groq/whisper-large-v3-turbo"
     vexa_base_url: str = "http://localhost:8056"
-    vexa_api_key: str = ""
+    vexa_api_key: str = Field(default="", repr=False)
     bot_name: str = "Beyric Note Taker (recording)"
 
     def bot_name_for(self, provider: str | None) -> str:
@@ -126,7 +173,7 @@ class Settings(BaseSettings):
     # spike (P0.7) has passed and this is set: until then a Teams event reads "Can't join yet".
     teams_join_enabled: bool = False
 
-    openai_api_key: str = ""
+    openai_api_key: str = Field(default="", repr=False)
     transcription_model: str = "gpt-transcribe"
     notes_model: str = "gpt-6-luna"
     # The one call that reads the notes and transcript into decisions, open questions and review
@@ -153,13 +200,13 @@ class Settings(BaseSettings):
     # Read only by migration 0006, which creates the admin account from them. After that the
     # login uses the `users` table and OWNER_PASSWORD can be removed from .env.
     owner_email: str = ""
-    owner_password: str = ""
-    session_secret: str = ""
+    owner_password: str = Field(default="", repr=False)
+    session_secret: str = Field(default="", repr=False)
     cookie_secure: bool = True
     # The secret nginx sends in X-Edge-Secret. The app believes X-Forwarded-For only on a request
     # that carries it (app/edge.py). Empty = not configured: the app warns at startup and treats
     # every client as the socket peer (the proxy), so all visitors share one login limit.
-    edge_shared_secret: str = ""
+    edge_shared_secret: str = Field(default="", repr=False)
 
     # The public address of the site: mail links and the Google redirect URIs are built from it.
     public_base_url: str = "https://notes.beyrictech.com"
@@ -167,11 +214,11 @@ class Settings(BaseSettings):
     # console outside production, and no mailer at all in production without a key (mail then
     # stays in the outbox and password sign-up stays off).
     mail_provider: str = ""
-    resend_api_key: str = ""
+    resend_api_key: str = Field(default="", repr=False)
     # The OAuth client for "Sign in with Google". Both set = the feature exists; either empty =
     # the routes answer 404 and `GET /api/pilot` says `google_signin: false`.
     google_client_id: str = ""
-    google_client_secret: str = ""
+    google_client_secret: str = Field(default="", repr=False)
     # True while the Google Cloud project is in Testing: a refresh token then lapses after 7 days,
     # and a connection records when (`expected_expiry_at`). Off once the project is in production.
     google_oauth_testing: bool = False
@@ -211,13 +258,31 @@ class Settings(BaseSettings):
     # random bytes, base64 (`openssl rand -base64 32`). It lives only in the server .env, never in
     # the database or a backup. Rotation: new key here, old key in `token_enc_key_previous`, raise
     # `token_enc_key_version` by one, re-encrypt, then drop the previous key (app/vault.py).
-    token_enc_key: str = ""
-    token_enc_key_previous: str = ""
+    token_enc_key: str = Field(default="", repr=False)
+    token_enc_key_previous: str = Field(default="", repr=False)
     token_enc_key_version: int = 1
     # Set true where the calendar features (Google connect, pasted calendar links) are switched
     # on. In production the app then refuses to start without `token_enc_key`, as it already does
     # once `google_client_id` is set.
     calendar_enabled: bool = False
+
+    # The Microsoft (Outlook) calendar, Outlook spec 9.2. All optional while the flag is false.
+    # The OAuth client of the Azure app registration; both set = the client exists. The flag is the
+    # operator's switch for the whole feature: the routes answer 404 `calendar_unavailable` and the
+    # UI draws nothing until it is true (and the Teams gate of spec section 7 is met).
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = Field(default="", repr=False)
+    microsoft_calendar_enabled: bool = False
+    # Which accounts our authorize endpoint accepts: `consumers` (personal Outlook.com, Hotmail,
+    # Live: the pilot) or `common` (work and school as well, once publisher verification is done).
+    microsoft_authority: str = "consumers"
+    # Optional, comma separated tenant ids a connection must come from (empty = any).
+    microsoft_allowed_tenants: str = ""
+    # When the client secret in Azure expires, YYYY-MM-DD: drives the 30-day-before reminder.
+    microsoft_secret_expires_on: str = ""
+    # True once Microsoft's publisher verification is done; until then the connect call may tell
+    # the frontend to explain the "unverified" screen (only if M0 shows Microsoft shows one).
+    microsoft_publisher_verified: bool = False
 
     # The scheduler's two loops (spec section 9.7): dispatch every 10 s (which is also how often
     # a standby retries the leader lock), the sync loop wakes every 60 s. Not required.

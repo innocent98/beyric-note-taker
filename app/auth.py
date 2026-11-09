@@ -20,7 +20,7 @@ from fastapi import Depends, Request
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app import vault
+from app import microsoft_oauth, vault
 from app.config import Settings
 from app.db import get_session
 from app.models import AppState, User
@@ -312,6 +312,7 @@ def check_start(settings: Settings) -> None:
             f"(generate one with: openssl rand -hex 48); it signs every session cookie"
         )
     vault.check_settings(settings)
+    microsoft_oauth.check_settings(settings)
 
 
 PUBLIC_PATHS = frozenset({"/login", "/privacy", "/terms"})

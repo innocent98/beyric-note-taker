@@ -1,0 +1,9 @@
+{
+  "token_type": "Bearer",
+  "scope": "https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/User.Read",
+  "expires_in": 3599,
+  "ext_expires_in": 3599,
+  "access_token": "ACCESS-TOKEN-PLACEHOLDER-two",
+  "refresh_token": "REFRESH-TOKEN-PLACEHOLDER-two",
+  "id_token": "unsigned.id-token.not-read-by-us"
+}

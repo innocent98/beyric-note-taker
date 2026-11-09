@@ -1,4 +1,4 @@
-"""Encrypts secrets at rest (Google refresh tokens, a pasted calendar link) with AES-256-GCM.
+"""Encrypts secrets at rest (Google and Microsoft refresh tokens, a pasted link) with AES-256-GCM.
 
 A value is stored as `nonce || ciphertext` (12-byte random nonce, the GCM tag at the end of the
 ciphertext) next to the `key_version` that made it. The authenticated data is `purpose:owner`, so a
@@ -23,7 +23,7 @@ from app.config import Settings, get_settings
 
 # Every kind of secret the vault holds. Part of the authenticated data, so a blob made for one
 # purpose never opens for another; a new kind is added here on purpose.
-PURPOSES = ("refresh_token", "ics_url", "host_api_key", "integration")
+PURPOSES = ("refresh_token", "ms_refresh_token", "ics_url", "host_api_key", "integration")
 NONCE_BYTES = 12
 KEY_BYTES = 32
 TAG_BYTES = 16
@@ -144,10 +144,13 @@ def check_settings(settings: Settings) -> None:
                 "TOKEN_ENC_KEY_VERSION must be 2 or more when TOKEN_ENC_KEY_PREVIOUS is set "
                 "(the previous key is the one before the current version)"
             )
-    wants_key = settings.google_client_id or settings.calendar_enabled
+    wants_key = (
+        settings.google_client_id or settings.microsoft_client_id or settings.calendar_enabled
+    )
     if settings.app_env == "production" and wants_key and not settings.token_enc_key:
         raise RuntimeError(
-            "TOKEN_ENC_KEY is required when GOOGLE_CLIENT_ID is set or CALENDAR_ENABLED is true: "
+            "TOKEN_ENC_KEY is required when GOOGLE_CLIENT_ID or MICROSOFT_CLIENT_ID is set or "
+            "CALENDAR_ENABLED is true: "
             "it encrypts the calendar refresh tokens and pasted calendar links "
             "(generate one with: openssl rand -base64 32)"
         )
