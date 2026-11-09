@@ -13,7 +13,7 @@
 <h2 id="collect">Information we collect</h2>
 <h3>Information you give us</h3>
 <ul>
-  <li>Account details: your name and email address, and a password (stored only in hashed form) or, if you sign in with Google, your Google account identifier. We also keep a count of the hours of meetings recorded for your account, and, if you join the waiting list, your email address.</li>
+  <li>Account details: your name and email address, and a password (stored only in hashed form) or, if you sign in with Google, your Google account identifier. If you connect Outlook, we also keep an identifier that Microsoft gives your account (a tenant and user identifier) and the email address of that Microsoft account. We also keep a count of the hours of meetings recorded for your account, and, if you join the waiting list, your email address.</li>
   <li>Settings and content you create: notes templates and vocabulary terms. From each set of notes we also keep the lists of decisions, open questions and Please check items it contains, so you can search and tick them off, and, for a Please check item about a name or term that may have been misheard, the word as it was transcribed. From the action items we keep tasks: a short title, who it is assigned to, a due date, a status and a short quote from the transcript that shows where it came from, and any tasks you add yourself.</li>
   <li>Messages you send us, such as support requests.</li>
   <li>When you share notes by email: the names and email addresses of the people you send them to, and the optional message you write, kept with the meeting so you can see who it went to.</li>
@@ -53,6 +53,14 @@
 </ul>
 <p>You can disconnect at any time by revoking access at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> or by asking us to remove it. When you disconnect, we stop reading your calendar and delete the calendar data we hold.</p>
 
+<h2 id="microsoft">Microsoft user data</h2>
+<p>If you connect your Outlook calendar, we ask only for the access the feature below needs, and Microsoft shows you each permission before you agree.</p>
+<ul>
+  <li><strong>Outlook calendar:</strong> we read the title, start and end time, whether you are the organiser, your reply, the number of attendees (not their addresses) and the meeting link of events on your main Outlook calendar. We read an event's description and location only to find its meeting link, and do not keep them. We use this only to decide which meetings to join, following the rules you choose, and to show your upcoming meetings in the app. We do not create, change or delete calendar events.</li>
+</ul>
+<p>We handle Microsoft user data under the same rules as Google user data above: we use it only to provide this feature, we do not sell it or use it for advertising, we do not use it to train artificial intelligence models, and people at Beyric do not read it unless you ask us to for support, it is needed for security or to investigate abuse, or the law requires it.</p>
+<p>You can disconnect Outlook in the app, which deletes the calendar data we hold and our stored Microsoft access credential. Microsoft does not let us withdraw that permission for you: to remove Beyric from your Microsoft account, remove it in your Microsoft account's app permissions.</p>
+
 <h2 id="use">How we use your information</h2>
 <ul>
   <li>To provide the service: joining meetings, recording audio, and producing transcripts and notes for you.</li>
@@ -71,7 +79,7 @@
   <li><strong>Linear</strong>, only if an owner or admin of your team connects it in Settings. For each task taken from a meeting you have shared with your team, we create an issue in the Linear team they chose, with the task's title, due date, the owner's name and a link to the meeting in Beyric. Linear is in the United States and is not sent audio, transcripts or notes. The personal API key you paste is encrypted before it is stored, is never shown again, and is deleted when you disconnect; issues already created stay in Linear.</li>
   <li><strong>Contabo</strong> hosts our server, in France.</li>
   <li><strong>Cloudflare</strong> provides our domain's DNS and may carry traffic to the site.</li>
-  <li><strong>Meeting and calendar platforms</strong> (Google and Zoom), as needed to join meetings and to read calendar events you have authorised.</li>
+  <li><strong>Meeting and calendar platforms</strong> (Google, Microsoft and Zoom), as needed to join meetings and to read calendar events you have authorised.</li>
   <li><strong>Authorities</strong>, when required by law or court order, or to protect the rights, safety or property of Beyric, our users or others.</li>
   <li><strong>A buyer or successor</strong>, if Beyric is involved in a merger, acquisition or sale of assets, subject to this policy.</li>
 </ul>
@@ -97,7 +105,7 @@
 </ul>
 
 <h2 id="security">Security</h2>
-<p>Traffic to the site is encrypted with TLS. Access to the server is limited to the people who run it, the software that joins meetings runs on a separate network from our database, and secrets are kept out of our code. Google access credentials are encrypted before they are stored, and the encryption key is kept apart from the database and its backups. Our administrator can see account details (name, email, status and hours used) and, if you ask for help signing in, can create a one-time password reset link for your account, which would give access to it. You are notified in the app when this happens, and the action is logged. The administrator's account screens do not show your meetings or notes. No system is completely secure. If a personal data breach affects you, we will tell you and the relevant authorities as the law requires.</p>
+<p>Traffic to the site is encrypted with TLS. Access to the server is limited to the people who run it, the software that joins meetings runs on a separate network from our database, and secrets are kept out of our code. Calendar access credentials are encrypted before they are stored, and the encryption key is kept apart from the database and its backups. Our administrator can see account details (name, email, status and hours used) and, if you ask for help signing in, can create a one-time password reset link for your account, which would give access to it. You are notified in the app when this happens, and the action is logged. The administrator's account screens do not show your meetings or notes. No system is completely secure. If a personal data breach affects you, we will tell you and the relevant authorities as the law requires.</p>
 
 <h2 id="transfers">International transfers</h2>
 <p>Our server is in France. OpenAI may process meeting audio and transcripts, and Resend the email addresses and names it sends mail to, in the United States. When personal data leaves Nigeria, the UK or the European Economic Area, we rely on the safeguards those laws allow, such as standard contractual clauses in our providers' terms.</p>
@@ -107,7 +115,7 @@
 <ul>
   <li>Performance of a contract, to provide the service you signed up for.</li>
   <li>Legitimate interests, to secure and maintain the service, where those interests are not overridden by your rights.</li>
-  <li>Consent, where we ask for it, such as when you connect your Google account. You can withdraw it at any time.</li>
+  <li>Consent, where we ask for it, such as when you connect your Google account or your Outlook calendar. You can withdraw it at any time.</li>
   <li>Legal obligation, where the law requires us to keep or disclose information.</li>
 </ul>
 
