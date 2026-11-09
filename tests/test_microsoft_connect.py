@@ -1094,3 +1094,140 @@ def test_a_wrong_client_secret_at_the_callback_does_not_claim_an_expiry(
     ms.token_error = httpx.Response(401, json={"error": "invalid_client", "error_codes": [7000215]})
     assert error_code(connect_outlook(web, ms)[0]) == "microsoft_failed"
     assert seen == []
+
+
+# ---- review fixes (Opus review of #152) ----
+
+
+def seed_calendar(session, user, conn, n: int, *, state="scheduled"):
+    """One event and its join for `conn`, as the sync would leave them."""
+    return add_join(session, conn, user, state, n)
+
+
+def test_a_microsoft_disconnect_with_only_google_connected_deletes_nothing_of_googles(
+    web, session, owner, google
+):
+    """The route works with the flag off, so it can be POSTed while only Google is connected."""
+    connect_google_for(web, google)
+    g = row(session, owner, "google")
+    g.sync_token = "google-sync-token"
+    session.commit()
+    seed_calendar(session, owner, g, 1)
+    add_notification(session, owner, "calendar.not_recorded", "cal-nr:1")
+    response = web.post(DISCONNECT)
+    assert response.status_code == 200 and response.json() == {
+        "status": "disconnected",
+        "revoked": True,
+    }
+    assert count(session, CalendarEvent) == 1 and count(session, ScheduledJoin) == 1
+    assert count(session, Notification, kind="calendar.not_recorded") == 1
+    after = row(session, owner, "google")
+    assert after.status == "connected" and after.sync_token == "google-sync-token"
+
+
+def test_disconnecting_a_meet_only_google_never_touches_the_outlook_calendar(
+    web, session, owner, google, ms
+):
+    connect_outlook(web, ms)
+    outlook_conn = row(session, owner)
+    seed_calendar(session, owner, outlook_conn, 1)
+    outlook_conn.sync_token = "outlook-marker"
+    session.commit()
+    # Google connected for Meet only is allowed beside a live Outlook calendar
+    g_url, g_state, _ = google_connect_features(web, ["meet"])
+    assert landing(cc.callback(web, g_state, google.consent(g_url)))[1] == {"calendar": "connected"}
+    assert web.post("/api/calendar/google/disconnect").status_code == 200
+    assert count(session, CalendarEvent) == 1 and count(session, ScheduledJoin) == 1
+    after = row(session, owner)
+    assert after.status == "connected" and after.sync_token == "outlook-marker"
+    assert row(session, owner, "google").status == "disconnected"
+
+
+def google_connect_features(web: Api, features):
+    response = web.post("/api/calendar/google/connect", {"features": features})
+    assert response.status_code == 200, response.text
+    url = response.json()["authorize_url"]
+    return url, parse_qs(urlparse(url).query)["state"][0], response
+
+
+def test_replacing_a_dead_connection_only_drops_that_connections_unstarted_joins(
+    web, session, owner, google, ms
+):
+    from app.models import CalendarConnection
+
+    google_conn = CalendarConnection(
+        user_id=owner.id,
+        provider="google",
+        status="connected",
+        granted_scopes=google_oauth.CALENDAR_SCOPE,
+        account_subject="g-1",
+    )
+    dead = CalendarConnection(
+        user_id=owner.id,
+        provider="microsoft",
+        status="needs_reconnect",
+        granted_scopes="Calendars.Read",
+        account_subject="oid-old",
+        tenant_id=CONSUMER_TENANT,
+        account_kind="personal",
+    )
+    session.add_all([google_conn, dead])
+    session.commit()
+    _, google_join = seed_calendar(session, owner, google_conn, 1)
+    _, dead_join = seed_calendar(session, owner, dead, 2)
+    google_join_id, dead_join_id = google_join.id, dead_join.id
+    calendar_connect._drop_old_account(session, dead)
+    session.commit()
+    session.expire_all()
+    assert session.get(ScheduledJoin, google_join_id) is not None
+    assert session.get(ScheduledJoin, dead_join_id) is None
+    assert count(session, CalendarEvent, connection_id=google_conn.id) == 1
+    assert count(session, CalendarEvent, connection_id=dead.id) == 0
+
+
+def test_the_same_object_id_under_a_different_tenant_is_another_identity(
+    engine, work_settings, google, fake_vexa, fake_openai, session, owner
+):
+    """Identity is tenant plus object id: `oid` alone is not enough."""
+    app, work_ms = work_app(engine, work_settings, google, fake_vexa, fake_openai)
+    web_ = browser(app)
+    connect_outlook(web_, work_ms, oid=OID_SAME)  # personal tenant
+    response, _, _ = connect_outlook(web_, work_ms, oid=OID_SAME, tid=WORK_TENANT)
+    assert error_code(response) == "different_account"
+    conn = row(session, owner)
+    assert conn.tenant_id == CONSUMER_TENANT and conn.account_subject == OID_SAME
+
+
+OID_SAME = "00000000-0000-0000-0000-0000000000a1"
+
+
+def test_a_switched_on_provider_with_no_source_yet_never_takes_the_scheduler_down(
+    settings, monkeypatch, caplog
+):
+    row_ = calendar_providers.PROVIDERS["microsoft"]
+
+    def not_built(_settings):
+        raise NotImplementedError("later")
+
+    monkeypatch.setattr(
+        calendar_providers,
+        "PROVIDERS",
+        {
+            **calendar_providers.PROVIDERS,
+            "microsoft": row_.__class__(**{**row_.__dict__, "make_source": not_built}),
+        },
+    )
+    sources = calendar_providers.build_sources(settings)
+    assert [s.provider for s in sources] == ["google"]
+    assert "microsoft is switched on but has no source yet" in caplog.text
+
+
+def test_a_commit_collision_names_the_callers_own_error():
+    from sqlalchemy.exc import IntegrityError
+
+    class Colliding:
+        def commit(self):
+            raise IntegrityError("x", {}, Exception("y"))
+
+    assert calendar_connect._commit(Colliding()) == "google_failed"
+    assert calendar_connect._commit(Colliding(), "microsoft_failed") == "microsoft_failed"

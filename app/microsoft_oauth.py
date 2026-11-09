@@ -36,7 +36,7 @@ import json
 import logging
 import re
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 
@@ -119,8 +119,9 @@ class Identity:
     tenant_id: str
     subject: str
     account_kind: str  # personal or work
-    name: str | None = None
-    preferred_username: str | None = None
+    # Labels only, and an address is personal data: kept out of `repr`.
+    name: str | None = field(default=None, repr=False)
+    preferred_username: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -372,7 +373,7 @@ class MicrosoftOAuth:
         if access is None:
             logger.warning("microsoft token answer had no access token")
             raise MicrosoftError
-        identity = self.check_id_token(id_token, nonce=nonce, now=now)
+        identity = self._check_id_token(id_token, nonce=nonce, now=now)
         return Grant(
             identity=identity,
             scopes=frozenset(scope.split()),
@@ -442,7 +443,7 @@ class MicrosoftOAuth:
 
     # ---- the ID token ----
 
-    def check_id_token(self, id_token: str, *, nonce: str, now: datetime) -> Identity:
+    def _check_id_token(self, id_token: str, *, nonce: str, now: datetime) -> Identity:
         """Check the ID token from the code redemption (module docstring) and return who it is,
         or raise `MicrosoftError` / `TenantNotAllowed`."""
         claims = _claims(id_token)
@@ -456,7 +457,8 @@ class MicrosoftOAuth:
             claims.get("aud") == self._settings.microsoft_client_id,
             stamps and expires > now.timestamp() - CLOCK_SKEW_SECONDS,
             stamps and issued < now.timestamp() + CLOCK_SKEW_SECONDS,
-            isinstance(seen_nonce, str)
+            bool(nonce)  # an empty expected nonce can never match: fail closed
+            and isinstance(seen_nonce, str)
             and secrets.compare_digest(seen_nonce.encode(), nonce.encode()),
             bool(_GUID.fullmatch(tid)),
             # The chain of trust of a tenant-independent endpoint: the issuer must be the

@@ -269,6 +269,10 @@ ID_TOKEN_REFUSALS = {
     "tid is not a GUID": {"tid": "consumers"},
     "no tid": {"tid": None},
     "issuer of another tenant": {"iss": f"https://login.microsoftonline.com/{OTHER_TENANT}/v2.0"},
+    "tid is `consumers` with a matching issuer": {
+        "tid": "consumers",
+        "iss": "https://login.microsoftonline.com/consumers/v2.0",
+    },
     "issuer on another host": {"iss": f"https://login.evil.example/{CONSUMER_TENANT}/v2.0"},
     "v1 issuer": {"iss": f"https://sts.windows.net/{CONSUMER_TENANT}/"},
     "no oid and no sub": {"oid": None, "sub": None},
@@ -768,3 +772,83 @@ def test_the_dependency_gives_a_client_only_when_configured():
 
     assert microsoft_oauth.get_microsoft(request_with(make_settings())) is None
     assert isinstance(microsoft_oauth.get_microsoft(request_with(settings_for())), MicrosoftOAuth)
+
+
+# ---- review fixes (Opus review of #150) ----
+
+
+def test_an_empty_expected_nonce_never_matches_even_an_empty_one():
+    """Fail closed: `compare_digest(b"", b"")` is true, so an empty flow nonce must be refused."""
+    claims = claims_for("personal", nonce="")
+    client = MicrosoftOAuth(
+        settings_for(), transport=Recorder(code_answer("personal", claims)).transport
+    )
+    with pytest.raises(MicrosoftError):
+        client.exchange_connect(code=CODE, code_verifier=VERIFIER, nonce="", now=NOW)
+    claims = claims_for("personal")
+    del claims["nonce"]
+    with pytest.raises(MicrosoftError):
+        exchange(Recorder(code_answer("personal", claims)))
+
+
+@pytest.mark.parametrize(
+    "authority", ["evil", "", "common/../x", "consumers/x", "../common", "9188040d-6c67", "COMMON"]
+)
+def test_the_authority_url_refuses_anything_but_consumers_common_or_a_guid(authority):
+    with pytest.raises(ValueError):
+        MicrosoftOAuth(settings_for())._authority_url(authority, "token")
+
+
+def test_the_authority_url_accepts_the_two_audiences_and_a_tenant_guid():
+    oauth = MicrosoftOAuth(settings_for())
+    for authority in ("consumers", "common", WORK_TENANT):
+        assert oauth._authority_url(authority, "token") == (
+            f"https://login.microsoftonline.com/{authority}/oauth2/v2.0/token"
+        )
+
+
+def test_the_id_token_check_is_private_so_only_the_code_redemption_reaches_it():
+    assert not hasattr(MicrosoftOAuth, "check_id_token")
+    assert hasattr(MicrosoftOAuth, "_check_id_token")
+
+
+def test_the_identity_labels_and_the_grant_stay_out_of_a_repr():
+    grant = exchange(Recorder(code_answer("personal")))
+    shown = repr(grant) + str(grant) + repr(grant.identity)
+    assert "person-1@example.test" not in shown and "Person One" not in shown
+    assert "REFRESH-TOKEN" not in shown and "ACCESS-TOKEN" not in shown
+    assert grant.identity.preferred_username == "person-1@example.test"  # still readable by code
+
+
+SECRET_FIELDS = (
+    "microsoft_client_secret",
+    "google_client_secret",
+    "session_secret",
+    "token_enc_key",
+    "token_enc_key_previous",
+    "owner_password",
+    "edge_shared_secret",
+    "resend_api_key",
+    "openai_api_key",
+    "vexa_api_key",
+)
+
+
+def test_no_secret_setting_appears_in_the_repr_of_the_settings():
+    sentinels = {name: f"SENTINEL-{name}-VALUE" for name in SECRET_FIELDS}
+    settings = make_settings(**sentinels)
+    shown = repr(settings) + str(settings)
+    for name, value in sentinels.items():
+        assert value not in shown, name
+        assert getattr(settings, name) == value  # the app still reads them
+
+
+def test_a_start_up_validation_error_never_prints_a_secret():
+    """A forced failure (`BOT_PROVIDER=skribby` with no key) used to print the whole input."""
+    sentinels = {name: f"SENTINEL-{name}-VALUE" for name in SECRET_FIELDS}
+    with pytest.raises(Exception) as raised:
+        make_settings(bot_provider="skribby", **sentinels)
+    shown = str(raised.value) + repr(raised.value)
+    assert "SKRIBBY_API_KEY" in shown  # the useful message is there
+    for value in sentinels.values():
+        assert value not in shown
