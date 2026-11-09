@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -403,11 +403,13 @@ def _store(
     return _commit(session)
 
 
-def _commit(session: Session) -> str | None:
+def _commit(session: Session, failure: str = "google_failed") -> str | None:
+    """Commit; the error code to redirect with (the provider's own) if two connects for one user
+    finish at the same moment."""
     try:
         session.commit()
-    except IntegrityError:  # two connects for one user finishing at the same moment
-        return "google_failed"
+    except IntegrityError:
+        return failure
     return None
 
 
@@ -415,12 +417,13 @@ def _release(conn: CalendarConnection) -> ReleasedConnection:
     """Copy out of `conn`, in memory, what the Google-side clean-up needs, before the row is
     wiped or overwritten. An unreadable token (lost key) gives `token=None, had_token=True`."""
     token = None
+    purpose = "ms_refresh_token" if conn.provider == "microsoft" else "refresh_token"
     if conn.refresh_token_enc is not None and conn.key_version is not None:
         try:
             token = vault.decrypt(
                 conn.refresh_token_enc,
                 conn.key_version,
-                purpose="refresh_token",
+                purpose=purpose,
                 owner=conn.user_id,
             )
         except vault.VaultError:
@@ -457,6 +460,15 @@ def _release_at_google(
                 pass  # the client already logged the HTTP status or the error type
         if not revoked:
             logger.warning("google token for user %s was not revoked", released.user_id)
+    run_disconnect_hooks(session, released, google)
+    return revoked
+
+
+def run_disconnect_hooks(
+    session: Session, released: ReleasedConnection, google: GoogleOAuth | None
+) -> None:
+    """Run every `ON_DISCONNECT` hook for a released connection (any provider). A hook that
+    raises is logged by exception type only, rolled back alone, and never stops the others."""
     for hook in list(ON_DISCONNECT):
         try:
             hook(session, released, google)
@@ -465,7 +477,6 @@ def _release_at_google(
             logger.warning(
                 "disconnect hook failed for user %s (%s)", released.user_id, type(exc).__name__
             )
-    return revoked
 
 
 def _forget_meet_subscription(conn: CalendarConnection) -> None:
@@ -482,14 +493,22 @@ def _drop_old_account(session: Session, conn: CalendarConnection) -> ReleasedCon
     though the connection died)."""
     released = _release(conn)
     _forget_meet_subscription(conn)
-    session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
+    own_events = select(CalendarEvent.id).where(CalendarEvent.connection_id == conn.id)
+    # Only this connection's joins: another provider's connection keeps its own. A join with no
+    # event (its event row aged out) cannot be told apart, so it goes only when no other calendar
+    # of the user is live.
+    mine = ScheduledJoin.calendar_event_id.in_(own_events)
+    if other_live_calendar(session, conn.user_id, conn.provider) is None:
+        mine = or_(mine, ScheduledJoin.calendar_event_id.is_(None))
     session.execute(
         delete(ScheduledJoin).where(
             ScheduledJoin.user_id == conn.user_id,
             ScheduledJoin.source == "calendar",
             ScheduledJoin.state.not_in(LIVE_JOIN_STATES),
+            mine,
         )
     )
+    session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
     return released
 
 
@@ -518,14 +537,30 @@ def disconnect(
         .with_for_update()
     ).first()
     released = _release(conn) if conn is not None else None
-    session.execute(delete(CalendarEvent).where(CalendarEvent.user_id == user.id))
-    session.execute(delete(ScheduledJoin).where(ScheduledJoin.user_id == user.id))
-    session.execute(
-        delete(Notification).where(
-            Notification.user_id == user.id,
-            Notification.kind.startswith(CALENDAR_NOTIFICATION_PREFIX, autoescape=True),
+    # With another calendar of the user still live (Outlook while Google is being disconnected for
+    # Meet, or a disconnect aimed at a provider that is not the connected one), only THIS
+    # connection's events and their joins go: the other calendar's rows, joins and notifications
+    # stay, or its auto-join would silently stop while its row still says `connected`.
+    other_live = other_live_calendar(session, user.id, provider) is not None
+    if other_live:
+        if conn is not None:
+            own_events = select(CalendarEvent.id).where(CalendarEvent.connection_id == conn.id)
+            session.execute(
+                delete(ScheduledJoin).where(
+                    ScheduledJoin.user_id == user.id,
+                    ScheduledJoin.calendar_event_id.in_(own_events),
+                )
+            )
+            session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
+    else:
+        session.execute(delete(CalendarEvent).where(CalendarEvent.user_id == user.id))
+        session.execute(delete(ScheduledJoin).where(ScheduledJoin.user_id == user.id))
+        session.execute(
+            delete(Notification).where(
+                Notification.user_id == user.id,
+                Notification.kind.startswith(CALENDAR_NOTIFICATION_PREFIX, autoescape=True),
+            )
         )
-    )
     if conn is not None:
         conn.status = "disconnected"
         conn.needs_reconnect_reason = None
@@ -535,6 +570,9 @@ def disconnect(
         conn.account_email = None
         conn.account_subject = None
         conn.account_domain = None
+        conn.tenant_id = None
+        conn.account_kind = None
+        conn.tenant_domains = None
         conn.sync_token = None
         conn.last_sync_at = None
         conn.last_error = None
@@ -545,4 +583,10 @@ def disconnect(
     if released is None:
         return True
     logger.info("calendar disconnected for user %s", user.id)
+    if provider == "microsoft":
+        # Microsoft has no revoke call an app can use for its own grant (spec 4.6): only the hooks
+        # run, and a token that existed is reported as not revoked so the person is told where to
+        # remove the app at Microsoft.
+        run_disconnect_hooks(session, released, None)
+        return not released.had_token
     return _release_at_google(session, released, google)

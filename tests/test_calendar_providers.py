@@ -78,9 +78,11 @@ def add_microsoft(session, user, status="connected", scopes="Calendars.Read User
 # ---- the registry ----
 
 
-def test_google_is_the_only_provider_with_a_row():
-    assert list(PROVIDERS) == ["google"]
-    assert calendar_providers.get("microsoft") is None
+def test_google_and_microsoft_are_the_providers_with_a_row():
+    assert list(PROVIDERS) == ["google", "microsoft"]
+    assert calendar_providers.get("ics") is None
+    assert PROVIDERS["microsoft"].flow_cookie == "calendar_flow_ms"
+    assert PROVIDERS["microsoft"].flow_cookie_path == "/api/calendar/microsoft"
     assert PROVIDERS["google"].flow_cookie == calendar_connect.FLOW_COOKIE
     assert PROVIDERS["google"].flow_cookie_path == calendar_connect.FLOW_COOKIE_PATH
 
@@ -131,11 +133,13 @@ def test_parsing_needs_a_provider_with_a_row():
 # ---- the routes ----
 
 
-def test_the_microsoft_routes_answer_404_while_there_is_no_microsoft_row(web):
+def test_the_microsoft_connect_and_callback_answer_404_while_the_flag_is_off(web):
+    """The flag is off by default, so the routes do not exist for anyone. Disconnect still works
+    (a person must always be able to delete their data); with nothing connected it is a no-op."""
     error_of(web.post("/api/calendar/microsoft/connect", {}), 404, "calendar_unavailable")
-    error_of(web.post("/api/calendar/microsoft/disconnect"), 404, "calendar_unavailable")
     response = web.client.get("/api/calendar/microsoft/callback?code=x&state=y")
     error_of(response, 404, "calendar_unavailable")
+    assert web.post("/api/calendar/microsoft/disconnect").status_code == 200
 
 
 def test_an_unknown_provider_is_a_validation_error_not_a_route(web):

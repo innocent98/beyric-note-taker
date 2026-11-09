@@ -283,6 +283,10 @@ class Settings(BaseSettings):
     # True once Microsoft's publisher verification is done; until then the connect call may tell
     # the frontend to explain the "unverified" screen (only if M0 shows Microsoft shows one).
     microsoft_publisher_verified: bool = False
+    # Off by default. When on, a WORK connection also reads the organisation's verified domains
+    # and an unanswered invite from an organiser in them joins like a colleague's. That trusts the
+    # organiser's address as Exchange Online reports it (spec 8.1 #8: confirm with the M0 run, S4).
+    microsoft_organizer_domain_trust: bool = False
 
     # The scheduler's two loops (spec section 9.7): dispatch every 10 s (which is also how often
     # a standby retries the leader lock), the sync loop wakes every 60 s. Not required.

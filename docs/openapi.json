@@ -1314,8 +1314,20 @@
         "type": "object"
       },
       "DisconnectOut": {
-        "description": "`status` is always `disconnected`: the call is safe to repeat, and also answers 200 when\nnothing was connected. `revoked` is false when Google could not be asked to remove the access\n(it was unreachable, or the stored key could not be read): the data is deleted here\nregardless, but tell the person to also remove Beyric at myaccount.google.com/permissions.\nIt is true when Google confirmed, and also when there was nothing left to revoke (a repeat\ncannot re-check an earlier failure: act on the first answer).",
+        "description": "`status` is always `disconnected`: the call is safe to repeat, and also answers 200 when\nnothing was connected. `revoked` is false when the provider could not be asked to remove the\naccess (Google was unreachable, or the stored key could not be read: `reason` is null) or\ncannot be (Microsoft has no way for an app to remove its own access: `reason` is\n`provider_has_no_revoke`). The data is deleted here regardless; tell the person to also\nremove Beyric at myaccount.google.com/permissions (Google) or in their Microsoft account's\napp permissions (Microsoft). `revoked` is true when the provider confirmed, and also when\nthere was nothing left to revoke (a repeat cannot re-check an earlier failure: act on the\nfirst answer).",
         "properties": {
+          "reason": {
+            "anyOf": [
+              {
+                "const": "provider_has_no_revoke",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "revoked": {
             "title": "Revoked",
             "type": "boolean"
@@ -7573,7 +7585,7 @@
     },
     "/api/calendar/{provider}/callback": {
       "get": {
-        "description": "Where Google sends the browser back after the consent screen. Public in the guard (it\nanswers a signed-out visitor itself) but checked by the single-use `state`, the signed-in\nuser the flow was started for, and the `calendar_flow` cookie. Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with `?calendar=connected`; a failure goes there with\n`?calendar_error=` `google_denied`, `google_failed`, `scope_missing` (the calendar box was\nunticked), `no_refresh_token`, `wrong_account` or `already_connected` (another provider's\ncalendar is connected); nobody signed in goes to\n`/login?error=google_failed`. 404 `calendar_unavailable` while the feature is off.",
+        "description": "Where Google or Microsoft sends the browser back after the consent screen. Public in the\nguard (it answers a signed-out visitor itself) but checked by the single-use `state` (which\nonly finishes at the callback of the provider it was started for), the signed-in user the\nflow was started for, and the flow cookie. Always a redirect, never JSON: success goes to the\nstored `return_to` with `?calendar=connected`; a failure goes there with `?calendar_error=`\n`google_denied`, `google_failed`, `scope_missing` (the calendar box was unticked),\n`no_refresh_token`, `wrong_account`, `different_account` or `already_connected` (another\nprovider's calendar is connected); for Microsoft `microsoft_denied`, `microsoft_failed`,\n`scope_missing`, `no_mailbox` (the account has no calendar to read), `tenant_not_allowed`,\n`wrong_account`, `different_account` or `already_connected`. Nobody signed in goes to\n`/login?error=google_failed` (Google) or `/login?error=microsoft_failed` (Microsoft). 404\n`calendar_unavailable` while the feature is off.",
         "operationId": "calendar_connect_callback",
         "parameters": [
           {
@@ -7699,7 +7711,7 @@
     },
     "/api/calendar/{provider}/connect": {
       "post": {
-        "description": "Start connecting Google Calendar (CSRF header needed). Returns the Google consent URL to\nnavigate to. Only the permissions in `features` are asked for, each at the moment its feature\nis switched on; permissions given earlier are kept. Sets the `calendar_flow` cookie that ties\nthe callback to this browser. 404 `calendar_unavailable` when the calendar features are off,\n409 `calendar_already_connected` when another provider's calendar is connected (one calendar at\na time), 503 `calendar_unavailable` when the server cannot store a token safely. `provider` is\n`google`; `microsoft` answers 404 `calendar_unavailable` until it is built.",
+        "description": "Start connecting a calendar (CSRF header needed). Returns the consent URL to navigate to.\n`provider` is `google` or `microsoft`. For Google only the permissions in `features` are asked\nfor, each at the moment its feature is switched on; permissions given earlier are kept. For\nMicrosoft `features` must be `[\"calendar\"]` (there is no Meet feature: 422 `invalid_features`).\nSets a flow cookie (`calendar_flow`, or `calendar_flow_ms` for Microsoft) that ties the\ncallback to this browser. 404 `calendar_unavailable` when the calendar features are off (for\nMicrosoft: also while its switch is off, so the route does not exist for anyone), 409\n`calendar_already_connected` when another provider's calendar is connected (one calendar at a\ntime), 503 `calendar_unavailable` when the server cannot store a token safely.",
         "operationId": "calendar_connect_start",
         "parameters": [
           {
@@ -7785,7 +7797,7 @@
                 }
               }
             },
-            "description": "Malformed request"
+            "description": "Unprocessable Content"
           },
           "503": {
             "content": {
@@ -7806,7 +7818,7 @@
     },
     "/api/calendar/{provider}/disconnect": {
       "post": {
-        "description": "Disconnect the caller's Google account (CSRF header needed, no body). Revokes the access at\nGoogle, then deletes the caller's calendar events, all their scheduled joins (every state) and\ncalendar notifications, and the stored token. Meetings already recorded, the hours used and\nthe settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),\nand it works while the calendar features are switched off. If Google cannot be reached the\nlocal deletion still happens and `revoked` is false: tell the person to remove Beyric at\nmyaccount.google.com/permissions.\nAfterwards `connect` works again, for the same or another Google account.",
+        "description": "Disconnect the caller's calendar (CSRF header needed, no body). For Google it revokes the\naccess at Google first. Either way it deletes the caller's calendar events, all their\nscheduled joins (every state) and calendar notifications, and the stored token. Meetings\nalready recorded, the hours used and the settings stay; a meeting being recorded right now\ncarries on. Safe to repeat (200 again), and it works while the calendar features are switched\noff. If Google cannot be reached the local deletion still happens and `revoked` is false: tell\nthe person to remove Beyric at myaccount.google.com/permissions. Microsoft cannot be asked to\nremove its own access: `revoked` is false with `reason` `provider_has_no_revoke`, and the\nperson is told to remove Beyric in their Microsoft account's app permissions. `reason` is\nabsent (not null) for Google, so Google's answer keeps its shape.\nAfterwards `connect` works again, for the same or another account.",
         "operationId": "calendar_connect_disconnect",
         "parameters": [
           {

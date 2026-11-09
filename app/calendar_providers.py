@@ -11,14 +11,18 @@ own access-token cache. The sync loop and the join runner both take one, so a co
 read by the source of its own provider and the sync and the runner share one token cache.
 """
 
+import logging
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 
+from app import graph_events, microsoft_oauth
 from app.calendar_source import CalendarSource
 from app.config import Settings
 from app.gcal_events import ParsedEvent, parse_event
 from app.google_oauth import CALENDAR_SCOPE, MEET_SCOPE
 from app.models import CalendarConnection
+
+logger = logging.getLogger(__name__)
 
 # The providers a route can name. A name here that has no row below answers 404.
 ROUTE_PROVIDERS = ("google", "microsoft")
@@ -58,6 +62,25 @@ def _google_source(settings: Settings) -> CalendarSource:
     return GoogleSource(settings)
 
 
+# ---- Microsoft (Outlook) ----
+
+
+def _microsoft_features(conn: CalendarConnection) -> set[str]:
+    """`calendar` when `Calendars.Read` is among the granted scopes (full Graph URLs or short
+    names, any case; `Calendars.ReadBasic` and look-alikes do not count)."""
+    return {"calendar"} if microsoft_oauth.has_calendar_scope(conn.granted_scopes) else set()
+
+
+def _microsoft_parse(raw: dict, conn: CalendarConnection) -> ParsedEvent:
+    # The organisation's domains matter only for a work account, and only if they were read.
+    domains = conn.tenant_domains if conn.account_kind == "work" else None
+    return graph_events.parse_event(raw, tenant_domains=domains)
+
+
+def _microsoft_source(settings: Settings) -> CalendarSource:
+    raise NotImplementedError("the Microsoft calendar source arrives with M4")
+
+
 PROVIDERS: dict[str, Provider] = {
     "google": Provider(
         name="google",
@@ -67,7 +90,16 @@ PROVIDERS: dict[str, Provider] = {
         make_source=_google_source,
         flow_cookie="calendar_flow",
         flow_cookie_path="/api/calendar/google",
-    )
+    ),
+    "microsoft": Provider(
+        name="microsoft",
+        parse_event=_microsoft_parse,
+        granted_features=_microsoft_features,
+        enabled=microsoft_oauth.calendar_enabled,
+        make_source=_microsoft_source,
+        flow_cookie="calendar_flow_ms",
+        flow_cookie_path="/api/calendar/microsoft",
+    ),
 }
 
 
@@ -127,7 +159,17 @@ def as_registry(
 
 
 def build_sources(settings: Settings) -> SourceRegistry:
-    """One source per provider that is switched on for this server."""
-    return SourceRegistry(
-        p.make_source(settings) for p in PROVIDERS.values() if p.enabled(settings)
-    )
+    """One source per provider that is switched on for this server. A provider that is switched on
+    but whose source is not built yet (`NotImplementedError`) is skipped with a log line: it must
+    never take the scheduler's other jobs down."""
+    sources = []
+    for provider in PROVIDERS.values():
+        if not provider.enabled(settings):
+            continue
+        try:
+            sources.append(provider.make_source(settings))
+        except NotImplementedError:
+            logger.warning(
+                "calendar provider %s is switched on but has no source yet", provider.name
+            )
+    return SourceRegistry(sources)
