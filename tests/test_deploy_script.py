@@ -24,6 +24,7 @@ DOCKER = """#!/usr/bin/env bash
 state="$STUB_STATE"
 head="$(cat "$state/head")"
 echo "docker $* @${head:0:1}" >> "$state/log"
+echo "${COMPOSE_PROFILES-unset}" >> "$state/profiles"
 case "$1 $2" in
   "compose ps")
     if [[ "$*" == *"--status created"* ]]; then
@@ -78,7 +79,7 @@ case "$1" in
     [ "$n" -ge "${STUB_FETCH_FAILS:-0}" ] ;;
 esac
 """
-CURL = '#!/usr/bin/env bash\n[ -f "$STUB_STATE/healthy" ]\n'
+CURL = '#!/usr/bin/env bash\necho "$*" >> "$STUB_STATE/curl"\n[ -f "$STUB_STATE/healthy" ]\n'
 NOOP = "#!/usr/bin/env bash\nexit 0\n"
 
 
@@ -119,6 +120,7 @@ def server(tmp_path):
             fetch_fails=0,
             joins="",
             allow=None,
+            profiles=None,
         ):
             env = {
                 **os.environ,
@@ -136,6 +138,9 @@ def server(tmp_path):
                 "STUB_JOINS": joins,  # what the gate's query prints: nothing, a time, or "error"
             }
             env.pop("ALLOW_DEPLOY_WITH_JOINS_DUE", None)
+            env.pop("COMPOSE_PROFILES", None)
+            if profiles is not None:
+                env["COMPOSE_PROFILES"] = profiles
             if allow is not None:
                 env["ALLOW_DEPLOY_WITH_JOINS_DUE"] = allow
             result = subprocess.run(
@@ -162,6 +167,17 @@ def server(tmp_path):
         @property
         def head(self) -> str:
             return (state / "head").read_text().strip()
+
+        @property
+        def profiles_seen(self) -> set[str]:
+            """The COMPOSE_PROFILES value each stand-in `docker` call ran with ('unset' if none)."""
+            path = state / "profiles"
+            return set(path.read_text().splitlines()) if path.exists() else set()
+
+        @property
+        def curls(self) -> list[str]:
+            path = state / "curl"
+            return path.read_text().splitlines() if path.exists() else []
 
         def ups(self) -> list[str]:
             return [line for line in self.log if line.startswith("docker compose up")]
@@ -318,3 +334,59 @@ def test_an_unexpected_answer_from_the_database_also_refuses(server):
 def test_a_sha_not_on_main_is_refused_before_the_gate_asks_anything(server):
     result = server.deploy(on_main=False, joins=DUE)
     assert "not on origin/main" in result.stderr and server.log == []
+
+
+# The Vexa containers are in the `vexa` compose profile (compose.yaml), so the deploy may run with
+# the profile off (a plain `docker compose up -d`, Vexa stopped) or on (COMPOSE_PROFILES=vexa in the
+# server's environment). It must behave the same either way: it never names a Vexa service, never
+# waits on Vexa's health, and never sets or clears the profile itself, so the rollback runs in the
+# same mode as the deploy. See docs/sop/2026-11-09-vexa-compose-profile.md.
+PROFILE_MODES = pytest.mark.parametrize(
+    ("profiles", "seen"), [(None, "unset"), ("vexa", "vexa")], ids=["profile-off", "profile-on"]
+)
+
+
+@PROFILE_MODES
+def test_a_healthy_deploy_is_the_same_with_the_vexa_profile_off_or_on(server, profiles, seen):
+    result = server.deploy(scheduler=True, profiles=profiles)
+    assert result.returncode == 0 and f"deployed {NEW}" in result.stdout
+    assert server.head == NEW
+    assert server.ups() == [
+        "docker compose up -d --remove-orphans @b"
+    ]  # no service named: all active
+    assert server.profiles_seen == {seen}  # the script neither sets nor clears the profile
+
+
+@PROFILE_MODES
+def test_the_deploy_never_names_or_waits_on_a_vexa_service(server, profiles, seen):
+    server.deploy(scheduler=True, profiles=profiles)
+    assert not [line for line in server.log if "vexa" in line.lower()]
+    # Health is the front door only: next (8020), FastAPI through it, next itself, FastAPI direct.
+    assert server.curls
+    assert all(
+        url.split()[-1].startswith(("http://127.0.0.1:8020/", "http://127.0.0.1:8021/"))
+        for url in server.curls
+    )
+    assert not [url for url in server.curls if "18056" in url or "8056" in url]
+
+
+@PROFILE_MODES
+def test_the_rollback_runs_in_the_same_profile_mode_and_does_not_break(server, profiles, seen):
+    result = server.deploy(new_up="unhealthy", old_up="ok", profiles=profiles)
+    assert result.returncode == 1 and f"starting {OLD} again" in result.stderr
+    assert server.head == OLD
+    assert server.ups() == [
+        "docker compose up -d --remove-orphans @b",
+        "docker compose up -d --remove-orphans @a",
+    ]
+    assert "previous version is not healthy either" not in result.stderr
+    assert server.profiles_seen == {seen}
+    assert not [line for line in server.log if "vexa" in line.lower()]
+
+
+@PROFILE_MODES
+def test_a_failing_up_still_reaches_the_rollback_in_either_profile_mode(server, profiles, seen):
+    result = server.deploy(new_up="fail", old_up="fail", profiles=profiles)
+    assert result.returncode == 1
+    assert "docker start next-created @a" in server.log  # stuck containers are still started
+    assert server.profiles_seen == {seen}
