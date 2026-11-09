@@ -36,11 +36,12 @@ def get(
     url: str,
     *,
     params: dict | None = None,
-    headers: dict[str, str] | None = None,
+    headers: "dict[str, str] | list[tuple[str, str]] | None" = None,
     transport: httpx.BaseTransport | None = None,
 ) -> httpx.Response:
     """One authorised GET. `url` must be a Graph URL (`graph_url(...)` or a vetted `nextLink`);
-    anything else is a bug and raises before a request is made, so the token cannot leave."""
+    anything else is a bug and raises before a request is made, so the token cannot leave.
+    `headers` may repeat a name (a list of pairs), as the two `Prefer` lines do."""
     if not under_graph_base(url):
         raise ValueError("not a Graph URL")
     with calendar_http.client(transport) as http:
@@ -50,5 +51,8 @@ def get(
             "GET",
             url,
             params=params,
-            headers={**(headers or {}), "Authorization": f"Bearer {access_token}"},
+            headers=[
+                *(headers.items() if isinstance(headers, dict) else headers or []),
+                ("Authorization", f"Bearer {access_token}"),
+            ],
         )

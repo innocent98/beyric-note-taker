@@ -75,7 +75,9 @@ def _microsoft_parse(raw: dict, conn: CalendarConnection) -> ParsedEvent:
 
 
 def _microsoft_source(settings: Settings) -> CalendarSource:
-    raise NotImplementedError("the Microsoft calendar source arrives with M4")
+    from app.graph_client import MicrosoftSource  # not at the top: keeps this module light
+
+    return MicrosoftSource(settings)
 
 
 PROVIDERS: dict[str, Provider] = {
