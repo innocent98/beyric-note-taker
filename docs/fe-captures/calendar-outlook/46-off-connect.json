@@ -1,0 +1,26 @@
+{
+  "note": "404 `calendar_unavailable`.",
+  "client": "signed-in user, Outlook switched off",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/microsoft/connect",
+    "headers": {
+      "X-CSRF-Token": "<csrf-F>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "calendar_unavailable",
+        "message": "This calendar is not available."
+      }
+    }
+  }
+}

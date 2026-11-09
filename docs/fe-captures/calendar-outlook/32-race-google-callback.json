@@ -1,0 +1,21 @@
+{
+  "note": "Google finishes first.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar/google/callback?code=<code>&state=<state>",
+    "headers": {
+      "Cookie": "calendar_flow=<cookie>; calendar_flow_ms=<cookie>; device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 302,
+    "headers": {
+      "cache-control": "no-store",
+      "location": "/settings?calendar=connected",
+      "set-cookie": "calendar_flow=<cookie>; expires=Mon, 09 Nov 2026 12:54:15 GMT; Max-Age=0; Path=/api/calendar/google; SameSite=lax"
+    },
+    "body": ""
+  }
+}

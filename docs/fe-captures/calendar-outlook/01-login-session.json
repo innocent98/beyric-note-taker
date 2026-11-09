@@ -1,0 +1,26 @@
+{
+  "note": "Read the CSRF token.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax"
+    },
+    "body": {
+      "authenticated": false,
+      "csrf_token": "<csrf-A>",
+      "user": null,
+      "usage": null,
+      "unread_notifications": null,
+      "badges": null
+    }
+  }
+}

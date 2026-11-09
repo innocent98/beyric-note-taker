@@ -1,0 +1,25 @@
+{
+  "note": "Disconnect Outlook to set up a race.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/microsoft/disconnect",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "disconnected",
+      "revoked": false,
+      "reason": "provider_has_no_revoke"
+    }
+  }
+}

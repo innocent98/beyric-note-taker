@@ -1,0 +1,26 @@
+{
+  "note": "Another provider's calendar is live: 409 `calendar_already_connected`.",
+  "client": "second tab",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/google/connect",
+    "headers": {
+      "X-CSRF-Token": "<csrf-D>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "calendar_already_connected",
+        "message": "Another calendar is already connected. Disconnect it first."
+      }
+    }
+  }
+}

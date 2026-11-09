@@ -1,0 +1,25 @@
+{
+  "note": "The row: identity is tenant + object id, the address is a label, the token is its length.",
+  "content": {
+    "rows": [
+      {
+        "user_id": 1,
+        "provider": "microsoft",
+        "account_email": "ada@outlook.example.test",
+        "account_subject": "00000000-0000-0000-0000-000000000001",
+        "tenant_id": "9188040d-6c67-4c5b-b112-36a304b66dad",
+        "account_kind": "personal",
+        "tenant_domains": null,
+        "account_domain": null,
+        "status": "connected",
+        "needs_reconnect_reason": null,
+        "granted_scopes": "Calendars.Read User.Read openid profile",
+        "refresh_token_enc": "<bytes, 49 bytes>",
+        "key_version": 1,
+        "last_sync_at": null,
+        "sync_token": null,
+        "expected_expiry_at": null
+      }
+    ]
+  }
+}

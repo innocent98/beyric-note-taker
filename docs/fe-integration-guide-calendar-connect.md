@@ -274,3 +274,5 @@ connect the other account".
 | Disconnect while Google's revoke endpoint answers 503: still 200 with `"revoked": false`, deleted locally | **live**, Google faked (#45, #46). Google's real answer to a revoke was not seen |
 | Disconnect with the feature flag off; a running meeting carries on; meetings, usage and settings kept; only the caller's rows touched | tested only (`tests/test_calendar_connect.py`), not captured |
 | A real Google revoke (token stops working, Beyric leaves myaccount.google.com/permissions) | **not verified**: needs Adebayo's Gmail test account |
+
+**Outlook.** The same `{provider}` routes connect a Microsoft Outlook calendar (`microsoft` instead of `google`): see `docs/fe-integration-guide-calendar-outlook.md`. `DisconnectOut` gained an optional `reason` (absent for Google).

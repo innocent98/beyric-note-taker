@@ -1,0 +1,32 @@
+{
+  "note": "Emptied row (status disconnected, no token, no identity) and the counts.",
+  "content": {
+    "rows": [
+      {
+        "user_id": 1,
+        "provider": "microsoft",
+        "account_email": null,
+        "account_subject": null,
+        "tenant_id": null,
+        "account_kind": null,
+        "tenant_domains": null,
+        "account_domain": null,
+        "status": "disconnected",
+        "needs_reconnect_reason": null,
+        "granted_scopes": null,
+        "refresh_token_enc": null,
+        "key_version": null,
+        "last_sync_at": null,
+        "sync_token": null,
+        "expected_expiry_at": null
+      }
+    ],
+    "calendar": {
+      "calendar_events": 0,
+      "scheduled_joins": 0,
+      "notification_kinds": [
+        "usage.hours_low"
+      ]
+    }
+  }
+}
