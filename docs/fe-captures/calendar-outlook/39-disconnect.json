@@ -1,0 +1,25 @@
+{
+  "note": "Deletes the local data, sends nothing to Microsoft: `revoked: false` and a `reason`.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/microsoft/disconnect",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "calendar_flow_ms=<cookie>; device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "status": "disconnected",
+      "revoked": false,
+      "reason": "provider_has_no_revoke"
+    }
+  }
+}

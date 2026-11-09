@@ -28,6 +28,7 @@
       "calendar_template_id": 2,
       "auto_join_paused": false,
       "auto_join_paused_text": null,
+      "microsoft_enabled": false,
       "upcoming": [
         {
           "id": 1,

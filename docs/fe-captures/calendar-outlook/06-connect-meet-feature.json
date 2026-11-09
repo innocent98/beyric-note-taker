@@ -1,0 +1,30 @@
+{
+  "note": "Microsoft has no Meet feature.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/microsoft/connect",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "features": [
+        "meet"
+      ]
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_features",
+        "message": "Microsoft Outlook connects the calendar only."
+      }
+    }
+  }
+}
