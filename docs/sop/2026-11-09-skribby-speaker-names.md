@@ -32,7 +32,7 @@ Adebayo tested Zoom, Teams and Meet through the app on 2026-11-09. Meet named hi
 | Path | Change |
 |---|---|
 | `app/skribby.py` | `_tag`, `_same`, `_candidate_names`, `_tag_names` (new), `_segments` uses them, `MAX_CANDIDATES = 20` |
-| `tests/test_skribby_provider.py` | `segment()` helper takes `tag` and `candidates` (it no longer writes `speaker: 0` on every segment, which would have put every old test's speakers on one tag); 18 new test functions |
+| `tests/test_skribby_provider.py` | `segment()` helper takes `tag` and `candidates` (it no longer writes `speaker: 0` on every segment, which would have put every old test's speakers on one tag); 17 new test functions (some parametrized) |
 | `docs/checklist/master-checklist.md` | line under B2 |
 
 ## Verification
