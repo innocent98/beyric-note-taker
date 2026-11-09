@@ -288,6 +288,8 @@ class VexaProvider:
     Vexa's URLs; this wrapper is where a Vexa-only feature would live without leaking into the
     interface."""
 
+    name = "vexa"  # what `meetings.bot_provider` remembers
+
     def __init__(self, client: VexaClient | None = None) -> None:
         self._client = client or VexaClient()
 

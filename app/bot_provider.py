@@ -1,14 +1,18 @@
 """The bot layer's one interface: what the app asks of whatever puts a bot in a meeting.
 
 The worker, the pipeline, `place_bot`, the join runner, deletion and the routes depend on
-`BotProvider` and on the names here, never on a vendor's client. Today one provider exists,
-`app.vexa.VexaProvider` (the self-hosted Vexa); a hosted vendor is one more class behind the same
-six calls. Which one runs is the `BOT_PROVIDER` setting (default `vexa`); `build_provider()` turns
-that into an object, and an unknown value stops the process at startup (`app/config.py`).
+`BotProvider` and on the names here, never on a vendor's client. Two providers exist:
+`app.vexa.VexaProvider` (the self-hosted Vexa, the default) and `app.skribby.SkribbyProvider` (the
+hosted Skribby). Which one runs is the `BOT_PROVIDER` setting (default `vexa`); `build_provider()`
+turns that into an object, and an unknown value stops the process at startup (`app/config.py`).
+A meeting remembers which provider ran it (`meetings.bot_provider`), and `provider_for` hands the
+callers that work on an existing meeting (the pipeline, deletion, cancel and end) that provider,
+whatever the setting says now, so flipping `BOT_PROVIDER` never strands a meeting in flight.
 
 The interface is exactly the calls the app makes today, with the rules the callers already rely on:
 
-- `send_bot(url)`: put a bot in the meeting; returns the provider's id for it (an int today).
+- `send_bot(url)`: put a bot in the meeting; returns the provider's id for it (an int for Vexa, a
+  UUID string for Skribby; callers only ever store it as text and hand it back).
 - `get_meeting(platform, code)` and `get_meeting_by_id(id)`: the bot's live status, segments,
   recording and failure text.
 - `stop_bot(platform, code)`: take the bot out; nothing there is not an error. Keyed by code alone.
@@ -48,6 +52,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+# The provider's id for a bot: whatever `send_bot` returned, stored as text on the meeting.
+BotId = int | str
+
 # `send_bot` is held across by the placement lock, and httpx's timeout is per phase (connect,
 # write, each read), so a host that trickles bytes could keep one send going for minutes. This is
 # the whole-call limit; the lock, and the database connection under it, are never held longer.
@@ -73,6 +80,18 @@ class BotSendUncertain(BotProviderError):
     made is NOT this: that is a plain `BotProviderError`, nothing was sent."""
 
 
+class BotProviderNotConfigured(BotProviderError):
+    """A provider was asked for that has no settings here (a meeting that Skribby ran, with the
+    Skribby key since removed). Retryable like every provider error: the worker leaves the meeting
+    where it is and looks again on the next pass."""
+
+
+class BotRegionMismatch(BotProviderError):
+    """A meeting's bot is in another region of a hosted provider than the one configured now. The
+    provider cannot see it (it would answer 404), so nothing is asked of it: the caller waits and
+    tries again, and the log says why."""
+
+
 class BotNotFound(BotProviderError):
     """The provider does not know the meeting (HTTP 404 on Vexa). Still a `BotProviderError`, so
     every caller that retries is unchanged; `app/deletion.py` reads it as "nothing there to wait
@@ -90,7 +109,7 @@ class BotMeeting:
     # The provider's own words for why the bot failed, e.g. "[Zoom Web] zoom_requires_rtms: ...".
     failure_reason: str | None = None
     # The provider's id for this meeting (the one `send_bot` returns), when the body carries one.
-    vexa_id: int | None = None
+    vexa_id: BotId | None = None
     # The bot has stood in the waiting room (`awaiting_admission` in Vexa's own transition
     # history). Vexa raises `needs_help` there as a warning that its lobby budget is running out,
     # which is not a prompt the bot is stuck on.
@@ -124,7 +143,11 @@ class BotProvider(Protocol):
     """What the app asks of a bot provider. See the module docstring for the rules every
     implementation keeps. The names of the parameters are the ones callers use as keywords."""
 
-    def send_bot(self, meeting_url: str) -> int: ...
+    # A real provider also has a class attribute `name` (`vexa`, `skribby`), the value stored in
+    # `meetings.bot_provider`; it is not part of this check so a test double needs none
+    # (`provider_name`, `provider_for`).
+
+    def send_bot(self, meeting_url: str) -> BotId: ...
 
     def get_meeting(self, platform: str, native_id: str) -> BotMeeting:
         """By platform and meeting code. A reused link can match an older meeting, so callers
@@ -146,9 +169,27 @@ def _vexa() -> BotProvider:
     return VexaProvider()
 
 
+# Skribby keeps what it has seen of its bots in the process (`SkribbyProvider`): one object per
+# settings object, so a send and the stop that follows it in the same process agree.
+_skribby_cache: dict[str, tuple[object, BotProvider]] = {}
+
+
+def _skribby() -> BotProvider:
+    from app.config import get_settings  # inside: app/config.py reads this module
+    from app.skribby import SkribbyProvider  # inside: app/skribby.py imports this module
+
+    settings = get_settings()
+    cached = _skribby_cache.get("provider")
+    if cached is not None and cached[0] is settings:
+        return cached[1]
+    provider = SkribbyProvider.from_settings(settings)
+    _skribby_cache["provider"] = (settings, provider)
+    return provider
+
+
 # One entry per provider the app can run. A new provider adds its factory here and nothing else:
 # the startup check in `app/config.py` and `build_provider` both read this table.
-PROVIDER_FACTORIES: dict[str, Callable[[], BotProvider]] = {"vexa": _vexa}
+PROVIDER_FACTORIES: dict[str, Callable[[], BotProvider]] = {"vexa": _vexa, "skribby": _skribby}
 
 
 def build_provider(name: str | None = None) -> BotProvider:
@@ -164,3 +205,51 @@ def build_provider(name: str | None = None) -> BotProvider:
         known = ", ".join(sorted(PROVIDER_FACTORIES))
         raise ValueError(f"unknown bot provider {name!r}; expected one of: {known}") from None
     return factory()
+
+
+def provider_name(provider: object) -> str:
+    """The name to store on a new meeting for the provider that sent its bot. A provider has a
+    `name`; a test double that has none counts as whatever the setting says."""
+    name = getattr(provider, "name", None)
+    if isinstance(name, str) and name:
+        return name
+    from app.config import get_settings
+
+    return get_settings().bot_provider
+
+
+def provider_region(provider: object) -> str | None:
+    """The region a hosted provider's bot is sent to (a real provider has `region`), else None."""
+    region = getattr(provider, "region", None)
+    return region if isinstance(region, str) and region else None
+
+
+def provider_for(
+    default: BotProvider | None, meeting_provider: str | None, meeting_region: str | None = None
+) -> BotProvider:
+    """The provider that ran a meeting, for work on a meeting that already exists.
+
+    `default` is the provider the caller was given (the setting's, or a test's). It is used unless
+    it is a real provider with a different `name` than the one the meeting remembers: then the
+    meeting's own provider is built (a Vexa meeting still in flight after the setting moved to
+    Skribby, or the other way round). A `default` with no name (a test double) is always used, and
+    so is the default for a meeting that remembers a name this build does not know.
+
+    A hosted provider's region is part of where a bot is: when the meeting remembers a region and
+    the provider talks to another, `BotRegionMismatch` is raised instead of asking a provider that
+    would answer 404.
+    """
+    wanted = (meeting_provider or "").strip().lower()
+    have = getattr(default, "name", None) if default is not None else None
+    if default is not None and (not isinstance(have, str) or not wanted or have == wanted):
+        provider = default
+    elif wanted in PROVIDER_FACTORIES:
+        provider = build_provider(wanted)
+    else:
+        provider = default if default is not None else build_provider()
+    region = provider_region(provider)
+    if meeting_region and region and meeting_region != region:
+        raise BotRegionMismatch(
+            f"this meeting's bot is in region {meeting_region} but the provider is set to {region}"
+        )
+    return provider

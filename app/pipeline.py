@@ -35,9 +35,14 @@ from app.audio import AudioError, NoSpeechError
 from app.bot_provider import (
     BotDuplicate,
     BotMeeting,
+    BotNotFound,
     BotProviderError,
+    BotRegionMismatch,
     BotSendUncertain,
     build_provider,
+    provider_for,
+    provider_name,
+    provider_region,
 )
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
@@ -167,6 +172,18 @@ RECORDING_GRACE = timedelta(minutes=10)
 # reported on calls that ended normally, so it only ever produces a notice, never a failure.
 REMOVAL_REASONS = frozenset({"evicted", "max_bot_time_exceeded"})
 
+# The deletion of a hosted provider's copy (`delete_fetched_copy`): a failed try waits twice as long
+# as the one before (5 minutes, 10, 20 ... up to 6 hours) and after this many failures the retry job
+# leaves the row to the hourly retention pass.
+COPY_RETRY_BASE = timedelta(minutes=5)
+COPY_RETRY_MAX = timedelta(hours=6)
+COPY_MAX_ATTEMPTS = 8
+# A meeting that failed with no recording and no speaker names keeps its provider copy until the
+# retention pass (the bot may still be processing a recording we have not fetched: a long call can
+# end after our own give-up), except where the bot clearly never recorded: it was not let in, or
+# Google refused it.
+NEVER_RECORDED_MARKS = ("awaiting_admission_rejected", "awaiting_admission_timeout", MEET_REFUSED)
+
 # Consecutive polls that saw a finished meeting with no audio recording, per meeting. Lost on a
 # restart, which only gives the recording a fresh grace period.
 _no_audio_polls: dict[int, int] = {}
@@ -179,6 +196,13 @@ _stop_tries: dict[int, int] = {}
 _gone_checks: dict[int, int] = {}
 # Consecutive failed Vexa lookups per meeting. Lost on a restart, which only forgets a miss.
 _lookup_misses: dict[int, int] = {}
+# Failed speaker lookups per meeting: how many, and when the first was. The speakers step gives up
+# (notes from the plain transcript) only after the 6 hours AND this many misses over this long,
+# so one 5xx at the end of a long call never drops every speaker name. Lost on a restart, which
+# only starts the count again.
+SPEAKER_MISSES_TO_GIVE_UP = 5
+SPEAKERS_GIVE_UP_AFTER = timedelta(minutes=30)
+_speaker_misses: dict[int, tuple[int, datetime]] = {}
 
 
 def audio_path(meeting_id: int) -> Path:
@@ -253,6 +277,7 @@ def _fail(
     meeting.failure_reason = reason
     _no_audio_polls.pop(meeting.id, None)
     _lookup_misses.pop(meeting.id, None)
+    _speaker_misses.pop(meeting.id, None)
     if not_admitted_at is not None:
         _tell_not_admitted(session, meeting, not_admitted_at)
     session.commit()
@@ -349,6 +374,25 @@ def bot_failure_reason(meeting: Meeting, info: BotMeeting) -> str:
     return REASON_BOT_FAILED
 
 
+def _delete_replaced_record(meeting: Meeting, default) -> None:
+    """The bot this meeting is about to stop pointing at (refused, blocked, or ended) may leave a
+    record at a hosted provider (the link, the name, its timeline). Delete it while its id is still
+    on the row; best effort, since the new bot matters more and the id is lost either way."""
+    old_id = meeting.vexa_meeting_id
+    if not old_id or meeting.provider_copy_deleted_at is not None:
+        return
+    try:
+        old = provider_for(default, meeting.bot_provider, meeting.bot_region)
+        if hasattr(type(old), "delete_bot_record"):
+            old.delete_bot_record(old_id)
+    except Exception as exc:  # the resend must never fail for this
+        logger.warning(
+            "meeting %s: the replaced bot's record was not deleted (%s)",
+            meeting.id,
+            type(exc).__name__,
+        )
+
+
 def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool:
     """Send a fresh bot to the same link and point the meeting at it. The caller commits.
 
@@ -370,9 +414,14 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     except BotProviderError as exc:
         logger.warning("meeting %s: resending the bot failed (%s)", meeting.id, type(exc).__name__)
         return False
+    _delete_replaced_record(meeting, vexa)  # before its id is lost to the new bot's
     meeting.join_attempts += 1
     meeting.status, meeting.step, meeting.failure_reason = "bot_sent", "waiting", None
+    meeting.provider_copy_deleted_at = None
+    meeting.provider_copy_attempts, meeting.provider_copy_next_try_at = 0, None
+    meeting.bot_region = provider_region(vexa)
     meeting.vexa_meeting_id = None if vexa_id is None else str(vexa_id)
+    meeting.bot_provider = provider_name(vexa)  # a hand retry goes to the provider in use now
     meeting.vexa_recording_id = None
     meeting.completion_reason = SEND_UNCONFIRMED if unconfirmed else None
     meeting.terminal_seen_at = None
@@ -756,12 +805,133 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
     return True
 
 
+def _copy_backoff(attempts: int) -> timedelta:
+    return min(COPY_RETRY_BASE * 2 ** max(attempts - 1, 0), COPY_RETRY_MAX)
+
+
+def _copy_failed(meeting: Meeting, now: datetime, exc: Exception) -> None:
+    """One failed try at deleting the provider's copy: count it and set when the next may be made,
+    for every kind of failure (a refusal, a region that does not match, a provider that is not
+    configured), so no row can be picked again at once and starve the queue."""
+    meeting.provider_copy_attempts = (meeting.provider_copy_attempts or 0) + 1
+    meeting.provider_copy_next_try_at = now + _copy_backoff(meeting.provider_copy_attempts)
+    last = meeting.provider_copy_attempts >= COPY_MAX_ATTEMPTS
+    (logger.error if last else logger.warning)(
+        "meeting %s: could not delete the provider's copy (%s), try %s of %s%s",
+        meeting.id,
+        type(exc).__name__,
+        meeting.provider_copy_attempts,
+        COPY_MAX_ATTEMPTS,
+        "; left to the retention pass" if last else "; will retry",
+    )
+
+
+def delete_fetched_copy(meeting: Meeting, provider, now: datetime | None = None) -> bool:
+    """Delete a hosted provider's copy of the meeting (recording, transcript, the record of the bot)
+    now that we hold the audio and the speaker names. True when it is gone or there is nothing to
+    delete. Never raises for a failure: the notes must not wait for it. The caller commits.
+    `provider_copy_deleted_at` is set here on success. A failure counts an attempt and sets
+    `provider_copy_next_try_at` (a doubling wait) so `delete_fetched_copies` neither repeats it
+    every loop nor lets stuck rows crowd out newer ones; after `COPY_MAX_ATTEMPTS` the row is left
+    to the retention pass. Vexa has no `delete_bot_record`: its copy is on our own server and
+    follows the retention rule (`delete_expired_audio`)."""
+    if meeting.provider_copy_deleted_at is not None:
+        return True
+    if not meeting.vexa_meeting_id or not hasattr(type(provider), "delete_bot_record"):
+        return True
+    now = now or datetime.now(UTC)
+    region = provider_region(provider)
+    if meeting.bot_region and region and meeting.bot_region != region:
+        _copy_failed(
+            meeting,
+            now,
+            BotRegionMismatch(f"bot in region {meeting.bot_region}, provider set to {region}"),
+        )
+        return False
+    try:
+        provider.delete_bot_record(meeting.vexa_meeting_id)
+    except Exception as exc:  # a provider error, or anything else: never in the notes' way
+        _copy_failed(meeting, now, exc)
+        return False
+    meeting.provider_copy_deleted_at = now
+    meeting.provider_copy_next_try_at = None
+    return True
+
+
+def delete_fetched_copies(session: Session, now: datetime, *, vexa=None, limit: int = 5) -> int:
+    """Retry the deletion `delete_fetched_copy` could not do (the provider was down), and do it for
+    a bot that never recorded. Rows chosen: a hosted provider's meeting whose copy is not yet
+    deleted, that is ready or failed, whose next try is due and that has tries left, and that needs
+    nothing more from the provider: its speaker names are saved, or no recording was made and the
+    bot clearly never recorded (`NEVER_RECORDED_MARKS`). A meeting that failed with no recording
+    for any other reason keeps its copy until the retention pass. Rows are taken with a row lock
+    (skipping any being worked on, such as one a resend is pointing at a new bot), the ones never
+    tried or due longest ago first, so failing rows go to the back. At most `limit` a pass;
+    returns how many were deleted."""
+    candidates = session.scalars(
+        select(Meeting)
+        .where(
+            Meeting.bot_provider != "vexa",
+            Meeting.provider_copy_deleted_at.is_(None),
+            Meeting.vexa_meeting_id.is_not(None),
+            Meeting.status.in_(("ready", "failed")),
+            Meeting.provider_copy_attempts < COPY_MAX_ATTEMPTS,
+            (Meeting.provider_copy_next_try_at.is_(None))
+            | (Meeting.provider_copy_next_try_at <= now),
+            (Meeting.speaker_transcript.is_not(None))
+            | (
+                Meeting.vexa_recording_id.is_(None)
+                & Meeting.completion_reason.in_(NEVER_RECORDED_MARKS)
+            ),
+        )
+        .order_by(Meeting.provider_copy_next_try_at.asc().nulls_first(), Meeting.id)
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+    ).all()
+    deleted = 0
+    for meeting in candidates:
+        try:
+            provider = provider_for(vexa, meeting.bot_provider, meeting.bot_region)
+        except BotProviderError as exc:  # not configured here, or the bot is in another region
+            _copy_failed(meeting, now, exc)
+            continue
+        if delete_fetched_copy(meeting, provider, now):
+            deleted += 1
+    session.commit()
+    return deleted
+
+
+def _delete_copy_after_commit(session: Session, meeting_id: int, provider) -> None:
+    """The deletion of the step that saved the speaker names, in a transaction of its own AFTER the
+    names were committed: a failed commit or a restart between the two can never lose the names to
+    a delete that already happened. The row is locked again for it (a row another worker holds is
+    left to the retry job)."""
+    try:
+        locked = _lock(session, meeting_id)
+        if locked is None:
+            return
+        delete_fetched_copy(locked, provider)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.warning(
+            "meeting %s: the provider copy step failed (%s)", meeting_id, type(exc).__name__
+        )
+
+
 def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> bool:
     if meeting.speaker_transcript is None:
-        info = _lookup(vexa, meeting)
+        try:
+            segments = _lookup(vexa, meeting).segments
+            _speaker_misses.pop(meeting.id, None)
+        except BotNotFound:
+            # The provider no longer has the meeting (its copy is gone): there are no segments to
+            # label with, which is "speakers incomplete", never a retry that cannot succeed.
+            logger.warning("meeting %s: no speaker segments (the provider has none)", meeting.id)
+            segments = []
         spent: list = []
         text, complete = label_transcript(
-            meeting.transcript or "", info.segments, client=openai_client, usage=spent
+            meeting.transcript or "", segments, client=openai_client, usage=spent
         )
         ai_runs.record_usage(
             session,
@@ -774,7 +944,10 @@ def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> b
         meeting.speaker_transcript = text
         meeting.speakers_incomplete = not complete
     meeting.step = "notes"
-    session.commit()
+    session.commit()  # the speaker names are saved FIRST ...
+    # ... and only then does a hosted provider's copy go: it holds nothing more we need. Best
+    # effort and never in the way of the notes (`delete_fetched_copies` retries).
+    _delete_copy_after_commit(session, meeting.id, vexa)
     return True
 
 
@@ -853,13 +1026,15 @@ def advance_meeting(
     `failed` with a plain reason, or untouched when the problem is temporary.
     """
     now = now or datetime.now(UTC)
-    vexa = vexa or build_provider()
+    default = vexa or build_provider()  # the setting's provider (or the caller's, in a test)
     meeting = _lock(session, meeting_id)
     try:
         while meeting is not None and meeting.status in ("bot_sent", "processing"):
             if _owner_deleted(session, meeting):
                 session.rollback()  # looked at on every step, so a deletion mid-run stops it
                 return
+            # The provider that ran THIS meeting, whatever the setting says now.
+            vexa = provider_for(default, meeting.bot_provider, meeting.bot_region)
             if meeting.step == "waiting":
                 proceed = _poll(session, meeting, vexa, now)
                 if proceed:
@@ -896,6 +1071,28 @@ def advance_meeting(
             and _expired(meeting, now)
         ):
             _fail(session, meeting, REASON_DOWNLOAD)
+        elif (
+            meeting is not None
+            and meeting.status == "processing"
+            and meeting.step == "speakers"
+            and meeting.speaker_transcript is None
+        ):
+            # The same give-up for the speaker lookup, but not on the first miss: after the 6 hours
+            # AND `SPEAKER_MISSES_TO_GIVE_UP` misses over `SPEAKERS_GIVE_UP_AFTER`, the notes go
+            # ahead from the plain transcript (speakers incomplete) rather than wait for ever on a
+            # provider that does not answer.
+            count, first = _speaker_misses.get(meeting_id, (0, now))
+            _speaker_misses[meeting_id] = (count + 1, first)
+            if (
+                _expired(meeting, now)
+                and count + 1 >= SPEAKER_MISSES_TO_GIVE_UP
+                and now - first >= SPEAKERS_GIVE_UP_AFTER
+            ):
+                _speaker_misses.pop(meeting_id, None)
+                meeting.speaker_transcript = meeting.transcript or ""
+                meeting.speakers_incomplete = True
+                meeting.step = "notes"
+                session.commit()
     except OperationalError as exc:
         # Transient database trouble: do not fail the meeting, try again on the next pass.
         logger.warning("meeting %s: database error (%s)", meeting_id, type(exc).__name__)
@@ -944,9 +1141,11 @@ def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
     """Delete audio of finished meetings older than the retention period, here and in Vexa.
 
     The transcript and notes are kept. `audio_deleted_at` is set only once the local folder is
-    gone and, when Vexa's recording id is known, Vexa's copy is gone too (`DELETE
-    /recordings/{id}`; Vexa answers 404 for one already deleted). A Vexa failure leaves the
-    meeting unmarked so the next pass tries again. Returns how many meetings were cleared.
+    gone and, when the provider's recording id is known, the provider's copy is gone too (Vexa:
+    `DELETE /recordings/{id}`, 404 for one already deleted; Skribby: `DELETE /bot/{id}`, which also
+    removes the transcript and the record of the bot, and is called for a bot with no recording
+    too). A provider failure leaves the meeting unmarked so the next pass tries again. Returns how
+    many meetings were cleared.
     """
     cutoff = now - timedelta(days=get_settings().audio_retention_days)
     expired = session.scalars(
@@ -957,6 +1156,7 @@ def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
         )
     ).all()
     cleared = 0
+    default = vexa
     for meeting in expired:
         folder = audio_path(meeting.id).parent
         try:
@@ -965,13 +1165,25 @@ def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
         except OSError as exc:
             logger.error("meeting %s: could not delete audio (%s)", meeting.id, type(exc).__name__)
             continue
-        if meeting.vexa_recording_id is not None:
+        if meeting.provider_copy_deleted_at is None and (
+            meeting.vexa_recording_id is not None or meeting.vexa_meeting_id
+        ):
             try:
-                vexa = vexa or build_provider()
-                vexa.delete_recording(meeting.vexa_recording_id)
+                # The provider that holds this meeting's copy, whatever the setting says now.
+                provider = provider_for(
+                    default or build_provider(), meeting.bot_provider, meeting.bot_region
+                )
+                if meeting.vexa_recording_id is not None:
+                    provider.delete_recording(meeting.vexa_recording_id)
+                elif hasattr(type(provider), "delete_bot_record"):
+                    # No recording, but a hosted provider still keeps a record of the bot (the
+                    # link, the name, its timeline): a bot that was never let in, say.
+                    provider.delete_bot_record(meeting.vexa_meeting_id)
+                if hasattr(type(provider), "delete_bot_record"):
+                    meeting.provider_copy_deleted_at = now
             except BotProviderError as exc:
                 logger.warning(
-                    "meeting %s: could not delete Vexa's copy (%s); will retry",
+                    "meeting %s: could not delete the provider's copy (%s); will retry",
                     meeting.id,
                     type(exc).__name__,
                 )

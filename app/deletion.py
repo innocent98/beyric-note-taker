@@ -42,7 +42,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from app import placement, teams
-from app.bot_provider import BotNotFound
+from app.bot_provider import BotNotFound, provider_for
 from app.models import (
     AuthToken,
     MailOutbox,
@@ -107,6 +107,16 @@ def recording_to_delete(
     raise VexaError("Vexa has not settled this meeting's recording yet")
 
 
+def delete_provider_copy(provider, meeting: Meeting, recording_id: int | None) -> None:
+    """Delete what the provider holds for `meeting`: the recording when there is one, else (for a
+    hosted provider) the record of the bot, which a meeting that never recorded still has. Raises
+    like the provider does, so the caller's "not settled yet" handling applies."""
+    if recording_id is not None:
+        provider.delete_recording(recording_id)
+    elif meeting.vexa_meeting_id and hasattr(type(provider), "delete_bot_record"):
+        provider.delete_bot_record(meeting.vexa_meeting_id)
+
+
 def purge_user(
     session: Session, user: User, vexa, now: datetime | None = None, *, force: bool = False
 ) -> None:
@@ -120,13 +130,15 @@ def purge_user(
         for meeting in meetings:
             if meeting.status == "bot_sent":
                 if placement.may_stop_bot(session, meeting):  # never another meeting's bot
-                    vexa.stop_bot(meeting.platform, meeting.native_id)
+                    provider_for(vexa, meeting.bot_provider, meeting.bot_region).stop_bot(
+                        meeting.platform, meeting.native_id
+                    )
                 stopped.add(meeting.id)
         for meeting in meetings:
             if meeting.audio_deleted_at is None:
-                recording_id = recording_to_delete(session, vexa, meeting, now, stopped)
-                if recording_id is not None:
-                    vexa.delete_recording(recording_id)
+                holder = provider_for(vexa, meeting.bot_provider, meeting.bot_region)
+                recording_id = recording_to_delete(session, holder, meeting, now, stopped)
+                delete_provider_copy(holder, meeting, recording_id)
     for meeting in meetings:
         shutil.rmtree(audio_path(meeting.id).parent, ignore_errors=True)
     email, user_id = user.email, user.id

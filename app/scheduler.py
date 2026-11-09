@@ -41,6 +41,7 @@ from sqlalchemy import Connection, create_engine, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
+from app import skribby
 from app.clock import Clock, SystemClock
 from app.config import get_settings
 from app.db import SessionLocal
@@ -298,6 +299,7 @@ def _remember_if_autojoin_is_off(settings) -> None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     settings = get_settings()
+    skribby.check_region_unchanged(settings)
     scheduler = Scheduler(
         SystemClock(),
         SessionLocal,

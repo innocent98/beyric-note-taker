@@ -135,7 +135,8 @@ Edit `.env`:
 | `POSTGRES_PASSWORD`, `VEXA_DB_PASSWORD`, `VEXA_STORAGE_SECRET` | each `openssl rand -hex 24` |
 | `VEXA_API_KEY` | from step 4 |
 | `DATABASE_URL`, `VEXA_BASE_URL` | leave commented; compose sets both |
-| `BOT_PROVIDER` | leave `vexa`; the only provider there is today. An unknown value stops web, worker and scheduler at startup |
+| `BOT_PROVIDER` | Optional, default `vexa`. `skribby` switches new bots to the hosted Skribby (needs `SKRIBBY_API_KEY`; see `docs/sop/2026-11-08-skribby-provider.md` first). An unknown value, or `skribby` without its key, stops web, worker and scheduler at startup. Roll back: set `vexa`, restart |
+| `SKRIBBY_API_KEY`, `SKRIBBY_ACCOUNT_ID`, `SKRIBBY_ACCOUNT_NAME`, `SKRIBBY_REGION`, `SKRIBBY_BOT_NAME`, `SKRIBBY_TRANSCRIPTION_MODEL`, `SKRIBBY_DOWNLOAD_HOSTS` | All optional while `BOT_PROVIDER` is `vexa`. Key from Skribby's dashboard; account id is the Authenticated Account of the signed-in bot (leave out for a guest); region `eu` (default) or `jp` (do not change it while Skribby meetings are open: the app logs an error and refuses Skribby operations on those meetings until it is set back); download hosts only if the live check shows recordings on a host other than Skribby's or Amazon's. Keep the key in the server `.env` only |
 | `OPENAI_API_KEY` | the OpenAI key |
 | `OWNER_EMAIL`, `OWNER_PASSWORD` | The admin account's email and a long password. Migration `0006` creates the account from them (once; later changes to these two do nothing), and the sign-in is then email plus password. **Both must be in `.env` before the first deploy that contains migration `0006`**, or that migration fails and rolls back. `OWNER_PASSWORD` can be removed after it has run |
 | `SESSION_SECRET` | `openssl rand -hex 48`. The app refuses to start if it is shorter than 32 characters (it is the only key behind every session cookie) |

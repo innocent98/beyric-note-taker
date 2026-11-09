@@ -119,6 +119,7 @@ def env(monkeypatch, tmp_path):
     pipeline._stop_tries.clear()
     pipeline._gone_checks.clear()
     pipeline._lookup_misses.clear()
+    pipeline._speaker_misses.clear()
 
     def fake_prepare(source, out_dir):
         return audio.Recording(_good_chunks(out_dir), RECORDED_SECONDS)
@@ -704,8 +705,51 @@ def test_vexa_blip_after_six_hours_does_not_fail_a_meeting_with_a_transcript(ses
     meeting.started_polling_at = NOW - timedelta(hours=7)
     session.commit()
     run(session, meeting, FakeVexa(VexaError("down")))
+    # One miss is a blip, not the end: it waits, whatever the hour.
     assert (meeting.status, meeting.step) == ("processing", "speakers")
     assert meeting.failure_reason is None
+
+
+def test_a_speaker_lookup_that_keeps_failing_for_long_enough_gives_up_with_no_names(
+    session, meeting
+):
+    meeting.status, meeting.step = "processing", "speakers"
+    meeting.transcript = TRANSCRIPT
+    meeting.started_polling_at = NOW - timedelta(hours=7)
+    session.commit()
+    vexa = FakeVexa(VexaError("down"))
+    # misses a few minutes apart: enough of them, but not over enough time
+    for minutes in range(pipeline.SPEAKER_MISSES_TO_GIVE_UP + 2):
+        run(session, meeting, vexa, now=NOW + timedelta(minutes=minutes))
+    assert (meeting.status, meeting.step) == ("processing", "speakers")
+    # over enough time, with enough misses: the notes go ahead from the plain transcript
+    run(session, meeting, vexa, now=NOW + pipeline.SPEAKERS_GIVE_UP_AFTER + timedelta(minutes=1))
+    assert (meeting.status, meeting.step) == ("processing", "notes")
+    assert meeting.failure_reason is None
+    assert meeting.speaker_transcript == TRANSCRIPT and meeting.speakers_incomplete is True
+
+
+def test_vexa_blip_on_the_speaker_lookup_within_six_hours_just_waits(session, meeting):
+    meeting.status, meeting.step = "processing", "speakers"
+    meeting.transcript = TRANSCRIPT
+    meeting.started_polling_at = NOW - timedelta(hours=1)
+    session.commit()
+    run(session, meeting, FakeVexa(VexaError("down")))
+    assert (meeting.status, meeting.step) == ("processing", "speakers")
+    assert meeting.speaker_transcript is None
+
+
+def test_a_provider_that_does_not_know_the_meeting_at_the_speaker_step_means_no_names(
+    session, meeting
+):
+    from app.bot_provider import BotNotFound
+
+    meeting.status, meeting.step = "processing", "speakers"
+    meeting.transcript = TRANSCRIPT
+    session.commit()
+    run(session, meeting, FakeVexa(BotNotFound("404")))
+    assert (meeting.status, meeting.step) == ("ready", "done")
+    assert meeting.speakers_incomplete is True and meeting.speaker_transcript == TRANSCRIPT
 
 
 def test_download_that_never_works_gives_up_with_its_own_reason(session, meeting):
