@@ -13,8 +13,12 @@ access token in memory. Its one secret file is git-ignored.
 
 ## A. One-time setup (about 10 minutes, Adebayo)
 
-Use the *second* registration of spec 9.1 step 12, not the production one (production has no
-`localhost` redirect, and we do not want a development secret on it).
+Best: use the *second* registration of spec 9.1 step 12 (it has the `localhost` redirect, so the
+script catches the redirect by itself and no development secret sits on production). If you only
+have the **production** registration (redirect `https://notes.beyrictech.com/...`, no `localhost`),
+that works too: add `--redirect paste` to every `run` below and follow the paste steps in section C.
+Both registrations need the permissions of step 6 below; `Calendars.ReadBasic` is only used by
+run 2.
 
 1. Open `https://entra.microsoft.com`, sign in to the `beyric.onmicrosoft.com` tenant.
 2. **Entra ID** > **App registrations** > **New registration**.
@@ -29,10 +33,11 @@ Use the *second* registration of spec 9.1 step 12, not the production one (produ
    4.2. Do **not** press "Grant admin consent".)
 7. **Certificates & secrets** > **New client secret**, description `m0-local`, expiry **3 months**.
    Copy the **Value** now: it is shown once.
-8. In this folder, copy `.env.m0.example` to `.env.m0` and put the **Application (client) ID** and
-   the secret **Value** in it. `.env.m0` is git-ignored. Do not paste either into a chat. The lead
-   or you can run: `cp docs/spike/outlook-m0/.env.m0.example docs/spike/outlook-m0/.env.m0` and
-   edit it in an editor.
+8. Put the keys in `~/.config/beyric-outlook/keys.env` (outside the repo; the exact lines are at
+   the top of `capture.py`): `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`,
+   `MICROSOFT_AUTHORITY=consumers`. Run `chmod 600` on it. The same names in the environment win
+   over the file. Do not paste either value into a chat. (The old `docs/spike/outlook-m0/.env.m0`
+   with `MS_M0_CLIENT_ID` and `MS_M0_CLIENT_SECRET` still works as a last resort; it is git-ignored.)
 9. Money rule: if any page asks for a card, a phone number for payment, or shows a price, stop.
 
 ## B. Test events (so the run has something to read)
@@ -50,11 +55,19 @@ repo root, with the project's venv:
 
 | Run | Command | Sign in with | Closes |
 |---|---|---|---|
-| 1 | `.venv/bin/python docs/spike/outlook-m0/capture.py run --label personal --authority consumers` | the spare **Outlook.com** account | S1, S2, S3, S4, S6, S7 |
+| 1 | `.venv/bin/python docs/spike/outlook-m0/capture.py run --label personal --authority consumers` (add `--redirect paste` for the production registration) | the spare **Outlook.com** account | S1, S2, S3, S4, S6, S7 |
 | 2 | `... run --label personal-basic --authority consumers --scopes basic` | the same account | S3 (does `Calendars.ReadBasic` return `onlineMeeting`, `location`, `responseStatus`, `organizer`?) |
 | 3 | `... run --label work --authority organizations` | a **work/school** mailbox, ideally another tenant | S1 (work `tid`), S2 (blocked?), S4 (`/organization`), S5 (Safe Links) |
 | 4 | `... run --label work-nomailbox --authority organizations` | an account with **no mailbox**, if you have one (a user in `beyric.onmicrosoft.com` without an Exchange licence is exactly that) | S6 (`MailboxNotEnabledForRESTAPI`) |
 | 5 | `... after-revoke --label personal` | nothing: first **remove the app** at Microsoft (below), then run | S6 (what a revoked grant answers) |
+
+**Production registration (`--redirect paste`).** Microsoft sends the browser to
+`https://notes.beyrictech.com/api/calendar/microsoft/callback?code=...`, which answers an error or
+"not available" page (the Microsoft route is dark): expected. Copy the whole address bar, paste it
+at the prompt in the terminal (hidden while pasting), press Enter, within a minute (the code works
+once). The script only reads its query, refuses any other host or path, and refuses a `state` that
+is not its own. That one request also appears in the production server's access log with the code
+in it; the code is single use and already spent when anyone could read it.
 
 Each `run` opens your browser at Microsoft's sign-in page. At the consent screen **take a
 screenshot** (save under `docs/spike/outlook-m0/screens/`, they are not secret but check for your

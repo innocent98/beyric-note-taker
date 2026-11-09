@@ -2,27 +2,73 @@
 """M0 throwaway: record REAL Microsoft sign-in and Graph calendar answers (Outlook spec section 11).
 
 NOT part of the app (nothing under app/ imports it, and it is never deployed). It answers S1 to S7
-of docs/superpowers/specs/2026-11-04-outlook-oauth-design.md by signing in a real account through
-the LOCAL DEVELOPMENT registration and recording what Microsoft really answers. Read README.md in
-this folder first: it lists what Adebayo does by hand (registration, secret, sign-ins, screenshots).
+of docs/superpowers/specs/2026-11-04-outlook-oauth-design.md by signing in a real account to YOUR
+Azure app registration and recording what Microsoft really answers. It reads the calendar only
+(Calendars.Read, User.Read), writes nothing at Microsoft, keeps the access token in memory, and
+never prints or stores a secret or a token.
+
+HOW TO RUN IT (Adebayo, on your Mac; about 15 minutes per account)
+
+ 1. Put your keys in ONE file outside the repo. In a terminal:
+        mkdir -p ~/.config/beyric-outlook && chmod 700 ~/.config/beyric-outlook
+        open -e ~/.config/beyric-outlook/keys.env       (creates an empty file if missing)
+    and type these three lines (values from the Azure portal: Overview > Application (client) ID,
+    Certificates & secrets > the secret VALUE; never paste them into a chat):
+        MICROSOFT_CLIENT_ID=<application (client) id>
+        MICROSOFT_CLIENT_SECRET=<secret value>
+        MICROSOFT_AUTHORITY=consumers
+    Save it, then lock it:  chmod 600 ~/.config/beyric-outlook/keys.env
+    (The same names in the environment win over the file; an old docs/spike/outlook-m0/.env.m0
+    with MS_M0_CLIENT_ID and MS_M0_CLIENT_SECRET still works as a last resort.)
+ 2. Check the script itself first, no network, no secret:
+        .venv/bin/python docs/spike/outlook-m0/capture.py selftest
+    It must end with "selftest ok".
+ 3. Which redirect does your registration have? In Azure: App registrations > your app >
+    Authentication > Web redirect URIs.
+      * It lists http://localhost:8000/api/calendar/microsoft/callback  -> use the default
+        `--redirect local`: stop anything on port 8000, run the command, and the script catches the
+        redirect by itself.
+      * It lists only https://notes.beyrictech.com/api/calendar/microsoft/callback (the production
+        registration) -> add `--redirect paste`. After you consent, Microsoft sends the browser to
+        notes.beyrictech.com, which shows an error or "not available" page: THAT IS EXPECTED. Copy
+        the whole address from the browser's address bar (it starts with https://notes.beyrictech.com/
+        and holds `?code=...&state=...`), come back to the terminal, paste it at the prompt (it is
+        hidden while you paste) and press Enter. Do it within a minute: the code expires quickly
+        and works once. (It will also show in the production server's access log for that one
+        request; it is single use and already spent by then.)
+ 4. Run it, once per account. From the repo root:
+        .venv/bin/python docs/spike/outlook-m0/capture.py run --label personal --authority consumers
+    A browser opens at Microsoft. Sign in with the TEST account (the spare Outlook.com one), and on
+    the consent screen take a SCREENSHOT (Cmd+Shift+4) into docs/spike/outlook-m0/screens/ before
+    you click Accept. Note whether it says "unverified" or "needs administrator approval".
+ 5. The script then calls Graph and prints "*" lines for each fact it read. At the end it asks two
+    questions: what the consent screen said, and the URL of the page where this app's access can
+    be removed. Type the answers (Enter skips one).
+ 6. The other runs, the cleanup and the commit steps are in README.md in this folder (sections C
+    and "Cleanup"): personal-basic (compares Calendars.ReadBasic), work (a work account),
+    work-nomailbox and after-revoke (remove the app at Microsoft first).
 
     python docs/spike/outlook-m0/capture.py run --label personal --authority consumers
-    python docs/spike/outlook-m0/capture.py run --label personal-basic --authority consumers --scopes basic
+    python docs/spike/outlook-m0/capture.py run --label personal --redirect paste
+    python docs/spike/outlook-m0/capture.py run --label personal-basic --scopes basic
     python docs/spike/outlook-m0/capture.py run --label work --authority organizations
     python docs/spike/outlook-m0/capture.py after-revoke --label personal
     python docs/spike/outlook-m0/capture.py selftest          # no network, no secret
 
-Secrets: the client id and secret are read from `docs/spike/outlook-m0/.env.m0` (git-ignored),
-never from the command line, never printed. Access tokens live in memory only. The one refresh
-token is kept in `out/state-<label>.json` (git-ignored) so `after-revoke` can try it once after the
-app is removed at Microsoft; delete `out/` when the run is finished.
+Secrets: the client id and secret are read from the environment (MICROSOFT_CLIENT_ID,
+MICROSOFT_CLIENT_SECRET, MICROSOFT_AUTHORITY), else from ~/.config/beyric-outlook/keys.env, else
+from docs/spike/outlook-m0/.env.m0 (git-ignored); never from the command line, never printed.
+Access tokens live in memory only. The one refresh token is kept in `out/state-<label>.json`
+(git-ignored, mode 600) so `after-revoke` can try it once after the app is removed at Microsoft;
+delete `out/` when the run is finished.
 
-Output: raw answers go to `out/raw/` (git-ignored, NOT redacted). The redacted copies that may be
-committed go to docs/fe-captures/calendar-outlook/graph/, and a readable record is appended to
-docs/spike/outlook-oauth-captures.md. Redaction keeps every field name and the SHAPE of every
-value (URL hosts and paths, the length of ids) and replaces the values: addresses become
-`person-N@example.test`, GUIDs become `00000000-0000-0000-0000-00000000000N` (the consumer-tenant
-GUID is public and kept), long id-like runs become `<id:LEN>`, URL queries become `?<query>`.
+Output: raw answers go to `out/raw/` (git-ignored, NOT redacted, tokens already stripped). The
+redacted copies that may be committed go to docs/fe-captures/calendar-outlook/graph/, and a
+readable record is appended to docs/spike/outlook-oauth-captures.md. Redaction keeps every field
+name and the SHAPE of every value (URL hosts and paths, the length of ids) and replaces the
+values: addresses become `person-N@example.test`, GUIDs become
+`00000000-0000-0000-0000-00000000000N` (the consumer-tenant GUID is public and kept), long id-like
+runs become `<id:LEN>`, URL queries become `?<query>`.
 """
 
 import argparse
@@ -36,6 +82,7 @@ import sys
 import threading
 import webbrowser
 from datetime import UTC, datetime, timedelta
+from getpass import getpass
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlencode, urlparse
@@ -49,7 +96,10 @@ STATE = HERE / "out"
 GRAPH_DIR = ROOT / "docs" / "fe-captures" / "calendar-outlook" / "graph"
 REPORT = ROOT / "docs" / "spike" / "outlook-oauth-captures.md"
 
-REDIRECT_URI = "http://localhost:8000/api/calendar/microsoft/callback"
+REDIRECT_LOCAL = "http://localhost:8000/api/calendar/microsoft/callback"
+REDIRECT_PROD = "https://notes.beyrictech.com/api/calendar/microsoft/callback"
+KEYS_FILE = Path.home() / ".config" / "beyric-outlook" / "keys.env"
+AUTHORITIES = ("consumers", "organizations", "common")
 LOGIN = "https://login.microsoftonline.com"
 GRAPH = "https://graph.microsoft.com/v1.0"
 CONSUMER_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad"
@@ -212,19 +262,48 @@ def body_of(response: httpx.Response):
 # ---------------------------------------------------------------- config and OAuth
 
 
-def load_env() -> tuple[str, str]:
-    path = HERE / ".env.m0"
+def read_env_file(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
     if path.exists():
         for line in path.read_text().splitlines():
             if "=" in line and not line.lstrip().startswith("#"):
                 key, _, value = line.partition("=")
                 values[key.strip()] = value.strip().strip('"').strip("'")
-    client_id = values.get("MS_M0_CLIENT_ID") or os.environ.get("MS_M0_CLIENT_ID", "")
-    secret = values.get("MS_M0_CLIENT_SECRET") or os.environ.get("MS_M0_CLIENT_SECRET", "")
+    return values
+
+
+def load_env() -> tuple[str, str, str | None]:
+    """(client id, client secret, authority or None): the environment first, then
+    ~/.config/beyric-outlook/keys.env, then the old docs/spike/outlook-m0/.env.m0. Never printed."""
+    keys = read_env_file(KEYS_FILE)
+    old = read_env_file(HERE / ".env.m0")
+
+    def pick(name: str, old_name: str | None = None) -> str:
+        return (
+            os.environ.get(name)
+            or keys.get(name)
+            or (old.get(old_name) if old_name else None)
+            or (os.environ.get(old_name) if old_name else None)
+            or ""
+        )
+
+    client_id = pick("MICROSOFT_CLIENT_ID", "MS_M0_CLIENT_ID")
+    secret = pick("MICROSOFT_CLIENT_SECRET", "MS_M0_CLIENT_SECRET")
+    authority = pick("MICROSOFT_AUTHORITY") or None
     if not client_id or not secret:
-        sys.exit(f"Put MS_M0_CLIENT_ID and MS_M0_CLIENT_SECRET in {path} (see README.md).")
-    return client_id, secret
+        sys.exit(
+            "Put MICROSOFT_CLIENT_ID and MICROSOFT_CLIENT_SECRET in "
+            f"{KEYS_FILE} (see the top of this script)."
+        )
+    if authority is not None and authority not in AUTHORITIES:
+        sys.exit(f"MICROSOFT_AUTHORITY must be one of {', '.join(AUTHORITIES)}.")
+    return client_id, secret, authority
+
+
+def redirect_uri_for(args) -> str:
+    if args.redirect_uri:
+        return args.redirect_uri
+    return REDIRECT_LOCAL if args.redirect == "local" else REDIRECT_PROD
 
 
 def pkce() -> tuple[str, str]:
@@ -233,15 +312,16 @@ def pkce() -> tuple[str, str]:
     return verifier, base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
 
 
-def wait_for_callback(state: str, timeout: int = 300) -> dict[str, str]:
+def wait_for_callback(state: str, redirect_uri: str, timeout: int = 300) -> dict[str, str]:
     """Listen on localhost:8000 for the one redirect Microsoft sends back."""
     got: dict[str, str] = {}
     done = threading.Event()
+    want_path = urlparse(redirect_uri).path
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):  # noqa: N802
             parsed = urlparse(self.path)
-            if parsed.path != urlparse(REDIRECT_URI).path:
+            if parsed.path != want_path:
                 self.send_response(404)
                 self.end_headers()
                 return
@@ -263,7 +343,35 @@ def wait_for_callback(state: str, timeout: int = 300) -> dict[str, str]:
             sys.exit("No redirect arrived within 5 minutes.")
     finally:
         server.shutdown()
-    if got.get("state") != state:
+    return check_state(got, state)
+
+
+def parse_pasted_redirect(pasted: str, redirect_uri: str, state: str) -> dict[str, str]:
+    """The query of the address the person copied after consenting. Only its query is read, the
+    address must be the registered redirect (host and path), and the state must be ours."""
+    parts = urlparse(pasted.strip())
+    want = urlparse(redirect_uri)
+    if (parts.scheme, parts.netloc, parts.path) != (want.scheme, want.netloc, want.path):
+        sys.exit(
+            "That address is not the redirect address "
+            f"({want.scheme}://{want.netloc}{want.path}). Copy the whole address bar."
+        )
+    got = {k: v[0] for k, v in parse_qs(parts.query).items()}
+    return check_state(got, state)
+
+
+def paste_callback(state: str, redirect_uri: str) -> dict[str, str]:
+    print(
+        "After you consent, the browser lands on a page of notes.beyrictech.com that shows an error\n"
+        "or 'not available'. That is expected. Copy the WHOLE address from the address bar and\n"
+        "paste it here (nothing is shown while you paste), then press Enter. Be quick: the code\n"
+        "works once and expires in about a minute.\n"
+    )
+    return parse_pasted_redirect(getpass("Pasted address > "), redirect_uri, state)
+
+
+def check_state(got: dict[str, str], state: str) -> dict[str, str]:
+    if not secrets.compare_digest(got.get("state", "").encode(), state.encode()):
         sys.exit("The state in the redirect does not match: stop and tell the lead.")
     return got
 
@@ -315,17 +423,22 @@ def event_row(e: dict) -> dict:
 
 
 def run(args) -> None:
-    client_id, client_secret = load_env()
+    client_id, client_secret, env_authority = load_env()
+    args.authority = args.authority or env_authority or "consumers"
+    redirect_uri = redirect_uri_for(args)
     scope = SCOPES[args.scopes]
     rec = Recorder(args.label)
-    print(f"M0 run: label={args.label} authority={args.authority} scopes={args.scopes}")
+    print(
+        f"M0 run: label={args.label} authority={args.authority} scopes={args.scopes} "
+        f"redirect={args.redirect}"
+    )
     verifier, challenge = pkce()
     state, nonce = secrets.token_urlsafe(24), secrets.token_urlsafe(24)
     query = urlencode(
         {
             "client_id": client_id,
             "response_type": "code",
-            "redirect_uri": REDIRECT_URI,
+            "redirect_uri": redirect_uri,
             "response_mode": "query",
             "scope": scope,
             "state": state,
@@ -344,7 +457,10 @@ def run(args) -> None:
     )
     print("'unverified', 'needs admin approval' or blocks you.\n")
     webbrowser.open(url)
-    callback = wait_for_callback(state)
+    if args.redirect == "paste":
+        callback = paste_callback(state, redirect_uri)
+    else:
+        callback = wait_for_callback(state, redirect_uri)
     rec.save(
         "callback-query",
         "What Microsoft appended to the redirect (code removed).",
@@ -367,7 +483,7 @@ def run(args) -> None:
                 "client_secret": client_secret,
                 "grant_type": "authorization_code",
                 "code": callback["code"],
-                "redirect_uri": REDIRECT_URI,
+                "redirect_uri": redirect_uri,
                 "code_verifier": verifier,
                 "scope": scope,
             },
@@ -640,7 +756,7 @@ def run(args) -> None:
 
 
 def after_revoke(args) -> None:
-    client_id, client_secret = load_env()
+    client_id, client_secret, _ = load_env()
     path = STATE / f"state-{args.label}.json"
     if not path.exists():
         sys.exit("No saved state: run `run` for this label first.")
@@ -752,6 +868,40 @@ def selftest() -> None:
         + ".y"
     )
     assert decode_claims(jwt) == {"tid": "t"}
+
+    # the pasted redirect: only the registered address with OUR state is accepted
+    state = "st4te"
+    good = f"{REDIRECT_PROD}?code=0.ABC&state={state}&session_state=x"
+    assert parse_pasted_redirect(good, REDIRECT_PROD, state)["code"] == "0.ABC"
+    assert parse_pasted_redirect(f"  {good}  ", REDIRECT_PROD, state)["state"] == state
+    for bad in (
+        f"https://evil.example/api/calendar/microsoft/callback?code=c&state={state}",
+        f"https://notes.beyrictech.com/other?code=c&state={state}",
+        f"{REDIRECT_PROD}?code=c&state=wrong",
+        f"{REDIRECT_PROD}?code=c",
+        "not a url",
+    ):
+        try:
+            parse_pasted_redirect(bad, REDIRECT_PROD, state)
+        except SystemExit:
+            continue
+        raise AssertionError(f"accepted a bad pasted redirect: {bad}")
+    denied = parse_pasted_redirect(
+        f"{REDIRECT_PROD}?error=access_denied&state={state}", REDIRECT_PROD, state
+    )
+    assert denied["error"] == "access_denied" and "code" not in denied
+
+    # keys: a file's values are read, comments skipped, quotes stripped
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        f = Path(tmp) / "keys.env"
+        f.write_text("# c\nMICROSOFT_CLIENT_ID='abc'\nMICROSOFT_AUTHORITY=consumers\n")
+        assert read_env_file(f) == {
+            "MICROSOFT_CLIENT_ID": "abc",
+            "MICROSOFT_AUTHORITY": "consumers",
+        }
+        assert read_env_file(Path(tmp) / "missing.env") == {}
     print("selftest ok")
     print(json.dumps(r.walk(sample), indent=2))
 
@@ -766,9 +916,24 @@ def main() -> None:
         p.add_argument("--label", required=True, help="personal, work, work-nomailbox, ...")
         if name == "run":
             p.add_argument(
-                "--authority", choices=["consumers", "organizations", "common"], required=True
+                "--authority",
+                choices=AUTHORITIES,
+                default=None,
+                help="default: MICROSOFT_AUTHORITY from the keys file, else consumers",
             )
             p.add_argument("--scopes", choices=sorted(SCOPES), default="read")
+            p.add_argument(
+                "--redirect",
+                choices=["local", "paste"],
+                default="local",
+                help="local: catch the redirect on localhost:8000; paste: you paste the address "
+                "bar after consenting (for a registration with only the production redirect)",
+            )
+            p.add_argument(
+                "--redirect-uri",
+                default=None,
+                help="override the redirect URI sent to Microsoft (must match the registration)",
+            )
     sub.add_parser("selftest")
     args = parser.parse_args()
     if args.cmd == "selftest":
