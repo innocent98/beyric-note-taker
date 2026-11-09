@@ -1,0 +1,8 @@
+{
+  "token_type": "Bearer",
+  "scope": "https://graph.microsoft.com/Calendars.Read https://graph.microsoft.com/User.Read openid profile",
+  "expires_in": 3599,
+  "ext_expires_in": 3599,
+  "access_token": "ACCESS-TOKEN-PLACEHOLDER-work",
+  "refresh_token": "REFRESH-TOKEN-PLACEHOLDER-work"
+}

@@ -1,0 +1,10 @@
+{
+  "ver": "2.0",
+  "iss": "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0",
+  "aud": "CLIENT-ID-PLACEHOLDER",
+  "tid": "9188040d-6c67-4c5b-b112-36a304b66dad",
+  "oid": "00000000-0000-0000-0000-000000000001",
+  "sub": "SUB-PLACEHOLDER-personal",
+  "preferred_username": "person-1@example.test",
+  "name": "Person One"
+}

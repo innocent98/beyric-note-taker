@@ -1,4 +1,6 @@
+import re
 import uuid
+from datetime import date
 from functools import lru_cache
 
 from pydantic import AliasChoices, Field, field_validator, model_validator
@@ -46,6 +48,49 @@ class Settings(BaseSettings):
             except ValueError:
                 raise ValueError("SKRIBBY_ACCOUNT_ID must be the account's id (a UUID)") from None
         return value
+
+    @field_validator("microsoft_authority")
+    @classmethod
+    def _known_microsoft_authority(cls, value: str) -> str:
+        """Only the two audiences the registration can serve are accepted (Outlook spec 3.2): a
+        stray value would send people to an endpoint we never designed for."""
+        authority = value.strip().lower() or "consumers"
+        if authority not in ("consumers", "common"):
+            raise ValueError(f"MICROSOFT_AUTHORITY is {value!r}; it must be consumers or common")
+        return authority
+
+    @field_validator("microsoft_allowed_tenants")
+    @classmethod
+    def _microsoft_tenants_are_guids(cls, value: str) -> str:
+        """A comma separated list of directory (tenant) ids, lower-cased. Anything that is not a
+        GUID is refused at start: a typo here would silently admit or block a whole organisation."""
+        ids = []
+        for part in value.split(","):
+            part = part.strip().lower()
+            if not part:
+                continue
+            if not re.fullmatch(r"[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}", part):
+                raise ValueError(
+                    "MICROSOFT_ALLOWED_TENANTS must be tenant ids (GUIDs), comma separated"
+                )
+            ids.append(part)
+        return ",".join(dict.fromkeys(ids))
+
+    @field_validator("microsoft_secret_expires_on")
+    @classmethod
+    def _microsoft_secret_expiry_is_a_date(cls, value: str) -> str:
+        value = value.strip()
+        if value:
+            try:
+                date.fromisoformat(value)
+            except ValueError:
+                raise ValueError("MICROSOFT_SECRET_EXPIRES_ON must be a date, YYYY-MM-DD") from None
+        return value
+
+    @property
+    def microsoft_allowed_tenant_ids(self) -> frozenset[str]:
+        """The tenants a Microsoft connection may come from; empty means any."""
+        return frozenset(t for t in self.microsoft_allowed_tenants.split(",") if t)
 
     @model_validator(mode="after")
     def _skribby_needs_its_key(self):
@@ -218,6 +263,24 @@ class Settings(BaseSettings):
     # on. In production the app then refuses to start without `token_enc_key`, as it already does
     # once `google_client_id` is set.
     calendar_enabled: bool = False
+
+    # The Microsoft (Outlook) calendar, Outlook spec 9.2. All optional while the flag is false.
+    # The OAuth client of the Azure app registration; both set = the client exists. The flag is the
+    # operator's switch for the whole feature: the routes answer 404 `calendar_unavailable` and the
+    # UI draws nothing until it is true (and the Teams gate of spec section 7 is met).
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    microsoft_calendar_enabled: bool = False
+    # Which accounts our authorize endpoint accepts: `consumers` (personal Outlook.com, Hotmail,
+    # Live: the pilot) or `common` (work and school as well, once publisher verification is done).
+    microsoft_authority: str = "consumers"
+    # Optional, comma separated tenant ids a connection must come from (empty = any).
+    microsoft_allowed_tenants: str = ""
+    # When the client secret in Azure expires, YYYY-MM-DD: drives the 30-day-before reminder.
+    microsoft_secret_expires_on: str = ""
+    # True once Microsoft's publisher verification is done; until then the connect call may tell
+    # the frontend to explain the "unverified" screen (only if M0 shows Microsoft shows one).
+    microsoft_publisher_verified: bool = False
 
     # The scheduler's two loops (spec section 9.7): dispatch every 10 s (which is also how often
     # a standby retries the leader lock), the sync loop wakes every 60 s. Not required.

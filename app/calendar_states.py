@@ -55,10 +55,13 @@ def _own_joins(conn: CalendarConnection):
 
 
 def reason_for(conn: CalendarConnection, exc: Exception, now: datetime, *, testing: bool) -> str:
-    """`error` for a token we cannot read, `expired` when the 7-day Testing expiry has passed (only
-    while the project is in Testing), otherwise `revoked`."""
+    """`error` for a token we cannot read, `expired` when the provider says the grant lapsed
+    unused or the 7-day Testing expiry has passed (only while the project is in Testing),
+    otherwise `revoked`."""
     if isinstance(exc, RefreshTokenUnreadable):
         return "error"
+    if isinstance(exc, AuthRevoked) and exc.expired:
+        return "expired"
     if testing and conn.expected_expiry_at is not None and now >= conn.expected_expiry_at:
         return "expired"
     return "revoked"
