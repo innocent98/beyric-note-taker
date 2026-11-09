@@ -370,6 +370,8 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
   - [ ] **M3** connect, callback, disconnect (Opus review): seven checks plus tenant rules, probe before store, 409 `calendar_already_connected`, flag, no revoke at Microsoft
   - [ ] **M4** Graph source and token cache (Opus review): full-window `calendarView`, `Prefer` headers, nextLink rule, `get_event`, compare-and-swap rotation write, 429, client-secret expiry alert
   - [ ] **M5** event normaliser `app/graph_events.py`: UTC only, links (join URL, location, HTML body, Safe Links), responses, organiser, cancelled, count, same-organisation test; fixtures from the M0 captures
+    - [x] Built 2026-11-09 (SOP `docs/sop/2026-11-09-outlook-m5-graph-event-normaliser.md`; branch `feature/outlook-m5-graph-events`): `app/graph_events.py`, 151 tests incl. the 5.4 table against `will_join`; dispatch is the registry row M3 adds
+    - [ ] Fixtures are documented shapes (`tests/fixtures/graph/documented_*__replace_with_m0_capture.json`): replace with the M0 captures and settle the SOP's "to confirm with the M0 run" list
   - [ ] **M6** Settings and Meetings UI as drawn (Connect Microsoft Outlook, connected card), provider-aware words, shown only when the server says it is enabled; designer-gap list
   - [ ] **M7** privacy and terms rows, `.well-known/microsoft-identity-association.json` (held until switch-on; a lawyer reads the wording)
   - [ ] **M8** close-out: SOP, checklist, FE guide `docs/fe-integration-guide-calendar-outlook.md` from live captures, phase Opus review, go-live check
