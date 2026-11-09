@@ -14,7 +14,7 @@ alter table transcriptions alter column language type varchar(32);
 Run in the `vexa-db` container (`psql -U $POSTGRES_USER -d $POSTGRES_DB`). Widening a varchar only changes the catalogue, not the rows, so it takes milliseconds. `lock_timeout` makes sure it can never queue behind Vexa's writes.
 
 ### Making it permanent
-`compose.yaml` has a `vexa-schema-fix` service (postgres:17-alpine, on the `vexainternal` network only) that runs `deploy/vexa-schema-fix.sh` once per `docker compose up`, so every deploy re-applies it. The script waits up to 5 minutes for Vexa to create the table, reads the column's current length, and does nothing if it is already 32 or more; otherwise it runs the `alter` above. Choices:
+`compose.yaml` has a `vexa-schema-fix` service (postgres:17-alpine, on the `vexainternal` network only) that runs `deploy/vexa-schema-fix.sh` once per `docker compose up`, so every deploy re-applies it. **(Since 2026-11-09 it is in the `vexa` compose profile: a deploy re-applies it only while the profile is on, see `2026-11-09-vexa-compose-profile.md`.)** The script waits up to 5 minutes for Vexa to create the table, reads the column's current length, and does nothing if it is already 32 or more; otherwise it runs the `alter` above. Choices:
 - A compose service rather than a line in `deploy/deploy.sh`: it also runs on first install and after a Vexa volume is recreated, with no extra step to remember.
 - Nothing depends on it, so a failure never blocks or rolls back a deploy; it shows as an exited service in `docker compose ps -a`.
 - Rejected: patching Vexa's image or source (we run the stock `vexa-lite` image), and pinning the live-hint language (could hurt French speech).
