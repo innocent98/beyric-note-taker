@@ -1,0 +1,22 @@
+Outlook Settings > Calendar parity, 2026-11-09 (built app against docs/ui/Beyric Note Taker redesign/Beyric Note Taker.dc.html; Next on a mock API)
+--- state B: Outlook connected (mock --calendar microsoft_connected)
+same     connected row (box)
+same     provider name
+same     address and state
+same     Disconnect button
+outlook-settings-calendar-b 1440
+outlook-settings-calendar-b 768
+outlook-settings-calendar-b 390
+--- state A: not connected, Outlook on (mock --calendar microsoft_on)
+DIFFERS  Connect Google Calendar button
+           lineHeight: design normal | next 21px
+           w: design 230 | next 228
+DIFFERS  Connect Microsoft Outlook button
+           lineHeight: design normal | next 21px
+           x: design 263 | next 261
+           w: design 240 | next 238
+same     buttons share one row
+outlook-settings-calendar-a 1440
+outlook-settings-calendar-a 768
+outlook-settings-calendar-a 390
+note: lineHeight 'normal' vs 21px and the 2px width are the existing Button's difference; the Google button shows the same two lines, so Outlook matches Google.

@@ -11,6 +11,13 @@ const ERROR_CODES = [
   "google_failed",
   "different_account",
   "wrong_account",
+  // Outlook (docs/fe-integration-guide-calendar-outlook.md): its own refusals, and the one a second
+  // connect gets while another calendar is connected.
+  "microsoft_denied",
+  "microsoft_failed",
+  "no_mailbox",
+  "tenant_not_allowed",
+  "already_connected",
 ] as const;
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);

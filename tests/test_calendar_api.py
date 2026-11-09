@@ -178,6 +178,7 @@ def test_a_person_who_never_connected_gets_the_not_connected_answer(web):
         "calendar_template_id": None,
         "auto_join_paused": False,
         "auto_join_paused_text": None,
+        "microsoft_enabled": False,  # Outlook is off unless the server switches it on
         "upcoming": [],
     }
 

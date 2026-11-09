@@ -146,6 +146,9 @@ class CalendarOut(BaseModel):
     `auto_join_paused` is true while the operator has stopped calendar auto-join for everyone
     (`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and
     `auto_join_paused_text` is the line to show (null when it is not paused).
+    `microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the
+    "Connect Microsoft Outlook" button live only then (while it is false the page looks as it did
+    before Outlook existed).
     `upcoming` is empty unless connected."""
 
     connected: bool
@@ -160,6 +163,7 @@ class CalendarOut(BaseModel):
     calendar_template_id: int | None
     auto_join_paused: bool
     auto_join_paused_text: str | None
+    microsoft_enabled: bool
     upcoming: list[UpcomingEvent]
 
 
@@ -318,9 +322,13 @@ def _start_microsoft(
         secure=settings.cookie_secure,
         path=microsoft_connect.FLOW_COOKIE_PATH,
     )
-    return ConnectOut(
-        authorize_url=url, show_unverified_notice=not settings.microsoft_publisher_verified
+    # Only work accounts (authority `common`) are known to meet Microsoft's unverified-publisher
+    # screen or block (docs: publisher verification); whether a personal account's consent says
+    # "unverified" is not documented (M0 S2), so no explainer is promised for `consumers`.
+    unverified = (
+        settings.microsoft_authority == "common" and not settings.microsoft_publisher_verified
     )
+    return ConnectOut(authorize_url=url, show_unverified_notice=unverified)
 
 
 @router.get("/{provider}/callback", status_code=302, responses=CALLBACK_RESPONSES)
@@ -487,6 +495,7 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
     # restart of `scheduler` alone, as the runbook says, must be enough in both directions.
     paused = session.scalar(select(AppState.autojoin_paused_since)) is not None
     paused_text = calendar_text.AUTO_JOIN_PAUSED_TEXT if paused else None
+    microsoft_on = calendar_providers.PROVIDERS["microsoft"].enabled(request.app.state.settings)
     if conn is None:
         return CalendarOut(
             connected=False,
@@ -501,6 +510,7 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
             calendar_template_id=template_id,
             auto_join_paused=paused,
             auto_join_paused_text=paused_text,
+            microsoft_enabled=microsoft_on,
             upcoming=[],
         )
     state = conn.status if conn.status in ("connected", "degraded") else "needs_reconnect"
@@ -511,12 +521,13 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
         account_email=conn.account_email,
         provider=conn.provider,
         last_sync_at=conn.last_sync_at,
-        last_error=calendar_text.error_text(conn.last_error),
+        last_error=calendar_text.error_text(conn.last_error, conn.provider),
         rule=rule,
         rule_text=calendar_text.rule_text(rule),
         calendar_template_id=template_id,
         auto_join_paused=paused,
         auto_join_paused_text=paused_text,
+        microsoft_enabled=microsoft_on,
         upcoming=_upcoming(session, conn, _join_settings(prefs, request), _now()),
     )
 

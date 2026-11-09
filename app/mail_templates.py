@@ -305,7 +305,8 @@ def _calendar_disconnected(payload: dict, to: str, settings: Settings) -> Messag
     join" mail (heading, two paragraphs, one button, the footer with Email preferences) and the
     words the Settings card already uses. Queued by `app/calendar_states.py` once per disconnect
     (and only for `needs_reconnect`, never `degraded`), after the account's own email switch and the
-    suppression list were checked. The payload is not read: nothing in it is shown."""
+    suppression list were checked. Only the payload's `provider` is read (the footer names the
+    calendar); nothing else in it is shown."""
     base = settings.public_base_url.rstrip("/")
     subject = "Your calendar is disconnected"
     blocks: list[Block] = [
@@ -317,7 +318,8 @@ def _calendar_disconnected(payload: dict, to: str, settings: Settings) -> Messag
         Para("Connect again and it carries on with your upcoming meetings."),
         Button("Reconnect", f"{base}/settings"),
     ]
-    footer = "You received this because your Google Calendar is connected to Beyric Note Taker."
+    calendar = "Microsoft Outlook" if payload.get("provider") == "microsoft" else "Google Calendar"
+    footer = f"You received this because your {calendar} is connected to Beyric Note Taker."
     prefs = ("Email preferences", f"{base}/settings#email-preferences")
     return Message(
         to=to,
