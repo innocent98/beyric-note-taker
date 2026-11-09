@@ -1846,3 +1846,46 @@ def test_a_hung_lookup_of_the_orphan_bot_ends_quickly_as_a_retry(
     run(session, host, cal, at(-1))
     assert time.monotonic() - started < 1.5
     assert state_of(session, join) == ("skipped", "code_in_use") and meetings(session) == []
+
+
+TEAMS_LINK = "https://teams.microsoft.com/meet/1234567890123?p=placeholder"
+
+
+def teams_event(session, ada, cal, settings):
+    from app.gcal_sync import apply_batch
+
+    raw = raw_event("evt-teams", start=T0, location=f"Join: {TEAMS_LINK}")
+    del raw["hangoutLink"]
+    cal.serve(raw)
+    apply_batch(session, ada.conn, batch(raw), ada.user_settings, now=at(-60), settings=settings)
+    return join_of(session, "evt-teams", ada.user.id)
+
+
+def test_a_teams_event_is_joined_like_a_meet_one_when_teams_is_on(session, host, cal, ada):
+    settings = make_settings(
+        autojoin_lead_seconds=60,
+        bot_max_local=1,
+        user_bot_limit=2,
+        bot_provider="skribby",
+        skribby_api_key="placeholder-key",
+    )
+    join = teams_event(session, ada, cal, settings)
+    assert state_of(session, join) == ("scheduled", None)
+
+    outcomes = run(session, host, cal, at(-1), settings)
+
+    assert host.bots_sent == 1 and [o.result for o in outcomes] == ["joined"]
+    [meeting] = meetings(session)
+    assert meeting.platform == "teams" and meeting.native_id.startswith("teams-")
+
+
+def test_a_teams_event_is_not_joined_when_the_provider_cannot(session, host, cal, ada):
+    from app.gcal_sync import apply_batch
+
+    raw = raw_event("evt-teams", start=T0, location=f"Join: {TEAMS_LINK}")
+    del raw["hangoutLink"]
+    apply_batch(session, ada.conn, batch(raw), ada.user_settings, now=at(-60), settings=SETTINGS)
+    session.expire_all()
+    assert list(session.scalars(select(ScheduledJoin))) == []  # Vexa: nothing is scheduled
+    run(session, host, cal, at(-1))
+    assert host.bots_sent == 0

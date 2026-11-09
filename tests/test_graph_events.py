@@ -52,7 +52,7 @@ def decide(event: ParsedEvent, *, rule="all", teams=False, override=None):
 
 
 def test_a_teams_meeting_of_a_work_account():
-    """Documented: `onlineMeeting.joinUrl` on an online meeting. Platform `teams`, a derived native id."""
+    """`onlineMeeting.joinUrl` on an online meeting. Platform `teams`, with a derived native id."""
     event = parsed("teams_work")
     assert event.platform == "teams" and event.native_id.startswith("teams-")
     assert event.meeting_url.startswith("https://teams.microsoft.com/l/meetup-join/")

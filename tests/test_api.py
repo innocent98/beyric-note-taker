@@ -750,6 +750,38 @@ def test_create_refuses_a_link_that_is_not_meet_or_zoom(api, template, fake_vexa
     assert fake_vexa.sent == [] and session.scalars(select(Meeting)).first() is None
 
 
+TEAMS = "https://teams.microsoft.com/meet/1234567890123?p=placeholder"
+
+
+def test_create_refuses_a_teams_link_while_the_provider_cannot_join_teams(
+    api, template, fake_vexa, session
+):
+    error = error_of(create(api, template, url=TEAMS), 400, "unsupported_link")
+    assert error["message"] == "Microsoft Teams meetings cannot be joined yet"
+    assert fake_vexa.sent == [] and session.scalars(select(Meeting)).first() is None
+
+
+def test_create_sends_a_bot_to_a_teams_link_when_the_provider_can(
+    api, template, fake_vexa, session, monkeypatch
+):
+    from tests.test_web import make_settings
+
+    monkeypatch.setattr(
+        api.client.app.state,
+        "settings",
+        make_settings(bot_provider="skribby", skribby_api_key="placeholder-key"),
+    )
+    response = create(api, template, url=TEAMS)
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["platform"] == "teams" and body["title"] == "Microsoft Teams"
+    assert body["native_id"].startswith("teams-")
+    assert fake_vexa.sent == [TEAMS]
+    # the same meeting again, however the link is written: one bot per meeting code
+    again = create(api, template, url=TEAMS.split("?")[0])
+    assert again.status_code == 409
+
+
 def test_create_needs_a_real_template(api, template, fake_vexa):
     response = api.post("/api/meetings", {"url": MEET, "template_id": 9999})
     error_of(response, 400, "template_required")

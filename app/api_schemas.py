@@ -19,7 +19,7 @@ Status = Literal["bot_sent", "processing", "ready", "failed"]
 Step = Literal["waiting", "audio", "transcribing", "speakers", "notes", "done"]
 ExtractionStatus = Literal["pending", "running", "done", "failed", "skipped"]
 Tone = Literal["success", "danger", "info", "warning", "neutral"]
-Platform = Literal["google_meet", "zoom"]
+Platform = Literal["google_meet", "zoom", "teams"]
 RetryBlock = Literal["not_failed", "no_audio", "no_speech", "audio_deleted"]
 
 

@@ -522,6 +522,8 @@ def _create_meeting(
             "invalid_meeting_url",
             "That is not a Google Meet or Zoom link. Paste the full meeting link.",
         ) from None
+    if platform == "teams" and not settings.teams_join_enabled:  # the provider cannot join Teams
+        raise Refused(400, "unsupported_link", "Microsoft Teams meetings cannot be joined yet")
     template = _own_template(session, user.id, template_id)
     if template is None:  # also a template that is someone else's: it looks like a missing one
         raise Refused(400, "template_required", "Choose a template for the notes.")
