@@ -173,7 +173,7 @@ See the PR body for the exact run. In short: ruff check and format clean (ruff 0
 2. Restart web, worker and scheduler. A wrong or missing setting stops them at startup with a message naming it.
 3. Send one real meeting; check it reaches notes with speaker names; check Skribby's dashboard shows the bot and, after the retention, no longer holds it.
 
-**Roll back:** set `BOT_PROVIDER=vexa` and restart. New bots go to Vexa; meetings Skribby already holds keep being worked on through Skribby **if `SKRIBBY_API_KEY` is still set** (leave it set until they are over and their retention has run), else they wait (not fail) until it is. No data migration is needed; the column stays. To revert the code: revert the PR; `alembic downgrade 0037` drops the column (any Skribby meeting then loses the memory of its provider: drain them first).
+**Roll back:** if the Vexa containers were stopped (`2026-11-09-vexa-compose-profile.md`), start them first (`deploy/README.md` section 8, "Stopping Vexa and bringing it back"); then set `BOT_PROVIDER=vexa` and restart. New bots go to Vexa; meetings Skribby already holds keep being worked on through Skribby **if `SKRIBBY_API_KEY` is still set** (leave it set until they are over and their retention has run), else they wait (not fail) until it is. No data migration is needed; the column stays. To revert the code: revert the PR; `alembic downgrade 0037` drops the column (any Skribby meeting then loses the memory of its provider: drain them first).
 
 **The Skribby side:** the bot account's login (a Google security check can break the saved session: `invalid_credentials`; sign in to the account outside Skribby, clear the check, retry), the Free plan's 5 bot hours a month and 3 bots at once (a 403 on send, worded by Skribby).
 

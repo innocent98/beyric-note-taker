@@ -512,6 +512,11 @@ def run(args) -> None:
         rec.fact(
             f"S1: refresh token present: {facts['has_refresh_token']}; expires_in={tbody.get('expires_in')}"
         )
+        rec.fact(
+            "S1: token lengths in characters (lengths only, never the values): "
+            f"access {len(access)}, refresh {len(tbody.get('refresh_token') or '')}, "
+            f"id_token {len(tbody.get('id_token') or '')}; token_type {tbody.get('token_type')!r}"
+        )
         if tbody.get("refresh_token"):
             write_private(
                 STATE / f"state-{args.label}.json",
