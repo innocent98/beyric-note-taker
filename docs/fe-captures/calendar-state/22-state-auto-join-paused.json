@@ -28,6 +28,7 @@
       "calendar_template_id": 1,
       "auto_join_paused": true,
       "auto_join_paused_text": "Auto-join is paused for now. The note taker is not joining meetings from your calendar.",
+      "microsoft_enabled": false,
       "upcoming": []
     }
   }

@@ -3012,7 +3012,7 @@ export interface components {
              * Platform
              * @enum {string}
              */
-            platform: "google_meet" | "zoom";
+            platform: "google_meet" | "zoom" | "teams";
             /** Refresh After Seconds */
             refresh_after_seconds: number | null;
             /** Retry Block */
@@ -3102,7 +3102,7 @@ export interface components {
              * Platform
              * @enum {string}
              */
-            platform: "google_meet" | "zoom";
+            platform: "google_meet" | "zoom" | "teams";
             /** Title */
             title: string;
         };
@@ -3130,7 +3130,7 @@ export interface components {
              * Platform
              * @enum {string}
              */
-            platform: "google_meet" | "zoom";
+            platform: "google_meet" | "zoom" | "teams";
             /**
              * Status
              * @enum {string}
@@ -3638,7 +3638,7 @@ export interface components {
             /** Open Questions */
             open_questions: number;
             /** Platform */
-            platform: ("google_meet" | "zoom") | null;
+            platform: ("google_meet" | "zoom" | "teams") | null;
             project: components["schemas"]["ProjectLink"] | null;
             /** Title */
             title: string;
@@ -3682,7 +3682,7 @@ export interface components {
             /** Past Meetings */
             past_meetings: components["schemas"]["PastMeeting"][];
             /** Platform */
-            platform: ("google_meet" | "zoom") | null;
+            platform: ("google_meet" | "zoom" | "teams") | null;
             /** Questions */
             questions: components["schemas"]["CarriedQuestion"][];
             /** Sprint Note */

@@ -133,7 +133,9 @@ class VexaClient:
         )
 
     def send_bot(self, meeting_url: str) -> int:
-        _, _, canonical = _parse(meeting_url)  # rebuilt from parsed parts; keeps Zoom pwd
+        platform, _, canonical = _parse(meeting_url)  # rebuilt from parsed parts; keeps Zoom pwd
+        if platform == "teams":  # Vexa knows Meet and Zoom only
+            raise UnsupportedMeetingUrl("Vexa cannot join Microsoft Teams meetings")
         payload: dict[str, Any] = {"meeting_url": canonical, "bot_name": self._bot_name}
         if self._left_alone_seconds > 0:
             # Milliseconds, a positive integer: Vexa answers 422 to anything else.

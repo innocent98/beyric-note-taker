@@ -46,3 +46,5 @@ Roll back: revert the PR; `alembic downgrade 0021` deletes the `notes` and `labe
 **Not recorded:** a transcription that fails (nothing comes back, so no row; chunks done before the failure were billed). Same trade-off as the notes step.
 **Tests:** `tests/test_usage.py` (row with seconds, no-speech case), `tests/test_pipeline.py` (ledger rows of a normal meeting), `tests/test_migrations.py` (0025 round trip, single head).
 **Roll back:** revert the PR; `alembic downgrade 0024`.
+
+**Update 2026-11-09:** a new kind `shadow` (a transcription made only for the sampled Skribby-versus-ours check, no `user_id`) and meetings made from Skribby's transcript, which have no `transcribe` or `label` row: see `docs/sop/2026-11-09-transcript-source-switch.md`. The price query above still counts every row's `audio_seconds`, so `shadow` appears as its own line.

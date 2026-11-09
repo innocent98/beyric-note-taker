@@ -10,7 +10,6 @@ import html
 import re
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.meeting_url import UnsupportedMeetingUrl, canonical_meeting_url, parse_meeting_url
@@ -23,10 +22,6 @@ RESPONSES = frozenset({"accepted", "declined", "tentative", "needsAction"})
 STATUSES = frozenset({"confirmed", "tentative", "cancelled"})
 URL_IN_TEXT = re.compile(r"https?://[^\s<>\"']+")
 TRAILING_PUNCTUATION = ".,;:!?)]}"
-TEAMS_HOSTS = {
-    "teams.microsoft.com": ("/l/meetup-join/", "/meet/"),
-    "teams.live.com": ("/meet/",),
-}
 
 
 class EventParseError(ValueError):
@@ -44,7 +39,7 @@ class ParsedEvent:
     platform: str | None  # google_meet, zoom, teams or None
     # Can carry a Zoom passcode, which Retry needs: kept, but out of `repr` so no log line has it.
     meeting_url: str | None = field(repr=False)
-    native_id: str | None  # None for Teams until T1
+    native_id: str | None  # None when the event has no joinable link
     organizer_self: bool | None
     attendee_count: int
     self_response: str | None
@@ -62,35 +57,15 @@ def _obj(container: object, key: str) -> dict:
     return value if isinstance(value, dict) else {}
 
 
-def _teams_url(url: str) -> str | None:
-    """The https form of a Teams meeting link, or None when `url` is not one."""
-    try:
-        parts = urlsplit(url)
-        host = (parts.hostname or "").lower()
-    except ValueError:
-        return None
-    prefixes = TEAMS_HOSTS.get(host)
-    if (
-        parts.scheme not in ("http", "https")
-        or prefixes is None
-        or not parts.path.startswith(prefixes)
-    ):
-        return None
-    # Path and query stay: the query carries the meeting context a Teams join needs.
-    return f"https://{host}{parts.path}" + (f"?{parts.query}" if parts.query else "")
-
-
 def _classify(url: str) -> tuple[str, str | None, str] | None:
-    """(platform, native_id, canonical link) when `url` is a link we can join (or, for Teams,
-    recognise). The canonical form is https, without tracking parameters."""
+    """(platform, native_id, canonical link) when `url` is a link we can join. The canonical form is
+    https, without tracking parameters (a Teams link keeps its query: the join needs it)."""
     url = url.strip()
     try:
         platform, native_id = parse_meeting_url(url)
         return platform, native_id, canonical_meeting_url(url)
     except UnsupportedMeetingUrl:
-        pass
-    teams = _teams_url(url)
-    return ("teams", None, teams) if teams else None
+        return None
 
 
 def _urls_in_text(text: object) -> list[str]:

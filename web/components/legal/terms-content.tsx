@@ -59,7 +59,7 @@ export function TermsContent() {
       </ul>
 
       <h2 id="third">Third-party services</h2>
-      <p>The Service works with platforms we do not control, including Google Meet, Google Calendar and Zoom. Your use of those platforms is governed by their own terms. We are not responsible for their availability or for changes that affect how the note taker can join or record.</p>
+      <p>The Service works with platforms we do not control, including Google Meet, Google Calendar, Microsoft Outlook and Zoom. Your use of those platforms is governed by their own terms. We are not responsible for their availability or for changes that affect how the note taker can join or record.</p>
 
       <h2 id="termination">Suspension and termination</h2>
       <p>You may stop using the Service and ask us to close your account at any time. We may suspend or end your access if you seriously breach these Terms, if the law requires it, or if your use puts the Service or other users at risk. Where reasonable, we will tell you first.</p>

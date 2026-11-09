@@ -1,0 +1,66 @@
+{
+  "note": "Two seeded events as the sync would store them: the Teams one is `Cannot join` while Teams joining is off, the Zoom one `Will join`.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": true,
+      "state": "connected",
+      "state_text": "Connected",
+      "account_email": "ada@outlook.example.test",
+      "provider": "microsoft",
+      "last_sync_at": null,
+      "last_error": null,
+      "rule": "all",
+      "rule_text": "Joining all meetings",
+      "calendar_template_id": 1,
+      "auto_join_paused": false,
+      "auto_join_paused_text": null,
+      "microsoft_enabled": true,
+      "upcoming": [
+        {
+          "id": 1,
+          "title": "Planning (Teams)",
+          "starts_at": "2026-11-09T17:54:15.800183+01:00",
+          "ends_at": "2026-11-09T18:24:15.800183+01:00",
+          "platform": "teams",
+          "platform_label": "Microsoft Teams",
+          "attendee_count": 2,
+          "will_join": false,
+          "will_join_text": "Cannot join",
+          "reason_text": "Microsoft Teams meetings cannot be joined yet",
+          "join_id": null,
+          "can_send_now": false,
+          "not_recorded_text": null
+        },
+        {
+          "id": 2,
+          "title": "Standup (Zoom)",
+          "starts_at": "2026-11-09T18:54:15.800183+01:00",
+          "ends_at": "2026-11-09T19:24:15.800183+01:00",
+          "platform": "zoom",
+          "platform_label": "Zoom",
+          "attendee_count": 2,
+          "will_join": true,
+          "will_join_text": "Will join",
+          "reason_text": null,
+          "join_id": null,
+          "can_send_now": false,
+          "not_recorded_text": null
+        }
+      ]
+    }
+  }
+}

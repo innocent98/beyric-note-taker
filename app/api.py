@@ -250,7 +250,7 @@ _title = services.meeting_title
 
 
 def _platform_label(meeting: Meeting) -> str:
-    return "Zoom" if meeting.platform == "zoom" else "Google Meet"
+    return {"zoom": "Zoom", "teams": "Microsoft Teams"}.get(meeting.platform, "Google Meet")
 
 
 def _summary(meeting: Meeting, template_name: str, tasks_count: int = 0) -> MeetingSummary:

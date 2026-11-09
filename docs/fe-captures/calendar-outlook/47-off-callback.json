@@ -1,0 +1,25 @@
+{
+  "note": "404 `calendar_unavailable`.",
+  "client": "signed-in user, Outlook switched off",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar/microsoft/callback?code=x&state=y",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "calendar_unavailable",
+        "message": "This calendar is not available."
+      }
+    }
+  }
+}

@@ -23,12 +23,14 @@ In short:
 """
 
 import ipaddress
+import json
 import logging
 import math
 import re
 import socket
 import threading
 import time
+import unicodedata
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable
@@ -47,8 +49,10 @@ from app.bot_provider import (
     BotProviderNotConfigured,
     BotSendUncertain,
     run_within,
+    scrub_links,
 )
 from app.meeting_url import _parse
+from app.transcribe import _keywords
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +60,7 @@ BASES = {
     "eu": "https://platform.skribby.io/api/v1",
     "jp": "https://platform-jp.skribby.io/api/v1",
 }
-SERVICES = {"google_meet": "gmeet", "zoom": "zoom"}
+SERVICES = {"google_meet": "gmeet", "zoom": "zoom", "teams": "teams"}
 
 # Joined for this long and still not in: the bot is knocking, and the owner is told to admit it.
 # Skribby has no status for the waiting room (`joining` covers it), so this is inferred, as the
@@ -80,6 +84,8 @@ TIME_LIMIT_MARGIN_MINUTES = 30  # (and the waiting room's allowance too: see `pa
 # `SKRIBBY_DOWNLOAD_HOSTS` adds a host once an operator has seen where recordings really live.
 DOWNLOAD_HOSTS = ("skribby.io", "amazonaws.com")
 MAX_DOWNLOAD_BYTES = 1 << 30
+# A validation error to a create that carried `custom_vocabulary`: retried once without it.
+VOCABULARY_RETRY_STATUSES = (400, 422)
 # The late-reply watch (see `SkribbyProvider.send_bot`).
 LATE_ADOPT_TRIES = 10
 LATE_ADOPT_PAUSE_SECONDS = 2.0
@@ -89,6 +95,9 @@ SENT_KEPT_FOR = 12 * 3600
 MAX_FAILURE_REASON_CHARS = 300
 MAX_COMPLETION_REASON_CHARS = 64  # `meetings.completion_reason` is String(64)
 MAX_NAME_CHARS = 80
+# The most `potential_speaker_names` entries one segment may list and still be read (real ones
+# hold a few); a longer list is treated as no usable answer.
+MAX_CANDIDATES = 20
 # What `BotMeeting.recording_status` says while Skribby is still processing or transcribing: the
 # call is over (`completed`) and the recording is not ready to download (the pipeline's own
 # "finishing the recording" wait).
@@ -210,21 +219,134 @@ def _clean_name(value: Any) -> str:
     return " ".join(name.split())[:MAX_NAME_CHARS].strip()
 
 
-def _segments(body: dict) -> list[dict[str, Any]]:
+def _tag(value: Any) -> str | None:
+    """Skribby's own diarization tag of a segment ("1", "2", ...), stable across a meeting: a
+    string or an integer is a tag, anything else (a boolean, a float, a list, empty) is none."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _same(name: str) -> str:
+    """What two spellings of a name are compared by: compatibility-normalised, with invisible
+    format characters (zero-width space and the like) dropped, then case-folded."""
+    plain = unicodedata.normalize("NFKC", name)
+    return "".join(ch for ch in plain if unicodedata.category(ch) != "Cf").casefold()
+
+
+def _candidate_names(item: dict) -> dict[str, str] | None:
+    """The cleaned names in a segment's `potential_speaker_names` as `{comparison key: name}`, the
+    first spelling of a name kept, in the order listed; None when the list is so long that choosing
+    from it would be a guess made on a cut-off list (real ones hold a few)."""
+    listed = item.get("potential_speaker_names")
+    if not isinstance(listed, list):
+        return {}
+    if len(listed) > MAX_CANDIDATES:
+        return None
+    names: dict[str, str] = {}
+    for entry in listed:
+        name = _clean_name(entry.get("name")) if isinstance(entry, dict) else ""
+        if name:
+            names.setdefault(_same(name), name)
+    return names
+
+
+def _tag_names(value: list[dict], own_names: tuple[str, ...] = ()) -> dict[str, str]:
+    """The name each of Skribby's diarization tags stands for, for the tags where it is knowable.
+
+    Skribby names a tag on some segments (`speaker_name`) and, for a participant it could not pin
+    down, lists `potential_speaker_names` instead. A tag takes the one name its own segments carry.
+    A tag with none is named by elimination: its candidates minus the bot's own names, minus every
+    name another tag already has, and only when at least one candidate was dropped for being
+    another tag's and exactly one is left (a lone candidate nothing rules anything out for has no
+    support). A name two tags would both take goes to neither. Whatever stays unclear is left out:
+    the label is "unknown", never a name made up."""
+    bot = {_same(name) for name in map(_clean_name, own_names) if name}
+    given: dict[str, dict[str, str]] = {}  # tag -> {comparison key: the name as shown}
+    listed: dict[str, dict[str, str] | None] = {}  # tag -> candidates, None when too many
+    for item in value:
+        tag = _tag(item.get("speaker"))
+        if tag is None:
+            continue
+        named = given.setdefault(tag, {})
+        own = _clean_name(item.get("speaker_name"))
+        if own:
+            named.setdefault(_same(own), own)
+        candidates = _candidate_names(item)
+        if candidates is None or listed.get(tag, {}) is None:
+            listed[tag] = None
+        else:
+            for key, name in candidates.items():
+                listed.setdefault(tag, {}).setdefault(key, name)
+    result = {tag: next(iter(named.values())) for tag, named in given.items() if len(named) == 1}
+    holders: dict[str, set[str]] = {}  # name key -> the tags that carry it
+    for tag, named in given.items():
+        for key in named:
+            holders.setdefault(key, set()).add(tag)
+    claims: dict[str, list[str]] = {}  # candidate key -> the tags that would take it
+    chosen: dict[str, str] = {}
+    for tag, named in given.items():
+        candidates = listed.get(tag)
+        if named or not candidates:
+            continue
+        ruled_out = [key for key in candidates if holders.get(key, set()) - {tag}]
+        left = {
+            key: name for key, name in candidates.items() if key not in bot and key not in ruled_out
+        }
+        if ruled_out and len(left) == 1:
+            key, name = next(iter(left.items()))
+            claims.setdefault(key, []).append(tag)
+            chosen[tag] = name
+    for tag, name in chosen.items():
+        if len(claims[_same(name)]) == 1:
+            result[tag] = name
+    return result
+
+
+def _segments(body: dict, own_names: tuple[str, ...] = ()) -> list[dict[str, Any]]:
     """`{"speaker", "text"}` for each of Skribby's transcript segments (the shape the speaker
     labelling reads). Absent or null is none; any other shape means Skribby changed its response,
-    which we refuse to guess about."""
+    which we refuse to guess about. A segment's own `speaker_name` wins; one without it takes its
+    diarization tag's name (see `_tag_names`; `own_names`, the bot's own, are never a speaker)."""
     value = body.get("transcript")
     if value is None:
         return []
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise SkribbyError("get_meeting failed: 'transcript' is not a list of JSON objects")
+    by_tag = _tag_names(value, own_names)
     segments = []
     for item in value:
         text = item.get("transcript")
         if isinstance(text, str) and text.strip():
-            segments.append({"speaker": _clean_name(item.get("speaker_name")), "text": text})
+            name = _clean_name(item.get("speaker_name"))
+            if not name:
+                tag = _tag(item.get("speaker"))
+                name = by_tag.get(tag, "") if tag is not None else ""
+            segments.append({"speaker": name, "text": text})
     return segments
+
+
+def _last_segment_end(body: dict) -> float | None:
+    """Where the last of Skribby's transcript segments ends, in seconds from the start of the
+    recording (the unit of its `start` and `end`, seen on a real answer: 7.53 and 19.11). The
+    latest end of any segment; None when no segment has a usable one."""
+    value = body.get("transcript")
+    if not isinstance(value, list):
+        return None
+    ends = [
+        float(end)
+        for item in value
+        if isinstance(item, dict)
+        and isinstance(end := item.get("end"), int | float)
+        and not isinstance(end, bool)
+        and math.isfinite(end)
+        and end >= 0
+    ]
+    return max(ends) if ends else None
 
 
 def _recording_url(body: dict) -> str | None:
@@ -292,10 +414,13 @@ def _bot_detected_is_final(
     return False
 
 
-def map_bot(body: dict, now: datetime, bot_id: str | None = None) -> BotMeeting:
+def map_bot(
+    body: dict, now: datetime, bot_id: str | None = None, own_names: tuple[str, ...] = ()
+) -> BotMeeting:
     """Skribby's bot body as a `BotMeeting`, in the vocabulary the pipeline reads (see the SOP's
     table). `bot_id` is the id the caller asked for (the recording's handle is made from it; the
-    body's own `id` is the fallback). `vexa_id` is left for the caller to set."""
+    body's own `id` is the fallback). `own_names` are the names the bot itself goes by (a candidate
+    speaker name that is one of them is never used). `vexa_id` is left for the caller to set."""
     raw = body.get("status")
     if not isinstance(raw, str):
         raise SkribbyError("get_meeting failed: 'status' is not a string")
@@ -311,7 +436,8 @@ def map_bot(body: dict, now: datetime, bot_id: str | None = None) -> BotMeeting:
         reason = _FINISHED_REASON[stop] if stop in _FINISHED_REASON else stop
         return BotMeeting(
             status="completed",
-            segments=_segments(body),
+            segments=_segments(body, own_names),
+            last_segment_end=_last_segment_end(body),
             recording_id=handle if url else None,
             media_id=handle if url else None,
             recording_status="completed" if url else None,
@@ -473,6 +599,7 @@ class SkribbyClient:
         region: str = "eu",
         account_id: str = "",
         bot_name: str = "Beyric Meeting Support",
+        account_name: str = "",
         transcription_model: str = "groq/whisper-large-v3-turbo",
         left_alone_seconds: int = 0,
         max_poll_hours: int = 6,
@@ -495,11 +622,18 @@ class SkribbyClient:
         self._resolve = resolve or _resolve_host
         self._account_id = account_id
         self._bot_name = bot_name
+        self._account_name = account_name
         self._model = transcription_model.strip() or "none"
         self._left_alone_seconds = left_alone_seconds
         self._max_poll_hours = max_poll_hours
         self._timeout = timeout
         self.send_deadline = send_deadline
+
+    @property
+    def own_names(self) -> tuple[str, ...]:
+        """The names the bot goes by in a meeting (the guest name, and the signed-in account's name
+        when it is known): never the name of a speaker."""
+        return tuple(name for name in (self._bot_name, self._account_name) if name.strip())
 
     def __repr__(self) -> str:  # never shows the key
         return f"SkribbyClient(base_url={self._base_url!r})"
@@ -527,16 +661,32 @@ class SkribbyClient:
         message = ""
         try:
             body = response.json()
-            value = body.get("message") if isinstance(body, dict) else None
-            message = value.strip()[:200] if isinstance(value, str) else ""
+            if isinstance(body, dict):
+                # Skribby's own reason: `message`, or `error`/`code`/`detail` when it uses those
+                # (a bad-parameter 400 is not documented), as short text only.
+                parts = []
+                for name in ("message", "error", "code", "detail"):
+                    value = body.get(name)
+                    if isinstance(value, list | dict):
+                        value = json.dumps(value, default=str)
+                    if isinstance(value, str) and value.strip():
+                        parts.append(value.strip())
+                message = " ".join(parts)[:300]
         except ValueError:
             pass
+        message = scrub_links(message)  # a link can carry a passcode
         detail = f": {self._scrub(message)}" if message else ""
         return SkribbyError(f"{what} failed: HTTP {status}{detail}")
 
     # -- the calls --
 
-    def payload(self, platform: str, code: str, canonical_url: str) -> dict[str, Any]:
+    def payload(
+        self,
+        platform: str,
+        code: str,
+        canonical_url: str,
+        vocabulary: list[str] | None = None,
+    ) -> dict[str, Any]:
         stop_options: dict[str, Any] = {
             "waiting_room_timeout": WAITING_ROOM_MINUTES,
             # The ghost-bot backstop. Skribby counts it from when the bot is in, our give-up from
@@ -564,16 +714,42 @@ class SkribbyClient:
             "custom_metadata": {"app": "beyric-note-taker", "meeting_code": code},
             "stop_options": stop_options,
         }
-        if self._account_id:
+        # The account is a Google one: only a Meet bot signs in with it. A Zoom bot would need a
+        # ZAK token and a Teams bot an account in the meeting's own tenant (Skribby's bot
+        # authentication page); neither is ours, so both join as guests.
+        if self._account_id and platform == "google_meet":
             body["authentication"] = {"account_id": self._account_id, "always_authenticate": True}
+        # The owner's own words and names, for the transcription model to spell right. Skribby's
+        # create-bot page: `custom_vocabulary` (string[]), "Only supported on certain models" and
+        # no stated limits, so our own cap (`app.transcribe` keywords: 50 terms, 100 characters)
+        # applies. Not sent when transcription is off (`none`): nothing would read it.
+        terms = _keywords(vocabulary or [])
+        if terms and self._model != "none":
+            body["custom_vocabulary"] = terms
         return body
+
+    def _post_bot(self, payload: dict[str, Any]) -> httpx.Response:
+        with self._http(connect=SEND_CONNECT_SECONDS) as client:
+            return client.post("/bot", json=payload)
 
     def create(self, payload: dict[str, Any]) -> str:
         """`POST /bot`; the new bot's id. Errors follow the interface: never connected is plain,
-        no clear answer is `SkribbySendUncertain`, a 4xx is plain."""
+        no clear answer is `SkribbySendUncertain`, a 4xx is plain.
+
+        `custom_vocabulary` has never been exercised against the real service: if Skribby answers
+        a validation error (400 or 422) to a create that carries it, the create is made ONCE more
+        without it (a 4xx means no bot was made, so this cannot make two) and that is logged, with
+        no terms. A bot without the owner's vocabulary beats no bot."""
         try:
-            with self._http(connect=SEND_CONNECT_SECONDS) as client:
-                response = client.post("/bot", json=payload)
+            response = self._post_bot(payload)
+            if response.status_code in VOCABULARY_RETRY_STATUSES and "custom_vocabulary" in payload:
+                logger.warning(
+                    "Skribby refused the bot create with HTTP %s; retrying once without the "
+                    "custom vocabulary",
+                    response.status_code,
+                )
+                payload = {k: v for k, v in payload.items() if k != "custom_vocabulary"}
+                response = self._post_bot(payload)
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             raise SkribbyError(f"send_bot failed: {self._scrub(str(exc))}") from None
         except httpx.HTTPError as exc:
@@ -800,6 +976,7 @@ class SkribbyProvider:
             region=settings.skribby_region,
             account_id=settings.skribby_account_id,
             bot_name=settings.skribby_bot_name,
+            account_name=settings.skribby_account_name,
             transcription_model=settings.skribby_transcription_model,
             left_alone_seconds=settings.bot_left_alone_seconds,
             max_poll_hours=settings.max_poll_hours,
@@ -903,7 +1080,7 @@ class SkribbyProvider:
 
     def _look(self, bot_id: str, *, timeout: float | None = None) -> BotMeeting:
         body = self._client.get_bot(bot_id, timeout=timeout)
-        info = map_bot(body, self._clock(), bot_id)
+        info = map_bot(body, self._clock(), bot_id, self._client.own_names)
         info.vexa_id = bot_id
         if info.recording_id is not None:
             self._remember_handle(bot_id)
@@ -913,9 +1090,12 @@ class SkribbyProvider:
 
     # ---- the BotProvider interface ----
 
-    def send_bot(self, meeting_url: str) -> str:
+    # The owner's vocabulary can be passed to `send_bot` (`vocabulary=`): callers check this.
+    accepts_vocabulary = True
+
+    def send_bot(self, meeting_url: str, vocabulary: list[str] | None = None) -> str:
         platform, code, canonical = _parse(meeting_url)  # UnsupportedMeetingUrl for a bad link
-        payload = self._client.payload(platform, code, canonical)
+        payload = self._client.payload(platform, code, canonical, vocabulary)
         lock = threading.Lock()
         state: dict[str, Any] = {"started": False, "bot_id": None, "abandoned": False}
 
@@ -1009,7 +1189,7 @@ class SkribbyProvider:
         return self._look(bot_uuid(vexa_meeting_id))
 
     def stop_bot(self, platform: str, native_id: str) -> None:
-        if platform not in ("google_meet", "zoom") or not re.fullmatch(r"[A-Za-z0-9-]+", native_id):
+        if platform not in SERVICES or not re.fullmatch(r"[A-Za-z0-9-]+", native_id):
             raise ValueError("unsupported platform or meeting code")
         failure: SkribbyError | None = None
         for bot_id in self._candidates(platform, native_id):

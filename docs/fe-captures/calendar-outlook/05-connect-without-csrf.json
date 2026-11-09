@@ -1,0 +1,25 @@
+{
+  "note": "No CSRF header.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/microsoft/connect",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "csrf_rejected",
+        "message": "Missing or wrong X-CSRF-Token header. Read it from GET /api/session."
+      }
+    }
+  }
+}

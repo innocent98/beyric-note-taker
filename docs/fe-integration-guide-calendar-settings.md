@@ -8,6 +8,14 @@ files in `docs/fe-captures/calendar-state/NN-name.json`, cited as **#NN**) and
 re-derive any claim. Emails and ids in the captures are placeholders, and the dates are those of
 the day the script ran (2026-11-04).
 
+**Outlook (added 2026-11-09, `docs/fe-integration-guide-calendar-outlook.md`).** `GET /api/calendar` and
+`PUT /api/calendar/settings` now also carry `microsoft_enabled` (boolean, top level, just before
+`upcoming`): `false` unless the server has Outlook switched on. Only the captures that already had
+`auto_join_paused_text` were updated in place (`calendar-state/22`, `send-now/08` and `send-now/12`:
+the field added as `false`, nothing else changed); the older captures in this folder predate that field
+and `microsoft_enabled` and show neither. `provider` may now be `"microsoft"`, and `account_email` is
+then the Microsoft account's address (a label).
+
 **What was NOT captured live: a real Google calendar.** Google's servers (consent screen, token
 endpoint, Calendar API) are replaced by `tests/fakes/google.py`. The events in #09 went through the
 **real sync job** (`gcal_sync.sync_connection` over `GoogleSource`) reading synthetic Google event

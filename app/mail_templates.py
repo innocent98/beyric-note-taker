@@ -395,7 +395,7 @@ def ready_meeting(session: Session, meeting_id: object) -> tuple[Meeting, User] 
 
 
 def _platform_label(meeting: Meeting) -> str:
-    return "Zoom" if meeting.platform == "zoom" else "Google Meet"
+    return {"zoom": "Zoom", "teams": "Microsoft Teams"}.get(meeting.platform, "Google Meet")
 
 
 def meeting_name(meeting: Meeting) -> str:

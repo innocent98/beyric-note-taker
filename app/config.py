@@ -6,6 +6,11 @@ from functools import lru_cache
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# `TRANSCRIPT_SOURCE=skribby` is allowed only with a Skribby model on this list: the notes then
+# take their speaker names straight from Skribby's own transcript, so the model must do speaker
+# diarization (Skribby's billing page lists it for Soniox, not for Groq Whisper, which is the
+# default `SKRIBBY_TRANSCRIPTION_MODEL`). Add a model here only after reading a real answer from it.
+TRANSCRIPT_SKRIBBY_MODELS = ("soniox/stt-async-v5",)
 # One address: no spaces, commas, angle brackets or quotes; a dotted domain. Deliberately plain (no
 # display names, no comments, no quoted local parts): this is a public address an operator types in.
 _LABEL = r"[a-z0-9]([a-z0-9-]*[a-z0-9])?"
@@ -36,6 +41,36 @@ class Settings(BaseSettings):
             known = ", ".join(sorted(PROVIDER_FACTORIES))
             raise ValueError(f"BOT_PROVIDER is {value!r}; it must be one of: {known}")
         return name
+
+    @field_validator("transcript_source", mode="before")
+    @classmethod
+    def _blank_transcript_source_is_the_default(cls, value):
+        """An empty `TRANSCRIPT_SOURCE=` line means "not set": our own transcription."""
+        if isinstance(value, str) and not value.strip():
+            return "own"
+        return value
+
+    @field_validator("transcript_source")
+    @classmethod
+    def _known_transcript_source(cls, value: str) -> str:
+        name = value.strip().lower()
+        if name not in ("own", "skribby"):
+            raise ValueError(f"TRANSCRIPT_SOURCE is {value!r}; it must be own or skribby")
+        return name
+
+    @field_validator("transcript_shadow_percent", mode="before")
+    @classmethod
+    def _blank_shadow_percent_is_zero(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return 0
+        return value
+
+    @field_validator("transcript_shadow_percent")
+    @classmethod
+    def _shadow_percent_in_range(cls, value: int) -> int:
+        if not 0 <= value <= 100:
+            raise ValueError(f"TRANSCRIPT_SHADOW_PERCENT is {value}; it must be from 0 to 100")
+        return value
 
     @field_validator("skribby_region")
     @classmethod
@@ -118,6 +153,27 @@ class Settings(BaseSettings):
             raise ValueError("BOT_PROVIDER is 'skribby' but SKRIBBY_API_KEY is not set")
         return self
 
+    @model_validator(mode="after")
+    def _skribby_transcript_needs_a_diarizing_model(self):
+        if (
+            self.transcript_source == "skribby"
+            and self.skribby_transcription_model.strip() not in TRANSCRIPT_SKRIBBY_MODELS
+        ):
+            known = ", ".join(TRANSCRIPT_SKRIBBY_MODELS)
+            raise ValueError(
+                f"TRANSCRIPT_SOURCE is 'skribby' but SKRIBBY_TRANSCRIPTION_MODEL is "
+                f"{self.skribby_transcription_model!r}; it must be one of: {known}"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _teams_follows_the_provider(self):
+        if self.bot_provider != "skribby":
+            self.teams_join_enabled = False
+        elif self.teams_join_enabled is None:
+            self.teams_join_enabled = True
+        return self
+
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/notetaker"
 
     # Which bot provider puts the bot in meetings (`app/bot_provider.py`): `vexa` (the default, the
@@ -147,9 +203,20 @@ class Settings(BaseSettings):
     # the host). Optional.
     skribby_download_hosts: str = ""
     # Skribby transcribes the call too; its text is only used to know who spoke when (our own
-    # transcription still writes the transcript). `groq/whisper-large-v3-turbo` is on the Free
-    # plan and the cheapest (0.04 USD an hour); `none` turns it off and with it the speaker names.
+    # transcription still writes the transcript), unless `transcript_source` is `skribby`, when
+    # this model's text IS the transcript (`soniox/stt-async-v5`, 0.10 USD an hour, has speaker
+    # diarization). `groq/whisper-large-v3-turbo` is on the Free plan and the cheapest (0.04 USD an
+    # hour); `none` turns it off and with it the speaker names.
     skribby_transcription_model: str = "groq/whisper-large-v3-turbo"
+    # What the notes are made from. `own` (the default, and today's behaviour): our OpenAI
+    # transcription of the audio. `skribby`: the bot provider's own transcript, for meetings a
+    # Skribby bot ran, falling back to ours when it is missing or too short
+    # (`app/transcript_source.py`). Anything else stops the process at startup.
+    transcript_source: str = "own"
+    # In `skribby` mode: the share of meetings (0 to 100, chosen by meeting id) for which our own
+    # transcription is ALSO run, only to compare numbers with Skribby's and then thrown away
+    # (`transcript_shadow_metrics`). Costs OpenAI transcription for that share. 0 = never.
+    transcript_shadow_percent: int = 0
     # The address of the signed-in Skribby bot's Google account (`SKRIBBY_ACCOUNT_ID`). On Google
     # Meet a bot whose address is on the event's guest list skips the waiting room, so the app can
     # tell people to invite it ("Add note@... to your event to skip the wait"). Public, not a
@@ -199,9 +266,12 @@ class Settings(BaseSettings):
     # How many bots one user may have on meetings at once (spec section 9.4, step 7). It only bites
     # once `bot_max_local` is above it. 0 stops every user.
     user_bot_limit: int = Field(default=2, ge=0)
-    # Teams links are recognised on calendar events, but the bot joins them only once the Teams
-    # spike (P0.7) has passed and this is set: until then a Teams event reads "Can't join yet".
-    teams_join_enabled: bool = False
+    # Whether the bot joins Microsoft Teams meetings (a pasted link, a calendar event). Unset, it
+    # follows the provider: on with `BOT_PROVIDER=skribby` (Skribby joins Teams as a guest), off
+    # with Vexa, which only knows Meet and Zoom. `TEAMS_JOIN_ENABLED=false` switches it off under
+    # Skribby; `true` under Vexa is ignored (the bot could not join). Off, a Teams event reads
+    # "Microsoft Teams meetings cannot be joined yet" and a pasted Teams link is refused.
+    teams_join_enabled: bool | None = None
 
     openai_api_key: str = Field(default="", repr=False)
     transcription_model: str = "gpt-transcribe"

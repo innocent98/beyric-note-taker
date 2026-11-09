@@ -1,0 +1,35 @@
+{
+  "note": "The row was set by hand to what the sync leaves after a revoked grant (a real revoked grant has not been captured).",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/calendar",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "connected": false,
+      "state": "needs_reconnect",
+      "state_text": "Microsoft access was removed. Connect again to carry on.",
+      "account_email": "ada@outlook.example.test",
+      "provider": "microsoft",
+      "last_sync_at": null,
+      "last_error": "Microsoft no longer lets Beyric read your calendar. Connect again to fix this.",
+      "rule": "all",
+      "rule_text": "Joining all meetings",
+      "calendar_template_id": 1,
+      "auto_join_paused": false,
+      "auto_join_paused_text": null,
+      "microsoft_enabled": true,
+      "upcoming": []
+    }
+  }
+}

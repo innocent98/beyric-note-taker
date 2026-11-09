@@ -91,7 +91,7 @@ REMINDER_BATCH = 200
 # 35 minutes before, the 30-minute mail from 30 to 5. A scheduler that was down misses a mail
 # rather than send a stale one.
 WINDOWS = {"1h": (60, 35), "30m": (30, 5)}
-JOIN_HOSTS = ("meet.google.com", "zoom.us")
+JOIN_HOSTS = ("meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com")
 
 
 class AgendaRefused(series.SeriesRefused):
@@ -419,8 +419,8 @@ def _when(starts: datetime, ends: datetime | None, zone: str | None) -> str:
 
 
 def _join_url(event: CalendarEvent | None) -> str | None:
-    """The event's meeting link if it is one we know how to open: https, on Meet or Zoom. Anything
-    else (a link someone put in an invite) gets no button."""
+    """The event's meeting link if it is one we know how to open: https, on Meet, Zoom or Teams.
+    Anything else (a link someone put in an invite) gets no button."""
     if event is None or not event.meeting_url:
         return None
     try:
@@ -521,7 +521,9 @@ def _series_reminder(
     name = _title(found)
     one_hour = reminder.kind == "1h"
     pill = "Starts in 1 hour" if one_hour else "Starts in 30 minutes"
-    platform = {"google_meet": "Google Meet", "zoom": "Zoom"}.get(found.platform or "", "")
+    platform = {"google_meet": "Google Meet", "zoom": "Zoom", "teams": "Microsoft Teams"}.get(
+        found.platform or "", ""
+    )
     # The one-hour mail names the end ("14:00 to 14:45 UTC"); the 30-minute one only the start.
     ends = event.ends_at if event is not None and one_hour else None
     when = _when(reminder.starts_at, ends, zone)

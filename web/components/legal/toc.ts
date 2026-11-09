@@ -4,6 +4,7 @@ export const PRIVACY_TOC: ReadonlyArray<readonly [string, string]> = [
   ["who", "Who we are"],
   ["collect", "Information we collect"],
   ["google", "Google user data"],
+  ["microsoft", "Microsoft user data"],
   ["use", "How we use your information"],
   ["share", "Who we share information with"],
   ["recording", "Recording and participant notice"],

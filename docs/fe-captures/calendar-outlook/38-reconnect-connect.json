@@ -1,0 +1,25 @@
+{
+  "note": "`connect` works for a dead connection.",
+  "client": "signed-in user",
+  "request": {
+    "method": "POST",
+    "path": "/api/calendar/microsoft/connect",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {}
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store",
+      "set-cookie": "calendar_flow_ms=<cookie>; HttpOnly; Max-Age=600; Path=/api/calendar/microsoft; SameSite=lax"
+    },
+    "body": {
+      "authorize_url": "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=capture-ms-client-id&response_type=code&redirect_uri=https%3A%2F%2Fnotes.example.test%2Fapi%2Fcalendar%2Fmicrosoft%2Fcallback&response_mode=query&scope=openid+profile+offline_access+https%3A%2F%2Fgraph.microsoft.com%2FUser.Read+https%3A%2F%2Fgraph.microsoft.com%2FCalendars.Read&state=<state>&nonce=<nonce>&code_challenge=<code_challenge>&code_challenge_method=S256&prompt=select_account",
+      "show_unverified_notice": false
+    }
+  }
+}
