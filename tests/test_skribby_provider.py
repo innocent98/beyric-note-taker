@@ -448,6 +448,50 @@ def test_a_zoom_link_keeps_its_passcode_for_skribby_and_nowhere_else(httpx_mock)
     assert "sekrit" not in str(body["custom_metadata"])
 
 
+TEAMS_URL = (
+    "https://teams.microsoft.com/l/meetup-join/19%3ameeting_PLACEHOLDER%40thread.v2/0"
+    "?context=%7b%22Tid%22%3a%22placeholder%22%7d"
+)
+
+
+def test_a_teams_link_goes_whole_to_skribby_as_a_guest_even_with_an_account_set(httpx_mock):
+    accept(httpx_mock)
+    provider, _ = make(account_id=OTHER)  # the account is a Google one: Teams never uses it
+    provider.send_bot(TEAMS_URL)
+    body = sent_body(httpx_mock)
+    assert body["service"] == "teams"
+    assert body["meeting_url"] == TEAMS_URL
+    assert "authentication" not in body
+    assert re.fullmatch(r"teams-[0-9a-f]{24}", body["custom_metadata"]["meeting_code"])
+
+
+def test_a_second_bot_for_one_teams_meeting_is_refused_whatever_the_link_says(httpx_mock):
+    from app.meeting_url import parse_meeting_url
+
+    _, held = parse_meeting_url(TEAMS_URL)
+    httpx_mock.add_response(
+        method="GET", url=f"{BASE}/bot/{OTHER}", json=bot("recording", steps=[("recording", 30)])
+    )
+    provider, _ = make(ledger=Ledger(live=[OTHER]))
+    provider._remember_bot(("teams", held), OTHER)
+    with pytest.raises(BotDuplicate):
+        provider.send_bot(TEAMS_URL.split("?")[0] + "?context=%7b%7d")
+
+
+def test_a_teams_bot_can_be_stopped_by_its_code(httpx_mock):
+    from app.meeting_url import parse_meeting_url
+
+    _, code = parse_meeting_url(TEAMS_URL)
+    accept(httpx_mock)
+    httpx_mock.add_response(method="POST", url=f"{BASE}/bot/{BOT}/stop", json={"message": "ok"})
+    httpx_mock.add_response(
+        method="GET", url=f"{BASE}/bot/{BOT}", json=bot("finished", steps=[("finished", 1)])
+    )
+    provider, _ = make()
+    provider.send_bot(TEAMS_URL)
+    provider.stop_bot("teams", code)  # no ValueError: Teams is a platform here
+
+
 def test_the_model_and_the_time_limit_follow_the_settings(httpx_mock):
     accept(httpx_mock)
     provider, _ = make(transcription_model="none", left_alone_seconds=0, max_poll_hours=24)

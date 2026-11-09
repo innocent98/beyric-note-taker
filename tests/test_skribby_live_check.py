@@ -263,9 +263,32 @@ def test_a_missing_key_is_said_plainly_and_nothing_is_sent(httpx_mock):
     assert httpx_mock.get_requests() == []
 
 
+def test_a_teams_link_is_sent_whole_as_a_guest_even_with_an_account_id(httpx_mock):
+    link = (
+        "https://teams.microsoft.com/l/meetup-join/19%3ameeting_PLACEHOLDER%40thread.v2/0"
+        "?context=%7b%22Tid%22%3a%22placeholder%22%7d"
+    )
+    accept(httpx_mock)
+    httpx_mock.add_response(
+        method="GET", url=f"{API}/bot/{BOT}", json=bot("not_admitted", stop_reason="request_denied")
+    )
+    code, text = run(["--meet-url", link], {"SKRIBBY_API_KEY": KEY, "SKRIBBY_ACCOUNT_ID": ACCOUNT})
+    (created,) = [
+        r for r in httpx_mock.get_requests() if r.method == "POST" and r.url.path.endswith("/bot")
+    ]
+    import json
+
+    body = json.loads(created.content)
+    assert body["service"] == "teams" and body["meeting_url"] == link
+    assert "authentication" not in body
+    assert "guest bot to teams meeting teams-" in text
+    assert "PLACEHOLDER" not in text  # the link is never printed
+    assert code == 1  # never admitted
+
+
 def test_a_link_that_is_not_a_meeting_is_refused_before_any_request(httpx_mock):
     code, text = run(["--meet-url", "https://example.com/x"], {"SKRIBBY_API_KEY": KEY})
-    assert code == 2 and "not a Google Meet or Zoom" in text
+    assert code == 2 and "not a Google Meet, Zoom or Microsoft Teams" in text
     assert httpx_mock.get_requests() == []
 
 

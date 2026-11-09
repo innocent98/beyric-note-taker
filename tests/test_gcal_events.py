@@ -208,14 +208,14 @@ def test_a_malformed_event_error_never_carries_the_event_body():
     assert PASSCODE not in f"{raised.value} {raised.value!r}"
 
 
-# ---- Teams: recognised, no meeting id until T1 ----
+# ---- Teams: a joinable link, with a derived meeting code (T1) ----
 
 
 def test_teams_link_in_entrypoints_and_in_description_sets_platform_teams():
     in_entry = parse_event(event(conferenceData={"entryPoints": [entry(TEAMS)]}))
     in_text = parse_event(load("teams_event"))
     for parsed in (in_entry, in_text):
-        assert parsed.platform == "teams" and parsed.native_id is None
+        assert parsed.platform == "teams" and parsed.native_id.startswith("teams-")
         assert parsed.meeting_url.startswith("https://teams.microsoft.com/l/meetup-join/")
     new_style = parse_event(event(description="https://teams.microsoft.com/meet/9876543210?p=abc"))
     live = parse_event(event(description="https://teams.live.com/meet/9876543210?p=abc"))
