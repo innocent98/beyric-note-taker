@@ -52,6 +52,7 @@ from app.bot_provider import (
     scrub_links,
 )
 from app.meeting_url import _parse
+from app.transcribe import _keywords
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +84,8 @@ TIME_LIMIT_MARGIN_MINUTES = 30  # (and the waiting room's allowance too: see `pa
 # `SKRIBBY_DOWNLOAD_HOSTS` adds a host once an operator has seen where recordings really live.
 DOWNLOAD_HOSTS = ("skribby.io", "amazonaws.com")
 MAX_DOWNLOAD_BYTES = 1 << 30
+# A validation error to a create that carried `custom_vocabulary`: retried once without it.
+VOCABULARY_RETRY_STATUSES = (400, 422)
 # The late-reply watch (see `SkribbyProvider.send_bot`).
 LATE_ADOPT_TRIES = 10
 LATE_ADOPT_PAUSE_SECONDS = 2.0
@@ -327,6 +330,25 @@ def _segments(body: dict, own_names: tuple[str, ...] = ()) -> list[dict[str, Any
     return segments
 
 
+def _last_segment_end(body: dict) -> float | None:
+    """Where the last of Skribby's transcript segments ends, in seconds from the start of the
+    recording (the unit of its `start` and `end`, seen on a real answer: 7.53 and 19.11). The
+    latest end of any segment; None when no segment has a usable one."""
+    value = body.get("transcript")
+    if not isinstance(value, list):
+        return None
+    ends = [
+        float(end)
+        for item in value
+        if isinstance(item, dict)
+        and isinstance(end := item.get("end"), int | float)
+        and not isinstance(end, bool)
+        and math.isfinite(end)
+        and end >= 0
+    ]
+    return max(ends) if ends else None
+
+
 def _recording_url(body: dict) -> str | None:
     url = body.get("recording_url")
     return url if isinstance(url, str) and url.startswith("https://") else None
@@ -415,6 +437,7 @@ def map_bot(
         return BotMeeting(
             status="completed",
             segments=_segments(body, own_names),
+            last_segment_end=_last_segment_end(body),
             recording_id=handle if url else None,
             media_id=handle if url else None,
             recording_status="completed" if url else None,
@@ -657,7 +680,13 @@ class SkribbyClient:
 
     # -- the calls --
 
-    def payload(self, platform: str, code: str, canonical_url: str) -> dict[str, Any]:
+    def payload(
+        self,
+        platform: str,
+        code: str,
+        canonical_url: str,
+        vocabulary: list[str] | None = None,
+    ) -> dict[str, Any]:
         stop_options: dict[str, Any] = {
             "waiting_room_timeout": WAITING_ROOM_MINUTES,
             # The ghost-bot backstop. Skribby counts it from when the bot is in, our give-up from
@@ -690,14 +719,37 @@ class SkribbyClient:
         # authentication page); neither is ours, so both join as guests.
         if self._account_id and platform == "google_meet":
             body["authentication"] = {"account_id": self._account_id, "always_authenticate": True}
+        # The owner's own words and names, for the transcription model to spell right. Skribby's
+        # create-bot page: `custom_vocabulary` (string[]), "Only supported on certain models" and
+        # no stated limits, so our own cap (`app.transcribe` keywords: 50 terms, 100 characters)
+        # applies. Not sent when transcription is off (`none`): nothing would read it.
+        terms = _keywords(vocabulary or [])
+        if terms and self._model != "none":
+            body["custom_vocabulary"] = terms
         return body
+
+    def _post_bot(self, payload: dict[str, Any]) -> httpx.Response:
+        with self._http(connect=SEND_CONNECT_SECONDS) as client:
+            return client.post("/bot", json=payload)
 
     def create(self, payload: dict[str, Any]) -> str:
         """`POST /bot`; the new bot's id. Errors follow the interface: never connected is plain,
-        no clear answer is `SkribbySendUncertain`, a 4xx is plain."""
+        no clear answer is `SkribbySendUncertain`, a 4xx is plain.
+
+        `custom_vocabulary` has never been exercised against the real service: if Skribby answers
+        a validation error (400 or 422) to a create that carries it, the create is made ONCE more
+        without it (a 4xx means no bot was made, so this cannot make two) and that is logged, with
+        no terms. A bot without the owner's vocabulary beats no bot."""
         try:
-            with self._http(connect=SEND_CONNECT_SECONDS) as client:
-                response = client.post("/bot", json=payload)
+            response = self._post_bot(payload)
+            if response.status_code in VOCABULARY_RETRY_STATUSES and "custom_vocabulary" in payload:
+                logger.warning(
+                    "Skribby refused the bot create with HTTP %s; retrying once without the "
+                    "custom vocabulary",
+                    response.status_code,
+                )
+                payload = {k: v for k, v in payload.items() if k != "custom_vocabulary"}
+                response = self._post_bot(payload)
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             raise SkribbyError(f"send_bot failed: {self._scrub(str(exc))}") from None
         except httpx.HTTPError as exc:
@@ -1038,9 +1090,12 @@ class SkribbyProvider:
 
     # ---- the BotProvider interface ----
 
-    def send_bot(self, meeting_url: str) -> str:
+    # The owner's vocabulary can be passed to `send_bot` (`vocabulary=`): callers check this.
+    accepts_vocabulary = True
+
+    def send_bot(self, meeting_url: str, vocabulary: list[str] | None = None) -> str:
         platform, code, canonical = _parse(meeting_url)  # UnsupportedMeetingUrl for a bad link
-        payload = self._client.payload(platform, code, canonical)
+        payload = self._client.payload(platform, code, canonical, vocabulary)
         lock = threading.Lock()
         state: dict[str, Any] = {"started": False, "bot_id": None, "abandoned": False}
 

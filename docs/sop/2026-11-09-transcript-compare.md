@@ -80,6 +80,6 @@ Nothing runs by itself and nothing changes in the app: to remove it, delete the 
 
 | Gap | What it needs |
 |---|---|
-| The decision | Adebayo reads a few meetings. If Skribby's transcript wins, the transcript-source switch is a pipeline change (skip audio and our transcription, move the hours metering and `ai_runs` rows with it); see the last row of section 8 in `docs/sop/2026-11-08-skribby-provider.md`. |
+| The decision | **Built as a switch, default off** (`TRANSCRIPT_SOURCE=skribby`, with a fallback and a sampled shadow check, `docs/sop/2026-11-09-transcript-source-switch.md`). The audio is still downloaded and metered; no pipeline step was removed. Adebayo turns it on, runs `scripts/transcript_shadow_report.py` after about a week, and decides from those numbers; this tool stays the way to read one meeting side by side. |
 | The app deletes the copy before you can compare | Optional later: a per-meeting "keep Skribby's copy" flag, only if comparing becomes routine. |
 | Skribby's own page for the time unit | Check on the first real answer. |

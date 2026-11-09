@@ -53,7 +53,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import titles, usage
+from app import titles, transcript_source, usage
 from app.bot_provider import (
     BotDuplicate,
     BotId,
@@ -279,7 +279,10 @@ def place_bot(
         session.rollback()  # also releases the lock
         raise
     try:
-        vexa_id = vexa.send_bot(req.meeting_url)
+        vexa_id = vexa.send_bot(
+            req.meeting_url,
+            **transcript_source.send_options(session, vexa, user.id, settings or get_settings()),
+        )
     except BotDuplicate:  # a bot that is not ours is there (another host, a race)...
         if not req.adopt_orphan:
             session.rollback()

@@ -11,6 +11,8 @@ import logging
 import os
 import random
 import shutil
+import threading
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -28,6 +30,7 @@ from app import (
     series,
     teams,
     titles,
+    transcript_source,
     usage,
     workspace,
 )
@@ -46,7 +49,7 @@ from app.bot_provider import (
 )
 from app.config import get_settings
 from app.meeting_url import UnsupportedMeetingUrl
-from app.models import Meeting, Template, User, VocabularyTerm
+from app.models import Meeting, Template, TranscriptShadowMetric, User, VocabularyTerm
 from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
 
@@ -403,7 +406,12 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     meeting) is raised when `raise_duplicate`, else it is a plain failure."""
     unconfirmed = False
     try:
-        vexa_id = vexa.send_bot(meeting.url)
+        vexa_id = vexa.send_bot(
+            meeting.url,
+            **transcript_source.send_options(
+                object_session(meeting), vexa, meeting.owner_user_id, get_settings()
+            ),
+        )
     except BotDuplicate:
         logger.warning("meeting %s: Vexa has another bot in that meeting", meeting.id)
         if raise_duplicate:
@@ -770,7 +778,164 @@ def _terms(session: Session, owner_user_id: int) -> list[str]:
     )
 
 
-def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> bool:
+def _skribby_mode(meeting: Meeting) -> bool:
+    """Whether this meeting's notes are to be made from Skribby's own transcript: the setting says
+    so AND Skribby ran the meeting (a Vexa meeting always uses our transcription)."""
+    return (
+        get_settings().transcript_source == transcript_source.SKRIBBY
+        and meeting.bot_provider == "skribby"
+    )
+
+
+def _skribby_segments(vexa, meeting: Meeting) -> tuple[list[dict], float | None] | None:
+    """Skribby's segments for this meeting and where the last one ends (seconds), or None when they
+    could not be fetched (the provider is down, no longer has the meeting, or anything else). Never
+    raises: a failed fetch is the fallback to our own transcription, never a failed meeting.
+    Logged by error type only."""
+    try:
+        info = _lookup(vexa, meeting)
+        return list(info.segments or []), info.last_segment_end
+    except Exception as exc:
+        logger.warning(
+            "meeting %s: Skribby's transcript could not be fetched (%s)",
+            meeting.id,
+            type(exc).__name__,
+        )
+        return None
+
+
+def _record_shadow(
+    session: Session,
+    meeting_id: int,
+    found: transcript_source.Candidate | None,
+    own_text: str,
+    seconds: int,
+    notes_source: str,
+) -> None:
+    """Keep the NUMBERS of a Skribby-versus-ours comparison (never either text) and drop both. In
+    the caller's transaction."""
+    overlap = transcript_source.overlap(found.spoken if found else "", own_text)
+    session.add(
+        TranscriptShadowMetric(
+            meeting_id=meeting_id,
+            skribby_words=overlap.skribby_words,
+            own_words=overlap.own_words,
+            shared_words=overlap.shared_words,
+            shared_share=overlap.share,
+            skribby_speakers=found.speakers if found else 0,
+            unnamed_segments=found.unnamed_segments if found else 0,
+            segments=found.segments if found else 0,
+            audio_seconds=seconds,
+            notes_source=notes_source,
+        )
+    )
+
+
+@dataclass
+class _ShadowJob:
+    """A sampled comparison waiting for its meeting's notes to be committed."""
+
+    owner_user_id: int
+    found: transcript_source.Candidate
+    recording: audio.Recording
+    queued_at: datetime
+
+
+# Held in this process's memory, keyed by meeting id: best effort by design. A restart forgets the
+# queue (the check is then simply missing for those meetings), and an entry whose meeting never
+# becomes ready is dropped after `SHADOW_MAX_AGE`.
+_shadow_queue: dict[int, _ShadowJob] = {}
+_shadow_lock = threading.Lock()
+SHADOW_MAX_AGE = timedelta(hours=24)
+
+
+def _queue_shadow(
+    meeting_id: int, owner_user_id: int, found, recording: audio.Recording, now: datetime
+) -> None:
+    with _shadow_lock:
+        _shadow_queue[meeting_id] = _ShadowJob(owner_user_id, found, recording, now)
+
+
+def _shadow_ready(session: Session, now: datetime) -> list[tuple[int, _ShadowJob]]:
+    """Take from the queue the jobs whose meeting now has its notes; drop those whose meeting is
+    gone, failed, or has waited longer than `SHADOW_MAX_AGE`. The rest stay queued."""
+    with _shadow_lock:
+        waiting = list(_shadow_queue.items())
+    ready = []
+    for meeting_id, job in waiting:
+        status = session.scalar(select(Meeting.status).where(Meeting.id == meeting_id))
+        if status == "ready":
+            ready.append((meeting_id, job))
+        elif status in (None, "failed") or now - job.queued_at > SHADOW_MAX_AGE:
+            with _shadow_lock:
+                _shadow_queue.pop(meeting_id, None)
+    session.rollback()  # the reads above hold no lock the model call should wait behind
+    return ready
+
+
+def _shadow_run(session: Session, meeting_id: int, job: _ShadowJob, openai_client) -> None:
+    """The sampled check: transcribe the audio ourselves as `own` mode would, keep only the
+    numbers, throw the text away. Runs only AFTER the meeting's notes are committed, so it can
+    never delay or fail them. Best effort: any error is logged by type and the check is simply
+    missing for this meeting.
+
+    Its OpenAI cost is a `shadow` ledger row with no user (the owner did not cause it), committed
+    on its own right after the call so that a failure later still leaves the spend recorded; if
+    even that commit fails, the cost is logged."""
+    seconds = job.recording.seconds
+    try:
+        text = transcribe_chunks(
+            job.recording.chunks, _terms(session, job.owner_user_id), client=openai_client
+        )
+    except Exception as exc:
+        session.rollback()
+        logger.warning(
+            "meeting %s: the shadow check was not made (%s)", meeting_id, type(exc).__name__
+        )
+        return
+    try:
+        ai_runs.record(
+            session,
+            meeting_id,
+            "shadow",
+            get_settings().transcription_model,
+            audio_seconds=seconds,
+        )
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.error(
+            "meeting %s: %d seconds of audio were transcribed for the shadow check and the "
+            "ledger row could not be written (%s)",
+            meeting_id,
+            seconds,
+            type(exc).__name__,
+        )
+    try:
+        _record_shadow(session, meeting_id, job.found, text, seconds, transcript_source.SKRIBBY)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.warning(
+            "meeting %s: the shadow numbers were not saved (%s)", meeting_id, type(exc).__name__
+        )
+
+
+def run_shadow_checks(session: Session, openai_client=None, now: datetime | None = None) -> int:
+    """Run the queued shadow checks whose meetings are ready; how many ran. Called from a thread of
+    its own in the worker (`app/worker.py`), never from the meeting pass."""
+    now = now or datetime.now(UTC)
+    ran = 0
+    for meeting_id, job in _shadow_ready(session, now):
+        with _shadow_lock:
+            if _shadow_queue.pop(meeting_id, None) is None:
+                continue  # another call took it
+        _shadow_run(session, meeting_id, job, openai_client)
+        ran += 1
+    return ran
+
+
+def _step_transcribing(session: Session, meeting: Meeting, vexa, openai_client) -> bool:
     if meeting.transcript is None:
         folder = audio_path(meeting.id).parent
         recording = audio.prepare_recording(
@@ -785,6 +950,43 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
         session.commit()
         if _lock(session, meeting.id) is None:
             return False
+        meeting_id, owner_id = meeting.id, meeting.owner_user_id
+        found, fetched = None, False
+        if _skribby_mode(meeting):
+            looked = _skribby_segments(vexa, meeting)
+            fetched = looked is not None
+            segments, last_end = looked or ([], None)
+            found = transcript_source.candidate(segments, last_end)
+            why_not = transcript_source.fallback_reason(found, recording.seconds, MIN_WORDS)
+            if why_not is None:
+                # Skribby's transcript is the transcript: our transcription and the model-based
+                # speaker labelling are skipped (it already carries the names). Saved, with the
+                # names, in this one commit, BEFORE the provider's copy is deleted (that is the
+                # speakers step's, after this commit).
+                meeting.transcript = found.text
+                meeting.speaker_transcript = found.text
+                meeting.speakers_incomplete = not found.complete
+                meeting.transcript_source = transcript_source.SKRIBBY
+                logger.info(
+                    "meeting %s: transcript from skribby (%d words, %d speakers, %d unnamed)",
+                    meeting_id,
+                    found.words,
+                    found.speakers,
+                    found.unnamed_segments,
+                )
+                meeting.step = "speakers"
+                session.commit()
+                if transcript_source.shadow_selected(
+                    meeting_id, get_settings().transcript_shadow_percent
+                ):
+                    # Queued, not run here: it starts only once the notes are committed.
+                    _queue_shadow(meeting_id, owner_id, found, recording, datetime.now(UTC))
+                return True
+            logger.info(
+                "meeting %s: Skribby's transcript not used (%s); transcribing ourselves",
+                meeting_id,
+                why_not,
+            )
         text = transcribe_chunks(
             recording.chunks, _terms(session, meeting.owner_user_id), client=openai_client
         )
@@ -799,11 +1001,23 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
             audio_seconds=recording.seconds,
             user_id=meeting.owner_user_id,
         )
+        if (
+            _skribby_mode(meeting)
+            and fetched
+            and transcript_source.shadow_selected(
+                meeting.id, get_settings().transcript_shadow_percent
+            )
+        ):
+            # Skribby's was not used, and ours is already made: the comparison costs nothing more.
+            _record_shadow(
+                session, meeting.id, found, text, recording.seconds, transcript_source.OWN
+            )
         if len(text.split()) < MIN_WORDS:
             # The audio check only looks at peak volume, so noise can slip through.
             _fail(session, meeting, REASON_NO_SPEECH)
             return False
         meeting.transcript = text
+        meeting.transcript_source = transcript_source.OWN
     meeting.step = "speakers"
     session.commit()
     return True
@@ -1047,7 +1261,7 @@ def advance_meeting(
             elif meeting.step == "audio":
                 proceed = _step_audio(session, meeting, vexa)
             elif meeting.step == "transcribing":
-                proceed = _step_transcribing(session, meeting, openai_client)
+                proceed = _step_transcribing(session, meeting, vexa, openai_client)
             elif meeting.step == "speakers":
                 proceed = _step_speakers(session, meeting, vexa, openai_client)
             elif meeting.step == "notes":
