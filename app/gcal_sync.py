@@ -620,4 +620,14 @@ def register_calendar_sync(
             ),
             loop="sync",
         )
+        if each.provider == "microsoft":
+            from app import microsoft_alerts
+
+            # The client-secret reminder must not depend on a connection being due for sync.
+            scheduler.register(
+                "microsoft_secret_reminder",
+                3600,
+                lambda session, now: microsoft_alerts.remind_if_due(settings, now),
+                loop="sync",
+            )
     return True

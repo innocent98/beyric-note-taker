@@ -19,7 +19,15 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import calendar_connect, calendar_providers, google_oauth, microsoft_oauth, tokens, vault
+from app import (
+    calendar_connect,
+    calendar_providers,
+    google_oauth,
+    microsoft_alerts,
+    microsoft_oauth,
+    tokens,
+    vault,
+)
 from app.db import get_session
 from app.main import create_app
 from app.microsoft_oauth import CONSUMER_TENANT
@@ -1025,8 +1033,7 @@ def test_the_microsoft_row_reads_scopes_exactly_and_parses_with_domains_for_work
     )
     assert row_.enabled(settings) is True
     assert row_.enabled(settings.model_copy(update={"microsoft_calendar_enabled": False})) is False
-    with pytest.raises(NotImplementedError):  # the source arrives with M4
-        row_.make_source(settings)
+    assert row_.make_source(settings).provider == "microsoft"  # M4's Graph source
     assert [
         s.provider
         for s in calendar_providers.build_sources(
@@ -1059,6 +1066,34 @@ def test_no_code_token_secret_or_description_reaches_a_log_in_any_outcome(
     for sentinel in SECRET_SENTINELS:
         assert sentinel not in logged, sentinel
     assert "microsoft" in logged  # the useful, non-secret lines are there
+
+
+# ---- our own client secret at the callback ----
+
+
+def test_an_expired_client_secret_at_the_callback_alerts_the_admins_not_the_person(
+    web, session, owner, ms, monkeypatch
+):
+    seen = []
+    monkeypatch.setattr(microsoft_alerts, "secret_expired", lambda now: seen.append(now))
+    ms.token_error = httpx.Response(
+        401,
+        json={"error": "invalid_client", "error_codes": [7000222], "error_description": "X"},
+    )
+    response, _, _ = connect_outlook(web, ms)
+    assert error_code(response) == "microsoft_failed"  # the person is told nothing of our secret
+    assert len(seen) == 1
+    assert row(session, owner) is None
+
+
+def test_a_wrong_client_secret_at_the_callback_does_not_claim_an_expiry(
+    web, session, owner, ms, monkeypatch
+):
+    seen = []
+    monkeypatch.setattr(microsoft_alerts, "secret_expired", lambda now: seen.append(now))
+    ms.token_error = httpx.Response(401, json={"error": "invalid_client", "error_codes": [7000215]})
+    assert error_code(connect_outlook(web, ms)[0]) == "microsoft_failed"
+    assert seen == []
 
 
 # ---- review fixes (Opus review of #152) ----

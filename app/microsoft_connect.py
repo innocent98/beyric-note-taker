@@ -56,6 +56,7 @@ from app import (
     google_oauth,
     google_signin,
     graph_http,
+    microsoft_alerts,
     tokens,
     vault,
 )
@@ -286,7 +287,9 @@ def finish_connect(
         )
     except TenantNotAllowed:
         return _failure("tenant_not_allowed", back)
-    except ClientMisconfigured:
+    except ClientMisconfigured as exc:
+        if exc.secret_expired:
+            microsoft_alerts.secret_expired(now)  # our own secret, not the person's doing
         return _failure("microsoft_failed", back)
     except MicrosoftError:
         return _failure("microsoft_failed", back)

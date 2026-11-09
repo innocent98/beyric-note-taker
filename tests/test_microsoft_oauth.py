@@ -852,3 +852,13 @@ def test_a_start_up_validation_error_never_prints_a_secret():
     assert "SKRIBBY_API_KEY" in shown  # the useful message is there
     for value in sentinels.values():
         assert value not in shown
+
+
+def test_a_tiny_stated_lifetime_is_raised_to_the_minimum():
+    """Review of #153: a 30 s `expires_in` must not cause a refresh and a rotation on every call."""
+    for stated, expected in ((30, microsoft_oauth.MIN_LIFETIME), (3599, timedelta(seconds=3599))):
+        grant = exchange(Recorder(code_answer("personal", expires_in=stated)))
+        assert grant.access_lifetime == expected
+    body = fixture("documented_refresh_response")
+    body["expires_in"] = 5
+    assert refresh(Recorder(reply(body))).lifetime == microsoft_oauth.MIN_LIFETIME

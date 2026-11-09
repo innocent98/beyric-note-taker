@@ -37,6 +37,12 @@ class Provider:
     make_source: Callable[[Settings], CalendarSource]
     flow_cookie: str  # the cookie that ties the callback to the browser that started the flow
     flow_cookie_path: str
+    # What the join runner's re-check applies when the source says an event is gone: a cancelled
+    # event in THIS provider's own raw shape, so its parser reads it (Google's by default).
+    cancelled_stub: Callable[[str], dict] = lambda event_id: {  # noqa: E731
+        "id": event_id,
+        "status": "cancelled",
+    }
 
 
 # ---- Google ----
@@ -78,7 +84,9 @@ def _microsoft_parse(raw: dict, conn: CalendarConnection) -> ParsedEvent:
 
 
 def _microsoft_source(settings: Settings) -> CalendarSource:
-    raise NotImplementedError("the Microsoft calendar source arrives with M4")
+    from app.graph_client import MicrosoftSource  # not at the top: keeps this module light
+
+    return MicrosoftSource(settings)
 
 
 PROVIDERS: dict[str, Provider] = {
@@ -99,12 +107,20 @@ PROVIDERS: dict[str, Provider] = {
         make_source=_microsoft_source,
         flow_cookie="calendar_flow_ms",
         flow_cookie_path="/api/calendar/microsoft",
+        cancelled_stub=graph_events.cancelled_stub,
     ),
 }
 
 
 def get(name: str) -> Provider | None:
     return PROVIDERS.get(name)
+
+
+def cancelled_stub(provider: str, event_id: str) -> dict:
+    """The raw cancelled event the re-check applies for `provider` (Google's shape for a provider
+    with no row)."""
+    row = PROVIDERS.get(provider)
+    return row.cancelled_stub(event_id) if row else {"id": event_id, "status": "cancelled"}
 
 
 def features_of(conn: CalendarConnection) -> set[str]:

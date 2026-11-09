@@ -72,6 +72,9 @@ MAX_REFRESH_TOKEN_CHARS = 8192
 MAX_ACCESS_TOKEN_CHARS = 16384
 MAX_SUBJECT_CHARS = 64  # the `account_subject` column; an `oid` is a 36-character GUID
 DEFAULT_LIFETIME = timedelta(hours=1)
+# A stated lifetime is never trusted below this: the cache refreshes five minutes early, so a
+# shorter one would mint and rotate on every call (40 times in one sync).
+MIN_LIFETIME = timedelta(minutes=10)
 # AADSTS error numbers read from `error_codes` (documented; the M0 run confirms the real answers).
 CODE_REFRESH_TOKEN_IDLE = 700082  # the refresh token expired from inactivity
 CODE_SECRET_EXPIRED = 7000222  # our client secret has expired
@@ -252,7 +255,9 @@ def _lifetime(body: dict) -> timedelta:
     if isinstance(expires_in, str) and expires_in.isdigit():
         expires_in = int(expires_in)
     usable = isinstance(expires_in, (int, float)) and not isinstance(expires_in, bool)
-    return timedelta(seconds=expires_in) if usable and expires_in > 0 else DEFAULT_LIFETIME
+    if not usable or expires_in <= 0:
+        return DEFAULT_LIFETIME
+    return max(timedelta(seconds=expires_in), MIN_LIFETIME)
 
 
 def _token(body: dict, name: str, limit: int) -> Secret | None:

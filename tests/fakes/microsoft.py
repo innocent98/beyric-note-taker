@@ -36,6 +36,7 @@ class FakeMicrosoft:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
         self.fail_token_endpoint = False
+        self.token_error: httpx.Response | None = None  # an answer to give instead
         self.codes: dict[str, dict] = {}
         self.token_requests: list[dict[str, str]] = []
         self.token_urls: list[str] = []
@@ -124,6 +125,8 @@ class FakeMicrosoft:
         form = {k: v[0] for k, v in parse_qs(request.content.decode()).items()}
         self.token_requests.append(form)
         self.token_urls.append(str(request.url))
+        if self.token_error is not None:
+            return self.token_error
         if self.fail_token_endpoint:
             return httpx.Response(503, json={"error": "temporarily_unavailable"})
         if form.get("grant_type") == "refresh_token":
