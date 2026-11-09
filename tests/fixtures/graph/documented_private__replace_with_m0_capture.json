@@ -1,0 +1,55 @@
+{
+  "id": "PRIVATE-ID",
+  "iCalUId": "ICALUID-PRIVATE-ID",
+  "subject": "Weekly planning",
+  "start": {
+    "dateTime": "2026-11-12T10:00:00.0000000",
+    "timeZone": "UTC"
+  },
+  "end": {
+    "dateTime": "2026-11-12T10:30:00.0000000",
+    "timeZone": "UTC"
+  },
+  "isAllDay": false,
+  "isCancelled": false,
+  "isDraft": false,
+  "isOrganizer": true,
+  "organizer": {
+    "emailAddress": {
+      "name": "Person One",
+      "address": "person-1@example.test"
+    }
+  },
+  "responseStatus": {
+    "response": "organizer",
+    "time": "0001-01-01T00:00:00Z"
+  },
+  "attendees": [
+    {
+      "type": "required",
+      "status": {
+        "response": "accepted",
+        "time": "2026-11-10T09:00:00Z"
+      },
+      "emailAddress": {
+        "name": "Person Two",
+        "address": "person-2@example.test"
+      }
+    }
+  ],
+  "onlineMeeting": null,
+  "onlineMeetingProvider": "unknown",
+  "isOnlineMeeting": false,
+  "location": {
+    "displayName": "https://meet.google.com/abc-defg-hij"
+  },
+  "locations": [],
+  "body": {
+    "contentType": "html",
+    "content": "<html><body></body></html>"
+  },
+  "seriesMasterId": null,
+  "type": "singleInstance",
+  "sensitivity": "private",
+  "showAs": "busy"
+}
