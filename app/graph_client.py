@@ -34,12 +34,14 @@ failures carry an HTTP status, a short Graph error code from a fixed list, or an
 Throttling (spec 8.1 #9). Graph allows far more (10,000 requests per 10 minutes, four at once per
 mailbox) than two or three calls a minute; a 429, a 503 or a 504 is a `TransientError` and the
 connection retries at the pace the sync already uses after any error. One connection is never read
-by two calls at once (the per-connection lock around a mint, and the sync loop's own order).
+by two calls at once: a per-connection lock wraps each Graph call, and the sync thread and the join
+runner's re-check share this source (and so the lock) in one process.
 
 The client secret. `invalid_client` at the token endpoint means OUR secret is wrong or expired, not
 the user's grant: it is transient for the connection, and when Microsoft names the expiry
 (AADSTS7000222) the admins are told once a day (`app/microsoft_alerts.py`). From 30 days before
-`MICROSOFT_SECRET_EXPIRES_ON` the sync also reminds them, once a day.
+`MICROSOFT_SECRET_EXPIRES_ON` the sync also reminds them, once a day, and so does an hourly job of
+its own (`gcal_sync.register_calendar_sync`), so the reminder comes even with no connection due.
 """
 
 import logging
@@ -132,6 +134,21 @@ class ConnectionTokenStore:
             return None
         return bytes(row[0]), row[1], row[2], row[3]
 
+    def exists(self, conn_id: int) -> bool:
+        """Whether the connection still holds a Microsoft refresh token (it does not after a
+        disconnect)."""
+        with self._session_factory() as session:
+            return (
+                session.scalar(
+                    select(CalendarConnection.id).where(
+                        CalendarConnection.id == conn_id,
+                        CalendarConnection.provider == "microsoft",
+                        CalendarConnection.refresh_token_enc.is_not(None),
+                    )
+                )
+                is not None
+            )
+
     def swap(self, conn_id: int, previous: bytes, new: bytes, key_version: int) -> bool:
         """Compare-and-swap: the new token replaces `previous` only if `previous` is still what
         the row holds. False when another writer got there first (or the row is gone)."""
@@ -153,6 +170,13 @@ class ConnectionTokenStore:
 class _Cached:
     token: vault.Secret
     expires_at: datetime
+    # Whose token it is: a reconnect (same row id, perhaps another Microsoft identity) changes it,
+    # and a token minted for the old identity is then never used for the new one.
+    stamp: tuple = ()
+
+
+def _stamp(conn: CalendarConnection) -> tuple:
+    return (conn.account_subject, conn.tenant_id, conn.connected_at)
 
 
 class MicrosoftTokenCache:
@@ -200,6 +224,9 @@ class MicrosoftTokenCache:
         with lock:
             now = self._clock()
             cached = self._tokens.get(conn.id)
+            if cached is not None and cached.stamp != _stamp(conn):
+                self._tokens.pop(conn.id, None)  # another identity (or a fresh connect): start over
+                cached = None
             if cached and now < cached.expires_at - REFRESH_EARLY:
                 return cached.token.reveal()
             try:
@@ -212,7 +239,7 @@ class MicrosoftTokenCache:
             except AuthRevoked:
                 self._tokens.pop(conn.id, None)
                 raise
-            self._tokens[conn.id] = _Cached(vault.Secret(token), now + lifetime)
+            self._tokens[conn.id] = _Cached(vault.Secret(token), now + lifetime, _stamp(conn))
             return token
 
     def invalidate(self, conn_id: int) -> None:
@@ -275,10 +302,12 @@ class MicrosoftTokenCache:
             )
             return
         if not saved:
-            logger.warning(
-                "microsoft refresh token for connection %s not saved (another writer won)",
-                conn_id,
+            why = (
+                "another writer won"
+                if self._token_store().exists(conn_id)
+                else "the connection was removed"
             )
+            logger.warning("microsoft refresh token for connection %s not saved (%s)", conn_id, why)
 
 
 # ---- the source ----
@@ -300,6 +329,8 @@ class MicrosoftSource:
         self._transport = transport
         self._cache = cache or MicrosoftTokenCache(settings=settings, transport=transport)
         self._reminded_on: date | None = None
+        self._call_locks: dict[int, threading.Lock] = {}
+        self._lock_guard = threading.Lock()
 
     @property
     def cache(self) -> MicrosoftTokenCache:
@@ -343,17 +374,22 @@ class MicrosoftSource:
         if not isinstance(source_event_id, str) or source_event_id in ("", ".", ".."):
             raise ValueError("not an event id")
         url = graph_http.graph_url(f"/me/events/{quote(source_event_id, safe='')}")
+        if not graph_http.under_graph_base(url):  # e.g. an id that decodes to `..`: no token minted
+            raise ValueError("not an event id")
         response = self._call(conn, url, {"$select": SELECT})
-        if response.status_code in (404, 410):
-            return None  # ErrorItemNotFound: the source no longer has it
-        self._check(response)
+        status = response.status_code
+        if status == 410 or (status == 404 and _error_code(response) == "ErrorItemNotFound"):
+            return None  # the source no longer has this event
+        # Any other 404 (`MailboxNotEnabledForRESTAPI` is a problem of the whole mailbox, not a
+        # missing event) is transient: it must never cancel a real join.
+        self._checked(conn, response)
         return calendar_http.json_object(response, "Microsoft")
 
     # ---- internals ----
 
     def _list_page(self, conn: CalendarConnection, url: str, params: dict | None) -> dict:
         response = self._call(conn, url, params)
-        self._check(response)
+        self._checked(conn, response)
         body = calendar_http.json_object(response, "Microsoft")
         items = body.get("value")
         if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
@@ -363,15 +399,29 @@ class MicrosoftSource:
     def _call(self, conn: CalendarConnection, url: str, params: dict | None) -> httpx.Response:
         """One authorised GET. A 401 means the cached token died early: mint a fresh one and try
         once more."""
-        for attempt in (1, 2):
-            token = self._cache.get(conn)
-            response = graph_http.get(
-                token, url, params=params, headers=list(PREFER), transport=self._transport
-            )
-            if response.status_code != 401 or attempt == 2:
-                return response
-            self._cache.invalidate(conn.id)
+        with self._call_lock(conn.id):  # the sync thread and the runner never call at once
+            for attempt in (1, 2):
+                token = self._cache.get(conn)
+                response = graph_http.get(
+                    token, url, params=params, headers=list(PREFER), transport=self._transport
+                )
+                if response.status_code != 401 or attempt == 2:
+                    return response
+                self._cache.invalidate(conn.id)
         raise AssertionError("unreachable")  # pragma: no cover
+
+    def _call_lock(self, conn_id: int) -> threading.Lock:
+        with self._lock_guard:
+            return self._call_locks.setdefault(conn_id, threading.Lock())
+
+    def _checked(self, conn: CalendarConnection, response: httpx.Response) -> None:
+        """`_check`, and a refused grant drops the cached access token at once, so a token minted
+        for a dead grant (or an old identity) is never read again."""
+        try:
+            self._check(response)
+        except AuthRevoked:
+            self._cache.invalidate(conn.id)
+            raise
 
     @staticmethod
     def _check(response: httpx.Response) -> None:

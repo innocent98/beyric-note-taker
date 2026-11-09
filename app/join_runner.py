@@ -569,7 +569,7 @@ def _recheck(
         session.rollback()
         return WAIT
     if raw is None:  # the source no longer has it: cancelled or deleted
-        raw = {"id": event.source_event_id, "status": "cancelled"}
+        raw = calendar_providers.cancelled_stub(conn.provider, event.source_event_id)
     join.rechecked_at = now  # committed by apply_batch with the rest
     _touch(join, now)
     user_settings = session.get(UserSettings, join.user_id) or DEFAULT_USER_SETTINGS

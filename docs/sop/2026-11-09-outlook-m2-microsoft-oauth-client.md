@@ -49,6 +49,11 @@ Each line is an assumption this code makes; the captures either settle it or cha
 ## Operate / roll back
 **Server steps before merge: none.** The six new variables are optional while `MICROSOFT_CALENDAR_ENABLED` is false and nothing reads them yet; set them (names only: `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`, `MICROSOFT_AUTHORITY`, `MICROSOFT_CALENDAR_ENABLED`, `MICROSOFT_ALLOWED_TENANTS`, `MICROSOFT_SECRET_EXPIRES_ON`) only at switch-on. A mistyped `MICROSOFT_AUTHORITY`, `MICROSOFT_ALLOWED_TENANTS` or `MICROSOFT_SECRET_EXPIRES_ON` stops the app at start with a message naming the variable. Roll back by reverting the PR: no data was written.
 
+## Opus review fixes (2026-11-09, review of #150)
+- **Secrets out of `repr` and start-up errors:** `microsoft_client_secret`, `google_client_secret`, `session_secret`, `token_enc_key`, `token_enc_key_previous`, `owner_password`, `edge_shared_secret`, `resend_api_key`, `openai_api_key` and `vexa_api_key` are `Field(default="", repr=False)`, and the settings model sets `hide_input_in_errors=True`. Tested with sentinel values through `repr`, `str` and a forced start-up `ValidationError`.
+- The nonce check fails closed on an empty expected nonce; `tid="consumers"` with a matching `iss` is refused (the GUID check has its own case); the `_authority_url` guard has a test; `Identity.name` and `preferred_username` are out of `repr`; `check_id_token` is private (`_check_id_token`), so only `exchange_connect` reaches it.
+- Notes kept: M3 reuses `google_oauth.new_pkce`; a refresh answer with no new refresh token is M4's (keep the old one, no swap).
+
 ## Follow-ups
 - M3 (connect, callback, disconnect, probe, flag), M4 (Graph source, `MicrosoftTokenCache` compare-and-swap, the expired-secret alert), M5 (event normaliser).
 - The 30-day secret reminder (`secret_expiry_due`) is a helper only; M4 wires it to the admin alert.

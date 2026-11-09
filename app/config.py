@@ -8,7 +8,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # `hide_input_in_errors`: a start-up validation error must never print the settings it was given
+    # (they hold the secrets below; their `repr` is hidden too, `Field(repr=False)`).
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", hide_input_in_errors=True)
 
     @field_validator("bot_provider", mode="before")
     @classmethod
@@ -133,7 +135,7 @@ class Settings(BaseSettings):
     # plan and the cheapest (0.04 USD an hour); `none` turns it off and with it the speaker names.
     skribby_transcription_model: str = "groq/whisper-large-v3-turbo"
     vexa_base_url: str = "http://localhost:8056"
-    vexa_api_key: str = ""
+    vexa_api_key: str = Field(default="", repr=False)
     bot_name: str = "Beyric Note Taker (recording)"
 
     def bot_name_for(self, provider: str | None) -> str:
@@ -171,7 +173,7 @@ class Settings(BaseSettings):
     # spike (P0.7) has passed and this is set: until then a Teams event reads "Can't join yet".
     teams_join_enabled: bool = False
 
-    openai_api_key: str = ""
+    openai_api_key: str = Field(default="", repr=False)
     transcription_model: str = "gpt-transcribe"
     notes_model: str = "gpt-6-luna"
     # The one call that reads the notes and transcript into decisions, open questions and review
@@ -198,13 +200,13 @@ class Settings(BaseSettings):
     # Read only by migration 0006, which creates the admin account from them. After that the
     # login uses the `users` table and OWNER_PASSWORD can be removed from .env.
     owner_email: str = ""
-    owner_password: str = ""
-    session_secret: str = ""
+    owner_password: str = Field(default="", repr=False)
+    session_secret: str = Field(default="", repr=False)
     cookie_secure: bool = True
     # The secret nginx sends in X-Edge-Secret. The app believes X-Forwarded-For only on a request
     # that carries it (app/edge.py). Empty = not configured: the app warns at startup and treats
     # every client as the socket peer (the proxy), so all visitors share one login limit.
-    edge_shared_secret: str = ""
+    edge_shared_secret: str = Field(default="", repr=False)
 
     # The public address of the site: mail links and the Google redirect URIs are built from it.
     public_base_url: str = "https://notes.beyrictech.com"
@@ -212,11 +214,11 @@ class Settings(BaseSettings):
     # console outside production, and no mailer at all in production without a key (mail then
     # stays in the outbox and password sign-up stays off).
     mail_provider: str = ""
-    resend_api_key: str = ""
+    resend_api_key: str = Field(default="", repr=False)
     # The OAuth client for "Sign in with Google". Both set = the feature exists; either empty =
     # the routes answer 404 and `GET /api/pilot` says `google_signin: false`.
     google_client_id: str = ""
-    google_client_secret: str = ""
+    google_client_secret: str = Field(default="", repr=False)
     # True while the Google Cloud project is in Testing: a refresh token then lapses after 7 days,
     # and a connection records when (`expected_expiry_at`). Off once the project is in production.
     google_oauth_testing: bool = False
@@ -256,8 +258,8 @@ class Settings(BaseSettings):
     # random bytes, base64 (`openssl rand -base64 32`). It lives only in the server .env, never in
     # the database or a backup. Rotation: new key here, old key in `token_enc_key_previous`, raise
     # `token_enc_key_version` by one, re-encrypt, then drop the previous key (app/vault.py).
-    token_enc_key: str = ""
-    token_enc_key_previous: str = ""
+    token_enc_key: str = Field(default="", repr=False)
+    token_enc_key_previous: str = Field(default="", repr=False)
     token_enc_key_version: int = 1
     # Set true where the calendar features (Google connect, pasted calendar links) are switched
     # on. In production the app then refuses to start without `token_enc_key`, as it already does
@@ -269,7 +271,7 @@ class Settings(BaseSettings):
     # operator's switch for the whole feature: the routes answer 404 `calendar_unavailable` and the
     # UI draws nothing until it is true (and the Teams gate of spec section 7 is met).
     microsoft_client_id: str = ""
-    microsoft_client_secret: str = ""
+    microsoft_client_secret: str = Field(default="", repr=False)
     microsoft_calendar_enabled: bool = False
     # Which accounts our authorize endpoint accepts: `consumers` (personal Outlook.com, Hotmail,
     # Live: the pilot) or `common` (work and school as well, once publisher verification is done).

@@ -53,6 +53,16 @@ RESPONSES = {
 }
 
 
+def cancelled_stub(event_id: str) -> dict:
+    """What the join runner's re-check applies when Graph no longer has an event (404 or 410): an
+    id-only cancelled event in Graph's own shape, which `parse_event` reads as `cancelled` (the
+    instants are the sync's `NO_TIME` placeholder; only the id and the status mean anything).
+    Google's `{"id", "status": "cancelled"}` is not a valid Graph event and would be skipped as
+    unreadable, leaving the bot to go to a deleted meeting."""
+    placeholder = {"dateTime": "1970-01-01T00:00:00.0000000", "timeZone": "UTC"}
+    return {"id": event_id, "isCancelled": True, "start": placeholder, "end": dict(placeholder)}
+
+
 def _instant(point: object) -> datetime:
     """The UTC instant of a Graph `dateTimeTimeZone`, which must say `UTC`."""
     if not isinstance(point, dict) or not point:

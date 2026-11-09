@@ -46,6 +46,13 @@ def secret_expired(now: datetime) -> None:
     )
 
 
+def remind_if_due(settings: Settings, now: datetime) -> None:
+    """The scheduled job's body: the reminder when the secret is within 30 days of expiring (or
+    past it). The 24-hour dedupe key makes a call every hour cheap."""
+    if microsoft_oauth.secret_expiry_due(settings, now.date()):
+        secret_expiring(settings, now)
+
+
 def secret_expiring(settings: Settings, now: datetime) -> None:
     """The client secret expires within 30 days (or has, by the date in the settings): remind
     the admins once per day."""

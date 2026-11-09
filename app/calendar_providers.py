@@ -11,6 +11,7 @@ own access-token cache. The sync loop and the join runner both take one, so a co
 read by the source of its own provider and the sync and the runner share one token cache.
 """
 
+import logging
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 
@@ -20,6 +21,8 @@ from app.config import Settings
 from app.gcal_events import ParsedEvent, parse_event
 from app.google_oauth import CALENDAR_SCOPE, MEET_SCOPE
 from app.models import CalendarConnection
+
+logger = logging.getLogger(__name__)
 
 # The providers a route can name. A name here that has no row below answers 404.
 ROUTE_PROVIDERS = ("google", "microsoft")
@@ -34,6 +37,12 @@ class Provider:
     make_source: Callable[[Settings], CalendarSource]
     flow_cookie: str  # the cookie that ties the callback to the browser that started the flow
     flow_cookie_path: str
+    # What the join runner's re-check applies when the source says an event is gone: a cancelled
+    # event in THIS provider's own raw shape, so its parser reads it (Google's by default).
+    cancelled_stub: Callable[[str], dict] = lambda event_id: {  # noqa: E731
+        "id": event_id,
+        "status": "cancelled",
+    }
 
 
 # ---- Google ----
@@ -98,12 +107,20 @@ PROVIDERS: dict[str, Provider] = {
         make_source=_microsoft_source,
         flow_cookie="calendar_flow_ms",
         flow_cookie_path="/api/calendar/microsoft",
+        cancelled_stub=graph_events.cancelled_stub,
     ),
 }
 
 
 def get(name: str) -> Provider | None:
     return PROVIDERS.get(name)
+
+
+def cancelled_stub(provider: str, event_id: str) -> dict:
+    """The raw cancelled event the re-check applies for `provider` (Google's shape for a provider
+    with no row)."""
+    row = PROVIDERS.get(provider)
+    return row.cancelled_stub(event_id) if row else {"id": event_id, "status": "cancelled"}
 
 
 def features_of(conn: CalendarConnection) -> set[str]:
@@ -158,7 +175,17 @@ def as_registry(
 
 
 def build_sources(settings: Settings) -> SourceRegistry:
-    """One source per provider that is switched on for this server."""
-    return SourceRegistry(
-        p.make_source(settings) for p in PROVIDERS.values() if p.enabled(settings)
-    )
+    """One source per provider that is switched on for this server. A provider that is switched on
+    but whose source is not built yet (`NotImplementedError`) is skipped with a log line: it must
+    never take the scheduler's other jobs down."""
+    sources = []
+    for provider in PROVIDERS.values():
+        if not provider.enabled(settings):
+            continue
+        try:
+            sources.append(provider.make_source(settings))
+        except NotImplementedError:
+            logger.warning(
+                "calendar provider %s is switched on but has no source yet", provider.name
+            )
+    return SourceRegistry(sources)
