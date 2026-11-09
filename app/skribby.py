@@ -22,10 +22,13 @@ In short:
   body or a meeting link (a Zoom link carries its passcode).
 """
 
+import ipaddress
 import logging
 import math
 import re
+import socket
 import threading
+import time
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable
@@ -69,6 +72,20 @@ WAITING_ROOM_MINUTES = 10
 SEND_CONNECT_SECONDS = 5.0
 LOOKUP_TIMEOUT_SECONDS = 5.0  # the duplicate check's looks, which run inside the send's deadline
 MAX_REDIRECTS = 5
+# Skribby's own `time_limit` ends the bot this long BEFORE the pipeline gives up on the meeting
+# (`MAX_POLL_HOURS`), so a long call is over, and its recording processed, before the give-up.
+TIME_LIMIT_MARGIN_MINUTES = 30
+# Hosts a recording may be fetched from (the name, or any subdomain of it): Skribby's own, and
+# Amazon's storage (its sub-processors page: AWS, "hosting / storage"). Anything else fails closed;
+# `SKRIBBY_DOWNLOAD_HOSTS` adds a host once an operator has seen where recordings really live.
+DOWNLOAD_HOSTS = ("skribby.io", "amazonaws.com")
+MAX_DOWNLOAD_BYTES = 1 << 30
+# The late-reply watch (see `SkribbyProvider.send_bot`).
+LATE_ADOPT_TRIES = 10
+LATE_ADOPT_PAUSE_SECONDS = 2.0
+# What the process remembers of the bots it sent: this many codes, each for this long.
+SENT_CODES_KEPT = 256
+SENT_KEPT_FOR = 12 * 3600
 MAX_FAILURE_REASON_CHARS = 300
 MAX_COMPLETION_REASON_CHARS = 64  # `meetings.completion_reason` is String(64)
 MAX_NAME_CHARS = 80
@@ -348,6 +365,12 @@ class BotLedger(Protocol):
         """Skribby bot ids that start with `prefix` (see `handle_prefix`)."""
         ...
 
+    def adopt_late_bot(self, platform: str, code: str, bot_id: str) -> bool:
+        """Give a bot whose "created" answer came after the send deadline to the placeholder
+        meeting waiting for it (the one kept as an unconfirmed start). False when there is none
+        (yet)."""
+        ...
+
 
 class DbLedger:
     """The ledger over the `meetings` table: rows `bot_provider = 'skribby'` with a bot id. Each
@@ -382,6 +405,37 @@ class DbLedger:
                 .order_by(Meeting.id.desc())
             )
             return [str(row) for row in rows]
+
+    def adopt_late_bot(self, platform: str, code: str, bot_id: str) -> bool:
+        from sqlalchemy import select
+
+        from app.models import Meeting
+        from app.placement import SEND_UNCONFIRMED
+
+        with self._session() as session:
+            row = session.scalars(
+                select(Meeting)
+                .where(
+                    Meeting.bot_provider == "skribby",
+                    Meeting.platform == platform,
+                    Meeting.native_id == code,
+                    Meeting.status == "bot_sent",
+                    Meeting.vexa_meeting_id.is_(None),
+                    Meeting.completion_reason == SEND_UNCONFIRMED,
+                )
+                .order_by(Meeting.id.desc())
+                .limit(1)
+                .with_for_update(skip_locked=True)
+            ).first()
+            if row is None:
+                return False
+            # As `pipeline._settle_unconfirmed` does when the bot shows up: pinned to its id, and
+            # the "starting the bot" marker cleared so the worker's next look reads its state.
+            row.vexa_meeting_id = bot_id
+            row.completion_reason = None
+            row.bot_state_seen_at = None
+            session.commit()
+            return True
 
     def bots_for_prefix(self, prefix: str) -> list[str]:
         from sqlalchemy import select
@@ -419,6 +473,8 @@ class SkribbyClient:
         timeout: float = 30.0,
         send_deadline: float = SEND_DEADLINE_SECONDS,
         base_url: str | None = None,
+        download_hosts: tuple[str, ...] = (),
+        resolve: Callable[[str], list[str]] | None = None,
     ) -> None:
         key = api_key.strip()
         if not key:
@@ -426,7 +482,11 @@ class SkribbyClient:
         if base_url is None and region not in BASES:
             raise BotProviderNotConfigured("SKRIBBY_REGION must be eu or jp")
         self._key = key
+        self.region = region
         self._base_url = (base_url or BASES[region]).rstrip("/")
+        own_host = httpx.URL(self._base_url).host
+        self._download_hosts = (*DOWNLOAD_HOSTS, own_host, *(h.lower() for h in download_hosts))
+        self._resolve = resolve or _resolve_host
         self._account_id = account_id
         self._bot_name = bot_name
         self._model = transcription_model.strip() or "none"
@@ -473,8 +533,13 @@ class SkribbyClient:
     def payload(self, platform: str, code: str, canonical_url: str) -> dict[str, Any]:
         stop_options: dict[str, Any] = {
             "waiting_room_timeout": WAITING_ROOM_MINUTES,
-            # The ghost-bot backstop: Skribby ends the bot when the pipeline would give up.
-            "time_limit": min(720, max(1, self._max_poll_hours * 60)),
+            # The ghost-bot backstop, `TIME_LIMIT_MARGIN_MINUTES` under the pipeline's give-up, so a
+            # long call is over and processed before we would fail it.
+            "time_limit": min(720, max(1, self._max_poll_hours * 60 - TIME_LIMIT_MARGIN_MINUTES)),
+            # Off: a quiet stretch must not send the bot away (Vexa never left for silence; the
+            # "only person left" rule below ends a bot whose call is over). Skribby's default is
+            # 15 minutes.
+            "silence_detection": 0,
         }
         if self._left_alone_seconds > 0:
             stop_options["last_person_detection"] = max(1, math.ceil(self._left_alone_seconds / 60))
@@ -548,9 +613,10 @@ class SkribbyClient:
             raise self._failure("stop_bot", response)
         return "stopped"
 
-    def delete(self, bot_id: str) -> None:
+    def delete(self, bot_id: str) -> str:
         """`DELETE /bot/{id}`: Skribby's data for the bot (recording, transcript, participants).
-        Already gone (404) is success."""
+        `gone` for a 404 (the caller cannot tell "deleted before" from "never in this region"),
+        else `deleted` for a 2xx."""
         bot_id = bot_uuid(bot_id)
         try:
             with self._http() as client:
@@ -558,21 +624,65 @@ class SkribbyClient:
         except httpx.HTTPError as exc:
             raise SkribbyError(f"delete_recording failed: {self._scrub(str(exc))}") from None
         if response.status_code == 404:
-            return
+            return "gone"
         if not 200 <= response.status_code < 300:
             raise self._failure("delete_recording", response)
+        return "deleted"
+
+    def probe(self, url: str) -> int:
+        """The HTTP status Skribby (or its storage) answers for a recording link, without keeping
+        the body (the live check uses it to show a deleted recording is gone). The same checks as a
+        download apply, so it never goes to a host the download would refuse."""
+        target = httpx.URL(url)
+        self._check_download_target(target)
+        base = httpx.URL(self._base_url)
+        own = (target.scheme, target.netloc) == (base.scheme, base.netloc)
+        headers = {"Authorization": f"Bearer {self._key}"} if own else {}
+        try:
+            with httpx.Client(timeout=self._timeout) as client:
+                with client.stream("GET", target, headers=headers) as response:
+                    return response.status_code
+        except httpx.HTTPError as exc:
+            raise SkribbyError(f"probe failed: {self._scrub(str(exc))}") from None
+
+    def _check_download_target(self, target: httpx.URL) -> None:
+        """Fail closed before any request to `target`: https, a host we allow, and no address that
+        is private, loopback, link-local or otherwise not public."""
+        if target.scheme != "https":
+            raise SkribbyError("download_audio failed: the recording is not on https")
+        host = (target.host or "").lower()
+        if not any(
+            host == allowed or host.endswith("." + allowed) for allowed in self._download_hosts
+        ):
+            raise SkribbyError(
+                "download_audio failed: the recording is on a host that is not allowed "
+                f"({host[:80]}); add it to SKRIBBY_DOWNLOAD_HOSTS only if it is Skribby's storage"
+            )
+        try:
+            addresses = [host] if _is_ip(host) else self._resolve(host)
+            public = bool(addresses) and all(
+                ipaddress.ip_address(a.split("%")[0]).is_global for a in addresses
+            )
+        except (OSError, ValueError):
+            public = False
+        if not public:
+            raise SkribbyError(
+                "download_audio failed: the recording's host is not a public address"
+            )
 
     def download(self, url: str, path: Path) -> None:
-        """Stream the recording at `url` to `path`. Redirects are followed by hand, https only, and
-        the API key goes only to Skribby's own origin, never to a storage host."""
+        """Stream the recording at `url` to `path`. https only, a host on the allow list, no
+        non-public address, redirects followed by hand (each hop checked the same way), the API key
+        only to Skribby's own origin, at most `MAX_DOWNLOAD_BYTES`, and the bytes received must
+        match the `Content-Length` when there is one and not be empty: the caller deletes the
+        provider's copy once this returns, so a short file must never pass."""
         path = Path(path)
         base = httpx.URL(self._base_url)
         target = httpx.URL(url)
         try:
             with httpx.Client(timeout=self._timeout) as client:
                 for _ in range(MAX_REDIRECTS + 1):
-                    if target.scheme != "https":
-                        raise SkribbyError("download_audio failed: the recording is not on https")
+                    self._check_download_target(target)
                     own = (target.scheme, target.netloc) == (base.scheme, base.netloc)
                     headers = {"Authorization": f"Bearer {self._key}"} if own else {}
                     with client.stream("GET", target, headers=headers) as response:
@@ -588,9 +698,7 @@ class SkribbyClient:
                             raise SkribbyError(
                                 f"download_audio failed: HTTP {response.status_code}"
                             )
-                        with path.open("wb") as out:
-                            for chunk in response.iter_bytes():
-                                out.write(chunk)
+                        self._write(response, path)
                         return
                 raise SkribbyError("download_audio failed: too many redirects")
         except SkribbyError:
@@ -599,6 +707,44 @@ class SkribbyClient:
         except (httpx.HTTPError, OSError) as exc:
             path.unlink(missing_ok=True)
             raise SkribbyError(f"download_audio failed: {self._scrub(str(exc))}") from None
+
+    @staticmethod
+    def _write(response: httpx.Response, path: Path) -> None:
+        declared = response.headers.get("content-length")
+        try:
+            expected = int(declared) if declared is not None else None
+        except ValueError:
+            expected = None
+        if expected is not None and expected > MAX_DOWNLOAD_BYTES:
+            raise SkribbyError("download_audio failed: the recording is larger than the limit")
+        encoded = bool(response.headers.get("content-encoding"))
+        chunks = response.iter_bytes() if encoded else response.iter_raw()
+        written = 0
+        with path.open("wb") as out:
+            for chunk in chunks:
+                written += len(chunk)
+                if written > MAX_DOWNLOAD_BYTES:
+                    raise SkribbyError(
+                        "download_audio failed: the recording is larger than the limit"
+                    )
+                out.write(chunk)
+        if written == 0:
+            raise SkribbyError("download_audio failed: the recording is empty")
+        if expected is not None and not encoded and written != expected:
+            raise SkribbyError(f"download_audio failed: received {written} of {expected} bytes")
+
+
+def _is_ip(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host.split("%")[0])
+        return True
+    except ValueError:
+        return False
+
+
+def _resolve_host(host: str) -> list[str]:
+    """Every address `host` resolves to (the real resolver; tests replace it)."""
+    return [info[4][0] for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)]
 
 
 # ---- the provider ----
@@ -617,14 +763,17 @@ class SkribbyProvider:
         client: SkribbyClient,
         ledger: BotLedger | None = None,
         clock: Callable[[], datetime] | None = None,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         self._client = client
+        self._sleep = sleep or time.sleep
         self._ledger: BotLedger = ledger or DbLedger()
         self._clock = clock or (lambda: datetime.now(UTC))
         self._guard = threading.Lock()
         # Bots sent by this process, per `(platform, code)`, oldest first: the window between the
         # send and the meeting row's commit, which our own table cannot see.
-        self._sent: dict[tuple[str, str], list[str]] = {}
+        # Bounded: `SENT_CODES_KEPT` codes, each entry for `SENT_KEPT_FOR` seconds.
+        self._sent: OrderedDict[tuple[str, str], list[tuple[str, float]]] = OrderedDict()
         # Recent handle -> bot id answers, so a recording looked up a moment ago is found again
         # without the table (a deletion that looks the recording up and deletes it in one go).
         self._handles: OrderedDict[int, str] = OrderedDict()
@@ -641,8 +790,16 @@ class SkribbyProvider:
             transcription_model=settings.skribby_transcription_model,
             left_alone_seconds=settings.bot_left_alone_seconds,
             max_poll_hours=settings.max_poll_hours,
+            download_hosts=tuple(
+                host.strip() for host in settings.skribby_download_hosts.split(",") if host.strip()
+            ),
         )
         return cls(client)
+
+    @property
+    def region(self) -> str:
+        """The Skribby region this provider talks to (`meetings.bot_region` remembers it)."""
+        return self._client.region
 
     def __repr__(self) -> str:
         return "SkribbyProvider()"
@@ -650,18 +807,29 @@ class SkribbyProvider:
     # ---- what this process remembers ----
 
     def _remember_bot(self, key: tuple[str, str], bot_id: str) -> None:
+        now = time.monotonic()
         with self._guard:
+            for old_key in list(self._sent):  # drop what is too old, then what is over the cap
+                kept = [(b, at) for b, at in self._sent[old_key] if now - at < SENT_KEPT_FOR]
+                if kept:
+                    self._sent[old_key] = kept
+                else:
+                    del self._sent[old_key]
             bots = self._sent.setdefault(key, [])
-            if bot_id not in bots:
-                bots.append(bot_id)
+            if bot_id not in [b for b, _ in bots]:
+                bots.append((bot_id, now))
             del bots[: -self.BOTS_KEPT_PER_CODE]
+            self._sent.move_to_end(key)
+            while len(self._sent) > SENT_CODES_KEPT:
+                self._sent.popitem(last=False)
 
     def _forget_bot(self, bot_id: str) -> None:
         with self._guard:
             for key, bots in list(self._sent.items()):
-                if bot_id in bots:
-                    bots.remove(bot_id)
-                if not bots:
+                kept = [(b, at) for b, at in bots if b != bot_id]
+                if kept:
+                    self._sent[key] = kept
+                else:
                     del self._sent[key]
 
     def _remember_handle(self, bot_id: str) -> None:
@@ -676,7 +844,7 @@ class SkribbyProvider:
         """Bots that may hold the code, newest first: this process's own sends, then the live
         meetings on the code in our table. A table that cannot be read is an error, never "none"."""
         with self._guard:
-            mine = list(reversed(self._sent.get((platform, code), [])))
+            mine = [b for b, _ in reversed(self._sent.get((platform, code), []))]
         try:
             rows = self._ledger.live_bots(platform, code)
         except Exception as exc:
@@ -735,23 +903,67 @@ class SkribbyProvider:
     def send_bot(self, meeting_url: str) -> str:
         platform, code, canonical = _parse(meeting_url)  # UnsupportedMeetingUrl for a bad link
         payload = self._client.payload(platform, code, canonical)
-        sending = {"started": False}
+        lock = threading.Lock()
+        state: dict[str, Any] = {"started": False, "bot_id": None, "abandoned": False}
 
         def attempt() -> str:
             self._refuse_if_held(platform, code)
-            sending["started"] = True
-            return self._client.create(payload)
+            state["started"] = True
+            bot_id = self._client.create(payload)
+            with lock:
+                late = state["abandoned"]
+                state["bot_id"] = bot_id
+            if late:  # the caller gave up on this send: the bot exists and must not be lost
+                self._keep_late_bot(platform, code, bot_id)
+            return bot_id
 
         try:
             bot_id = run_within(self._client.send_deadline, attempt)
         except TimeoutError:
-            if not sending["started"]:  # still checking the code: nothing was sent
-                raise SkribbyError(
-                    "send_bot failed: the check for a bot already there timed out"
+            with lock:
+                bot_id = state["bot_id"]  # it arrived just as the deadline did: it counts
+                state["abandoned"] = bot_id is None
+            if bot_id is None:
+                if not state["started"]:  # still checking the code: nothing was sent
+                    raise SkribbyError(
+                        "send_bot failed: the check for a bot already there timed out"
+                    ) from None
+                raise SkribbySendUncertain(
+                    "send_bot failed: no answer within the deadline"
                 ) from None
-            raise SkribbySendUncertain("send_bot failed: no answer within the deadline") from None
         self._remember_bot((platform, code), bot_id)
         return bot_id
+
+    def _keep_late_bot(self, platform: str, code: str, bot_id: str) -> None:
+        """Skribby's "created" answer came after the send's deadline, so `place_bot` has kept the
+        meeting as an unconfirmed start. Remember the bot here, log its id for an operator, and give
+        it to the placeholder meeting (the worker then manages it like any other bot). If no
+        placeholder takes it within `LATE_ADOPT_TRIES` looks (the worker already gave the meeting
+        up), nobody is waiting for this bot: it is stopped and its data deleted rather than left
+        recording unmanaged. Runs in the send's own thread, which outlives the call."""
+        self._remember_bot((platform, code), bot_id)
+        logger.warning("Skribby bot %s was created after the send deadline; attaching it", bot_id)
+        adopt = getattr(self._ledger, "adopt_late_bot", None)
+        for attempt in range(LATE_ADOPT_TRIES):
+            try:
+                if adopt is not None and adopt(platform, code, bot_id):
+                    logger.warning("Skribby bot %s was attached to its meeting", bot_id)
+                    return
+            except Exception as exc:
+                logger.warning("late bot %s: could not attach it (%s)", bot_id, type(exc).__name__)
+            if attempt + 1 < LATE_ADOPT_TRIES:
+                self._sleep(LATE_ADOPT_PAUSE_SECONDS)
+        logger.error("Skribby bot %s has no meeting waiting for it: stopping it", bot_id)
+        try:
+            self._stop_one(bot_id)
+            self._delete_verified(bot_id)
+        except Exception as exc:
+            logger.error(
+                "Skribby bot %s could not be stopped or deleted (%s): do it in the dashboard",
+                bot_id,
+                type(exc).__name__,
+            )
+        self._forget_bot(bot_id)
 
     def _refuse_if_held(self, platform: str, code: str) -> None:
         """One live bot per meeting code, across users: Skribby lets several bots into one meeting,
@@ -799,20 +1011,38 @@ class SkribbyProvider:
         if self._look(bot_id).status not in TERMINAL:
             raise SkribbyError("stop_bot failed: HTTP 403 for a bot that is still live")
 
+    def _delete_verified(self, bot_id: str) -> None:
+        """Delete everything Skribby holds for the bot and check it is gone: a 2xx alone is not
+        taken for it. A 404 on the delete is gone (the caller's region rule keeps a bot of another
+        region from being mistaken for one that is deleted). After a 2xx the bot is fetched again:
+        404, or an answer with no recording link and no transcript, is gone; anything else raises,
+        so the caller tries again and does not mark the copy deleted."""
+        if self._client.delete(bot_id) == "gone":
+            return
+        try:
+            body = self._client.get_bot(bot_id)
+        except SkribbyNotFound:
+            return
+        if body.get("recording_url") or body.get("transcript"):
+            raise SkribbyError(
+                "delete_recording failed: Skribby still shows the recording or transcript after "
+                "the delete (not verified gone)"
+            )
+
     def delete_recording(self, recording_id: int) -> None:
         bot_id = self._resolve(recording_id)
-        self._client.delete(bot_id)
+        self._delete_verified(bot_id)
         self._forget_bot(bot_id)
         with self._guard:
             self._handles.pop(recording_handle(bot_id), None)
 
     def delete_bot_record(self, bot_id: str | int) -> None:
-        """Delete everything Skribby keeps for a bot that never made a recording (not admitted,
-        blocked, stopped at the door): the meeting link, the bot's name and its timeline. The
-        cleanup of finished meetings calls this where `delete_recording` has no handle to use. A
-        bot Skribby no longer has is success."""
+        """Delete everything Skribby keeps for a bot, by its id, and verify it (see
+        `_delete_verified`): the early delete once the audio and the speaker names are ours, the
+        record of a bot that never made a recording (the meeting link, the bot's name, its
+        timeline), the replaced bot of a resend. A bot Skribby no longer has is success."""
         bot_id = bot_uuid(bot_id)
-        self._client.delete(bot_id)
+        self._delete_verified(bot_id)
         self._forget_bot(bot_id)
 
     def download_audio(self, recording_id: int, media_id: int, path: Path) -> None:
@@ -821,3 +1051,43 @@ class SkribbyProvider:
         if url is None:
             raise SkribbyError("download_audio failed: Skribby has no recording for this bot")
         self._client.download(url, Path(path))
+
+
+def check_region_unchanged(settings, session_factory: Callable[[], Any] | None = None) -> None:
+    """Refuse to start while Skribby meetings of ANOTHER region still have their copy at Skribby.
+
+    Skribby's `eu` and `jp` regions are separate accounts: a bot sent to one answers 404 in the
+    other, which would read as "already deleted" and leave the data behind, and an open meeting
+    would lose its bot. So changing `SKRIBBY_REGION` waits until the meetings of the old region are
+    over and their copies deleted (a day to a week). No-op unless Skribby is the provider. A
+    database that cannot be reached is a warning, not a refusal (the same database stops the
+    processes anyway)."""
+    if settings.bot_provider != "skribby":
+        return
+    from sqlalchemy import func, select
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.models import Meeting
+
+    try:
+        with (session_factory or DbLedger()._session)() as session:
+            open_elsewhere = session.scalar(
+                select(func.count(Meeting.id)).where(
+                    Meeting.bot_provider == "skribby",
+                    Meeting.bot_region.is_not(None),
+                    Meeting.bot_region != settings.skribby_region,
+                    Meeting.provider_copy_deleted_at.is_(None),
+                )
+            )
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "could not check SKRIBBY_REGION against open meetings (%s)", type(exc).__name__
+        )
+        return
+    if open_elsewhere:
+        raise RuntimeError(
+            f"SKRIBBY_REGION is {settings.skribby_region!r} but {open_elsewhere} Skribby "
+            "meeting(s) of the other region still hold data there: set it back, and change it "
+            "once they are "
+            "over and their copies are deleted"
+        )

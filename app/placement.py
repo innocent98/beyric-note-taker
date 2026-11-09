@@ -61,6 +61,7 @@ from app.bot_provider import (
     BotProviderError,
     BotSendUncertain,
     provider_name,
+    provider_region,
     run_within,
 )
 from app.config import Settings, get_settings
@@ -302,6 +303,7 @@ def place_bot(
         template_id=template_id,
         vexa_meeting_id=None if vexa_id is None else str(vexa_id),
         bot_provider=provider_name(vexa),
+        bot_region=provider_region(vexa),
         started_polling_at=now,
         source=req.source,
         title=titles.event_title(req.title),

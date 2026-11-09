@@ -6,6 +6,7 @@ import io
 import itertools
 from datetime import UTC, datetime, timedelta
 
+import httpx
 import pytest
 
 from scripts import skribby_live_check as check
@@ -19,7 +20,7 @@ ACCOUNT = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"
 API = "https://platform.skribby.io/api/v1"
 BOT = "3c09b2aa-6708-42c1-8145-aa55ee223613"
 MEET = "https://meet.google.com/abc-defg-hij"
-FILES = "https://files.skribby.test/rec.webm"
+FILES = "https://files.skribby.io/rec.webm"
 
 
 def ago(seconds):
@@ -52,32 +53,60 @@ def accept(mock):
     mock.add_response(method="POST", url=f"{API}/bot/{BOT}/stop", json={"message": "ok"})
 
 
-def test_a_good_run_prints_the_mapping_stops_the_bot_and_never_prints_a_key(httpx_mock):
+def serve(mock, bodies):
+    """GET /bot answers the bodies in turn (the last repeats) until a DELETE succeeds, then 404."""
+    state = {"n": 0, "gone": False}
+
+    def look(request):
+        if state["gone"]:
+            return httpx.Response(404, json={})
+        item = bodies[min(state["n"], len(bodies) - 1)]
+        state["n"] += 1
+        return httpx.Response(200, json=item)
+
+    def delete(request):
+        state["gone"] = True
+        return httpx.Response(200, json={"message": "deleted"})
+
+    mock.add_callback(look, method="GET", url=f"{API}/bot/{BOT}")
+    mock.add_callback(delete, method="DELETE", url=f"{API}/bot/{BOT}")
+    return state
+
+
+def test_a_good_run_prints_the_mapping_stops_the_bot_proves_the_delete_and_never_prints_a_key(
+    httpx_mock,
+):
     accept(httpx_mock)
-    for item in (
-        bot("booting", ("booting", 3)),
-        bot("joining", ("joining", 30)),
-        bot("recording", ("joining", 60), ("recording", 30)),
-        bot("recording", ("joining", 90), ("recording", 60)),
-        bot(
-            "finished",
-            ("joining", 120),
-            ("recording", 90),
-            stop_reason="manually_stopped",
-            recording_url=FILES,
-            transcript=[{"speaker_name": "Ada", "transcript": "hello there"}],
-        ),
-    ):
-        httpx_mock.add_response(method="GET", url=f"{API}/bot/{BOT}", json=item)
-    httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
-    httpx_mock.add_response(method="DELETE", url=f"{API}/bot/{BOT}", json={})
+    finished = bot(
+        "finished",
+        ("joining", 120),
+        ("recording", 90),
+        stop_reason="manually_stopped",
+        recording_url=FILES,
+        transcript=[{"speaker_name": "Ada", "transcript": "hello there"}],
+    )
+    state = serve(
+        httpx_mock,
+        [
+            bot("booting", ("booting", 3)),
+            bot("joining", ("joining", 30)),
+            bot("recording", ("joining", 60), ("recording", 30)),
+            bot("recording", ("joining", 90), ("recording", 60)),
+            finished,
+        ],
+    )
+    httpx_mock.add_callback(
+        lambda request: httpx.Response(404 if state["gone"] else 200, content=b"audio"),
+        method="GET",
+        url=FILES,
+    )
 
     code, text = run(
         ["--meet-url", MEET, "--stay", "5", "--download", "--delete"],
         {"SKRIBBY_API_KEY": KEY, "SKRIBBY_ACCOUNT_ID": ACCOUNT},
     )
 
-    assert code == 0
+    assert code == 0, text
     for words in (
         "signed in bot",
         f"Bot created: {BOT}",
@@ -87,17 +116,60 @@ def test_a_good_run_prints_the_mapping_stops_the_bot_and_never_prints_a_key(http
         "stopping the bot (stay time reached)",
         "Over: Skribby `completed`",
         "speakers: Ada",
+        "Recording host (the only part of the link printed): files.skribby.io",
         "Audio downloaded: 5 bytes",
-        "deleted at Skribby",
+        "GET /bot/{id}: 404 (the bot is gone)",
+        "the recording link now answers HTTP 404",
+        "-> gone.",
     ):
         assert words in text
-    assert KEY not in text and ACCOUNT not in text and MEET not in text
+    assert state["gone"]
+    assert KEY not in text and ACCOUNT not in text and MEET not in text and "rec.webm" not in text
     stops = [r for r in httpx_mock.get_requests() if str(r.url).endswith("/stop")]
     assert stops  # the bot was stopped by the run
     created = [
         r for r in httpx_mock.get_requests() if r.method == "POST" and r.url.path.endswith("/bot")
     ]
     assert b"always_authenticate" in created[0].content  # signed in, since the account id was given
+
+
+def test_a_recording_link_that_still_answers_after_the_delete_is_reported_as_not_gone(httpx_mock):
+    accept(httpx_mock)
+    finished = bot("finished", ("joining", 20), ("recording", 10), recording_url=FILES)
+    state = serve(httpx_mock, [finished])
+    httpx_mock.add_response(method="GET", url=FILES, content=b"audio")  # still there
+
+    code, text = run(["--meet-url", MEET, "--delete"], {"SKRIBBY_API_KEY": KEY})
+
+    assert state["gone"] and code == 1
+    assert "the recording link now answers HTTP 200" in text
+    assert "NOT shown to be gone: do not promise deletion yet" in text
+
+
+def test_a_delete_that_leaves_the_data_in_place_is_reported_as_not_gone(httpx_mock):
+    accept(httpx_mock)
+    finished = bot("finished", ("joining", 20), ("recording", 10), recording_url=FILES)
+    httpx_mock.add_response(method="GET", url=f"{API}/bot/{BOT}", json=finished)
+    httpx_mock.add_response(method="DELETE", url=f"{API}/bot/{BOT}", json={})  # but nothing goes
+
+    code, text = run(["--meet-url", MEET, "--delete"], {"SKRIBBY_API_KEY": KEY})
+
+    assert code == 1
+    assert "still shows the recording or transcript" in text and KEY not in text
+
+
+def test_a_run_with_no_speaker_names_says_so_plainly(httpx_mock):
+    accept(httpx_mock)
+    nameless = bot(
+        "finished",
+        ("joining", 20),
+        ("recording", 10),
+        recording_url=FILES,
+        transcript=[{"speaker_name": None, "transcript": "hello there"}],
+    )
+    httpx_mock.add_response(method="GET", url=f"{API}/bot/{BOT}", json=nameless)
+    code, text = run(["--meet-url", MEET], {"SKRIBBY_API_KEY": KEY})
+    assert "NO speaker name: meetings would be unlabelled" in text
 
 
 def test_guest_mode_ignores_the_account_id(httpx_mock):

@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import deletion, mail, maintenance, topics, translation, workspace
+from app import deletion, mail, maintenance, skribby, topics, translation, workspace
 from app.bot_provider import build_provider
 from app.config import get_settings
 from app.db import SessionLocal
@@ -152,6 +152,7 @@ def start_translation_thread(stop: threading.Event) -> threading.Thread:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+    skribby.check_region_unchanged(get_settings())
     mailer = mail.build_mailer(get_settings())
     if mailer is None:
         logger.warning("no mail provider is configured: mail stays in the outbox")

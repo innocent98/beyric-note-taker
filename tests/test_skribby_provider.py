@@ -52,7 +52,7 @@ pytestmark = pytest.mark.httpx_mock(
 
 KEY = "skr-live-0123456789abcdef"
 BASE = "https://skribby.test/api/v1"
-FILES = "https://files.skribby.test/rec.webm"
+FILES = "https://files.skribby.io/rec.webm"
 NOW = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
 CODE = "abc-defg-hij"
 URL = f"https://meet.google.com/{CODE}"
@@ -76,11 +76,28 @@ class Ledger:
             raise self.error
         return [bot for bot in self.known if bot.startswith(prefix)]
 
+    adopt_answers: list = ()  # what each `adopt_late_bot` look answers, the last one repeating
+    adopted: list = None
+
+    def adopt_late_bot(self, platform, code, bot_id):
+        self.adopted = (self.adopted or []) + [(platform, code, bot_id)]
+        answers = list(self.adopt_answers) or [False]
+        return answers[min(len(self.adopted) - 1, len(answers) - 1)]
+
 
 def make(*, ledger=None, now=NOW, **client_options):
     client = SkribbyClient(api_key=KEY, base_url=BASE, **client_options)
     ledger = ledger if ledger is not None else Ledger()
-    return SkribbyProvider(client, ledger, clock=lambda: now), ledger
+    return SkribbyProvider(client, ledger, clock=lambda: now, sleep=lambda seconds: None), ledger
+
+
+def wait_for(condition, seconds=5.0):
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        if condition():
+            return True
+        time.sleep(0.02)
+    return condition()
 
 
 def events(*steps):
@@ -403,7 +420,8 @@ def test_a_guest_bot_is_sent_with_the_configured_name_and_the_safety_limits(http
         "custom_metadata": {"app": "beyric-note-taker", "meeting_code": CODE},
         "stop_options": {
             "waiting_room_timeout": 10,
-            "time_limit": 360,
+            "time_limit": 330,  # 30 minutes under the pipeline's 6 hour give-up
+            "silence_detection": 0,  # a quiet stretch must not send the bot away
             "last_person_detection": 5,
         },
     }
@@ -435,7 +453,11 @@ def test_the_model_and_the_time_limit_follow_the_settings(httpx_mock):
     provider.send_bot(URL)
     body = sent_body(httpx_mock)
     assert body["transcription_model"] == "none"
-    assert body["stop_options"] == {"waiting_room_timeout": 10, "time_limit": 720}
+    assert body["stop_options"] == {
+        "waiting_room_timeout": 10,
+        "time_limit": 720,
+        "silence_detection": 0,
+    }
 
 
 def test_the_key_goes_in_the_authorization_header_and_nowhere_in_the_body(httpx_mock):
@@ -756,11 +778,13 @@ def test_a_table_that_cannot_be_read_makes_a_stop_an_error_and_not_a_success():
 
 def test_deleting_a_recording_deletes_the_bots_data_at_skribby(httpx_mock):
     httpx_mock.add_response(method="DELETE", url=f"{BASE}/bot/{BOT}", json={"message": "deleted"})
+    httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{BOT}", status_code=404, json={})
     ledger = Ledger()
     ledger.known = [BOT]
     provider, _ = make(ledger=ledger)
     provider.delete_recording(recording_handle(BOT))
-    assert [r.method for r in httpx_mock.get_requests()] == ["DELETE"]
+    # the delete, then a look to check it is gone
+    assert [r.method for r in httpx_mock.get_requests()] == ["DELETE", "GET"]
 
 
 def test_a_failed_delete_is_retryable_and_never_reported_as_done(httpx_mock):
@@ -796,6 +820,7 @@ def test_a_recording_just_looked_up_is_found_again_without_the_table(httpx_mock)
     httpx_mock.add_response(
         method="GET", url=f"{BASE}/bot/{BOT}", json=bot("finished", recording_url=FILES)
     )
+    httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{BOT}", status_code=404, json={})
     httpx_mock.add_response(method="DELETE", url=f"{BASE}/bot/{BOT}", json={})
     provider, _ = make(ledger=Ledger(error=RuntimeError("db down")))
     info = provider.get_meeting_by_id(BOT)
@@ -805,7 +830,7 @@ def test_a_recording_just_looked_up_is_found_again_without_the_table(httpx_mock)
 def test_the_download_goes_to_the_recording_url_and_sends_the_key_only_to_skribby(
     httpx_mock, tmp_path
 ):
-    storage = "https://s3.eu-west-1.example-storage.test/rec.webm?sig=abc"
+    storage = "https://bucket.s3.eu-west-1.amazonaws.com/rec.webm?sig=abc"
     own = "https://skribby.test/api/v1/recordings/x.webm"
     httpx_mock.add_response(
         method="GET", url=f"{BASE}/bot/{BOT}", json=bot("finished", recording_url=own)
@@ -826,7 +851,7 @@ def test_the_download_goes_to_the_recording_url_and_sends_the_key_only_to_skribb
 
 @pytest.mark.parametrize(
     "bad_url",
-    [None, "", "http://files.skribby.test/rec.webm", "ftp://x/y", 12, "file:///etc/hosts"],
+    [None, "", "http://files.skribby.io/rec.webm", "ftp://x/y", 12, "file:///etc/hosts"],
 )
 def test_a_recording_that_is_not_on_https_is_never_fetched(httpx_mock, tmp_path, bad_url):
     httpx_mock.add_response(
@@ -1172,3 +1197,348 @@ def test_a_finished_body_with_no_id_of_its_own_still_gets_the_handle_of_the_bot_
     provider, _ = make()
     info = provider.get_meeting_by_id(BOT)
     assert info.recording_id == recording_handle(BOT) == info.media_id
+
+
+# ---- the delete is verified, not assumed ----
+
+
+def deleter(httpx_mock, *, after):
+    """A provider that holds BOT, with `DELETE` answering 200 and the look after it answering
+    `after` (a status code or a body)."""
+    httpx_mock.add_response(method="DELETE", url=f"{BASE}/bot/{BOT}", json={"message": "deleted"})
+    if isinstance(after, int):
+        httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{BOT}", status_code=after, json={})
+    else:
+        httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{BOT}", json=after)
+    provider, _ = make()
+    return provider
+
+
+def test_a_delete_that_skribby_answers_with_a_404_afterwards_is_verified(httpx_mock):
+    deleter(httpx_mock, after=404).delete_bot_record(BOT)
+
+
+def test_a_bot_with_no_recording_link_and_no_transcript_afterwards_is_gone(httpx_mock):
+    emptied = bot("finished", recording_url=None, transcript=[])
+    deleter(httpx_mock, after=emptied).delete_bot_record(BOT)
+
+
+@pytest.mark.parametrize(
+    "still",
+    [
+        {"recording_url": FILES, "transcript": []},
+        {"recording_url": None, "transcript": [segment("Ada")]},
+    ],
+)
+def test_a_2xx_is_not_taken_for_gone_while_skribby_still_shows_the_data(httpx_mock, still):
+    provider = deleter(httpx_mock, after=bot("finished", **still))
+    with pytest.raises(SkribbyError, match="not verified gone"):
+        provider.delete_bot_record(BOT)
+
+
+def test_a_delete_that_cannot_be_checked_afterwards_is_an_error_not_a_success(httpx_mock):
+    with pytest.raises(SkribbyError):
+        deleter(httpx_mock, after=500).delete_bot_record(BOT)
+
+
+def test_a_404_on_the_delete_itself_needs_no_second_look(httpx_mock):
+    httpx_mock.add_response(method="DELETE", url=f"{BASE}/bot/{BOT}", status_code=404, json={})
+    make()[0].delete_bot_record(BOT)
+    assert [r.method for r in httpx_mock.get_requests()] == ["DELETE"]
+
+
+# ---- a bot whose "created" answer arrives after the deadline is not lost ----
+
+
+def slow_create(httpx_mock, bot_id=BOT, seconds=0.4):
+    def slow(request):
+        time.sleep(seconds)
+        return httpx.Response(201, json={"id": bot_id})
+
+    httpx_mock.add_callback(slow, method="POST", url=f"{BASE}/bot")
+
+
+def test_a_late_created_answer_is_given_to_the_placeholder_meeting(httpx_mock, caplog):
+    caplog.set_level(logging.WARNING)
+    slow_create(httpx_mock)
+    ledger = Ledger()
+    ledger.adopt_answers = [False, True]  # the placeholder is not there on the first look
+    provider, _ = make(send_deadline=0.1, ledger=ledger)
+
+    with pytest.raises(BotSendUncertain):
+        provider.send_bot(URL)
+
+    assert wait_for(lambda: ledger.adopted and len(ledger.adopted) == 2)
+    assert ledger.adopted[-1] == ("google_meet", CODE, BOT)
+    assert (
+        f"Skribby bot {BOT} was created after the send deadline" in caplog.text
+    )  # for an operator
+    assert KEY not in caplog.text
+    # and this process knows it, so a stop by code finds it
+    assert provider._candidates("google_meet", CODE) == [BOT]
+
+
+def test_a_late_bot_that_no_meeting_wants_is_stopped_and_deleted_not_left_recording(httpx_mock):
+    slow_create(httpx_mock)
+    httpx_mock.add_response(method="POST", url=f"{BASE}/bot/{BOT}/stop", json={"message": "ok"})
+    httpx_mock.add_response(method="DELETE", url=f"{BASE}/bot/{BOT}", json={})
+    httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{BOT}", status_code=404, json={})
+    provider, _ = make(send_deadline=0.1)  # no placeholder ever takes it
+
+    with pytest.raises(BotSendUncertain):
+        provider.send_bot(URL)
+
+    def stopped_and_deleted():
+        methods = [(r.method, r.url.path) for r in httpx_mock.get_requests()]
+        return ("POST", f"/api/v1/bot/{BOT}/stop") in methods and (
+            "DELETE",
+            f"/api/v1/bot/{BOT}",
+        ) in methods
+
+    assert wait_for(stopped_and_deleted)
+    assert wait_for(lambda: provider._candidates("google_meet", CODE) == [])
+
+
+def test_an_answer_that_lands_just_as_the_deadline_does_still_counts(httpx_mock, monkeypatch):
+    import app.skribby as module
+
+    accept(httpx_mock)
+
+    def lands_with_the_deadline(seconds, call):
+        call()  # the answer is in ...
+        raise TimeoutError  # ... as the caller's wait runs out
+
+    monkeypatch.setattr(module, "run_within", lands_with_the_deadline)
+    provider, _ = make()
+    assert provider.send_bot(URL) == BOT
+    assert provider._candidates("google_meet", CODE) == [BOT]
+
+
+def test_a_late_answer_attaches_to_a_real_placeholder_row(session, httpx_mock, engine):
+    from sqlalchemy.orm import sessionmaker
+
+    user = make_user(session, "ada@example.test")
+    template = make_template(session, user)
+    placeholder = row(
+        session, user, template, CODE, provider="skribby", status="bot_sent", bot_id=None
+    )
+    placeholder.completion_reason = "send_unconfirmed"
+    placeholder.bot_state_seen_at = NOW
+    session.commit()
+    ledger = DbLedger(sessionmaker(bind=engine, expire_on_commit=False))
+
+    assert ledger.adopt_late_bot("google_meet", CODE, BOT) is True
+
+    session.refresh(placeholder)
+    assert placeholder.vexa_meeting_id == BOT
+    assert placeholder.completion_reason is None and placeholder.bot_state_seen_at is None
+    assert ledger.adopt_late_bot("google_meet", CODE, OTHER) is False  # nothing left waiting
+
+
+def test_a_row_that_is_not_waiting_for_a_bot_is_never_given_one(session, engine):
+    from sqlalchemy.orm import sessionmaker
+
+    user = make_user(session, "ada@example.test")
+    template = make_template(session, user)
+    row(
+        session, user, template, CODE, provider="vexa", status="bot_sent", bot_id=None
+    ).completion_reason = "send_unconfirmed"
+    row(
+        session, user, template, CODE, provider="skribby", status="bot_sent", bot_id=None
+    )  # no marker
+    row(session, user, template, CODE, provider="skribby", status="failed", bot_id=None)
+    session.commit()
+    ledger = DbLedger(sessionmaker(bind=engine, expire_on_commit=False))
+    assert ledger.adopt_late_bot("google_meet", CODE, BOT) is False
+
+
+# ---- what this process remembers is bounded ----
+
+
+def test_the_process_forgets_old_bots_and_caps_the_codes_it_keeps(monkeypatch):
+    import app.skribby as module
+
+    provider, _ = make()
+    monkeypatch.setattr(module, "SENT_CODES_KEPT", 3)
+    for n in range(10):
+        provider._remember_bot(("google_meet", f"aaa-bbbb-c{n:02d}"), str(uuid.uuid4()))
+    assert len(provider._sent) == 3
+    assert ("google_meet", "aaa-bbbb-c09") in provider._sent
+    monkeypatch.setattr(module, "SENT_KEPT_FOR", -1)  # everything is now too old
+    provider._remember_bot(("google_meet", "zzz-yyyy-xxx"), str(uuid.uuid4()))
+    assert list(provider._sent) == [("google_meet", "zzz-yyyy-xxx")]
+
+
+# ---- the download is fenced ----
+
+
+def downloader(httpx_mock, link, *, resolve=None, **client_options):
+    httpx_mock.add_response(
+        method="GET", url=f"{BASE}/bot/{BOT}", json=bot("finished", recording_url=link)
+    )
+    client = SkribbyClient(api_key=KEY, base_url=BASE, resolve=resolve, **client_options)
+    ledger = Ledger()
+    ledger.known = [BOT]
+    return SkribbyProvider(client, ledger, clock=lambda: NOW), recording_handle(BOT)
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        "https://evil.example/rec.webm",
+        "https://skribby.io.evil.example/rec.webm",
+        "https://notskribby.io/rec.webm",
+        "https://amazonaws.com.evil.example/rec.webm",
+        "https://127.0.0.1/rec.webm",
+        "https://[::1]/rec.webm",
+        "https://169.254.169.254/latest/meta-data",
+    ],
+)
+def test_a_recording_on_a_host_that_is_not_allowed_is_refused_before_any_request(
+    httpx_mock, tmp_path, link
+):
+    provider, handle = downloader(httpx_mock, link)
+    with pytest.raises(SkribbyError, match="not allowed|not a public"):
+        provider.download_audio(handle, handle, tmp_path / "a.webm")
+    assert [str(r.url) for r in httpx_mock.get_requests()] == [f"{BASE}/bot/{BOT}"]
+    assert not (tmp_path / "a.webm").exists()
+
+
+def test_an_allowed_host_that_resolves_to_a_private_address_is_refused(httpx_mock, tmp_path):
+    provider, handle = downloader(
+        httpx_mock, FILES, resolve=lambda host: ["10.0.0.5", "93.184.216.34"]
+    )
+    with pytest.raises(SkribbyError, match="not a public address"):
+        provider.download_audio(handle, handle, tmp_path / "a.webm")
+    assert [r.url.host for r in httpx_mock.get_requests()] == [httpx.URL(BASE).host]
+
+
+def test_a_host_that_does_not_resolve_is_refused(httpx_mock, tmp_path):
+    def nowhere(host):
+        raise OSError("no such host")
+
+    provider, handle = downloader(httpx_mock, FILES, resolve=nowhere)
+    with pytest.raises(SkribbyError, match="not a public address"):
+        provider.download_audio(handle, handle, tmp_path / "a.webm")
+
+
+def test_a_redirect_to_a_host_that_is_not_allowed_is_refused_and_carries_no_key(
+    httpx_mock, tmp_path
+):
+    provider, handle = downloader(httpx_mock, FILES)
+    httpx_mock.add_response(
+        method="GET", url=FILES, status_code=302, headers={"location": "https://evil.example/x"}
+    )
+    with pytest.raises(SkribbyError, match="not allowed"):
+        provider.download_audio(handle, handle, tmp_path / "a.webm")
+    assert not [r for r in httpx_mock.get_requests() if r.url.host == "evil.example"]
+
+
+def test_an_operator_can_allow_another_storage_host(httpx_mock, tmp_path):
+    link = "https://recordings.example-storage.net/rec.webm"
+    provider, handle = downloader(httpx_mock, link, download_hosts=("example-storage.net",))
+    httpx_mock.add_response(method="GET", url=link, content=b"audio")
+    provider.download_audio(handle, handle, tmp_path / "a.webm")
+    assert (tmp_path / "a.webm").read_bytes() == b"audio"
+
+
+def test_a_recording_bigger_than_the_limit_is_refused_and_leaves_no_file(
+    httpx_mock, tmp_path, monkeypatch
+):
+    import app.skribby as module
+
+    monkeypatch.setattr(module, "MAX_DOWNLOAD_BYTES", 10)
+    provider, handle = downloader(httpx_mock, FILES)
+    httpx_mock.add_response(method="GET", url=FILES, content=b"x" * 11)
+    with pytest.raises(SkribbyError, match="larger than the limit"):
+        provider.download_audio(handle, handle, tmp_path / "a.webm")
+    assert not (tmp_path / "a.webm").exists()
+
+
+def test_a_declared_size_over_the_limit_is_refused_before_a_byte_is_written(
+    httpx_mock, tmp_path, monkeypatch
+):
+    import app.skribby as module
+
+    monkeypatch.setattr(module, "MAX_DOWNLOAD_BYTES", 10)
+    provider, handle = downloader(httpx_mock, FILES)
+    httpx_mock.add_response(
+        method="GET", url=FILES, content=b"xx", headers={"content-length": "999"}
+    )
+    with pytest.raises(SkribbyError, match="larger than the limit"):
+        provider.download_audio(handle, handle, tmp_path / "a.webm")
+    assert not (tmp_path / "a.webm").exists()
+
+
+def test_fewer_bytes_than_the_declared_length_is_a_failure_and_leaves_no_file(httpx_mock, tmp_path):
+    provider, handle = downloader(httpx_mock, FILES)
+    httpx_mock.add_response(
+        method="GET", url=FILES, content=b"short", headers={"content-length": "50"}
+    )
+    with pytest.raises(BotProviderError):
+        provider.download_audio(handle, handle, tmp_path / "a.webm")
+    assert not (tmp_path / "a.webm").exists()
+
+
+def test_an_empty_recording_is_a_failure_so_nothing_is_deleted_after_it(httpx_mock, tmp_path):
+    provider, handle = downloader(httpx_mock, FILES)
+    httpx_mock.add_response(method="GET", url=FILES, content=b"")
+    with pytest.raises(SkribbyError, match="empty"):
+        provider.download_audio(handle, handle, tmp_path / "a.webm")
+    assert not (tmp_path / "a.webm").exists()
+
+
+# ---- the region ----
+
+
+def test_the_provider_says_which_region_it_talks_to():
+    assert make()[0].region == "eu"
+    assert SkribbyProvider(SkribbyClient(api_key=KEY, region="jp"), Ledger()).region == "jp"
+
+
+def test_the_name_the_host_sees_is_the_one_of_the_provider_that_ran_the_meeting():
+    settings = Settings(_env_file=None, bot_provider="skribby", skribby_api_key=KEY)
+    assert settings.bot_name_for("vexa") == "Beyric Note Taker (recording)"
+    assert settings.bot_name_for("skribby") == "Beyric Meeting Support"
+    assert settings.bot_name_for(None) == "Beyric Meeting Support"  # an old row: the setting
+
+
+def test_starting_with_another_region_while_meetings_hold_data_in_the_old_one_is_refused(
+    session, engine
+):
+    from sqlalchemy.orm import sessionmaker
+
+    from app.skribby import check_region_unchanged
+
+    user = make_user(session, "ada@example.test")
+    template = make_template(session, user)
+    meeting = row(session, user, template, CODE, provider="skribby", bot_id=BOT)
+    meeting.bot_region = "eu"
+    session.commit()
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    here = Settings(
+        _env_file=None, bot_provider="skribby", skribby_api_key=KEY, skribby_region="eu"
+    )
+    there = Settings(
+        _env_file=None, bot_provider="skribby", skribby_api_key=KEY, skribby_region="jp"
+    )
+
+    check_region_unchanged(here, factory)  # the same region: fine
+    with pytest.raises(RuntimeError, match="SKRIBBY_REGION is 'jp' but 1 Skribby meeting"):
+        check_region_unchanged(there, factory)
+    meeting.provider_copy_deleted_at = NOW  # once the old copy is deleted the region may move
+    session.commit()
+    check_region_unchanged(there, factory)
+    check_region_unchanged(Settings(_env_file=None), factory)  # not Skribby: nothing to check
+
+
+def test_an_unreachable_database_is_a_warning_and_not_a_refusal_to_start():
+    from app.skribby import check_region_unchanged
+
+    def broken():
+        from sqlalchemy.exc import OperationalError
+
+        raise OperationalError("select", {}, RuntimeError("down"))
+
+    settings = Settings(_env_file=None, bot_provider="skribby", skribby_api_key=KEY)
+    check_region_unchanged(settings, broken)

@@ -1521,11 +1521,24 @@ def test_0038_adds_bot_provider_to_meetings_filling_old_rows_with_vexa_and_drops
     columns = {c["name"]: c for c in inspect(engine).get_columns("meetings")}
     assert columns["bot_provider"]["nullable"] is False
     assert columns["provider_copy_deleted_at"]["nullable"] is True
-    assert _rows(engine, "select bot_provider, provider_copy_deleted_at from meetings") == [
-        ("vexa", None)
-    ]
+    assert columns["provider_copy_attempts"]["nullable"] is False
+    assert columns["bot_region"]["nullable"] is True
+    assert _rows(
+        engine,
+        "select bot_provider, provider_copy_deleted_at, provider_copy_attempts, "
+        "provider_copy_next_try_at, bot_region from meetings",
+    ) == [("vexa", None, 0, None, None)]
     command.downgrade(cfg, "0037")
     left = {c["name"] for c in inspect(engine).get_columns("meetings")}
-    assert not {"bot_provider", "provider_copy_deleted_at"} & left
+    assert (
+        not {
+            "bot_provider",
+            "provider_copy_deleted_at",
+            "provider_copy_attempts",
+            "provider_copy_next_try_at",
+            "bot_region",
+        }
+        & left
+    )
     command.upgrade(cfg, "head")
     engine.dispose()

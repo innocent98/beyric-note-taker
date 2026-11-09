@@ -8,8 +8,10 @@ runs), checks every few seconds and prints what Skribby said and what the app wo
 waits for the bot to be admitted (up to `--lobby-limit` seconds, then stops it), lets it record for
 `--stay` seconds, stops it with `SkribbyProvider.stop_bot`, waits for the recording, and prints the
 result. `--download` also fetches the audio (and prints its size, never the link); `--delete` then
-removes the bot's data at Skribby, the call the app's cleanup makes. Without `--delete` the data
-stays at Skribby (7 days by default) and the dashboard shows it.
+removes the bot's data at Skribby, the call the app's cleanup makes, and then ASKS SKRIBBY AGAIN
+(the bot, and the recording link's HTTP status) and prints whether it is gone: run it before the
+privacy page says the audio is deleted. Without `--delete` the data stays at Skribby (7 days by
+default) and the dashboard shows it.
 
 Keys: `SKRIBBY_API_KEY` (required), `SKRIBBY_ACCOUNT_ID` (the signed-in bot; leave it out, or pass
 `--guest`, for a guest) and `SKRIBBY_REGION` (`eu` or `jp`), read from the environment first and
@@ -27,10 +29,11 @@ import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from app.bot_provider import BotProviderError
 from app.meeting_url import UnsupportedMeetingUrl, parse_meeting_url
-from app.skribby import SkribbyClient, SkribbyProvider, map_bot
+from app.skribby import SkribbyClient, SkribbyNotFound, SkribbyProvider, map_bot
 
 DEFAULT_KEYS_FILE = Path.home() / ".config" / "beyric-bakeoff" / "keys.env"
 KEY_NAMES = ("SKRIBBY_API_KEY", "SKRIBBY_ACCOUNT_ID", "SKRIBBY_REGION")
@@ -243,13 +246,20 @@ def watch(provider, client, bot_id, platform, code, args, say, sleep, clock, sta
 def finish(provider, bot_id, final, args, say) -> int:
     say()
     say(f"Over: Skribby `{final.status}`, recording {final.recording_status or 'none'}.")
+    client = provider._client
     info = provider.get_meeting_by_id(bot_id)
     names = sorted({seg["speaker"] or "(no name)" for seg in info.segments})
     say(
         f"Segments for speaker labelling: {len(info.segments)}; "
         f"speakers: {', '.join(names) or 'none'}"
     )
+    if info.segments and names == ["(no name)"]:
+        say("  -> every segment has NO speaker name: meetings would be unlabelled.")
     ok = info.status == "completed"
+    raw = client.get_bot(bot_id)
+    link = raw.get("recording_url") if isinstance(raw.get("recording_url"), str) else None
+    if link:
+        say(f"Recording host (the only part of the link printed): {urlsplit(link).hostname}")
     if args.download and info.recording_id is not None:
         with tempfile.TemporaryDirectory() as folder:
             target = Path(folder) / "recording"
@@ -259,12 +269,41 @@ def finish(provider, bot_id, final, args, say) -> int:
         say("No recording to download.")
         ok = False
     if args.delete:
-        if info.recording_id is not None:
-            provider.delete_recording(info.recording_id)
-            say("The bot's data was deleted at Skribby.")
-        else:
-            say("Nothing to delete by recording (no recording): remove the bot in the dashboard.")
+        ok = delete_and_prove(provider, client, bot_id, info, link, say) and ok
     return 0 if ok else 1
+
+
+def delete_and_prove(provider, client, bot_id, info, link, say) -> bool:
+    """Delete the bot's data the way the app does, then ask Skribby again and print what it says:
+    the bot (`GET /bot/{id}`) and the recording link, so the data can be seen to be gone BEFORE the
+    privacy page says so. True when everything answered as gone."""
+    if info.recording_id is not None:
+        provider.delete_recording(info.recording_id)
+    else:
+        provider.delete_bot_record(bot_id)
+    say("DELETE /bot/{id} answered success and the provider's own re-check passed. Asking again:")
+    gone = True
+    try:
+        after = client.get_bot(bot_id)
+        has_link = bool(after.get("recording_url"))
+        segments = len(after.get("transcript") or [])
+        say(
+            f"  GET /bot/{{id}}: 200, recording link {'STILL THERE' if has_link else 'absent'}, "
+            f"{segments} transcript segment(s), status `{after.get('status')}`"
+        )
+        gone = not has_link and segments == 0
+    except SkribbyNotFound:
+        say("  GET /bot/{id}: 404 (the bot is gone)")
+    if link:
+        try:
+            status = client.probe(link)
+            say(f"  the recording link now answers HTTP {status}")
+            gone = gone and status in (403, 404, 410)
+        except BotProviderError as exc:
+            say(f"  the recording link could not be checked ({type(exc).__name__}): {exc}")
+            gone = False
+    say("  -> " + ("gone." if gone else "NOT shown to be gone: do not promise deletion yet."))
+    return gone
 
 
 if __name__ == "__main__":

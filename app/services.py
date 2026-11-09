@@ -294,7 +294,7 @@ def status_text(meeting: Meeting, now: datetime | None = None) -> str:
         if text:
             if bot_state_is_stale(meeting, now):
                 return BOT_STATE_UNSURE_TEXT
-            return text.format(bot=get_settings().shown_bot_name)
+            return text.format(bot=get_settings().bot_name_for(meeting.bot_provider))
         if meeting.terminal_seen_at is not None and reason not in JOIN_FAILURE_MARKS:
             return CALL_ENDED_TEXT  # Vexa said the call is over and the recording is being made
         return "Bot sent"

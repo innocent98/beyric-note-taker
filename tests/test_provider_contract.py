@@ -41,7 +41,7 @@ URL = f"https://meet.google.com/{CODE}"
 BASE = "http://vexa.test"
 VEXA_BOT = 5  # the id the pretend Vexa host hands out first
 SKRIBBY_BASE = "https://skribby.test/api/v1"
-SKRIBBY_FILES = "https://files.skribby.test/recording.webm"
+SKRIBBY_FILES = "https://files.skribby.io/recording.webm"
 NOW = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
 
 

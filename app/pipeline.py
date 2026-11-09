@@ -35,11 +35,13 @@ from app.audio import AudioError, NoSpeechError
 from app.bot_provider import (
     BotDuplicate,
     BotMeeting,
+    BotNotFound,
     BotProviderError,
     BotSendUncertain,
     build_provider,
     provider_for,
     provider_name,
+    provider_region,
 )
 from app.config import get_settings
 from app.models import Meeting, Template, User, VocabularyTerm
@@ -168,6 +170,18 @@ RECORDING_GRACE = timedelta(minutes=10)
 # Vexa `completion_reason` values that mean the bot did not stay to the end. "evicted" is also
 # reported on calls that ended normally, so it only ever produces a notice, never a failure.
 REMOVAL_REASONS = frozenset({"evicted", "max_bot_time_exceeded"})
+
+# The deletion of a hosted provider's copy (`delete_fetched_copy`): a failed try waits twice as long
+# as the one before (5 minutes, 10, 20 ... up to 6 hours) and after this many failures the retry job
+# leaves the row to the hourly retention pass.
+COPY_RETRY_BASE = timedelta(minutes=5)
+COPY_RETRY_MAX = timedelta(hours=6)
+COPY_MAX_ATTEMPTS = 8
+# A meeting that failed with no recording and no speaker names keeps its provider copy until the
+# retention pass (the bot may still be processing a recording we have not fetched: a long call can
+# end after our own give-up), except where the bot clearly never recorded: it was not let in, or
+# Google refused it.
+NEVER_RECORDED_MARKS = ("awaiting_admission_rejected", "awaiting_admission_timeout", MEET_REFUSED)
 
 # Consecutive polls that saw a finished meeting with no audio recording, per meeting. Lost on a
 # restart, which only gives the recording a fresh grace period.
@@ -395,6 +409,8 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     meeting.join_attempts += 1
     meeting.status, meeting.step, meeting.failure_reason = "bot_sent", "waiting", None
     meeting.provider_copy_deleted_at = None
+    meeting.provider_copy_attempts, meeting.provider_copy_next_try_at = 0, None
+    meeting.bot_region = provider_region(vexa)
     meeting.vexa_meeting_id = None if vexa_id is None else str(vexa_id)
     meeting.bot_provider = provider_name(vexa)  # a hand retry goes to the provider in use now
     meeting.vexa_recording_id = None
@@ -780,37 +796,63 @@ def _step_transcribing(session: Session, meeting: Meeting, openai_client) -> boo
     return True
 
 
-def delete_fetched_copy(meeting: Meeting, provider) -> bool:
+def _copy_backoff(attempts: int) -> timedelta:
+    return min(COPY_RETRY_BASE * 2 ** max(attempts - 1, 0), COPY_RETRY_MAX)
+
+
+def delete_fetched_copy(meeting: Meeting, provider, now: datetime | None = None) -> bool:
     """Delete a hosted provider's copy of the meeting (recording, transcript, the record of the bot)
     now that we hold the audio and the speaker names. True when it is gone or there is nothing to
-    delete. Never raises for a provider failure: the notes must not wait for it. The caller commits
-    (`provider_copy_deleted_at` is set here on success, and a retry job tries again while it is
-    null). Vexa has no `delete_bot_record`: its copy is on our own server and follows the retention
-    rule (`delete_expired_audio`)."""
+    delete. Never raises for a failure: the notes must not wait for it. The caller commits.
+    `provider_copy_deleted_at` is set here on success. A failure counts an attempt and sets
+    `provider_copy_next_try_at` (a doubling wait) so `delete_fetched_copies` neither repeats it
+    every loop nor lets stuck rows crowd out newer ones; after `COPY_MAX_ATTEMPTS` the row is left
+    to the retention pass. Vexa has no `delete_bot_record`: its copy is on our own server and
+    follows the retention rule (`delete_expired_audio`)."""
     if meeting.provider_copy_deleted_at is not None:
         return True
     if not meeting.vexa_meeting_id or not hasattr(type(provider), "delete_bot_record"):
         return True
-    try:
-        provider.delete_bot_record(meeting.vexa_meeting_id)
-    except BotProviderError as exc:
-        logger.warning(
-            "meeting %s: could not delete the provider's copy yet (%s); will retry",
+    now = now or datetime.now(UTC)
+    region = provider_region(provider)
+    if meeting.bot_region and region and meeting.bot_region != region:
+        logger.error(
+            "meeting %s: its bot is in region %s but SKRIBBY_REGION is %s; not deleting",
             meeting.id,
-            type(exc).__name__,
+            meeting.bot_region,
+            region,
         )
         return False
-    meeting.provider_copy_deleted_at = datetime.now(UTC)
+    try:
+        provider.delete_bot_record(meeting.vexa_meeting_id)
+    except Exception as exc:  # a provider error, or anything else: never in the notes' way
+        meeting.provider_copy_attempts = (meeting.provider_copy_attempts or 0) + 1
+        meeting.provider_copy_next_try_at = now + _copy_backoff(meeting.provider_copy_attempts)
+        last = meeting.provider_copy_attempts >= COPY_MAX_ATTEMPTS
+        (logger.error if last else logger.warning)(
+            "meeting %s: could not delete the provider's copy (%s), try %s of %s%s",
+            meeting.id,
+            type(exc).__name__,
+            meeting.provider_copy_attempts,
+            COPY_MAX_ATTEMPTS,
+            "; left to the retention pass" if last else "; will retry",
+        )
+        return False
+    meeting.provider_copy_deleted_at = now
+    meeting.provider_copy_next_try_at = None
     return True
 
 
 def delete_fetched_copies(session: Session, now: datetime, *, vexa=None, limit: int = 5) -> int:
-    """Retry the deletion `delete_fetched_copy` could not do (the provider was down, or the meeting
-    ended before the speaker step: a bot never let in has a record too). Meetings of a hosted
-    provider whose copy is not yet deleted and that need nothing more from it: notes ready, or the
-    speaker names already saved, or no recording was ever made. A meeting still waiting for a
-    retry from the audio (a recording id and no speaker names yet) keeps its copy. At most `limit`
-    a pass; returns how many were deleted."""
+    """Retry the deletion `delete_fetched_copy` could not do (the provider was down), and do it for
+    a bot that never recorded. Rows chosen: a hosted provider's meeting whose copy is not yet
+    deleted, that is ready or failed, whose next try is due and that has tries left, and that needs
+    nothing more from the provider: its speaker names are saved, or no recording was made and the
+    bot clearly never recorded (`NEVER_RECORDED_MARKS`). A meeting that failed with no recording
+    for any other reason keeps its copy until the retention pass. Rows are taken with a row lock
+    (skipping any being worked on, such as one a resend is pointing at a new bot), the ones never
+    tried or due longest ago first, so failing rows go to the back. At most `limit` a pass;
+    returns how many were deleted."""
     candidates = session.scalars(
         select(Meeting)
         .where(
@@ -818,29 +860,62 @@ def delete_fetched_copies(session: Session, now: datetime, *, vexa=None, limit: 
             Meeting.provider_copy_deleted_at.is_(None),
             Meeting.vexa_meeting_id.is_not(None),
             Meeting.status.in_(("ready", "failed")),
-            (Meeting.speaker_transcript.is_not(None)) | (Meeting.vexa_recording_id.is_(None)),
+            Meeting.provider_copy_attempts < COPY_MAX_ATTEMPTS,
+            (Meeting.provider_copy_next_try_at.is_(None))
+            | (Meeting.provider_copy_next_try_at <= now),
+            (Meeting.speaker_transcript.is_not(None))
+            | (
+                Meeting.vexa_recording_id.is_(None)
+                & Meeting.completion_reason.in_(NEVER_RECORDED_MARKS)
+            ),
         )
-        .order_by(Meeting.id)
+        .order_by(Meeting.provider_copy_next_try_at.asc().nulls_first(), Meeting.id)
         .limit(limit)
+        .with_for_update(skip_locked=True)
     ).all()
     deleted = 0
     for meeting in candidates:
         try:
             provider = provider_for(vexa, meeting.bot_provider)
         except BotProviderError:
-            continue  # that provider is not configured here (yet): leave it to retention
-        if delete_fetched_copy(meeting, provider):
+            meeting.provider_copy_next_try_at = now + COPY_RETRY_MAX  # not configured here
+            continue
+        if delete_fetched_copy(meeting, provider, now):
             deleted += 1
     session.commit()
     return deleted
 
 
+def _delete_copy_after_commit(session: Session, meeting_id: int, provider) -> None:
+    """The deletion of the step that saved the speaker names, in a transaction of its own AFTER the
+    names were committed: a failed commit or a restart between the two can never lose the names to
+    a delete that already happened. The row is locked again for it (a row another worker holds is
+    left to the retry job)."""
+    try:
+        locked = _lock(session, meeting_id)
+        if locked is None:
+            return
+        delete_fetched_copy(locked, provider)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.warning(
+            "meeting %s: the provider copy step failed (%s)", meeting_id, type(exc).__name__
+        )
+
+
 def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> bool:
     if meeting.speaker_transcript is None:
-        info = _lookup(vexa, meeting)
+        try:
+            segments = _lookup(vexa, meeting).segments
+        except BotNotFound:
+            # The provider no longer has the meeting (its copy is gone): there are no segments to
+            # label with, which is "speakers incomplete", never a retry that cannot succeed.
+            logger.warning("meeting %s: no speaker segments (the provider has none)", meeting.id)
+            segments = []
         spent: list = []
         text, complete = label_transcript(
-            meeting.transcript or "", info.segments, client=openai_client, usage=spent
+            meeting.transcript or "", segments, client=openai_client, usage=spent
         )
         ai_runs.record_usage(
             session,
@@ -852,12 +927,11 @@ def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> b
         )
         meeting.speaker_transcript = text
         meeting.speakers_incomplete = not complete
-    # The audio is on our disk and the speaker names are in the row: a hosted provider has nothing
-    # more we need. Best effort and never in the way of the notes (a failure is retried by
-    # `delete_fetched_copies`).
-    delete_fetched_copy(meeting, vexa)
     meeting.step = "notes"
-    session.commit()
+    session.commit()  # the speaker names are saved FIRST ...
+    # ... and only then does a hosted provider's copy go: it holds nothing more we need. Best
+    # effort and never in the way of the notes (`delete_fetched_copies` retries).
+    _delete_copy_after_commit(session, meeting.id, vexa)
     return True
 
 
@@ -981,6 +1055,19 @@ def advance_meeting(
             and _expired(meeting, now)
         ):
             _fail(session, meeting, REASON_DOWNLOAD)
+        elif (
+            meeting is not None
+            and meeting.status == "processing"
+            and meeting.step == "speakers"
+            and meeting.speaker_transcript is None
+            and _expired(meeting, now)
+        ):
+            # The same give-up for the speaker lookup: the notes go ahead from the plain transcript
+            # (speakers incomplete) rather than wait for ever on a provider that does not answer.
+            meeting.speaker_transcript = meeting.transcript or ""
+            meeting.speakers_incomplete = True
+            meeting.step = "notes"
+            session.commit()
     except OperationalError as exc:
         # Transient database trouble: do not fail the meeting, try again on the next pass.
         logger.warning("meeting %s: database error (%s)", meeting_id, type(exc).__name__)
@@ -1059,6 +1146,15 @@ def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
             try:
                 # The provider that holds this meeting's copy, whatever the setting says now.
                 provider = provider_for(default or build_provider(), meeting.bot_provider)
+                region = provider_region(provider)
+                if meeting.bot_region and region and meeting.bot_region != region:
+                    logger.error(
+                        "meeting %s: its copy is in region %s, not %s; not deleting it",
+                        meeting.id,
+                        meeting.bot_region,
+                        region,
+                    )
+                    continue
                 if meeting.vexa_recording_id is not None:
                     provider.delete_recording(meeting.vexa_recording_id)
                 elif hasattr(type(provider), "delete_bot_record"):

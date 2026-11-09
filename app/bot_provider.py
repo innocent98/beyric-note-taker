@@ -212,6 +212,12 @@ def provider_name(provider: object) -> str:
     return get_settings().bot_provider
 
 
+def provider_region(provider: object) -> str | None:
+    """The region a hosted provider's bot is sent to (a real provider has `region`), else None."""
+    region = getattr(provider, "region", None)
+    return region if isinstance(region, str) and region else None
+
+
 def provider_for(default: BotProvider | None, meeting_provider: str | None) -> BotProvider:
     """The provider that ran a meeting, for work on a meeting that already exists.
 

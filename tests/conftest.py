@@ -26,3 +26,10 @@ def engine():
 def session(engine):
     with Session(engine) as session:
         yield session
+
+
+@pytest.fixture(autouse=True)
+def public_dns(monkeypatch):
+    """Recording hosts resolve to a public address in tests: the download refuses a host that does
+    not, and the fake hosts have no DNS."""
+    monkeypatch.setattr("app.skribby._resolve_host", lambda host: ["93.184.216.34"])

@@ -78,6 +78,11 @@ class Settings(BaseSettings):
     # recorder ("Bot", "Notetaker", "Recording", "AI") raise Google's bot detection, and a name
     # that sounds like a person or a service desk does not.
     skribby_bot_name: str = "Beyric Meeting Support"
+    # Extra hosts a recording may be fetched from, comma separated (a name, or any subdomain of it).
+    # Skribby's own domain and Amazon's storage are always allowed; anything else is refused until
+    # an operator has seen where the recordings really are (`scripts/skribby_live_check.py` prints
+    # the host). Optional.
+    skribby_download_hosts: str = ""
     # Skribby transcribes the call too; its text is only used to know who spoke when (our own
     # transcription still writes the transcript). `groq/whisper-large-v3-turbo` is on the Free
     # plan and the cheapest (0.04 USD an hour); `none` turns it off and with it the speaker names.
@@ -86,15 +91,19 @@ class Settings(BaseSettings):
     vexa_api_key: str = ""
     bot_name: str = "Beyric Note Taker (recording)"
 
-    @property
-    def shown_bot_name(self) -> str:
-        """The name the host sees in the meeting for the provider in use, for the owner's
-        "Admit '...'" line."""
-        if self.bot_provider == "skribby":
+    def bot_name_for(self, provider: str | None) -> str:
+        """The name the host sees in the meeting for the provider that ran a meeting, for the
+        owner's "Admit '...'" line (so a meeting Vexa runs still names Vexa's bot after the setting
+        moved to Skribby)."""
+        if (provider or self.bot_provider) == "skribby":
             if self.skribby_account_id:
                 return self.skribby_account_name.strip() or self.skribby_bot_name
             return self.skribby_bot_name
         return self.bot_name
+
+    @property
+    def shown_bot_name(self) -> str:
+        return self.bot_name_for(self.bot_provider)
 
     poll_interval_seconds: int = 30
     # How long the bot may sit in a call with no one else speaking before it leaves on its own

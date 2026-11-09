@@ -12,6 +12,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from functools import partial
 
+import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
@@ -33,7 +34,7 @@ pytestmark = pytest.mark.httpx_mock(
 
 KEY = "skr-live-0123456789abcdef"
 API = "https://platform.skribby.io/api/v1"
-FILES = "https://files.skribby.test/rec.webm"
+FILES = "https://files.skribby.io/rec.webm"
 BOT = "3c09b2aa-6708-42c1-8145-aa55ee223613"
 SECOND = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"
 
@@ -94,12 +95,30 @@ def accept(mock, *ids):
         mock.add_response(method="POST", url=f"{API}/bot", status_code=201, json={"id": bot})
 
 
+GONE: set[str] = set()  # bots Skribby has deleted: every look at one answers 404 from then on
+
+
+@pytest.fixture(autouse=True)
+def nothing_is_gone():
+    GONE.clear()
+    yield
+    GONE.clear()
+
+
 def deletable(mock, bot=BOT, *statuses):
-    """Skribby's `DELETE /bot/{id}`: each answer in turn (the last one repeats); 200 by default."""
-    for status in statuses or (200,):
-        mock.add_response(
-            method="DELETE", url=f"{API}/bot/{bot}", status_code=status, json={"message": "x"}
-        )
+    """Skribby's `DELETE /bot/{id}`: each answer in turn (the last one repeats); 200 by default. A
+    success makes the bot gone (404 on every look after), as the verification expects."""
+    answers = list(statuses or (200,))
+    count = {"n": 0}
+
+    def answer(request):
+        status = answers[min(count["n"], len(answers) - 1)]
+        count["n"] += 1
+        if 200 <= status < 300 or status == 404:
+            GONE.add(bot)
+        return httpx.Response(status, json={"message": "x"})
+
+    mock.add_callback(answer, method="DELETE", url=f"{API}/bot/{bot}")
 
 
 def deletes(mock):
@@ -107,8 +126,17 @@ def deletes(mock):
 
 
 def looks(mock, bot, *bodies):
-    for item in bodies:
-        mock.add_response(method="GET", url=f"{API}/bot/{bot}", json=item)
+    """Each look at the bot answers the next body (the last repeats), or 404 once it is deleted."""
+    sequence, count = list(bodies), {"n": 0}
+
+    def answer(request):
+        if bot in GONE:
+            return httpx.Response(404, json={})
+        item = sequence[min(count["n"], len(sequence) - 1)]
+        count["n"] += 1
+        return httpx.Response(200, json=item)
+
+    mock.add_callback(answer, method="GET", url=f"{API}/bot/{bot}")
 
 
 GOOD_CALL = [
@@ -221,19 +249,13 @@ def test_the_delete_is_after_the_download_and_the_speaker_lookup_never_before(
 
     passes(session, meeting.id)
 
-    order = [
-        r.method
-        for r in httpx_mock.get_requests()
-        if str(r.url) in (FILES,) or r.method == "DELETE"
-    ]
-    assert order == ["GET", "DELETE"]
-    last_lookup = max(
-        i
-        for i, r in enumerate(httpx_mock.get_requests())
-        if r.url.path.endswith(BOT) and r.method == "GET"
-    )
-    first_delete = min(i for i, r in enumerate(httpx_mock.get_requests()) if r.method == "DELETE")
-    assert last_lookup < first_delete
+    seen = [(r.method, r.url.path) for r in httpx_mock.get_requests()]
+    bot_path = f"/api/v1/bot/{BOT}"
+    download = seen.index(("GET", httpx.URL(FILES).path))
+    delete = seen.index(("DELETE", bot_path))
+    assert download < delete
+    # every look at the bot but the one that checks the delete came before it
+    assert seen[delete + 1 :] == [("GET", bot_path)]
 
 
 def test_a_delete_skribby_refuses_never_holds_up_the_notes_and_is_retried_until_it_works(
@@ -250,14 +272,17 @@ def test_a_delete_skribby_refuses_never_holds_up_the_notes_and_is_retried_until_
     session.expire_all()
     done = session.get(Meeting, meeting.id)
     assert done.status == "ready" and done.notes == NOTES + "\n"  # the notes did not wait for it
-    assert done.provider_copy_deleted_at is None
-    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0  # still refused
+    assert done.provider_copy_deleted_at is None and done.provider_copy_attempts == 1
+    later = datetime.now(UTC) + timedelta(minutes=6)
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0  # not due yet: a wait
+    assert len(deletes(httpx_mock)) == 1
+    assert pipeline.delete_fetched_copies(session, later) == 0  # still refused
     session.expire_all()
-    assert session.get(Meeting, meeting.id).provider_copy_deleted_at is None
-    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 1
+    assert session.get(Meeting, meeting.id).provider_copy_attempts == 2
+    assert pipeline.delete_fetched_copies(session, later + timedelta(minutes=11)) == 1
     session.expire_all()
     assert session.get(Meeting, meeting.id).provider_copy_deleted_at is not None
-    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0  # nothing left to do
+    assert pipeline.delete_fetched_copies(session, later + timedelta(hours=1)) == 0  # all done
     assert len(deletes(httpx_mock)) == 3
 
 
@@ -288,7 +313,7 @@ def test_the_worker_loops_job_retries_the_delete(session, skribby, user, templat
     meeting = place(session, skribby, user, template)
     passes(session, meeting.id)
 
-    worker.background_jobs(session, None, datetime.now(UTC))
+    worker.background_jobs(session, None, datetime.now(UTC) + timedelta(minutes=6))
 
     session.expire_all()
     assert session.get(Meeting, meeting.id).provider_copy_deleted_at is not None
@@ -492,7 +517,7 @@ def test_deleting_a_finished_skribby_meeting_deletes_the_bots_data_at_skribby(
     accept(httpx_mock)
     looks(httpx_mock, BOT, *GOOD_CALL)
     httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
-    httpx_mock.add_response(method="DELETE", url=f"{API}/bot/{BOT}", json={"message": "deleted"})
+    deletable(httpx_mock)
     meeting = place(session, skribby, user, template)
     passes(session, meeting.id)
     session.expire_all()
@@ -727,3 +752,273 @@ def test_a_failed_meeting_with_no_bot_id_has_nothing_to_delete_at_skribby(
 
     assert cleared == 1
     assert not [r for r in httpx_mock.get_requests() if r.method == "DELETE"]
+
+
+# ---- the review's cases: order, kill, 404, give-up, backoff, abandoned, region, lock, name ----
+
+
+class Halt(BaseException):
+    """Stops a worker pass where a test wants it, as a kill would (it is not an `Exception`)."""
+
+
+def reach_the_speakers_step(session, skribby, user, template, httpx_mock, monkeypatch):
+    """A meeting whose audio is fetched and transcribed, next in line for the speaker names."""
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, *GOOD_CALL)
+    httpx_mock.add_response(method="GET", url=FILES, content=b"audio")
+    meeting = place(session, skribby, user, template)
+    real = pipeline._step_speakers
+
+    def halt(*args, **kwargs):
+        raise Halt
+
+    monkeypatch.setattr(pipeline, "_step_speakers", halt)
+    with pytest.raises(Halt):
+        for _ in range(12):
+            worker.run_pass(session, 0)
+    monkeypatch.setattr(pipeline, "_step_speakers", real)
+    session.rollback()
+    session.expire_all()
+    current = session.get(Meeting, meeting.id)
+    assert current.step == "speakers" and current.transcript == TRANSCRIPT
+    return current
+
+
+def stuck_bot(mock, bot, *delete_statuses):
+    """A bot of a never-admitted meeting: Skribby still shows it until a delete succeeds."""
+    looks(mock, bot, body("not_admitted", bot, stop_reason="request_denied"))
+    deletable(mock, bot, *delete_statuses)
+
+
+def test_a_kill_between_saving_the_names_and_the_delete_loses_nothing(
+    session, skribby, user, template, httpx_mock, monkeypatch
+):
+    from app.skribby import SkribbyProvider
+
+    meeting = reach_the_speakers_step(session, skribby, user, template, httpx_mock, monkeypatch)
+    deletable(httpx_mock)
+    killed = {"n": 0}
+    real = SkribbyProvider.delete_bot_record
+
+    def kill_once(self, bot_id):
+        if not killed["n"]:
+            killed["n"] += 1
+            GONE.add(BOT)  # the delete reached Skribby, then the process died
+            raise KeyboardInterrupt
+        return real(self, bot_id)
+
+    monkeypatch.setattr(SkribbyProvider, "delete_bot_record", kill_once)
+
+    with pytest.raises(KeyboardInterrupt):
+        worker.run_pass(session, 0)
+
+    session.rollback()
+    session.expire_all()
+    saved = session.get(Meeting, meeting.id)
+    assert saved.speaker_transcript.startswith("[Ada]: ")  # the names were committed first
+    assert (saved.step, saved.provider_copy_deleted_at) == ("notes", None)
+    # the next pass needs nothing from Skribby: the notes are written from what was saved
+    seen = passes(session, meeting.id)
+    assert seen[-1][:2] == ("ready", "done")
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).notes == NOTES + "\n"
+    # and the job finishes the delete: Skribby says 404, which for a bot it already removed is done
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 1
+
+
+def test_a_provider_that_no_longer_has_the_meeting_means_no_speaker_names_not_a_stuck_meeting(
+    session, skribby, user, template, httpx_mock, monkeypatch
+):
+    meeting = reach_the_speakers_step(session, skribby, user, template, httpx_mock, monkeypatch)
+    deletable(httpx_mock, BOT, 404)  # nothing left to delete
+    GONE.add(BOT)  # Skribby's copy went before the speaker lookup
+
+    seen = passes(session, meeting.id)
+
+    assert seen[-1][:2] == ("ready", "done")
+    session.expire_all()
+    done = session.get(Meeting, meeting.id)
+    assert done.speakers_incomplete is True
+    assert done.speaker_transcript == TRANSCRIPT  # plain text, said plainly by the flag
+    assert done.notes == NOTES + "\n"
+
+
+def test_a_speaker_lookup_that_keeps_failing_gives_up_like_the_download_does(
+    session, skribby, user, template, httpx_mock, monkeypatch
+):
+    meeting = reach_the_speakers_step(session, skribby, user, template, httpx_mock, monkeypatch)
+    httpx_mock.reset()
+    httpx_mock.add_response(method="GET", url=f"{API}/bot/{BOT}", status_code=500)
+    soon = datetime.now(UTC)
+    pipeline.advance_meeting(session, meeting.id, now=soon, openai_client=FakeOpenAI())
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).step == "speakers"  # a blip: try again next pass
+
+    late = meeting.started_polling_at + timedelta(hours=7)
+    pipeline.advance_meeting(session, meeting.id, now=late, openai_client=FakeOpenAI())
+    session.expire_all()
+    done = session.get(Meeting, meeting.id)
+    assert (done.step, done.speakers_incomplete) == ("notes", True)
+    pipeline.advance_meeting(session, meeting.id, now=late, openai_client=FakeOpenAI())
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).status == "ready"
+
+
+def test_a_meeting_given_up_on_while_skribby_is_still_processing_keeps_its_copy(
+    session, skribby, user, template, httpx_mock
+):
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, body("processing", events=[("recording", 300)]))
+    meeting = place(session, skribby, user, template)
+    late = meeting.started_polling_at + timedelta(hours=6, minutes=1)
+    pipeline.advance_meeting(session, meeting.id, now=late, openai_client=FakeOpenAI())
+    session.expire_all()
+    gave_up = session.get(Meeting, meeting.id)
+    assert gave_up.status == "failed" and gave_up.vexa_recording_id is None
+
+    assert pipeline.delete_fetched_copies(session, late) == 0  # the recording may still arrive
+    assert deletes(httpx_mock) == []
+
+
+def test_skribbys_own_limit_ends_the_bot_well_before_the_pipeline_gives_up(
+    session, skribby, user, template, httpx_mock
+):
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, GOOD_CALL[0])
+    place(session, skribby, user, template)
+    sent = json.loads(posts(httpx_mock)[0].content)
+    assert sent["stop_options"]["time_limit"] == get_settings().max_poll_hours * 60 - 30
+    assert sent["stop_options"]["silence_detection"] == 0
+
+
+def stuck_row(session, user, template, code, bot_id):
+    meeting = Meeting(
+        owner_user_id=user.id,
+        url=url_of(code),
+        platform="google_meet",
+        native_id=code,
+        template_id=template.id,
+        vexa_meeting_id=bot_id,
+        bot_provider="skribby",
+        bot_region="eu",
+        status="failed",
+        completion_reason="awaiting_admission_rejected",
+        started_polling_at=datetime.now(UTC),
+    )
+    session.add(meeting)
+    session.commit()
+    return meeting
+
+
+def test_rows_that_keep_failing_back_off_stop_at_the_cap_and_never_crowd_out_newer_ones(
+    session, skribby, user, template, httpx_mock
+):
+    stuck = [
+        stuck_row(session, user, template, f"aaa-bbbb-c{n:02d}", str(uuid.uuid4()))
+        for n in range(5)
+    ]
+    newer = stuck_row(session, user, template, "zzz-yyyy-xxx", SECOND)
+    for row_ in stuck:
+        stuck_bot(httpx_mock, row_.vexa_meeting_id, 500)
+    stuck_bot(httpx_mock, SECOND)
+    now = datetime.now(UTC)
+
+    assert pipeline.delete_fetched_copies(session, now) == 0  # the first five all fail
+    assert len(deletes(httpx_mock)) == 5
+    # the newer meeting is next, though five older rows are still failing
+    assert pipeline.delete_fetched_copies(session, now) == 1
+    session.expire_all()
+    assert session.get(Meeting, newer.id).provider_copy_deleted_at is not None
+    assert len(deletes(httpx_mock)) == 6
+    # the failed five are not asked again until their wait is over ...
+    assert pipeline.delete_fetched_copies(session, now + timedelta(minutes=1)) == 0
+    assert len(deletes(httpx_mock)) == 6
+    # ... then the wait doubles each time, up to the cap, after which they are left alone
+    clock = now
+    for _ in range(2, pipeline.COPY_MAX_ATTEMPTS + 1):
+        clock += pipeline.COPY_RETRY_MAX + timedelta(minutes=1)
+        pipeline.delete_fetched_copies(session, clock)
+    session.expire_all()
+    assert {session.get(Meeting, m.id).provider_copy_attempts for m in stuck} == {
+        pipeline.COPY_MAX_ATTEMPTS
+    }
+    before = len(deletes(httpx_mock))
+    pipeline.delete_fetched_copies(session, clock + timedelta(days=3))
+    assert len(deletes(httpx_mock)) == before  # capped: the retention pass has them now
+
+
+def test_the_wait_between_tries_doubles_up_to_six_hours():
+    waits = [pipeline._copy_backoff(n) for n in range(1, 9)]
+    assert waits[:4] == [timedelta(minutes=m) for m in (5, 10, 20, 40)]
+    assert max(waits) == pipeline.COPY_RETRY_MAX
+
+
+def test_the_retention_pass_still_tries_a_row_the_job_has_given_up_on(
+    session, skribby, user, template, httpx_mock
+):
+    row_ = stuck_row(session, user, template, "aaa-bbbb-ccc", BOT)
+    row_.provider_copy_attempts = pipeline.COPY_MAX_ATTEMPTS
+    session.commit()
+    stuck_bot(httpx_mock, BOT)
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0
+
+    cleared = pipeline.delete_expired_audio(session, datetime.now(UTC) + timedelta(days=10))
+
+    assert cleared == 1 and len(deletes(httpx_mock)) == 1
+
+
+def test_a_row_another_worker_is_working_on_is_left_alone_by_the_job(
+    session, skribby, user, template, httpx_mock, engine
+):
+    from sqlalchemy.orm import Session
+
+    row_ = stuck_row(session, user, template, "aaa-bbbb-ccc", BOT)
+    stuck_bot(httpx_mock, BOT)
+    with Session(engine) as other:  # a resend (or the pipeline) holds the row
+        other.scalars(select(Meeting).where(Meeting.id == row_.id).with_for_update()).all()
+        assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0
+        assert deletes(httpx_mock) == []
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 1
+
+
+def test_a_copy_in_another_region_is_never_marked_deleted_by_a_404_from_this_one(
+    session, skribby, user, template, httpx_mock
+):
+    row_ = stuck_row(session, user, template, "aaa-bbbb-ccc", BOT)
+    row_.bot_region = "jp"  # the provider here talks to eu
+    session.commit()
+    deletable(httpx_mock, BOT, 404)
+
+    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0
+    cleared = pipeline.delete_expired_audio(session, datetime.now(UTC) + timedelta(days=10))
+
+    assert cleared == 0  # kept, not marked cleared
+    assert deletes(httpx_mock) == []
+    session.expire_all()
+    assert session.get(Meeting, row_.id).provider_copy_deleted_at is None
+
+
+def test_a_new_meeting_remembers_the_region_it_was_sent_to(
+    session, skribby, user, template, httpx_mock
+):
+    accept(httpx_mock)
+    looks(httpx_mock, BOT, GOOD_CALL[0])
+    meeting = place(session, skribby, user, template)
+    assert meeting.bot_region == "eu"
+
+
+def test_the_admit_line_names_the_bot_of_the_provider_that_ran_the_meeting(monkeypatch):
+    skribby_setting = Settings(_env_file=None, bot_provider="skribby", skribby_api_key=KEY)
+    monkeypatch.setattr(services, "get_settings", lambda: skribby_setting)
+
+    def line(provider):
+        meeting = Meeting(
+            status="bot_sent",
+            completion_reason="awaiting_admission",
+            bot_state_seen_at=datetime.now(UTC),
+            bot_provider=provider,
+        )
+        return services.status_text(meeting)
+
+    assert "Beyric Note Taker (recording)" in line("vexa")  # a meeting Vexa runs, after the flip
+    assert "Beyric Meeting Support" in line("skribby")

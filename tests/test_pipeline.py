@@ -704,8 +704,34 @@ def test_vexa_blip_after_six_hours_does_not_fail_a_meeting_with_a_transcript(ses
     meeting.started_polling_at = NOW - timedelta(hours=7)
     session.commit()
     run(session, meeting, FakeVexa(VexaError("down")))
-    assert (meeting.status, meeting.step) == ("processing", "speakers")
+    # Not failed: the speaker lookup gives up as the download does, and the notes go ahead from
+    # the plain transcript with the speakers marked incomplete (it used to wait here for ever).
+    assert (meeting.status, meeting.step) == ("processing", "notes")
     assert meeting.failure_reason is None
+    assert meeting.speaker_transcript == TRANSCRIPT and meeting.speakers_incomplete is True
+
+
+def test_vexa_blip_on_the_speaker_lookup_within_six_hours_just_waits(session, meeting):
+    meeting.status, meeting.step = "processing", "speakers"
+    meeting.transcript = TRANSCRIPT
+    meeting.started_polling_at = NOW - timedelta(hours=1)
+    session.commit()
+    run(session, meeting, FakeVexa(VexaError("down")))
+    assert (meeting.status, meeting.step) == ("processing", "speakers")
+    assert meeting.speaker_transcript is None
+
+
+def test_a_provider_that_does_not_know_the_meeting_at_the_speaker_step_means_no_names(
+    session, meeting
+):
+    from app.bot_provider import BotNotFound
+
+    meeting.status, meeting.step = "processing", "speakers"
+    meeting.transcript = TRANSCRIPT
+    session.commit()
+    run(session, meeting, FakeVexa(BotNotFound("404")))
+    assert (meeting.status, meeting.step) == ("ready", "done")
+    assert meeting.speakers_incomplete is True and meeting.speaker_transcript == TRANSCRIPT
 
 
 def test_download_that_never_works_gives_up_with_its_own_reason(session, meeting):
