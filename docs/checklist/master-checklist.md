@@ -394,6 +394,8 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
     - [x] Vexa behind the compose profile `vexa`, so its containers can be stopped (data kept) and a deploy leaves them alone; the way back is one command (2026-11-09, `feature/vexa-compose-profile`, SOP `docs/sop/2026-11-09-vexa-compose-profile.md`, README section 8). Checked locally with the profile off; **not yet done on the server**
     - [ ] Adebayo: after the flip, stop Vexa on the server (README steps) and decide what to do with Vexa recordings that outlive retention while it is stopped
     - [ ] Adebayo: run `scripts/skribby_live_check.py` once in a real meeting (guest and signed-in), then set `BOT_PROVIDER=skribby` in a no-meetings window
+    - [x] Transcript comparison tool `scripts/transcript_compare.py` (Skribby's transcript and ours of one meeting side by side, HTML and text, offline re-run; no pipeline change), PR open 2026-11-09, SOP `docs/sop/2026-11-09-transcript-compare.md`
+    - [ ] Adebayo: read the comparison on one or more real meetings and decide whether Skribby's transcript replaces ours (the transcript-source switch is built only after that)
     - [ ] Privacy page and sub-processor list: add Skribby (the sentences are in the SOP); recording notice for Skribby's name and chat message (follow-up)
     - [ ] `RecallProvider` is not planned: Skribby was chosen; keep Recall only as the fallback to reconsider if Skribby's terms change
   - [ ] B3 fallback placement, spend guard and policy text (needs Adebayo's yes on Recall as a sub-processor)

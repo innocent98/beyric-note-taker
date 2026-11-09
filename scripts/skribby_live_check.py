@@ -36,7 +36,7 @@ from app.meeting_url import UnsupportedMeetingUrl, parse_meeting_url
 from app.skribby import SkribbyClient, SkribbyNotFound, SkribbyProvider, map_bot
 
 DEFAULT_KEYS_FILE = Path.home() / ".config" / "beyric-bakeoff" / "keys.env"
-KEY_NAMES = ("SKRIBBY_API_KEY", "SKRIBBY_ACCOUNT_ID", "SKRIBBY_REGION")
+KEY_NAMES = ("SKRIBBY_API_KEY", "SKRIBBY_ACCOUNT_ID", "SKRIBBY_REGION", "OPENAI_API_KEY")
 TERMINAL_RAW = (
     "finished",
     "not_admitted",
