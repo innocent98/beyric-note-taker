@@ -376,4 +376,4 @@ def _store(
     conn.expected_expiry_at = None  # Microsoft has no testing-mode expiry
     session.flush()
     calendar_states.revive_on_reconnect(session, conn, now)
-    return _commit(session)
+    return _commit(session, "microsoft_failed")

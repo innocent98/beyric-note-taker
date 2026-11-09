@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -403,11 +403,13 @@ def _store(
     return _commit(session)
 
 
-def _commit(session: Session) -> str | None:
+def _commit(session: Session, failure: str = "google_failed") -> str | None:
+    """Commit; the error code to redirect with (the provider's own) if two connects for one user
+    finish at the same moment."""
     try:
         session.commit()
-    except IntegrityError:  # two connects for one user finishing at the same moment
-        return "google_failed"
+    except IntegrityError:
+        return failure
     return None
 
 
@@ -491,14 +493,22 @@ def _drop_old_account(session: Session, conn: CalendarConnection) -> ReleasedCon
     though the connection died)."""
     released = _release(conn)
     _forget_meet_subscription(conn)
-    session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
+    own_events = select(CalendarEvent.id).where(CalendarEvent.connection_id == conn.id)
+    # Only this connection's joins: another provider's connection keeps its own. A join with no
+    # event (its event row aged out) cannot be told apart, so it goes only when no other calendar
+    # of the user is live.
+    mine = ScheduledJoin.calendar_event_id.in_(own_events)
+    if other_live_calendar(session, conn.user_id, conn.provider) is None:
+        mine = or_(mine, ScheduledJoin.calendar_event_id.is_(None))
     session.execute(
         delete(ScheduledJoin).where(
             ScheduledJoin.user_id == conn.user_id,
             ScheduledJoin.source == "calendar",
             ScheduledJoin.state.not_in(LIVE_JOIN_STATES),
+            mine,
         )
     )
+    session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
     return released
 
 
@@ -527,14 +537,30 @@ def disconnect(
         .with_for_update()
     ).first()
     released = _release(conn) if conn is not None else None
-    session.execute(delete(CalendarEvent).where(CalendarEvent.user_id == user.id))
-    session.execute(delete(ScheduledJoin).where(ScheduledJoin.user_id == user.id))
-    session.execute(
-        delete(Notification).where(
-            Notification.user_id == user.id,
-            Notification.kind.startswith(CALENDAR_NOTIFICATION_PREFIX, autoescape=True),
+    # With another calendar of the user still live (Outlook while Google is being disconnected for
+    # Meet, or a disconnect aimed at a provider that is not the connected one), only THIS
+    # connection's events and their joins go: the other calendar's rows, joins and notifications
+    # stay, or its auto-join would silently stop while its row still says `connected`.
+    other_live = other_live_calendar(session, user.id, provider) is not None
+    if other_live:
+        if conn is not None:
+            own_events = select(CalendarEvent.id).where(CalendarEvent.connection_id == conn.id)
+            session.execute(
+                delete(ScheduledJoin).where(
+                    ScheduledJoin.user_id == user.id,
+                    ScheduledJoin.calendar_event_id.in_(own_events),
+                )
+            )
+            session.execute(delete(CalendarEvent).where(CalendarEvent.connection_id == conn.id))
+    else:
+        session.execute(delete(CalendarEvent).where(CalendarEvent.user_id == user.id))
+        session.execute(delete(ScheduledJoin).where(ScheduledJoin.user_id == user.id))
+        session.execute(
+            delete(Notification).where(
+                Notification.user_id == user.id,
+                Notification.kind.startswith(CALENDAR_NOTIFICATION_PREFIX, autoescape=True),
+            )
         )
-    )
     if conn is not None:
         conn.status = "disconnected"
         conn.needs_reconnect_reason = None
