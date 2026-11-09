@@ -30,6 +30,7 @@ import re
 import socket
 import threading
 import time
+import unicodedata
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable
@@ -228,33 +229,40 @@ def _tag(value: Any) -> str | None:
 
 
 def _same(name: str) -> str:
-    return name.casefold()
+    """What two spellings of a name are compared by: compatibility-normalised, with invisible
+    format characters (zero-width space and the like) dropped, then case-folded."""
+    plain = unicodedata.normalize("NFKC", name)
+    return "".join(ch for ch in plain if unicodedata.category(ch) != "Cf").casefold()
 
 
-def _candidate_names(item: dict) -> set[str] | None:
-    """The cleaned names in a segment's `potential_speaker_names`, or None when the list is so
-    long that choosing from it would be a guess made on a cut-off list (real ones hold a few)."""
+def _candidate_names(item: dict) -> dict[str, str] | None:
+    """The cleaned names in a segment's `potential_speaker_names` as `{comparison key: name}`, the
+    first spelling of a name kept, in the order listed; None when the list is so long that choosing
+    from it would be a guess made on a cut-off list (real ones hold a few)."""
     listed = item.get("potential_speaker_names")
     if not isinstance(listed, list):
-        return set()
+        return {}
     if len(listed) > MAX_CANDIDATES:
         return None
-    names = set()
+    names: dict[str, str] = {}
     for entry in listed:
         name = _clean_name(entry.get("name")) if isinstance(entry, dict) else ""
         if name:
-            names.add(name)
+            names.setdefault(_same(name), name)
     return names
 
 
-def _tag_names(value: list[dict]) -> dict[str, str]:
+def _tag_names(value: list[dict], own_names: tuple[str, ...] = ()) -> dict[str, str]:
     """The name each of Skribby's diarization tags stands for, for the tags where it is knowable.
 
     Skribby names a tag on some segments (`speaker_name`) and, for a participant it could not pin
-    down, lists `potential_speaker_names` instead. A tag takes the one name its own segments carry;
-    a tag with none takes its candidates minus every name another tag already has, and only when
-    exactly one is left. A name two tags would both take goes to neither. Whatever stays unclear is
-    left out: the label is "unknown", never a name made up."""
+    down, lists `potential_speaker_names` instead. A tag takes the one name its own segments carry.
+    A tag with none is named by elimination: its candidates minus the bot's own names, minus every
+    name another tag already has, and only when at least one candidate was dropped for being
+    another tag's and exactly one is left (a lone candidate nothing rules anything out for has no
+    support). A name two tags would both take goes to neither. Whatever stays unclear is left out:
+    the label is "unknown", never a name made up."""
+    bot = {_same(name) for name in map(_clean_name, own_names) if name}
     given: dict[str, dict[str, str]] = {}  # tag -> {comparison key: the name as shown}
     listed: dict[str, dict[str, str] | None] = {}  # tag -> candidates, None when too many
     for item in value:
@@ -269,18 +277,24 @@ def _tag_names(value: list[dict]) -> dict[str, str]:
         if candidates is None or listed.get(tag, {}) is None:
             listed[tag] = None
         else:
-            listed.setdefault(tag, {}).update({_same(name): name for name in candidates})
+            for key, name in candidates.items():
+                listed.setdefault(tag, {}).setdefault(key, name)
     result = {tag: next(iter(named.values())) for tag, named in given.items() if len(named) == 1}
-    taken = {tag: set(named) for tag, named in given.items() if named}
+    holders: dict[str, set[str]] = {}  # name key -> the tags that carry it
+    for tag, named in given.items():
+        for key in named:
+            holders.setdefault(key, set()).add(tag)
     claims: dict[str, list[str]] = {}  # candidate key -> the tags that would take it
     chosen: dict[str, str] = {}
     for tag, named in given.items():
         candidates = listed.get(tag)
         if named or not candidates:
             continue
-        elsewhere = {key for other, keys in taken.items() if other != tag for key in keys}
-        left = {key: name for key, name in candidates.items() if key not in elsewhere}
-        if len(left) == 1:
+        ruled_out = [key for key in candidates if holders.get(key, set()) - {tag}]
+        left = {
+            key: name for key, name in candidates.items() if key not in bot and key not in ruled_out
+        }
+        if ruled_out and len(left) == 1:
             key, name = next(iter(left.items()))
             claims.setdefault(key, []).append(tag)
             chosen[tag] = name
@@ -290,17 +304,17 @@ def _tag_names(value: list[dict]) -> dict[str, str]:
     return result
 
 
-def _segments(body: dict) -> list[dict[str, Any]]:
+def _segments(body: dict, own_names: tuple[str, ...] = ()) -> list[dict[str, Any]]:
     """`{"speaker", "text"}` for each of Skribby's transcript segments (the shape the speaker
     labelling reads). Absent or null is none; any other shape means Skribby changed its response,
     which we refuse to guess about. A segment's own `speaker_name` wins; one without it takes its
-    diarization tag's name (see `_tag_names`)."""
+    diarization tag's name (see `_tag_names`; `own_names`, the bot's own, are never a speaker)."""
     value = body.get("transcript")
     if value is None:
         return []
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise SkribbyError("get_meeting failed: 'transcript' is not a list of JSON objects")
-    by_tag = _tag_names(value)
+    by_tag = _tag_names(value, own_names)
     segments = []
     for item in value:
         text = item.get("transcript")
@@ -378,10 +392,13 @@ def _bot_detected_is_final(
     return False
 
 
-def map_bot(body: dict, now: datetime, bot_id: str | None = None) -> BotMeeting:
+def map_bot(
+    body: dict, now: datetime, bot_id: str | None = None, own_names: tuple[str, ...] = ()
+) -> BotMeeting:
     """Skribby's bot body as a `BotMeeting`, in the vocabulary the pipeline reads (see the SOP's
     table). `bot_id` is the id the caller asked for (the recording's handle is made from it; the
-    body's own `id` is the fallback). `vexa_id` is left for the caller to set."""
+    body's own `id` is the fallback). `own_names` are the names the bot itself goes by (a candidate
+    speaker name that is one of them is never used). `vexa_id` is left for the caller to set."""
     raw = body.get("status")
     if not isinstance(raw, str):
         raise SkribbyError("get_meeting failed: 'status' is not a string")
@@ -397,7 +414,7 @@ def map_bot(body: dict, now: datetime, bot_id: str | None = None) -> BotMeeting:
         reason = _FINISHED_REASON[stop] if stop in _FINISHED_REASON else stop
         return BotMeeting(
             status="completed",
-            segments=_segments(body),
+            segments=_segments(body, own_names),
             recording_id=handle if url else None,
             media_id=handle if url else None,
             recording_status="completed" if url else None,
@@ -559,6 +576,7 @@ class SkribbyClient:
         region: str = "eu",
         account_id: str = "",
         bot_name: str = "Beyric Meeting Support",
+        account_name: str = "",
         transcription_model: str = "groq/whisper-large-v3-turbo",
         left_alone_seconds: int = 0,
         max_poll_hours: int = 6,
@@ -581,11 +599,18 @@ class SkribbyClient:
         self._resolve = resolve or _resolve_host
         self._account_id = account_id
         self._bot_name = bot_name
+        self._account_name = account_name
         self._model = transcription_model.strip() or "none"
         self._left_alone_seconds = left_alone_seconds
         self._max_poll_hours = max_poll_hours
         self._timeout = timeout
         self.send_deadline = send_deadline
+
+    @property
+    def own_names(self) -> tuple[str, ...]:
+        """The names the bot goes by in a meeting (the guest name, and the signed-in account's name
+        when it is known): never the name of a speaker."""
+        return tuple(name for name in (self._bot_name, self._account_name) if name.strip())
 
     def __repr__(self) -> str:  # never shows the key
         return f"SkribbyClient(base_url={self._base_url!r})"
@@ -899,6 +924,7 @@ class SkribbyProvider:
             region=settings.skribby_region,
             account_id=settings.skribby_account_id,
             bot_name=settings.skribby_bot_name,
+            account_name=settings.skribby_account_name,
             transcription_model=settings.skribby_transcription_model,
             left_alone_seconds=settings.bot_left_alone_seconds,
             max_poll_hours=settings.max_poll_hours,
@@ -1002,7 +1028,7 @@ class SkribbyProvider:
 
     def _look(self, bot_id: str, *, timeout: float | None = None) -> BotMeeting:
         body = self._client.get_bot(bot_id, timeout=timeout)
-        info = map_bot(body, self._clock(), bot_id)
+        info = map_bot(body, self._clock(), bot_id, self._client.own_names)
         info.vexa_id = bot_id
         if info.recording_id is not None:
             self._remember_handle(bot_id)

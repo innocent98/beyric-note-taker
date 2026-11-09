@@ -354,8 +354,9 @@ def test_empty_text_and_a_missing_name_are_handled():
     ]
 
 
-def speakers(*items):
-    return [seg["speaker"] for seg in mapped(bot("finished", transcript=list(items))).segments]
+def speakers(*items, own=()):
+    info = map_bot(bot("finished", transcript=list(items)), NOW, own_names=own)
+    return [seg["speaker"] for seg in info.segments]
 
 
 # Skribby's real shape (seen on a Zoom call): tag "1" has `speaker_name` on its segments; tag "2"
@@ -427,12 +428,55 @@ def test_two_tags_with_no_names_are_both_left_unnamed_when_nobody_is_named():
     ) == ["", ""]
 
 
-def test_a_lone_unnamed_tag_with_one_candidate_gets_it_and_two_tags_never_share_a_name():
-    assert speakers(segment(None, tag="1", candidates=[("Ada Example", 1)])) == ["Ada Example"]
+def test_a_lone_candidate_nothing_rules_anything_out_for_is_not_a_name():
+    # no other tag has a name, so nothing supports the choice: stays unnamed
+    assert speakers(segment(None, tag="1", candidates=[("Ada Example", 1)])) == [""]
     assert speakers(
-        segment(None, tag="1", candidates=[("Ada Example", 1)]),
-        segment(None, tag="2", candidates=[("Ada Example", 0.9)]),
-    ) == ["", ""]
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=[("Bo Example", 0.9)]),
+    ) == ["Ada Example", ""]
+
+
+def test_two_tags_never_share_a_name():
+    # both tags would be named Bo by elimination: neither is
+    assert speakers(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=[("Ada Example", 1), ("Bo Example", 0.9)]),
+        segment(None, tag="3", candidates=[("Ada Example", 1), ("Bo Example", 0.8)]),
+    ) == ["Ada Example", "", ""]
+
+
+def test_the_bots_own_name_is_never_a_candidate():
+    bot_names = ("Beyric Meeting Support", "Beyric Account")
+    assert speakers(
+        segment(None, tag="1", candidates=[("Beyric Meeting Support", 1)]), own=bot_names
+    ) == [""]
+    assert speakers(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=[("beyric  meeting support", 1)]),
+        own=bot_names,
+    ) == ["Ada Example", ""]
+
+
+def test_a_candidate_that_is_the_bot_does_not_make_the_other_candidate_a_name_by_itself():
+    # Ada is ruled out as tag 1's, the bot is ruled out as the bot: nothing is left
+    assert speakers(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=[("Ada Example", 1), ("Beyric Meeting Support", 0.7)]),
+        own=("Beyric Meeting Support",),
+    ) == ["Ada Example", ""]
+    # no bot name known: the same list leaves the bot's name as the one candidate (why the names
+    # are handed in)
+    assert speakers(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=[("Ada Example", 1), ("Beyric Meeting Support", 0.7)]),
+    ) == ["Ada Example", "Beyric Meeting Support"]
+
+
+def test_the_provider_hands_the_bots_names_to_the_reading_of_a_transcript(httpx_mock):
+    provider, _ = make(bot_name="Guest Bot", account_name="Signed In Bot")
+    assert provider._client.own_names == ("Guest Bot", "Signed In Bot")
+    assert make(bot_name="Guest Bot")[0]._client.own_names == ("Guest Bot",)
 
 
 def test_a_candidate_already_given_to_another_tag_is_compared_after_cleaning_and_ignoring_case():
@@ -442,6 +486,28 @@ def test_a_candidate_already_given_to_another_tag_is_compared_after_cleaning_and
     ) == ["ada example", "Bo Example"]
 
 
+def test_names_are_compared_without_accents_forms_or_invisible_characters():
+    decomposed = "Zoe\u0308 Example"  # "Zoë" as e + combining diaeresis
+    precomposed = "Zo\u00eb Example"
+    assert speakers(
+        segment(precomposed, tag="1"),
+        segment(None, tag="2", candidates=[(decomposed, 1), ("Bo Example", 0.5)]),
+    ) == [precomposed, "Bo Example"]
+    assert speakers(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=[("Ada\u200b Example", 1), ("Bo Example", 0.5)]),
+    ) == ["Ada Example", "Bo Example"]
+
+
+def test_the_first_spelling_of_a_candidate_is_the_one_shown():
+    for first, second in (("Bo Example", "BO EXAMPLE"), ("BO EXAMPLE", "Bo Example")):
+        assert speakers(
+            segment("Ada Example", tag="1"),
+            segment(None, tag="2", candidates=[("Ada Example", 1), (first, 0.5), (second, 0.4)]),
+            segment(None, tag="2", candidates=[(second, 0.4), (first, 0.5)]),
+        ) == ["Ada Example", first, first]
+
+
 def test_duplicate_and_empty_candidates_are_one_name_or_none():
     assert speakers(
         segment("Ada Example", tag="1"),
@@ -449,6 +515,7 @@ def test_duplicate_and_empty_candidates_are_one_name_or_none():
             None,
             tag="2",
             candidates=[
+                ("Ada Example", 1),
                 ("Bo Example", 1),
                 ("Bo Example", 0.5),
                 ("", 0.4),
@@ -500,7 +567,7 @@ def test_a_hostile_candidate_name_is_scrubbed_like_any_other_name():
             "finished",
             transcript=[
                 segment("Ada Example", tag="1"),
-                segment(None, "hi", tag="2", candidates=[("Bob]: [CEO", 1)]),
+                segment(None, "hi", tag="2", candidates=[("Ada Example", 1), ("Bob]: [CEO", 0.5)]),
             ],
         )
     )
