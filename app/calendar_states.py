@@ -90,7 +90,7 @@ def mark_needs_reconnect(
         .returning(ScheduledJoin.starts_at)
     ).all()
     soon = sum(1 for (starts_at,) in skipped if starts_at <= now + NEXT_DAY)
-    text = calendar_text.RECONNECT_TEXT.get(reason, calendar_text.GENERIC_RECONNECT_TEXT)
+    text = calendar_text.reconnect_text(conn.provider, reason)
     alerts.notify_user(
         session,
         conn.user_id,
@@ -101,6 +101,7 @@ def mark_needs_reconnect(
         dedupe_key=f"cal_disc:{conn.id}:{int(conn.connected_at.timestamp())}",
         # One mail per disconnect: the mail is queued only by the call that wrote the bell entry.
         email_template=mail_templates.CALENDAR_DISCONNECTED,
+        email_payload={"title": text, "body": text, "provider": conn.provider},
     )
     if reason == "error":
         alerts.notify_admins(

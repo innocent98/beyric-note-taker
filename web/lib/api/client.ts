@@ -4,6 +4,7 @@ import type {
   AskScope,
   AgendaSent,
   CalendarEvent,
+  CalendarProvider,
   CalendarSettingsInput,
   CalendarState,
   ConnectStart,
@@ -468,20 +469,22 @@ export function createApi(options: ApiOptions = {}) {
         request<NoticeList>("GET", "/api/notifications", { query }),
       readAll: () => request<{ unread_notifications: number }>("POST", "/api/notifications/read-all", { write: true }),
     },
-    // Google Calendar (docs/fe-integration-guide-calendar-settings.md). `get` answers 404
-    // `calendar_unavailable` while the feature is off. `connect` returns the Google consent URL to
-    // navigate to; the browser comes back to /settings with the result in the query string.
+    // Calendar (docs/fe-integration-guide-calendar-settings.md). `get` answers 404
+    // `calendar_unavailable` while the feature is off. `connect` returns the consent URL of the
+    // provider (Google, or Microsoft Outlook when `microsoft_enabled`) to navigate to; the browser
+    // comes back to /settings with the result in the query string.
     // `settings` changes the auto-join rule and/or the template for calendar meetings and answers
     // with the whole state; `override` is the switch on one Upcoming row (true joins, false does
     // not, null clears it) and answers with that row, or 409 `not_joinable` with the reason.
     calendar: {
       get: () => request<CalendarState>("GET", "/api/calendar"),
-      connect: () =>
-        request<ConnectStart>("POST", "/api/calendar/google/connect", {
+      connect: (provider: CalendarProvider = "google") =>
+        request<ConnectStart>("POST", `/api/calendar/${provider}/connect`, {
           body: { features: ["calendar"], return_to: "/settings" },
           write: true,
         }),
-      disconnect: () => request<DisconnectResult>("POST", "/api/calendar/google/disconnect", { write: true }),
+      disconnect: (provider: CalendarProvider = "google") =>
+        request<DisconnectResult>("POST", `/api/calendar/${provider}/disconnect`, { write: true }),
       // The Recurring cards. `timeZone` is the browser's own zone: the texts come back written in it.
       recurring: (timeZone?: string) =>
         request<RecurringState>("GET", "/api/calendar/recurring", { query: timeZone ? { tz: timeZone } : {} }),

@@ -2553,6 +2553,9 @@ export interface components {
          *     `auto_join_paused` is true while the operator has stopped calendar auto-join for everyone
          *     (`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and
          *     `auto_join_paused_text` is the line to show (null when it is not paused).
+         *     `microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the
+         *     "Connect Microsoft Outlook" button live only then (while it is false the page looks as it did
+         *     before Outlook existed).
          *     `upcoming` is empty unless connected.
          */
         CalendarOut: {
@@ -2570,6 +2573,8 @@ export interface components {
             last_error: string | null;
             /** Last Sync At */
             last_sync_at: string | null;
+            /** Microsoft Enabled */
+            microsoft_enabled: boolean;
             /** Provider */
             provider: ("google" | "microsoft") | null;
             /**

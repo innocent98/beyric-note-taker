@@ -199,7 +199,8 @@ def test_the_connect_url_is_the_consumers_code_flow_with_pkce(web, session, owne
     assert query["code_challenge_method"] == "S256" and query["prompt"] == "select_account"
     assert "login_hint" not in query and query["state"] == state and len(state) >= 40
     assert "https://graph.microsoft.com/Calendars.Read" in query["scope"].split()
-    assert response.json()["show_unverified_notice"] is True
+    # a personal-account consent screen is not documented to say "unverified" (M0 S2): no promise
+    assert response.json()["show_unverified_notice"] is False
     [flow] = flows(session)
     assert flow.provider == "microsoft" and flow.purpose == "calendar" and flow.user_id == owner.id
     assert flow.state_hash == tokens.digest(state) and state not in flow.state_hash
@@ -213,12 +214,19 @@ def test_the_connect_url_is_the_consumers_code_flow_with_pkce(web, session, owne
     )
 
 
-def test_the_notice_flag_follows_publisher_verification(
-    engine, settings, ms, google, fake_vexa, fake_openai, owner
+@pytest.mark.parametrize(
+    "authority,verified,expected",
+    [("consumers", False, False), ("common", False, True), ("common", True, False)],
+)
+def test_the_notice_flag_is_for_work_accounts_until_the_publisher_is_verified(
+    engine, settings, ms, google, fake_vexa, fake_openai, owner, authority, verified, expected
 ):
-    verified = settings.model_copy(update={"microsoft_publisher_verified": True})
-    app = build_app(engine, verified, ms, google, fake_vexa, fake_openai)
-    assert connect(browser(app))[2].json()["show_unverified_notice"] is False
+    changed = settings.model_copy(
+        update={"microsoft_authority": authority, "microsoft_publisher_verified": verified}
+    )
+    app = build_app(engine, changed, FakeMicrosoft(changed), google, fake_vexa, fake_openai)
+    app.dependency_overrides[microsoft_oauth.get_microsoft] = lambda: FakeMicrosoft(changed).oauth
+    assert connect(browser(app))[2].json()["show_unverified_notice"] is expected
 
 
 def test_the_response_sets_the_microsoft_flow_cookie(web):

@@ -5,19 +5,38 @@ import { Alert, Button, Icon, SelectField } from "@/components/ui";
 import type { AlertKind } from "@/components/ui/alert";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
-import type { AutoJoinRule, CalendarSettingsInput, CalendarState, Template } from "@/lib/api/types";
+import type {
+  AutoJoinRule,
+  CalendarProvider,
+  CalendarSettingsInput,
+  CalendarState,
+  Template,
+} from "@/lib/api/types";
 import type { CalendarNotice } from "@/lib/calendar-notice";
 import { LocalTime } from "@/components/app/local-time";
 
-type Message = { kind: AlertKind; text: string; revokeNote?: boolean };
+type Message = { kind: AlertKind; text: string; revokeNote?: CalendarProvider };
+
+// What the calendar is called on screen: the designer's provider names (`Beyric Note Taker.dc.html`,
+// the connected row). Google is the default for a state with no provider.
+export const PROVIDER_LABEL: Record<CalendarProvider, string> = {
+  google: "Google Calendar",
+  microsoft: "Microsoft Outlook",
+};
+const PROVIDER_NAME: Record<CalendarProvider, string> = { google: "Google", microsoft: "Microsoft" };
+const labelOf = (provider: CalendarProvider | null | undefined) => PROVIDER_LABEL[provider ?? "google"];
 
 // The words for what happened. The connect errors are the guide's (docs/fe-integration-guide-
-// calendar-connect.md section 2); `different_account` names the account that is already
-// connected, which only the page's own state knows.
-function messageFor(notice: CalendarNotice, email: string | null): Message {
-  if (notice.kind === "connected") return { kind: "info", text: "Google Calendar connected." };
+// calendar-connect.md section 2, docs/fe-integration-guide-calendar-outlook.md for Outlook's);
+// `different_account` names the account that is already connected, which only the page's own state
+// knows. The Outlook words are lead-designed (the designer drew no error): see the SOP's gap list.
+function messageFor(notice: CalendarNotice, state: CalendarState | null): Message {
+  const email = state?.account_email ?? null;
+  const provider = (state?.provider ?? "google") as CalendarProvider;
+  if (notice.kind === "connected") return { kind: "info", text: `${labelOf(state?.provider)} connected.` };
   switch (notice.code) {
     case "google_denied":
+    case "microsoft_denied":
       return { kind: "info", text: "You did not connect your calendar." };
     case "scope_missing":
       return {
@@ -29,16 +48,33 @@ function messageFor(notice: CalendarNotice, email: string | null): Message {
         kind: "error",
         text: "Google did not finish connecting. Remove Beyric at myaccount.google.com/permissions and try again.",
       };
+    case "no_mailbox":
+      return {
+        kind: "error",
+        text: "That Microsoft account has no calendar Beyric can read. Try another account, one that has an Outlook mailbox.",
+      };
+    case "tenant_not_allowed":
+      return {
+        kind: "error",
+        text: "That Microsoft account belongs to an organisation Beyric cannot connect yet. Try a personal Outlook.com, Hotmail or Live account.",
+      };
+    case "already_connected":
+      return {
+        kind: "notice",
+        text: "Another calendar is already connected. To use a different one, disconnect first.",
+      };
     case "different_account":
       return {
         kind: "notice",
-        text: `A different Google account is already connected${email ? ` (${email})` : ""}. To use another one, disconnect first.`,
+        text: `A different ${PROVIDER_NAME[provider]} account is already connected${email ? ` (${email})` : ""}. To use another one, disconnect first.`,
       };
     case "wrong_account":
       return {
         kind: "error",
         text: "This connection was started from a different account. Sign in with the right account and start again.",
       };
+    case "microsoft_failed":
+      return { kind: "error", text: "Something went wrong connecting Microsoft Outlook. Try again." };
     default:
       return { kind: "error", text: "Something went wrong connecting Google. Try again." };
   }
@@ -75,11 +111,13 @@ export function SettingsCalendar({
 }) {
   const [state, setState] = useState<CalendarState | null>(initial);
   const [message, setMessage] = useState<Message | null>(() =>
-    notice ? messageFor(notice, initial?.account_email ?? null) : null,
+    notice ? messageFor(notice, initial) : null,
   );
-  const [connecting, setConnecting] = useState(false);
-  // Google's unverified-app warning is explained once the connect call has answered, before leaving.
-  const [pendingUrl, setPendingUrl] = useState<string | null>(null);
+  // Which provider's button is working (both are disabled while one is).
+  const [connecting, setConnecting] = useState<CalendarProvider | null>(null);
+  // The provider's unverified-app warning is explained once the connect call has answered, before
+  // leaving.
+  const [pending, setPending] = useState<{ url: string; provider: CalendarProvider } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -99,16 +137,16 @@ export function SettingsCalendar({
     }
   }, [notice]);
 
-  async function connect() {
+  async function connect(provider: CalendarProvider) {
     if (busy.current) return;
     busy.current = true;
-    setConnecting(true);
+    setConnecting(provider);
     setError(null);
     setMessage(null);
     try {
-      const start = await api.calendar.connect();
+      const start = await api.calendar.connect(provider);
       if (start.show_unverified_notice) {
-        setPendingUrl(start.authorize_url);
+        setPending({ url: start.authorize_url, provider });
       } else {
         navigate(start.authorize_url);
         return; // the page is being left: keep the button disabled until it is
@@ -117,7 +155,7 @@ export function SettingsCalendar({
       setError(errorMessage(caught));
     }
     busy.current = false;
-    setConnecting(false);
+    setConnecting(null);
   }
 
   async function disconnect() {
@@ -126,10 +164,15 @@ export function SettingsCalendar({
     setDisconnecting(true);
     setError(null);
     try {
-      const result = await api.calendar.disconnect();
+      const provider = (state?.provider ?? "google") as CalendarProvider;
+      const result = await api.calendar.disconnect(provider);
       setState((current) => (current ? disconnectedFrom(current) : current));
       setConfirming(false);
-      setMessage({ kind: "info", text: "Google Calendar disconnected.", revokeNote: !result.revoked });
+      setMessage({
+        kind: "info",
+        text: `${PROVIDER_LABEL[provider]} disconnected.`,
+        revokeNote: result.revoked ? undefined : provider,
+      });
     } catch (caught) {
       setError(errorMessage(caught));
     }
@@ -153,20 +196,34 @@ export function SettingsCalendar({
 
   const connected = state !== null && state.state !== "not_connected";
   const needsReconnect = state?.state === "needs_reconnect";
-  const connectLabel = connecting ? "Connecting..." : needsReconnect ? "Connect Google Calendar again" : "Connect Google Calendar";
+  // Outlook is drawn live only when the server says so; otherwise the page is exactly what it was.
+  const outlookOn = state?.microsoft_enabled === true;
+  const provider = (state?.provider ?? "google") as CalendarProvider;
+  const connectLabel = (which: CalendarProvider) =>
+    connecting === which
+      ? "Connecting..."
+      : needsReconnect && provider === which
+        ? `Connect ${PROVIDER_LABEL[which]} again`
+        : `Connect ${PROVIDER_LABEL[which]}`;
 
   return (
     <>
       {message ? (
         <Alert kind={message.kind}>
           <p className="alert-text">{message.text}</p>
-          {message.revokeNote ? (
+          {message.revokeNote === "google" ? (
             <p className="alert-text">
               Beyric could not ask Google to remove its access. To be sure, remove Beyric at{" "}
               <a href={PERMISSIONS_URL} target="_blank" rel="noreferrer">
                 myaccount.google.com/permissions
               </a>
               .
+            </p>
+          ) : null}
+          {message.revokeNote === "microsoft" ? (
+            <p className="alert-text">
+              Microsoft does not let Beyric remove its own access. To be sure, open the app permissions of your
+              Microsoft account and remove Beyric Note Taker there.
             </p>
           ) : null}
         </Alert>
@@ -187,30 +244,53 @@ export function SettingsCalendar({
           <p className="meta set-note">Google Calendar is not available yet.</p>
         ) : !connected ? (
           <Fragment>
-            {pendingUrl ? (
+            {pending ? (
               <div className="set-stack">
-                <UnverifiedNotice onContinue={() => navigate(pendingUrl)} />
+                <UnverifiedNotice provider={pending.provider} onContinue={() => navigate(pending.url)} />
               </div>
             ) : (
               <div className="set-actions">
-                <Button kind="secondary" size="tight" type="button" disabled={connecting} onClick={() => void connect()}>
+                <Button
+                  kind="secondary"
+                  size="tight"
+                  type="button"
+                  disabled={connecting !== null}
+                  onClick={() => void connect("google")}
+                >
                   <Icon name="calendar" />
-                  {connectLabel}
+                  {connectLabel("google")}
                 </Button>
-                {/* Drawn in the designer's file, no backend yet (Outlook M2 to M6): switched off with one line. */}
-                <Button kind="secondary" size="tight" type="button" disabled aria-describedby="outlook-off">
-                  <Icon name="calendar" />
-                  Connect Microsoft Outlook
-                </Button>
-                <span id="outlook-off" className="meta set-off-line">
-                  Not available yet.
-                </span>
+                {outlookOn ? (
+                  <Button
+                    kind="secondary"
+                    size="tight"
+                    type="button"
+                    disabled={connecting !== null}
+                    onClick={() => void connect("microsoft")}
+                  >
+                    <Icon name="calendar" />
+                    {connectLabel("microsoft")}
+                  </Button>
+                ) : (
+                  <>
+                    {/* Drawn in the designer's file, switched off with one line while the server has Outlook off. */}
+                    <Button kind="secondary" size="tight" type="button" disabled aria-describedby="outlook-off">
+                      <Icon name="calendar" />
+                      Connect Microsoft Outlook
+                    </Button>
+                    <span id="outlook-off" className="meta set-off-line">
+                      Not available yet.
+                    </span>
+                  </>
+                )}
               </div>
             )}
             <p className="meta set-note set-note-after">
-              Beyric asks Google for read-only access to the events on your calendars. It never adds, changes or
-              deletes anything on your calendar, keeps each event&apos;s title, time, video link and number of
-              guests, and does not keep guest email addresses or event descriptions.
+              {outlookOn
+                ? "Beyric asks Google or Microsoft for read-only access to the events on your main calendar. "
+                : "Beyric asks Google for read-only access to the events on your calendars. "}
+              It never adds, changes or deletes anything on your calendar, keeps each event&apos;s title, time, video
+              link and number of guests, and does not keep guest email addresses or event descriptions.
             </p>
           </Fragment>
         ) : (
@@ -221,7 +301,7 @@ export function SettingsCalendar({
                   <Icon name="calendar" size={18} />
                 </span>
                 <div>
-                  <div className="cal-provider">Google Calendar</div>
+                  <div className="cal-provider">{PROVIDER_LABEL[provider]}</div>
                   <div className="cal-account-sub">
                     {state.account_email} · {needsReconnect ? "Needs to connect again" : "Connected"}
                   </div>
@@ -235,11 +315,11 @@ export function SettingsCalendar({
             </div>
 
             {confirming ? (
-              <div className="cal-confirm" role="group" aria-label="Disconnect Google Calendar?">
+              <div className="cal-confirm" role="group" aria-label={`Disconnect ${PROVIDER_LABEL[provider]}?`}>
                 <p>
-                  Beyric forgets your Google connection, deletes the calendar events it copied and cancels the
-                  meetings it planned to join. Meetings already recorded and your notes stay. A meeting being
-                  recorded right now carries on.
+                  Beyric forgets your {PROVIDER_NAME[provider]} connection, deletes the calendar events it copied and
+                  cancels the meetings it planned to join. Meetings already recorded and your notes stay. A meeting
+                  being recorded right now carries on.
                 </p>
                 <div className="alert-actions">
                   <Button kind="danger" size="sm" type="button" disabled={disconnecting} onClick={() => void disconnect()}>
@@ -256,8 +336,14 @@ export function SettingsCalendar({
               {needsReconnect ? (
                 <Alert kind="notice">
                   <p className="alert-text">{state.state_text}</p>
-                  <Button kind="secondary" size="sm" type="button" disabled={connecting} onClick={() => void connect()}>
-                    {connectLabel}
+                  <Button
+                    kind="secondary"
+                    size="sm"
+                    type="button"
+                    disabled={connecting !== null}
+                    onClick={() => void connect(provider)}
+                  >
+                    {connectLabel(provider)}
                   </Button>
                 </Alert>
               ) : (
@@ -267,7 +353,7 @@ export function SettingsCalendar({
                 </>
               )}
               {state.auto_join_paused_text ? <Alert kind="notice">{state.auto_join_paused_text}</Alert> : null}
-              {pendingUrl ? <UnverifiedNotice onContinue={() => navigate(pendingUrl)} /> : null}
+              {pending ? <UnverifiedNotice provider={pending.provider} onContinue={() => navigate(pending.url)} /> : null}
 
               <div className="cal-rules" role="radiogroup" aria-labelledby="cal-rules-label">
                 <div id="cal-rules-label" className="cal-field-label">
@@ -354,21 +440,29 @@ function disconnectedFrom(current: CalendarState): CalendarState {
     calendar_template_id: current.calendar_template_id,
     auto_join_paused: current.auto_join_paused,
     auto_join_paused_text: current.auto_join_paused_text,
+    microsoft_enabled: current.microsoft_enabled,
     upcoming: [],
   };
 }
 
-// Shown after the connect call answered with `show_unverified_notice`, before Google's screen.
-// Not seen live: the wording of Google's own warning is described, not quoted.
-export function UnverifiedNotice({ onContinue }: { onContinue: () => void }) {
+// Shown after the connect call answered with `show_unverified_notice`, before the provider's screen.
+// Not seen live: the wording of each provider's own warning is described, not quoted.
+export function UnverifiedNotice({
+  onContinue,
+  provider = "google",
+}: {
+  onContinue: () => void;
+  provider?: CalendarProvider;
+}) {
   return (
     <Alert kind="notice">
       <p className="alert-text">
-        Google will warn that it has not verified Beyric yet. That is expected for now. On the warning screen choose
-        Advanced, then continue to Beyric.
+        {provider === "microsoft"
+          ? "Microsoft may warn that Beyric comes from a publisher it has not verified yet. That is expected for now. Continue to Microsoft and accept the permissions."
+          : "Google will warn that it has not verified Beyric yet. That is expected for now. On the warning screen choose Advanced, then continue to Beyric."}
       </p>
       <Button type="button" size="sm" onClick={onContinue}>
-        Continue to Google
+        {provider === "microsoft" ? "Continue to Microsoft" : "Continue to Google"}
       </Button>
     </Alert>
   );

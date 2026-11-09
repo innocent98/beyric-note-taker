@@ -24,7 +24,11 @@ export default async function SetupPage() {
   const calendar: CalendarState | null = await api.calendar.get().catch(() => null);
   return (
     <AuthShell>
-      <SetupWorkspace calendarConnected={calendar?.connected ?? null} />
+      <SetupWorkspace
+        calendarConnected={calendar?.connected ?? null}
+        microsoftEnabled={calendar?.microsoft_enabled ?? false}
+        connectedProvider={calendar?.provider ?? null}
+      />
     </AuthShell>
   );
 }

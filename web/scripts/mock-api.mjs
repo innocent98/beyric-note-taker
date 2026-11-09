@@ -1265,6 +1265,28 @@ const server = http.createServer(async (req, res) => {
       });
     }
     if (values.calendar === "off") return json(res, 404, calendarCapture("04-state-feature-off"));
+    // Outlook (docs/fe-integration-guide-calendar-outlook.md): `microsoft_on` is not connected with
+    // `microsoft_enabled: true`; `microsoft_connected` and `microsoft_needs_reconnect` are the Google
+    // captures with the Outlook provider and an Outlook address (a documented shape, not a capture).
+    if (values.calendar.startsWith("microsoft_")) {
+      const on = values.calendar !== "microsoft_off";
+      const capture =
+        values.calendar === "microsoft_connected"
+          ? "09-state-connected-with-upcoming"
+          : values.calendar === "microsoft_needs_reconnect"
+            ? "15-state-needs-reconnect-revoked"
+            : "05-state-not-connected";
+      const state = calendarCapture(capture);
+      const outlook = values.calendar === "microsoft_connected" || values.calendar === "microsoft_needs_reconnect";
+      return json(res, 200, {
+        ...state,
+        microsoft_enabled: on,
+        ...(outlook ? { provider: "microsoft", account_email: "ada@outlook.example.test" } : {}),
+        ...(values.calendar === "microsoft_needs_reconnect"
+          ? { state_text: "Microsoft access was removed. Connect again to carry on." }
+          : {}),
+      });
+    }
     if (values.calendar === "paused") {
       // Connected with events, and the operator's emergency stop on (the 22 capture's line).
       return json(res, 200, {
@@ -1316,6 +1338,12 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { authorize_url: "https://accounts.example.test/consent", show_unverified_notice: false });
   }
   if (path === "/api/calendar/google/disconnect" && method === "POST") return json(res, 200, { status: "disconnected", revoked: true });
+  if (path === "/api/calendar/microsoft/connect" && method === "POST") {
+    return json(res, 200, { authorize_url: "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?mock=1", show_unverified_notice: false });
+  }
+  if (path === "/api/calendar/microsoft/disconnect" && method === "POST") {
+    return json(res, 200, { status: "disconnected", revoked: false, reason: "provider_has_no_revoke" });
+  }
   if (path === "/api/vocabulary" && method === "GET") return json(res, 200, { terms });
   if (path.startsWith("/api/")) return json(res, 200, {});
   res.writeHead(404, { "content-type": "text/plain" });

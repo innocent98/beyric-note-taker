@@ -54,6 +54,24 @@ RECONNECT_TEXT = {
 }
 GENERIC_RECONNECT_TEXT = "Google needs you to connect again."
 
+# The same four sentences for a Microsoft connection (designer gap: the designer drew none; these
+# follow the Google words with "Microsoft" in them).
+MICROSOFT_RECONNECT_TEXT = {
+    "revoked": "Microsoft access was removed. Connect again to carry on.",
+    "expired": "Microsoft access ran out. Connect again to carry on.",
+    "error": "Microsoft Outlook stopped working. Connect again to carry on.",
+}
+MICROSOFT_GENERIC_RECONNECT_TEXT = "Microsoft needs you to connect again."
+
+
+def reconnect_text(provider: str | None, reason: str | None) -> str:
+    """The sentence for a connection that needs to be connected again, in the words of its own
+    provider (Google's when the provider is not Microsoft)."""
+    if provider == "microsoft":
+        return MICROSOFT_RECONNECT_TEXT.get(reason or "", MICROSOFT_GENERIC_RECONNECT_TEXT)
+    return RECONNECT_TEXT.get(reason or "", GENERIC_RECONNECT_TEXT)
+
+
 # Shown while the operator's emergency stop (`AUTOJOIN_ENABLED=false`) is on: the rows still say
 # "Will join", and this line says why nothing is being sent.
 AUTO_JOIN_PAUSED_TEXT = (
@@ -64,6 +82,9 @@ DEGRADED_TEXT = "Connected, but your calendar has not been read lately."
 CONNECTED_TEXT = "Connected"
 
 REVOKED_ERROR_TEXT = "Google no longer lets Beyric read your calendar. Connect again to fix this."
+MICROSOFT_REVOKED_ERROR_TEXT = (
+    "Microsoft no longer lets Beyric read your calendar. Connect again to fix this."
+)
 GENERIC_ERROR_TEXT = "The last check of your calendar did not work. Beyric will try again soon."
 
 
@@ -98,18 +119,18 @@ def state_text(conn: CalendarConnection | None, state: str) -> str:
         return DEGRADED_TEXT
     if state == "needs_reconnect":
         reason = conn.needs_reconnect_reason if conn is not None else None
-        return RECONNECT_TEXT.get(reason or "", GENERIC_RECONNECT_TEXT)
+        return reconnect_text(conn.provider if conn is not None else None, reason)
     return NOT_CONNECTED
 
 
-def error_text(recorded: str | None) -> str | None:
+def error_text(recorded: str | None, provider: str | None = None) -> str | None:
     """The sync's last recorded failure (`ExcType: message`, see `gcal_sync._record_error`) in
     plain words. Never the type, status or message: a revoked grant says to connect again, anything
     else says the last check did not work."""
     if not recorded:
         return None
     if recorded.startswith("AuthRevoked"):
-        return REVOKED_ERROR_TEXT
+        return MICROSOFT_REVOKED_ERROR_TEXT if provider == "microsoft" else REVOKED_ERROR_TEXT
     return GENERIC_ERROR_TEXT
 
 
