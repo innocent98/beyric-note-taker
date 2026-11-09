@@ -713,7 +713,7 @@
         "type": "object"
       },
       "CalendarOut": {
-        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the\n\"Connect Microsoft Outlook\" button live only then (while it is false the page looks as it did\nbefore Outlook existed).\n`upcoming` is empty unless connected.",
+        "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the\n\"Connect Microsoft Outlook\" button live only then (while it is false the page looks as it did\nbefore Outlook existed).\n`bot_invite_email` is the note taker's Google address, set only when it is true that adding it\nto an event's guest list lets the bot skip the waiting room on Google Meet (the server runs the\nsigned-in Skribby bot and has the address set); null otherwise, and then draw no tip. Zoom and\nTeams meetings still wait for the host. It is a public address, not a secret.\n`upcoming` is empty unless connected.",
         "properties": {
           "account_email": {
             "anyOf": [
@@ -740,6 +740,17 @@
               }
             ],
             "title": "Auto Join Paused Text"
+          },
+          "bot_invite_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Invite Email"
           },
           "calendar_template_id": {
             "anyOf": [
@@ -1841,6 +1852,17 @@
       },
       "MeetingDetail": {
         "properties": {
+          "bot_invite_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Invite Email"
+          },
           "bot_left_early": {
             "title": "Bot Left Early",
             "type": "boolean"

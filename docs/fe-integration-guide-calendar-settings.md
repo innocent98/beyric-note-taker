@@ -180,6 +180,7 @@ when you turn it on"). It is changed with `PUT /api/calendar/settings` (section 
 | `state_text` | The sentence for the state; show it verbatim when the state is not `connected` |
 | `account_email` | The account connected (before 2026-11-05 this field was called `google_email`). `null` when not connected. **Present for `needs_reconnect`**, so the person knows which account to fix |
 | `provider` | Which calendar it is: `"google"` (the only value today; `"microsoft"` is reserved). `null` when not connected. Use it for the provider label; until Microsoft ships, print "Google" as the screen does now |
+| `bot_invite_email` | The note taker's Google address when the server may tell people to add it to an event's guest list (so the bot skips the waiting room on Google Meet), else `null`. **Present as a string or `null`** (the generated type marks it optional). Draw the Settings tip only when `connected` is true, `provider` is `google` and this is a string. A public address, never write one in the web code. Real bodies and the rule: `docs/fe-integration-guide-bot-invite-tip.md` (#05 and #10 there) |
 | `last_sync_at` | UTC, with microseconds. The last time the calendar was read completely; `null` before the first sync. It does not move while syncs fail |
 | `last_error` | The last failure in plain words, or `null` after a success |
 | `rule`, `rule_text` | The auto-join rule and its label (always present) |

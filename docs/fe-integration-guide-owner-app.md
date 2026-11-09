@@ -755,6 +755,8 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/47-meeting-detail-ready.json`_
 
+**`bot_invite_email` (added 2026-11-09).** A top-level string or `null` (the generated type marks it optional). It is the note taker's Google address, set only for a Google Meet meeting whose Skribby bot is waiting to be let in or was not let in, and only while the server is set up for it; `null` for everything else (Zoom, Teams, a bot already in the call, a ready meeting). Draw the "Add this address to your event to skip the wait" tip under the state card's sentence only when it is a string. It is **not** in the list items (`GET /api/meetings`). The ready body above does not show it because it was captured before the field existed; for that state it is `null`. Real bodies: `docs/fe-integration-guide-bot-invite-tip.md`.
+
 **Which notes field to use.** Show `notes_html`: it is `notes` rendered by the server's markdown renderer, which escapes raw HTML, never renders `javascript:` links, gives links `rel="noopener noreferrer nofollow"` and turns images into plain links (verified by `tests/test_api.py` with hostile input; the capture has only benign input). Put it in with `dangerouslySetInnerHTML` and nowhere else; do not re-render `notes` with another markdown library unless you accept it will differ from the server's. Use `notes` (raw markdown) for the **Copy notes** button.
 
 Unknown id, an id with too many digits, and a non-number:

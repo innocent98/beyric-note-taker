@@ -1,0 +1,65 @@
+{
+  "note": "A Zoom meeting in the same waiting state: Zoom guests always wait for the host. Tip on in the server's settings.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/3",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 3,
+      "title": "Zoom 81234567890",
+      "platform": "zoom",
+      "native_id": "81234567890",
+      "status": "bot_sent",
+      "step": "waiting",
+      "status_text": "Waiting to be let in. Admit 'Beyric Meeting Support' in the meeting",
+      "status_tone": "warning",
+      "template_id": 1,
+      "template_name": "General",
+      "created_at": "2026-11-09T22:02:16.589215Z",
+      "tasks_count": 0,
+      "failure_reason": null,
+      "bot_invite_email": null,
+      "retry_block": null,
+      "retry_block_message": null,
+      "can_cancel": true,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": false,
+      "can_delete": false,
+      "shared_with_team": false,
+      "can_share": true,
+      "shared_by": null,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": 30,
+      "worker_stale": true,
+      "join_retry_at": null,
+      "extraction_status": null,
+      "notes": null,
+      "notes_html": null,
+      "transcript": null,
+      "translations": [],
+      "duration_seconds": null,
+      "participants": [],
+      "decisions_count": 0,
+      "review_open_count": 0,
+      "tasks": [],
+      "series": null,
+      "suggest_recurring": false,
+      "open_questions": []
+    }
+  }
+}

@@ -179,6 +179,7 @@ def test_a_person_who_never_connected_gets_the_not_connected_answer(web):
         "auto_join_paused": False,
         "auto_join_paused_text": None,
         "microsoft_enabled": False,  # Outlook is off unless the server switches it on
+        "bot_invite_email": None,  # only when the server is set up for the tip
         "upcoming": [],
     }
 

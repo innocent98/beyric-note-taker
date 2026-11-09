@@ -67,6 +67,8 @@ from app.api_schemas import (
     UsageOut,
     UserOut,
 )
+from app.bot_invite import meeting_invite_email
+from app.config import get_settings
 from app.db import get_session
 from app.models import Decision, Meeting, MeetingTranslation, ReviewItem, User, UserSettings
 from app.notes_document import (
@@ -320,6 +322,7 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
             sum(1 for task in task_rows if not task.suggested),  # a suggestion is not counted
         ).model_dump(),
         failure_reason=(meeting.failure_reason or REASON_UNEXPECTED) if failed else None,
+        bot_invite_email=meeting_invite_email(meeting, get_settings()),
         retry_block=block,
         retry_block_message=services.retry_block_message(meeting, block),
         can_cancel=owner and services.can_cancel(meeting),

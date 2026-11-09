@@ -13,6 +13,7 @@ import type {
   Template,
 } from "@/lib/api/types";
 import type { CalendarNotice } from "@/lib/calendar-notice";
+import { BotInviteTip } from "@/components/app/bot-invite-tip";
 import { LocalTime } from "@/components/app/local-time";
 
 type Message = { kind: AlertKind; text: string; revokeNote?: CalendarProvider };
@@ -383,6 +384,10 @@ export function SettingsCalendar({
                   );
                 })}
               </div>
+
+              {/* Only for a Google calendar: the tip is about Google Meet (the server sends no address
+                  unless it is true that inviting the note taker helps). */}
+              {state.connected && state.provider === "google" ? <BotInviteTip email={state.bot_invite_email} /> : null}
 
               {templates.length > 0 ? (
                 <div className="cal-template">

@@ -28,13 +28,16 @@ async function copyText(text: string): Promise<boolean> {
   return ok;
 }
 
-export function CopyButton({ text, label }: { text: string; label: string }) {
+// `onFailed` runs when the browser would not copy, so a caller can fall back (select the text).
+export function CopyButton({ text, label, onFailed }: { text: string; label: string; onFailed?: () => void }) {
   const [state, setState] = useState<"idle" | "done" | "failed">("idle");
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
 
   async function copy() {
-    setState((await copyText(text)) ? "done" : "failed");
+    const copied = await copyText(text);
+    setState(copied ? "done" : "failed");
+    if (!copied) onFailed?.();
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setState("idle"), 2000);
   }
