@@ -46,6 +46,7 @@ This module imports nothing from the app at module level (the settings are read 
 `build_provider`), so `app/config.py` can read `PROVIDER_FACTORIES` for the startup check.
 """
 
+import re
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -63,6 +64,15 @@ SEND_DEADLINE_SECONDS = 30.0
 
 class BotProviderError(Exception):
     """HTTP failure or connection problem talking to a bot provider. Treat as retryable."""
+
+
+def describe_failure(exc: BaseException) -> str:
+    """A provider failure for a log line: its type and its own words, cut short, with every web
+    address replaced (a meeting link can carry a Zoom passcode or a Teams passcode). Provider
+    errors are written without the API key; this is only for the reason, which the type alone
+    hides."""
+    text = re.sub(r"https?://\S+", "[link]", str(exc))
+    return f"{type(exc).__name__}: {text[:300]}" if text else type(exc).__name__
 
 
 class BotDuplicate(BotProviderError):

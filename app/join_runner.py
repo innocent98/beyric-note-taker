@@ -51,7 +51,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app import alerts, calendar_providers, calendar_states, titles
-from app.bot_provider import BotProvider, BotProviderError, build_provider
+from app.bot_provider import BotProvider, BotProviderError, build_provider, describe_failure
 from app.calendar_source import AuthRevoked, CalendarSource, CalendarSourceError, SyncBatch
 from app.config import Settings, get_settings
 from app.gcal_rules import JoinSettings, will_join
@@ -656,7 +656,7 @@ def _place(
         session.rollback()
         return _wait_after_a_conflict(session, join_id, now)
     except BotProviderError as exc:
-        logger.warning("sending the bot for join %s failed (%s)", join_id, type(exc).__name__)
+        logger.warning("sending the bot for join %s failed (%s)", join_id, describe_failure(exc))
         return _send_failed(session, join_id, now)
     except UnsupportedMeetingUrl:  # a link the host cannot join (Teams until T1): retrying is vain
         return _fail(session, join_id, now, "unsupported_link", UNSUPPORTED_TEXT)

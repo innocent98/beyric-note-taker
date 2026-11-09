@@ -26,6 +26,7 @@ from app.bot_provider import (
     BotProviderNotConfigured,
     BotSendUncertain,
     build_provider,
+    describe_failure,
     provider_for,
     provider_name,
 )
@@ -52,6 +53,10 @@ pytestmark = pytest.mark.httpx_mock(
 )
 
 KEY = "skr-live-0123456789abcdef"
+TEAMS_URL = (
+    "https://teams.microsoft.com/l/meetup-join/19%3ameeting_PLACEHOLDER%40thread.v2/0"
+    "?context=%7b%22Tid%22%3a%22placeholder%22%7d"
+)
 BASE = "https://skribby.test/api/v1"
 FILES = "https://files.skribby.io/rec.webm"
 NOW = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
@@ -409,6 +414,39 @@ def accept(httpx_mock, bot_id=BOT):
     )
 
 
+@pytest.mark.parametrize(
+    ("link", "service", "signs_in"),
+    [
+        (URL, "gmeet", True),
+        ("https://us05web.zoom.us/j/123456789?pwd=sekrit", "zoom", False),
+        (TEAMS_URL, "teams", False),
+    ],
+)
+def test_only_a_meet_bot_signs_in_with_the_google_account(httpx_mock, link, service, signs_in):
+    accept(httpx_mock)
+    provider, _ = make(account_id=OTHER)
+    provider.send_bot(link)
+    body = sent_body(httpx_mock)
+    assert body["service"] == service
+    assert ("authentication" in body) is signs_in
+
+
+def test_a_refusal_names_skribbys_reason_without_the_link_or_the_key(httpx_mock):
+    link = "https://us05web.zoom.us/j/123456789?pwd=sekrit"
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE}/bot",
+        status_code=400,
+        json={"error": "invalid_authentication", "detail": [{"msg": f"bad {link} {KEY}"}]},
+    )
+    provider, _ = make()
+    with pytest.raises(SkribbyError) as caught:
+        provider.send_bot(link)
+    text = describe_failure(caught.value)
+    assert text.startswith("SkribbyError: send_bot failed: HTTP 400: invalid_authentication")
+    assert "sekrit" not in text and "zoom.us" not in text and KEY not in text
+
+
 def test_a_guest_bot_is_sent_with_the_configured_name_and_the_safety_limits(httpx_mock):
     accept(httpx_mock)
     provider, _ = make(bot_name="Beyric Meeting Support", left_alone_seconds=300, max_poll_hours=6)
@@ -446,12 +484,6 @@ def test_a_zoom_link_keeps_its_passcode_for_skribby_and_nowhere_else(httpx_mock)
     assert body["service"] == "zoom"
     assert body["meeting_url"] == "https://zoom.us/j/123456789?pwd=sekrit"
     assert "sekrit" not in str(body["custom_metadata"])
-
-
-TEAMS_URL = (
-    "https://teams.microsoft.com/l/meetup-join/19%3ameeting_PLACEHOLDER%40thread.v2/0"
-    "?context=%7b%22Tid%22%3a%22placeholder%22%7d"
-)
 
 
 def test_a_teams_link_goes_whole_to_skribby_as_a_guest_even_with_an_account_set(httpx_mock):

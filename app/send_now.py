@@ -43,7 +43,7 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import calendar_text, join_runner, placement, services
-from app.bot_provider import BotProvider, BotProviderError
+from app.bot_provider import BotProvider, BotProviderError, describe_failure
 from app.config import Settings
 from app.meeting_url import UnsupportedMeetingUrl
 from app.models import CalendarEvent, Meeting, ScheduledJoin, Template, User, UserSettings
@@ -182,7 +182,7 @@ def _attempt(
         session.rollback()
         raise services.placement_refusal(PlacementRefused("already_in_meeting")) from None
     except BotProviderError as exc:
-        logger.warning("send now for join %s: the host refused (%s)", row_id, type(exc).__name__)
+        logger.warning("send now for join %s: the host refused (%s)", row_id, describe_failure(exc))
         raise services.Refused(502, "bot_send_failed", SEND_FAILED_TEXT) from None
     except UnsupportedMeetingUrl:  # a link the host cannot join (Teams until T1)
         raise services.Refused(409, "unsupported_link", UNSUPPORTED_TEXT) from None

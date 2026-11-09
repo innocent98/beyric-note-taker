@@ -41,6 +41,7 @@ from app.bot_provider import (
     BotProvider,
     BotProviderError,
     build_provider,
+    describe_failure,
     provider_for,
 )
 from app.config import Settings, get_settings
@@ -541,7 +542,7 @@ def _create_meeting(
     except PlacementRefused as exc:
         raise placement_refusal(exc) from None
     except BotProviderError as exc:
-        logger.warning("send_bot failed (%s)", type(exc).__name__)
+        logger.warning("send_bot failed (%s)", describe_failure(exc))
         raise _send_failed() from None
 
 

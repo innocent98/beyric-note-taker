@@ -523,7 +523,7 @@ def test_stopping_a_meeting_with_no_bot_in_it_is_not_an_error(world):
 
 
 @pytest.mark.parametrize(
-    ("platform", "code"), [("teams", CODE), ("google_meet", "../bots"), ("zoom", "a b")]
+    ("platform", "code"), [("webex", CODE), ("google_meet", "../bots"), ("zoom", "a b")]
 )
 def test_stopping_with_a_platform_or_code_it_would_never_accept_is_a_value_error(
     world, platform, code

@@ -23,6 +23,7 @@ In short:
 """
 
 import ipaddress
+import json
 import logging
 import math
 import re
@@ -527,10 +528,20 @@ class SkribbyClient:
         message = ""
         try:
             body = response.json()
-            value = body.get("message") if isinstance(body, dict) else None
-            message = value.strip()[:200] if isinstance(value, str) else ""
+            if isinstance(body, dict):
+                # Skribby's own reason: `message`, or `error`/`code`/`detail` when it uses those
+                # (a bad-parameter 400 is not documented), as short text only.
+                parts = []
+                for name in ("message", "error", "code", "detail"):
+                    value = body.get(name)
+                    if isinstance(value, list | dict):
+                        value = json.dumps(value, default=str)
+                    if isinstance(value, str) and value.strip():
+                        parts.append(value.strip())
+                message = " ".join(parts)[:300]
         except ValueError:
             pass
+        message = re.sub(r"https?://\S+", "[link]", message)  # a link can carry a passcode
         detail = f": {self._scrub(message)}" if message else ""
         return SkribbyError(f"{what} failed: HTTP {status}{detail}")
 
@@ -564,9 +575,10 @@ class SkribbyClient:
             "custom_metadata": {"app": "beyric-note-taker", "meeting_code": code},
             "stop_options": stop_options,
         }
-        # The account is a Google one: a Teams bot always joins as a guest (Skribby would need an
-        # account in the meeting's own tenant, which we do not have).
-        if self._account_id and platform != "teams":
+        # The account is a Google one: only a Meet bot signs in with it. A Zoom bot would need a
+        # ZAK token and a Teams bot an account in the meeting's own tenant (Skribby's bot
+        # authentication page); neither is ours, so both join as guests.
+        if self._account_id and platform == "google_meet":
             body["authentication"] = {"account_id": self._account_id, "always_authenticate": True}
         return body
 
