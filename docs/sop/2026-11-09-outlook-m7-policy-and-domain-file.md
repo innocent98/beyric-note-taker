@@ -37,3 +37,5 @@ Spec 8.2: the policy has to name Microsoft data, what is read, what is kept and 
 - Add the Microsoft permissions URL to the disconnect paragraph and to M6's note once M0 S7 confirms it.
 - Teams sentence with T3.
 - Publisher domain verification in the tenant (DNS TXT) and publisher verification (Q3), Adebayo's steps.
+
+**Update 2026-11-09 (evening):** the placeholder was replaced with the real Application (client) ID (given by Adebayo in chat; public, not a secret) in `chore/ms-domain-file-client-id`, so the file is ready for Microsoft's publisher-domain check. Still to do by Adebayo: add and DNS-verify `beyrictech.com` in the Entra tenant (the work tenant `beyric.onmicrosoft.com`), set it as the app's publisher domain, and finish the Partner Center verification.
