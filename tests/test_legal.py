@@ -30,7 +30,9 @@ def test_the_account_details_say_password_or_google_hours_and_waiting_list(anon_
     page = text(anon_client, PRIVACY)
     assert (
         "Account details: your name and email address, and a password (stored only in hashed "
-        "form) or, if you sign in with Google, your Google account identifier. We also keep a "
+        "form) or, if you sign in with Google, your Google account identifier. If you connect "
+        "Outlook, we also keep an identifier that Microsoft gives your account (a tenant and user "
+        "identifier) and the email address of that Microsoft account. We also keep a "
         "count of the hours of meetings recorded for your account, and, if you join the waiting "
         "list, your email address." in page
     )
@@ -76,10 +78,32 @@ def test_the_terms_say_the_pilot_has_a_limited_number_of_accounts(anon_client):
     assert "Each pilot account has a limit on recorded hours, shown in the app" in page
 
 
-def test_nothing_is_claimed_about_calendar_features_that_are_not_built(anon_client):
-    """Accounts only: the calendar and Meet sentences stay as they were until those ship."""
+def test_the_policy_says_what_is_read_from_outlook_and_how_to_disconnect(anon_client):
+    """Outlook phase O, M7: merged only at switch-on, so the policy never runs ahead."""
     page = text(anon_client, PRIVACY)
-    assert "Outlook" not in page and "Microsoft" not in page
+    assert (
+        "Outlook calendar: we read the title, start and end time, whether you are the organiser, "
+        "your reply, the number of attendees (not their addresses) and the meeting link of events "
+        "on your main Outlook calendar. We read an event's description and location only to find "
+        "its meeting link, and do not keep them." in page
+    )
+    assert "We do not create, change or delete calendar events." in page
+    assert (
+        "You can disconnect Outlook in the app, which deletes the calendar data we hold and our "
+        "stored Microsoft access credential. Microsoft does not let us withdraw that permission "
+        "for you: to remove Beyric from your Microsoft account, remove it in your Microsoft "
+        "account's app permissions." in page
+    )
+    assert "(Google, Microsoft and Zoom)" in page
+    assert "Calendar access credentials are encrypted before they are stored" in page
+    # Teams joining is not built: the policy says nothing of joining Teams meetings
+    assert "Microsoft Teams" not in page
+
+
+def test_the_terms_name_outlook_as_a_third_party_platform_and_not_teams(anon_client):
+    page = text(anon_client, "/terms")
+    assert "including Google Meet, Google Calendar, Microsoft Outlook and Zoom." in page
+    assert "Microsoft Teams" not in page
 
 
 def test_resend_is_named_as_a_recipient_with_what_it_receives(anon_client):
