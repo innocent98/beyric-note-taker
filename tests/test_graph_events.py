@@ -52,9 +52,9 @@ def decide(event: ParsedEvent, *, rule="all", teams=False, override=None):
 
 
 def test_a_teams_meeting_of_a_work_account():
-    """Documented: `onlineMeeting.joinUrl` on an online meeting. Platform `teams`, no native id."""
+    """Documented: `onlineMeeting.joinUrl` on an online meeting. Platform `teams`, a derived native id."""
     event = parsed("teams_work")
-    assert event.platform == "teams" and event.native_id is None
+    assert event.platform == "teams" and event.native_id.startswith("teams-")
     assert event.meeting_url.startswith("https://teams.microsoft.com/l/meetup-join/")
     assert "context=" in event.meeting_url  # the query carries the meeting context a join needs
     assert event.source_event_id == "TEAMS-WORK-ID"
@@ -63,7 +63,7 @@ def test_a_teams_meeting_of_a_work_account():
 
 def test_a_teams_meeting_of_a_personal_account():
     event = parsed("teams_personal")
-    assert event.platform == "teams" and event.native_id is None
+    assert event.platform == "teams" and event.native_id.startswith("teams-")
     assert event.meeting_url.startswith("https://teams.live.com/meet/")
 
 
@@ -478,7 +478,7 @@ def test_a_safe_links_wrapped_teams_link_is_a_teams_link():
     event = parsed(
         "zoom_in_body", body={"contentType": "html", "content": f"<a href='{wrapped(TEAMS)}'>x</a>"}
     )
-    assert event.platform == "teams" and event.native_id is None
+    assert event.platform == "teams" and event.native_id.startswith("teams-")
 
 
 # ---- the table of spec 5.4 against will_join ----
