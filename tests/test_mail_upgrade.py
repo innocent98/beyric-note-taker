@@ -931,7 +931,7 @@ def test_a_teams_meeting_is_named_microsoft_teams_not_google_meet(session):
     payload = mail_templates.not_joined_payload(
         session, user.id, "teams", "1234", datetime(2026, 11, 4, 11, 58, tzinfo=UTC)
     )
-    assert payload["meeting"] == "Microsoft Teams 1234"
+    assert payload["meeting"] == "Microsoft Teams"  # the derived code is not a name
 
 
 def test_a_could_not_join_row_with_no_fields_fails_safely_and_is_not_sent(session):

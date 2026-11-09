@@ -439,7 +439,8 @@ def test_a_teams_event_can_be_switched_once_the_server_can_join_teams(
         google_client_secret="s3cret",
         calendar_enabled=True,
         token_enc_key=cc.KEY,
-        teams_join_enabled=True,
+        bot_provider="skribby",  # Teams follows the provider: only Skribby can join it
+        skribby_api_key="placeholder-key",
     )
     web = browser(build_app(engine, on, google, fake_vexa, fake_openai))
     connect_google(web, google)

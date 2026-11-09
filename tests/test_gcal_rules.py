@@ -258,6 +258,35 @@ def test_teams_join_enabled_defaults_to_false_in_config():
     assert Settings(_env_file=None).teams_join_enabled is False
 
 
+@pytest.mark.parametrize(
+    ("provider", "setting", "expected"),
+    [
+        ("vexa", None, False),
+        ("vexa", True, False),  # Vexa cannot join Teams, whatever is asked
+        ("skribby", None, True),
+        ("skribby", True, True),
+        ("skribby", False, False),
+    ],
+)
+def test_teams_join_follows_the_provider_unless_switched_off(provider, setting, expected):
+    extra = {"skribby_api_key": "placeholder-key"} if provider == "skribby" else {}
+    value = {} if setting is None else {"teams_join_enabled": setting}
+    settings = Settings(_env_file=None, bot_provider=provider, **extra, **value)
+    assert settings.teams_join_enabled is expected
+
+
+def test_a_teams_event_is_joined_when_teams_is_on_and_still_waits_when_off():
+    teams = make(
+        platform="teams",
+        meeting_url="https://teams.live.com/meet/9876543210?p=placeholder",
+        native_id="teams-0123456789abcdef01234567",
+    )
+    assert will_join(teams, None, settings("all", teams=True), now=NOW) == JoinDecision(True, "ok")
+    assert will_join(teams, None, settings("all", teams=False), now=NOW) == JoinDecision(
+        False, "teams_unsupported"
+    )
+
+
 def test_an_outside_invite_with_no_entry_for_the_owner_waits_like_an_unanswered_one():
     """An invite sent to a group address has no `self` attendee: it is not an accepted invite."""
     group = make(self_response=None, organizer_self=False, organizer_same_org=False)

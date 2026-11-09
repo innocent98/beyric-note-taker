@@ -85,6 +85,8 @@ def fallback_name(meeting: Meeting) -> str:
 
 def _fallback(platform: str | None, native_id: str | None) -> str:
     label = {"zoom": "Zoom", "teams": "Microsoft Teams"}.get(platform or "", "Google Meet")
+    if platform == "teams":  # a Teams code is a derived token, not something a person knows
+        return label
     return f"{label} {native_id}"
 
 

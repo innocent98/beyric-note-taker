@@ -144,7 +144,7 @@ def _timing(
 
 
 def _platform(found: Series) -> str | None:
-    return found.platform if found.platform in ("google_meet", "zoom") else None
+    return found.platform if found.platform in ("google_meet", "zoom", "teams") else None
 
 
 def _project_names(session: Session, team_id: int) -> dict[int, str]:

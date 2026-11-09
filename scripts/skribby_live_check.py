@@ -13,6 +13,10 @@ removes the bot's data at Skribby, the call the app's cleanup makes, and then AS
 privacy page says the audio is deleted. Without `--delete` the data stays at Skribby (7 days by
 default) and the dashboard shows it.
 
+A Teams link (teams.microsoft.com `/l/meetup-join/...` or `/meet/...`, teams.live.com `/meet/...`)
+works the same way and always joins as a guest, `SKRIBBY_ACCOUNT_ID` or not: paste it whole, with
+its `?context=` or `?p=` part.
+
 Keys: `SKRIBBY_API_KEY` (required), `SKRIBBY_ACCOUNT_ID` (the signed-in bot; leave it out, or pass
 `--guest`, for a guest) and `SKRIBBY_REGION` (`eu` or `jp`), read from the environment first and
 else from `~/.config/beyric-bakeoff/keys.env` (the bake-off's file, `NAME=value` per line). No key
@@ -131,7 +135,9 @@ def owner_words(info) -> str:
 def main(argv=None, *, env=None, out=None, sleep=time.sleep, clock=time.monotonic) -> int:
     out = out or sys.stdout
     parser = argparse.ArgumentParser(description="Send one Skribby bot into one meeting and watch.")
-    parser.add_argument("--meet-url", required=True, help="a Google Meet (or Zoom) link")
+    parser.add_argument(
+        "--meet-url", required=True, help="a Google Meet, Zoom or Microsoft Teams link"
+    )
     parser.add_argument("--keys-file", default=None, help=f"default {DEFAULT_KEYS_FILE}")
     parser.add_argument("--guest", action="store_true", help="ignore SKRIBBY_ACCOUNT_ID")
     parser.add_argument("--bot-name", default="Beyric Meeting Support")
@@ -158,13 +164,14 @@ def main(argv=None, *, env=None, out=None, sleep=time.sleep, clock=time.monotoni
         platform, code = parse_meeting_url(args.meet_url)
         provider = build(args, keys)
     except UnsupportedMeetingUrl:
-        say("That is not a Google Meet or Zoom meeting link.")
+        say("That is not a Google Meet, Zoom or Microsoft Teams meeting link.")
         return 2
     except CheckError as exc:
         say(str(exc))
         return 2
     client = provider._client
-    mode = "signed in" if keys.get("SKRIBBY_ACCOUNT_ID") and not args.guest else "guest"
+    signed_in = keys.get("SKRIBBY_ACCOUNT_ID") and not args.guest and platform != "teams"
+    mode = "signed in" if signed_in else "guest"  # a Teams bot is always a guest
     say(f"Sending a {mode} bot to {platform} meeting {code} (key and link not shown further).")
 
     started = clock()

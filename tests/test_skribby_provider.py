@@ -26,6 +26,7 @@ from app.bot_provider import (
     BotProviderNotConfigured,
     BotSendUncertain,
     build_provider,
+    describe_failure,
     provider_for,
     provider_name,
 )
@@ -52,6 +53,10 @@ pytestmark = pytest.mark.httpx_mock(
 )
 
 KEY = "skr-live-0123456789abcdef"
+TEAMS_URL = (
+    "https://teams.microsoft.com/l/meetup-join/19%3ameeting_PLACEHOLDER%40thread.v2/0"
+    "?context=%7b%22Tid%22%3a%22placeholder%22%7d"
+)
 BASE = "https://skribby.test/api/v1"
 FILES = "https://files.skribby.io/rec.webm"
 NOW = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
@@ -409,6 +414,58 @@ def accept(httpx_mock, bot_id=BOT):
     )
 
 
+@pytest.mark.parametrize(
+    ("link", "service", "signs_in"),
+    [
+        (URL, "gmeet", True),
+        ("https://us05web.zoom.us/j/123456789?pwd=sekrit", "zoom", False),
+        (TEAMS_URL, "teams", False),
+    ],
+)
+def test_only_a_meet_bot_signs_in_with_the_google_account(httpx_mock, link, service, signs_in):
+    accept(httpx_mock)
+    provider, _ = make(account_id=OTHER)
+    provider.send_bot(link)
+    body = sent_body(httpx_mock)
+    assert body["service"] == service
+    assert ("authentication" in body) is signs_in
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "bad HTTPS://US05WEB.ZOOM.US/j/123456789?PWD=sekrit here",
+        "bad us05web.zoom.us/j/123456789 here and pwd=sekrit",
+        "bad teams.microsoft.com/meet/1234567890123?p=sekrit here",
+        "bad meet.google.com/abc-defg-hij and context=sekrit",
+        "bad password=sekrit",
+    ],
+)
+def test_a_failure_reason_never_keeps_a_link_or_a_passcode(reason):
+    from app.bot_provider import describe_failure
+
+    text = describe_failure(SkribbyError(f"send_bot failed: HTTP 400: {reason}"))
+    assert "sekrit" not in text.lower() and "zoom.us" not in text.lower()
+    assert "teams.microsoft" not in text and "meet.google" not in text
+    assert text.startswith("SkribbyError: send_bot failed: HTTP 400: bad ")
+
+
+def test_a_refusal_names_skribbys_reason_without_the_link_or_the_key(httpx_mock):
+    link = "https://us05web.zoom.us/j/123456789?pwd=sekrit"
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE}/bot",
+        status_code=400,
+        json={"error": "invalid_authentication", "detail": [{"msg": f"bad {link} {KEY}"}]},
+    )
+    provider, _ = make()
+    with pytest.raises(SkribbyError) as caught:
+        provider.send_bot(link)
+    text = describe_failure(caught.value)
+    assert text.startswith("SkribbyError: send_bot failed: HTTP 400: invalid_authentication")
+    assert "sekrit" not in text and "zoom.us" not in text and KEY not in text
+
+
 def test_a_guest_bot_is_sent_with_the_configured_name_and_the_safety_limits(httpx_mock):
     accept(httpx_mock)
     provider, _ = make(bot_name="Beyric Meeting Support", left_alone_seconds=300, max_poll_hours=6)
@@ -446,6 +503,44 @@ def test_a_zoom_link_keeps_its_passcode_for_skribby_and_nowhere_else(httpx_mock)
     assert body["service"] == "zoom"
     assert body["meeting_url"] == "https://zoom.us/j/123456789?pwd=sekrit"
     assert "sekrit" not in str(body["custom_metadata"])
+
+
+def test_a_teams_link_goes_whole_to_skribby_as_a_guest_even_with_an_account_set(httpx_mock):
+    accept(httpx_mock)
+    provider, _ = make(account_id=OTHER)  # the account is a Google one: Teams never uses it
+    provider.send_bot(TEAMS_URL)
+    body = sent_body(httpx_mock)
+    assert body["service"] == "teams"
+    assert body["meeting_url"] == TEAMS_URL
+    assert "authentication" not in body
+    assert re.fullmatch(r"teams-[0-9a-f]{24}", body["custom_metadata"]["meeting_code"])
+
+
+def test_a_second_bot_for_one_teams_meeting_is_refused_whatever_the_link_says(httpx_mock):
+    from app.meeting_url import parse_meeting_url
+
+    _, held = parse_meeting_url(TEAMS_URL)
+    httpx_mock.add_response(
+        method="GET", url=f"{BASE}/bot/{OTHER}", json=bot("recording", steps=[("recording", 30)])
+    )
+    provider, _ = make(ledger=Ledger(live=[OTHER]))
+    provider._remember_bot(("teams", held), OTHER)
+    with pytest.raises(BotDuplicate):
+        provider.send_bot(TEAMS_URL.split("?")[0] + "?context=%7b%7d")
+
+
+def test_a_teams_bot_can_be_stopped_by_its_code(httpx_mock):
+    from app.meeting_url import parse_meeting_url
+
+    _, code = parse_meeting_url(TEAMS_URL)
+    accept(httpx_mock)
+    httpx_mock.add_response(method="POST", url=f"{BASE}/bot/{BOT}/stop", json={"message": "ok"})
+    httpx_mock.add_response(
+        method="GET", url=f"{BASE}/bot/{BOT}", json=bot("finished", steps=[("finished", 1)])
+    )
+    provider, _ = make()
+    provider.send_bot(TEAMS_URL)
+    provider.stop_bot("teams", code)  # no ValueError: Teams is a platform here
 
 
 def test_the_model_and_the_time_limit_follow_the_settings(httpx_mock):

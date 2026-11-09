@@ -98,7 +98,8 @@ export function formatDuration(startIso: string, endIso: string): string {
   return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
 }
 
-export function platformLabel(platform: "google_meet" | "zoom"): string {
+export function platformLabel(platform: "google_meet" | "zoom" | "teams"): string {
+  if (platform === "teams") return "Microsoft Teams";
   return platform === "zoom" ? "Zoom" : "Google Meet";
 }
 

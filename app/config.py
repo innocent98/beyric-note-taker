@@ -102,6 +102,14 @@ class Settings(BaseSettings):
             raise ValueError("BOT_PROVIDER is 'skribby' but SKRIBBY_API_KEY is not set")
         return self
 
+    @model_validator(mode="after")
+    def _teams_follows_the_provider(self):
+        if self.bot_provider != "skribby":
+            self.teams_join_enabled = False
+        elif self.teams_join_enabled is None:
+            self.teams_join_enabled = True
+        return self
+
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/notetaker"
 
     # Which bot provider puts the bot in meetings (`app/bot_provider.py`): `vexa` (the default, the
@@ -169,9 +177,12 @@ class Settings(BaseSettings):
     # How many bots one user may have on meetings at once (spec section 9.4, step 7). It only bites
     # once `bot_max_local` is above it. 0 stops every user.
     user_bot_limit: int = Field(default=2, ge=0)
-    # Teams links are recognised on calendar events, but the bot joins them only once the Teams
-    # spike (P0.7) has passed and this is set: until then a Teams event reads "Can't join yet".
-    teams_join_enabled: bool = False
+    # Whether the bot joins Microsoft Teams meetings (a pasted link, a calendar event). Unset, it
+    # follows the provider: on with `BOT_PROVIDER=skribby` (Skribby joins Teams as a guest), off
+    # with Vexa, which only knows Meet and Zoom. `TEAMS_JOIN_ENABLED=false` switches it off under
+    # Skribby; `true` under Vexa is ignored (the bot could not join). Off, a Teams event reads
+    # "Microsoft Teams meetings cannot be joined yet" and a pasted Teams link is refused.
+    teams_join_enabled: bool | None = None
 
     openai_api_key: str = Field(default="", repr=False)
     transcription_model: str = "gpt-transcribe"

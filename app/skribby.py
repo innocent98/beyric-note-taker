@@ -23,6 +23,7 @@ In short:
 """
 
 import ipaddress
+import json
 import logging
 import math
 import re
@@ -47,6 +48,7 @@ from app.bot_provider import (
     BotProviderNotConfigured,
     BotSendUncertain,
     run_within,
+    scrub_links,
 )
 from app.meeting_url import _parse
 
@@ -56,7 +58,7 @@ BASES = {
     "eu": "https://platform.skribby.io/api/v1",
     "jp": "https://platform-jp.skribby.io/api/v1",
 }
-SERVICES = {"google_meet": "gmeet", "zoom": "zoom"}
+SERVICES = {"google_meet": "gmeet", "zoom": "zoom", "teams": "teams"}
 
 # Joined for this long and still not in: the bot is knocking, and the owner is told to admit it.
 # Skribby has no status for the waiting room (`joining` covers it), so this is inferred, as the
@@ -527,10 +529,20 @@ class SkribbyClient:
         message = ""
         try:
             body = response.json()
-            value = body.get("message") if isinstance(body, dict) else None
-            message = value.strip()[:200] if isinstance(value, str) else ""
+            if isinstance(body, dict):
+                # Skribby's own reason: `message`, or `error`/`code`/`detail` when it uses those
+                # (a bad-parameter 400 is not documented), as short text only.
+                parts = []
+                for name in ("message", "error", "code", "detail"):
+                    value = body.get(name)
+                    if isinstance(value, list | dict):
+                        value = json.dumps(value, default=str)
+                    if isinstance(value, str) and value.strip():
+                        parts.append(value.strip())
+                message = " ".join(parts)[:300]
         except ValueError:
             pass
+        message = scrub_links(message)  # a link can carry a passcode
         detail = f": {self._scrub(message)}" if message else ""
         return SkribbyError(f"{what} failed: HTTP {status}{detail}")
 
@@ -564,7 +576,10 @@ class SkribbyClient:
             "custom_metadata": {"app": "beyric-note-taker", "meeting_code": code},
             "stop_options": stop_options,
         }
-        if self._account_id:
+        # The account is a Google one: only a Meet bot signs in with it. A Zoom bot would need a
+        # ZAK token and a Teams bot an account in the meeting's own tenant (Skribby's bot
+        # authentication page); neither is ours, so both join as guests.
+        if self._account_id and platform == "google_meet":
             body["authentication"] = {"account_id": self._account_id, "always_authenticate": True}
         return body
 
@@ -1009,7 +1024,7 @@ class SkribbyProvider:
         return self._look(bot_uuid(vexa_meeting_id))
 
     def stop_bot(self, platform: str, native_id: str) -> None:
-        if platform not in ("google_meet", "zoom") or not re.fullmatch(r"[A-Za-z0-9-]+", native_id):
+        if platform not in SERVICES or not re.fullmatch(r"[A-Za-z0-9-]+", native_id):
             raise ValueError("unsupported platform or meeting code")
         failure: SkribbyError | None = None
         for bot_id in self._candidates(platform, native_id):

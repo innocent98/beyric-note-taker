@@ -243,7 +243,7 @@ def test_invalid_link_shows_plain_error(client, fake_vexa, template, session):
         client, "/meetings", {"url": "https://example.com/x", "template_id": template.id}
     )
     assert response.status_code == 400
-    assert "Google Meet or Zoom" in response.text
+    assert "Google Meet, Zoom or Microsoft Teams" in response.text
     assert fake_vexa.sent == []
     assert session.scalars(select(Meeting)).all() == []
 

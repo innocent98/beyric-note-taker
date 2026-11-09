@@ -604,3 +604,10 @@ def test_stop_bot_rejects_odd_platform_or_id_without_request(httpx_mock, client)
     with pytest.raises(ValueError):
         client.stop_bot("teams", "1")
     assert httpx_mock.get_requests() == []
+
+
+def test_vexa_refuses_a_teams_link_before_any_request(client, httpx_mock):
+    link = "https://teams.microsoft.com/meet/1234567890123?p=placeholder"
+    with pytest.raises(UnsupportedMeetingUrl):
+        client.send_bot(link)
+    assert httpx_mock.get_requests() == []

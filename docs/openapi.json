@@ -1986,7 +1986,8 @@
           "platform": {
             "enum": [
               "google_meet",
-              "zoom"
+              "zoom",
+              "teams"
             ],
             "title": "Platform",
             "type": "string"
@@ -2277,7 +2278,8 @@
           "platform": {
             "enum": [
               "google_meet",
-              "zoom"
+              "zoom",
+              "teams"
             ],
             "title": "Platform",
             "type": "string"
@@ -2356,7 +2358,8 @@
           "platform": {
             "enum": [
               "google_meet",
-              "zoom"
+              "zoom",
+              "teams"
             ],
             "title": "Platform",
             "type": "string"
@@ -3717,7 +3720,8 @@
               {
                 "enum": [
                   "google_meet",
-                  "zoom"
+                  "zoom",
+                  "teams"
                 ],
                 "type": "string"
               },
@@ -3882,7 +3886,8 @@
               {
                 "enum": [
                   "google_meet",
-                  "zoom"
+                  "zoom",
+                  "teams"
                 ],
                 "type": "string"
               },
