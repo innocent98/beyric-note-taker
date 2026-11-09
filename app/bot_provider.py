@@ -139,6 +139,10 @@ class BotMeeting:
     # history). Vexa raises `needs_help` there as a warning that its lobby budget is running out,
     # which is not a prompt the bot is stuck on.
     reached_lobby: bool = False
+    # Where the last transcript segment ends, in seconds from the start of the recording, for a
+    # provider that times its transcript (Skribby). Read only by `TRANSCRIPT_SOURCE=skribby`, to
+    # tell a transcript that stops early; None when the provider gives no times.
+    last_segment_end: float | None = None
 
 
 def run_within(seconds: float, call):

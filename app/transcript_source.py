@@ -34,6 +34,19 @@ SKRIBBY = "skribby"
 # transcript that lost only part of the call: the sampled shadow check measures that.
 MIN_WORDS_PER_MINUTE = 20
 
+# Skribby's last segment must end at least this far into the recording (its times are seconds from
+# the start of the recording). Trailing quiet (people leaving, the bot waiting out the last-person
+# timer) is normal, so 70% leaves room for about 30% of silence at the end; a transcript that stops
+# earlier lost the rest of the call. Too strict only costs the fallback (about 0.70 USD an hour).
+MIN_COVERAGE = 0.70
+# Distinct words over total words, below which the text is a loop ("Thank you. Thank you. ...") and
+# not speech. Real speech of the lengths that pass the rule above has far more: a hundred-odd
+# distinct words at the very least, and at an hour (about 9,000 words) well over a thousand, so the
+# ratio of real meetings stays far above 5%; a looped transcript has a handful. These are estimates
+# from ordinary English speech, not measured on our meetings; the direction is safe (it rarely
+# fires).
+MIN_DISTINCT_SHARE = 0.05
+
 SHADOW_BUCKETS = 100
 
 _WORD = re.compile(r"[a-z0-9']+")
@@ -50,6 +63,8 @@ class Candidate:
     segments: int  # segments that carried words
     unnamed_segments: int  # of those, the ones with no (usable) speaker name
     named: bool  # at least one named speaker: the text carries "[Name]:" turns
+    distinct_words: int = 0  # different words (case and punctuation ignored)
+    last_end: float | None = None  # seconds into the recording where the last segment ends
 
     @property
     def complete(self) -> bool:
@@ -57,9 +72,10 @@ class Candidate:
         return self.named
 
 
-def candidate(segments: list[dict]) -> Candidate | None:
+def candidate(segments: list[dict], last_end: float | None = None) -> Candidate | None:
     """Build the transcript from Skribby's segments (`{"speaker", "text"}`), or None when there is
-    no text at all.
+    no text at all. `last_end` is where the last segment ends (seconds into the recording), as the
+    provider reports it; when not given, the latest numeric `end` among the segments is used.
 
     A turn is `[Name]: text`, one per line; consecutive segments of one speaker are merged into one
     turn. A segment with no usable name is `[Unknown speaker]`, as `label_transcript` writes it.
@@ -71,6 +87,14 @@ def candidate(segments: list[dict]) -> Candidate | None:
     turns = _clean_segments(segments or [])
     if not turns:
         return None
+    ends = [
+        end
+        for segment in segments or []
+        if isinstance(end := segment.get("end"), int | float)
+        and not isinstance(end, bool)
+        and math.isfinite(end)
+        and end >= 0
+    ]
     named = {name for name, _ in turns if name != UNKNOWN_SPEAKER}
     unnamed = sum(1 for name, _ in turns if name == UNKNOWN_SPEAKER)
     words = sum(len(text.split()) for _, text in turns)
@@ -92,6 +116,8 @@ def candidate(segments: list[dict]) -> Candidate | None:
         segments=len(turns),
         unnamed_segments=unnamed,
         named=bool(named),
+        distinct_words=len(set(_words(" ".join(spoken for _, spoken in turns)))),
+        last_end=last_end if last_end is not None else (max(ends) if ends else None),
     )
 
 
@@ -103,11 +129,21 @@ def needed_words(seconds: int, floor: int) -> int:
 
 
 def fallback_reason(found: Candidate | None, seconds: int, floor: int) -> str | None:
-    """None when Skribby's transcript may be used; else a short fixed word naming why not."""
+    """None when Skribby's transcript may be used; else a short fixed phrase naming why not (never
+    any text). Four checks: it exists; it has at least `MIN_WORDS_PER_MINUTE` of audio; its words
+    are not a loop (`MIN_DISTINCT_SHARE`); and its last segment ends at least `MIN_COVERAGE` of the
+    way into the recording. No segment times at all fails the last, closed: a transcript whose
+    reach cannot be told is not trusted."""
     if found is None:
         return "no transcript"
     if found.words < needed_words(seconds, floor):
         return "too short for the recording"
+    if found.distinct_words < MIN_DISTINCT_SHARE * found.words:
+        return "repeats the same few words"
+    if found.last_end is None:
+        return "no segment times"
+    if found.last_end < MIN_COVERAGE * seconds:
+        return "stops well before the end of the recording"
     return None
 
 
@@ -166,13 +202,16 @@ def send_options(
     ):
         return {}
     try:
-        terms = list(
-            session.scalars(
-                select(VocabularyTerm.term)
-                .where(VocabularyTerm.owner_user_id == owner_user_id)
-                .order_by(VocabularyTerm.id)
+        # A savepoint: a failed read must not abort the caller's transaction (`place_bot` holds the
+        # placement lock and the slot in it).
+        with session.begin_nested():
+            terms = list(
+                session.scalars(
+                    select(VocabularyTerm.term)
+                    .where(VocabularyTerm.owner_user_id == owner_user_id)
+                    .order_by(VocabularyTerm.id)
+                )
             )
-        )
     except Exception:  # a database hiccup must not stop the bot from being sent
         return {}
     return {"vocabulary": terms} if terms else {}

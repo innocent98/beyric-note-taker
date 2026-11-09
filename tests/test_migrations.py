@@ -1593,9 +1593,16 @@ def test_0039_adds_transcript_source_and_the_shadow_table_and_round_trips(scratc
                 "from meetings"
             )
         )
+    with engine.begin() as conn:  # the ledger takes the new `shadow` kind, with no user
+        conn.execute(text("insert into ai_runs (kind, model) values ('shadow', 'm')"))
     with engine.begin() as conn:  # the numbers go with the meeting
         conn.execute(text("delete from meetings"))
     assert _rows(engine, "select count(*) from transcript_shadow_metrics") == [(0,)]
+    command.downgrade(cfg, "0038")
+    assert _rows(engine, "select count(*) from ai_runs where kind = 'shadow'") == [(0,)]
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # the old check is back
+        conn.execute(text("insert into ai_runs (kind, model) values ('shadow', 'm')"))
+    command.upgrade(cfg, "0039")
     command.downgrade(cfg, "0038")
     assert "transcript_source" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
     assert "transcript_shadow_metrics" not in inspect(engine).get_table_names()

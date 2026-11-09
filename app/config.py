@@ -6,6 +6,12 @@ from functools import lru_cache
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# `TRANSCRIPT_SOURCE=skribby` is allowed only with a Skribby model on this list: the notes then
+# take their speaker names straight from Skribby's own transcript, so the model must do speaker
+# diarization (Skribby's billing page lists it for Soniox, not for Groq Whisper, which is the
+# default `SKRIBBY_TRANSCRIPTION_MODEL`). Add a model here only after reading a real answer from it.
+TRANSCRIPT_SKRIBBY_MODELS = ("soniox/stt-async-v5",)
+
 
 class Settings(BaseSettings):
     # `hide_input_in_errors`: a start-up validation error must never print the settings it was given
@@ -130,6 +136,19 @@ class Settings(BaseSettings):
         startup instead, naming the setting (never printing any key)."""
         if self.bot_provider == "skribby" and not self.skribby_api_key.strip():
             raise ValueError("BOT_PROVIDER is 'skribby' but SKRIBBY_API_KEY is not set")
+        return self
+
+    @model_validator(mode="after")
+    def _skribby_transcript_needs_a_diarizing_model(self):
+        if (
+            self.transcript_source == "skribby"
+            and self.skribby_transcription_model.strip() not in TRANSCRIPT_SKRIBBY_MODELS
+        ):
+            known = ", ".join(TRANSCRIPT_SKRIBBY_MODELS)
+            raise ValueError(
+                f"TRANSCRIPT_SOURCE is 'skribby' but SKRIBBY_TRANSCRIPTION_MODEL is "
+                f"{self.skribby_transcription_model!r}; it must be one of: {known}"
+            )
         return self
 
     @model_validator(mode="after")

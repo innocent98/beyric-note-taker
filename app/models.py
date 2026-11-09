@@ -61,7 +61,19 @@ JOIN_STATES = (
 )
 # A join in one of these states holds its meeting code: only one bot per code at a time.
 LIVE_JOIN_STATES = ("dispatching", "no_capacity", "joined")
-AI_RUN_KINDS = ("extract", "translate", "notes", "label", "transcribe", "ask", "topics")
+# `shadow` is a transcription made only to compare with the provider's transcript
+# (`TRANSCRIPT_SHADOW_PERCENT`): a real OpenAI cost, so it counts in cost totals, but it has no
+# user_id (the owner did not cause it) and is never a meeting's transcript.
+AI_RUN_KINDS = (
+    "extract",
+    "translate",
+    "notes",
+    "label",
+    "transcribe",
+    "ask",
+    "topics",
+    "shadow",
+)
 AI_RUN_STATUSES = ("ok", "failed", "pending")
 # `pending` waits for the worker (or for a retry), `running` is being worked on, `done` is finished,
 # `failed` gave up after the retries, `skipped` means only the decisions were read from the notes

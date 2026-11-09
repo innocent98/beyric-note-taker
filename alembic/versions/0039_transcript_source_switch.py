@@ -12,6 +12,10 @@ numbers comparing the two transcripts: word counts, the share of words in common
 with no name, audio seconds, which source the notes used. Numbers only, no transcript text, no name,
 no email; the meeting is the one link and the row is deleted with it (`ON DELETE CASCADE`).
 
+The shadow check's own OpenAI transcription is a new ledger kind, `shadow` (`ck_ai_runs_kind` is
+widened): it is real spend, so cost totals count it, but it is not a meeting's transcript and it is
+written with no `user_id` (the owner did not cause it), so a per-account view never charges them.
+
 Revision ID: 0039
 Revises: 0038
 Create Date: 2026-11-09
@@ -19,6 +23,11 @@ Create Date: 2026-11-09
 
 import sqlalchemy as sa
 from alembic import op
+
+_KINDS_NEW = (
+    "kind in ('extract', 'translate', 'notes', 'label', 'transcribe', 'ask', 'topics', 'shadow')"
+)
+_KINDS_OLD = "kind in ('extract', 'translate', 'notes', 'label', 'transcribe', 'ask', 'topics')"
 
 revision = "0039"
 down_revision = "0038"
@@ -33,7 +42,7 @@ def upgrade() -> None:
         sa.Column("id", sa.BigInteger(), primary_key=True),
         sa.Column(
             "meeting_id",
-            sa.BigInteger(),
+            sa.Integer(),
             sa.ForeignKey("meetings.id", ondelete="CASCADE"),
             nullable=False,
         ),
@@ -51,8 +60,13 @@ def upgrade() -> None:
         ),
         sa.UniqueConstraint("meeting_id", name="uq_transcript_shadow_metrics_meeting"),
     )
+    op.drop_constraint("ck_ai_runs_kind", "ai_runs", type_="check")
+    op.create_check_constraint("ck_ai_runs_kind", "ai_runs", _KINDS_NEW)
 
 
 def downgrade() -> None:
+    op.execute("delete from ai_runs where kind = 'shadow'")
+    op.drop_constraint("ck_ai_runs_kind", "ai_runs", type_="check")
+    op.create_check_constraint("ck_ai_runs_kind", "ai_runs", _KINDS_OLD)
     op.drop_table("transcript_shadow_metrics")
     op.drop_column("meetings", "transcript_source")

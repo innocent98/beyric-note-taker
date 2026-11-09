@@ -17,10 +17,16 @@ from app.bot_provider import build_provider
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import AppState, Meeting, User
-from app.pipeline import advance_meeting, delete_expired_audio, delete_fetched_copies
+from app.pipeline import (
+    advance_meeting,
+    delete_expired_audio,
+    delete_fetched_copies,
+    run_shadow_checks,
+)
 
 logger = logging.getLogger("app.worker")
 CLEANUP_EVERY_SECONDS = 3600
+SHADOW_POLL_SECONDS = 15
 
 
 def next_meeting_id(session: Session, after_id: int) -> int | None:
@@ -150,6 +156,27 @@ def start_translation_thread(stop: threading.Event) -> threading.Thread:
     return thread
 
 
+def run_shadow_loop(stop: threading.Event) -> None:
+    """Runs the queued shadow checks (`pipeline.run_shadow_checks`) one after another, in a thread
+    of its own: a check is a whole OpenAI transcription, and neither the notes nor the polling of
+    live meetings may wait for it. Its session is its own; whatever goes wrong is logged by type."""
+    while not stop.is_set():
+        ran = 0
+        try:
+            with SessionLocal() as session:
+                ran = run_shadow_checks(session)
+        except Exception as exc:
+            logger.warning("shadow check loop failed (%s)", type(exc).__name__)
+        if not ran:
+            stop.wait(SHADOW_POLL_SECONDS)
+
+
+def start_shadow_thread(stop: threading.Event) -> threading.Thread:
+    thread = threading.Thread(target=run_shadow_loop, args=(stop,), name="shadow", daemon=True)
+    thread.start()
+    return thread
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     skribby.check_region_unchanged(get_settings())
@@ -161,6 +188,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, lambda *_: stop.set())
     interval = get_settings().poll_interval_seconds
     translator = start_translation_thread(stop)
+    start_shadow_thread(stop)
     last_cleanup = 0.0
     cursor = 0
     logger.info("worker started")

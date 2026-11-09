@@ -4,13 +4,15 @@ provider's copy being deleted, metering, the cost ledger, the sampled shadow che
 and the vocabulary sent to Skribby. Pure rules first, then the pipeline over a real database."""
 
 import logging
+import threading
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import sessionmaker
 
-from app import pipeline, transcript_source
+from app import pipeline, transcript_source, translation, worker
 from app.bot_provider import BotProviderError
 from app.config import Settings
 from app.models import (
@@ -39,8 +41,16 @@ from tests.test_web import owner, stranger  # noqa: F401  (fixtures used by name
 # ---- the format: `[Name]: text` turns, as `label_transcript` gives them ----
 
 
-def seg(speaker, text):
-    return {"speaker": speaker, "text": text}
+def seg(speaker, text, end=None):
+    segment = {"speaker": speaker, "text": text}
+    if end is not None:
+        segment["end"] = end
+    return segment
+
+
+def varied(n, prefix="w"):
+    """`n` words, 60 of them different: speech has more than a handful, a looped text does not."""
+    return " ".join(f"{prefix}{i % 60}" for i in range(n))
 
 
 def test_consecutive_segments_of_one_speaker_become_one_turn():
@@ -102,8 +112,8 @@ def test_the_fewest_words_is_twenty_a_minute_and_never_below_the_floor():
     assert transcript_source.needed_words(0, 5) == 5
 
 
-def words(n, speaker="Ada"):
-    return transcript_source.candidate([seg(speaker, " ".join(["word"] * n))])
+def words(n, speaker="Ada", end=590):
+    return transcript_source.candidate([seg(speaker, varied(n), end)])
 
 
 def test_a_transcript_at_the_limit_is_used_and_one_word_under_is_not():
@@ -156,7 +166,8 @@ def test_a_bad_source_stops_startup_naming_the_setting():
         Settings(transcript_source="whisper")
     assert Settings().transcript_source == "own"  # the default is today's behaviour
     assert Settings(transcript_source="").transcript_source == "own"
-    assert Settings(transcript_source=" Skribby ").transcript_source == "skribby"
+    on = Settings(transcript_source=" Skribby ", skribby_transcription_model=MODEL)
+    assert on.transcript_source == "skribby"
 
 
 @pytest.mark.parametrize("bad", [-1, 101])
@@ -208,7 +219,7 @@ def test_send_options_pass_the_owners_own_terms_only_in_skribby_mode(session, ow
         ]
     )
     session.commit()
-    on = Settings(transcript_source="skribby")
+    on = Settings(transcript_source="skribby", skribby_transcription_model=MODEL)
     off = Settings()
     assert transcript_source.send_options(session, TakesVocabulary(), owner.id, on) == {
         "vocabulary": ["Beyric"]
@@ -220,19 +231,23 @@ def test_send_options_pass_the_owners_own_terms_only_in_skribby_mode(session, ow
 
 # ---- the pipeline ----
 
+MODEL = "soniox/stt-async-v5"
 SKRIBBY_TEXT_WORDS = 700  # RECORDED_SECONDS (1830) needs 610
 
 
 def long_segments():
     """Ada, Bo, Ada again, with enough words for the recording's length."""
-    chunk = " ".join(["alpha"] * (SKRIBBY_TEXT_WORDS // 3))
-    return [seg("Ada", chunk), seg("Bo", chunk), seg("Ada", chunk)]
+    chunk = varied(SKRIBBY_TEXT_WORDS // 3, "alpha")
+    return [seg("Ada", chunk, 600), seg("Bo", chunk, 1200), seg("Ada", chunk, 1800)]
 
 
 def done(segments):
+    """A finished bot; `last_segment_end` as Skribby's mapping would give it (seconds)."""
+    ends = [x["end"] for x in segments if "end" in x]
     return VexaMeeting(
         status="completed",
         segments=segments,
+        last_segment_end=max(ends) if ends else None,
         recording_id=7,
         media_id=9,
         recording_status="completed",
@@ -256,7 +271,10 @@ def mode(monkeypatch, env):
             pipeline,
             "get_settings",
             lambda: Settings(
-                audio_dir=str(env / "a"), transcript_source=source, transcript_shadow_percent=shadow
+                audio_dir=str(env / "a"),
+                transcript_source=source,
+                skribby_transcription_model=MODEL,
+                transcript_shadow_percent=shadow,
             ),
         )
 
@@ -317,8 +335,8 @@ def test_hours_metering_is_unchanged(session, skribby_meeting, mode):
 
 def test_nobody_named_is_unlabelled_and_marked_incomplete(session, skribby_meeting, mode):
     mode()
-    chunk = " ".join(["alpha"] * 700)
-    run(session, skribby_meeting, FakeVexa(done([seg("", chunk)])))
+    chunk = varied(700, "alpha")
+    run(session, skribby_meeting, FakeVexa(done([seg("", chunk, 1800)])))
     assert skribby_meeting.transcript == chunk
     assert skribby_meeting.speakers_incomplete is True
     assert skribby_meeting.transcript_source == "skribby"
@@ -330,9 +348,12 @@ def test_nobody_named_is_unlabelled_and_marked_incomplete(session, skribby_meeti
         [],
         [seg("Ada", "   ")],
         [seg("Ada", "just a few words here")],
-        [seg("Ada", " ".join(["w"] * 609))],  # one word under 20 a minute for 1830 s
+        [seg("Ada", varied(609), 1800)],  # one word under 20 a minute for 1830 s
+        [seg("Ada", "Thank you. " * 400, 1800)],  # a loop: enough words, a handful of different
+        [seg("Ada", varied(700), 1000)],  # ends at 55% of the recording: the rest is missing
+        [seg("Ada", varied(700))],  # no segment times at all
     ],
-    ids=["none", "blank", "short", "just_under"],
+    ids=["none", "blank", "short", "just_under", "loop", "stops_early", "no_times"],
 )
 def test_missing_or_too_short_falls_back_to_our_own_transcription(
     session, skribby_meeting, mode, segments
@@ -348,8 +369,7 @@ def test_missing_or_too_short_falls_back_to_our_own_transcription(
 
 def test_a_transcript_at_the_limit_is_used(session, skribby_meeting, mode):
     mode()
-    exactly = " ".join(["w"] * 610)
-    openai = run(session, skribby_meeting, FakeVexa(done([seg("Ada", exactly)])))
+    openai = run(session, skribby_meeting, FakeVexa(done([seg("Ada", varied(610), 1281)])))
     assert skribby_meeting.transcript_source == "skribby"
     assert openai.transcriptions == 0
 
@@ -377,7 +397,7 @@ def test_a_vexa_meeting_always_uses_our_transcription(session, meeting, mode):
 
 def test_the_log_says_which_source_and_never_the_text(session, skribby_meeting, mode, caplog):
     mode()
-    segments = [seg("Ada", "zebraquill " * 700)]
+    segments = [seg("Ada", "zebraquill " + varied(699), 1800)]
     with caplog.at_level(logging.DEBUG):
         run(session, skribby_meeting, FakeVexa(done(segments)))
     assert "transcript from skribby (700 words, 1 speakers, 0 unnamed)" in caplog.text
@@ -435,11 +455,55 @@ def test_the_copy_is_not_deleted_while_the_transcript_step_is_failing(
 # ---- the sampled shadow check, in the pipeline ----
 
 
+@pytest.fixture(autouse=True)
+def empty_shadow_queue():
+    pipeline._shadow_queue.clear()
+    yield
+    pipeline._shadow_queue.clear()
+
+
+def shadow(session, openai):
+    return pipeline.run_shadow_checks(session, openai)
+
+
+class OrderedOpenAI(FakeOpenAI):
+    """Records the order of the calls: `notes` or `transcribe`."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.order = []
+
+    def _transcribe(self, **kwargs):
+        self.order.append("transcribe")
+        return super()._transcribe(**kwargs)
+
+    def _chat(self, **kwargs):
+        reply = super()._chat(**kwargs)
+        if not kwargs["messages"][0]["content"].startswith("You add speaker labels"):
+            self.order.append("notes")
+        return reply
+
+
 def test_shadow_zero_never_calls_openai_transcription(session, skribby_meeting, mode):
     mode(shadow=0)
     openai = run(session, skribby_meeting, FakeVexa(done(long_segments())))
+    assert shadow(session, openai) == 0
     assert openai.transcriptions == 0
     assert session.scalars(select(TranscriptShadowMetric)).first() is None
+
+
+def test_the_shadow_waits_for_the_notes_and_never_delays_them(session, skribby_meeting, mode):
+    """The meeting is ready, with its notes, before our transcription is even attempted."""
+    mode(shadow=100)
+    openai = OrderedOpenAI()
+    run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
+    assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
+    assert skribby_meeting.notes == NOTES + "\n"
+    assert openai.transcriptions == 0  # not attempted in the meeting's own pass
+    assert session.scalars(select(TranscriptShadowMetric)).first() is None
+    assert skribby_meeting.id in pipeline._shadow_queue  # waiting its turn
+    assert shadow(session, openai) == 1
+    assert openai.order == ["notes", "transcribe"]  # the notes came first
 
 
 def test_shadow_hundred_runs_ours_keeps_numbers_and_the_notes_stay_skribbys(
@@ -447,7 +511,9 @@ def test_shadow_hundred_runs_ours_keeps_numbers_and_the_notes_stay_skribbys(
 ):
     mode(shadow=100)
     openai = run(session, skribby_meeting, FakeVexa(done(long_segments())))
+    assert shadow(session, openai) == 1
     assert openai.transcriptions == 1
+    session.refresh(skribby_meeting)
     assert skribby_meeting.transcript == expected_text()  # still Skribby's, ours was dropped
     assert skribby_meeting.transcript_source == "skribby"
     row = session.scalars(select(TranscriptShadowMetric)).one()
@@ -457,16 +523,31 @@ def test_shadow_hundred_runs_ours_keeps_numbers_and_the_notes_stay_skribbys(
     assert row.audio_seconds == RECORDED_SECONDS
     assert row.own_words == len(TRANSCRIPT.split())
     assert 0.0 <= row.shared_share <= 1.0 and row.shared_words <= row.own_words
-    # the shadow run's OpenAI cost goes through the ledger like any transcription
-    paid = ledger(session, skribby_meeting.id, "transcribe")
-    assert len(paid) == 1 and paid[0].audio_seconds == RECORDED_SECONDS
-    assert paid[0].user_id == skribby_meeting.owner_user_id
+    assert shadow(session, openai) == 0  # taken off the queue: it never runs twice
+
+
+def test_the_shadow_spend_is_its_own_ledger_kind_with_no_user(session, skribby_meeting, mode):
+    """Real spend (it is in the totals) that is not a transcript and not the owner's doing."""
+    mode(shadow=100)
+    openai = run(session, skribby_meeting, FakeVexa(done(long_segments())))
+    shadow(session, openai)
+    assert ledger(session, skribby_meeting.id, "transcribe") == []
+    paid = ledger(session, skribby_meeting.id, "shadow")
+    assert len(paid) == 1
+    assert paid[0].audio_seconds == RECORDED_SECONDS and paid[0].model == "gpt-transcribe"
+    assert paid[0].user_id is None and paid[0].status == "ok"
+    total = session.scalar(
+        select(func.sum(AiRun.audio_seconds)).where(AiRun.kind.in_(("transcribe", "shadow")))
+    )
+    assert total == RECORDED_SECONDS  # a cost query over audio seconds still counts it
 
 
 def test_shadow_picks_by_the_meeting_id(session, skribby_meeting, mode):
     bucket = transcript_source.shadow_bucket(skribby_meeting.id)
+    openai = FakeOpenAI()
     mode(shadow=bucket)  # one under: not chosen
-    assert run(session, skribby_meeting, FakeVexa(done(long_segments()))).transcriptions == 0
+    run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
+    assert shadow(session, openai) == 0 and openai.transcriptions == 0
     session.execute(
         Meeting.__table__.update()
         .where(Meeting.id == skribby_meeting.id)
@@ -474,15 +555,36 @@ def test_shadow_picks_by_the_meeting_id(session, skribby_meeting, mode):
     )
     session.commit()
     mode(shadow=bucket + 1)  # at the id's bucket: chosen
-    assert run(session, skribby_meeting, FakeVexa(done(long_segments()))).transcriptions == 1
+    run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
+    assert shadow(session, openai) == 1 and openai.transcriptions == 1
+
+
+def test_a_queued_check_waits_for_a_meeting_still_working_and_is_dropped_if_it_failed(
+    session, skribby_meeting
+):
+    recording = SimpleNamespace(chunks=[], seconds=60)
+    found = transcript_source.candidate([seg("Ada", varied(50), 60)])
+    skribby_meeting.status = "processing"
+    session.commit()
+    pipeline._queue_shadow(
+        skribby_meeting.id, skribby_meeting.owner_user_id, found, recording, datetime.now(UTC)
+    )
+    assert shadow(session, FakeOpenAI()) == 0
+    assert skribby_meeting.id in pipeline._shadow_queue  # still waiting
+    skribby_meeting.status = "failed"
+    session.commit()
+    assert shadow(session, FakeOpenAI()) == 0
+    assert pipeline._shadow_queue == {}  # no check for a meeting with no notes
 
 
 def test_the_shadow_row_holds_numbers_only_never_text(session, skribby_meeting, mode, caplog):
     mode(shadow=100)
     ours = "lemonquartz " * 40
-    segments = [seg("Zeppelin Quokka", "walnutmarble " * 700)]
+    segments = [seg("Zeppelin Quokka", "walnutmarble " + varied(699), 1800)]
+    openai = FakeOpenAI(transcript=ours)
     with caplog.at_level(logging.DEBUG):
-        run(session, skribby_meeting, FakeVexa(done(segments)), FakeOpenAI(transcript=ours))
+        run(session, skribby_meeting, FakeVexa(done(segments)), openai)
+        shadow(session, openai)
     row = session.scalars(select(TranscriptShadowMetric)).one()
     columns = {c.name: getattr(row, c.name) for c in TranscriptShadowMetric.__table__.columns}
     assert set(columns) == {
@@ -494,29 +596,95 @@ def test_the_shadow_row_holds_numbers_only_never_text(session, skribby_meeting, 
     assert not any(w in dump for w in ("lemonquartz", "walnutmarble", "Zeppelin", "@"))
     assert not any(w in caplog.text for w in ("lemonquartz", "walnutmarble", "Zeppelin"))
     assert row.shared_words == 0 and row.shared_share == 0.0
+    session.refresh(skribby_meeting)
     meeting_text = skribby_meeting.transcript + (skribby_meeting.speaker_transcript or "")
     assert "lemonquartz" not in meeting_text  # our shadow text was thrown away
 
 
-def test_a_failing_shadow_run_never_fails_the_meeting(session, skribby_meeting, mode, caplog):
+def test_a_failing_shadow_run_leaves_the_ready_meeting_alone(
+    session, skribby_meeting, mode, caplog
+):
     mode(shadow=100)
 
     class Broken(FakeOpenAI):
         def _transcribe(self, **kwargs):
             raise RuntimeError("openai down")
 
+    openai = run(session, skribby_meeting, FakeVexa(done(long_segments())), Broken())
     with caplog.at_level(logging.WARNING):
-        run(session, skribby_meeting, FakeVexa(done(long_segments())), Broken())
+        shadow(session, openai)
+    session.refresh(skribby_meeting)
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
     assert skribby_meeting.transcript_source == "skribby"
     assert session.scalars(select(TranscriptShadowMetric)).first() is None
+    assert ledger(session, skribby_meeting.id, "shadow") == []  # nothing was billed
     assert "the shadow check was not made" in caplog.text
+
+
+def test_a_database_error_reading_the_vocabulary_cannot_fail_a_saved_transcript(
+    session, skribby_meeting, mode, monkeypatch, caplog
+):
+    """The vocabulary is read inside the shadow's own guard, after the notes: never before."""
+    mode(shadow=100)
+    openai = run(session, skribby_meeting, FakeVexa(done(long_segments())))
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("db gone")
+
+    monkeypatch.setattr(pipeline, "_terms", broken)
+    with caplog.at_level(logging.WARNING):
+        assert shadow(session, openai) == 1  # attempted, failed quietly
+    session.refresh(skribby_meeting)
+    assert (skribby_meeting.status, skribby_meeting.transcript_source) == ("ready", "skribby")
+    assert "the shadow check was not made (RuntimeError)" in caplog.text
+
+
+def test_if_the_ledger_row_cannot_be_written_the_cost_is_logged_and_the_numbers_kept(
+    session, skribby_meeting, mode, monkeypatch, caplog
+):
+    mode(shadow=100)
+    openai = run(session, skribby_meeting, FakeVexa(done(long_segments())))
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("ledger down")
+
+    monkeypatch.setattr(pipeline.ai_runs, "record", broken)
+    with caplog.at_level(logging.ERROR):
+        shadow(session, openai)
+    assert (
+        f"{RECORDED_SECONDS} seconds of audio were transcribed for the shadow check" in caplog.text
+    )
+    assert session.scalars(select(TranscriptShadowMetric)).one().own_words > 0
+
+
+def test_the_worker_runs_the_shadow_checks_in_a_thread_of_its_own(monkeypatch):
+    stop = threading.Event()
+    calls = []
+
+    class FakeSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_checks(session):
+        calls.append(session)
+        stop.set()
+        return 1
+
+    monkeypatch.setattr(worker, "SessionLocal", FakeSession)
+    monkeypatch.setattr(worker, "run_shadow_checks", fake_checks)
+    thread = worker.start_shadow_thread(stop)
+    thread.join(timeout=5)
+    assert not thread.is_alive() and len(calls) == 1 and thread.daemon
 
 
 def test_on_a_fallback_the_shadow_numbers_cost_nothing_more(session, skribby_meeting, mode):
     mode(shadow=100)
-    openai = run(session, skribby_meeting, FakeVexa(done([seg("Ada", "too few words")])))
+    openai = run(session, skribby_meeting, FakeVexa(done([seg("Ada", "too few words", 1800)])))
     assert openai.transcriptions == 1  # the fallback's own call, no second one
+    assert shadow(session, openai) == 0 and openai.transcriptions == 1
     row = session.scalars(select(TranscriptShadowMetric)).one()
     assert (row.notes_source, row.skribby_words, row.segments) == ("own", 3, 1)
     assert len(ledger(session, skribby_meeting.id, "transcribe")) == 1
@@ -524,16 +692,163 @@ def test_on_a_fallback_the_shadow_numbers_cost_nothing_more(session, skribby_mee
 
 def test_no_shadow_numbers_when_the_fetch_itself_failed(session, skribby_meeting, mode):
     mode(shadow=100)
-    run(session, skribby_meeting, FakeVexa(*FETCH_FAILS))
+    openai = run(session, skribby_meeting, FakeVexa(*FETCH_FAILS))
+    shadow(session, openai)
     assert session.scalars(select(TranscriptShadowMetric)).first() is None
 
 
 def test_metrics_go_with_the_meeting(session, skribby_meeting, mode):
     mode(shadow=100)
-    run(session, skribby_meeting, FakeVexa(done(long_segments())))
+    openai = run(session, skribby_meeting, FakeVexa(done(long_segments())))
+    shadow(session, openai)
     session.delete(skribby_meeting)
     session.commit()
     assert session.scalars(select(TranscriptShadowMetric)).first() is None
+
+
+# ---- Skribby's text is not trusted blindly ----
+
+
+def test_a_looped_text_is_not_used():
+    loop = transcript_source.candidate([seg("Ada", "Thank you. " * 400, 590)])
+    assert transcript_source.fallback_reason(loop, 600, 5) == "repeats the same few words"
+    real = transcript_source.candidate([seg("Ada", varied(400), 590)])
+    assert transcript_source.fallback_reason(real, 600, 5) is None
+
+
+def test_a_text_that_stops_early_is_not_used_and_the_edge_is_70_percent():
+    def reason(end):
+        found = transcript_source.candidate([seg("Ada", varied(400), end)])
+        return transcript_source.fallback_reason(found, 600, 5)
+
+    assert reason(420) is None  # exactly 70% of 600 s
+    assert reason(419.9) == "stops well before the end of the recording"
+    assert reason(600) is None
+
+
+def test_the_last_segment_time_is_the_latest_end_in_seconds_and_junk_is_ignored():
+    found = transcript_source.candidate(
+        [
+            seg("Ada", "one two", 19.11),
+            {"speaker": "Bo", "text": "three", "end": "soon"},
+            {"speaker": "Bo", "text": "four", "end": True},
+            {"speaker": "Bo", "text": "five", "end": float("nan")},
+            {"speaker": "Bo", "text": "six", "end": -4},
+            seg("Bo", "seven", 7.53),
+        ]
+    )
+    assert found.last_end == 19.11
+    assert transcript_source.candidate([seg("Ada", "one two")]).last_end is None
+    nothing = transcript_source.candidate([seg("Ada", varied(400))])
+    assert transcript_source.fallback_reason(nothing, 600, 5) == "no segment times"
+
+
+def test_skribbys_last_segment_end_is_read_from_its_answer_and_segments_keep_their_shape():
+    from app.skribby import _last_segment_end, _segments
+
+    body = {
+        "transcript": [
+            {"speaker_name": "Ada", "transcript": "hello there", "start": 7.53, "end": 19.11},
+            {"speaker_name": "Bo", "transcript": "hi", "end": "x"},
+            {"speaker_name": "Bo", "transcript": "late", "end": 2},
+        ]
+    }
+    assert _last_segment_end(body) == 19.11
+    assert _last_segment_end({"transcript": [{"transcript": "x"}]}) is None
+    assert _last_segment_end({"transcript": None}) is None
+    assert _segments(body) == [  # still speaker and text only
+        {"speaker": "Ada", "text": "hello there"},
+        {"speaker": "Bo", "text": "hi"},
+        {"speaker": "Bo", "text": "late"},
+    ]
+
+
+def test_skribby_mode_refuses_to_start_without_a_diarizing_model():
+    with pytest.raises(ValueError) as error:
+        Settings(transcript_source="skribby")  # the default model is Groq's
+    message = str(error.value)
+    assert "TRANSCRIPT_SOURCE is 'skribby' but SKRIBBY_TRANSCRIPTION_MODEL is" in message
+    assert "groq/whisper-large-v3-turbo" in message and "soniox/stt-async-v5" in message
+    with pytest.raises(ValueError, match="SKRIBBY_TRANSCRIPTION_MODEL"):
+        Settings(transcript_source="skribby", skribby_transcription_model="none")
+    ok = Settings(transcript_source="skribby", skribby_transcription_model=MODEL)
+    assert ok.transcript_source == "skribby"
+    # the default source never looks at the model
+    assert Settings(
+        skribby_transcription_model="groq/whisper-large-v3-turbo"
+    ).transcript_source == ("own")
+
+
+# ---- the vocabulary field has never been tried live ----
+
+BASE = "https://skribby.test/api/v1"
+BOT = "0f9e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f"
+
+
+def test_a_validation_error_on_the_vocabulary_retries_once_without_it(httpx_mock, caplog):
+    client = SkribbyClient(api_key="k" * 12, base_url=BASE, transcription_model=MODEL)
+    httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=422, json={"m": "bad"})
+    httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=201, json={"id": BOT})
+    payload = client.payload("google_meet", "abc-defg-hij", "https://meet.google.com/x", ["Zorbl"])
+    with caplog.at_level(logging.INFO):
+        assert client.create(payload) == BOT
+    first, second = httpx_mock.get_requests()
+    assert b"custom_vocabulary" in first.content and b"Zorbl" in first.content
+    assert b"custom_vocabulary" not in second.content  # the same request, without the field
+    assert "retrying once without the custom vocabulary" in caplog.text
+    assert "Zorbl" not in caplog.text  # no terms in the log
+
+
+def test_other_failures_and_a_create_without_vocabulary_are_not_retried(httpx_mock):
+    client = SkribbyClient(api_key="k" * 12, base_url=BASE, transcription_model=MODEL)
+    with_terms = client.payload("google_meet", "a", "https://meet.google.com/x", ["Zorbl"])
+    httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=403, json={"m": "plan"})
+    with pytest.raises(BotProviderError):
+        client.create(with_terms)  # a plan limit is not about the vocabulary
+    httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=400, json={"m": "bad"})
+    with pytest.raises(BotProviderError):
+        client.create(client.payload("google_meet", "a", "https://meet.google.com/x"))
+    assert len(httpx_mock.get_requests()) == 2  # one try each, no second
+
+
+def test_a_second_validation_error_is_an_error_not_a_loop(httpx_mock):
+    client = SkribbyClient(api_key="k" * 12, base_url=BASE, transcription_model=MODEL)
+    httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=400, json={"m": "bad"})
+    httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=400, json={"m": "bad"})
+    payload = client.payload("google_meet", "a", "https://meet.google.com/x", ["Zorbl"])
+    with pytest.raises(BotProviderError):
+        client.create(payload)
+    assert len(httpx_mock.get_requests()) == 2
+
+
+def test_a_failed_vocabulary_read_cannot_abort_the_placement_transaction(
+    session, owner, monkeypatch
+):
+    """A failing statement aborts a Postgres transaction unless it ran in a savepoint."""
+    real = session.scalars
+
+    def failing(statement, *args, **kwargs):
+        session.execute(text("select * from table_that_is_not_there"))
+        return real(statement, *args, **kwargs)
+
+    monkeypatch.setattr(session, "scalars", failing)
+    on = Settings(transcript_source="skribby", skribby_transcription_model=MODEL)
+    assert transcript_source.send_options(session, TakesVocabulary(), owner.id, on) == {}
+    monkeypatch.undo()
+    assert session.scalar(select(1)) == 1  # the transaction is still usable
+
+
+# ---- what reads `meeting.transcript` ----
+
+
+def test_every_reader_gets_the_same_labelled_text_in_either_mode(session, skribby_meeting, mode):
+    """In both modes `speaker_transcript` (what every reader prefers) holds the `[Name]:` turns;
+    only `transcript` itself differs (plain in `own`, the same labelled text in `skribby`)."""
+    mode()
+    run(session, skribby_meeting, FakeVexa(done(long_segments())))
+    assert skribby_meeting.speaker_transcript == skribby_meeting.transcript
+    assert skribby_meeting.speaker_transcript.startswith("[Ada]: ")
+    assert translation.speaker_names(skribby_meeting.speaker_transcript) == ["Ada", "Bo"]
 
 
 # ---- the report ----

@@ -11,6 +11,8 @@ import logging
 import os
 import random
 import shutil
+import threading
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -785,12 +787,14 @@ def _skribby_mode(meeting: Meeting) -> bool:
     )
 
 
-def _skribby_segments(vexa, meeting: Meeting) -> list[dict] | None:
-    """Skribby's segments for this meeting, or None when they could not be fetched (the provider
-    is down, no longer has the meeting, or anything else). Never raises: a failed fetch is the
-    fallback to our own transcription, never a failed meeting. Logged by error type only."""
+def _skribby_segments(vexa, meeting: Meeting) -> tuple[list[dict], float | None] | None:
+    """Skribby's segments for this meeting and where the last one ends (seconds), or None when they
+    could not be fetched (the provider is down, no longer has the meeting, or anything else). Never
+    raises: a failed fetch is the fallback to our own transcription, never a failed meeting.
+    Logged by error type only."""
     try:
-        return list(_lookup(vexa, meeting).segments or [])
+        info = _lookup(vexa, meeting)
+        return list(info.segments or []), info.last_segment_end
     except Exception as exc:
         logger.warning(
             "meeting %s: Skribby's transcript could not be fetched (%s)",
@@ -827,40 +831,108 @@ def _record_shadow(
     )
 
 
-def _shadow_run(
-    session: Session,
-    meeting_id: int,
-    owner_user_id: int,
-    found: transcript_source.Candidate,
-    recording,
-    terms: list[str],
-    openai_client,
+@dataclass
+class _ShadowJob:
+    """A sampled comparison waiting for its meeting's notes to be committed."""
+
+    owner_user_id: int
+    found: transcript_source.Candidate
+    recording: audio.Recording
+    queued_at: datetime
+
+
+# Held in this process's memory, keyed by meeting id: best effort by design. A restart forgets the
+# queue (the check is then simply missing for those meetings), and an entry whose meeting never
+# becomes ready is dropped after `SHADOW_MAX_AGE`.
+_shadow_queue: dict[int, _ShadowJob] = {}
+_shadow_lock = threading.Lock()
+SHADOW_MAX_AGE = timedelta(hours=24)
+
+
+def _queue_shadow(
+    meeting_id: int, owner_user_id: int, found, recording: audio.Recording, now: datetime
 ) -> None:
+    with _shadow_lock:
+        _shadow_queue[meeting_id] = _ShadowJob(owner_user_id, found, recording, now)
+
+
+def _shadow_ready(session: Session, now: datetime) -> list[tuple[int, _ShadowJob]]:
+    """Take from the queue the jobs whose meeting now has its notes; drop those whose meeting is
+    gone, failed, or has waited longer than `SHADOW_MAX_AGE`. The rest stay queued."""
+    with _shadow_lock:
+        waiting = list(_shadow_queue.items())
+    ready = []
+    for meeting_id, job in waiting:
+        status = session.scalar(select(Meeting.status).where(Meeting.id == meeting_id))
+        if status == "ready":
+            ready.append((meeting_id, job))
+        elif status in (None, "failed") or now - job.queued_at > SHADOW_MAX_AGE:
+            with _shadow_lock:
+                _shadow_queue.pop(meeting_id, None)
+    session.rollback()  # the reads above hold no lock the model call should wait behind
+    return ready
+
+
+def _shadow_run(session: Session, meeting_id: int, job: _ShadowJob, openai_client) -> None:
     """The sampled check: transcribe the audio ourselves as `own` mode would, keep only the
-    numbers, throw the text away. Its OpenAI cost goes through the ledger like any transcription.
-    Best effort, the notes never wait on it and it never fails the meeting: any error is logged by
-    type and the check is simply missing for this meeting."""
+    numbers, throw the text away. Runs only AFTER the meeting's notes are committed, so it can
+    never delay or fail them. Best effort: any error is logged by type and the check is simply
+    missing for this meeting.
+
+    Its OpenAI cost is a `shadow` ledger row with no user (the owner did not cause it), committed
+    on its own right after the call so that a failure later still leaves the spend recorded; if
+    even that commit fails, the cost is logged."""
+    seconds = job.recording.seconds
     try:
-        if _lock(session, meeting_id) is None:
-            return  # another worker has the meeting: not worth waiting for
-        text = transcribe_chunks(recording.chunks, terms, client=openai_client)
-        ai_runs.record(
-            session,
-            meeting_id,
-            "transcribe",
-            get_settings().transcription_model,
-            audio_seconds=recording.seconds,
-            user_id=owner_user_id,
+        text = transcribe_chunks(
+            job.recording.chunks, _terms(session, job.owner_user_id), client=openai_client
         )
-        _record_shadow(
-            session, meeting_id, found, text, recording.seconds, transcript_source.SKRIBBY
-        )
-        session.commit()
     except Exception as exc:
         session.rollback()
         logger.warning(
             "meeting %s: the shadow check was not made (%s)", meeting_id, type(exc).__name__
         )
+        return
+    try:
+        ai_runs.record(
+            session,
+            meeting_id,
+            "shadow",
+            get_settings().transcription_model,
+            audio_seconds=seconds,
+        )
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.error(
+            "meeting %s: %d seconds of audio were transcribed for the shadow check and the "
+            "ledger row could not be written (%s)",
+            meeting_id,
+            seconds,
+            type(exc).__name__,
+        )
+    try:
+        _record_shadow(session, meeting_id, job.found, text, seconds, transcript_source.SKRIBBY)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        logger.warning(
+            "meeting %s: the shadow numbers were not saved (%s)", meeting_id, type(exc).__name__
+        )
+
+
+def run_shadow_checks(session: Session, openai_client=None, now: datetime | None = None) -> int:
+    """Run the queued shadow checks whose meetings are ready; how many ran. Called from a thread of
+    its own in the worker (`app/worker.py`), never from the meeting pass."""
+    now = now or datetime.now(UTC)
+    ran = 0
+    for meeting_id, job in _shadow_ready(session, now):
+        with _shadow_lock:
+            if _shadow_queue.pop(meeting_id, None) is None:
+                continue  # another call took it
+        _shadow_run(session, meeting_id, job, openai_client)
+        ran += 1
+    return ran
 
 
 def _step_transcribing(session: Session, meeting: Meeting, vexa, openai_client) -> bool:
@@ -881,9 +953,10 @@ def _step_transcribing(session: Session, meeting: Meeting, vexa, openai_client) 
         meeting_id, owner_id = meeting.id, meeting.owner_user_id
         found, fetched = None, False
         if _skribby_mode(meeting):
-            segments = _skribby_segments(vexa, meeting)
-            fetched = segments is not None
-            found = transcript_source.candidate(segments or [])
+            looked = _skribby_segments(vexa, meeting)
+            fetched = looked is not None
+            segments, last_end = looked or ([], None)
+            found = transcript_source.candidate(segments, last_end)
             why_not = transcript_source.fallback_reason(found, recording.seconds, MIN_WORDS)
             if why_not is None:
                 # Skribby's transcript is the transcript: our transcription and the model-based
@@ -906,15 +979,8 @@ def _step_transcribing(session: Session, meeting: Meeting, vexa, openai_client) 
                 if transcript_source.shadow_selected(
                     meeting_id, get_settings().transcript_shadow_percent
                 ):
-                    _shadow_run(
-                        session,
-                        meeting_id,
-                        owner_id,
-                        found,
-                        recording,
-                        _terms(session, owner_id),
-                        openai_client,
-                    )
+                    # Queued, not run here: it starts only once the notes are committed.
+                    _queue_shadow(meeting_id, owner_id, found, recording, datetime.now(UTC))
                 return True
             logger.info(
                 "meeting %s: Skribby's transcript not used (%s); transcribing ourselves",
