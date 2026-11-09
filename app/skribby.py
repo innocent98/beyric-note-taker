@@ -91,6 +91,9 @@ SENT_KEPT_FOR = 12 * 3600
 MAX_FAILURE_REASON_CHARS = 300
 MAX_COMPLETION_REASON_CHARS = 64  # `meetings.completion_reason` is String(64)
 MAX_NAME_CHARS = 80
+# The most `potential_speaker_names` entries one segment may list and still be read (real ones
+# hold a few); a longer list is treated as no usable answer.
+MAX_CANDIDATES = 20
 # What `BotMeeting.recording_status` says while Skribby is still processing or transcribing: the
 # call is over (`completed`) and the recording is not ready to download (the pipeline's own
 # "finishing the recording" wait).
@@ -212,20 +215,101 @@ def _clean_name(value: Any) -> str:
     return " ".join(name.split())[:MAX_NAME_CHARS].strip()
 
 
+def _tag(value: Any) -> str | None:
+    """Skribby's own diarization tag of a segment ("1", "2", ...), stable across a meeting: a
+    string or an integer is a tag, anything else (a boolean, a float, a list, empty) is none."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _same(name: str) -> str:
+    return name.casefold()
+
+
+def _candidate_names(item: dict) -> set[str] | None:
+    """The cleaned names in a segment's `potential_speaker_names`, or None when the list is so
+    long that choosing from it would be a guess made on a cut-off list (real ones hold a few)."""
+    listed = item.get("potential_speaker_names")
+    if not isinstance(listed, list):
+        return set()
+    if len(listed) > MAX_CANDIDATES:
+        return None
+    names = set()
+    for entry in listed:
+        name = _clean_name(entry.get("name")) if isinstance(entry, dict) else ""
+        if name:
+            names.add(name)
+    return names
+
+
+def _tag_names(value: list[dict]) -> dict[str, str]:
+    """The name each of Skribby's diarization tags stands for, for the tags where it is knowable.
+
+    Skribby names a tag on some segments (`speaker_name`) and, for a participant it could not pin
+    down, lists `potential_speaker_names` instead. A tag takes the one name its own segments carry;
+    a tag with none takes its candidates minus every name another tag already has, and only when
+    exactly one is left. A name two tags would both take goes to neither. Whatever stays unclear is
+    left out: the label is "unknown", never a name made up."""
+    given: dict[str, dict[str, str]] = {}  # tag -> {comparison key: the name as shown}
+    listed: dict[str, dict[str, str] | None] = {}  # tag -> candidates, None when too many
+    for item in value:
+        tag = _tag(item.get("speaker"))
+        if tag is None:
+            continue
+        named = given.setdefault(tag, {})
+        own = _clean_name(item.get("speaker_name"))
+        if own:
+            named.setdefault(_same(own), own)
+        candidates = _candidate_names(item)
+        if candidates is None or listed.get(tag, {}) is None:
+            listed[tag] = None
+        else:
+            listed.setdefault(tag, {}).update({_same(name): name for name in candidates})
+    result = {tag: next(iter(named.values())) for tag, named in given.items() if len(named) == 1}
+    taken = {tag: set(named) for tag, named in given.items() if named}
+    claims: dict[str, list[str]] = {}  # candidate key -> the tags that would take it
+    chosen: dict[str, str] = {}
+    for tag, named in given.items():
+        candidates = listed.get(tag)
+        if named or not candidates:
+            continue
+        elsewhere = {key for other, keys in taken.items() if other != tag for key in keys}
+        left = {key: name for key, name in candidates.items() if key not in elsewhere}
+        if len(left) == 1:
+            key, name = next(iter(left.items()))
+            claims.setdefault(key, []).append(tag)
+            chosen[tag] = name
+    for tag, name in chosen.items():
+        if len(claims[_same(name)]) == 1:
+            result[tag] = name
+    return result
+
+
 def _segments(body: dict) -> list[dict[str, Any]]:
     """`{"speaker", "text"}` for each of Skribby's transcript segments (the shape the speaker
     labelling reads). Absent or null is none; any other shape means Skribby changed its response,
-    which we refuse to guess about."""
+    which we refuse to guess about. A segment's own `speaker_name` wins; one without it takes its
+    diarization tag's name (see `_tag_names`)."""
     value = body.get("transcript")
     if value is None:
         return []
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise SkribbyError("get_meeting failed: 'transcript' is not a list of JSON objects")
+    by_tag = _tag_names(value)
     segments = []
     for item in value:
         text = item.get("transcript")
         if isinstance(text, str) and text.strip():
-            segments.append({"speaker": _clean_name(item.get("speaker_name")), "text": text})
+            name = _clean_name(item.get("speaker_name"))
+            if not name:
+                tag = _tag(item.get("speaker"))
+                name = by_tag.get(tag, "") if tag is not None else ""
+            segments.append({"speaker": name, "text": text})
     return segments
 
 

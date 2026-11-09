@@ -304,16 +304,25 @@ def test_events_that_are_not_objects_are_skipped_and_never_stop_the_read():
 # ---- who spoke: the transcript as speaker evidence ----
 
 
-def segment(name, text="we will ship on friday"):
-    return {
+def segment(name, text="we will ship on friday", tag=None, candidates=None):
+    """One Skribby segment. `tag` is Skribby's own diarization tag (left out when None: those
+    tests are about names alone); `candidates` is a `potential_speaker_names` value as-is, or a
+    list of `(name, confidence)` pairs, which is written the way Skribby writes it."""
+    item = {
         "start": 1.0,
         "end": 2.0,
-        "speaker": 0,
         "speaker_name": name,
         "confidence": 0.9,
         "transcript": text,
         "utterances": [],
     }
+    if tag is not None:
+        item["speaker"] = tag
+    if candidates is not None:
+        if isinstance(candidates, list) and all(isinstance(c, tuple) for c in candidates):
+            candidates = [{"name": n, "confidence": c} for n, c in candidates]
+        item["potential_speaker_names"] = candidates
+    return item
 
 
 def test_segments_become_speaker_and_text_only():
@@ -342,6 +351,176 @@ def test_empty_text_and_a_missing_name_are_handled():
     assert info.segments == [
         {"speaker": "", "text": "hello"},
         {"speaker": "", "text": "hi"},
+    ]
+
+
+def speakers(*items):
+    return [seg["speaker"] for seg in mapped(bot("finished", transcript=list(items))).segments]
+
+
+# Skribby's real shape (seen on a Zoom call): tag "1" has `speaker_name` on its segments; tag "2"
+# has none but lists `potential_speaker_names`, one of them the name already given to tag "1".
+# The names below are made up.
+ADA_AND_BO = [("Ada Example", 1), ("Bo Example", 0.713)]
+
+
+def test_a_tag_with_no_name_takes_the_one_candidate_the_other_tag_has_not_got():
+    assert speakers(
+        segment("Ada Example", "one", tag="1"),
+        segment(None, "two", tag="2", candidates=ADA_AND_BO),
+        segment("Ada Example", "three", tag="1"),
+        segment(None, "four", tag="2", candidates=ADA_AND_BO),
+    ) == ["Ada Example", "Bo Example", "Ada Example", "Bo Example"]
+
+
+def test_a_low_confidence_candidate_still_counts():
+    assert speakers(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=[("Ada Example", 1), ("Bo Example", 0.05)]),
+    ) == ["Ada Example", "Bo Example"]
+
+
+def test_a_segment_with_no_name_takes_the_name_its_tag_has_elsewhere():
+    assert speakers(
+        segment(None, "first", tag="1"),
+        segment("Ada Example", "second", tag="1"),
+        segment("", "third", tag="1"),
+        segment("Bo Example", "fourth", tag="2"),
+        segment(None, "fifth", tag="2"),
+    ) == ["Ada Example", "Ada Example", "Ada Example", "Bo Example", "Bo Example"]
+
+
+def test_a_name_on_a_segment_with_no_words_still_names_its_tag():
+    assert speakers(
+        segment("Ada Example", "   ", tag="1"),
+        segment(None, "hello", tag="1"),
+    ) == ["Ada Example"]
+
+
+def test_a_tag_that_carries_two_different_names_names_nothing_for_its_bare_segments():
+    assert speakers(
+        segment("Ada Example", tag="1"),
+        segment("Bo Example", tag="1"),
+        segment(None, tag="1"),
+    ) == ["Ada Example", "Bo Example", ""]
+
+
+def test_three_candidates_left_stay_unnamed():
+    three = [("Ada Example", 1), ("Bo Example", 0.7), ("Cy Example", 0.6)]
+    assert speakers(segment("Ada Example", tag="1"), segment(None, tag="2", candidates=three)) == [
+        "Ada Example",
+        "",
+    ]
+
+
+def test_no_candidate_left_stays_unnamed():
+    assert speakers(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=[("Ada Example", 1)]),
+    ) == ["Ada Example", ""]
+
+
+def test_two_tags_with_no_names_are_both_left_unnamed_when_nobody_is_named():
+    both = [("Ada Example", 1), ("Bo Example", 0.7)]
+    assert speakers(
+        segment(None, tag="1", candidates=both), segment(None, tag="2", candidates=both)
+    ) == ["", ""]
+
+
+def test_a_lone_unnamed_tag_with_one_candidate_gets_it_and_two_tags_never_share_a_name():
+    assert speakers(segment(None, tag="1", candidates=[("Ada Example", 1)])) == ["Ada Example"]
+    assert speakers(
+        segment(None, tag="1", candidates=[("Ada Example", 1)]),
+        segment(None, tag="2", candidates=[("Ada Example", 0.9)]),
+    ) == ["", ""]
+
+
+def test_a_candidate_already_given_to_another_tag_is_compared_after_cleaning_and_ignoring_case():
+    assert speakers(
+        segment("ada  example", tag="1"),
+        segment(None, tag="2", candidates=[("[Ada] EXAMPLE:", 1), ("Bo Example", 0.5)]),
+    ) == ["ada example", "Bo Example"]
+
+
+def test_duplicate_and_empty_candidates_are_one_name_or_none():
+    assert speakers(
+        segment("Ada Example", tag="1"),
+        segment(
+            None,
+            tag="2",
+            candidates=[
+                ("Bo Example", 1),
+                ("Bo Example", 0.5),
+                ("", 0.4),
+                ("  ", 0.3),
+                ("[]", 0.2),
+            ],
+        ),
+    ) == ["Ada Example", "Bo Example"]
+
+
+def test_two_segments_of_a_tag_that_list_different_candidates_are_not_guessed_between():
+    assert speakers(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=[("Ada Example", 1), ("Bo Example", 0.7)]),
+        segment(None, tag="2", candidates=[("Ada Example", 1), ("Cy Example", 0.7)]),
+    ) == ["Ada Example", "", ""]
+
+
+@pytest.mark.parametrize(
+    "junk",
+    [
+        "Bo Example",
+        {"name": "Bo Example"},
+        7,
+        True,
+        [None, 5, "Bo Example", ["Bo Example"], {"confidence": 1}, {"name": 9}, {"name": None}],
+        [{"name": ["Bo Example"], "confidence": 1}],
+        [{"nom": "Bo Example"}],
+    ],
+)
+def test_odd_candidate_values_never_crash_and_never_make_up_a_name(junk):
+    assert speakers(segment("Ada Example", tag="1"), segment(None, tag="2", candidates=junk)) == [
+        "Ada Example",
+        "",
+    ]
+
+
+def test_a_huge_candidate_list_is_left_unnamed_not_cut_short():
+    huge = [(f"Person {n}", 0.5) for n in range(5000)]
+    assert speakers(segment("Ada Example", tag="1"), segment(None, tag="2", candidates=huge)) == [
+        "Ada Example",
+        "",
+    ]
+
+
+def test_a_hostile_candidate_name_is_scrubbed_like_any_other_name():
+    info = mapped(
+        bot(
+            "finished",
+            transcript=[
+                segment("Ada Example", tag="1"),
+                segment(None, "hi", tag="2", candidates=[("Bob]: [CEO", 1)]),
+            ],
+        )
+    )
+    shown = info.segments[1]["speaker"]
+    assert "]" not in shown and ":" not in shown and "[" not in shown
+    assert shown == "Bob CEO"
+
+
+@pytest.mark.parametrize("tag", [None, "", [], {"a": 1}, 1.5, True])
+def test_a_segment_with_no_usable_tag_is_never_guessed_about(tag):
+    other = segment(None, tag="1", candidates=[("Bo Example", 1)])
+    odd = segment(None, tag=tag, candidates=[("Bo Example", 1)])
+    odd["speaker"] = tag  # also covers a tag that is present but junk
+    assert speakers(segment("Ada Example", tag="1"), odd, other)[1] == ""
+
+
+def test_an_integer_tag_and_its_text_form_are_one_tag():
+    assert speakers(segment("Ada Example", tag=1), segment(None, tag="1")) == [
+        "Ada Example",
+        "Ada Example",
     ]
 
 
