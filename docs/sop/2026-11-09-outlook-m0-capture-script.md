@@ -15,6 +15,7 @@ Adebayo registered the **production** app (spec 9.1: one Web redirect, `https://
 | Redirect | `--redirect local` (default): the script listens on `localhost:8000`. `--redirect paste`: it opens the authorize URL, Adebayo copies the address bar after consenting (the production page shows an error: expected) and pastes it at a hidden prompt. `--redirect-uri` overrides the string sent to Microsoft |
 | Paste checks | Only the query is read; scheme, host and path must equal the registered redirect; `state` must equal ours (constant-time compare); a `?error=` answer is recorded as an S2 fact like the local mode. The pasted address is never printed or stored |
 | `--authority` | now optional (default: the keys file's value, else `consumers`) |
+| Token lengths | The run also records the LENGTH (never the value) of the access, refresh and ID tokens and the `token_type`, so M2's limits (16,384 and 8,192 characters) and its `Bearer` check are settled by a real answer |
 | Instructions | Click-by-click run steps at the top of the script and in `README.md` sections A and C |
 | Rejected | A second script under `scripts/` (duplicate, and `docs/spike/` is already excluded from ruff and CI); asking Adebayo to add a `localhost` redirect to the production registration (the spec keeps production to one redirect); storing the pasted URL for replay (the code works once) |
 

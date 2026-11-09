@@ -1,0 +1,58 @@
+{
+  "id": "TEAMS-PERSONAL-ID",
+  "iCalUId": "ICALUID-TEAMS-PERSONAL-ID",
+  "subject": "Weekly planning",
+  "start": {
+    "dateTime": "2026-11-12T10:00:00.0000000",
+    "timeZone": "UTC"
+  },
+  "end": {
+    "dateTime": "2026-11-12T10:30:00.0000000",
+    "timeZone": "UTC"
+  },
+  "isAllDay": false,
+  "isCancelled": false,
+  "isDraft": false,
+  "isOrganizer": true,
+  "organizer": {
+    "emailAddress": {
+      "name": "Person One",
+      "address": "person-1@example.test"
+    }
+  },
+  "responseStatus": {
+    "response": "organizer",
+    "time": "0001-01-01T00:00:00Z"
+  },
+  "attendees": [
+    {
+      "type": "required",
+      "status": {
+        "response": "accepted",
+        "time": "2026-11-10T09:00:00Z"
+      },
+      "emailAddress": {
+        "name": "Person Two",
+        "address": "person-2@example.test"
+      }
+    }
+  ],
+  "onlineMeeting": {
+    "joinUrl": "https://teams.live.com/meet/9876543210123?p=PLACEHOLDERPASS"
+  },
+  "onlineMeetingProvider": "skypeForConsumer",
+  "isOnlineMeeting": true,
+  "location": {
+    "displayName": "",
+    "locationType": "default"
+  },
+  "locations": [],
+  "body": {
+    "contentType": "html",
+    "content": "<html><body></body></html>"
+  },
+  "seriesMasterId": null,
+  "type": "singleInstance",
+  "sensitivity": "normal",
+  "showAs": "busy"
+}

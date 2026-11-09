@@ -7,7 +7,7 @@ so nothing here takes a public port except through nginx.
 |---|---|---|
 | Front door: `next` (Next.js) | Docker Compose in this repo | `127.0.0.1:8020` only; this is the port nginx proxies to |
 | App: `db`, `migrate`, `worker`, `web` (FastAPI) | Docker Compose in this repo | `web` on `127.0.0.1:8021` only (operator and rollback); visitors reach it through `next` |
-| Vexa Lite: `vexa`, `vexa-db`, `vexa-storage` | the same Compose project | the app, as `vexa:8056`; the server only, on `127.0.0.1:18056` |
+| Vexa Lite: `vexa`, `vexa-db`, `vexa-storage` (compose profile `vexa`, off unless asked for: see "Stopping Vexa and bringing it back" in section 8) | the same Compose project | the app, as `vexa:8056`; the server only, on `127.0.0.1:18056` |
 | nginx + certbot | **on the host**, not in Docker | the internet, ports 80 and 443 |
 
 - Vexa is a ready-made image, `vexaai/vexa-lite:v012`; there is nothing to install or build. It
@@ -157,13 +157,19 @@ Edit `.env`:
 
 ```bash
 cd /opt/beyric-note-taker
-docker compose up -d vexa              # also starts vexa-db and vexa-storage
+docker compose up -d vexa vexa-schema-fix   # also starts vexa-db, vexa-storage and its bucket step;
+                                            # naming a service turns the `vexa` profile on for it
 curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18056/health    # 200
 deploy/vexa-api-key.sh                 # prints vxa_bot_... once; put it in .env as VEXA_API_KEY
 ```
 
 The first start pulls images and takes a few minutes. Run `vexa-api-key.sh` once: a second run
 fails because the Vexa user already exists.
+
+Vexa is in the compose profile `vexa`: a plain `docker compose up -d` (section 5, and every deploy)
+does not start or touch it. Only needed while `BOT_PROVIDER` is `vexa` (the default): skip this
+section for a server that uses Skribby only. To have every `up` keep Vexa running, put
+`COMPOSE_PROFILES=vexa` in `.env` (compose reads it from there too).
 
 ## 5. Start the app
 
@@ -173,7 +179,7 @@ docker compose ps
 curl -s http://127.0.0.1:8020/health   # ok  (through next, to FastAPI and the database)
 curl -s http://127.0.0.1:8020/healthz  # ok  (next itself)
 curl -s http://127.0.0.1:8021/health   # ok  (FastAPI directly)
-docker compose exec worker python -c "import urllib.request; print(urllib.request.urlopen('http://vexa:8056/health', timeout=5).status)"   # 200
+docker compose exec worker python -c "import urllib.request; print(urllib.request.urlopen('http://vexa:8056/health', timeout=5).status)"   # 200, only while Vexa is running (profile on)
 ```
 
 `web` and `worker` run as the non-root user `app`; the image makes `/srv/data/audio` theirs. A
@@ -443,6 +449,86 @@ After the upgrade, check the language column is still wide: `docker compose up -
 runs the idempotent fix again, and `docker compose logs vexa-schema-fix` should say "language is
 already varchar(32)" or "widened". Vexa's own migrations may touch that table, so keep this step.
 
+### Stopping Vexa and bringing it back
+
+**Why.** Once `BOT_PROVIDER=skribby` has been live and Vexa has nothing left to do, its three
+containers only hold memory (up to 3 GB for `vexa`, plus its database and storage). They are in the
+compose profile `vexa`, so they can be stopped and **stay stopped through deploys and reboots**,
+with their data kept: nothing in this procedure deletes a volume or `.env.vexa`. Nothing in the
+app waits for Vexa: `web`, `worker`, `scheduler` and `next` never depended on it, and none of them
+calls Vexa at startup (only a meeting that Vexa ran, still open or still holding a recording, makes
+the worker call it).
+
+**Before you stop it** (all from `/opt/beyric-note-taker`; no change to any file):
+
+```bash
+grep '^BOT_PROVIDER' .env     # BOT_PROVIDER=skribby, and web, worker, scheduler restarted since
+docker compose exec -T db psql -U postgres -d notetaker -c "select count(*) as vexa_in_flight from meetings where bot_provider = 'vexa' and status in ('bot_sent', 'processing');"
+docker compose exec -T db psql -U postgres -d notetaker -c "select count(*) as vexa_copy_left, count(*) filter (where created_at < now() - interval '7 days') as past_retention from meetings where bot_provider = 'vexa' and status in ('ready', 'failed') and audio_deleted_at is null and (vexa_recording_id is not null or vexa_meeting_id is not null);"
+```
+
+- `vexa_in_flight` must be **0**: those meetings still need Vexa to finish. If not 0, wait.
+- `vexa_copy_left` counts Vexa meetings whose recording in Vexa's storage is not yet deleted. The
+  hourly cleanup deletes it once the meeting is older than `AUDIO_RETENTION_DAYS` (7), by asking
+  Vexa. **While Vexa is stopped that cannot happen:** the worker logs `could not delete the
+  provider's copy ... will retry` each hour and leaves the recording in the `vexastorage` volume,
+  so recordings can outlive the retention the privacy page states. Choose one: (a) stop only once
+  `vexa_copy_left` is 0 (keeps Vexa's memory for up to 7 more days); (b) stop now, then once
+  `AUDIO_RETENTION_DAYS` days have passed start Vexa again (the bring-back commands below), wait an
+  hour, run the second query until it shows 0, and stop it again. Deleting an account that
+  has Vexa meetings while Vexa is stopped waits for the 24-hour give-up, then purges with an admin
+  alert (`app/deletion.py`).
+
+**Stop** (the app containers are not touched; Vexa's own first, then what it stands on):
+
+```bash
+docker compose stop vexa
+docker compose stop vexa-storage vexa-db
+docker compose ps                       # web, worker, scheduler, next, db: up; no vexa container running
+docker compose ps -a | grep vexa        # vexa, vexa-db, vexa-storage: Exited; the bucket and schema steps: Exited (0)
+docker stats --no-stream                # the memory of the vexa containers is gone from the list
+free -m                                 # "available" has grown by what Vexa held
+```
+
+`docker compose stop <service>` works with the profile off. Do **not** use `docker compose down`
+for this, and never `docker compose down -v`: with the profile on, `-v` deletes the Vexa volumes
+(`vexapgdata`: Vexa's database; `vexastorage`: its recordings), as it does `dbdata`. Check the
+volumes are still there: `docker volume ls | grep vexa`.
+
+**A server reboot.** The containers have `restart: unless-stopped`, which Docker documents as not
+restarting a container that was stopped (manually or otherwise) after a daemon restart, so Vexa
+stays stopped; check once with `docker compose ps -a` after the first reboot (not tested live on
+this server).
+
+**A deploy while Vexa is stopped.** The deploy runs `docker compose up -d --remove-orphans` and
+waits on the front door only: it does not start Vexa, does not wait for it, and does not remove a
+stopped or running Vexa container (tested with a throwaway compose project on 2026-11-09). It no
+longer re-runs `vexa-schema-fix` on every deploy; run it by hand after a Vexa upgrade (above).
+A deploy that **rolls back to a commit from before the profile existed** starts Vexa again
+(that commit's compose file has no profile): stop it again with the commands above.
+
+**Bring Vexa back (rollback to Vexa).** In this order, on the server:
+
+```bash
+cd /opt/beyric-note-taker
+COMPOSE_PROFILES=vexa docker compose up -d vexa-db vexa-storage vexa-storage-init vexa vexa-schema-fix
+docker compose ps -a | grep vexa        # vexa "healthy" after about 2 minutes (start_period 120 s)
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:18056/health    # 200
+# then switch the app back:
+sed -i 's/^BOT_PROVIDER=.*/BOT_PROVIDER=vexa/' .env
+docker compose up -d --force-recreate web worker scheduler
+```
+
+The data in `vexapgdata` and `vexastorage` is exactly as it was when Vexa was stopped, so Vexa's
+user and the app's `VEXA_API_KEY` still work (no `vexa-api-key.sh` again). Start Vexa **first**,
+then flip `BOT_PROVIDER`: a bot is sent to whichever provider the setting names. Meetings that
+Skribby already holds keep being worked on through Skribby while `SKRIBBY_API_KEY` stays set. To
+have later deploys keep Vexa running too, add `COMPOSE_PROFILES=vexa` to `.env` (the next deploy then
+runs the same `up` with the profile on, and `vexa-schema-fix` runs on each deploy again); remove that
+line when stopping Vexa again. `.env` must keep `VEXA_DB_PASSWORD` and `VEXA_STORAGE_SECRET` even
+while Vexa is stopped: compose checks them for every service, profile or not, and a missing value
+makes every `docker compose` command (the deploy's build included) fail.
+
 ## 9. Verification checklist
 
 From **outside** the server:
@@ -475,7 +561,8 @@ curl -s -o /dev/null -w '%{http_code}\n' https://notes.beyrictech.com/health    
   gets a 403 from Cloudflare itself. Expect your own address in `docker compose logs web`. The test
   locks your own address out of login for 5 minutes (the app's per-address limit), and each failed
   attempt also counts against the account's 10 an hour, so do not repeat it within the hour.
-- [ ] `docker compose ps`: `db`, `web`, `vexa` healthy; `worker` up; no Vexa errors in
+- [ ] `docker compose ps`: `db`, `web` healthy; `worker` up; `vexa` healthy while Vexa is on
+      (profile `vexa`; absent when it is stopped on purpose); no Vexa errors in
       `docker compose logs worker`.
 - [ ] Other apps on the server still answer after the install.
 - [ ] After a reboot, the stack and nginx come back.

@@ -154,8 +154,19 @@ services:
   # ---- Vexa Lite (bots). Same containers as Vexa's deploy/lite Makefile at commit 31122f9, run
   # here instead so no port is public, no host credentials file is ever mounted, and Vexa's own
   # database and storage get random passwords (VEXA_DB_PASSWORD, VEXA_STORAGE_SECRET in .env). ----
+  #
+  # All five Vexa services are in the `vexa` profile, so a plain `docker compose up -d` (a deploy)
+  # neither starts nor touches them: stop them and they stay stopped. Nothing outside the profile
+  # depends on them (web, worker and scheduler only call `http://vexa:8056` when BOT_PROVIDER is
+  # `vexa`, or for a meeting Vexa ran), and they depend only on each other, so one profile is enough.
+  # The volumes below are declared at the bottom and never removed by stopping. To run Vexa again:
+  #   COMPOSE_PROFILES=vexa docker compose up -d vexa-db vexa-storage vexa-storage-init vexa vexa-schema-fix
+  # or put COMPOSE_PROFILES=vexa in the server .env to have every `up` (the deploy's included) run it.
+  # `docker compose up -d vexa` alone also works: naming a service turns its profile on.
+  # See deploy/README.md "Stopping Vexa and bringing it back".
 
   vexa-db:
+    profiles: ["vexa"]
     image: postgres:17-alpine
     command: ["postgres", "-c", "idle_in_transaction_session_timeout=60000"]
     environment:
@@ -175,6 +186,7 @@ services:
       retries: 20
 
   vexa-storage:
+    profiles: ["vexa"]
     image: versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -194,6 +206,7 @@ services:
 
   # Creates the recordings bucket; "already owned" on later runs counts as success.
   vexa-storage-init:
+    profiles: ["vexa"]
     image: versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -207,6 +220,7 @@ services:
         condition: service_healthy
 
   vexa:
+    profiles: ["vexa"]
     image: vexaai/vexa-lite:${VEXA_IMAGE_TAG:-v012}
     shm_size: 2g
     mem_limit: 3g  # a bot runs Chrome; cap it so a call cannot starve other apps on the server
@@ -244,6 +258,7 @@ services:
   # `up`, waits for Vexa to create the table, and does nothing when the column is already wide.
   # Nothing depends on it, so a failure shows in `docker compose ps -a` without stopping a deploy.
   vexa-schema-fix:
+    profiles: ["vexa"]
     image: postgres:17-alpine
     entrypoint: ["/bin/sh", "/vexa-schema-fix.sh"]
     environment:

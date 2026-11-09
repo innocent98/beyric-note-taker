@@ -1,0 +1,56 @@
+{
+  "id": "STRANGER-ID",
+  "iCalUId": "ICALUID-STRANGER-ID",
+  "subject": "Weekly planning",
+  "start": {
+    "dateTime": "2026-11-12T10:00:00.0000000",
+    "timeZone": "UTC"
+  },
+  "end": {
+    "dateTime": "2026-11-12T10:30:00.0000000",
+    "timeZone": "UTC"
+  },
+  "isAllDay": false,
+  "isCancelled": false,
+  "isDraft": false,
+  "isOrganizer": false,
+  "organizer": {
+    "emailAddress": {
+      "name": "Stranger",
+      "address": "stranger@evil.example"
+    }
+  },
+  "responseStatus": {
+    "response": "notResponded",
+    "time": "0001-01-01T00:00:00Z"
+  },
+  "attendees": [
+    {
+      "type": "required",
+      "status": {
+        "response": "accepted",
+        "time": "2026-11-10T09:00:00Z"
+      },
+      "emailAddress": {
+        "name": "Person Two",
+        "address": "person-2@example.test"
+      }
+    }
+  ],
+  "onlineMeeting": null,
+  "onlineMeetingProvider": "unknown",
+  "isOnlineMeeting": false,
+  "location": {
+    "displayName": "",
+    "locationType": "default"
+  },
+  "locations": [],
+  "body": {
+    "contentType": "html",
+    "content": "<html><body>Join <a href=\"https://us02web.zoom.us/j/81234567890\">now</a></body></html>"
+  },
+  "seriesMasterId": null,
+  "type": "singleInstance",
+  "sensitivity": "normal",
+  "showAs": "busy"
+}
