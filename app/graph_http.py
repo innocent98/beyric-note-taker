@@ -8,6 +8,9 @@ transport failure is reported by its exception type only. A caller that must fol
 sent (`@odata.nextLink`) first passes it through `under_graph_base`.
 """
 
+import re
+from urllib.parse import unquote
+
 import httpx
 
 from app import calendar_http
@@ -21,7 +24,13 @@ def under_graph_base(url: object) -> bool:
     character in it. A `nextLink` that fails this is never followed."""
     if not isinstance(url, str) or not url.startswith(GRAPH_BASE + "/"):
         return False
-    return not any(ch.isspace() or ord(ch) < 32 or ch == "\\" for ch in url)
+    if any(ch.isspace() or ord(ch) < 32 or ch == "\\" for ch in url):
+        return False
+    # No dot segment, plain or percent-encoded (once or twice): the HTTP client folds `/../` into
+    # the path, which would leave /v1.0/ for another Graph version (`/beta/`) while the host stays.
+    path = re.split(r"[?#]", url[len(GRAPH_BASE) :], maxsplit=1)[0]
+    decoded = unquote(unquote(path))
+    return not any(part in (".", "..") for part in re.split(r"[/\\]", decoded))
 
 
 def graph_url(path: str) -> str:
