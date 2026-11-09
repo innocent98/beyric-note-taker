@@ -404,6 +404,7 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
     - [ ] Adebayo: after the flip, stop Vexa on the server (README steps) and decide what to do with Vexa recordings that outlive retention while it is stopped
     - [ ] Adebayo: run `scripts/skribby_live_check.py` once in a real meeting (guest and signed-in), then set `BOT_PROVIDER=skribby` in a no-meetings window
     - [x] Transcript comparison tool `scripts/transcript_compare.py` (Skribby's transcript and ours of one meeting side by side, HTML and text, offline re-run; no pipeline change), PR open 2026-11-09, SOP `docs/sop/2026-11-09-transcript-compare.md`
+    - [x] Speaker names from Skribby's diarization tag and `potential_speaker_names` (a second Zoom speaker was "Unknown speaker"; 2026-11-09, PR open, no migration, no server step): a tag takes its one name, an unnamed tag takes its only remaining candidate, never two tags one name; SOP `docs/sop/2026-11-09-skribby-speaker-names.md`. Teams not confirmed live
     - [ ] Adebayo: read the comparison on one or more real meetings and decide whether Skribby's transcript replaces ours (the transcript-source switch is built only after that)
     - [ ] Privacy page and sub-processor list: add Skribby (the sentences are in the SOP); recording notice for Skribby's name and chat message (follow-up)
     - [ ] `RecallProvider` is not planned: Skribby was chosen; keep Recall only as the fallback to reconsider if Skribby's terms change
