@@ -1,0 +1,58 @@
+{
+  "id": "TEAMS-WORK-ID",
+  "iCalUId": "ICALUID-TEAMS-WORK-ID",
+  "subject": "Weekly planning",
+  "start": {
+    "dateTime": "2026-11-12T10:00:00.0000000",
+    "timeZone": "UTC"
+  },
+  "end": {
+    "dateTime": "2026-11-12T10:30:00.0000000",
+    "timeZone": "UTC"
+  },
+  "isAllDay": false,
+  "isCancelled": false,
+  "isDraft": false,
+  "isOrganizer": true,
+  "organizer": {
+    "emailAddress": {
+      "name": "Person One",
+      "address": "person-1@example.test"
+    }
+  },
+  "responseStatus": {
+    "response": "organizer",
+    "time": "0001-01-01T00:00:00Z"
+  },
+  "attendees": [
+    {
+      "type": "required",
+      "status": {
+        "response": "accepted",
+        "time": "2026-11-10T09:00:00Z"
+      },
+      "emailAddress": {
+        "name": "Person Two",
+        "address": "person-2@example.test"
+      }
+    }
+  ],
+  "onlineMeeting": {
+    "joinUrl": "https://teams.microsoft.com/l/meetup-join/19%3ameeting_PLACEHOLDER%40thread.v2/0?context=%7b%22Tid%22%3a%22PLACEHOLDER%22%7d"
+  },
+  "onlineMeetingProvider": "teamsForBusiness",
+  "isOnlineMeeting": true,
+  "location": {
+    "displayName": "",
+    "locationType": "default"
+  },
+  "locations": [],
+  "body": {
+    "contentType": "html",
+    "content": "<html><body><a href=\"https://teams.microsoft.com/l/meetup-join/19%3ameeting_PLACEHOLDER%40thread.v2/0\">Join the meeting now</a></body></html>"
+  },
+  "seriesMasterId": null,
+  "type": "singleInstance",
+  "sensitivity": "normal",
+  "showAs": "busy"
+}
