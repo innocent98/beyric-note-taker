@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app import auth, calendar_connect, google_oauth, services
+from app import auth, calendar_connect, calendar_providers, google_oauth, services
 from app.api_schemas import ErrorResponse
 from app.db import get_session
 from app.models import CalendarConnection, CalendarEvent, User
@@ -151,7 +151,9 @@ def _zone(name: str | None) -> ZoneInfo:
 
 
 def _enabled(request: Request, google: google_oauth.GoogleOAuth | None) -> None:
-    if google is None or not request.app.state.settings.calendar_enabled:
+    settings = request.app.state.settings
+    microsoft_on = calendar_providers.PROVIDERS["microsoft"].enabled(settings)
+    if not settings.calendar_enabled or (google is None and not microsoft_on):
         raise services.Refused(404, "calendar_unavailable", "Google Calendar is not available.")
 
 

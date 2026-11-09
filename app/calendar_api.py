@@ -27,6 +27,8 @@ from app import (
     calendar_text,
     gcal_sync,
     google_oauth,
+    microsoft_connect,
+    microsoft_oauth,
     send_now,
     services,
     titles,
@@ -51,7 +53,7 @@ joins_router = APIRouter(tags=["calendar"])
 
 ProviderName = Literal["google", "microsoft"]  # calendar_providers.ROUTE_PROVIDERS
 
-CONNECT_RESPONSES = {code: {"model": ErrorResponse} for code in (404, 409, 503)}
+CONNECT_RESPONSES = {code: {"model": ErrorResponse} for code in (404, 409, 422, 503)}
 CALLBACK_RESPONSES = {302: {"description": "Redirect"}, 404: {"model": ErrorResponse}}
 STATE_RESPONSES = {404: {"model": ErrorResponse}}
 SETTINGS_RESPONSES = {code: {"model": ErrorResponse} for code in (404, 422)}
@@ -86,14 +88,18 @@ class ConnectOut(BaseModel):
 
 class DisconnectOut(BaseModel):
     """`status` is always `disconnected`: the call is safe to repeat, and also answers 200 when
-    nothing was connected. `revoked` is false when Google could not be asked to remove the access
-    (it was unreachable, or the stored key could not be read): the data is deleted here
-    regardless, but tell the person to also remove Beyric at myaccount.google.com/permissions.
-    It is true when Google confirmed, and also when there was nothing left to revoke (a repeat
-    cannot re-check an earlier failure: act on the first answer)."""
+    nothing was connected. `revoked` is false when the provider could not be asked to remove the
+    access (Google was unreachable, or the stored key could not be read: `reason` is null) or
+    cannot be (Microsoft has no way for an app to remove its own access: `reason` is
+    `provider_has_no_revoke`). The data is deleted here regardless; tell the person to also
+    remove Beyric at myaccount.google.com/permissions (Google) or in their Microsoft account's
+    app permissions (Microsoft). `revoked` is true when the provider confirmed, and also when
+    there was nothing left to revoke (a repeat cannot re-check an earlier failure: act on the
+    first answer)."""
 
     status: Literal["disconnected"] = "disconnected"
     revoked: bool
+    reason: Literal["provider_has_no_revoke"] | None = None
 
 
 class UpcomingEvent(BaseModel):
@@ -190,22 +196,39 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _unavailable(message: str = "This calendar is not available.") -> services.Refused:
+    return services.Refused(404, "calendar_unavailable", message)
+
+
 def _enabled(request: Request, google: google_oauth.GoogleOAuth | None) -> google_oauth.GoogleOAuth:
     """The Google client, or 404 `calendar_unavailable` while the calendar features are off (the
     `calendar_enabled` flag) or the server has no Google client configured."""
     if google is None or not request.app.state.settings.calendar_enabled:
-        raise services.Refused(404, "calendar_unavailable", "Google Calendar is not available.")
+        raise _unavailable("Google Calendar is not available.")
     return google
 
 
-def _provider_client(
-    request: Request, provider: str, google: google_oauth.GoogleOAuth | None
-) -> google_oauth.GoogleOAuth:
-    """The OAuth client of the provider a route names, or 404 `calendar_unavailable`: a provider
-    with no row in the registry (Microsoft until it is built) is simply not available."""
-    if calendar_providers.get(provider) is None:
-        raise services.Refused(404, "calendar_unavailable", "This calendar is not available.")
-    return _enabled(request, google)
+def _calendar_on(request: Request, google: google_oauth.GoogleOAuth | None) -> None:
+    """404 `calendar_unavailable` unless the calendar features are on and at least one provider
+    is available: Google (its client is configured) or Microsoft (its flag is on and its client
+    is configured). The state, settings and per-meeting routes work for whichever is connected."""
+    settings = request.app.state.settings
+    microsoft_on = calendar_providers.PROVIDERS["microsoft"].enabled(settings)
+    if not settings.calendar_enabled or (google is None and not microsoft_on):
+        raise _unavailable("Google Calendar is not available.")
+
+
+def _microsoft_client(
+    request: Request, microsoft: microsoft_oauth.MicrosoftOAuth | None
+) -> microsoft_oauth.MicrosoftOAuth:
+    """The Microsoft client, or 404 `calendar_unavailable` while the flag is off, the calendar
+    features are off or the server has no Microsoft client: while off, every Microsoft route
+    answers as if it did not exist."""
+    if microsoft is None or not calendar_providers.PROVIDERS["microsoft"].enabled(
+        request.app.state.settings
+    ):
+        raise _unavailable()
+    return microsoft
 
 
 @router.post("/{provider}/connect", responses=CONNECT_RESPONSES)
@@ -217,16 +240,21 @@ def calendar_connect_start(
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
+    microsoft: microsoft_oauth.MicrosoftOAuth | None = Depends(microsoft_oauth.get_microsoft),
 ) -> ConnectOut:
-    """Start connecting Google Calendar (CSRF header needed). Returns the Google consent URL to
-    navigate to. Only the permissions in `features` are asked for, each at the moment its feature
-    is switched on; permissions given earlier are kept. Sets the `calendar_flow` cookie that ties
-    the callback to this browser. 404 `calendar_unavailable` when the calendar features are off,
-    409 `calendar_already_connected` when another provider's calendar is connected (one calendar at
-    a time), 503 `calendar_unavailable` when the server cannot store a token safely. `provider` is
-    `google`; `microsoft` answers 404 `calendar_unavailable` until it is built."""
-    google = _provider_client(request, provider, google)
+    """Start connecting a calendar (CSRF header needed). Returns the consent URL to navigate to.
+    `provider` is `google` or `microsoft`. For Google only the permissions in `features` are asked
+    for, each at the moment its feature is switched on; permissions given earlier are kept. For
+    Microsoft `features` must be `["calendar"]` (there is no Meet feature: 422 `invalid_features`).
+    Sets a flow cookie (`calendar_flow`, or `calendar_flow_ms` for Microsoft) that ties the
+    callback to this browser. 404 `calendar_unavailable` when the calendar features are off (for
+    Microsoft: also while its switch is off, so the route does not exist for anyone), 409
+    `calendar_already_connected` when another provider's calendar is connected (one calendar at a
+    time), 503 `calendar_unavailable` when the server cannot store a token safely."""
     settings = request.app.state.settings
+    if provider == "microsoft":
+        return _start_microsoft(request, response, body, session, user, microsoft)
+    google = _enabled(request, google)
     try:
         url, state = calendar_connect.start_connect(
             session, user, body.features, body.return_to, google=google, now=_now()
@@ -253,6 +281,48 @@ def calendar_connect_start(
     return ConnectOut(authorize_url=url, show_unverified_notice=not settings.google_app_verified)
 
 
+def _start_microsoft(
+    request: Request,
+    response: Response,
+    body: ConnectIn,
+    session: Session,
+    user: User,
+    microsoft: microsoft_oauth.MicrosoftOAuth | None,
+) -> ConnectOut:
+    microsoft = _microsoft_client(request, microsoft)
+    settings = request.app.state.settings
+    if body.features != ["calendar"]:
+        raise services.Refused(
+            422, "invalid_features", "Microsoft Outlook connects the calendar only."
+        )
+    try:
+        url, state = microsoft_connect.start_connect(
+            session, user, body.return_to, microsoft=microsoft, now=_now()
+        )
+    except calendar_connect.AlreadyConnected:
+        raise services.Refused(
+            409,
+            "calendar_already_connected",
+            "Another calendar is already connected. Disconnect it first.",
+        ) from None
+    except calendar_connect.ConnectUnavailable:
+        raise services.Refused(
+            503, "calendar_unavailable", "Microsoft Outlook cannot be connected right now."
+        ) from None
+    response.set_cookie(
+        microsoft_connect.FLOW_COOKIE,
+        state,
+        max_age=int(microsoft_connect.FLOW_TTL.total_seconds()),
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+        path=microsoft_connect.FLOW_COOKIE_PATH,
+    )
+    return ConnectOut(
+        authorize_url=url, show_unverified_notice=not settings.microsoft_publisher_verified
+    )
+
+
 @router.get("/{provider}/callback", status_code=302, responses=CALLBACK_RESPONSES)
 def calendar_connect_callback(
     provider: ProviderName,
@@ -262,17 +332,40 @@ def calendar_connect_callback(
     error: str | None = Query(None, max_length=200),
     session: Session = Depends(get_session),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
+    microsoft: microsoft_oauth.MicrosoftOAuth | None = Depends(microsoft_oauth.get_microsoft),
 ) -> RedirectResponse:
-    """Where Google sends the browser back after the consent screen. Public in the guard (it
-    answers a signed-out visitor itself) but checked by the single-use `state`, the signed-in
-    user the flow was started for, and the `calendar_flow` cookie. Always a redirect, never JSON:
-    success goes to the stored `return_to` with `?calendar=connected`; a failure goes there with
-    `?calendar_error=` `google_denied`, `google_failed`, `scope_missing` (the calendar box was
-    unticked), `no_refresh_token`, `wrong_account` or `already_connected` (another provider's
-    calendar is connected); nobody signed in goes to
-    `/login?error=google_failed`. 404 `calendar_unavailable` while the feature is off."""
-    google = _provider_client(request, provider, google)
+    """Where Google or Microsoft sends the browser back after the consent screen. Public in the
+    guard (it answers a signed-out visitor itself) but checked by the single-use `state` (which
+    only finishes at the callback of the provider it was started for), the signed-in user the
+    flow was started for, and the flow cookie. Always a redirect, never JSON: success goes to the
+    stored `return_to` with `?calendar=connected`; a failure goes there with `?calendar_error=`
+    `google_denied`, `google_failed`, `scope_missing` (the calendar box was unticked),
+    `no_refresh_token`, `wrong_account`, `different_account` or `already_connected` (another
+    provider's calendar is connected); for Microsoft `microsoft_denied`, `microsoft_failed`,
+    `scope_missing`, `no_mailbox` (the account has no calendar to read), `tenant_not_allowed`,
+    `wrong_account`, `different_account` or `already_connected`. Nobody signed in goes to
+    `/login?error=google_failed` (Google) or `/login?error=microsoft_failed` (Microsoft). 404
+    `calendar_unavailable` while the feature is off."""
     settings = request.app.state.settings
+    if provider == "microsoft":
+        microsoft = _microsoft_client(request, microsoft)
+        result = microsoft_connect.finish_connect(
+            session,
+            request.state.user,
+            state=state,
+            code=code,
+            microsoft=microsoft,
+            settings=settings,
+            now=_now(),
+            flow_cookie=request.cookies.get(microsoft_connect.FLOW_COOKIE),
+            error=error,
+        )
+        redirect = RedirectResponse(result.redirect_to, status_code=302)
+        redirect.delete_cookie(
+            microsoft_connect.FLOW_COOKIE, path=microsoft_connect.FLOW_COOKIE_PATH
+        )
+        return redirect
+    google = _enabled(request, google)
     result = calendar_connect.finish_connect(
         session,
         request.state.user,
@@ -289,25 +382,31 @@ def calendar_connect_callback(
     return response
 
 
-@router.post("/{provider}/disconnect")
+@router.post("/{provider}/disconnect", response_model_exclude_none=True)
 def calendar_connect_disconnect(
     provider: ProviderName,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
 ) -> DisconnectOut:
-    """Disconnect the caller's Google account (CSRF header needed, no body). Revokes the access at
-    Google, then deletes the caller's calendar events, all their scheduled joins (every state) and
-    calendar notifications, and the stored token. Meetings already recorded, the hours used and
-    the settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),
-    and it works while the calendar features are switched off. If Google cannot be reached the
-    local deletion still happens and `revoked` is false: tell the person to remove Beyric at
-    myaccount.google.com/permissions.
-    Afterwards `connect` works again, for the same or another Google account."""
+    """Disconnect the caller's calendar (CSRF header needed, no body). For Google it revokes the
+    access at Google first. Either way it deletes the caller's calendar events, all their
+    scheduled joins (every state) and calendar notifications, and the stored token. Meetings
+    already recorded, the hours used and the settings stay; a meeting being recorded right now
+    carries on. Safe to repeat (200 again), and it works while the calendar features are switched
+    off. If Google cannot be reached the local deletion still happens and `revoked` is false: tell
+    the person to remove Beyric at myaccount.google.com/permissions. Microsoft cannot be asked to
+    remove its own access: `revoked` is false with `reason` `provider_has_no_revoke`, and the
+    person is told to remove Beyric in their Microsoft account's app permissions. `reason` is
+    absent (not null) for Google, so Google's answer keeps its shape.
+    Afterwards `connect` works again, for the same or another account."""
     if calendar_providers.get(provider) is None:
-        raise services.Refused(404, "calendar_unavailable", "This calendar is not available.")
+        raise _unavailable()
     revoked = calendar_connect.disconnect(session, user, google, provider)
-    return DisconnectOut(revoked=revoked)
+    return DisconnectOut(
+        revoked=revoked,
+        reason=None if revoked or provider != "microsoft" else "provider_has_no_revoke",
+    )
 
 
 def _join_settings(prefs: UserSettings | None, request: Request) -> JoinSettings:
@@ -434,7 +533,7 @@ def calendar_state(
     failure in plain words, and the next seven days of synced events, each with whether the bot
     will join it and why not when it will not. Nothing is fetched from Google here: this reads what
     the sync job last stored. 404 `calendar_unavailable` while the calendar features are off."""
-    _enabled(request, google)
+    _calendar_on(request, google)
     return _calendar_out(request, session, user)
 
 
@@ -454,7 +553,7 @@ def calendar_settings(
     applies; nothing is fetched from Google and no bot is sent here). Choosing the rule that is
     already set changes nothing. 404 `not_found` for a template that is not the caller's own,
     404 `calendar_unavailable` while the calendar features are off."""
-    _enabled(request, google)
+    _calendar_on(request, google)
     set_template = "calendar_template_id" in body.model_fields_set
     if set_template and body.calendar_template_id is not None:
         services.template_or_404(session, user, body.calendar_template_id)
@@ -510,7 +609,7 @@ def calendar_event_override(
     switches can change (declined, over, cancelled, all day, no meeting link, or Microsoft Teams
     before Teams can be joined): `message` is the reason in plain words, and nothing is stored.
     404 `calendar_unavailable` while the calendar features are off."""
-    _enabled(request, google)
+    _calendar_on(request, google)
     conn = calendar_connect.live_calendar_connection(session, user)
     row = None
     if conn is not None:

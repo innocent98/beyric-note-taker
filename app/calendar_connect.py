@@ -415,12 +415,13 @@ def _release(conn: CalendarConnection) -> ReleasedConnection:
     """Copy out of `conn`, in memory, what the Google-side clean-up needs, before the row is
     wiped or overwritten. An unreadable token (lost key) gives `token=None, had_token=True`."""
     token = None
+    purpose = "ms_refresh_token" if conn.provider == "microsoft" else "refresh_token"
     if conn.refresh_token_enc is not None and conn.key_version is not None:
         try:
             token = vault.decrypt(
                 conn.refresh_token_enc,
                 conn.key_version,
-                purpose="refresh_token",
+                purpose=purpose,
                 owner=conn.user_id,
             )
         except vault.VaultError:
@@ -457,6 +458,15 @@ def _release_at_google(
                 pass  # the client already logged the HTTP status or the error type
         if not revoked:
             logger.warning("google token for user %s was not revoked", released.user_id)
+    run_disconnect_hooks(session, released, google)
+    return revoked
+
+
+def run_disconnect_hooks(
+    session: Session, released: ReleasedConnection, google: GoogleOAuth | None
+) -> None:
+    """Run every `ON_DISCONNECT` hook for a released connection (any provider). A hook that
+    raises is logged by exception type only, rolled back alone, and never stops the others."""
     for hook in list(ON_DISCONNECT):
         try:
             hook(session, released, google)
@@ -465,7 +475,6 @@ def _release_at_google(
             logger.warning(
                 "disconnect hook failed for user %s (%s)", released.user_id, type(exc).__name__
             )
-    return revoked
 
 
 def _forget_meet_subscription(conn: CalendarConnection) -> None:
@@ -535,6 +544,9 @@ def disconnect(
         conn.account_email = None
         conn.account_subject = None
         conn.account_domain = None
+        conn.tenant_id = None
+        conn.account_kind = None
+        conn.tenant_domains = None
         conn.sync_token = None
         conn.last_sync_at = None
         conn.last_error = None
@@ -545,4 +557,10 @@ def disconnect(
     if released is None:
         return True
     logger.info("calendar disconnected for user %s", user.id)
+    if provider == "microsoft":
+        # Microsoft has no revoke call an app can use for its own grant (spec 4.6): only the hooks
+        # run, and a token that existed is reported as not revoked so the person is told where to
+        # remove the app at Microsoft.
+        run_disconnect_hooks(session, released, None)
+        return not released.had_token
     return _release_at_google(session, released, google)

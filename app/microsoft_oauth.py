@@ -154,6 +154,14 @@ def enabled(settings: Settings) -> bool:
     return bool(settings.microsoft_client_id and settings.microsoft_client_secret)
 
 
+def calendar_enabled(settings: Settings) -> bool:
+    """Whether the Microsoft calendar is switched on for this server: the calendar features, the
+    Microsoft flag and a full OAuth client. The registry row's `enabled` is this."""
+    return bool(
+        settings.calendar_enabled and settings.microsoft_calendar_enabled and enabled(settings)
+    )
+
+
 def redirect_uri(settings: Settings) -> str:
     """The one redirect URI we send, exactly the string registered in Azure (HTTPS, case-sensitive,
     no trailing slash)."""
@@ -263,6 +271,11 @@ class MicrosoftOAuth:
 
     def __repr__(self) -> str:
         return "<MicrosoftOAuth>"  # the settings hold the client secret
+
+    @property
+    def transport(self) -> httpx.BaseTransport | None:
+        """The HTTP transport this client was built with (None in production; a test's fake)."""
+        return self._transport
 
     def _authority_url(self, authority: str, path: str) -> str:
         if authority not in AUTHORITIES and not _GUID.fullmatch(authority):

@@ -387,14 +387,18 @@ export interface paths {
         };
         /**
          * Calendar Connect Callback
-         * @description Where Google sends the browser back after the consent screen. Public in the guard (it
-         *     answers a signed-out visitor itself) but checked by the single-use `state`, the signed-in
-         *     user the flow was started for, and the `calendar_flow` cookie. Always a redirect, never JSON:
-         *     success goes to the stored `return_to` with `?calendar=connected`; a failure goes there with
-         *     `?calendar_error=` `google_denied`, `google_failed`, `scope_missing` (the calendar box was
-         *     unticked), `no_refresh_token`, `wrong_account` or `already_connected` (another provider's
-         *     calendar is connected); nobody signed in goes to
-         *     `/login?error=google_failed`. 404 `calendar_unavailable` while the feature is off.
+         * @description Where Google or Microsoft sends the browser back after the consent screen. Public in the
+         *     guard (it answers a signed-out visitor itself) but checked by the single-use `state` (which
+         *     only finishes at the callback of the provider it was started for), the signed-in user the
+         *     flow was started for, and the flow cookie. Always a redirect, never JSON: success goes to the
+         *     stored `return_to` with `?calendar=connected`; a failure goes there with `?calendar_error=`
+         *     `google_denied`, `google_failed`, `scope_missing` (the calendar box was unticked),
+         *     `no_refresh_token`, `wrong_account`, `different_account` or `already_connected` (another
+         *     provider's calendar is connected); for Microsoft `microsoft_denied`, `microsoft_failed`,
+         *     `scope_missing`, `no_mailbox` (the account has no calendar to read), `tenant_not_allowed`,
+         *     `wrong_account`, `different_account` or `already_connected`. Nobody signed in goes to
+         *     `/login?error=google_failed` (Google) or `/login?error=microsoft_failed` (Microsoft). 404
+         *     `calendar_unavailable` while the feature is off.
          */
         get: operations["calendar_connect_callback"];
         put?: never;
@@ -416,13 +420,15 @@ export interface paths {
         put?: never;
         /**
          * Calendar Connect Start
-         * @description Start connecting Google Calendar (CSRF header needed). Returns the Google consent URL to
-         *     navigate to. Only the permissions in `features` are asked for, each at the moment its feature
-         *     is switched on; permissions given earlier are kept. Sets the `calendar_flow` cookie that ties
-         *     the callback to this browser. 404 `calendar_unavailable` when the calendar features are off,
-         *     409 `calendar_already_connected` when another provider's calendar is connected (one calendar at
-         *     a time), 503 `calendar_unavailable` when the server cannot store a token safely. `provider` is
-         *     `google`; `microsoft` answers 404 `calendar_unavailable` until it is built.
+         * @description Start connecting a calendar (CSRF header needed). Returns the consent URL to navigate to.
+         *     `provider` is `google` or `microsoft`. For Google only the permissions in `features` are asked
+         *     for, each at the moment its feature is switched on; permissions given earlier are kept. For
+         *     Microsoft `features` must be `["calendar"]` (there is no Meet feature: 422 `invalid_features`).
+         *     Sets a flow cookie (`calendar_flow`, or `calendar_flow_ms` for Microsoft) that ties the
+         *     callback to this browser. 404 `calendar_unavailable` when the calendar features are off (for
+         *     Microsoft: also while its switch is off, so the route does not exist for anyone), 409
+         *     `calendar_already_connected` when another provider's calendar is connected (one calendar at a
+         *     time), 503 `calendar_unavailable` when the server cannot store a token safely.
          */
         post: operations["calendar_connect_start"];
         delete?: never;
@@ -442,14 +448,17 @@ export interface paths {
         put?: never;
         /**
          * Calendar Connect Disconnect
-         * @description Disconnect the caller's Google account (CSRF header needed, no body). Revokes the access at
-         *     Google, then deletes the caller's calendar events, all their scheduled joins (every state) and
-         *     calendar notifications, and the stored token. Meetings already recorded, the hours used and
-         *     the settings stay; a meeting being recorded right now carries on. Safe to repeat (200 again),
-         *     and it works while the calendar features are switched off. If Google cannot be reached the
-         *     local deletion still happens and `revoked` is false: tell the person to remove Beyric at
-         *     myaccount.google.com/permissions.
-         *     Afterwards `connect` works again, for the same or another Google account.
+         * @description Disconnect the caller's calendar (CSRF header needed, no body). For Google it revokes the
+         *     access at Google first. Either way it deletes the caller's calendar events, all their
+         *     scheduled joins (every state) and calendar notifications, and the stored token. Meetings
+         *     already recorded, the hours used and the settings stay; a meeting being recorded right now
+         *     carries on. Safe to repeat (200 again), and it works while the calendar features are switched
+         *     off. If Google cannot be reached the local deletion still happens and `revoked` is false: tell
+         *     the person to remove Beyric at myaccount.google.com/permissions. Microsoft cannot be asked to
+         *     remove its own access: `revoked` is false with `reason` `provider_has_no_revoke`, and the
+         *     person is told to remove Beyric in their Microsoft account's app permissions. `reason` is
+         *     absent (not null) for Google, so Google's answer keeps its shape.
+         *     Afterwards `connect` works again, for the same or another account.
          */
         post: operations["calendar_connect_disconnect"];
         delete?: never;
@@ -2743,13 +2752,18 @@ export interface components {
         /**
          * DisconnectOut
          * @description `status` is always `disconnected`: the call is safe to repeat, and also answers 200 when
-         *     nothing was connected. `revoked` is false when Google could not be asked to remove the access
-         *     (it was unreachable, or the stored key could not be read): the data is deleted here
-         *     regardless, but tell the person to also remove Beyric at myaccount.google.com/permissions.
-         *     It is true when Google confirmed, and also when there was nothing left to revoke (a repeat
-         *     cannot re-check an earlier failure: act on the first answer).
+         *     nothing was connected. `revoked` is false when the provider could not be asked to remove the
+         *     access (Google was unreachable, or the stored key could not be read: `reason` is null) or
+         *     cannot be (Microsoft has no way for an app to remove its own access: `reason` is
+         *     `provider_has_no_revoke`). The data is deleted here regardless; tell the person to also
+         *     remove Beyric at myaccount.google.com/permissions (Google) or in their Microsoft account's
+         *     app permissions (Microsoft). `revoked` is true when the provider confirmed, and also when
+         *     there was nothing left to revoke (a repeat cannot re-check an earlier failure: act on the
+         *     first answer).
          */
         DisconnectOut: {
+            /** Reason */
+            reason?: "provider_has_no_revoke" | null;
             /** Revoked */
             revoked: boolean;
             /**
@@ -5595,7 +5609,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Malformed request */
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
