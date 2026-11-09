@@ -420,7 +420,7 @@ def test_a_guest_bot_is_sent_with_the_configured_name_and_the_safety_limits(http
         "custom_metadata": {"app": "beyric-note-taker", "meeting_code": CODE},
         "stop_options": {
             "waiting_room_timeout": 10,
-            "time_limit": 330,  # 30 minutes under the pipeline's 6 hour give-up
+            "time_limit": 320,  # 6 h = 360 minutes, less 10 at the door and 30 to process
             "silence_detection": 0,  # a quiet stretch must not send the bot away
             "last_person_detection": 5,
         },
@@ -1503,9 +1503,7 @@ def test_the_name_the_host_sees_is_the_one_of_the_provider_that_ran_the_meeting(
     assert settings.bot_name_for(None) == "Beyric Meeting Support"  # an old row: the setting
 
 
-def test_starting_with_another_region_while_meetings_hold_data_in_the_old_one_is_refused(
-    session, engine
-):
+def test_starting_with_another_region_logs_loudly_and_still_starts(session, engine, caplog):
     from sqlalchemy.orm import sessionmaker
 
     from app.skribby import check_region_unchanged
@@ -1523,13 +1521,26 @@ def test_starting_with_another_region_while_meetings_hold_data_in_the_old_one_is
         _env_file=None, bot_provider="skribby", skribby_api_key=KEY, skribby_region="jp"
     )
 
-    check_region_unchanged(here, factory)  # the same region: fine
-    with pytest.raises(RuntimeError, match="SKRIBBY_REGION is 'jp' but 1 Skribby meeting"):
-        check_region_unchanged(there, factory)
-    meeting.provider_copy_deleted_at = NOW  # once the old copy is deleted the region may move
+    assert check_region_unchanged(here, factory) == 0  # the same region: fine
+    with caplog.at_level(logging.ERROR, logger="app.skribby"):
+        assert check_region_unchanged(there, factory) == 1  # it does not raise: the app starts
+    assert "SKRIBBY_REGION is 'jp' but 1 Skribby meeting(s)" in caplog.text
+    assert KEY not in caplog.text
+    meeting.provider_copy_deleted_at = NOW  # once the old copy is deleted nothing is left to say
     session.commit()
-    check_region_unchanged(there, factory)
-    check_region_unchanged(Settings(_env_file=None), factory)  # not Skribby: nothing to check
+    assert check_region_unchanged(there, factory) == 0
+    assert check_region_unchanged(Settings(_env_file=None), factory) == 0  # not Skribby
+
+
+def test_a_meeting_in_another_region_is_refused_by_the_routing_not_asked_and_read_as_404():
+    from app.bot_provider import BotRegionMismatch
+
+    provider, _ = make()  # the eu region
+    assert provider_for(provider, "skribby", "eu") is provider
+    assert provider_for(provider, "skribby", None) is provider  # a row with no region: as before
+    with pytest.raises(BotRegionMismatch):
+        provider_for(provider, "skribby", "jp")
+    assert isinstance(BotRegionMismatch("x"), BotProviderError)  # callers that retry are unchanged
 
 
 def test_an_unreachable_database_is_a_warning_and_not_a_refusal_to_start():
@@ -1541,4 +1552,24 @@ def test_an_unreachable_database_is_a_warning_and_not_a_refusal_to_start():
         raise OperationalError("select", {}, RuntimeError("down"))
 
     settings = Settings(_env_file=None, bot_provider="skribby", skribby_api_key=KEY)
-    check_region_unchanged(settings, broken)
+    assert check_region_unchanged(settings, broken) == 0
+
+
+# ---- a send the caller gave up on during the duplicate check never goes out ----
+
+
+def test_a_send_abandoned_while_the_code_was_being_checked_never_posts(httpx_mock):
+    class SlowLedger(Ledger):
+        def live_bots(self, platform, code):
+            time.sleep(0.4)  # the deadline (0.1 s) passes while this is running
+            return []
+
+    provider, _ = make(send_deadline=0.1, ledger=SlowLedger())
+
+    with pytest.raises(SkribbyError, match="check for a bot already there timed out") as caught:
+        provider.send_bot(URL)
+    assert not isinstance(caught.value, BotSendUncertain)
+
+    time.sleep(0.8)  # the thread has finished its check by now ...
+    assert not [r for r in httpx_mock.get_requests() if r.method == "POST"]  # ... and did not send
+    assert provider._candidates("google_meet", CODE) == []

@@ -86,6 +86,12 @@ class BotProviderNotConfigured(BotProviderError):
     where it is and looks again on the next pass."""
 
 
+class BotRegionMismatch(BotProviderError):
+    """A meeting's bot is in another region of a hosted provider than the one configured now. The
+    provider cannot see it (it would answer 404), so nothing is asked of it: the caller waits and
+    tries again, and the log says why."""
+
+
 class BotNotFound(BotProviderError):
     """The provider does not know the meeting (HTTP 404 on Vexa). Still a `BotProviderError`, so
     every caller that retries is unchanged; `app/deletion.py` reads it as "nothing there to wait
@@ -218,7 +224,9 @@ def provider_region(provider: object) -> str | None:
     return region if isinstance(region, str) and region else None
 
 
-def provider_for(default: BotProvider | None, meeting_provider: str | None) -> BotProvider:
+def provider_for(
+    default: BotProvider | None, meeting_provider: str | None, meeting_region: str | None = None
+) -> BotProvider:
     """The provider that ran a meeting, for work on a meeting that already exists.
 
     `default` is the provider the caller was given (the setting's, or a test's). It is used unless
@@ -226,11 +234,22 @@ def provider_for(default: BotProvider | None, meeting_provider: str | None) -> B
     meeting's own provider is built (a Vexa meeting still in flight after the setting moved to
     Skribby, or the other way round). A `default` with no name (a test double) is always used, and
     so is the default for a meeting that remembers a name this build does not know.
+
+    A hosted provider's region is part of where a bot is: when the meeting remembers a region and
+    the provider talks to another, `BotRegionMismatch` is raised instead of asking a provider that
+    would answer 404.
     """
     wanted = (meeting_provider or "").strip().lower()
     have = getattr(default, "name", None) if default is not None else None
     if default is not None and (not isinstance(have, str) or not wanted or have == wanted):
-        return default
-    if wanted in PROVIDER_FACTORIES:
-        return build_provider(wanted)
-    return default if default is not None else build_provider()
+        provider = default
+    elif wanted in PROVIDER_FACTORIES:
+        provider = build_provider(wanted)
+    else:
+        provider = default if default is not None else build_provider()
+    region = provider_region(provider)
+    if meeting_region and region and meeting_region != region:
+        raise BotRegionMismatch(
+            f"this meeting's bot is in region {meeting_region} but the provider is set to {region}"
+        )
+    return provider

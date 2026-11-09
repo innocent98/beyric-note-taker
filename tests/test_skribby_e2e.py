@@ -59,6 +59,7 @@ def skribby(monkeypatch, tmp_path, engine):
         pipeline._stop_tries,
         pipeline._gone_checks,
         pipeline._lookup_misses,
+        pipeline._speaker_misses,
     ):
         table.clear()
     yield build_provider()
@@ -853,13 +854,21 @@ def test_a_speaker_lookup_that_keeps_failing_gives_up_like_the_download_does(
     pipeline.advance_meeting(session, meeting.id, now=soon, openai_client=FakeOpenAI())
     session.expire_all()
     assert session.get(Meeting, meeting.id).step == "speakers"  # a blip: try again next pass
+    pipeline._speaker_misses.clear()  # the count for the give-up starts at the late misses
 
     late = meeting.started_polling_at + timedelta(hours=7)
-    pipeline.advance_meeting(session, meeting.id, now=late, openai_client=FakeOpenAI())
+    for minutes in range(pipeline.SPEAKER_MISSES_TO_GIVE_UP):  # misses, but not over long enough
+        pipeline.advance_meeting(
+            session, meeting.id, now=late + timedelta(minutes=minutes), openai_client=FakeOpenAI()
+        )
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).step == "speakers"  # one 5xx never drops the names
+    over = late + pipeline.SPEAKERS_GIVE_UP_AFTER + timedelta(minutes=1)
+    pipeline.advance_meeting(session, meeting.id, now=over, openai_client=FakeOpenAI())
     session.expire_all()
     done = session.get(Meeting, meeting.id)
     assert (done.step, done.speakers_incomplete) == ("notes", True)
-    pipeline.advance_meeting(session, meeting.id, now=late, openai_client=FakeOpenAI())
+    pipeline.advance_meeting(session, meeting.id, now=over, openai_client=FakeOpenAI())
     session.expire_all()
     assert session.get(Meeting, meeting.id).status == "ready"
 
@@ -887,7 +896,7 @@ def test_skribbys_own_limit_ends_the_bot_well_before_the_pipeline_gives_up(
     looks(httpx_mock, BOT, GOOD_CALL[0])
     place(session, skribby, user, template)
     sent = json.loads(posts(httpx_mock)[0].content)
-    assert sent["stop_options"]["time_limit"] == get_settings().max_poll_hours * 60 - 30
+    assert sent["stop_options"]["time_limit"] == get_settings().max_poll_hours * 60 - 30 - 10
     assert sent["stop_options"]["silence_detection"] == 0
 
 
@@ -989,7 +998,15 @@ def test_a_copy_in_another_region_is_never_marked_deleted_by_a_404_from_this_one
     session.commit()
     deletable(httpx_mock, BOT, 404)
 
-    assert pipeline.delete_fetched_copies(session, datetime.now(UTC)) == 0
+    now = datetime.now(UTC)
+    assert pipeline.delete_fetched_copies(session, now) == 0
+    session.expire_all()
+    refused = session.get(Meeting, row_.id)
+    # counted like any failure, with a wait: it cannot be picked again every loop
+    assert refused.provider_copy_attempts == 1 and refused.provider_copy_next_try_at > now
+    assert pipeline.delete_fetched_copies(session, now) == 0
+    session.expire_all()
+    assert session.get(Meeting, row_.id).provider_copy_attempts == 1
     cleared = pipeline.delete_expired_audio(session, datetime.now(UTC) + timedelta(days=10))
 
     assert cleared == 0  # kept, not marked cleared
@@ -1022,3 +1039,29 @@ def test_the_admit_line_names_the_bot_of_the_provider_that_ran_the_meeting(monke
 
     assert "Beyric Note Taker (recording)" in line("vexa")  # a meeting Vexa runs, after the flip
     assert "Beyric Meeting Support" in line("skribby")
+
+
+def test_a_meeting_whose_bot_is_in_another_region_waits_and_keeps_its_speaker_names_chance(
+    session, skribby, user, template, httpx_mock, monkeypatch, caplog
+):
+    meeting = reach_the_speakers_step(session, skribby, user, template, httpx_mock, monkeypatch)
+    meeting.bot_region = "jp"  # the provider here is eu: a lookup would answer 404
+    session.commit()
+    httpx_mock.reset()
+
+    pipeline.advance_meeting(session, meeting.id, openai_client=FakeOpenAI())
+
+    session.expire_all()
+    waiting = session.get(Meeting, meeting.id)
+    assert (waiting.status, waiting.step) == ("processing", "speakers")
+    assert waiting.speaker_transcript is None and waiting.failure_reason is None
+    assert httpx_mock.get_requests() == []  # nothing was asked of the wrong region
+    assert "BotRegionMismatch" in caplog.text
+    # set the region back and the names are read, not lost
+    waiting.bot_region = "eu"
+    session.commit()
+    looks(httpx_mock, BOT, GOOD_CALL[2])
+    deletable(httpx_mock)
+    passes(session, meeting.id)
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).speaker_transcript.startswith("[Ada]: ")

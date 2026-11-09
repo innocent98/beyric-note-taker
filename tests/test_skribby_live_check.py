@@ -146,6 +146,46 @@ def test_a_recording_link_that_still_answers_after_the_delete_is_reported_as_not
     assert "NOT shown to be gone: do not promise deletion yet" in text
 
 
+def test_a_403_on_the_recording_link_is_inconclusive_and_a_404_bot_is_still_gone(httpx_mock):
+    accept(httpx_mock)
+    finished = bot("finished", ("joining", 20), ("recording", 10), recording_url=FILES)
+    serve(httpx_mock, [finished])  # the bot answers 404 once deleted
+    httpx_mock.add_response(method="GET", url=FILES, status_code=403)
+
+    code, text = run(["--meet-url", MEET, "--delete"], {"SKRIBBY_API_KEY": KEY})
+
+    assert "the recording link now answers HTTP 403" in text
+    assert "inconclusive: an expired link answers 403 too" in text
+    assert "GET /bot/{id}: 404 (the bot is gone)" in text and "-> gone." in text  # the bot's 404
+    assert code == 0
+
+
+def test_a_403_link_with_a_bot_that_still_answers_is_inconclusive_not_gone(httpx_mock):
+    accept(httpx_mock)
+    stripped = bot(
+        "finished", ("joining", 20), ("recording", 10), recording_url=None, transcript=[]
+    )
+    with_link = bot("finished", ("joining", 20), ("recording", 10), recording_url=FILES)
+    state = {"deleted": False}
+    httpx_mock.add_callback(
+        lambda r: httpx.Response(200, json=stripped if state["deleted"] else with_link),
+        method="GET",
+        url=f"{API}/bot/{BOT}",
+    )
+
+    def delete(request):
+        state["deleted"] = True
+        return httpx.Response(200, json={})
+
+    httpx_mock.add_callback(delete, method="DELETE", url=f"{API}/bot/{BOT}")
+    httpx_mock.add_response(method="GET", url=FILES, status_code=403)
+
+    code, text = run(["--meet-url", MEET, "--delete"], {"SKRIBBY_API_KEY": KEY})
+
+    assert "-> inconclusive" in text and "-> gone." not in text
+    assert code == 1
+
+
 def test_a_delete_that_leaves_the_data_in_place_is_reported_as_not_gone(httpx_mock):
     accept(httpx_mock)
     finished = bot("finished", ("joining", 20), ("recording", 10), recording_url=FILES)

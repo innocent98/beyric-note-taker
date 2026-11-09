@@ -74,7 +74,7 @@ LOOKUP_TIMEOUT_SECONDS = 5.0  # the duplicate check's looks, which run inside th
 MAX_REDIRECTS = 5
 # Skribby's own `time_limit` ends the bot this long BEFORE the pipeline gives up on the meeting
 # (`MAX_POLL_HOURS`), so a long call is over, and its recording processed, before the give-up.
-TIME_LIMIT_MARGIN_MINUTES = 30
+TIME_LIMIT_MARGIN_MINUTES = 30  # (and the waiting room's allowance too: see `payload`)
 # Hosts a recording may be fetched from (the name, or any subdomain of it): Skribby's own, and
 # Amazon's storage (its sub-processors page: AWS, "hosting / storage"). Anything else fails closed;
 # `SKRIBBY_DOWNLOAD_HOSTS` adds a host once an operator has seen where recordings really live.
@@ -533,9 +533,16 @@ class SkribbyClient:
     def payload(self, platform: str, code: str, canonical_url: str) -> dict[str, Any]:
         stop_options: dict[str, Any] = {
             "waiting_room_timeout": WAITING_ROOM_MINUTES,
-            # The ghost-bot backstop, `TIME_LIMIT_MARGIN_MINUTES` under the pipeline's give-up, so a
-            # long call is over and processed before we would fail it.
-            "time_limit": min(720, max(1, self._max_poll_hours * 60 - TIME_LIMIT_MARGIN_MINUTES)),
+            # The ghost-bot backstop. Skribby counts it from when the bot is in, our give-up from
+            # the send, so it is the give-up minus the longest wait at the door and minus 30 minutes
+            # for the recording to be processed: 6 h = 360 - 10 - 30 = 320 minutes.
+            "time_limit": min(
+                720,
+                max(
+                    1,
+                    self._max_poll_hours * 60 - TIME_LIMIT_MARGIN_MINUTES - WAITING_ROOM_MINUTES,
+                ),
+            ),
             # Off: a quiet stretch must not send the bot away (Vexa never left for silence; the
             # "only person left" rule below ends a bot whose call is over). Skribby's default is
             # 15 minutes.
@@ -908,7 +915,10 @@ class SkribbyProvider:
 
         def attempt() -> str:
             self._refuse_if_held(platform, code)
-            state["started"] = True
+            with lock:
+                if state["abandoned"]:  # the caller already gave up: nothing may be sent now
+                    raise SkribbyError("send_bot abandoned before anything was sent")
+                state["started"] = True
             bot_id = self._client.create(payload)
             with lock:
                 late = state["abandoned"]
@@ -922,9 +932,10 @@ class SkribbyProvider:
         except TimeoutError:
             with lock:
                 bot_id = state["bot_id"]  # it arrived just as the deadline did: it counts
-                state["abandoned"] = bot_id is None
+                started = state["started"]
+                state["abandoned"] = bot_id is None  # a send not yet begun now never will
             if bot_id is None:
-                if not state["started"]:  # still checking the code: nothing was sent
+                if not started:  # still checking the code: nothing was sent
                     raise SkribbyError(
                         "send_bot failed: the check for a bot already there timed out"
                     ) from None
@@ -1053,17 +1064,18 @@ class SkribbyProvider:
         self._client.download(url, Path(path))
 
 
-def check_region_unchanged(settings, session_factory: Callable[[], Any] | None = None) -> None:
-    """Refuse to start while Skribby meetings of ANOTHER region still have their copy at Skribby.
+def check_region_unchanged(settings, session_factory: Callable[[], Any] | None = None) -> int:
+    """Say loudly, at startup, when Skribby meetings of ANOTHER region still hold data.
 
     Skribby's `eu` and `jp` regions are separate accounts: a bot sent to one answers 404 in the
-    other, which would read as "already deleted" and leave the data behind, and an open meeting
-    would lose its bot. So changing `SKRIBBY_REGION` waits until the meetings of the old region are
-    over and their copies deleted (a day to a week). No-op unless Skribby is the provider. A
-    database that cannot be reached is a warning, not a refusal (the same database stops the
-    processes anyway)."""
+    other. The processes still start (a Low risk is no reason to take the app down); instead every
+    Skribby operation on such a meeting is refused with `BotRegionMismatch` (see
+    `provider_for`), so a lookup never reads 404 as "no speaker names" and a delete is never marked
+    done: they wait and are logged, until the region is set back. Logs an ERROR naming the setting
+    and returns how many meetings are affected. No-op unless Skribby is the provider; a database
+    that cannot be reached is a warning."""
     if settings.bot_provider != "skribby":
-        return
+        return 0
     from sqlalchemy import func, select
     from sqlalchemy.exc import SQLAlchemyError
 
@@ -1083,11 +1095,12 @@ def check_region_unchanged(settings, session_factory: Callable[[], Any] | None =
         logger.warning(
             "could not check SKRIBBY_REGION against open meetings (%s)", type(exc).__name__
         )
-        return
+        return 0
     if open_elsewhere:
-        raise RuntimeError(
-            f"SKRIBBY_REGION is {settings.skribby_region!r} but {open_elsewhere} Skribby "
-            "meeting(s) of the other region still hold data there: set it back, and change it "
-            "once they are "
-            "over and their copies are deleted"
+        logger.error(
+            "SKRIBBY_REGION is %r but %s Skribby meeting(s) of the other region still hold data "
+            "there: their lookups and deletes are refused until it is set back",
+            settings.skribby_region,
+            open_elsewhere,
         )
+    return int(open_elsewhere or 0)

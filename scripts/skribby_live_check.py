@@ -276,13 +276,16 @@ def finish(provider, bot_id, final, args, say) -> int:
 def delete_and_prove(provider, client, bot_id, info, link, say) -> bool:
     """Delete the bot's data the way the app does, then ask Skribby again and print what it says:
     the bot (`GET /bot/{id}`) and the recording link, so the data can be seen to be gone BEFORE the
-    privacy page says so. True when everything answered as gone."""
+    privacy page says so. True only when it is shown to be gone: the bot answers 404, or answers
+    with no recording link and no transcript AND the link answers 404 or 410. A link that answers
+    403 proves nothing (an expired signed link answers 403 too): that is "inconclusive" and is
+    not counted as gone; one that still answers 200 is not gone."""
     if info.recording_id is not None:
         provider.delete_recording(info.recording_id)
     else:
         provider.delete_bot_record(bot_id)
     say("DELETE /bot/{id} answered success and the provider's own re-check passed. Asking again:")
-    gone = True
+    bot_gone = False
     try:
         after = client.get_bot(bot_id)
         has_link = bool(after.get("recording_url"))
@@ -291,18 +294,40 @@ def delete_and_prove(provider, client, bot_id, info, link, say) -> bool:
             f"  GET /bot/{{id}}: 200, recording link {'STILL THERE' if has_link else 'absent'}, "
             f"{segments} transcript segment(s), status `{after.get('status')}`"
         )
-        gone = not has_link and segments == 0
+        stripped = not has_link and segments == 0
     except SkribbyNotFound:
         say("  GET /bot/{id}: 404 (the bot is gone)")
+        bot_gone, stripped = True, True
+    link_state = None
     if link:
         try:
             status = client.probe(link)
-            say(f"  the recording link now answers HTTP {status}")
-            gone = gone and status in (403, 404, 410)
         except BotProviderError as exc:
             say(f"  the recording link could not be checked ({type(exc).__name__}): {exc}")
-            gone = False
-    say("  -> " + ("gone." if gone else "NOT shown to be gone: do not promise deletion yet."))
+            link_state = "inconclusive"
+        else:
+            if status in (404, 410):
+                link_state = "gone"
+            elif status == 200:
+                link_state = "there"
+            else:
+                link_state = "inconclusive"
+            note = {
+                "gone": "",
+                "there": "  (the recording is STILL REACHABLE)",
+                "inconclusive": "  (inconclusive: an expired link answers 403 too)",
+            }[link_state]
+            say(f"  the recording link now answers HTTP {status}{note}")
+    if link_state == "there" or not stripped:
+        verdict = "NOT shown to be gone: do not promise deletion yet."
+        gone = False
+    elif bot_gone or link_state in (None, "gone"):
+        verdict = "gone."
+        gone = True
+    else:
+        verdict = "inconclusive (the link's answer proves nothing): do not promise deletion yet."
+        gone = False
+    say("  -> " + verdict)
     return gone
 
 

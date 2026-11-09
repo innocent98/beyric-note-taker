@@ -37,6 +37,7 @@ from app.bot_provider import (
     BotMeeting,
     BotNotFound,
     BotProviderError,
+    BotRegionMismatch,
     BotSendUncertain,
     build_provider,
     provider_for,
@@ -195,6 +196,13 @@ _stop_tries: dict[int, int] = {}
 _gone_checks: dict[int, int] = {}
 # Consecutive failed Vexa lookups per meeting. Lost on a restart, which only forgets a miss.
 _lookup_misses: dict[int, int] = {}
+# Failed speaker lookups per meeting: how many, and when the first was. The speakers step gives up
+# (notes from the plain transcript) only after the 6 hours AND this many misses over this long,
+# so one 5xx at the end of a long call never drops every speaker name. Lost on a restart, which
+# only starts the count again.
+SPEAKER_MISSES_TO_GIVE_UP = 5
+SPEAKERS_GIVE_UP_AFTER = timedelta(minutes=30)
+_speaker_misses: dict[int, tuple[int, datetime]] = {}
 
 
 def audio_path(meeting_id: int) -> Path:
@@ -269,6 +277,7 @@ def _fail(
     meeting.failure_reason = reason
     _no_audio_polls.pop(meeting.id, None)
     _lookup_misses.pop(meeting.id, None)
+    _speaker_misses.pop(meeting.id, None)
     if not_admitted_at is not None:
         _tell_not_admitted(session, meeting, not_admitted_at)
     session.commit()
@@ -373,7 +382,7 @@ def _delete_replaced_record(meeting: Meeting, default) -> None:
     if not old_id or meeting.provider_copy_deleted_at is not None:
         return
     try:
-        old = provider_for(default, meeting.bot_provider)
+        old = provider_for(default, meeting.bot_provider, meeting.bot_region)
         if hasattr(type(old), "delete_bot_record"):
             old.delete_bot_record(old_id)
     except Exception as exc:  # the resend must never fail for this
@@ -800,6 +809,23 @@ def _copy_backoff(attempts: int) -> timedelta:
     return min(COPY_RETRY_BASE * 2 ** max(attempts - 1, 0), COPY_RETRY_MAX)
 
 
+def _copy_failed(meeting: Meeting, now: datetime, exc: Exception) -> None:
+    """One failed try at deleting the provider's copy: count it and set when the next may be made,
+    for every kind of failure (a refusal, a region that does not match, a provider that is not
+    configured), so no row can be picked again at once and starve the queue."""
+    meeting.provider_copy_attempts = (meeting.provider_copy_attempts or 0) + 1
+    meeting.provider_copy_next_try_at = now + _copy_backoff(meeting.provider_copy_attempts)
+    last = meeting.provider_copy_attempts >= COPY_MAX_ATTEMPTS
+    (logger.error if last else logger.warning)(
+        "meeting %s: could not delete the provider's copy (%s), try %s of %s%s",
+        meeting.id,
+        type(exc).__name__,
+        meeting.provider_copy_attempts,
+        COPY_MAX_ATTEMPTS,
+        "; left to the retention pass" if last else "; will retry",
+    )
+
+
 def delete_fetched_copy(meeting: Meeting, provider, now: datetime | None = None) -> bool:
     """Delete a hosted provider's copy of the meeting (recording, transcript, the record of the bot)
     now that we hold the audio and the speaker names. True when it is gone or there is nothing to
@@ -816,27 +842,16 @@ def delete_fetched_copy(meeting: Meeting, provider, now: datetime | None = None)
     now = now or datetime.now(UTC)
     region = provider_region(provider)
     if meeting.bot_region and region and meeting.bot_region != region:
-        logger.error(
-            "meeting %s: its bot is in region %s but SKRIBBY_REGION is %s; not deleting",
-            meeting.id,
-            meeting.bot_region,
-            region,
+        _copy_failed(
+            meeting,
+            now,
+            BotRegionMismatch(f"bot in region {meeting.bot_region}, provider set to {region}"),
         )
         return False
     try:
         provider.delete_bot_record(meeting.vexa_meeting_id)
     except Exception as exc:  # a provider error, or anything else: never in the notes' way
-        meeting.provider_copy_attempts = (meeting.provider_copy_attempts or 0) + 1
-        meeting.provider_copy_next_try_at = now + _copy_backoff(meeting.provider_copy_attempts)
-        last = meeting.provider_copy_attempts >= COPY_MAX_ATTEMPTS
-        (logger.error if last else logger.warning)(
-            "meeting %s: could not delete the provider's copy (%s), try %s of %s%s",
-            meeting.id,
-            type(exc).__name__,
-            meeting.provider_copy_attempts,
-            COPY_MAX_ATTEMPTS,
-            "; left to the retention pass" if last else "; will retry",
-        )
+        _copy_failed(meeting, now, exc)
         return False
     meeting.provider_copy_deleted_at = now
     meeting.provider_copy_next_try_at = None
@@ -876,9 +891,9 @@ def delete_fetched_copies(session: Session, now: datetime, *, vexa=None, limit: 
     deleted = 0
     for meeting in candidates:
         try:
-            provider = provider_for(vexa, meeting.bot_provider)
-        except BotProviderError:
-            meeting.provider_copy_next_try_at = now + COPY_RETRY_MAX  # not configured here
+            provider = provider_for(vexa, meeting.bot_provider, meeting.bot_region)
+        except BotProviderError as exc:  # not configured here, or the bot is in another region
+            _copy_failed(meeting, now, exc)
             continue
         if delete_fetched_copy(meeting, provider, now):
             deleted += 1
@@ -908,6 +923,7 @@ def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> b
     if meeting.speaker_transcript is None:
         try:
             segments = _lookup(vexa, meeting).segments
+            _speaker_misses.pop(meeting.id, None)
         except BotNotFound:
             # The provider no longer has the meeting (its copy is gone): there are no segments to
             # label with, which is "speakers incomplete", never a retry that cannot succeed.
@@ -1018,7 +1034,7 @@ def advance_meeting(
                 session.rollback()  # looked at on every step, so a deletion mid-run stops it
                 return
             # The provider that ran THIS meeting, whatever the setting says now.
-            vexa = provider_for(default, meeting.bot_provider)
+            vexa = provider_for(default, meeting.bot_provider, meeting.bot_region)
             if meeting.step == "waiting":
                 proceed = _poll(session, meeting, vexa, now)
                 if proceed:
@@ -1060,14 +1076,23 @@ def advance_meeting(
             and meeting.status == "processing"
             and meeting.step == "speakers"
             and meeting.speaker_transcript is None
-            and _expired(meeting, now)
         ):
-            # The same give-up for the speaker lookup: the notes go ahead from the plain transcript
-            # (speakers incomplete) rather than wait for ever on a provider that does not answer.
-            meeting.speaker_transcript = meeting.transcript or ""
-            meeting.speakers_incomplete = True
-            meeting.step = "notes"
-            session.commit()
+            # The same give-up for the speaker lookup, but not on the first miss: after the 6 hours
+            # AND `SPEAKER_MISSES_TO_GIVE_UP` misses over `SPEAKERS_GIVE_UP_AFTER`, the notes go
+            # ahead from the plain transcript (speakers incomplete) rather than wait for ever on a
+            # provider that does not answer.
+            count, first = _speaker_misses.get(meeting_id, (0, now))
+            _speaker_misses[meeting_id] = (count + 1, first)
+            if (
+                _expired(meeting, now)
+                and count + 1 >= SPEAKER_MISSES_TO_GIVE_UP
+                and now - first >= SPEAKERS_GIVE_UP_AFTER
+            ):
+                _speaker_misses.pop(meeting_id, None)
+                meeting.speaker_transcript = meeting.transcript or ""
+                meeting.speakers_incomplete = True
+                meeting.step = "notes"
+                session.commit()
     except OperationalError as exc:
         # Transient database trouble: do not fail the meeting, try again on the next pass.
         logger.warning("meeting %s: database error (%s)", meeting_id, type(exc).__name__)
@@ -1145,16 +1170,9 @@ def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
         ):
             try:
                 # The provider that holds this meeting's copy, whatever the setting says now.
-                provider = provider_for(default or build_provider(), meeting.bot_provider)
-                region = provider_region(provider)
-                if meeting.bot_region and region and meeting.bot_region != region:
-                    logger.error(
-                        "meeting %s: its copy is in region %s, not %s; not deleting it",
-                        meeting.id,
-                        meeting.bot_region,
-                        region,
-                    )
-                    continue
+                provider = provider_for(
+                    default or build_provider(), meeting.bot_provider, meeting.bot_region
+                )
                 if meeting.vexa_recording_id is not None:
                     provider.delete_recording(meeting.vexa_recording_id)
                 elif hasattr(type(provider), "delete_bot_record"):

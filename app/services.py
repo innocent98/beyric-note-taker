@@ -610,7 +610,9 @@ def _stop_bot_or_refuse(session: Session, vexa, meeting: Meeting) -> None:
         logger.info("meeting %s: the bot at its code is a newer meeting's, left alone", meeting.id)
         return  # this meeting's own bot is already gone; its owner carries on
     try:
-        provider_for(vexa, meeting.bot_provider).stop_bot(meeting.platform, meeting.native_id)
+        provider_for(vexa, meeting.bot_provider, meeting.bot_region).stop_bot(
+            meeting.platform, meeting.native_id
+        )
     except (BotProviderError, ValueError) as exc:
         session.rollback()
         logger.warning("meeting %s: stop_bot failed (%s)", meeting.id, type(exc).__name__)
@@ -679,7 +681,7 @@ def delete_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Non
         if locked.audio_deleted_at is None:
             # Settle Vexa's side the way account deletion does: a cancelled meeting never had the
             # recording id stored, so ask Vexa for it (waiting out its grace) before it is lost.
-            holder = provider_for(vexa, locked.bot_provider)  # the one that ran this meeting
+            holder = provider_for(vexa, locked.bot_provider, locked.bot_region)
             recording_id = deletion.recording_to_delete(
                 session, holder, locked, datetime.now(UTC), set()
             )
