@@ -2,6 +2,60 @@
 
 **Written:** 2026-11-09, about 13:45 WAT, by the sixteenth lead session for the seventeenth (Adebayo starts it himself; this session does not). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6 to #131 and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail. **Sections 00, 1, 4, 5 and 6 were rewritten at this handoff and are current; sections 0, 2, 3 and 7 are standing rules, decisions, designs and recipes (the 2026-11-08/09 additions are marked).**
 
+## UPDATE 2026-11-09 evening (about 17:15 WAT), seventeenth lead for the eighteenth: READ THIS BLOCK FIRST
+
+It supersedes sections 00, 1, 5 and 6 below wherever they disagree. Everything here was checked with live commands during the session unless marked "not verified".
+
+### A. State right now
+
+| Thing | State |
+|---|---|
+| `main` | `4e4753f` (#158), ci and deploy green. `/health` 200. Alembic head 0038 (no migration today). |
+| Bot provider | **Skribby is LIVE** (`BOT_PROVIDER=skribby`, `SKRIBBY_TRANSCRIPTION_MODEL=soniox/stt-async-v5`, `BOT_MAX_LOCAL=3`; proved with `printenv` in the worker, he pasted it). The app still transcribes itself from the audio; Skribby supplies bot, audio and speaker names. **No whole real meeting has gone through the app on Skribby yet. His meeting at 17:00 WAT today (moved from 16:00) is that first test, Google Meet: check it when he says it is over** (meeting row, speaker names, notes, Skribby dashboard shows the bot gone). Never deploy while it runs. |
+| Vexa containers | **Still running** unless he ran the stop (I gave him the two commands: check `vexa_in_flight` = 0, then `docker compose stop vexa` and `docker compose stop vexa-storage vexa-db`; he has not confirmed). Ask. If he stops it: recordings in Vexa's storage cannot be deleted while stopped (7-day rule); **start Vexa for an hour about 2026-11-16 to let the hourly cleanup delete them, then stop it again** (`deploy/README.md` section 8). Rollback to Vexa: `COMPOSE_PROFILES=vexa docker compose up -d vexa-db vexa-storage vexa-storage-init vexa vexa-schema-fix`, `BOT_PROVIDER=vexa`, restart. |
+| Merged this session (all deployed one at a time) | #155 handoff docs, #150 Outlook M2 (`0828533`), #152 M3 (`4b78f59`), #153 M4 (`4325734`), #154 M6 Settings UI (`1ea02d7`), #158 transcript compare tool (`4e4753f`). The Outlook stack is dark (`MICROSOFT_CALENDAR_ENABLED=false`). |
+| Open PRs | **#159 Teams join + Zoom fix** (branch `feature/teams-join`, head `6a1600e`, READY, CI was still running; an Opus review was started by the 17th lead in the foreground: its result goes to the 17th lead, not to you: if you have no report, run a new read-only Opus review, first read `_teams` in `app/meeting_url.py`). **#156 Outlook M7 policy rows (HELD, base main, head `9c66801`) and #157 M8 close-out (HELD, base is #156's branch, head `1bb1041`): do not merge before Outlook switch-on.** |
+| Sessions | `transcript-compare` (done, PR #158 merged), `teams-join` (`local_74663186-ee9e-4e0f-887e-fae482936e2d`, idle after pushing #159), `outlook-build` (`local_47fa61e8-6474-46c5-8e23-69fae60b25ef`, idle). Note: the `teams-join` session's branch `feature/teams-join-f223e0` is checked out in `.claude/worktrees/outlook-m2-f7e9a6` (the Outlook session's old worktree): if the Outlook session is woken, tell it. |
+| Worktrees to KEEP | `skribby-check` (his live-check venv; the Python is `.claude/worktrees/skribby-check/.venv/bin/python`), `bakeoff` (his log), **`teams-test`** (detached at `d45cdd8`: the Teams live check he runs on his Mac, keep until he is done). The main checkout is stale (HEAD `6b7e047`) and holds his uncommitted design files: leave it, read files with `git show origin/main:<path>`. |
+| Merge permission | His "merge all" works only for PRs open when he said it; his window "No meetings, 2 hours" typed 14:15 WAT **expired 16:15**; ask for a new window with a duration before any merge (and none while his 17:00 meeting runs). Merge with `gh pr merge N --squash --delete-branch --match-head-commit <40-char sha>`. **Retarget every child PR of a stacked base to main BEFORE merging the base** (I forgot once today: #156 got closed when #154's branch was deleted; fixed by recreating the branch, reopening and retargeting). |
+
+### B. What was proved live today (his Mac, `scripts/skribby_live_check.py`)
+
+- **Teams:** guest bot joined a Teams meeting (`teams.live.com/meet/...?p=...`), in the lobby, admitted after 74 s, recorded, completed. Speaker names showed `(no name)` only because the script's default model is groq (the app uses soniox): not proof of a naming problem.
+- **Zoom (guest):** `--guest` bot joined `us05web.zoom.us/j/...?pwd=...`, admitted after 50 s, recorded, completed.
+- **Zoom in the app FAILED** (`502 bot_send_failed`, log `send_bot failed (SkribbyError)`, reason hidden). Cause (strongly supported: same link works as guest from the script): `app/skribby.py` attaches `authentication.account_id` (the note@ Google account) to every platform; Skribby cannot use a Google account on Zoom. **#159 fixes it** (authentication for google_meet only; Zoom and Teams guest) and adds `describe_failure` so send failures log Skribby's scrubbed reason. Not verified in the real app until #159 is deployed.
+- Teams account: **no**. Skribby's authenticated Teams bot needs a Microsoft 365 work user with a Teams licence, MFA OFF and the SAME tenant as the meeting: useless for pilot users from other companies, so Teams joins as a guest (Teams labels guests "unverified"; normal). Users never give us passwords.
+
+### C. Decisions today (his words in chat)
+
+| Decision | Detail |
+|---|---|
+| Build Zoom and Teams now, test live | "lets proceed to build zoom and teams now ... I want to test it live in a few minutes" |
+| **Drop the Outlook M0 capture spike** | "lets forget about the spike, we no longer align". Outlook parser fixtures stay "documented shape" until he switches Outlook on for himself and we see real events. The M0 README's "test events in the next 30 days" list is dropped. |
+| Outlook "get all 3 gates done now" | gates were: capture test (dropped by him), Teams joining (guest join proved today, calendar path in #159), lawyer wording (#156: `web/components/legal/privacy-content.tsx` section "Microsoft user data" + 3 list lines, `terms-content.tsx` one line; he may eyeball it himself: his call). To switch Outlook on FOR HIMSELF: server `.env` `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` (his paste showed both EMPTY: ask), `MICROSOFT_AUTHORITY=consumers`, `MICROSOFT_CALENDAR_ENABLED=true`; M2 to M6 are deployed, M5's normaliser is dormant until the Graph source is wired (check). Never print secrets. |
+| Vexa: "stop it, or give me the command" | commands above, unconfirmed |
+| Transcript comparison | script merged (#158), command in `docs/sop/2026-11-09-transcript-compare.md`; **not run yet on a real meeting**; the app deletes Skribby's copy minutes after a meeting, so use the script's own bot (kept copy) or copy the bot id from Skribby's dashboard at once. Needs `OPENAI_API_KEY=` added to `~/.config/beyric-bakeoff/keys.env`. The source switch is NOT built; he decides after reading. |
+| Bot invite (his earlier "do B and C") | **I recommended C+ first: an in-app tip "add note@beyrictech.com to the event to skip the wait" with a copy button (no new permission, about half a day), B (the app adds note@ to the event, needs a calendar WRITE scope) only if pilot users complain.** I asked "start the session for the tip?": he has NOT answered. Google facts read on Google's own page (`developers.google.com/identity/protocols/oauth2/production-readiness/sensitive-scope-verification`): sensitive-scope verification "can take up to 10 days"; "reading events stored in Google Calendar" is a sensitive scope (so our read scope already needs it); per-scope justification and a demo video; the page names no security assessment. NOT verified from Google: the label of the write scope (a third-party guide says sensitive), the exact unverified-user cap (our notes say 100). |
+| Bot display name | the app defaults to "Beyric Meeting Support" (Skribby's naming guide); he was asked if he wants "Beyric Note Taker" (one setting, `SKRIBBY_BOT_NAME`): unanswered. |
+
+### D. Next, in order
+
+1. His 17:00 meeting: when over, read the result (the first full Skribby run). No deploy before that.
+2. Opus review of #159 (the 17th lead's agent may have finished: ask Adebayo nothing, just check for a report, else rerun), fix findings, CI green, then ask him for "Merge #159" + a window with a duration. After the deploy: he tests Zoom and Teams through the app (paste link; calendar Teams events join now).
+3. Vexa stop confirmation (and the 16 Nov cleanup reminder).
+4. Run the transcript comparison on one real meeting (a call with a second speaker), he reads it, then decide the source switch (`TRANSCRIPT_SOURCE`, Opus review: hours metering and cost ledger).
+5. The in-app "add note@ to your event" tip (ask him to say go), bot name decision.
+6. Outlook for himself (secrets, flag), #156/#157 stay held until public switch-on (gates: Teams joining proven, lawyer or his own read of #156's wording).
+7. C17 close-out, C18 recording notice (Skribby's page says its bot can send chat in Google Meet, Zoom and Teams: vendor claim, not verified), Option B design only if wanted, then the older list in section 6.
+
+**Housekeeping owed:** reconcile `docs/checklist/master-checklist.md` (Outlook M2 to M6 now merged, M7/M8 held, transcript compare merged, Teams T1/T2 arrive with #159, Skribby live, spike dropped) and the SOP index; the lead did not get to it.
+
+### E. How he likes to work (today)
+
+Short, itemised, no jargon, one thing at a time; he wants things done fast ("we shouldn't deliberately slow things down"); give commands in their own code blocks. His terminal: **zsh without quotes breaks on `?` in links: always give links in single quotes; his `grep` is aliased to ripgrep: use `grep -i -e a -e b`, not `-E`**. The lead cannot read production (database, `docker compose` logs/ps): he runs ONE command per message and pastes. No secrets in chat. Merge only on his typed word in YOUR chat. `docker compose logs` of `web` only says `send_bot failed (SkribbyError)` until #159 deploys.
+
+---
+
 ## 00. Read this first
 
 - **Written 2026-11-09 about 13:45 WAT by the sixteenth lead for the seventeenth (Adebayo starts it himself; this session does not).** Everything below the line "Merged" is merged and live unless marked open. Server head should be **`b41cc1b`** (#151, merged 13:46 WAT; its deploy was still running when this was written: check `gh run list --commit b41cc1b...`; the previous head `8ac1a6a` was #149; neither confirmed from his paste: ask him for it), `/health` 200, Alembic head **0038** (next free **0039**; the open Outlook PRs may add one: check `alembic heads`).
