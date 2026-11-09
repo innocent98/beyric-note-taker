@@ -23,8 +23,16 @@ MEET = "https://meet.google.com/abc-defg-hij"
 FILES = "https://files.skribby.io/rec.webm"
 
 
+FROZEN = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)  # the time the status mapping reads, fixed
+
+
+@pytest.fixture(autouse=True)
+def frozen_clock(monkeypatch):
+    monkeypatch.setattr(check, "utcnow", lambda: FROZEN)
+
+
 def ago(seconds):
-    return (datetime.now(UTC) - timedelta(seconds=seconds)).isoformat().replace("+00:00", "Z")
+    return (FROZEN - timedelta(seconds=seconds)).isoformat().replace("+00:00", "Z")
 
 
 def bot(status, *steps, **fields):

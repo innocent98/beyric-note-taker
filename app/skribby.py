@@ -124,6 +124,12 @@ class SkribbyNotFound(SkribbyError, BotNotFound):
     """Skribby does not know the bot (HTTP 404, or an id that is not a Skribby bot id)."""
 
 
+def _utcnow() -> datetime:
+    """The provider's clock when none is given (tests replace it, so no assertion depends on the
+    real time the knock inference reads)."""
+    return datetime.now(UTC)
+
+
 # ---- recording handles ----
 
 
@@ -775,7 +781,7 @@ class SkribbyProvider:
         self._client = client
         self._sleep = sleep or time.sleep
         self._ledger: BotLedger = ledger or DbLedger()
-        self._clock = clock or (lambda: datetime.now(UTC))
+        self._clock = clock or _utcnow
         self._guard = threading.Lock()
         # Bots sent by this process, per `(platform, code)`, oldest first: the window between the
         # send and the meeting row's commit, which our own table cannot see.

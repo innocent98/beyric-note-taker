@@ -76,8 +76,18 @@ def template(session, user):
     return make_template(session, user)
 
 
+# The time every Skribby body below is written against and the provider reads: fixed, so how long a
+# bot has been `joining` (the 20 s knock inference) never depends on how fast the test runs.
+FROZEN = datetime(2026, 11, 9, 12, 0, tzinfo=UTC)
+
+
+@pytest.fixture(autouse=True)
+def frozen_skribby_clock(monkeypatch):
+    monkeypatch.setattr("app.skribby._utcnow", lambda: FROZEN)
+
+
 def ago(seconds):
-    return (datetime.now(UTC) - timedelta(seconds=seconds)).isoformat().replace("+00:00", "Z")
+    return (FROZEN - timedelta(seconds=seconds)).isoformat().replace("+00:00", "Z")
 
 
 def steps(*items):
@@ -483,7 +493,8 @@ def test_a_send_that_got_no_answer_is_kept_then_given_up_since_skribby_cannot_fi
         meeting.completion_reason == pipeline.SEND_UNCONFIRMED and meeting.vexa_meeting_id is None
     )
 
-    pipeline.advance_meeting(session, meeting.id, openai_client=FakeOpenAI())
+    inside = meeting.started_polling_at + timedelta(seconds=1)
+    pipeline.advance_meeting(session, meeting.id, now=inside, openai_client=FakeOpenAI())
     session.expire_all()
     assert session.get(Meeting, meeting.id).status == "bot_sent"  # still within the grace
 

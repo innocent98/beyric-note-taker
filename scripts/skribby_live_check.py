@@ -48,6 +48,11 @@ TERMINAL_RAW = (
 MAX_POLL_FAILURES = 5
 
 
+def utcnow() -> datetime:
+    """The time the status mapping reads (tests replace it)."""
+    return datetime.now(UTC)
+
+
 class CheckError(Exception):
     """Something the person running it can fix; printed plainly, no traceback."""
 
@@ -205,7 +210,7 @@ def watch(provider, client, bot_id, platform, code, args, say, sleep, clock, sta
                 return 1
             sleep(args.interval)
             continue
-        info = map_bot(raw, datetime.now(UTC))
+        info = map_bot(raw, utcnow())
         shown = (raw.get("status"), info.status, info.reached_lobby)
         if shown != last:
             words = owner_words(info)

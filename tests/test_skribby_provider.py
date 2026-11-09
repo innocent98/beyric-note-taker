@@ -9,6 +9,7 @@ lookup by code Skribby does not have, recording handles, and the settings check 
 
 import logging
 import re
+import threading
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -544,30 +545,52 @@ def test_a_read_that_timed_out_after_the_send_is_uncertain(httpx_mock):
         provider.send_bot(URL)
 
 
-def test_a_send_that_hangs_is_given_up_within_the_deadline_as_uncertain(httpx_mock):
-    def slow(request):
-        time.sleep(0.6)
+def new_threads(before):
+    return [
+        t for t in threading.enumerate() if t not in before and t is not threading.main_thread()
+    ]
+
+
+def test_a_send_that_hangs_is_given_up_at_the_deadline_as_uncertain(httpx_mock):
+    release = threading.Event()  # the stub blocks until the test lets it go: no clock is read
+
+    def hangs(request):
+        release.wait(10)
         return httpx.Response(201, json={"id": BOT})
 
-    httpx_mock.add_callback(slow, method="POST", url=f"{BASE}/bot")
-    provider, _ = make(send_deadline=0.1)
-    began = time.monotonic()
-    with pytest.raises(BotSendUncertain):
-        provider.send_bot(URL)
-    assert time.monotonic() - began < 0.5
+    httpx_mock.add_callback(hangs, method="POST", url=f"{BASE}/bot")
+    ledger = Ledger()
+    ledger.adopt_answers = [True]  # when it does answer, the late bot is taken by its meeting
+    provider, _ = make(send_deadline=0.1, ledger=ledger)
+    before = set(threading.enumerate())
+    try:
+        with pytest.raises(BotSendUncertain):
+            provider.send_bot(URL)
+        assert not release.is_set()  # it gave up while the vendor was still not answering
+    finally:
+        release.set()
+        for thread in new_threads(before):
+            thread.join(10)
 
 
 def test_a_hang_while_checking_the_code_sent_nothing_so_it_is_a_plain_error(httpx_mock):
-    def slow(request):
-        time.sleep(0.6)
+    release = threading.Event()
+
+    def hangs(request):
+        release.wait(10)
         return httpx.Response(200, json=bot("joining"))
 
-    httpx_mock.add_callback(slow, method="GET", url=f"{BASE}/bot/{OTHER}")
-    provider, _ = make(send_deadline=0.1, ledger=None)
-    provider._ledger = Ledger(live=[OTHER])
-    with pytest.raises(BotProviderError) as caught:
-        provider.send_bot(URL)
-    assert not isinstance(caught.value, BotSendUncertain)
+    httpx_mock.add_callback(hangs, method="GET", url=f"{BASE}/bot/{OTHER}")
+    provider, _ = make(send_deadline=0.1, ledger=Ledger(live=[OTHER]))
+    before = set(threading.enumerate())
+    try:
+        with pytest.raises(BotProviderError) as caught:
+            provider.send_bot(URL)
+        assert not isinstance(caught.value, BotSendUncertain)
+    finally:
+        release.set()
+        for thread in new_threads(before):
+            thread.join(10)
     assert not [r for r in httpx_mock.get_requests() if r.method == "POST"]
 
 
@@ -1250,23 +1273,29 @@ def test_a_404_on_the_delete_itself_needs_no_second_look(httpx_mock):
 # ---- a bot whose "created" answer arrives after the deadline is not lost ----
 
 
-def slow_create(httpx_mock, bot_id=BOT, seconds=0.4):
+def slow_create(httpx_mock, bot_id=BOT):
+    """A `POST /bot` that answers only when the returned event is set (after the caller's deadline
+    has fired), so "the answer came late" never depends on how fast the machine is."""
+    release = threading.Event()
+
     def slow(request):
-        time.sleep(seconds)
+        release.wait(10)
         return httpx.Response(201, json={"id": bot_id})
 
     httpx_mock.add_callback(slow, method="POST", url=f"{BASE}/bot")
+    return release
 
 
 def test_a_late_created_answer_is_given_to_the_placeholder_meeting(httpx_mock, caplog):
     caplog.set_level(logging.WARNING)
-    slow_create(httpx_mock)
+    release = slow_create(httpx_mock)
     ledger = Ledger()
     ledger.adopt_answers = [False, True]  # the placeholder is not there on the first look
     provider, _ = make(send_deadline=0.1, ledger=ledger)
 
     with pytest.raises(BotSendUncertain):
         provider.send_bot(URL)
+    release.set()  # now the vendor's answer arrives, after the deadline
 
     assert wait_for(lambda: ledger.adopted and len(ledger.adopted) == 2)
     assert ledger.adopted[-1] == ("google_meet", CODE, BOT)
@@ -1279,7 +1308,7 @@ def test_a_late_created_answer_is_given_to_the_placeholder_meeting(httpx_mock, c
 
 
 def test_a_late_bot_that_no_meeting_wants_is_stopped_and_deleted_not_left_recording(httpx_mock):
-    slow_create(httpx_mock)
+    release = slow_create(httpx_mock)
     httpx_mock.add_response(method="POST", url=f"{BASE}/bot/{BOT}/stop", json={"message": "ok"})
     httpx_mock.add_response(method="DELETE", url=f"{BASE}/bot/{BOT}", json={})
     httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{BOT}", status_code=404, json={})
@@ -1287,6 +1316,7 @@ def test_a_late_bot_that_no_meeting_wants_is_stopped_and_deleted_not_left_record
 
     with pytest.raises(BotSendUncertain):
         provider.send_bot(URL)
+    release.set()
 
     def stopped_and_deleted():
         methods = [(r.method, r.url.path) for r in httpx_mock.get_requests()]
@@ -1559,17 +1589,23 @@ def test_an_unreachable_database_is_a_warning_and_not_a_refusal_to_start():
 
 
 def test_a_send_abandoned_while_the_code_was_being_checked_never_posts(httpx_mock):
+    release = threading.Event()
+
     class SlowLedger(Ledger):
         def live_bots(self, platform, code):
-            time.sleep(0.4)  # the deadline (0.1 s) passes while this is running
+            release.wait(10)  # the deadline (0.1 s) fires while this is blocked
             return []
 
     provider, _ = make(send_deadline=0.1, ledger=SlowLedger())
+    before = set(threading.enumerate())
 
     with pytest.raises(SkribbyError, match="check for a bot already there timed out") as caught:
         provider.send_bot(URL)
     assert not isinstance(caught.value, BotSendUncertain)
 
-    time.sleep(0.8)  # the thread has finished its check by now ...
-    assert not [r for r in httpx_mock.get_requests() if r.method == "POST"]  # ... and did not send
+    release.set()  # the check now finishes: the thread must see it was abandoned and stop
+    for thread in new_threads(before):
+        thread.join(10)
+        assert not thread.is_alive()
+    assert not [r for r in httpx_mock.get_requests() if r.method == "POST"]
     assert provider._candidates("google_meet", CODE) == []
