@@ -2556,6 +2556,10 @@ export interface components {
          *     `microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the
          *     "Connect Microsoft Outlook" button live only then (while it is false the page looks as it did
          *     before Outlook existed).
+         *     `bot_invite_email` is the note taker's Google address, set only when it is true that adding it
+         *     to an event's guest list lets the bot skip the waiting room on Google Meet (the server runs the
+         *     signed-in Skribby bot and has the address set); null otherwise, and then draw no tip. Zoom and
+         *     Teams meetings still wait for the host. It is a public address, not a secret.
          *     `upcoming` is empty unless connected.
          */
         CalendarOut: {
@@ -2565,6 +2569,8 @@ export interface components {
             auto_join_paused: boolean;
             /** Auto Join Paused Text */
             auto_join_paused_text: string | null;
+            /** Bot Invite Email */
+            bot_invite_email?: string | null;
             /** Calendar Template Id */
             calendar_template_id: number | null;
             /** Connected */
@@ -2952,6 +2958,8 @@ export interface components {
         };
         /** MeetingDetail */
         MeetingDetail: {
+            /** Bot Invite Email */
+            bot_invite_email?: string | null;
             /** Bot Left Early */
             bot_left_early: boolean;
             /** Can Cancel */

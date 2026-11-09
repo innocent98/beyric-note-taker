@@ -1,0 +1,65 @@
+{
+  "note": "A Google Meet meeting that failed because the bot was not let in. Tip on in the server's settings.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/2",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "id": 2,
+      "title": "Google Meet ddd-eeee-fff",
+      "platform": "google_meet",
+      "native_id": "ddd-eeee-fff",
+      "status": "failed",
+      "step": "waiting",
+      "status_text": "Failed",
+      "status_tone": "danger",
+      "template_id": 1,
+      "template_name": "General",
+      "created_at": "2026-11-09T22:02:16.586360Z",
+      "tasks_count": 0,
+      "failure_reason": "The bot was not let into the meeting. The host may have declined it, or the waiting room timed out.",
+      "bot_invite_email": "note@example.test",
+      "retry_block": "no_audio",
+      "retry_block_message": "This meeting can't be retried: nothing was captured. Send the bot again with a new link.",
+      "can_cancel": false,
+      "can_end": false,
+      "can_retry": false,
+      "can_regenerate": false,
+      "can_delete": true,
+      "shared_with_team": false,
+      "can_share": true,
+      "shared_by": null,
+      "join_attempts": 1,
+      "max_join_attempts": 3,
+      "bot_left_early": false,
+      "speakers_incomplete": false,
+      "refresh_after_seconds": null,
+      "worker_stale": false,
+      "join_retry_at": null,
+      "extraction_status": null,
+      "notes": null,
+      "notes_html": null,
+      "transcript": null,
+      "translations": [],
+      "duration_seconds": null,
+      "participants": [],
+      "decisions_count": 0,
+      "review_open_count": 0,
+      "tasks": [],
+      "series": null,
+      "suggest_recurring": false,
+      "open_questions": []
+    }
+  }
+}

@@ -149,6 +149,10 @@ class CalendarOut(BaseModel):
     `microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the
     "Connect Microsoft Outlook" button live only then (while it is false the page looks as it did
     before Outlook existed).
+    `bot_invite_email` is the note taker's Google address, set only when it is true that adding it
+    to an event's guest list lets the bot skip the waiting room on Google Meet (the server runs the
+    signed-in Skribby bot and has the address set); null otherwise, and then draw no tip. Zoom and
+    Teams meetings still wait for the host. It is a public address, not a secret.
     `upcoming` is empty unless connected."""
 
     connected: bool
@@ -164,6 +168,7 @@ class CalendarOut(BaseModel):
     auto_join_paused: bool
     auto_join_paused_text: str | None
     microsoft_enabled: bool
+    bot_invite_email: str | None = None
     upcoming: list[UpcomingEvent]
 
 
@@ -496,6 +501,7 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
     paused = session.scalar(select(AppState.autojoin_paused_since)) is not None
     paused_text = calendar_text.AUTO_JOIN_PAUSED_TEXT if paused else None
     microsoft_on = calendar_providers.PROVIDERS["microsoft"].enabled(request.app.state.settings)
+    invite_email = request.app.state.settings.bot_invite_email_shown
     if conn is None:
         return CalendarOut(
             connected=False,
@@ -511,6 +517,7 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
             auto_join_paused=paused,
             auto_join_paused_text=paused_text,
             microsoft_enabled=microsoft_on,
+            bot_invite_email=invite_email,
             upcoming=[],
         )
     state = conn.status if conn.status in ("connected", "degraded") else "needs_reconnect"
@@ -528,6 +535,7 @@ def _calendar_out(request: Request, session: Session, user: User) -> CalendarOut
         auto_join_paused=paused,
         auto_join_paused_text=paused_text,
         microsoft_enabled=microsoft_on,
+        bot_invite_email=invite_email,
         upcoming=_upcoming(session, conn, _join_settings(prefs, request), _now()),
     )
 

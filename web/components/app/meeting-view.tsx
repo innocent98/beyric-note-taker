@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BotInviteTip } from "@/components/app/bot-invite-tip";
 import { CopyButton } from "@/components/app/copy-button";
 import { DownloadMenu } from "@/components/app/download-menu";
 import { ActionTasks } from "@/components/app/action-tasks";
@@ -503,6 +504,7 @@ export function MeetingView({
               ) : (
                 <p className="muted">{retryText ?? RETRY_BLOCKED.no_audio}</p>
               )}
+              <BotInviteTip email={m.bot_invite_email} />
             </>
           ) : (
             <>
@@ -517,6 +519,7 @@ export function MeetingView({
                   : "Notes and a full transcript will appear here when this finishes."}
               </p>
               {working ? <p className="muted">This page updates every 30 seconds.</p> : null}
+              <BotInviteTip email={m.bot_invite_email} />
               {m.can_end ? (
                 <Button type="button" disabled={busy !== null} data-dialog-open="end-dialog">
                   {busy === "end" ? "Ending..." : "End now and write the notes"}

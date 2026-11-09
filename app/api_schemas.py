@@ -220,6 +220,11 @@ class QuestionOut(BaseModel):
 class MeetingDetail(MeetingSummary):
     # Set (never null) when status is "failed", null otherwise.
     failure_reason: str | None
+    # The note taker's Google address, when the page may tell the owner to add it to the event's
+    # guest list so the bot skips the waiting room: only for a Google Meet meeting whose bot is
+    # waiting to be let in or was not, and only while the server is set up for it. Null otherwise
+    # (always null for Zoom and Teams, whose bot waits for the host). Public, not a secret.
+    bot_invite_email: str | None = None
     # Why a failed meeting cannot be retried; null when it can, and null unless failed.
     retry_block: RetryBlock | None
     retry_block_message: str | None

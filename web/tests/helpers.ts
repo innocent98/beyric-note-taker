@@ -136,6 +136,12 @@ export function calendarBody<T>(file: string): T {
   return JSON.parse(read(join(REPO, "docs/fe-captures/calendar-state", file))).response.body as T;
 }
 
+// A capture from the "add the note taker to your event" tip (docs/fe-captures/bot-invite-tip/<file>):
+// the calendar state or a meeting, with `bot_invite_email` set or `null`.
+export function inviteTipBody<T>(file: string): T {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/bot-invite-tip", file))).response.body as T;
+}
+
 // A capture from Send now and Not recorded (docs/fe-captures/send-now/<file>): the answer, and the
 // `ApiError` arguments of a failing one.
 export function sendNowBody<T>(file: string): T {

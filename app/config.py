@@ -11,6 +11,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # diarization (Skribby's billing page lists it for Soniox, not for Groq Whisper, which is the
 # default `SKRIBBY_TRANSCRIPTION_MODEL`). Add a model here only after reading a real answer from it.
 TRANSCRIPT_SKRIBBY_MODELS = ("soniox/stt-async-v5",)
+# One address: no spaces, commas, angle brackets or quotes; a dotted domain. Deliberately plain (no
+# display names, no comments, no quoted local parts): this is a public address an operator types in.
+_LABEL = r"[a-z0-9]([a-z0-9-]*[a-z0-9])?"
+_PLAIN_EMAIL = re.compile(rf"[a-z0-9][a-z0-9._%+-]*@{_LABEL}(\.{_LABEL})+")
 
 
 class Settings(BaseSettings):
@@ -85,6 +89,17 @@ class Settings(BaseSettings):
                 value = str(uuid.UUID(value))
             except ValueError:
                 raise ValueError("SKRIBBY_ACCOUNT_ID must be the account's id (a UUID)") from None
+        return value
+
+    @field_validator("bot_invite_email")
+    @classmethod
+    def _bot_invite_email_is_one_address(cls, value: str) -> str:
+        """Empty is fine (the tip stays hidden). Otherwise exactly one plain address, lower-cased:
+        the value is shown to people to type into a guest list, so a list, a display name
+        (`Bot <a@b.c>`) or a stray space is refused at start, naming the setting."""
+        value = value.strip().lower()
+        if value and not _PLAIN_EMAIL.fullmatch(value):
+            raise ValueError("BOT_INVITE_EMAIL must be one email address, such as note@example.com")
         return value
 
     @field_validator("microsoft_authority")
@@ -202,6 +217,11 @@ class Settings(BaseSettings):
     # transcription is ALSO run, only to compare numbers with Skribby's and then thrown away
     # (`transcript_shadow_metrics`). Costs OpenAI transcription for that share. 0 = never.
     transcript_shadow_percent: int = 0
+    # The address of the signed-in Skribby bot's Google account (`SKRIBBY_ACCOUNT_ID`). On Google
+    # Meet a bot whose address is on the event's guest list skips the waiting room, so the app can
+    # tell people to invite it ("Add note@... to your event to skip the wait"). Public, not a
+    # secret. Empty = no such tip. Shown only when it is true, see `bot_invite_email_shown`.
+    bot_invite_email: str = ""
     vexa_base_url: str = "http://localhost:8056"
     vexa_api_key: str = Field(default="", repr=False)
     bot_name: str = "Beyric Note Taker (recording)"
@@ -219,6 +239,15 @@ class Settings(BaseSettings):
     @property
     def shown_bot_name(self) -> str:
         return self.bot_name_for(self.bot_provider)
+
+    @property
+    def bot_invite_email_shown(self) -> str | None:
+        """The address people may be told to invite, or None. It is told only when it is true: the
+        bot is Skribby's, and it is signed in (`skribby_account_id`) as that address. A guest bot
+        (no account) or Vexa's bot is not on anyone's guest list, so there is nothing to invite."""
+        if self.bot_provider == "skribby" and self.skribby_account_id and self.bot_invite_email:
+            return self.bot_invite_email
+        return None
 
     poll_interval_seconds: int = 30
     # How long the bot may sit in a call with no one else speaking before it leaves on its own

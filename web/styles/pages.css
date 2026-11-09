@@ -312,6 +312,16 @@
 .cal-rule:has(.cal-rule-input:focus-visible) { box-shadow: 0 0 0 3px var(--teal-ring); }
 .cal-rule:has(.cal-rule-input:disabled) { cursor: default; }
 .cal-template { max-width: 320px; }
+/* The "add the note taker to your event" tip (components/app/bot-invite-tip.tsx): lead-designed. */
+.invite-tip { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-hover); text-align: left; }
+.invite-tip-text { flex: 1 1 280px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.invite-tip p { margin: 0; }
+.state-card .invite-tip { width: 100%; max-width: 460px; margin-top: var(--space-2); }
+.state-card .invite-tip p { max-width: none; }
+.invite-tip .invite-tip-title { font-size: var(--text-base); font-weight: 550; color: var(--ink-2); overflow-wrap: anywhere; }
+.invite-tip-address { font: inherit; font-weight: 600; color: var(--teal-deep); user-select: all; }
+.invite-tip .invite-tip-body { font-size: var(--text-sm); color: var(--text-2); line-height: 1.5; }
+.invite-tip p.meta { font-size: var(--text-xs); line-height: 1.5; }
 .cal-rule-on { border-color: var(--teal); background: var(--teal-wash); }
 .cal-radio { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: none; margin-top: 1px; border: 1.5px solid var(--separator); border-radius: 50%; }
 .cal-rule-on .cal-radio { border-color: var(--teal); }
