@@ -60,6 +60,10 @@ main() {
         git checkout --quiet --detach "$previous"
         return 1
     fi
+    # The Vexa services are in the `vexa` compose profile. This script never names them and never
+    # sets COMPOSE_PROFILES: with the profile off (Vexa stopped on purpose) this `up` leaves them
+    # alone, running or stopped, and nothing here waits on Vexa; with COMPOSE_PROFILES=vexa in the
+    # environment or the server `.env`, the same `up` also keeps Vexa running. See deploy/README.md.
     # `up` exits non-zero when a dependency is unhealthy (a crash-looping web, for instance). Under
     # `set -e` that used to end the script right here, before the health check and the rollback
     # below, leaving the broken version in place. So it never decides anything on its own: the
