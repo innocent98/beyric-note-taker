@@ -1,6 +1,6 @@
 # SOP: keep what Skribby sent for 7 days, and stop naming speakers by elimination
 
-**What shipped.** (1) Per meeting, Skribby's raw transcript items and the name the app derived for each speaker tag (with the reason) are saved for 7 days, so a bad labelling can be diagnosed. (2) A new setting `SKRIBBY_NAME_BY_ELIMINATION` (default **false**) turns off naming a tag by elimination. **PR:** `feature/skribby-raw-segments` (number in the PR). **Migration 0040.** No endpoint, no screen, no API shape change (so no FE guide).
+**What shipped.** (1) Per meeting, Skribby's raw transcript items and the name the app derived for each speaker tag (with the reason) are saved for 7 days, so a bad labelling can be diagnosed. (2) A new setting `SKRIBBY_NAME_BY_ELIMINATION` (default **true**, today's behaviour) that can turn off naming a tag by elimination. Adebayo's decision 2026-11-10: collect evidence first, decide later whether to remove elimination. **PR:** `feature/skribby-raw-segments` (number in the PR). **Migration 0040.** No endpoint, no screen, no API shape change (so no FE guide).
 
 ## Why
 
@@ -15,7 +15,7 @@ Adebayo's real meetings 29 and 30 on 2026-11-10 were labelled badly. In 29 a thi
 | Saved | `pipeline._step_speakers` calls `_keep_evidence` right after the lookup, in the commit that saves the speaker names and before the provider's copy is deleted. It runs in a savepoint: a failure rolls back only that write, logs the exception class (never the text), and the meeting still finishes. A retry of the step replaces the row (one row per meeting). |
 | Deleted | After 7 days by `pipeline.delete_expired_audio` (the audio retention job; `EVIDENCE_RETENTION_DAYS = 7`, from the row's own `created_at`, whatever state the meeting is in); with the meeting (`services.delete_meeting` and the foreign key `ON DELETE CASCADE`); with the account (`deletion.purge_user`). |
 | Read | Only `scripts/skribby_segments_report.py <meeting_id>`: items grouped by tag, the derived name and why, read-only. Never in an API answer or a page. |
-| Elimination | `Settings.skribby_name_by_elimination`, default false. Off: `_tag_names` names a tag only from the `speaker_name` its own segments carry; the elimination branch is still computed (so the evidence shows what it would have said) but never applied. On: today's behaviour exactly. |
+| Elimination | `Settings.skribby_name_by_elimination`, default **true**: today's behaviour exactly, and each tag it names is recorded as `how: elimination` (with `by_elimination: true` on the row), so the report shows which names elimination produced. `false`: `_tag_names` names a tag only from the `speaker_name` its own segments carry; the elimination branch is still computed (the evidence shows what it would have said, `would_be`) but never applied. |
 
 **Decision: a table, not a log line.** The text is what people said; a log would spread it into files with their own retention. A short-lived table with one delete job and a cascade is easy to prove gone. **Decision: the clock starts at the row's save time, not the meeting's start,** so a meeting that is slow to finish still keeps its evidence 7 days. **Rejected:** storing Skribby's whole body (it carries bot ids, links and per-word data we do not need); storing confidences (not needed for the diagnosis).
 
@@ -28,17 +28,16 @@ Adebayo's real meetings 29 and 30 on 2026-11-10 were labelled badly. In 29 a thi
 
 ## Verification
 
-Run on the Mac, bounded (CI runs the rest): `ruff check`, `ruff format --check`; `tests/test_skribby_provider.py` (both settings, evidence shape and reasons, the failure path), `tests/test_skribby_evidence.py` (saved in the speakers step, none for Vexa, one row after a repeat, a failing save never stops the meeting or logs the words, 7-day retention, meeting delete, account delete, the report), `tests/test_migrations.py -k "0039 or 0040 or head"` (one head, upgrade, unique, cascade, downgrade, upgrade again), `tests/test_skribby_e2e.py`, `tests/test_transcript_source.py`, `tests/test_pipeline.py`, `tests/test_meeting_delete.py`, `tests/test_dockerfile_scripts.py`, and the purge/delete tests of `tests/test_admin.py`. **Not verified live:** no real Skribby meeting was run; the first real evidence row will be the proof.
+Run on the Mac, bounded (CI runs the rest): `ruff check`, `ruff format --check`; `tests/test_skribby_provider.py` (both settings (default on, off tested), evidence shape and reasons, the failure path), `tests/test_skribby_evidence.py` (saved in the speakers step, none for Vexa, one row after a repeat, a failing save never stops the meeting or logs the words, 7-day retention, meeting delete, account delete, the report), `tests/test_migrations.py -k "0039 or 0040 or head"` (one head, upgrade, unique, cascade, downgrade, upgrade again), `tests/test_skribby_e2e.py`, `tests/test_transcript_source.py`, `tests/test_pipeline.py`, `tests/test_meeting_delete.py`, `tests/test_dockerfile_scripts.py`, and the purge/delete tests of `tests/test_admin.py`. **Not verified live:** no real Skribby meeting was run; the first real evidence row will be the proof.
 
 ## Operate / roll back
 
-- **Server steps before merge:** migration 0040 runs on deploy. The only new env variable is the optional `SKRIBBY_NAME_BY_ELIMINATION`; leave it unset (= false).
+- **Server steps before merge:** migration 0040 runs on deploy. The only new env variable is the optional `SKRIBBY_NAME_BY_ELIMINATION`; leave it unset (= true, today's behaviour).
 - **Read a meeting:** `docker compose exec -T web python scripts/skribby_segments_report.py <meeting_id>` (within 7 days of the meeting). It prints what people said: treat it like the transcript.
-- **Turn elimination back on:** `SKRIBBY_NAME_BY_ELIMINATION=true`, restart web, worker and scheduler.
+- **Turn elimination off:** `SKRIBBY_NAME_BY_ELIMINATION=false`, restart web, worker and scheduler.
 - **Roll back:** revert the PR; `alembic downgrade 0039` drops the table (the evidence is disposable by design).
 
 ## Follow-ups
 
-- **Privacy page (the lead raises it, not done here):** it needs one sentence: "speaker evidence from the meeting bot is kept 7 days". The legal pages were not touched.
 - Evidence is saved only in the speakers step. With `TRANSCRIPT_SOURCE=skribby` that step does not look Skribby up again (the names were saved in the transcript step), so no evidence is kept in that mode; add it there if that mode is switched on.
 - Once evidence from a bad meeting is read, decide whether elimination is wrong, Skribby's names are wrong, or `label_transcript`'s alignment is, and whether to delete the elimination code.

@@ -381,10 +381,10 @@ def test_a_tag_with_no_name_takes_the_one_candidate_the_other_tag_has_not_got():
     ) == ["Ada Example", "Bo Example", "Ada Example", "Bo Example"]
 
 
-def test_elimination_is_off_by_default_and_read_from_the_environment(monkeypatch):
+def test_elimination_is_on_by_default_and_read_from_the_environment(monkeypatch):
+    assert Settings().skribby_name_by_elimination is True  # today's behaviour is the default
+    monkeypatch.setenv("SKRIBBY_NAME_BY_ELIMINATION", "false")
     assert Settings().skribby_name_by_elimination is False
-    monkeypatch.setenv("SKRIBBY_NAME_BY_ELIMINATION", "true")
-    assert Settings().skribby_name_by_elimination is True
 
 
 def test_with_elimination_off_a_tag_is_named_only_by_its_own_segments():
@@ -405,8 +405,14 @@ def test_with_elimination_off_a_tag_is_named_only_by_its_own_segments():
 
 def test_the_setting_is_read_when_the_provider_reads_a_meeting():
     items = [segment("Ada Example", tag="1"), segment(None, tag="2", candidates=ADA_AND_BO)]
-    default = map_bot(bot("finished", transcript=items), NOW)  # the default: off
-    assert [seg["speaker"] for seg in default.segments] == ["Ada Example", ""]
+    default = map_bot(bot("finished", transcript=items), NOW)  # the default: on
+    assert [seg["speaker"] for seg in default.segments] == ["Ada Example", "Bo Example"]
+    assert default.evidence["by_elimination"] is True
+    assert default.evidence["tags"]["2"]["how"] == "elimination"  # the report can show it
+    with patch.object(get_settings(), "skribby_name_by_elimination", False):
+        off = map_bot(bot("finished", transcript=items), NOW)
+    assert [seg["speaker"] for seg in off.segments] == ["Ada Example", ""]
+    assert off.evidence["by_elimination"] is False
 
 
 def test_a_third_speaker_is_not_named_after_a_name_on_the_list_with_elimination_off():

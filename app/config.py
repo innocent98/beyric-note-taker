@@ -215,10 +215,12 @@ class Settings(BaseSettings):
     transcript_source: str = "own"
     # Whether a diarization tag that carries no `speaker_name` may be named by elimination from
     # Skribby's `potential_speaker_names` (the list minus the bot's names minus the names other tags
-    # have; `app/skribby.py::_tag_names`). OFF (the default): a tag is named only by the
+    # have; `app/skribby.py::_tag_names`). ON (the default, today's behaviour, kept while the saved
+    # evidence is collected; `skribby_segment_evidence`). OFF: a tag is named only by the
     # `speaker_name` its own segments carry, and any other tag stays "Unknown speaker". The
-    # elimination can name a tag after someone who is not in the call (meeting 29, 2026-11-10).
-    skribby_name_by_elimination: bool = False
+    # elimination may have named a tag after someone who is not in the call (meeting 29,
+    # 2026-11-10); the evidence will show whether it did.
+    skribby_name_by_elimination: bool = True
     # In `skribby` mode: the share of meetings (0 to 100, chosen by meeting id) for which our own
     # transcription is ALSO run, only to compare numbers with Skribby's and then thrown away
     # (`transcript_shadow_metrics`). Costs OpenAI transcription for that share. 0 = never.
