@@ -16,15 +16,22 @@ def retryable(exc: Exception) -> bool:
     return isinstance(exc, openai.APIStatusError) and exc.status_code >= 500
 
 
-def call_with_retry[T](call: Callable[[], T], *, what: str, failure: type[Exception]) -> T:
-    """Run `call`, retrying transient OpenAI errors. Raise `failure` when attempts run out."""
-    for attempt in range(1, MAX_ATTEMPTS + 1):
+def call_with_retry[T](
+    call: Callable[[], T], *, what: str, failure: type[Exception], attempts: int | None = None
+) -> T:
+    """Run `call`, retrying transient OpenAI errors. Raise `failure` when attempts run out.
+
+    `attempts` defaults to MAX_ATTEMPTS; a caller that pays per try (a diagnostic script) can ask
+    for fewer, down to 1 (no retry).
+    """
+    attempts = MAX_ATTEMPTS if attempts is None else attempts
+    for attempt in range(1, attempts + 1):
         try:
             return call()
         except openai.OpenAIError as exc:
-            if not retryable(exc) or attempt == MAX_ATTEMPTS:
+            if not retryable(exc) or attempt == attempts:
                 raise failure(
                     f"{what}: {type(exc).__name__} after {attempt} attempt(s): {exc}"
                 ) from exc
-            time.sleep(BACKOFF_SECONDS[attempt - 1])
+            time.sleep(BACKOFF_SECONDS[min(attempt, len(BACKOFF_SECONDS)) - 1])
     raise AssertionError("unreachable")
