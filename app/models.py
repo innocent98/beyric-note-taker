@@ -1500,3 +1500,26 @@ class TranscriptShadowMetric(Base):
     # Which one the notes were made from: `skribby`, or `own` when Skribby's was not used.
     notes_source: Mapped[str] = mapped_column(String(16))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SkribbySegmentEvidence(Base):
+    """What Skribby sent for one meeting, kept 7 days so a bad speaker labelling can be diagnosed
+    (our own copy of Skribby's is deleted minutes after the meeting). `items` is each transcript
+    item as it came (tag, `speaker_name`, the names in `potential_speaker_names`, start, end,
+    text); `tags` the name the app derived for each tag and why (given, elimination, unknown).
+    It holds the words people said: never logged, never in an API answer or a page. Deleted by the
+    retention job after 7 days, with the meeting (`ON DELETE CASCADE`) and with the account."""
+
+    __tablename__ = "skribby_segment_evidence"
+    __table_args__ = (
+        UniqueConstraint("meeting_id", name="uq_skribby_segment_evidence_meeting"),
+        Index("ix_skribby_segment_evidence_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    meeting_id: Mapped[int] = mapped_column(ForeignKey("meetings.id", ondelete="CASCADE"))
+    items: Mapped[list] = mapped_column(JSONB)
+    tags: Mapped[dict] = mapped_column(JSONB)
+    # Whether SKRIBBY_NAME_BY_ELIMINATION was on when the names were derived.
+    by_elimination: Mapped[bool] = mapped_column(Boolean)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

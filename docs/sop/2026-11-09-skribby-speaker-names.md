@@ -1,5 +1,8 @@
 # SOP: Skribby speaker names from the diarization tag and the candidate list
 
+> **Update 2026-11-10:** naming a tag by elimination (the "unnamed tag takes its only remaining candidate" rule below) is now behind a setting, `SKRIBBY_NAME_BY_ELIMINATION` (default **true**, so today's behaviour is unchanged). It may have named a third speaker after someone who had not joined (meeting 29). With `false` a tag is named only by the `speaker_name` its own segments carry. What Skribby sent is now kept 7 days, so the choice can be made on evidence. See `docs/sop/2026-11-10-skribby-raw-segments.md`.
+
+
 **What shipped.** `app/skribby.py` now names a Skribby transcript segment from Skribby's own speaker tag and its `potential_speaker_names`, not only from the segment's own `speaker_name`. PR: see the branch `fix/skribby-speaker-names` (no migration, no setting, no endpoint). Tests: `tests/test_skribby_provider.py` ("who spoke" section).
 
 ## Why

@@ -143,6 +143,10 @@ class BotMeeting:
     # provider that times its transcript (Skribby). Read only by `TRANSCRIPT_SOURCE=skribby`, to
     # tell a transcript that stops early; None when the provider gives no times.
     last_segment_end: float | None = None
+    # What the provider sent for each transcript item and the speaker name derived per tag, kept a
+    # few days for diagnosis (Skribby only; `app/skribby.py::_evidence`). Words people said: never
+    # logged, never shown. Not read by anything that labels speakers.
+    evidence: dict[str, Any] | None = None
 
 
 def run_within(seconds: float, call):

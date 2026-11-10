@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session, object_session
 
@@ -49,13 +49,22 @@ from app.bot_provider import (
 )
 from app.config import get_settings
 from app.meeting_url import UnsupportedMeetingUrl
-from app.models import Meeting, Template, TranscriptShadowMetric, User, VocabularyTerm
+from app.models import (
+    Meeting,
+    SkribbySegmentEvidence,
+    Template,
+    TranscriptShadowMetric,
+    User,
+    VocabularyTerm,
+)
 from app.notes import NotesFailed, generate_notes, label_transcript
 from app.transcribe import TranscriptionFailed, transcribe_chunks
 
 logger = logging.getLogger(__name__)
 
 NO_AUDIO_GRACE_POLLS = 3
+# How long what the bot provider sent about who spoke is kept (`skribby_segment_evidence`).
+EVIDENCE_RETENTION_DAYS = 7
 MIN_WORDS = 5
 REASON_NOT_ADMITTED = "The bot could not record this meeting. It may not have been admitted."
 REASON_NO_SPEECH = "No speech was found in this recording."
@@ -1137,11 +1146,42 @@ def _delete_copy_after_commit(session: Session, meeting_id: int, provider) -> No
         )
 
 
+def _keep_evidence(session: Session, meeting_id: int, evidence: dict | None) -> None:
+    """Keep what the provider sent for this meeting for `EVIDENCE_RETENTION_DAYS` days, in the
+    commit that saves the speaker names (just before the provider's copy is deleted), so a bad
+    labelling can be diagnosed (`scripts/skribby_segments_report.py`). A record for diagnosis
+    only: any failure rolls back just this write (a savepoint), is logged by exception class only
+    (the text is what people said) and never stops the meeting."""
+    if not evidence:
+        return
+    try:
+        with session.begin_nested():
+            session.execute(
+                delete(SkribbySegmentEvidence).where(
+                    SkribbySegmentEvidence.meeting_id == meeting_id
+                )
+            )
+            session.add(
+                SkribbySegmentEvidence(
+                    meeting_id=meeting_id,
+                    items=evidence["items"],
+                    tags=evidence["tags"],
+                    by_elimination=bool(evidence["by_elimination"]),
+                )
+            )
+    except Exception as exc:
+        logger.warning(
+            "meeting %s: could not keep the speaker evidence (%s)", meeting_id, type(exc).__name__
+        )
+
+
 def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> bool:
     if meeting.speaker_transcript is None:
         try:
-            segments = _lookup(vexa, meeting).segments
+            info = _lookup(vexa, meeting)
+            segments = info.segments
             _speaker_misses.pop(meeting.id, None)
+            _keep_evidence(session, meeting.id, info.evidence)
         except BotNotFound:
             # The provider no longer has the meeting (its copy is gone): there are no segments to
             # label with, which is "speakers incomplete", never a retry that cannot succeed.
@@ -1366,6 +1406,13 @@ def delete_expired_audio(session: Session, now: datetime, *, vexa=None) -> int:
     many meetings were cleared.
     """
     cutoff = now - timedelta(days=get_settings().audio_retention_days)
+    # What the bot provider sent about who spoke goes first and on its own clock: it is deleted
+    # EVIDENCE_RETENTION_DAYS after it was written, whatever state its meeting is in.
+    session.execute(
+        delete(SkribbySegmentEvidence).where(
+            SkribbySegmentEvidence.created_at < now - timedelta(days=EVIDENCE_RETENTION_DAYS)
+        )
+    )
     expired = session.scalars(
         select(Meeting).where(
             Meeting.created_at < cutoff,

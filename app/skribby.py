@@ -51,6 +51,7 @@ from app.bot_provider import (
     run_within,
     scrub_links,
 )
+from app.config import get_settings
 from app.meeting_url import _parse
 from app.transcribe import _keywords
 
@@ -98,6 +99,8 @@ MAX_NAME_CHARS = 80
 # The most `potential_speaker_names` entries one segment may list and still be read (real ones
 # hold a few); a longer list is treated as no usable answer.
 MAX_CANDIDATES = 20
+# Names kept per item in the saved evidence (a real list holds a few).
+MAX_EVIDENCE_NAMES = 50
 # What `BotMeeting.recording_status` says while Skribby is still processing or transcribing: the
 # call is over (`completed`) and the recording is not ready to download (the pipeline's own
 # "finishing the recording" wait).
@@ -255,16 +258,16 @@ def _candidate_names(item: dict) -> dict[str, str] | None:
     return names
 
 
-def _tag_names(value: list[dict], own_names: tuple[str, ...] = ()) -> dict[str, str]:
-    """The name each of Skribby's diarization tags stands for, for the tags where it is knowable.
-
-    Skribby names a tag on some segments (`speaker_name`) and, for a participant it could not pin
-    down, lists `potential_speaker_names` instead. A tag takes the one name its own segments carry.
-    A tag with none is named by elimination: its candidates minus the bot's own names, minus every
-    name another tag already has, and only when at least one candidate was dropped for being
-    another tag's and exactly one is left (a lone candidate nothing rules anything out for has no
-    support). A name two tags would both take goes to neither. Whatever stays unclear is left out:
-    the label is "unknown", never a name made up."""
+def _resolve_tags(
+    value: list[dict], own_names: tuple[str, ...], by_elimination: bool
+) -> dict[str, dict[str, str]]:
+    """For every diarization tag Skribby used: `{"name", "how", "note"}`. `how` says why the tag
+    has the name it has: `given` (its own segments carry exactly one `speaker_name`),
+    `elimination` (see `_tag_names`; only when `by_elimination`) or `unknown` (`name` is empty and
+    `note` says why: `several_names`, `no_candidates`, `elimination_off`, `unresolved`,
+    `shared_claim`). With elimination off, `note` is `elimination_off` for a tag it would have
+    named, and `would_be` holds the name it would have taken, so a saved record shows what the
+    switch changed."""
     bot = {_same(name) for name in map(_clean_name, own_names) if name}
     given: dict[str, dict[str, str]] = {}  # tag -> {comparison key: the name as shown}
     listed: dict[str, dict[str, str] | None] = {}  # tag -> candidates, None when too many
@@ -282,7 +285,6 @@ def _tag_names(value: list[dict], own_names: tuple[str, ...] = ()) -> dict[str, 
         else:
             for key, name in candidates.items():
                 listed.setdefault(tag, {}).setdefault(key, name)
-    result = {tag: next(iter(named.values())) for tag, named in given.items() if len(named) == 1}
     holders: dict[str, set[str]] = {}  # name key -> the tags that carry it
     for tag, named in given.items():
         for key in named:
@@ -301,13 +303,54 @@ def _tag_names(value: list[dict], own_names: tuple[str, ...] = ()) -> dict[str, 
             key, name = next(iter(left.items()))
             claims.setdefault(key, []).append(tag)
             chosen[tag] = name
-    for tag, name in chosen.items():
-        if len(claims[_same(name)]) == 1:
-            result[tag] = name
+    result: dict[str, dict[str, str]] = {}
+    for tag, named in given.items():
+        if len(named) == 1:
+            result[tag] = {"name": next(iter(named.values())), "how": "given", "note": ""}
+        elif named:
+            result[tag] = {"name": "", "how": "unknown", "note": "several_names"}
+        elif tag in chosen and len(claims[_same(chosen[tag])]) > 1:
+            result[tag] = {"name": "", "how": "unknown", "note": "shared_claim"}
+        elif tag in chosen and by_elimination:
+            result[tag] = {"name": chosen[tag], "how": "elimination", "note": ""}
+        elif tag in chosen:
+            result[tag] = {
+                "name": "",
+                "how": "unknown",
+                "note": "elimination_off",
+                "would_be": chosen[tag],
+            }
+        elif not listed.get(tag):
+            result[tag] = {"name": "", "how": "unknown", "note": "no_candidates"}
+        else:
+            result[tag] = {"name": "", "how": "unknown", "note": "unresolved"}
     return result
 
 
-def _segments(body: dict, own_names: tuple[str, ...] = ()) -> list[dict[str, Any]]:
+def _tag_names(
+    value: list[dict], own_names: tuple[str, ...] = (), by_elimination: bool | None = None
+) -> dict[str, str]:
+    """The name each of Skribby's diarization tags stands for, for the tags where it is knowable.
+
+    Skribby names a tag on some segments (`speaker_name`) and, for a participant it could not pin
+    down, lists `potential_speaker_names` instead. A tag takes the one name its own segments carry.
+
+    Only when `by_elimination` is true (the setting `SKRIBBY_NAME_BY_ELIMINATION`, read when None;
+    off by default because it can name a tag after someone who is not in the call): a tag with no
+    name of its own is named by elimination, its candidates minus the bot's own names, minus every
+    name another tag already has, and only when at least one candidate was dropped for being
+    another tag's and exactly one is left (a lone candidate nothing rules anything out for has no
+    support). A name two tags would both take goes to neither. Whatever stays unclear is left out:
+    the label is "unknown", never a name made up."""
+    if by_elimination is None:
+        by_elimination = get_settings().skribby_name_by_elimination
+    resolved = _resolve_tags(value, own_names, by_elimination)
+    return {tag: info["name"] for tag, info in resolved.items() if info["name"]}
+
+
+def _segments(
+    body: dict, own_names: tuple[str, ...] = (), by_elimination: bool | None = None
+) -> list[dict[str, Any]]:
     """`{"speaker", "text"}` for each of Skribby's transcript segments (the shape the speaker
     labelling reads). Absent or null is none; any other shape means Skribby changed its response,
     which we refuse to guess about. A segment's own `speaker_name` wins; one without it takes its
@@ -317,7 +360,7 @@ def _segments(body: dict, own_names: tuple[str, ...] = ()) -> list[dict[str, Any
         return []
     if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
         raise SkribbyError("get_meeting failed: 'transcript' is not a list of JSON objects")
-    by_tag = _tag_names(value, own_names)
+    by_tag = _tag_names(value, own_names, by_elimination)
     segments = []
     for item in value:
         text = item.get("transcript")
@@ -328,6 +371,63 @@ def _segments(body: dict, own_names: tuple[str, ...] = ()) -> list[dict[str, Any
                 name = by_tag.get(tag, "") if tag is not None else ""
             segments.append({"speaker": name, "text": text})
     return segments
+
+
+def _number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        return None
+    return float(value)
+
+
+def _evidence(
+    body: dict, own_names: tuple[str, ...], by_elimination: bool
+) -> dict[str, Any] | None:
+    """What Skribby sent for a meeting, kept for a few days so a bad labelling can be diagnosed
+    (`skribby_segment_evidence`): each transcript item as it came (`speaker` the diarization tag,
+    `speaker_name`, the NAMES in `potential_speaker_names`, `start`, `end`, `text`) and, per tag,
+    the name the app derived and why (`_resolve_tags`). None when there is no transcript. It
+    holds the words people said, so it is never logged or shown."""
+    value = body.get("transcript")
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        return None
+    if not value:
+        return None
+    items = []
+    for item in value:
+        listed = item.get("potential_speaker_names")
+        names = (
+            [_clean_name(entry.get("name")) for entry in listed if isinstance(entry, dict)]
+            if isinstance(listed, list)
+            else []
+        )
+        text = item.get("transcript")
+        items.append(
+            {
+                "speaker": _tag(item.get("speaker")),
+                "speaker_name": _clean_name(item.get("speaker_name")) or None,
+                "potential_speaker_names": [name for name in names if name][:MAX_EVIDENCE_NAMES],
+                "start": _number(item.get("start")),
+                "end": _number(item.get("end")),
+                "text": text if isinstance(text, str) else "",
+            }
+        )
+    return {
+        "items": items,
+        "tags": _resolve_tags(value, own_names, by_elimination),
+        "by_elimination": by_elimination,
+    }
+
+
+def _safe_evidence(
+    body: dict, own_names: tuple[str, ...], by_elimination: bool
+) -> dict[str, Any] | None:
+    """`_evidence`, which is only a record for diagnosis: whatever goes wrong in building it leaves
+    it out (logged by exception class only) and never stops the meeting being read."""
+    try:
+        return _evidence(body, own_names, by_elimination)
+    except Exception as exc:
+        logger.warning("skribby: could not keep the segment evidence (%s)", type(exc).__name__)
+        return None
 
 
 def _last_segment_end(body: dict) -> float | None:
@@ -431,12 +531,14 @@ def map_bot(
     knocked = seconds is not None and seconds >= KNOCK_AFTER_SECONDS
 
     if raw == "finished":
+        by_elimination = get_settings().skribby_name_by_elimination
         url = _recording_url(body)
         handle = _handle_for(bot_id or body.get("id"))
         reason = _FINISHED_REASON[stop] if stop in _FINISHED_REASON else stop
         return BotMeeting(
             status="completed",
-            segments=_segments(body, own_names),
+            segments=_segments(body, own_names, by_elimination),
+            evidence=_safe_evidence(body, own_names, by_elimination),
             last_segment_end=_last_segment_end(body),
             recording_id=handle if url else None,
             media_id=handle if url else None,

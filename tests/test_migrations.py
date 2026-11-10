@@ -1608,3 +1608,47 @@ def test_0039_adds_transcript_source_and_the_shadow_table_and_round_trips(scratc
     assert "transcript_shadow_metrics" not in inspect(engine).get_table_names()
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0040_follows_0039():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0040").down_revision == "0039"
+
+
+def test_0040_adds_the_skribby_evidence_table_and_round_trips(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0039")
+    engine = create_engine(scratch_url)
+    command.upgrade(cfg, "0040")
+    columns = {c["name"]: c for c in inspect(engine).get_columns("skribby_segment_evidence")}
+    assert set(columns) == {"id", "meeting_id", "items", "tags", "by_elimination", "created_at"}
+    assert all(not c["nullable"] for c in columns.values())
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
+                "select u.id, 'https://meet.google.com/abc-defg-hij', 'google_meet', "
+                "'abc-defg-hij', t.id from users u, templates t "
+                "where u.is_admin and t.name = 'General'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into skribby_segment_evidence (meeting_id, items, tags, by_elimination) "
+                "select id, '[{\"speaker\": \"1\"}]'::jsonb, '{}'::jsonb, false from meetings"
+            )
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # one row per meeting
+        conn.execute(
+            text(
+                "insert into skribby_segment_evidence (meeting_id, items, tags, by_elimination) "
+                "select id, '[]'::jsonb, '{}'::jsonb, true from meetings"
+            )
+        )
+    with engine.begin() as conn:  # the evidence goes with the meeting
+        conn.execute(text("delete from meetings"))
+    assert _rows(engine, "select count(*) from skribby_segment_evidence") == [(0,)]
+    command.downgrade(cfg, "0039")
+    assert "skribby_segment_evidence" not in inspect(engine).get_table_names()
+    command.upgrade(cfg, "head")
+    engine.dispose()

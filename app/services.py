@@ -51,6 +51,7 @@ from app.models import (
     MailOutbox,
     Meeting,
     Milestone,
+    SkribbySegmentEvidence,
     Template,
     User,
     UserSettings,
@@ -720,6 +721,11 @@ def delete_meeting(session: Session, vexa: BotProvider, meeting: Meeting) -> Non
             delete(Milestone).where(
                 Milestone.source_meeting_id == meeting_id, Milestone.confirmed_at.is_(None)
             )
+        )
+        # What the bot provider sent about who spoke goes with the meeting (the foreign key would
+        # cascade to it; this does not rely on that).
+        session.execute(
+            delete(SkribbySegmentEvidence).where(SkribbySegmentEvidence.meeting_id == meeting_id)
         )
         session.delete(locked)
         session.commit()
