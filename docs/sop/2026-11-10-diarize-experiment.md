@@ -18,7 +18,7 @@ docker compose exec -T worker python scripts/diarize_experiment.py 32 --show-tex
 
 | Flag | What it does |
 |---|---|
-| `--dry-run` | Lists chunks, starts, durations, sizes and the estimated cost; calls nothing at OpenAI. (If the chunks are gone it re-cuts the recording first, which takes about a minute.) |
+| `--dry-run` | Lists chunks, starts, durations, sizes and the estimated cost; calls nothing at OpenAI. (If the chunks are gone it re-cuts the recording first, which takes a while.) |
 | `--max-minutes N` | Default 90. Refuses (exit 2, nothing sent) when the audio is longer; the cost is printed first. |
 | `--show-text FROM-TO` | Seconds, e.g. `400-440`. Prints the model's turns in that window (speaker label, text) and Skribby's items in it (tag, name, text). **Without it no transcript text is printed at all.** With it, treat the output like the transcript: do not paste it anywhere public. |
 
