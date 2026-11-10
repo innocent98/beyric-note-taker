@@ -6,7 +6,8 @@ the slot is free at once, since `deleted` rows are treated as absent everywhere)
 `deleted_at`; the worker then calls `purge_deleted`, which runs `purge_user` for each. The pipeline
 leaves a deleted user's meetings alone (`pipeline._owner_deleted`), so nothing more is downloaded,
 sent to OpenAI or counted for them. `purge_user` stops any bot that is still in a call, deletes
-every recording at Vexa and here, then deletes their meetings, templates, vocabulary, settings,
+every recording at Vexa and here, then deletes their meetings (and the speaker evidence kept for
+them, `skribby_segment_evidence`), templates, vocabulary, settings,
 notifications, queued mail, tokens and waitlist row, and finally the user.
 
 What stays: `usage_entries` rows, with only the seconds and `email_hash` (no personal data), so
@@ -49,6 +50,7 @@ from app.models import (
     Meeting,
     Milestone,
     Notification,
+    SkribbySegmentEvidence,
     Task,
     TeamInvite,
     Template,
@@ -156,6 +158,15 @@ def purge_user(
             Milestone.source_meeting_id.in_(
                 select(Meeting.id).where(Meeting.owner_user_id == user_id)
             ),
+        )
+    )
+    # What the bot provider sent about who spoke goes first (the meetings' deletion would cascade
+    # to it; this does not rely on that).
+    session.execute(
+        delete(SkribbySegmentEvidence).where(
+            SkribbySegmentEvidence.meeting_id.in_(
+                select(Meeting.id).where(Meeting.owner_user_id == user_id)
+            )
         )
     )
     session.execute(delete(Meeting).where(Meeting.owner_user_id == user_id))  # tasks cascade

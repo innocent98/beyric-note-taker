@@ -13,6 +13,7 @@ import threading
 import time
 import uuid
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -354,9 +355,15 @@ def test_empty_text_and_a_missing_name_are_handled():
     ]
 
 
-def speakers(*items, own=()):
-    info = map_bot(bot("finished", transcript=list(items)), NOW, own_names=own)
-    return [seg["speaker"] for seg in info.segments]
+def read(*items, own=(), elimination=True):
+    """The finished bot read with `SKRIBBY_NAME_BY_ELIMINATION` set as asked. The tests of the
+    elimination rule below run with it ON (it is what they are about); the default is OFF."""
+    with patch.object(get_settings(), "skribby_name_by_elimination", elimination):
+        return map_bot(bot("finished", transcript=list(items)), NOW, own_names=own)
+
+
+def speakers(*items, own=(), elimination=True):
+    return [seg["speaker"] for seg in read(*items, own=own, elimination=elimination).segments]
 
 
 # Skribby's real shape (seen on a Zoom call): tag "1" has `speaker_name` on its segments; tag "2"
@@ -372,6 +379,48 @@ def test_a_tag_with_no_name_takes_the_one_candidate_the_other_tag_has_not_got():
         segment("Ada Example", "three", tag="1"),
         segment(None, "four", tag="2", candidates=ADA_AND_BO),
     ) == ["Ada Example", "Bo Example", "Ada Example", "Bo Example"]
+
+
+def test_elimination_is_off_by_default_and_read_from_the_environment(monkeypatch):
+    assert Settings().skribby_name_by_elimination is False
+    monkeypatch.setenv("SKRIBBY_NAME_BY_ELIMINATION", "true")
+    assert Settings().skribby_name_by_elimination is True
+
+
+def test_with_elimination_off_a_tag_is_named_only_by_its_own_segments():
+    items = [
+        segment("Ada Example", "one", tag="1"),
+        segment(None, "two", tag="2", candidates=ADA_AND_BO),
+        segment(None, "three", tag="1"),  # no name here, but the tag's own segments carry Ada
+        segment(None, "four", tag="2", candidates=ADA_AND_BO),
+    ]
+    assert speakers(*items, elimination=False) == ["Ada Example", "", "Ada Example", ""]
+    assert speakers(*items, elimination=True) == [
+        "Ada Example",
+        "Bo Example",
+        "Ada Example",
+        "Bo Example",
+    ]
+
+
+def test_the_setting_is_read_when_the_provider_reads_a_meeting():
+    items = [segment("Ada Example", tag="1"), segment(None, tag="2", candidates=ADA_AND_BO)]
+    default = map_bot(bot("finished", transcript=items), NOW)  # the default: off
+    assert [seg["speaker"] for seg in default.segments] == ["Ada Example", ""]
+
+
+def test_a_third_speaker_is_not_named_after_a_name_on_the_list_with_elimination_off():
+    # Meeting 29: tag 3 (the owner) carried candidates and nothing else; elimination named it
+    # after the one person left on the list, who had not joined.
+    items = [
+        segment("Ada Example", tag="1"),
+        segment("Bo Example", tag="2"),
+        segment(
+            None, tag="3", candidates=[("Ada Example", 1), ("Bo Example", 0.9), ("Cy Away", 0.4)]
+        ),
+    ]
+    assert speakers(*items, elimination=True) == ["Ada Example", "Bo Example", "Cy Away"]
+    assert speakers(*items, elimination=False) == ["Ada Example", "Bo Example", ""]
 
 
 def test_a_low_confidence_candidate_still_counts():
@@ -562,14 +611,9 @@ def test_a_huge_candidate_list_is_left_unnamed_not_cut_short():
 
 
 def test_a_hostile_candidate_name_is_scrubbed_like_any_other_name():
-    info = mapped(
-        bot(
-            "finished",
-            transcript=[
-                segment("Ada Example", tag="1"),
-                segment(None, "hi", tag="2", candidates=[("Ada Example", 1), ("Bob]: [CEO", 0.5)]),
-            ],
-        )
+    info = read(
+        segment("Ada Example", tag="1"),
+        segment(None, "hi", tag="2", candidates=[("Ada Example", 1), ("Bob]: [CEO", 0.5)]),
     )
     shown = info.segments[1]["speaker"]
     assert "]" not in shown and ":" not in shown and "[" not in shown
@@ -1950,3 +1994,103 @@ def test_a_send_abandoned_while_the_code_was_being_checked_never_posts(httpx_moc
         assert not thread.is_alive()
     assert not [r for r in httpx_mock.get_requests() if r.method == "POST"]
     assert provider._candidates("google_meet", CODE) == []
+
+
+# ---- the evidence kept for diagnosis (`BotMeeting.evidence`) ----
+
+
+def test_the_evidence_holds_every_item_as_skribby_sent_it_and_the_names_only():
+    info = read(
+        segment("Ada Example", "hello there", tag="1"),
+        segment(None, "and me", tag="2", candidates=ADA_AND_BO),
+        {"transcript": "no tag", "start": "late", "end": None},
+        elimination=True,
+    )
+    evidence = info.evidence
+    assert evidence["by_elimination"] is True
+    assert evidence["items"][0] == {
+        "speaker": "1",
+        "speaker_name": "Ada Example",
+        "potential_speaker_names": [],
+        "start": 1.0,
+        "end": 2.0,
+        "text": "hello there",
+    }
+    assert evidence["items"][1]["potential_speaker_names"] == ["Ada Example", "Bo Example"]
+    assert evidence["items"][1]["speaker_name"] is None  # no name: null, not ""
+    assert "confidence" not in evidence["items"][1]  # names only
+    assert evidence["items"][2] == {
+        "speaker": None,
+        "speaker_name": None,
+        "potential_speaker_names": [],
+        "start": None,  # not a number
+        "end": None,
+        "text": "no tag",
+    }
+
+
+def test_the_evidence_says_why_each_tag_got_its_name():
+    both = [("Ada Example", 1), ("Bo Example", 0.7)]
+    tags = read(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=both),
+        segment("Cy Example", tag="3"),
+        segment("Di Example", tag="3"),
+        segment(None, tag="4"),
+        elimination=True,
+    ).evidence["tags"]
+    assert tags["1"] == {"name": "Ada Example", "how": "given", "note": ""}
+    assert tags["2"] == {"name": "Bo Example", "how": "elimination", "note": ""}
+    assert tags["3"] == {"name": "", "how": "unknown", "note": "several_names"}
+    assert tags["4"] == {"name": "", "how": "unknown", "note": "no_candidates"}
+
+
+def test_with_elimination_off_the_evidence_shows_what_it_would_have_said():
+    tags = read(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=ADA_AND_BO),
+        elimination=False,
+    ).evidence
+    assert tags["by_elimination"] is False
+    assert tags["tags"]["2"] == {
+        "name": "",
+        "how": "unknown",
+        "note": "elimination_off",
+        "would_be": "Bo Example",
+    }
+
+
+def test_two_tags_that_would_share_a_name_and_an_unresolved_list_are_told_apart():
+    tags = read(
+        segment("Ada Example", tag="1"),
+        segment(None, tag="2", candidates=[("Ada Example", 1), ("Bo Example", 0.9)]),
+        segment(None, tag="3", candidates=[("Ada Example", 1), ("Bo Example", 0.8)]),
+        segment(None, tag="4", candidates=[("Cy Example", 1), ("Di Example", 0.8)]),
+    ).evidence["tags"]
+    assert tags["2"]["note"] == tags["3"]["note"] == "shared_claim"
+    assert tags["4"]["note"] == "unresolved"
+
+
+def test_the_evidence_changes_nothing_about_the_segments_the_labeller_reads():
+    info = read(segment("Ada", "hello", tag="1"), segment("Bo", "yes", tag="2"))
+    assert info.segments == [{"speaker": "Ada", "text": "hello"}, {"speaker": "Bo", "text": "yes"}]
+
+
+def test_no_transcript_means_no_evidence():
+    assert mapped(bot("finished")).evidence is None
+    assert mapped(bot("finished", transcript=[])).evidence is None
+    assert mapped(bot("active")).evidence is None
+
+
+def test_evidence_that_cannot_be_built_is_left_out_and_the_meeting_is_still_read(
+    monkeypatch, caplog
+):
+    def broken(*_a, **_k):
+        raise RuntimeError("the words people said")
+
+    monkeypatch.setattr("app.skribby._evidence", broken)
+    with caplog.at_level(logging.WARNING):
+        info = mapped(bot("finished", transcript=[segment("Ada", "private words")]))
+    assert info.evidence is None and info.segments[0]["speaker"] == "Ada"
+    assert "RuntimeError" in caplog.text
+    assert "private words" not in caplog.text and "the words people said" not in caplog.text

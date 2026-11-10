@@ -213,6 +213,12 @@ class Settings(BaseSettings):
     # Skribby bot ran, falling back to ours when it is missing or too short
     # (`app/transcript_source.py`). Anything else stops the process at startup.
     transcript_source: str = "own"
+    # Whether a diarization tag that carries no `speaker_name` may be named by elimination from
+    # Skribby's `potential_speaker_names` (the list minus the bot's names minus the names other tags
+    # have; `app/skribby.py::_tag_names`). OFF (the default): a tag is named only by the
+    # `speaker_name` its own segments carry, and any other tag stays "Unknown speaker". The
+    # elimination can name a tag after someone who is not in the call (meeting 29, 2026-11-10).
+    skribby_name_by_elimination: bool = False
     # In `skribby` mode: the share of meetings (0 to 100, chosen by meeting id) for which our own
     # transcription is ALSO run, only to compare numbers with Skribby's and then thrown away
     # (`transcript_shadow_metrics`). Costs OpenAI transcription for that share. 0 = never.
