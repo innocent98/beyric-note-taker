@@ -2,11 +2,15 @@
 voices Skribby merged. Here it runs against a fake OpenAI client and a temporary audio folder: no
 network, no database, no ffmpeg."""
 
+import time
+from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
+import openai
 import pytest
 
-from app import audio
+from app import audio, retry
 from scripts import diarize_experiment as exp
 
 SECRET_WORDS = "the budget is two million"
@@ -26,7 +30,10 @@ class FakeClient:
 
     def create(self, **kwargs):
         self.calls.append({k: v for k, v in kwargs.items() if k != "file"})
-        return SimpleNamespace(segments=self.answers.pop(0))
+        answer = self.answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return SimpleNamespace(segments=answer)
 
 
 @pytest.fixture
@@ -131,7 +138,7 @@ def test_dry_run_lists_chunks_and_cost_and_makes_no_call(meeting_audio, capsys, 
     monkeypatch.setattr(exp, "OpenAI", no_client)
     assert exp.run(["7", "--dry-run"]) == 0
     out = capsys.readouterr().out
-    assert "2 chunk(s), 15.0 minutes" in out
+    assert "To send: 2 file(s), 15.0 minutes" in out
     assert "chunk_001.webm  starts 10:00  300.0s" in out
     assert "Estimated cost: $0.090" in out
     assert "Dry run: nothing was sent to OpenAI." in out
@@ -195,3 +202,199 @@ def test_a_missing_key_stops_before_any_call(meeting_audio, monkeypatch, capsys)
     monkeypatch.setattr(exp, "get_settings", lambda: SimpleNamespace(openai_api_key=""))
     assert exp.run(["7"]) == 2
     assert "OPENAI_API_KEY is not set" in capsys.readouterr().err
+
+
+# ---- --window, --attempts, --timeout, the heartbeat ------------------------------------------
+
+
+def timeout_error():
+    return openai.APITimeoutError(request=httpx.Request("POST", "https://api.openai.com/v1"))
+
+
+@pytest.fixture
+def ffmpeg(monkeypatch):
+    """Stands in for ffmpeg: records its arguments and writes the output file (the last one)."""
+    calls = []
+
+    def fake(*args):
+        calls.append(args)
+        Path(args[-1]).write_bytes(b"opus-slice")
+
+    monkeypatch.setattr(audio, "_ffmpeg", fake)
+    monkeypatch.setattr(retry, "time", SimpleNamespace(sleep=lambda seconds: None))
+    return calls
+
+
+def scratch_left(folder):
+    return [p.name for p in folder.iterdir() if p.name.startswith("diarize-experiment")]
+
+
+def test_a_window_inside_one_chunk_cuts_only_that_slice_and_keeps_meeting_time(
+    meeting_audio, ffmpeg, capsys
+):
+    client = FakeClient([segment("A", 1.0, 4.0), segment("B", 5.0, 8.0)])
+    assert exp.run(["7", "--window", "330-510"], client=client) == 0
+    assert len(ffmpeg) == 1 and len(client.calls) == 1
+    args = ffmpeg[0]
+    assert args[:6] == (
+        "-ss",
+        "330.000",
+        "-t",
+        "180.000",
+        "-i",
+        str(meeting_audio / "chunks" / "chunk_000.webm"),
+    )
+    assert "-filter_complex" not in args
+    out = capsys.readouterr().out
+    assert "To send: 1 file(s), 3.0 minutes" in out
+    assert scratch_left(meeting_audio) == []  # the slice's folder is gone
+
+
+def test_the_returned_times_are_offset_by_the_window_start(meeting_audio, ffmpeg):
+    slice_chunk = exp.Chunk(meeting_audio / "x.webm", offset=330.0, seconds=180.0, size=1)
+    (meeting_audio / "x.webm").write_bytes(b"x")
+    turns = exp.diarize_chunk(FakeClient([segment("A", 1.0, 4.0)]), slice_chunk)
+    assert (turns[0].start, turns[0].end) == (331.0, 334.0)
+
+
+def test_a_window_across_a_chunk_boundary_is_joined_into_one_file_and_one_request(
+    meeting_audio, ffmpeg, capsys
+):
+    client = FakeClient([segment("A", 0.0, 10.0)])
+    assert exp.run(["7", "--window", "570-660", "--show-text", "570-580"], client=client) == 0
+    assert len(client.calls) == 1  # one file, so one set of speaker labels
+    args = ffmpeg[0]
+    first = (
+        "-ss",
+        "570.000",
+        "-t",
+        "30.000",
+        "-i",
+        str(meeting_audio / "chunks" / "chunk_000.webm"),
+    )
+    second = (
+        "-ss",
+        "0.000",
+        "-t",
+        "60.000",
+        "-i",
+        str(meeting_audio / "chunks" / "chunk_001.webm"),
+    )
+    assert args[:12] == first + second
+    assert "[0:a][1:a]concat=n=2:v=0:a=1[joined]" in args and "[joined]" in args
+    out = capsys.readouterr().out
+    assert "To send: 1 file(s), 1.5 minutes" in out
+    assert "9:30-9:40 A: " in out  # 570 s + 0 s: meeting time, not slice time
+    assert scratch_left(meeting_audio) == []
+
+
+def test_the_estimate_is_from_the_slice_and_the_end_says_what_was_sent(
+    meeting_audio, ffmpeg, capsys
+):
+    client = FakeClient([segment("A", 0.0, 10.0)])
+    exp.run(["7", "--window", "330-510"], client=client)
+    out = capsys.readouterr().out
+    assert "Estimated cost: $0.018" in out  # 3 minutes, not the meeting's 15
+    assert "Audio sent: 3.0 minutes in 1 request(s), about $0.018." in out
+
+
+def test_a_window_over_600_seconds_is_refused_unless_allowed(meeting_audio, ffmpeg, capsys):
+    client = FakeClient([segment("A", 0.0, 10.0)])
+    assert exp.run(["7", "--window", "0-700"], client=client) == 2
+    assert client.calls == [] and ffmpeg == []  # nothing cut, nothing sent
+    assert "add --allow-long" in capsys.readouterr().err
+    assert exp.run(["7", "--window", "0-700", "--allow-long"], client=client) == 0
+    assert len(client.calls) == 1
+
+
+def test_a_window_past_the_end_of_the_audio_is_refused(meeting_audio, ffmpeg, capsys):
+    assert exp.run(["7", "--window", "2000-2100"], client=FakeClient()) == 2
+    assert "starts at 2000s but the audio is 900s long" in capsys.readouterr().err
+
+
+def test_a_window_ending_past_the_audio_is_cut_at_the_end(meeting_audio, ffmpeg, capsys):
+    exp.run(["7", "--window", "840-1000", "--dry-run"])
+    assert "To send: 1 file(s), 1.0 minutes" in capsys.readouterr().out
+    assert ffmpeg[0][:4] == ("-ss", "240.000", "-t", "60.000")
+
+
+def test_by_default_a_timeout_makes_exactly_one_call_and_says_what_it_cost(
+    meeting_audio, ffmpeg, capsys
+):
+    client = FakeClient(timeout_error(), timeout_error(), timeout_error())
+    assert exp.run(["7", "--window", "330-510"], client=client) == 2
+    assert len(client.calls) == 1
+    err = capsys.readouterr().err
+    assert "APITimeoutError after 1 attempt(s)" in err
+    assert "At most $0.018 was spent: 1 attempt(s), 3.0 audio minutes" in err
+    assert scratch_left(meeting_audio) == []  # cleaned up on failure too
+
+
+def test_retries_happen_only_when_asked_for(meeting_audio, ffmpeg, capsys):
+    client = FakeClient(timeout_error(), timeout_error(), timeout_error())
+    assert exp.run(["7", "--window", "330-510", "--attempts", "2"], client=client) == 2
+    assert len(client.calls) == 2
+    assert "At most $0.036 was spent: 2 attempt(s), 6.0 audio minutes" in capsys.readouterr().err
+
+
+def test_a_retry_that_works_counts_every_attempt_in_the_audio_sent(meeting_audio, ffmpeg, capsys):
+    client = FakeClient(timeout_error(), [segment("A", 0.0, 10.0)])
+    assert exp.run(["7", "--window", "330-510", "--attempts", "2"], client=client) == 0
+    assert "Audio sent: 6.0 minutes in 2 request(s)" in capsys.readouterr().out
+
+
+def test_the_shared_retry_helper_defaults_to_three_attempts_and_takes_fewer(monkeypatch):
+    monkeypatch.setattr(retry, "time", SimpleNamespace(sleep=lambda seconds: None))
+
+    def tries(**extra):
+        count = []
+
+        def call():
+            count.append(1)
+            raise timeout_error()
+
+        with pytest.raises(exp.ExperimentError):
+            retry.call_with_retry(call, what="x", failure=exp.ExperimentError, **extra)
+        return len(count)
+
+    assert tries() == retry.MAX_ATTEMPTS == 3
+    assert tries(attempts=1) == 1
+    assert tries(attempts=4) == 4  # the backoff table is reused past its end, not indexed out of
+
+
+def test_the_request_timeout_and_no_hidden_sdk_retries_are_set(meeting_audio, ffmpeg, monkeypatch):
+    built = {}
+
+    def fake_openai(**kwargs):
+        built.update(kwargs)
+        return FakeClient([segment("A", 0.0, 10.0)])
+
+    monkeypatch.setattr(exp, "OpenAI", fake_openai)
+    monkeypatch.setattr(exp, "get_settings", lambda: SimpleNamespace(openai_api_key="sk-test"))
+    assert exp.run(["7", "--window", "330-510", "--timeout", "123"]) == 0
+    assert built == {"api_key": "sk-test", "max_retries": 0, "timeout": 123.0}
+
+
+def test_the_default_timeout_is_600_seconds():
+    assert exp.REQUEST_TIMEOUT == 600.0
+
+
+def test_a_slow_request_prints_a_heartbeat_to_stderr(meeting_audio, ffmpeg, monkeypatch, capsys):
+    monkeypatch.setattr(exp, "HEARTBEAT_SECONDS", 0.01)
+    client = FakeClient([segment("A", 0.0, 10.0)])
+    real = client.create
+
+    def slow(**kwargs):
+        time.sleep(0.08)
+        return real(**kwargs)
+
+    client.audio.transcriptions.create = slow
+    assert exp.run(["7", "--window", "330-510"], client=client) == 0
+    err = capsys.readouterr().err
+    assert "still waiting for slice.webm" in err
+    assert SECRET_WORDS not in err
+
+
+def test_a_multi_chunk_run_warns_that_labels_are_per_request(meeting_audio, capsys):
+    exp.run(["7"], client=FakeClient([segment("A", 0, 5)], [segment("A", 0, 5)]))
+    assert "labels speakers (A, B, ...) per request" in capsys.readouterr().out
