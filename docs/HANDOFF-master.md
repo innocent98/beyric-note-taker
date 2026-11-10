@@ -1,6 +1,61 @@
 # Beyric Note Taker: master handoff
 
-**Written:** 2026-11-09, about 13:45 WAT, by the sixteenth lead session for the seventeenth (Adebayo starts it himself; this session does not). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6 to #131 and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail. **Sections 00, 1, 4, 5 and 6 were rewritten at this handoff and are current; sections 0, 2, 3 and 7 are standing rules, decisions, designs and recipes (the 2026-11-08/09 additions are marked).**
+**Updated 2026-11-10 00:15 WAT by the eighteenth lead: read the FIRST update block below, then the second.** **Written:** 2026-11-09, about 13:45 WAT, by the sixteenth lead session for the seventeenth (Adebayo starts it himself; this session does not). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6 to #131 and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail. **Sections 00, 1, 4, 5 and 6 were rewritten at this handoff and are current; sections 0, 2, 3 and 7 are standing rules, decisions, designs and recipes (the 2026-11-08/09 additions are marked).**
+
+## UPDATE 2026-11-10, 00:15 WAT, eighteenth lead for the nineteenth: READ THIS BLOCK FIRST, then the 17th lead's block below it
+
+This block supersedes the block below, and sections 00, 1, 5 and 6, wherever they disagree. Start the next session with: "Read `docs/HANDOFF-master.md` and continue as the lead." Everything here was checked with live commands unless marked "not verified". Adebayo stopped for the night at about 00:00 WAT.
+
+### A. State right now
+
+| Thing | State |
+|---|---|
+| `main` | `176387e` (#163), ci and deploy green, `/health` 200, Alembic head **0039**, **no open PR**. Server `.env` edited and web, worker, scheduler restarted by him at 00:00 WAT (his paste: containers up). |
+| Merged tonight (each deployed one at a time) | #159 Teams join + Zoom guest fix (`c7583af`), #160 handoff, #161 speaker names from Skribby's diarization tag and candidate names (`581e1b4`), #156 Outlook M7 policy rows + domain file (`bc015d7`, he lifted the hold: "merge 156, 157 and all open PRs"), #157 Outlook M8 close-out (`314eee7`), #162 transcript-source switch (`8846649`, migration 0039, **default OFF**), #164 bot-invite tip (`d7b3336`), #163 real Microsoft client id `3f83e7a2-618d-4ef1-8bab-baa1bc5c3884` in `web/public/.well-known/microsoft-identity-association.json` (`176387e`; served live as application/json). |
+| Bot | **Skribby live**, Vexa containers stopped (remember: start Vexa for an hour about **2026-11-16** so the hourly cleanup deletes its old recordings, then stop it). `.env` now has `SKRIBBY_BOT_NAME=Beyric Note Taker (recording)` (his choice after my rec; Skribby's naming guide says words like Note Taker/Recording raise bot detection on Google Meet and Zoom, vendor claim, so **watch Zoom admissions; revert the name if Zoom starts refusing**; Meet bot is signed in and shows its account name; Teams ignores names) and `BOT_INVITE_EMAIL=note@beyrictech.com` (the tip). `BOT_NAME` in `.env` is the old Vexa name, unused with Skribby. |
+| Live tests today | Teams guest (admitted, notes made, **no speaker names**), Zoom (2 speakers: only one named; cause: the app ignored Skribby's `speaker` tag and `potential_speaker_names`; **fixed by #161, not yet re-tested**), Meet (named correctly). First Skribby run through the app: notes were fine. |
+| Transcript source | Switch is deployed but OFF. Comparison on one 4-minute Zoom call: Skribby's more complete on short interjections and carries speaker tags, ours cleaner and the only one that took the vocabulary list (0 terms in that run). To start the real test he sets `TRANSCRIPT_SOURCE=skribby` and optionally `TRANSCRIPT_SHADOW_PERCENT=25`, restarts web, worker, scheduler, reads `docker compose exec -T web python scripts/transcript_shadow_report.py` after about a week. **Both transcribe every meeting today** (Skribby about 0.10 USD/h, ours about 0.70 USD/h; estimates). |
+| Sessions | all done: `teams-join`, `speaker-names`, `transcript-source`, `bot-invite-tip`, `transcript-compare`, `outlook-build` (idle, old). Keep worktrees `skribby-check`, `bakeoff`, `teams-test`; scratch containers `b0-pg`, `b0-redis` on his Mac were left by an older session (remove when sure); worktree `ask-beyric-screens-3b895c` is the 18th lead's. |
+| Merge permission | His "No meetings, 2 hours" typed 23:37 WAT, ends about 01:35 WAT: **ask again with a duration for any merge**. "Merge all open PRs" covers only PRs open when he says it. Retarget stacked children to main BEFORE merging the base. |
+
+### B. Decisions today (his words in chat unless marked lead's rec)
+
+| Decision | Detail |
+|---|---|
+| Merge #156 and #157 now | he overrode the "hold until switch-on" (#156 puts Microsoft wording in the privacy and terms pages; Outlook is still off; "Last updated" and `TERMS_VERSION` were NOT bumped, his no-notice rule) |
+| Build the in-app tip, not Option B | "Yes, build the tip" (#164). B (the app adds note@ to the event) needs a calendar write scope and breaks our privacy line "we do not create, change or delete events": only if pilot teams complain |
+| Fix Zoom/Teams speaker names | "Yes, fix names" (#161) |
+| Build the transcript-source switch with fallback and a sampled shadow check, decide from data | "Yes, build it" (#162) |
+| Bot guest name | he chose the explicit "Beyric Note Taker (recording)" (his words: "we can go with your suggestion") |
+| Brand | lead's rec, not explicitly confirmed: keep **Beyric Note Taker** under Beyric, do NOT make it "Luran Note Taker" (Luran = live customer-conversation AI for businesses, luranai.com, "a product of Beyric"; different buyer and data; app name shows on Google/Microsoft consent screens). **Decide the final product name before submitting either verification.** Legal entity **Beyrichq LTD**, trading as **Beyric**. Market: **teams**, not individuals. Memory: `project-brand-and-luran.md` |
+| Scopes | he added them already. Google (Cloud Console, Data access): `https://www.googleapis.com/auth/calendar.events.readonly` + `openid email profile`. **Lead's rec: do NOT add `meetings.space.readonly`** (accepted by the API as an optional second feature but no screen or job uses it). Microsoft (Graph, delegated): `Calendars.Read`, `User.Read`, `offline_access`, `openid`, `profile`; no admin consent, no write scope |
+| ZAK tokens for Zoom | not handled; guest join works. Skribby's page: ZAK from the Zoom API for one specific Zoom user, expires after 2 hours for regular users, passed in `authentication.zoom_zak_token`, needs a Zoom OAuth/S2S app. Build only if a pilot team has Zoom meetings that block guests |
+
+### C. Needs Adebayo (his own steps)
+
+1. **Retest Zoom** (new bot name, speaker names from #161) and look at **Settings** (the invite tip shows when a Google calendar is connected) and a Google Meet meeting waiting in the lobby; tell the lead what he sees.
+2. **Microsoft publisher verification:** confirm the Azure app registration was made while signed in as the work account `victor@beyric.onmicrosoft.com` (a personal-account registration can never be verified: unanswered; if personal, recreate it and send the new client id); add and DNS-verify `beyrictech.com` in that Entra tenant; set it as the app's publisher domain; start Partner Center verification (free, company details and a mailbox on the domain). Needed before work/school accounts of other companies can connect without their admin (Microsoft's page, read 2026-11-09: `learn.microsoft.com/en-us/entra/identity-platform/publisher-verification-overview`). Personal Outlook.com accounts need none.
+3. **Google sensitive-scope verification (Phase V):** up to 10 days (Google's page); needs brand verification, a justification per scope, a demo video he records, privacy policy on the same domain. Unverified apps show a warning and have a cap on accounts (our notes say 100: the number was NOT on Google's page). Freeze the scope list first (a new scope later = new review) and settle the product name.
+4. **Outlook for himself:** `MICROSOFT_CLIENT_SECRET` (his earlier paste showed id and secret EMPTY; the id is now known), `MICROSOFT_AUTHORITY=consumers`, `MICROSOFT_CALENDAR_ENABLED=true`, restart. Not tested against real Microsoft: switching on for himself IS the test.
+5. His lawyer: the privacy and terms wording (#134 Ask, #147 Skribby, #156 Microsoft).
+
+### D. Next for the lead, in order
+
+1. Read what he reports from the retests (bot name on Zoom, tip, names). If the second Zoom speaker is still "Unknown speaker", fetch a fresh Skribby answer (the app deletes the copy minutes after the meeting: use the compare tool's way 2) and look at `potential_speaker_names` again.
+2. Reconcile and keep honest: the checklist was reconciled at this handoff (snapshot at the top); the SOP index is just the `docs/sop/` folder.
+3. Help with Microsoft and Google verification steps above (the lead cannot create accounts or click billing pages: he does, or a session drives his Chrome while he signs in).
+4. Decide the transcript source after the shadow report; the Vexa cleanup reminder on 2026-11-16.
+5. C18 recording notice (a chat message from the bot when it joins: Skribby's `initial_chat_message` is a create parameter never exercised live), C17 close-out, ZAK only on demand, the older list in section 6.
+
+### E. How we work now (rules added today)
+
+- **HARD RULE (his, in `~/.claude/CLAUDE.md`):** on his Mac only lint/format/type-check and the tests of touched files; NEVER the full suite, a shard, a full vitest, e2e or coverage; every brief to a session or agent says so; remove scratch test containers (`docker rm -f`). A session ran 705 tests today and he objected.
+- **No force-push** (the auto-mode checker denies it, and he never allowed one): when a branch conflicts with main, merge `origin/main` into it and push normally.
+- Opus reviews found real issues in #159, #161, #162 each time; each fix was re-read before merging. Keep doing one Opus review per risky PR, in the background, with the findings sent to the session that owns the branch.
+- GitHub or the app may time out from his Mac when his network is bad (it did around 23:00 WAT): retry before concluding anything is down.
+- He wants short, itemised answers, commands in their own code blocks, links in single quotes (zsh), one command per message for server reads, no secrets in chat. Merge only on his typed word in the lead's chat.
+
+---
 
 ## UPDATE 2026-11-09 evening (about 17:15 WAT), seventeenth lead for the eighteenth: READ THIS BLOCK FIRST
 
