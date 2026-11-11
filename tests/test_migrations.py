@@ -1652,3 +1652,45 @@ def test_0040_adds_the_skribby_evidence_table_and_round_trips(scratch_url):
     assert "skribby_segment_evidence" not in inspect(engine).get_table_names()
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0041_follows_0040():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0041").down_revision == "0040"
+
+
+def test_0041_adds_a_nullable_events_column_and_round_trips(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0040")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:  # evidence kept before the column existed
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
+                "select u.id, 'https://meet.google.com/abc-defg-hij', 'google_meet', "
+                "'abc-defg-hij', t.id from users u, templates t "
+                "where u.is_admin and t.name = 'General'"
+            )
+        )
+        conn.execute(
+            text(
+                "insert into skribby_segment_evidence (meeting_id, items, tags, by_elimination) "
+                "select id, '[]'::jsonb, '{}'::jsonb, false from meetings"
+            )
+        )
+    command.upgrade(cfg, "0041")
+    columns = {c["name"]: c for c in inspect(engine).get_columns("skribby_segment_evidence")}
+    assert columns["events"]["nullable"] is True
+    assert _rows(engine, "select events from skribby_segment_evidence") == [(None,)]
+    with engine.begin() as conn:
+        conn.execute(
+            text("update skribby_segment_evidence set events = '{\"participants\": []}'::jsonb")
+        )
+        conn.execute(text("delete from meetings"))  # the events go with the row, with the meeting
+    assert _rows(engine, "select count(*) from skribby_segment_evidence") == [(0,)]
+    command.downgrade(cfg, "0040")
+    assert "events" not in {
+        c["name"] for c in inspect(engine).get_columns("skribby_segment_evidence")
+    }
+    command.upgrade(cfg, "head")
+    engine.dispose()

@@ -18,7 +18,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from app import notes
+from app import notes, skribby
 from app.bot_provider import (
     PROVIDER_FACTORIES,
     BotDuplicate,
@@ -44,6 +44,7 @@ from app.skribby import (
     handle_prefix,
     map_bot,
     recording_handle,
+    speaker_events_record,
 )
 from app.vexa import VexaProvider
 from tests.test_placement import add_live, make_template
@@ -2100,3 +2101,105 @@ def test_evidence_that_cannot_be_built_is_left_out_and_the_meeting_is_still_read
     assert info.evidence is None and info.segments[0]["speaker"] == "Ada"
     assert "RuntimeError" in caplog.text
     assert "private words" not in caplog.text and "the words people said" not in caplog.text
+
+
+# ---- who was speaking when, from the meeting platform (`with-speaker-events`) ----
+
+REC = NOW - timedelta(seconds=600)
+REC_MS = int(REC.timestamp() * 1000)
+
+
+def timeline(*people, steps=(("joining", 700), ("recording", 600), ("finished", 5))):
+    """A bot body with `participants` the way Skribby's page describes them: `name`,
+    `first_seen_at`, `last_seen_at`, `presence_intervals` and `events` of `type` and a 13-digit
+    `timestamp`."""
+    return bot(
+        "finished",
+        steps=steps,
+        participants=[
+            {
+                "name": name,
+                "first_seen_at": REC.isoformat(),
+                "last_seen_at": REC_MS + 90_000,
+                "presence_intervals": [{"joined_at": REC_MS}],
+                "events": [{"type": kind, "timestamp": REC_MS + at} for kind, at in moves],
+            }
+            for name, moves in people
+        ],
+    )
+
+
+ADA_SPEAKS = ("Ada Example", [("started-speaking", 10_000), ("stopped-speaking", 30_000)])
+EVENTS_URL = f"{BASE}/bot/{BOT}?with-speaker-events=true"
+
+
+def test_the_events_record_keeps_the_participants_as_returned_and_the_recording_time():
+    record = speaker_events_record(timeline(ADA_SPEAKS))
+    assert record["participants"][0]["name"] == "Ada Example"
+    assert record["participants"][0]["events"] == [
+        {"type": "started-speaking", "timestamp": REC_MS + 10_000},
+        {"type": "stopped-speaking", "timestamp": REC_MS + 30_000},
+    ]
+    assert record["recording_started_at"] == REC.isoformat()
+    assert [name for name, _ in record["status_times"]] == ["joining", "recording", "finished"]
+    assert record["truncated"] is None and record["bytes"] > 0
+
+
+@pytest.mark.parametrize(
+    "body",
+    [None, "x", [], {}, {"participants": None}, {"participants": []}, {"participants": "Ada"}],
+)
+def test_no_participants_or_another_shape_is_no_record_and_never_an_error(body):
+    assert speaker_events_record(body) is None
+
+
+def test_odd_participants_are_kept_without_being_read_and_the_time_is_none_without_a_status():
+    record = speaker_events_record({"participants": ["junk", {"name": 5, "events": "x"}, None]})
+    assert record["participants"] == ["junk", {"name": 5, "events": "x"}, None]
+    assert record["recording_started_at"] is None and record["status_times"] == []
+
+
+def test_a_record_over_the_size_cap_keeps_only_speaking_events_then_none():
+    muted = [{"type": "muted", "timestamp": REC_MS + n} for n in range(12000)]
+    speaking = [{"type": "started-speaking", "timestamp": REC_MS}]
+    body = {"participants": [{"name": "Ada Example", "events": muted + speaking}]}
+    record = speaker_events_record(body)
+    assert record["truncated"] == "speaking_only"
+    assert record["participants"][0]["events"] == speaking  # the rest is cut, the name stays
+    assert record["bytes"] > skribby.MAX_SPEAKER_EVENTS_BYTES
+    body = {"participants": [{"name": f"P{n}", "events": speaking * 20} for n in range(4000)]}
+    assert speaker_events_record(body)["truncated"] == "events_dropped"
+
+
+def test_the_provider_asks_with_the_flag_and_returns_the_record(httpx_mock):
+    httpx_mock.add_response(method="GET", url=EVENTS_URL, json=timeline(ADA_SPEAKS))
+    provider, _ = make()
+    record = provider.get_speaker_events(BOT)
+    assert record["participants"][0]["name"] == "Ada Example"
+    (request,) = httpx_mock.get_requests()
+    assert request.url.params["with-speaker-events"] == "true"
+
+
+@pytest.mark.parametrize("answer", [{"status_code": 500}, {"status_code": 404}, {"json": [1, 2]}])
+def test_events_that_cannot_be_fetched_are_none_and_never_raise(httpx_mock, answer, caplog):
+    httpx_mock.add_response(method="GET", url=EVENTS_URL, **answer)
+    provider, _ = make()
+    with caplog.at_level(logging.WARNING):
+        assert provider.get_speaker_events(BOT) is None
+    assert "no speaker events kept" in caplog.text
+
+
+def test_events_with_a_connection_error_are_none_and_log_no_name(httpx_mock, caplog):
+    httpx_mock.add_exception(httpx.ConnectError("Ada Example refused"), url=EVENTS_URL)
+    provider, _ = make()
+    with caplog.at_level(logging.WARNING):
+        assert provider.get_speaker_events(BOT) is None
+    assert "Ada Example" not in caplog.text and "SkribbyError" in caplog.text
+
+
+def test_the_plain_fetch_is_untouched_by_the_events(httpx_mock):
+    httpx_mock.add_response(method="GET", url=f"{BASE}/bot/{BOT}", json=bot("finished"))
+    provider, _ = make()
+    assert provider.get_meeting_by_id(BOT).status == "completed"
+    (request,) = httpx_mock.get_requests()
+    assert "with-speaker-events" not in str(request.url)
