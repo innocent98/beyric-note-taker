@@ -1146,7 +1146,22 @@ def _delete_copy_after_commit(session: Session, meeting_id: int, provider) -> No
         )
 
 
-def _keep_evidence(session: Session, meeting_id: int, evidence: dict | None) -> None:
+def _speaker_events(provider, meeting: Meeting) -> dict | None:
+    """Who was speaking when, per the meeting platform, for the evidence (Skribby only; None for a
+    provider without it). Best effort and never in the way: any failure is None, logged by
+    exception class only."""
+    if not meeting.vexa_meeting_id or not hasattr(type(provider), "get_speaker_events"):
+        return None
+    try:
+        return provider.get_speaker_events(meeting.vexa_meeting_id)
+    except Exception as exc:
+        logger.warning("meeting %s: no speaker events kept (%s)", meeting.id, type(exc).__name__)
+        return None
+
+
+def _keep_evidence(
+    session: Session, meeting_id: int, evidence: dict | None, events: dict | None = None
+) -> None:
     """Keep what the provider sent for this meeting for `EVIDENCE_RETENTION_DAYS` days, in the
     commit that saves the speaker names (just before the provider's copy is deleted), so a bad
     labelling can be diagnosed (`scripts/skribby_segments_report.py`). A record for diagnosis
@@ -1154,25 +1169,32 @@ def _keep_evidence(session: Session, meeting_id: int, evidence: dict | None) -> 
     (the text is what people said) and never stops the meeting."""
     if not evidence:
         return
-    try:
-        with session.begin_nested():
-            session.execute(
-                delete(SkribbySegmentEvidence).where(
-                    SkribbySegmentEvidence.meeting_id == meeting_id
+    # The speaker events are an extra: if they cannot be written, the transcript evidence still is.
+    for kept in (events, None) if events is not None else (None,):
+        try:
+            with session.begin_nested():
+                session.execute(
+                    delete(SkribbySegmentEvidence).where(
+                        SkribbySegmentEvidence.meeting_id == meeting_id
+                    )
                 )
-            )
-            session.add(
-                SkribbySegmentEvidence(
-                    meeting_id=meeting_id,
-                    items=evidence["items"],
-                    tags=evidence["tags"],
-                    by_elimination=bool(evidence["by_elimination"]),
+                session.add(
+                    SkribbySegmentEvidence(
+                        meeting_id=meeting_id,
+                        items=evidence["items"],
+                        tags=evidence["tags"],
+                        by_elimination=bool(evidence["by_elimination"]),
+                        events=kept,
+                    )
                 )
+            return
+        except Exception as exc:
+            logger.warning(
+                "meeting %s: could not keep the speaker evidence%s (%s)",
+                meeting_id,
+                " with its events" if kept is not None else "",
+                type(exc).__name__,
             )
-    except Exception as exc:
-        logger.warning(
-            "meeting %s: could not keep the speaker evidence (%s)", meeting_id, type(exc).__name__
-        )
 
 
 def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> bool:
@@ -1181,7 +1203,12 @@ def _step_speakers(session: Session, meeting: Meeting, vexa, openai_client) -> b
             info = _lookup(vexa, meeting)
             segments = info.segments
             _speaker_misses.pop(meeting.id, None)
-            _keep_evidence(session, meeting.id, info.evidence)
+            _keep_evidence(
+                session,
+                meeting.id,
+                info.evidence,
+                _speaker_events(vexa, meeting) if info.evidence else None,
+            )
         except BotNotFound:
             # The provider no longer has the meeting (its copy is gone): there are no segments to
             # label with, which is "speakers incomplete", never a retry that cannot succeed.

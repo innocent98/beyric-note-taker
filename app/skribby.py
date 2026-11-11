@@ -101,6 +101,10 @@ MAX_NAME_CHARS = 80
 MAX_CANDIDATES = 20
 # Names kept per item in the saved evidence (a real list holds a few).
 MAX_EVIDENCE_NAMES = 50
+# The most the saved speaker events may take (as JSON text). Over it, only the speaking events are
+# kept; still over, the events are dropped and the names and presence are kept (`_cap_events`).
+MAX_SPEAKER_EVENTS_BYTES = 400_000
+SPEAKING_EVENTS = ("started-speaking", "stopped-speaking", "left", "rejoined")
 # What `BotMeeting.recording_status` says while Skribby is still processing or transcribing: the
 # call is over (`completed`) and the recording is not ready to download (the pipeline's own
 # "finishing the recording" wait).
@@ -416,6 +420,59 @@ def _evidence(
         "tags": _resolve_tags(value, own_names, by_elimination),
         "by_elimination": by_elimination,
     }
+
+
+def _cap_events(record: dict[str, Any]) -> dict[str, Any]:
+    """`record` kept within `MAX_SPEAKER_EVENTS_BYTES` as JSON text, and `truncated` says what was
+    done: None (untouched), `speaking_only` (every participant's events cut to started-speaking,
+    stopped-speaking, left and rejoined) or `events_dropped` (no events at all: the names, the
+    presence intervals and the times are kept). `bytes` is the size before any cut."""
+
+    def size(value: Any) -> int:
+        return len(json.dumps(value, default=str))
+
+    record["bytes"] = size(record)
+    record["truncated"] = None
+    if record["bytes"] <= MAX_SPEAKER_EVENTS_BYTES:
+        return record
+    people = [p for p in record["participants"] if isinstance(p, dict)]
+    record["participants"] = people
+    for person in people:
+        listed = person.get("events")
+        if isinstance(listed, list):
+            person["events"] = [
+                e for e in listed if isinstance(e, dict) and e.get("type") in SPEAKING_EVENTS
+            ]
+    record["truncated"] = "speaking_only"
+    if size(record) > MAX_SPEAKER_EVENTS_BYTES:
+        for person in people:
+            person["events"] = []
+        record["truncated"] = "events_dropped"
+    return record
+
+
+def speaker_events_record(body: Any) -> dict[str, Any] | None:
+    """What Skribby's `?with-speaker-events=true` answer says about who was speaking, kept as it
+    came (`participants`, each with `name`, `presence_intervals` and `events`; the schema is
+    documented at https://skribby.io/docs/guides/speaker-timelines but not proven live) with the
+    bot's status times (`status_times`, and `recording_started_at`, the first `recording`) so the
+    absolute event times can be placed on the transcript's own clock. None when the answer has no
+    participants. Reads nothing that can raise: whatever is not the expected shape is left out. It
+    holds names: never logged or shown."""
+    if not isinstance(body, dict):
+        return None
+    people = body.get("participants")
+    if not isinstance(people, list) or not people:
+        return None
+    times = [(name, when) for name, when in _events(body) if when is not None]
+    started = next((when for name, when in times if name == "recording"), None)
+    return _cap_events(
+        {
+            "participants": people,
+            "status_times": [[name, when.isoformat()] for name, when in times],
+            "recording_started_at": started.isoformat() if started else None,
+        }
+    )
 
 
 def _safe_evidence(
@@ -868,11 +925,13 @@ class SkribbyClient:
                 "send_bot failed: the answer had no readable bot id"
             ) from None
 
-    def get_bot(self, bot_id: str, *, timeout: float | None = None) -> dict[str, Any]:
+    def get_bot(
+        self, bot_id: str, *, timeout: float | None = None, params: dict[str, str] | None = None
+    ) -> dict[str, Any]:
         bot_id = bot_uuid(bot_id)
         try:
             with self._http(timeout=timeout) as client:
-                response = client.get(f"/bot/{bot_id}")
+                response = client.get(f"/bot/{bot_id}", params=params)
         except httpx.HTTPError as exc:
             raise SkribbyError(f"get_meeting failed: {self._scrub(str(exc))}") from None
         if response.status_code == 404:
@@ -1289,6 +1348,21 @@ class SkribbyProvider:
 
     def get_meeting_by_id(self, vexa_meeting_id: str | int) -> BotMeeting:
         return self._look(bot_uuid(vexa_meeting_id))
+
+    def get_speaker_events(self, vexa_meeting_id: str | int) -> dict[str, Any] | None:
+        """Who was speaking when, from the meeting platform itself (see `speaker_events_record`),
+        for the evidence kept to diagnose a bad labelling. A request of its own, separate from the
+        fetch that labels speakers, so nothing about it can break that: never raises, and any
+        failure (the request, a shape that is not what the docs describe) is None, logged by
+        exception class only (never a name)."""
+        try:
+            body = self._client.get_bot(
+                bot_uuid(vexa_meeting_id), params={"with-speaker-events": "true"}
+            )
+            return speaker_events_record(body)
+        except Exception as exc:
+            logger.warning("skribby: no speaker events kept (%s)", type(exc).__name__)
+            return None
 
     def stop_bot(self, platform: str, native_id: str) -> None:
         if platform not in SERVICES or not re.fullmatch(r"[A-Za-z0-9-]+", native_id):

@@ -41,3 +41,30 @@ Run on the Mac, bounded (CI runs the rest): `ruff check`, `ruff format --check`;
 
 - Evidence is saved only in the speakers step. With `TRANSCRIPT_SOURCE=skribby` that step does not look Skribby up again (the names were saved in the transcript step), so no evidence is kept in that mode; add it there if that mode is switched on.
 - Once evidence from a bad meeting is read, decide whether elimination is wrong, Skribby's names are wrong, or `label_transcript`'s alignment is, and whether to delete the elimination code.
+
+## Update 2026-11-11: Meet's own speaker timeline (migration 0041)
+
+**What shipped.** The evidence row now also keeps who was speaking when, as the meeting platform itself reports it and Skribby records it. **PR:** `feature/skribby-speaker-events`. **Migration 0041:** nullable JSONB column `skribby_segment_evidence.events`.
+
+**Why.** Meeting 32 (3 people) came back with only 2 tags and some lines under the wrong tag. The transcript evidence cannot say whether the model's voice separation or Skribby's own name matching is at fault; Meet's "who is speaking" signal can, because it does not depend on the voices.
+
+**What Skribby documents** (pages read 2026-11-11: https://skribby.io/docs/guides/speaker-timelines, https://skribby.io/docs/rest-api/bot-operations/getbot, https://skribby.io/docs/guides/bot-lifecycle): `GET /api/v1/bot/{id}?with-speaker-events=true` adds participant timelines (the default answer omits them), available once the bot is `finished`. Per participant: `name`, `first_seen_at` (ISO 8601), `last_seen_at`, `presence_intervals` (`joined_at`, `left_at`) and `events` (`type`, `timestamp`); `type` is one of `started-speaking`, `stopped-speaking`, `left`, `rejoined`, `muted`, `unmuted`, `camera-on`, `camera-off`, `started-screenshare`, `stopped-screenshare`. **Not documented, so unproven:** the unit and the reference of the integer timestamps (the page's example has 13-digit integers, which reads as Unix milliseconds), whether Meet fills them, and the transcript's `start` and `end` reference. Nothing here was run against the real Skribby.
+
+**How.**
+
+| Piece | What it does |
+|---|---|
+| Fetch | `SkribbyProvider.get_speaker_events` is a request of its own with the flag, made in the speakers step after the plain fetch that labels speakers. It never raises: any failure (HTTP error, 404, not JSON, wrong shape) is `None`, logged by exception class only. The plain fetch, the labelling and the notes are untouched, so the transcript path cannot break because of it. Only when there is transcript evidence to attach it to. |
+| Record | `speaker_events_record` keeps `participants` exactly as returned (it reads nothing that can raise), plus `status_times` and `recording_started_at` (the first `recording` status in the bot's own `events`) so absolute event times can be put on the transcript's clock, plus `bytes` and `truncated`. |
+| Size cap | 400,000 bytes of JSON (`MAX_SPEAKER_EVENTS_BYTES`). Over it, every participant's events are cut to started/stopped-speaking, left and rejoined (`truncated: "speaking_only"`); still over, all events are dropped and the names and presence intervals kept (`"events_dropped"`). `bytes` is the size before any cut. |
+| Save | `pipeline._keep_evidence` writes `events` in the same row and savepoint; if the events alone cannot be written it retries without them, so the transcript evidence is never lost to them. |
+| Retention | Unchanged: same row, so 7 days, the meeting's deletion and the account's deletion take it. |
+| Report | `scripts/skribby_segments_report.py` has a new section "Meet's own speaker timeline": seconds speaking per participant; a table of overlap seconds between each tag's segments and each participant's speaking intervals; a verdict per tag (`ok`, `MISMATCH: Meet says X spoke most`, `UNNAMED; Meet says X`, or no one speaking); and a clock check. Absent or unreadable events print one plain line saying so. |
+
+**Clock.** Event times are read as Unix milliseconds (anything of 13 digits; smaller numbers are read as seconds from the recording start) and placed on the transcript clock from the bot's `recording` status time, which is only close to the recording's own start. The clock check scans 30 s either way, says if a shift fits the segments clearly better, and `--offset SECONDS` re-runs the report with Meet's times shifted. Read a `MISMATCH` together with that line before blaming the names.
+
+**Files.** `alembic/versions/0041_skribby_evidence_events.py`, `app/models.py`, `app/skribby.py` (`get_bot(params=)`, `speaker_events_record`, `_cap_events`, `get_speaker_events`), `app/pipeline.py` (`_speaker_events`, `_keep_evidence`), `scripts/skribby_segments_report.py`; tests in `tests/test_skribby_provider.py`, `tests/test_skribby_evidence.py`, `tests/test_skribby_e2e.py` (its fake Skribby answers the flagged request too) and `tests/test_migrations.py`.
+
+**Operate / roll back.** Migration 0041 runs on deploy, no new setting. `docker compose exec -T web python scripts/skribby_segments_report.py <meeting_id> [--offset N]` within 7 days. Roll back: revert the PR and `alembic downgrade 0040` (drops the column; the events are disposable by design).
+
+**Follow-ups.** The first real meeting after deploy proves or disproves the shape: if the report says the events are unreadable, paste the raw column (`select events from skribby_segment_evidence where meeting_id = N`) and the reader gets fixed. Unit, reference and Meet coverage are still unproven.

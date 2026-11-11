@@ -149,6 +149,17 @@ def looks(mock, bot, *bodies):
 
     mock.add_callback(answer, method="GET", url=f"{API}/bot/{bot}")
 
+    def answer_with_events(request):
+        # the speakers step also asks for who was speaking (`with-speaker-events`); this fake
+        # Skribby has no participants to give, which leaves the kept events empty
+        if bot in GONE:
+            return httpx.Response(404, json={})
+        return httpx.Response(200, json=sequence[-1])
+
+    mock.add_callback(
+        answer_with_events, method="GET", url=f"{API}/bot/{bot}?with-speaker-events=true"
+    )
+
 
 GOOD_CALL = [
     body("joining", events=[("booting", 30), ("joining", 5)]),

@@ -1522,4 +1522,8 @@ class SkribbySegmentEvidence(Base):
     tags: Mapped[dict] = mapped_column(JSONB)
     # Whether SKRIBBY_NAME_BY_ELIMINATION was on when the names were derived.
     by_elimination: Mapped[bool] = mapped_column(Boolean)
+    # Who was speaking when, from the meeting platform itself (Skribby's `with-speaker-events`
+    # answer, as returned, capped at 400 KB; `app/skribby.py::speaker_events_record`). Null when it
+    # could not be fetched. Same retention and deletion as the row.
+    events: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
