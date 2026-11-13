@@ -97,7 +97,7 @@ export function ShareFlow({
       <Card title="Shared meeting link">
         <div className="stack-sm">
           <Alert kind="notice" role="alert">
-            We could not find a Google Meet or Zoom meeting link in what you shared. Open the meeting in its app, use
+            We could not find a Google Meet, Microsoft Teams or Zoom meeting link in what you shared. Open the meeting in its app, use
             Share on the invitation or the link itself, and choose Beyric Notes again. You can also paste the link on
             the Meetings page.
           </Alert>

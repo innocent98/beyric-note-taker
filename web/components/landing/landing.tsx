@@ -16,11 +16,14 @@ function Glyph({ d, size, stroke = 1.9 }: { d: string; size: number; stroke?: nu
   );
 }
 
-export function LandingHeader() {
+// `signedIn` is true on /welcome for the owner (app/welcome/page.tsx): the logo then leads to
+// /welcome, the page they are on, since `/` is their Meetings page, and the two sign-up buttons
+// give way to one way back into the app. A visitor's header is the designer's, unchanged.
+export function LandingHeader({ signedIn = false }: { signedIn?: boolean }) {
   return (
     <header className="ld-header">
       <div className="ld-header-in">
-        <Logo size="lg" />
+        <Logo size="lg" href={signedIn ? "/welcome" : "/"} />
         <nav className="ld-nav" aria-label="Sections">
           <a href="#workflow">How it works</a>
           <a href="#features">Features</a>
@@ -28,12 +31,20 @@ export function LandingHeader() {
           <a href="#faq">FAQ</a>
         </nav>
         <div className="ld-header-actions">
-          <AppLink className="ld-signin" href="/login">
-            Sign in
-          </AppLink>
-          <AppLink className="ld-get-started" href="/signup">
-            Get started
-          </AppLink>
+          {signedIn ? (
+            <AppLink className="ld-get-started" href="/">
+              Open the app
+            </AppLink>
+          ) : (
+            <>
+              <AppLink className="ld-signin" href="/login">
+                Sign in
+              </AppLink>
+              <AppLink className="ld-get-started" href="/signup">
+                Get started
+              </AppLink>
+            </>
+          )}
         </div>
       </div>
     </header>
@@ -338,13 +349,13 @@ function Closing() {
   );
 }
 
-export function LandingFooter() {
+export function LandingFooter({ signedIn = false }: { signedIn?: boolean }) {
   return (
     <footer className="ld-footer">
       <div className="ld-footer-in">
         <div className="ld-footer-cols">
           <div className="ld-footer-brand">
-            <Logo size="sm" />
+            <Logo size="sm" href={signedIn ? "/welcome" : "/"} />
             <p>Meeting notes, decisions and tasks for teams, from {LEGAL_NAME}.</p>
           </div>
           <div className="ld-footer-col">
@@ -369,7 +380,8 @@ export function LandingFooter() {
   );
 }
 
-// Only a visitor who is not logged in sees this page (app/page.tsx shows the owner Meetings).
+// A visitor who is not logged in sees this page at `/` (app/page.tsx shows the owner Meetings there);
+// everyone, the owner included, sees it at `/welcome` (app/welcome/page.tsx).
 export function Landing() {
   return (
     <>

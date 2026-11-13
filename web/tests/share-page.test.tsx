@@ -151,7 +151,7 @@ describe("share page, signed in", () => {
   it("says there was no meeting link, and offers the Meetings page", async () => {
     arriveAt("#none");
     render(<ShareFlow signedIn templates={templates} />);
-    expect((await screen.findByRole("alert")).textContent).toMatch(/could not find a Google Meet or Zoom meeting link/);
+    expect((await screen.findByRole("alert")).textContent).toMatch(/could not find a Google Meet, Microsoft Teams or Zoom meeting link/);
     expect(screen.getByRole("link", { name: "Go to Meetings" }).getAttribute("href")).toBe("/");
     expect(mocks.create).not.toHaveBeenCalled();
   });

@@ -147,6 +147,7 @@ Strangler pattern: Next.js takes host port 8020 and proxies any path it does not
   - [x] Nonce CSP for Next-rendered pages, no `unsafe-inline`, zero console errors in a real browser (`web/scripts/browser-check.mjs`; 2026-11-02)
   - [x] Tokens, fonts, `components.css` ported; React components for every Jinja macro; `/styleguide` (non-production); guard tests ported
   - [x] Public pages in Next: `/privacy`, `/terms` live (text equal to the Jinja templates, test-enforced); the landing moved from `/welcome` to `/` in stream C
+    - [x] `/welcome` shows the landing page to everyone, signed in or not (canonical `/`, no redirect); an owner's logo on `/privacy`, `/terms` and the 404 page leads there; the landing header now sticks (`.ld` had `overflow-x: hidden`, which stopped `sticky`; now `clip`), with scroll margins for the anchors (2026-11-13, PR open, web only); SOP `docs/sop/2026-11-13-welcome-page-and-sticky-public-header.md`. Looked at in a browser as a visitor only. A link inside the app waits for a design (the designer's file has no footer area)
   - [x] SEO basics: metadata, canonical, Open Graph, JSON-LD, `sitemap.ts`, `robots.ts`, `llms.txt`, favicon, manifest and icons
   - [x] Container memory measured on a Mac: 37 MiB idle, 65 MiB peak after 240 requests (not yet on the server); `mem_limit` stays 512m as a ceiling
   - [x] CI: `web` job with path filters (docs-only skips both, Python-only skips Node, web-only skips Python), always-reporting `ci` job **[Reconciled 2026-11-07 checklist pass: `.github/workflows/ci.yml`: `changes` job with path filters, `web` job, always-reporting `ci` summary (#19, #70)]**
@@ -363,7 +364,8 @@ Agreed with Adebayo: open sign-up capped at 10 accounts; 5 recorded hours per ac
 - [ ] Phase C-T, Teams (Q17, gated by P0.7): T1 pasted Teams link, T2 Teams events from the calendar, T3 Teams wording in policy, terms, landing
   - [x] T1 pasted Teams link and T2 Teams events from Google Calendar (2026-11-09, PR #159 merged 2026-11-09 (`c7583af`), no migration; through Skribby only, guest join): Teams links parse to a derived meeting code (`app/meeting_url.py`), `SERVICES` has `teams`, `teams_join_enabled` follows the provider (on with Skribby, off with Vexa), `platform` may be `teams` in the API, `scripts/skribby_live_check.py` accepts Teams links; SOP `docs/sop/2026-11-09-teams-join.md`
   - [ ] Live Teams join (Adebayo, `scripts/skribby_live_check.py` with a real Teams link; guest joins depend on the host organisation's external access policy)
-  - [ ] T3 Teams wording in the privacy page, terms, landing and the UI strings that list platforms (owner's word first; the lines are in the PR #159 body)
+  - [ ] T3 Teams wording in the privacy page, terms and landing (owner's word first; the lines are in the PR #159 body). The app's own strings are done, next line
+  - [x] Teams wording in the app (placeholder, Calendar sentence, share page message, `llms.txt`, legacy form label) and the phone share target finds Teams links, mirroring `app/meeting_url.py` (2026-11-13, PR open, web only, no API change); SOP `docs/sop/2026-11-13-teams-wording-and-share-link.md`. Not tried from a real phone
 - [ ] **Phase O, Outlook calendar (Microsoft OAuth plus Graph)** (decided 2026-11-04; design `docs/superpowers/specs/2026-11-04-outlook-oauth-design.md`; builds on C12, PR #72; ships dark behind `MICROSOFT_CALENDAR_ENABLED`; **no Outlook wording anywhere until it works**; the ICS route C19 to C24 stays separate)
   - [x] Design spec written (2026-11-04, branch `feature/outlook-oauth-spec`; docs only, no code, no migration): accounts and registration, OAuth flow with PKCE, scopes, refresh-token rotation, Graph `calendarView`, time zones, one provider registry, the Teams gate, security review list, Azure click steps, plan
   - [ ] Adebayo answers Q1 to Q8 of the spec (registration owner and tenant, personal first, Partner Center verification, ship dark until Teams joins, one calendar at a time, Microsoft sign-in stays out, secret now, test accounts)
@@ -787,3 +789,8 @@ Legal and business
 - [x] Parity: Lagos and UTC runs at 1440/768/390 (`docs/ui/parity/after/local-time-{lagos,utc}/`) and a layout check (`web/scripts/parity-local-time.mjs`)
 - [x] Mail now follows the stored per-user zone (see the next section); the old Jinja pages are still UTC
 - [x] Designer drew the "Time zone" row (#80); built below
+
+## Meetings list day groups (2026-11-13, `feature/meeting-list-day-groups`, PR open, web only; SOP `docs/sop/2026-11-13-meetings-list-day-groups.md`)
+
+- [x] A heading above each day on the Meetings list (Today, Yesterday, `Mon 9 Nov`, year only when not this year) in the owner's own zone, from `created_at`; one heading per day across "Show older meetings" and live refreshes (pure rule `web/lib/day-groups.ts`, tests `day-groups` and `meeting-list-days`). Lead-designed at Adebayo's request: the designer's file has no date groups. Looked at in a browser on a fixtures page at desktop and 375 px; not on the real page
+- [ ] A row can drop out of the list after a live refresh that follows "Show older meetings" (pre-existing, found 2026-11-13; see the SOP's follow-ups)

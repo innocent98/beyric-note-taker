@@ -4,14 +4,14 @@ import { MeetingsCalendar } from "@/components/app/meetings-calendar";
 import { MeetingList } from "@/components/app/meeting-list";
 import { NewMeetingForm } from "@/components/app/new-meeting-form";
 import { RecurringCards } from "@/components/app/recurring-cards";
-import { Landing, LandingFooter, LandingHeader } from "@/components/landing/landing";
-import { JsonLd, organizationJsonLd, softwareJsonLd } from "@/components/site/json-ld";
+import { LandingPage } from "@/components/landing/landing-page";
 import { Alert, PageHead } from "@/components/ui";
 import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, getSession, load, serverApi } from "@/lib/api/server";
 import type { CalendarState, NotRecordedItem } from "@/lib/api/types";
 
 // `/` is two pages: the landing page for a visitor who is not logged in (indexed, in the sitemap),
-// and the owner's Meetings page for the owner (never indexed). GET /api/session says which.
+// and the owner's Meetings page for the owner (never indexed). GET /api/session says which. The owner
+// reaches the landing page at /welcome (app/welcome/page.tsx).
 export async function generateMetadata(): Promise<Metadata> {
   if ((await getSession())?.authenticated) return { title: "Meetings", robots: { index: false, follow: false } };
   return {
@@ -23,22 +23,6 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function HomePage() {
   if (!(await getSession())?.authenticated) return <LandingPage />;
   return <MeetingsPage />;
-}
-
-function LandingPage() {
-  return (
-    <div className="ld">
-      <JsonLd data={[organizationJsonLd(), softwareJsonLd()]} />
-      <a className="skip-link" href="#main">
-        Skip to content
-      </a>
-      <LandingHeader />
-      <main id="main">
-        <Landing />
-      </main>
-      <LandingFooter />
-    </div>
-  );
 }
 
 // The calendar is optional on this page: while the server has it off (404 `calendar_unavailable`)

@@ -73,7 +73,6 @@ Two facts about the designs shaped the work. **The designs are light only**: no 
 | Contact and Help mailbox | `hello@beyrictech.com` | `privacy@beyrictech.com` | The handoff lists `privacy@` as the confirmed mailbox; `hello@` is not confirmed |
 | Phone header of the landing page | The section links wrap and clip at 390 px | The links hide below 720 px (the footer repeats them) and Sign in stays | The prototype's header breaks on a phone |
 | Phone layout of the app | Not responsive (crushed at 390) | Top bar and stacked panes from stream C, new tokens | See "Which file wins" |
-| Meeting link placeholder | "Paste a Google Meet, Microsoft Teams or Zoom link" | "Paste a Google Meet or Zoom link" | Teams links are refused by the backend |
 | Status words | Ready, Failed, Joining, Recording | The API's own (Ready, Failed, Bot sent, step names) | They are real states of the pipeline |
 | Landing buttons that lead to sign-up | "Get started", "Get started free", "Create your account", "Create account" | Not drawn on the landing page; the hero and closing band say "Sign in". The sign-in page now has "Create account" | Sign-up is closed; the landing page is not part of stream D |
 | "See the app" | A link to the prototype file | Not drawn | It is not a page |

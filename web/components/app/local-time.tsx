@@ -6,6 +6,16 @@ import { browserTimeZone, formatDay, formatTime, SERVER_ZONE } from "@/lib/forma
 
 const subscribe = () => () => {};
 
+// The zone every date on the page is written in: the one chosen on Settings, which the server knows
+// (so it needs no swap), else the browser's own once the page is in the browser, and UTC until then.
+// Anything that has to agree with a `LocalTime` on the same page (the day headings of the Meetings
+// list) asks here, so the two can never use different zones.
+export function useDisplayTimeZone(): string {
+  const inBrowser = useSyncExternalStore(subscribe, () => true, () => false);
+  const stored = useStoredTimeZone();
+  return stored ?? (inBrowser ? browserTimeZone() : SERVER_ZONE);
+}
+
 // A date or time from the API, shown in the viewer's own time zone, as `<time datetime="...">`.
 //
 // The server renders the page in UTC (it does not know the viewer's zone), and the browser's first
@@ -20,10 +30,6 @@ const subscribe = () => () => {};
 // `kind="datetime"` is "02 Nov 2026, 22:16 GMT+1" and `kind="day"` is "Mon 2 Nov 2026" (no zone
 // name: a day carries none, as the Jinja pages had it).
 export function LocalTime({ iso, kind = "datetime" }: { iso: string; kind?: "datetime" | "day" }) {
-  const inBrowser = useSyncExternalStore(subscribe, () => true, () => false);
-  // The zone chosen on Settings is known to the server, so it needs no swap; without one it is the
-  // browser's.
-  const stored = useStoredTimeZone();
-  const timeZone = stored ?? (inBrowser ? browserTimeZone() : SERVER_ZONE);
+  const timeZone = useDisplayTimeZone();
   return <time dateTime={iso}>{kind === "day" ? formatDay(iso, timeZone) : formatTime(iso, timeZone)}</time>;
 }

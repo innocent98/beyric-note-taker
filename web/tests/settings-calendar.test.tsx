@@ -53,7 +53,7 @@ describe("not connected", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Calendar" })).toBeTruthy();
     expect(
       screen.getByText(
-        "The note taker reads your calendar and joins meetings that have a Google Meet or Zoom link.",
+        "The note taker reads your calendar and joins meetings that have a Google Meet, Microsoft Teams or Zoom link.",
       ),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Connect Google Calendar" })).toBeTruthy();
@@ -74,7 +74,10 @@ describe("not connected", () => {
     expect(outlook.disabled).toBe(true);
     expect(outlook.getAttribute("aria-describedby")).toBe("outlook-off");
     expect(screen.getAllByText("Not available yet.")).toHaveLength(1);
-    expect(document.body.textContent).not.toMatch(/Teams/);
+    // The Outlook row makes no Teams claim of its own. (The sentence under "Calendar" names Teams as a
+    // kind of link the note taker joins, which is true of a Google Calendar event too.)
+    const rest = document.body.textContent!.replace("Google Meet, Microsoft Teams or Zoom link", "");
+    expect(rest).not.toMatch(/Teams/);
   });
 
   it("goes straight to Google when the app is verified", async () => {
