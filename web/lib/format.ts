@@ -1,5 +1,5 @@
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const two = (n: number) => String(n).padStart(2, "0");
 
 // Times are shown in the viewer's own time zone. The server does not know it, so the server render
@@ -17,12 +17,12 @@ export function browserTimeZone(): string {
   }
 }
 
-type Zoned = { year: number; month: number; day: number; hour: number; minute: number; weekday: number; label: string };
+export type Zoned = { year: number; month: number; day: number; hour: number; minute: number; weekday: number; label: string };
 
 // The wall-clock fields of an instant in `timeZone`, read as numbers (never from words, so ICU's
 // spelling of a month or weekday cannot change what the page says) and the zone's short name
 // ("UTC", "GMT+1", "GMT+5:30").
-function zoned(date: Date, timeZone: string): Zoned {
+export function zoned(date: Date, timeZone: string): Zoned {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone,
     year: "numeric",
