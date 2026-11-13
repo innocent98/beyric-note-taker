@@ -1,5 +1,7 @@
 # SOP: the transcript-source switch (`TRANSCRIPT_SOURCE`) and the sampled shadow check
 
+> **Update 2026-11-13:** the only model allowed with `TRANSCRIPT_SOURCE=skribby` is now `elevenlabs/scribe-v2` (the `soniox/stt-async-v5` named below was removed: deprecated and unused), the vocabulary is sent only to models Skribby lists with it (not ElevenLabs), and skribby mode now keeps the speaker evidence. See `docs/sop/2026-11-13-skribby-elevenlabs-single-transcript.md`.
+
 **What shipped.** A setting, `TRANSCRIPT_SOURCE` = `own` (default, today's behaviour) | `skribby`, that makes a Skribby meeting's notes from **Skribby's own transcript** instead of our OpenAI transcription, with an automatic fallback to ours and a sampled quality check (`TRANSCRIPT_SHADOW_PERCENT`) so the choice can be made from real numbers after about a week. Branch `feature/transcript-source-switch`; PR: see the PR list (opened 2026-11-09, not merged by this work). One migration, **0039** (next free after 0038; recheck `alembic heads` if anything else merges first). No endpoint, screen or response shape changed (no FE guide change, `docs/openapi.json` unchanged). Builds on `docs/sop/2026-11-08-skribby-provider.md` (section 1.4 is updated) and `docs/sop/2026-11-09-skribby-speaker-names.md`.
 
 ## Why
@@ -90,7 +92,7 @@ Checked (`grep` over `app/`): every reader of the transcript takes `meeting.spea
 **Server steps before merge:** the migration runs on deploy (`alembic upgrade head` to **0039**): it adds one nullable column to `meetings` and a new empty table; no table rewrite, no downtime. Check `alembic heads` shows one head and `/health` is 200 after. No `.env` change is needed: both settings default to today's behaviour.
 
 **To switch on** (when no meeting is running; a restart drops the worker's in-memory counters, which only gives live meetings a fresh grace):
-1. Server `.env`: `TRANSCRIPT_SOURCE=skribby` and, to collect the comparison, `TRANSCRIPT_SHADOW_PERCENT=25` (a share costs 0.70 USD an hour of the sampled meetings; 0 to stop it). Keep `BOT_PROVIDER=skribby` and a Skribby model with speaker diarization (`SKRIBBY_TRANSCRIPTION_MODEL=soniox/stt-async-v5`, Pay As You Go).
+1. Server `.env`: `TRANSCRIPT_SOURCE=skribby` and, to collect the comparison, `TRANSCRIPT_SHADOW_PERCENT=25` (a share costs 0.70 USD an hour of the sampled meetings; 0 to stop it). Keep `BOT_PROVIDER=skribby` and a Skribby model with speaker diarization (`SKRIBBY_TRANSCRIPTION_MODEL=elevenlabs/scribe-v2`, Pay As You Go; Soniox v5 was removed from the allowlist on 2026-11-13, see `docs/sop/2026-11-13-skribby-elevenlabs-single-transcript.md`).
 2. Restart **web, worker and scheduler** (settings are read once per process; web and scheduler send the bots, so they carry the vocabulary; a bad value stops all three with a message naming the setting).
 3. After about a week run the report command above and decide.
 

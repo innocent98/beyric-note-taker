@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.models import VocabularyTerm
 from app.notes import UNKNOWN_SPEAKER, _clean_segments
+from app.skribby import takes_vocabulary
 
 OWN = "own"
 SKRIBBY = "skribby"
@@ -192,13 +193,15 @@ def send_options(
     session: Session | None, provider, owner_user_id: int, settings: Settings
 ) -> dict[str, Any]:
     """Extra keyword arguments for `provider.send_bot`: the owner's vocabulary, only in `skribby`
-    mode and only for a provider that takes it (Skribby's `custom_vocabulary`), because there it is
+    mode, only for a provider that takes it (Skribby's `custom_vocabulary`) and only when the
+    configured model is one Skribby lists with it (`skribby.VOCABULARY_MODELS`), because there it is
     Skribby's model that transcribes. Our own transcription reads the vocabulary itself. Reading
     it can fail without stopping the send: no vocabulary is then sent."""
     if (
         session is None
         or settings.transcript_source != SKRIBBY
         or not getattr(type(provider), "accepts_vocabulary", False)
+        or not takes_vocabulary(settings.skribby_transcription_model)
     ):
         return {}
     try:

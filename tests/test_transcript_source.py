@@ -12,7 +12,7 @@ import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import sessionmaker
 
-from app import pipeline, transcript_source, translation, worker
+from app import pipeline, skribby, transcript_source, translation, worker
 from app.bot_provider import BotProviderError
 from app.config import Settings
 from app.models import (
@@ -182,7 +182,7 @@ def test_the_shadow_percent_must_be_from_0_to_100(bad):
 # ---- the owner's vocabulary goes to Skribby only in skribby mode ----
 
 
-def make_client(model="soniox/stt-async-v5"):
+def make_client(model="soniox/stt-async-v6"):  # a model Skribby lists with custom vocabulary
     return SkribbyClient(api_key="k" * 8, transcription_model=model)
 
 
@@ -203,6 +203,14 @@ def test_no_vocabulary_field_without_terms_or_when_transcription_is_off():
     assert "custom_vocabulary" not in off
 
 
+def skribby_settings(model):
+    """Skribby mode with `model`. Startup only allows ElevenLabs in this mode, so a model that takes
+    vocabulary (the setting is only read, never re-validated) is set afterwards."""
+    settings = Settings(transcript_source="skribby", skribby_transcription_model=MODEL)
+    settings.skribby_transcription_model = model
+    return settings
+
+
 class TakesVocabulary:
     accepts_vocabulary = True
 
@@ -219,7 +227,7 @@ def test_send_options_pass_the_owners_own_terms_only_in_skribby_mode(session, ow
         ]
     )
     session.commit()
-    on = Settings(transcript_source="skribby", skribby_transcription_model=MODEL)
+    on = skribby_settings(VOCAB_MODEL)
     off = Settings()
     assert transcript_source.send_options(session, TakesVocabulary(), owner.id, on) == {
         "vocabulary": ["Beyric"]
@@ -227,11 +235,43 @@ def test_send_options_pass_the_owners_own_terms_only_in_skribby_mode(session, ow
     assert transcript_source.send_options(session, TakesVocabulary(), owner.id, off) == {}
     assert transcript_source.send_options(session, Plain(), owner.id, on) == {}
     assert transcript_source.send_options(None, TakesVocabulary(), owner.id, on) == {}
+    # ElevenLabs is not listed by Skribby with custom vocabulary: nothing is sent (or even read)
+    assert (
+        transcript_source.send_options(
+            session, TakesVocabulary(), owner.id, skribby_settings(MODEL)
+        )
+        == {}
+    )
+
+
+def test_only_the_models_skribby_lists_with_custom_vocabulary_are_sent_it():
+    taken = {
+        "soniox/stt-async-v6",
+        "groq/whisper-large-v3-turbo",
+        "groq/whisper-large-v3",
+        "mistral/voxtral-mini-2",
+        "gladia/async",
+    }
+    assert skribby.VOCABULARY_MODELS == taken
+    for model in taken:
+        body = make_client(model).payload("google_meet", "a", "https://meet.google.com/a", ["Ada"])
+        assert body["custom_vocabulary"] == ["Ada"], model
+    for model in (
+        "elevenlabs/scribe-v2",  # neither page lists it
+        "deepgram/nova-3-multilingual",  # the two pages disagree: left out
+        "assemblyai/universal-3-5-pro",
+        "speechmatics/async",
+        "soniox/stt-async-v5",  # deprecated
+        "none",
+    ):
+        body = make_client(model).payload("google_meet", "a", "https://meet.google.com/a", ["Ada"])
+        assert "custom_vocabulary" not in body, model
 
 
 # ---- the pipeline ----
 
-MODEL = "soniox/stt-async-v5"
+MODEL = "elevenlabs/scribe-v2"
+VOCAB_MODEL = "soniox/stt-async-v6"  # listed by Skribby with custom vocabulary
 SKRIBBY_TEXT_WORDS = 700  # RECORDED_SECONDS (1830) needs 610
 
 
@@ -768,9 +808,12 @@ def test_skribby_mode_refuses_to_start_without_a_diarizing_model():
         Settings(transcript_source="skribby")  # the default model is Groq's
     message = str(error.value)
     assert "TRANSCRIPT_SOURCE is 'skribby' but SKRIBBY_TRANSCRIPTION_MODEL is" in message
-    assert "groq/whisper-large-v3-turbo" in message and "soniox/stt-async-v5" in message
+    assert "groq/whisper-large-v3-turbo" in message and "elevenlabs/scribe-v2" in message
+    assert "soniox" not in message  # v5 is deprecated and no longer allowed
     with pytest.raises(ValueError, match="SKRIBBY_TRANSCRIPTION_MODEL"):
         Settings(transcript_source="skribby", skribby_transcription_model="none")
+    with pytest.raises(ValueError, match="SKRIBBY_TRANSCRIPTION_MODEL"):
+        Settings(transcript_source="skribby", skribby_transcription_model="soniox/stt-async-v5")
     ok = Settings(transcript_source="skribby", skribby_transcription_model=MODEL)
     assert ok.transcript_source == "skribby"
     # the default source never looks at the model
@@ -786,7 +829,7 @@ BOT = "0f9e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f"
 
 
 def test_a_validation_error_on_the_vocabulary_retries_once_without_it(httpx_mock, caplog):
-    client = SkribbyClient(api_key="k" * 12, base_url=BASE, transcription_model=MODEL)
+    client = SkribbyClient(api_key="k" * 12, base_url=BASE, transcription_model=VOCAB_MODEL)
     httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=422, json={"m": "bad"})
     httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=201, json={"id": BOT})
     payload = client.payload("google_meet", "abc-defg-hij", "https://meet.google.com/x", ["Zorbl"])
@@ -800,7 +843,7 @@ def test_a_validation_error_on_the_vocabulary_retries_once_without_it(httpx_mock
 
 
 def test_other_failures_and_a_create_without_vocabulary_are_not_retried(httpx_mock):
-    client = SkribbyClient(api_key="k" * 12, base_url=BASE, transcription_model=MODEL)
+    client = SkribbyClient(api_key="k" * 12, base_url=BASE, transcription_model=VOCAB_MODEL)
     with_terms = client.payload("google_meet", "a", "https://meet.google.com/x", ["Zorbl"])
     httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=403, json={"m": "plan"})
     with pytest.raises(BotProviderError):
@@ -812,7 +855,7 @@ def test_other_failures_and_a_create_without_vocabulary_are_not_retried(httpx_mo
 
 
 def test_a_second_validation_error_is_an_error_not_a_loop(httpx_mock):
-    client = SkribbyClient(api_key="k" * 12, base_url=BASE, transcription_model=MODEL)
+    client = SkribbyClient(api_key="k" * 12, base_url=BASE, transcription_model=VOCAB_MODEL)
     httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=400, json={"m": "bad"})
     httpx_mock.add_response(method="POST", url=f"{BASE}/bot", status_code=400, json={"m": "bad"})
     payload = client.payload("google_meet", "a", "https://meet.google.com/x", ["Zorbl"])
@@ -832,7 +875,7 @@ def test_a_failed_vocabulary_read_cannot_abort_the_placement_transaction(
         return real(statement, *args, **kwargs)
 
     monkeypatch.setattr(session, "scalars", failing)
-    on = Settings(transcript_source="skribby", skribby_transcription_model=MODEL)
+    on = skribby_settings(VOCAB_MODEL)
     assert transcript_source.send_options(session, TakesVocabulary(), owner.id, on) == {}
     monkeypatch.undo()
     assert session.scalar(select(1)) == 1  # the transaction is still usable
