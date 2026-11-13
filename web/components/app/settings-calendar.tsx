@@ -237,7 +237,7 @@ export function SettingsCalendar({
             Calendar
           </h2>
           <p className="set-sub">
-            The note taker reads your calendar and joins meetings that have a Google Meet or Zoom link.
+            The note taker reads your calendar and joins meetings that have a Google Meet, Microsoft Teams or Zoom link.
           </p>
         </div>
 

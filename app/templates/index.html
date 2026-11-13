@@ -12,7 +12,7 @@
   <form method="post" action="/meetings" class="stack-sm">
     {{ ui.csrf_field(csrf) }}
     <div class="row-wrap">
-      <div class="field-grow">{{ ui.field("url", "Meeting link (Google Meet or Zoom)", type="url", value=url or "", required=true, attrs='inputmode="url" autocomplete="off"') }}</div>
+      <div class="field-grow">{{ ui.field("url", "Meeting link (Google Meet, Microsoft Teams or Zoom)", type="url", value=url or "", required=true, attrs='inputmode="url" autocomplete="off"') }}</div>
       <div class="field-fixed">{{ ui.select_field("template_id", "Notes template", template_options, chosen) }}</div>
       {{ ui.button("Send bot") }}
     </div>

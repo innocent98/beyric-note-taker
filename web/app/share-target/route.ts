@@ -3,7 +3,7 @@ import { findMeetingLink } from "@/lib/share";
 // The address in the manifest's `share_target` (app/manifest.ts). Android's share sheet makes the
 // browser POST the shared title, text and url here as a form. The body (which can hold a whole
 // invitation, and a Zoom passcode) is read here and goes no further: this handler keeps no copy,
-// logs nothing and calls no API. It finds the first Meet or Zoom link and sends the browser on to
+// logs nothing and calls no API. It finds the first Meet, Teams or Zoom link and sends the browser on to
 // /share with only that link after the `#`, which is never sent to a server, so no access log sees
 // it. The page then asks the owner to confirm before anything is sent to the note taker.
 //

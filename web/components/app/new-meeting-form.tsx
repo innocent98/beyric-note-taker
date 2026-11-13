@@ -50,7 +50,7 @@ export function NewMeetingForm({ templates, busy }: { templates: Template[]; bus
               required
               inputMode="url"
               autoComplete="off"
-              placeholder="Paste a Google Meet or Zoom link"
+              placeholder="Paste a Google Meet, Microsoft Teams or Zoom link"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
             />
