@@ -765,3 +765,8 @@ Legal and business
 - [x] Parity: Lagos and UTC runs at 1440/768/390 (`docs/ui/parity/after/local-time-{lagos,utc}/`) and a layout check (`web/scripts/parity-local-time.mjs`)
 - [x] Mail now follows the stored per-user zone (see the next section); the old Jinja pages are still UTC
 - [x] Designer drew the "Time zone" row (#80); built below
+
+## Meetings list day groups (2026-11-13, `feature/meeting-list-day-groups`, PR open, web only; SOP `docs/sop/2026-11-13-meetings-list-day-groups.md`)
+
+- [x] A heading above each day on the Meetings list (Today, Yesterday, `Mon 9 Nov`, year only when not this year) in the owner's own zone, from `created_at`; one heading per day across "Show older meetings" and live refreshes (pure rule `web/lib/day-groups.ts`, tests `day-groups` and `meeting-list-days`). Lead-designed at Adebayo's request: the designer's file has no date groups. Looked at in a browser on a fixtures page at desktop and 375 px; not on the real page
+- [ ] A row can drop out of the list after a live refresh that follows "Show older meetings" (pre-existing, found 2026-11-13; see the SOP's follow-ups)

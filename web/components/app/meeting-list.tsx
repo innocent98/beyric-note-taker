@@ -7,13 +7,19 @@ import { useToast } from "@/components/ui/toast";
 import { DELETED_FLAG } from "@/lib/deleted-flag";
 import { api } from "@/lib/api/browser";
 import type { MeetingList as MeetingListData, MeetingSummary, Template } from "@/lib/api/types";
-import { LocalTime } from "@/components/app/local-time";
+import { LocalTime, useDisplayTimeZone } from "@/components/app/local-time";
+import { groupByDay } from "@/lib/day-groups";
 import { plural } from "@/lib/format";
 
 // The list of meetings, newest first. The first page comes from the server render; older pages are
 // fetched on request with before_id (docs/fe-integration-guide-owner-app.md 5.1). The page asks for a
 // fresh first page every `refresh_after_seconds` while a listed meeting is being worked on (the
 // status words change), and when the tab comes back into view.
+//
+// A heading above each day (Today, Yesterday, "Mon 9 Nov"; `lib/day-groups.ts`) in the zone the rows'
+// own times are written in. A meeting is under the day of the `created_at` its row shows. The groups
+// are made from the whole list (first page and every older page together), so a day that runs over
+// a page boundary stays under one heading.
 export function MeetingList({ initial, templates }: { initial: MeetingListData; templates: Template[] }) {
   const router = useRouter();
   const [older, setOlder] = useState<MeetingSummary[]>([]);
@@ -21,6 +27,8 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [toast, flash] = useToast();
+  const timeZone = useDisplayTimeZone();
+  const now = useNow();
 
   // Arriving from a delete on the meeting page: say so once.
   useEffect(() => {
@@ -54,6 +62,7 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
   const hasMore = paging ? paging.hasMore : initial.has_more;
   const before = paging ? paging.before : initial.next_before_id;
   const names = new Map(templates.map((t) => [t.id, t.name]));
+  const days = groupByDay(meetings, timeZone, now);
 
   async function loadOlder() {
     if (before === null || loading) return;
@@ -81,42 +90,49 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
               {hasMore ? "+" : ""}
             </span>
           </div>
-          <ul className="list">
-            {meetings.map((m) => (
-              <ListRow
-                key={m.id}
-                href={`/meetings/${m.id}`}
-                end={
-                  <span className="row-end">
-                    <Badge tone={m.status_tone} dot>
-                      {m.status_text}
-                    </Badge>
-                    <span className="list-row-chevron">
-                      <Icon name="chevron" />
-                    </span>
-                  </span>
-                }
-              >
-                <span className="list-row-main">
-                  <span className="tile">
-                    <Icon name="video" size={18} />
-                  </span>
-                  <span className="list-row-text">
-                    <span className="list-title">{m.title}</span>
-                    <span className="meta-line">
-                      <span>
-                        <LocalTime iso={m.created_at} />
+          {days.map((day) => (
+            <div className="day-group" key={day.key}>
+              <h3 className="day-head" id={`meetings-day-${day.key}`} suppressHydrationWarning>
+                {day.label}
+              </h3>
+              <ul className="list" aria-labelledby={`meetings-day-${day.key}`}>
+                {day.items.map((m) => (
+                  <ListRow
+                    key={m.id}
+                    href={`/meetings/${m.id}`}
+                    end={
+                      <span className="row-end">
+                        <Badge tone={m.status_tone} dot>
+                          {m.status_text}
+                        </Badge>
+                        <span className="list-row-chevron">
+                          <Icon name="chevron" />
+                        </span>
                       </span>
-                      {names.get(m.template_id) ?? m.template_name ? (
-                        <span>{names.get(m.template_id) ?? m.template_name}</span>
-                      ) : null}
-                      {m.tasks_count > 0 ? <span className="meta-tasks">{plural(m.tasks_count, "task")}</span> : null}
+                    }
+                  >
+                    <span className="list-row-main">
+                      <span className="tile">
+                        <Icon name="video" size={18} />
+                      </span>
+                      <span className="list-row-text">
+                        <span className="list-title">{m.title}</span>
+                        <span className="meta-line">
+                          <span>
+                            <LocalTime iso={m.created_at} />
+                          </span>
+                          {names.get(m.template_id) ?? m.template_name ? (
+                            <span>{names.get(m.template_id) ?? m.template_name}</span>
+                          ) : null}
+                          {m.tasks_count > 0 ? <span className="meta-tasks">{plural(m.tasks_count, "task")}</span> : null}
+                        </span>
+                      </span>
                     </span>
-                  </span>
-                </span>
-              </ListRow>
-            ))}
-          </ul>
+                  </ListRow>
+                ))}
+              </ul>
+            </div>
+          ))}
           {hasMore ? (
             <div className="card-foot">
               <Button kind="secondary" size="sm" type="button" onClick={loadOlder} disabled={loading}>
@@ -133,4 +149,20 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
     <Toast message={toast} />
     </>
   );
+}
+
+// The current time, renewed every minute and whenever the tab comes back into view, so "Today" and
+// "Yesterday" move on at midnight in a page left open. The first value is the render's own clock.
+function useNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    const timer = setInterval(tick, 60_000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, []);
+  return now;
 }
