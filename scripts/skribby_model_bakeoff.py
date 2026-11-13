@@ -23,6 +23,13 @@ when every checkpoint of each non-reference person falls in ONE model speaker th
 reference person's voice, and the reference person's checkpoints fall in their voice (the model
 speaker with the most overlap with the reference old tag).
 
+A second mode, `--score-against-meet --window FROM-TO`, ranks the models against Meet's own speaker
+timeline (`skribby_segment_evidence.events`, read with `scripts/skribby_segments_report.py`'s code)
+instead of checkpoints: per model the voices found vs the participants who spoke in the slice, the
+table model speaker x participant, which speaker holds each participant and how pure it is, and a
+one-line verdict. `--list-windows` lists the windows where most participants spoke (database only:
+no audio, no key, no cost). Both are in the SOP.
+
 Nothing is written to the database or kept; no key is printed; no text is printed unless
 `--show-text FROM-TO`. One attempt per upload, no retry; the first error stops the run and says
 what was already sent. `--dry-run` calls nothing and needs no key.
@@ -48,6 +55,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.config import get_settings  # noqa: E402
 from app.skribby import BASES  # noqa: E402
 from scripts import diarize_experiment as dx  # noqa: E402
+from scripts import skribby_segments_report as sr  # noqa: E402
 from scripts.diarize_experiment import ExperimentError, Turn  # noqa: E402
 
 DEFAULT_MODELS = (
@@ -67,6 +75,9 @@ MODEL_PRICE_PER_HOUR = {
 }
 BASE_PRICE_PER_HOUR = 0.10  # "Base processing is $0.10/hour", billed per minute, only on success
 DEFAULT_WINDOW = (400.0, 1000.0)
+WINDOW_LENGTH = 600.0  # `--list-windows`: how long each candidate window is
+WINDOW_STEP = 30.0  # ... and how far apart their starts are
+MIN_SPEECH = 2.0  # seconds a Meet participant must speak in the slice to count as having spoken
 POLL_SECONDS = 10.0
 UPLOAD_TIMEOUT = httpx.Timeout(300.0, connect=15.0)
 CALL_TIMEOUT = httpx.Timeout(60.0, connect=15.0)
@@ -183,6 +194,244 @@ def score_text(result: Score, checkpoints: Checkpoints) -> str:
     return "\n".join(lines)
 
 
+# ---- Meet's own speaker timeline as the reference ---------------------------------------------
+
+Spans = dict[str, list[tuple[float, float]]]  # participant name -> speaking intervals, meeting s
+
+
+def load_meet_record(meeting_id: int) -> dict | None:
+    """The kept `skribby_segment_evidence.events` of the meeting (Meet's speaker timeline, see
+    `app/skribby.py::speaker_events_record`); None when there is none. Read only."""
+    from sqlalchemy import select
+
+    from app.db import SessionLocal
+    from app.models import SkribbySegmentEvidence
+
+    with SessionLocal() as session:
+        row = session.scalar(
+            select(SkribbySegmentEvidence).where(SkribbySegmentEvidence.meeting_id == meeting_id)
+        )
+        return row.events if row is not None and isinstance(row.events, dict) else None
+
+
+@dataclass(frozen=True)
+class MeetTimeline:
+    spans: Spans  # on the transcript's (meeting) clock, shifted by `offset`
+    how: str  # how the clock was placed, in words
+    offset: float
+
+
+def meet_timeline(record: dict | None, offset: float = 0.0) -> MeetTimeline:
+    """Meet's speaking intervals on the meeting's clock, by the same reading and clock placement as
+    `scripts/skribby_segments_report.py` (`offset` seconds are added to Meet's times, as its
+    `--offset` does). Refuses, in words, when the timeline cannot be used."""
+    if not record:
+        raise ExperimentError("no Meet speaker events are kept for this meeting")
+    spans = sr.speaking_intervals(record)
+    if spans is None:
+        raise ExperimentError("the kept speaker events are not in a shape that can be read")
+    zero, how = sr._anchor(record, spans)
+    if zero is None:
+        raise ExperimentError(f"{how}, so they cannot be placed on the meeting's clock")
+    shift = zero - offset
+    placed = {n: sr._merge([(a - shift, b - shift) for a, b in v]) for n, v in spans.items()}
+    return MeetTimeline(placed, f"{how}; shifted by {offset:+g} s", offset)
+
+
+def speech_in(spans: Spans, start: float, end: float, minimum: float) -> dict[str, float]:
+    """Participants who spoke at least `minimum` seconds inside [start, end], with those seconds."""
+    seconds = {name: sr._overlap(v, start, end) for name, v in spans.items()}
+    return {name: s for name, s in seconds.items() if s >= max(minimum, 1e-9)}
+
+
+def clock_check(timeline: MeetTimeline, items: list[dict]) -> str:
+    """One line on whether Meet's clock fits the old Skribby segments' clock (same fit as the
+    segments report); a fit off by seconds is how a bad anchor would show."""
+    heard = sr.heard_by_tag(items)
+    if not heard:
+        return (
+            "Clock check: no old Skribby segments are kept, so Meet's clock could not be checked."
+        )
+    best, here, there = sr.clock_fit(timeline.spans, heard)
+    if best != 0 and there > here * 1.1:
+        return (
+            f"Clock check: WARNING, moving Meet's times {best:+d} s would raise the overlap with "
+            f"the old Skribby segments from {here:.0f} s to {there:.0f} s: re-run with "
+            f"--meet-offset {timeline.offset + best:g} if that looks right."
+        )
+    return "Clock check: no shift of up to 30 s either way fits the old Skribby segments better."
+
+
+def best_windows(
+    spans: Spans, length: float, minimum: float, top: int, step: float = WINDOW_STEP
+) -> list[tuple[float, float, dict[str, float]]]:
+    """Up to `top` non-overlapping windows of `length` seconds with the most distinct participants
+    speaking (at least `minimum` seconds each), best first: `(start, end, {name: seconds})`. Ties
+    go to the window with more speech by those participants, then the earlier one."""
+    last = max((b for v in spans.values() for _, b in v), default=0.0)
+    if last <= 0:
+        return []
+    starts = [0.0]
+    while starts[-1] + step + length <= last:
+        starts.append(starts[-1] + step)
+    ranked = []
+    for start in starts:
+        spoke = speech_in(spans, start, start + length, minimum)
+        ranked.append((len(spoke), sum(spoke.values()), -start, start, spoke))
+    ranked.sort(key=lambda r: r[:3], reverse=True)
+    chosen: list[tuple[float, float, dict[str, float]]] = []
+    for count, _, _, start, spoke in ranked:
+        if count == 0 or len(chosen) >= top:
+            break
+        if all(start >= b or start + length <= a for a, b, _ in chosen):
+            chosen.append((start, start + length, spoke))
+    return chosen
+
+
+def windows_text(
+    meeting_id: int, timeline: MeetTimeline, length: float, minimum: float, top: int
+) -> str:
+    windows = best_windows(timeline.spans, length, minimum, top)
+    lines = [
+        f"Meeting {meeting_id}: {len(timeline.spans)} participant(s) in Meet's speaker timeline "
+        f"({timeline.how}).",
+        f"Windows of {length:g} s with the most distinct participants speaking at least "
+        f"{minimum:g} s, best first, none overlapping:",
+    ]
+    if not windows:
+        lines.append("  none: nobody speaks in Meet's timeline.")
+    for number, (start, end, spoke) in enumerate(windows, 1):
+        who = ", ".join(f"{n} {s:.0f}s" for n, s in sorted(spoke.items(), key=lambda kv: -kv[1]))
+        lines.append(f"  {number}. --window {start:g}-{end:g}: {len(spoke)} participant(s): {who}")
+    return "\n".join(lines)
+
+
+@dataclass
+class MeetScore:
+    voices: list[str]  # model speakers found in the slice
+    people: list[str]  # Meet participants who spoke in the slice
+    spoke: dict[str, float]  # participant -> seconds speaking in the slice
+    matrix: dict[str, dict[str, float]]  # model speaker -> participant -> overlap seconds
+    owner: dict[str, str | None]  # participant -> the speaker holding most of their speech
+    held: dict[str, float]  # participant -> their seconds inside that speaker
+    purity: dict[str, float]  # speaker -> share of its overlap that belongs to its owner
+    sharing: dict[str, list[str]]  # participant -> others whose owner is the same speaker
+
+    @property
+    def alone(self) -> list[str]:
+        return [p for p in self.people if self.owner[p] and not self.sharing[p]]
+
+    @property
+    def unheard(self) -> list[str]:
+        return [p for p in self.people if self.owner[p] is None]
+
+    def _main(self, speaker: str) -> str:
+        group = [p for p in self.people if self.owner[p] == speaker]
+        return max(sorted(group), key=lambda p: self.matrix[speaker][p])
+
+    @property
+    def merged(self) -> list[tuple[str, str]]:
+        """(participant, the participant whose voice holds them): owners that are not the main one
+        of a speaker shared by several."""
+        pairs = []
+        for person in self.people:
+            speaker = self.owner[person]
+            if speaker and self.sharing[person] and self._main(speaker) != person:
+                pairs.append((person, self._main(speaker)))
+        return pairs
+
+    @property
+    def hosts(self) -> list[str]:
+        return sorted({main for _, main in self.merged})
+
+    def ranking(self) -> tuple[int, int, float]:
+        """Higher is better: participants separated, then fewer merged, then mean purity."""
+        mean = sum(self.purity.values()) / len(self.purity) if self.purity else 0.0
+        return (len(self.alone), -len(self.merged), mean)
+
+
+def meet_score(turns: list[Turn], spans: Spans, start: float, end: float, minimum: float):
+    """Compare a model's speakers with who Meet says was speaking inside [start, end]."""
+    spoke = speech_in(spans, start, end, minimum)
+    people = sorted(spoke)
+    voices = list(dx.speaker_stats(turns))
+    matrix: dict[str, dict[str, float]] = {v: {} for v in voices}
+    for turn in turns:
+        for person in people:
+            seconds = sr._overlap(spans[person], turn.start, turn.end)
+            if seconds > 0:
+                row = matrix[turn.speaker]
+                row[person] = row.get(person, 0.0) + seconds
+    owner: dict[str, str | None] = {}
+    held: dict[str, float] = {}
+    for person in people:
+        cells = {v: matrix[v].get(person, 0.0) for v in voices if matrix[v].get(person, 0.0) > 0}
+        top = max(sorted(cells), key=lambda v: cells[v]) if cells else None
+        owner[person] = top
+        held[person] = cells[top] if top else 0.0
+    purity = {}
+    for speaker in voices:
+        total = sum(matrix[speaker].values())
+        mine = [p for p in people if owner[p] == speaker]
+        if total > 0 and mine:
+            purity[speaker] = max(matrix[speaker][p] for p in mine) / total
+    sharing = {
+        p: [q for q in people if q != p and owner[q] is not None and owner[q] == owner[p]]
+        for p in people
+    }
+    return MeetScore(voices, people, spoke, matrix, owner, held, purity, sharing)
+
+
+def meet_score_text(result: MeetScore, model: str) -> str:
+    width = sr.NAME_WIDTH
+    lines = [
+        f"Meet says {len(result.people)} participant(s) spoke in this slice; "
+        f"the model found {len(result.voices)} voice(s).",
+        "",
+        "Seconds of overlap, model speaker (rows) x Meet participant (columns):",
+        "  " + "speaker".ljust(8) + "".join(f"{p[:width]:>{width + 2}}" for p in result.people),
+    ]
+    for speaker in result.voices:
+        cells = "".join(
+            f"{result.matrix[speaker].get(p, 0.0):>{width + 2}.0f}" for p in result.people
+        )
+        lines.append("  " + speaker.ljust(8) + cells)
+    lines += ["", "Per participant: the speaker holding most of their speech, and its purity:"]
+    for person in result.people:
+        speaker = result.owner[person]
+        if speaker is None:
+            lines.append(
+                f"  {person}: spoke {result.spoke[person]:.0f} s -> no model speaker talking"
+            )
+            continue
+        share = result.held[person] / result.spoke[person] if result.spoke[person] else 0.0
+        shared = (
+            f"; SHARED with {', '.join(result.sharing[person])}" if result.sharing[person] else ""
+        )
+        lines.append(
+            f"  {person}: spoke {result.spoke[person]:.0f} s -> speaker {speaker} holds "
+            f"{result.held[person]:.0f} s of it ({share:.0%}); that speaker is "
+            f"{result.purity.get(speaker, 0.0):.0%} {person}{shared}"
+        )
+    lines.append(verdict(result, model))
+    return "\n".join(lines)
+
+
+def verdict(result: MeetScore, model: str) -> str:
+    """One line: voices found, participants separated, participants merged into another's voice."""
+    merged = ", ".join(f"{p} into {main}'s voice" for p, main in result.merged) or "none"
+    line = (
+        f"Verdict {model}: {len(result.voices)} voice(s) for {len(result.people)} participant(s); "
+        f"separated {len(result.alone)} ({', '.join(result.alone) or 'none'}); "
+        f"merged into another's voice {len(result.merged)} ({merged})"
+    )
+    if result.hosts:
+        line += f"; voice shared with them, kept by: {', '.join(result.hosts)}"
+    if result.unheard:
+        line += f"; not heard: {', '.join(result.unheard)}"
+    return line
+
+
 # ---- Skribby ----------------------------------------------------------------------------------
 
 
@@ -222,7 +471,7 @@ def delete_recording(http: httpx.Client, recording_id: str) -> bool:
     """DELETE /recording/{id}. Never raises (it runs in a finally); says so when it fails."""
     try:
         response = http.delete(f"/recording/{recording_id}", timeout=CALL_TIMEOUT)
-        if response.status_code == 200:
+        if 200 <= response.status_code < 300:  # Skribby answers 204 (no body) on success
             print(f"  deleted recording {recording_id} on Skribby", flush=True)
             return True
         reason = f"HTTP {response.status_code}"
@@ -354,10 +603,10 @@ class Sent:
 # ---- running ----------------------------------------------------------------------------------
 
 
-def run(argv: list[str], *, http: httpx.Client | None = None) -> int:
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("meeting_id", type=int)
-    parser.add_argument("--window", type=dx._window, default=DEFAULT_WINDOW, metavar="FROM-TO")
+    parser.add_argument("--window", type=dx._window, metavar="FROM-TO", help="default 400-1000")
     parser.add_argument("--models", default=",".join(DEFAULT_MODELS), help="comma-separated ids")
     parser.add_argument("--price", type=float, help="per-hour price of a model not in the table")
     parser.add_argument("--max-minutes", type=float, default=15.0, help="per model")
@@ -366,23 +615,87 @@ def run(argv: list[str], *, http: httpx.Client | None = None) -> int:
     parser.add_argument("--checkpoints", metavar="FILE.json")
     parser.add_argument("--show-text", type=dx._window, metavar="FROM-TO")
     parser.add_argument("--dry-run", action="store_true", help="plan and cost only, no upload")
-    args = parser.parse_args(argv)
+    meet = parser.add_argument_group("Meet's own speaker timeline as the reference")
+    meet.add_argument(
+        "--score-against-meet",
+        action="store_true",
+        help="score each model against who Meet says was speaking (needs --window)",
+    )
+    meet.add_argument(
+        "--list-windows",
+        action="store_true",
+        help="list the windows where most participants spoke; calls nothing, needs no audio or key",
+    )
+    meet.add_argument("--window-length", type=float, default=WINDOW_LENGTH, help="seconds")
+    meet.add_argument("--top", type=int, default=3, help="how many windows --list-windows shows")
+    meet.add_argument(
+        "--min-speech",
+        type=float,
+        default=MIN_SPEECH,
+        help="seconds a participant must speak in the slice to count (default 2)",
+    )
+    meet.add_argument(
+        "--meet-offset",
+        type=float,
+        default=0.0,
+        help="seconds added to Meet's times (see the clock check line)",
+    )
+    return parser
+
+
+def _meet_inputs(args) -> tuple[MeetTimeline, list[dict]]:
+    """Meet's timeline on the meeting's clock and the old Skribby items (for the clock check)."""
+    timeline = meet_timeline(load_meet_record(args.meeting_id), args.meet_offset)
+    return timeline, dx.load_skribby_items(args.meeting_id)
+
+
+def run(argv: list[str], *, http: httpx.Client | None = None) -> int:
+    args = _parser().parse_args(argv)
+    if args.list_windows:
+        try:
+            timeline, items = _meet_inputs(args)
+        except ExperimentError as exc:
+            print(f"Stopped: {exc}", file=sys.stderr)
+            return 2
+        print(
+            windows_text(args.meeting_id, timeline, args.window_length, args.min_speech, args.top)
+        )
+        print(clock_check(timeline, items))
+        return 0
     models = list(dict.fromkeys(m.strip() for m in args.models.split(",") if m.strip()))
     sent = Sent()
+    by_meet = args.score_against_meet
     try:
         if not models:
             raise ExperimentError("no models given")
         if "soniox/stt-async-v5" in models:
             raise ExperimentError("soniox/stt-async-v5 is deprecated and already measured: skip it")
         prices = model_prices(models, args.price)
-        checkpoints = load_checkpoints(args.checkpoints)
-        start, end = args.window
-        outside = [p for p in checkpoints.points if p[1] < start or p[2] > end]
-        if outside:
-            raise ExperimentError(
-                f"{len(outside)} checkpoint(s) fall outside the window {start:g}-{end:g}s: "
-                "widen the window or change the checkpoints. Nothing was sent"
-            )
+        if by_meet:
+            if args.window is None:
+                raise ExperimentError(
+                    "--score-against-meet needs --window FROM-TO (the default 400-1000 was picked "
+                    "for meeting 32): run --list-windows first to see where most people spoke"
+                )
+            timeline, items = _meet_inputs(args)
+            start, end = args.window
+            spoke = speech_in(timeline.spans, start, end, args.min_speech)
+            if len(spoke) < 2:
+                raise ExperimentError(
+                    f"only {len(spoke)} participant(s) spoke at least {args.min_speech:g} s in "
+                    f"{start:g}-{end:g} s by Meet's timeline: pick another window "
+                    "(--list-windows). Nothing was sent"
+                )
+            checkpoints = None
+        else:
+            start, end = args.window or DEFAULT_WINDOW
+            checkpoints = load_checkpoints(args.checkpoints)
+            outside = [p for p in checkpoints.points if p[1] < start or p[2] > end]
+            if outside:
+                raise ExperimentError(
+                    f"{len(outside)} checkpoint(s) fall outside the window {start:g}-{end:g}s: "
+                    "widen the window or change the checkpoints. Nothing was sent"
+                )
         with dx.prepared_chunks(args.meeting_id) as (paths, how), ExitStack() as stack:
             chunks = dx.measure(paths)
             total = sum(c.seconds for c in chunks)
@@ -408,8 +721,17 @@ def run(argv: list[str], *, http: httpx.Client | None = None) -> int:
                 f"  total for {len(models)} model(s): "
                 f"${sum(estimate(piece.seconds, prices[m]) for m in models):.3f}"
             )
-            items = dx.load_skribby_items(args.meeting_id)
-            print(f"Old Skribby evidence: {len(items)} item(s) kept.")
+            if by_meet:
+                spoke = speech_in(timeline.spans, start, end, args.min_speech)
+                print(
+                    f"Meet's timeline ({timeline.how}): {len(spoke)} participant(s) spoke at "
+                    f"least {args.min_speech:g} s in the slice."
+                )
+                check = clock_check(timeline, items)
+                print(check)
+            else:
+                items = dx.load_skribby_items(args.meeting_id)
+                print(f"Old Skribby evidence: {len(items)} item(s) kept.")
             if args.dry_run:
                 print("Dry run: nothing was sent to Skribby.")
                 return 0
@@ -424,6 +746,7 @@ def run(argv: list[str], *, http: httpx.Client | None = None) -> int:
                     follow_redirects=False,
                 )
             results: list[tuple[str, int, Score]] = []
+            meet_results: list[tuple[str, MeetScore]] = []
             for number, model in enumerate(models, 1):
                 print(f"\n== {model} ({number} of {len(models)}) ==", flush=True)
                 sent.models.append(model)
@@ -431,12 +754,17 @@ def run(argv: list[str], *, http: httpx.Client | None = None) -> int:
                     http, model, piece, lang=args.lang, poll_timeout=args.poll_timeout
                 )
                 turns = model_turns(body, piece.offset)
-                print(dx.summary(turns, items))
-                result = score(turns, items, checkpoints)
-                print(score_text(result, checkpoints))
+                if by_meet:
+                    graded = meet_score(turns, timeline.spans, start, end, args.min_speech)
+                    print(meet_score_text(graded, model))
+                    meet_results.append((model, graded))
+                else:
+                    print(dx.summary(turns, items))
+                    result = score(turns, items, checkpoints)
+                    print(score_text(result, checkpoints))
+                    results.append((model, len(dx.speaker_stats(turns)), result))
                 if args.show_text:
                     print(dx.window_text(turns, items, *args.show_text))
-                results.append((model, len(dx.speaker_stats(turns)), result))
     except ExperimentError as exc:
         print(f"Stopped: {exc}", file=sys.stderr)
         if sent.models:
@@ -447,6 +775,12 @@ def run(argv: list[str], *, http: httpx.Client | None = None) -> int:
             )
         return 2
     print("\nSummary:")
+    if by_meet:
+        print(f"  {check}")
+        ranked = sorted(meet_results, key=lambda r: r[1].ranking(), reverse=True)
+        for place, (model, graded) in enumerate(ranked, 1):
+            print(f"  {place}. {verdict(graded, model)}")
+        return 0
     for model, speakers, result in results:
         print(f"  {model}: {speakers} speaker(s), {'PASS' if result.passed else 'FAIL'}")
     return 0
