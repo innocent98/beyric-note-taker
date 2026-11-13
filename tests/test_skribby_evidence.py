@@ -8,6 +8,7 @@ only by `scripts/skribby_segments_report.py`.
 import importlib.util
 import logging
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -23,6 +24,12 @@ from tests.test_pipeline import (  # noqa: F401  (fixtures used by name)
     env,
     meeting,
     run,
+)
+from tests.test_transcript_source import (  # noqa: F401  (fixtures and helpers used by name)
+    done,
+    long_segments,
+    mode,
+    skribby_meeting,
 )
 from tests.test_web import owner  # noqa: F401
 
@@ -432,3 +439,108 @@ def test_the_whole_report_carries_the_section(session, meeting):
     assert "== Meet's own speaker timeline" in text and "MISMATCH" in text
     older = _script().report(session, meeting.id, offset=0.0)
     assert older == text
+
+
+# ---- in `TRANSCRIPT_SOURCE=skribby` the transcribing step keeps the evidence ----
+# The speakers step fetches nothing in that mode (the transcript already carries the names), so the
+# evidence is kept in the step that fetches Skribby's segments, from the same answer.
+
+
+def skribby_poll(evidence=EVIDENCE):
+    return replace(done(long_segments()), evidence=deepcopy(evidence) if evidence else None)
+
+
+def test_skribby_mode_keeps_the_evidence_and_the_events_in_one_row(session, skribby_meeting, mode):
+    mode()
+    skribby_meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    session.commit()
+    sent = record(person("Ada Example", (10, 30)))
+    vexa = EventsVexa(skribby_poll(), events=sent)
+    run(session, skribby_meeting, vexa)
+    assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
+    assert skribby_meeting.transcript_source == "skribby"
+    [row] = rows(session)
+    assert row.meeting_id == skribby_meeting.id
+    assert row.items == EVIDENCE["items"] and row.tags == EVIDENCE["tags"]
+    assert row.by_elimination is False and row.events == sent
+    assert vexa.asked == ["3c09b2aa-6708-42c1-8145-aa55ee223613"]  # asked once, not again later
+
+
+def test_the_skribby_mode_row_has_the_same_seven_day_retention_as_any_other(
+    session, skribby_meeting, mode
+):
+    mode()
+    run(session, skribby_meeting, FakeVexa(skribby_poll()))
+    [row] = rows(session)
+    assert row.events is None  # a provider without the call: the transcript evidence alone
+    row.created_at = NOW - timedelta(days=8)
+    session.commit()
+    assert pipeline.EVIDENCE_RETENTION_DAYS == 7
+    pipeline.delete_expired_audio(session, NOW)
+    assert rows(session) == []
+
+
+def test_skribby_mode_without_evidence_leaves_no_row_and_asks_nothing(
+    session, skribby_meeting, mode
+):
+    mode()
+    vexa = EventsVexa(skribby_poll(None), events=record(person("Ada Example", (1, 2))))
+    run(session, skribby_meeting, vexa)
+    assert skribby_meeting.transcript_source == "skribby"
+    assert vexa.asked == [] and rows(session) == []
+
+
+def test_a_failing_save_in_skribby_mode_leaves_the_meeting_finished_with_its_transcript(
+    session, skribby_meeting, mode, caplog
+):
+    mode()
+    broken = deepcopy(EVIDENCE)
+    broken["items"][0]["text"] = {SECRET}  # cannot be written as JSON
+    with caplog.at_level(logging.WARNING):
+        run(session, skribby_meeting, FakeVexa(skribby_poll(broken)))
+    assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
+    assert skribby_meeting.transcript_source == "skribby"
+    assert skribby_meeting.speaker_transcript.startswith("[Ada]: alpha")
+    assert skribby_meeting.notes
+    assert rows(session) == []
+    assert "could not keep the speaker evidence" in caplog.text
+    assert SECRET not in caplog.text
+
+
+def test_failing_events_in_skribby_mode_cost_only_the_events(
+    session, skribby_meeting, mode, caplog
+):
+    mode()
+    skribby_meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    session.commit()
+    boom = RuntimeError("Ada Example said the budget is two million")
+    with caplog.at_level(logging.WARNING):
+        run(session, skribby_meeting, EventsVexa(skribby_poll(), events=boom))
+    assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
+    [row] = rows(session)
+    assert row.events is None and row.items == EVIDENCE["items"]
+    assert "Ada Example" not in caplog.text and SECRET not in caplog.text
+
+
+def test_a_fallback_to_our_own_text_still_keeps_one_row_from_the_speakers_step(
+    session, skribby_meeting, mode
+):
+    mode()
+    too_short = replace(done([]), evidence=deepcopy(EVIDENCE))  # Skribby's text is not used
+    run(session, skribby_meeting, FakeVexa(too_short))
+    assert skribby_meeting.transcript_source == "own"
+    [row] = rows(session)
+    assert row.items == EVIDENCE["items"]
+
+
+def test_own_mode_is_unchanged_for_a_skribby_meeting(session, skribby_meeting):
+    """The default setting: the evidence is kept by the speakers step, once, as before."""
+    skribby_meeting.vexa_meeting_id = "3c09b2aa-6708-42c1-8145-aa55ee223613"
+    session.commit()
+    sent = record(person("Ada Example", (10, 30)))
+    vexa = EventsVexa(finished(), events=sent)
+    run(session, skribby_meeting, vexa)
+    assert skribby_meeting.transcript_source == "own"
+    [row] = rows(session)
+    assert row.events == sent and row.items == EVIDENCE["items"]
+    assert vexa.asked == ["3c09b2aa-6708-42c1-8145-aa55ee223613"]

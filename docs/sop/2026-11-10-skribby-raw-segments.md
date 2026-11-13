@@ -39,7 +39,7 @@ Run on the Mac, bounded (CI runs the rest): `ruff check`, `ruff format --check`;
 
 ## Follow-ups
 
-- Evidence is saved only in the speakers step. With `TRANSCRIPT_SOURCE=skribby` that step does not look Skribby up again (the names were saved in the transcript step), so no evidence is kept in that mode; add it there if that mode is switched on.
+- ~~Evidence is saved only in the speakers step; with `TRANSCRIPT_SOURCE=skribby` no evidence is kept.~~ **Fixed 2026-11-13** (`docs/sop/2026-11-13-skribby-elevenlabs-single-transcript.md`): in that mode the transcribing step keeps the same row (same retention, savepoint and rules) from the data it already fetched plus the events call; on a fallback to our own text the speakers step keeps it as before.
 - Once evidence from a bad meeting is read, decide whether elimination is wrong, Skribby's names are wrong, or `label_transcript`'s alignment is, and whether to delete the elimination code.
 
 ## Update 2026-11-11: Meet's own speaker timeline (migration 0041)

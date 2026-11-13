@@ -8,9 +8,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # `TRANSCRIPT_SOURCE=skribby` is allowed only with a Skribby model on this list: the notes then
 # take their speaker names straight from Skribby's own transcript, so the model must do speaker
-# diarization (Skribby's billing page lists it for Soniox, not for Groq Whisper, which is the
-# default `SKRIBBY_TRANSCRIPTION_MODEL`). Add a model here only after reading a real answer from it.
-TRANSCRIPT_SKRIBBY_MODELS = ("soniox/stt-async-v5",)
+# diarization (Skribby's billing page lists it for ElevenLabs, not for Groq Whisper, which is the
+# default `SKRIBBY_TRANSCRIPTION_MODEL`). `elevenlabs/scribe-v2` is the only one: it won the model
+# bake-off on voice separation (meeting 34, 2026-11-13). `soniox/stt-async-v5` was removed (Skribby
+# marks it deprecated and nothing used it). Add a model here only after reading a real answer
+# from it.
+TRANSCRIPT_SKRIBBY_MODELS = ("elevenlabs/scribe-v2",)
 # One address: no spaces, commas, angle brackets or quotes; a dotted domain. Deliberately plain (no
 # display names, no comments, no quoted local parts): this is a public address an operator types in.
 _LABEL = r"[a-z0-9]([a-z0-9-]*[a-z0-9])?"
@@ -204,7 +207,7 @@ class Settings(BaseSettings):
     skribby_download_hosts: str = ""
     # Skribby transcribes the call too; its text is only used to know who spoke when (our own
     # transcription still writes the transcript), unless `transcript_source` is `skribby`, when
-    # this model's text IS the transcript (`soniox/stt-async-v5`, 0.10 USD an hour, has speaker
+    # this model's text IS the transcript (`elevenlabs/scribe-v2`, 0.20 USD an hour, has speaker
     # diarization). `groq/whisper-large-v3-turbo` is on the Free plan and the cheapest (0.04 USD an
     # hour); `none` turns it off and with it the speaker names.
     skribby_transcription_model: str = "groq/whisper-large-v3-turbo"

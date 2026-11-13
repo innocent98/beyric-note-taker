@@ -796,14 +796,17 @@ def _skribby_mode(meeting: Meeting) -> bool:
     )
 
 
-def _skribby_segments(vexa, meeting: Meeting) -> tuple[list[dict], float | None] | None:
-    """Skribby's segments for this meeting and where the last one ends (seconds), or None when they
-    could not be fetched (the provider is down, no longer has the meeting, or anything else). Never
-    raises: a failed fetch is the fallback to our own transcription, never a failed meeting.
-    Logged by error type only."""
+def _skribby_segments(
+    vexa, meeting: Meeting
+) -> tuple[list[dict], float | None, dict | None] | None:
+    """Skribby's segments for this meeting, where the last one ends (seconds) and the evidence of
+    how they were named (`BotMeeting.evidence`, kept by `_keep_evidence` when they are used), or
+    None when they could not be fetched (the provider is down, no longer has the meeting, or
+    anything else). Never raises: a failed fetch is the fallback to our own transcription, never a
+    failed meeting. Logged by error type only."""
     try:
         info = _lookup(vexa, meeting)
-        return list(info.segments or []), info.last_segment_end
+        return list(info.segments or []), info.last_segment_end, info.evidence
     except Exception as exc:
         logger.warning(
             "meeting %s: Skribby's transcript could not be fetched (%s)",
@@ -964,7 +967,7 @@ def _step_transcribing(session: Session, meeting: Meeting, vexa, openai_client) 
         if _skribby_mode(meeting):
             looked = _skribby_segments(vexa, meeting)
             fetched = looked is not None
-            segments, last_end = looked or ([], None)
+            segments, last_end, evidence = looked or ([], None, None)
             found = transcript_source.candidate(segments, last_end)
             why_not = transcript_source.fallback_reason(found, recording.seconds, MIN_WORDS)
             if why_not is None:
@@ -982,6 +985,16 @@ def _step_transcribing(session: Session, meeting: Meeting, vexa, openai_client) 
                     found.words,
                     found.speakers,
                     found.unnamed_segments,
+                )
+                # The same evidence the speakers step keeps when it labels (that step fetches
+                # nothing in this mode: the transcript already carries the names), from the data
+                # fetched above plus the speaker events. A savepoint inside: it can fail without
+                # touching the transcript saved in this commit, and never stops the meeting.
+                _keep_evidence(
+                    session,
+                    meeting_id,
+                    evidence,
+                    _speaker_events(vexa, meeting) if evidence else None,
                 )
                 meeting.step = "speakers"
                 session.commit()

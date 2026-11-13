@@ -87,6 +87,31 @@ DOWNLOAD_HOSTS = ("skribby.io", "amazonaws.com")
 MAX_DOWNLOAD_BYTES = 1 << 30
 # A validation error to a create that carried `custom_vocabulary`: retried once without it.
 VOCABULARY_RETRY_STATUSES = (400, 422)
+# The transcription models Skribby lists WITH custom vocabulary on BOTH its pages,
+# skribby.io/pricing (the "Custom Vocab" capability) and skribby.io/docs/guides/billing
+# ("custom vocab"), read 2026-11-13: Soniox v6, Groq Whisper Large v3 and v3 Turbo, Mistral
+# Voxtral Mini 2, Gladia. Left out on purpose: Deepgram, AssemblyAI and Speechmatics (the two
+# pages disagree: pricing lists Deepgram Nova and AssemblyAI Universal with it, billing does
+# not; billing lists Speechmatics and pricing does not), and `elevenlabs/scribe-v2` (neither
+# page lists it). Ids are from skribby.io/docs/guides/transcription-models. A model absent
+# here is sent no vocabulary at all; the HTTP 400/422 retry above stays for a listed model whose
+# answer says otherwise.
+VOCABULARY_MODELS = frozenset(
+    {
+        "soniox/stt-async-v6",
+        "groq/whisper-large-v3-turbo",
+        "groq/whisper-large-v3",
+        "mistral/voxtral-mini-2",
+        "gladia/async",
+    }
+)
+
+
+def takes_vocabulary(model: str) -> bool:
+    """Whether Skribby lists this model with custom vocabulary (`VOCABULARY_MODELS`)."""
+    return model.strip() in VOCABULARY_MODELS
+
+
 # The late-reply watch (see `SkribbyProvider.send_bot`).
 LATE_ADOPT_TRIES = 10
 LATE_ADOPT_PAUSE_SECONDS = 2.0
@@ -881,9 +906,10 @@ class SkribbyClient:
         # The owner's own words and names, for the transcription model to spell right. Skribby's
         # create-bot page: `custom_vocabulary` (string[]), "Only supported on certain models" and
         # no stated limits, so our own cap (`app.transcribe` keywords: 50 terms, 100 characters)
-        # applies. Not sent when transcription is off (`none`): nothing would read it.
+        # applies. Sent only to a model Skribby lists with it (`VOCABULARY_MODELS`), so not when
+        # transcription is off (`none`) and not to ElevenLabs.
         terms = _keywords(vocabulary or [])
-        if terms and self._model != "none":
+        if terms and takes_vocabulary(self._model):
             body["custom_vocabulary"] = terms
         return body
 
