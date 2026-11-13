@@ -6,7 +6,7 @@ import { LEGAL_NAME } from "@/lib/site";
 // Header, footer and main landmark for the public pages the designs do not draw (the 404 page),
 // built from the legal pages' header and footer so they match. The header offers "Open the app" to
 // the logged-in owner (GET /api/session) and "Sign in" to everyone else, FastAPI being unreachable
-// included.
+// included. The owner's logo leads to /welcome (the landing page), since `/` is their Meetings page.
 export async function PublicShell({ children }: { children: ReactNode }) {
   const owner = (await getSession())?.authenticated === true;
   return (
@@ -16,7 +16,7 @@ export async function PublicShell({ children }: { children: ReactNode }) {
       </a>
       <header className="lg-header">
         <div className="lg-header-in">
-          <Logo />
+          <Logo href={owner ? "/welcome" : "/"} />
           <nav aria-label="Account">
             {owner ? (
               <Button href="/" size="md">
