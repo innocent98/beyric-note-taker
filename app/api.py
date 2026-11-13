@@ -330,7 +330,7 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         can_retry=owner and failed and block is None,
         can_regenerate=owner and ready,
         can_delete=owner and not active,
-        shared_with_team=meeting.shared_team_id is not None,
+        shared_with_team=visibility.is_shared(meeting),
         can_share=owner,
         shared_by=None if owner else _owner_name(session, meeting),
         join_attempts=meeting.join_attempts,
@@ -579,7 +579,7 @@ def share_meeting(
     anyone else gets 404). Doing it twice is fine. The team's default (`share_new_meetings`) is
     read once, when the notes are first written; this is how a person shares one by hand."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
-    team = teams.ensure_team(session, user)
+    team = teams.ensure_team(session, user)  # the default team (`teams.default_membership`)
     meeting.shared_team_id = team.id
     if meeting.series_id is not None:
         series_rules.mark_topics_stale(session, meeting.series_id)  # the repeat topics may change

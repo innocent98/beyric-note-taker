@@ -41,7 +41,7 @@ from app.extraction import normalise
 from app.models import AiRun, Decision, Meeting, Task, User, UserSettings
 from app.notes import NONE_NOTED, UNKNOWN_SPEAKER
 from app.services import Refused
-from app.visibility import can_read_clause, visible_meetings
+from app.visibility import can_read_clause, is_shared, visible_meetings
 from app.words import WORD_CAP as _WORD_CAP
 from app.words import stem as _stem
 from app.words import stems as _stems
@@ -576,7 +576,7 @@ class _Cites:
             owner_name=None
             if meeting.owner_user_id == self.user.id
             else self.owners.get(meeting.owner_user_id, "A teammate"),
-            shared=meeting.shared_team_id is not None,
+            shared=is_shared(meeting),
             target=target,
             line=line if target == "transcript" else None,
         )

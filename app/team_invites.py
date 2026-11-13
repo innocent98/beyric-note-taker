@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 
 from app import mail, teams, titles, tokens
 from app.config import Settings
-from app.models import AuthToken, TeamInvite, TeamMember, User, WaitlistEntry
+from app.models import AuthToken, Team, TeamInvite, TeamMember, User, WaitlistEntry
 from app.services import Refused
 
 TTL = timedelta(days=7)
@@ -171,7 +171,16 @@ def create(
 ) -> InviteResult:
     """Invite one (already normalised) address. `has_room` is the pilot's answer, asked by the
     caller before this and once per address. 409 `pilot_full` for someone who needs a place when
-    there is none; 409 `invite_limit` over the team's caps. In the caller's transaction."""
+    there is none; 409 `invite_limit` over the team's caps; 409 `personal_team` for a personal team
+    while `MULTI_TEAM_ENABLED` is on (nobody is invited into a personal space; with it off, a team
+    of one grows into a team as before: `teams.join`). In the caller's transaction."""
+    team = session.get(Team, team_id)
+    if team is not None and team.is_personal and teams.multi_team_enabled():
+        raise Refused(
+            409,
+            "personal_team",
+            "This is your personal space. Make a team first, then invite people into it.",
+        )
     already = session.scalars(
         select(TeamMember.id)
         .join(User, User.id == TeamMember.user_id)

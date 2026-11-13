@@ -337,18 +337,28 @@ class VocabularyTerm(Base):
 class Team(Base):
     """A small group of accounts that may share meetings (spec 8.1). Every account has one from
     sign-up (a team of one), so every query is team-aware from day one. Sprint and reminder
-    settings arrive with the phases that use them (W3, W8, W9), as additive columns."""
+    settings arrive with the phases that use them (W3, W8, W9), as additive columns.
+
+    `is_personal` marks a person's own permanent space (multi-team design, 2026-11-13): at most one
+    per owner (the partial unique index), never left, never joined, nobody invited into it."""
 
     __tablename__ = "teams"
     __table_args__ = (
         CheckConstraint(_in("reminder_timing", REMINDER_TIMINGS), name="ck_teams_reminder_timing"),
         CheckConstraint(_in("sprint_length", SPRINT_LENGTHS), name="ck_teams_sprint_length"),
         CheckConstraint("sprint_custom_days between 1 and 365", name="ck_teams_sprint_custom_days"),
+        Index(
+            "uq_teams_one_personal_per_owner",
+            "owner_user_id",
+            unique=True,
+            postgresql_where=sa.text("is_personal"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     name: Mapped[str] = mapped_column(String(200), default="My team", server_default="My team")
     owner_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
+    is_personal: Mapped[bool] = mapped_column(Boolean, default=False, server_default=sa.false())
     timezone: Mapped[str] = mapped_column(String(64), default="UTC", server_default="UTC")
     # The team default for "Share with team" (spec 8.2): off. Read when a meeting's notes are first
     # written (`teams.apply_share_default`), never when the bot joins, and never copied anywhere.
@@ -412,19 +422,21 @@ class TeamInvite(Base):
 
 
 class TeamMember(Base):
-    """A user's membership. `user_id` is unique: one team per user."""
+    """A user's membership of one team. A person may have several (multi-team design): one row per
+    team, a role in each, unique on (team, user). `MULTI_TEAM_ENABLED` decides whether the app lets
+    a second one be made; the schema no longer stops it."""
 
     __tablename__ = "team_members"
     __table_args__ = (
         CheckConstraint(_in("role", TEAM_ROLES), name="ck_team_members_role"),
+        UniqueConstraint("team_id", "user_id", name="uq_team_members_team_user"),
         Index("ix_team_members_team_id", "team_id"),
+        Index("ix_team_members_user_id", "user_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     team_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("teams.id", ondelete="CASCADE"))
-    user_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("users.id", ondelete="CASCADE"), unique=True
-    )
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"))
     role: Mapped[str] = mapped_column(String(8), default="member", server_default="member")
     # How the person is named aloud in meetings, for matching task owners (W2/W3).
     aliases: Mapped[list[str]] = mapped_column(
@@ -676,6 +688,11 @@ class Meeting(Base):
             "shared_team_id",
             postgresql_where=sa.text("shared_team_id is not null"),
         ),
+        Index(
+            "ix_meetings_owner_team_id",
+            "owner_team_id",
+            postgresql_where=sa.text("owner_team_id is not null"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -745,6 +762,12 @@ class Meeting(Base):
     # it is shared with. Null = private, which is the default and what every row starts as. Only
     # `app/visibility.py` turns this into who may read; nothing else may compare it.
     shared_team_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
+    )
+    # Stage 2 of the multi-team design: the team that OWNS the meeting (moved to it), as opposed to
+    # one it is merely shared with. Null for every row and unused until stage 2 fills it; the one
+    # rule in `app/visibility.py` already reads it.
+    owner_team_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
     )
     # The recurring meeting this one belongs to (W8, `app/series.py`). Null = not in one. Only

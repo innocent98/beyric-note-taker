@@ -413,6 +413,13 @@ class Settings(BaseSettings):
     # changes) and records since when, which the app shows. Restart `scheduler` after changing it.
     autojoin_enabled: bool = True
 
+    # Multi-team (docs/superpowers/specs/2026-11-13-multi-team-design.md). Off by default: while it
+    # is off a person is on one team at a time exactly as before, and accepting an invitation
+    # dissolves their team of one or is refused with `already_on_team`. On: a person keeps their
+    # personal team and may belong to several others. Switch it on only after the frontend that
+    # understands several teams is live (stage 4). Restart web, worker and scheduler after changing.
+    multi_team_enabled: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

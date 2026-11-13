@@ -1,6 +1,18 @@
-"""Teams (spec 8.1). Every account has one from sign-up: a team of one, owned by the account.
+"""Teams (spec 8.1). Every account has a personal team from sign-up: a team of one, owned by the
+account. Since the multi-team design (2026-11-13) a person may also belong to other teams.
 
-W0.4 builds only that foundation. Invites, roles and the Team screen are W3.
+The rules that make that safe live here, in one place:
+
+* `is_personal` marks a person's own permanent space. It is never left, never joined and nobody is
+  invited into it.
+* `default_membership` / `team_of` is the ONE rule for a route that names no team: the caller's
+  single ordinary team if they have exactly one, else their personal team. For everyone who has one
+  membership, and for everyone while `MULTI_TEAM_ENABLED` is off, that is the team they have always
+  had.
+* `MULTI_TEAM_ENABLED` (off by default) decides whether a second membership may be made. Off:
+  joining works as it always did (a team of one is dissolved into the team joined; someone on a
+  team with others is refused with `already_on_team`). On: joining adds a membership and dissolves
+  nothing.
 """
 
 from datetime import datetime
@@ -8,30 +20,85 @@ from datetime import datetime
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models import Meeting, Milestone, Project, Task, Team, TeamInvite, TeamMember, User
 
 
-def team_of(session: Session, user_id: int) -> Team | None:
+def multi_team_enabled() -> bool:
+    """`MULTI_TEAM_ENABLED`: may a person belong to more than one team. Read on each call (the
+    settings are cached), so a test may replace this function."""
+    return get_settings().multi_team_enabled
+
+
+def is_personal_of(team: Team, user_id: int) -> bool:
+    """True when `team` is this person's own personal team. A team flagged personal that someone
+    else joined by hand (old test fixtures, a flag-off join of a team of one) is simply a team to
+    its other members."""
+    return team.is_personal and team.owner_user_id == user_id
+
+
+def team_ids_of(session: Session, user_id: int) -> list[int]:
+    """Every team the person belongs to, oldest membership first."""
+    return list(
+        session.scalars(
+            select(TeamMember.team_id).where(TeamMember.user_id == user_id).order_by(TeamMember.id)
+        )
+    )
+
+
+def personal_team(session: Session, user_id: int) -> Team | None:
     return session.scalars(
-        select(Team)
-        .join(TeamMember, TeamMember.team_id == Team.id)
-        .where(TeamMember.user_id == user_id)
+        select(Team).where(Team.owner_user_id == user_id, Team.is_personal.is_(True))
     ).first()
 
 
-def ensure_team(session: Session, user: User) -> Team:
-    """The account's team, made if it has none. In the caller's transaction (flushes, no commit;
-    `user` must have an id). Every account-creation path calls this through
-    `accounts.add_user_defaults`, so the invariant "every account has a team" holds without the
-    paths knowing about it."""
-    team = team_of(session, user.id)
+def ensure_personal_team(session: Session, user: User) -> Team:
+    """The person's personal team, made if they have none (a flag-off join dissolves it). In the
+    caller's transaction (flushes, no commit; `user` must have an id)."""
+    team = personal_team(session, user.id)
     if team is None:
-        team = Team(owner_user_id=user.id)
+        team = Team(owner_user_id=user.id, is_personal=True)
         session.add(team)
         session.flush()
         session.add(TeamMember(team_id=team.id, user_id=user.id, role="owner"))
         session.flush()
     return team
+
+
+def default_membership(session: Session, user_id: int) -> TeamMember | None:
+    """The membership a route that names no team acts on: the person's only one; else their only
+    ordinary team; else their personal team (several ordinary teams, or none). No membership at all
+    is None. Never raises however many memberships there are."""
+    rows = session.execute(
+        select(TeamMember, Team)
+        .join(Team, Team.id == TeamMember.team_id)
+        .where(TeamMember.user_id == user_id)
+        .order_by(TeamMember.id)
+    ).all()
+    if not rows:
+        return None
+    if len(rows) == 1:
+        return rows[0][0]
+    ordinary = [m for m, t in rows if not is_personal_of(t, user_id)]
+    if len(ordinary) == 1:
+        return ordinary[0]
+    own = [m for m, t in rows if is_personal_of(t, user_id)]
+    return own[0] if own else rows[0][0]
+
+
+def team_of(session: Session, user_id: int) -> Team | None:
+    """The person's default team (see `default_membership`)."""
+    member = default_membership(session, user_id)
+    return session.get(Team, member.team_id) if member is not None else None
+
+
+def ensure_team(session: Session, user: User) -> Team:
+    """The account's default team, a personal team made if it has none. In the caller's transaction
+    (flushes, no commit; `user` must have an id). Every account-creation path calls this through
+    `accounts.add_user_defaults`, so the invariant "every account has a team" holds without the
+    paths knowing about it."""
+    team = team_of(session, user.id)
+    return team if team is not None else ensure_personal_team(session, user)
 
 
 def remove_users(session: Session, user_ids: list[int]) -> None:
@@ -70,8 +137,24 @@ class TeamChangeRefused(Exception):
         self.status, self.code, self.message = status, code, message
 
 
-def membership(session: Session, user_id: int) -> TeamMember | None:
-    return session.scalars(select(TeamMember).where(TeamMember.user_id == user_id)).first()
+def membership(session: Session, user_id: int, team_id: int | None = None) -> TeamMember | None:
+    """The person's membership of `team_id`, or, naming none, of their default team."""
+    if team_id is None:
+        return default_membership(session, user_id)
+    return session.scalars(
+        select(TeamMember).where(TeamMember.user_id == user_id, TeamMember.team_id == team_id)
+    ).first()
+
+
+def _has_other_members(session: Session, team_id: int, user_id: int) -> bool:
+    return (
+        session.scalar(
+            select(func.count())
+            .select_from(TeamMember)
+            .where(TeamMember.team_id == team_id, TeamMember.user_id != user_id)
+        )
+        > 0
+    )
 
 
 def _lock_teams(session: Session, *team_ids: int) -> None:
@@ -114,39 +197,63 @@ def join(
     alias: str | None,
     now: datetime,
 ) -> TeamMember:
-    """Make `user` a member of `team_id`. Their own team of one is dissolved first (their tasks
-    move; their meetings stay theirs and private). Someone who is on a team with other people must
-    leave it first (409 `already_on_team`). In the caller's transaction, no commit."""
-    current = membership(session, user.id)
+    """Make `user` a member of `team_id`, in the caller's transaction (no commit).
+
+    `MULTI_TEAM_ENABLED` on: the person gains a membership and nothing is dissolved or moved; their
+    personal team is made if a flag-off join dissolved it. A personal team cannot be joined (409
+    `personal_team`). Joining a team they are already in returns that membership.
+
+    Off (today's behaviour, exactly): their own team of one is dissolved first (their tasks move;
+    their meetings stay theirs and private), and someone on a team with other people must leave it
+    first (409 `already_on_team`). A team of one that somebody joins stops being "personal" (it is
+    now the team its owner runs)."""
+    on = multi_team_enabled()
+    current = default_membership(session, user.id)
     _lock_teams(session, team_id, *([current.team_id] if current else []))
-    if session.get(Team, team_id) is None:  # dissolved while we waited
+    target = session.get(Team, team_id)
+    if target is None:  # dissolved while we waited
         raise TeamChangeRefused(404, "invite_invalid", "That invitation is not valid any more.")
-    current = membership(session, user.id)
-    if current is not None and current.team_id == team_id:
-        return current
-    if current is not None:
-        others = session.scalar(
-            select(func.count())
-            .select_from(TeamMember)
-            .where(TeamMember.team_id == current.team_id, TeamMember.user_id != user.id)
-        )
-        if others:
+    held = membership(session, user.id, team_id)
+    if held is not None:
+        return held
+    if on:
+        if target.is_personal:
             raise TeamChangeRefused(
-                409,
-                "already_on_team",
-                "You are on another team. Leave it first, then accept this invitation.",
+                409, "personal_team", "Nobody can join a personal space. Ask for a team invitation."
             )
-        old_team_id = current.team_id
-        move_team_content(session, old_team_id, team_id)
-        # What the person invited from their team of one goes with it (`team_invites.team_id` is
-        # ON DELETE CASCADE): those links promised a place in a team that no longer exists, and
-        # their places are free again.
-        session.delete(current)
-        session.flush()
-        old = session.get(Team, old_team_id)
-        if old is not None:
-            session.delete(old)
-        session.flush()
+        ensure_personal_team(session, user)
+    else:
+        current = default_membership(session, user.id)
+        if current is not None:
+            others = session.scalar(
+                select(func.count())
+                .select_from(TeamMember)
+                .where(TeamMember.team_id == current.team_id, TeamMember.user_id != user.id)
+            )
+            if others:
+                raise TeamChangeRefused(
+                    409,
+                    "already_on_team",
+                    "You are on another team. Leave it first, then accept this invitation.",
+                )
+            old_team_id = current.team_id
+            move_team_content(session, old_team_id, team_id)
+            # What the person invited from their team of one goes with it (`team_invites.team_id`
+            # is ON DELETE CASCADE): those links promised a place in a team that no longer exists,
+            # and their places are free again.
+            session.delete(current)
+            session.flush()
+            old = session.get(Team, old_team_id)
+            if old is not None:
+                session.delete(old)
+            session.flush()
+        if target.is_personal:
+            # The owner invited people into their team of one (today's way to make a team): it is
+            # a team now, no longer a personal space. Nothing else changes while the switch is off
+            # (the owner's new personal team is made later, by `ensure_personal_team`, the first
+            # time something needs it).
+            target.is_personal = False
+            session.flush()
     member = TeamMember(
         team_id=team_id, user_id=user.id, role=role, aliases=[alias] if alias else []
     )
@@ -155,25 +262,31 @@ def join(
     return member
 
 
-def leave(session: Session, user: User, now: datetime) -> Team:
-    """Take `user` out of their team and give them a fresh team of one; returns it. What happens
-    to what was theirs (spec 8.1): the open tasks assigned to them are unassigned; the tasks read
-    from THEIR meetings go with them, unassigned unless they hold them (the team can no longer
-    read those meetings); every meeting of theirs shared with the team is unshared; the
-    invitations they sent stop working. Their meetings never move. The caller has checked who may
-    do this. In the caller's transaction, no commit."""
-    member = membership(session, user.id)
+def leave(session: Session, user: User, now: datetime, team_id: int | None = None) -> Team:
+    """Take `user` out of `team_id` (naming none: their default team) and return their personal
+    team, made if they have none. The person already has a personal team, so no new team of one is
+    created. A personal team cannot be left (409 `personal_team`). What happens to what was theirs
+    (spec 8.1): the open tasks assigned to them are unassigned; the tasks read from THEIR meetings
+    go with them to their personal team, unassigned unless they hold them (the team can no longer
+    read those meetings); every meeting of theirs shared with the team is unshared; the invitations
+    they sent stop working. Their meetings never move. The caller has checked who may do this. In
+    the caller's transaction, no commit."""
+    member = membership(session, user.id, team_id)
     if member is None:
-        return ensure_team(session, user)
+        return ensure_personal_team(session, user)
     old_team_id = member.team_id
     _lock_teams(session, old_team_id)
-    session.refresh(member)  # re-read under the lock; gone means a removal beat us to it
-    member = membership(session, user.id)
-    if member is None or member.team_id != old_team_id:
-        return ensure_team(session, user)
-    fresh = Team(owner_user_id=user.id)
-    session.add(fresh)
-    session.flush()
+    member = membership(session, user.id, old_team_id)  # re-read under the lock
+    if member is None:  # a removal beat us to it
+        return ensure_personal_team(session, user)
+    old_team = session.get(Team, old_team_id)
+    if (
+        old_team is not None
+        and is_personal_of(old_team, user.id)
+        and not _has_other_members(session, old_team_id, user.id)
+    ):
+        raise TeamChangeRefused(409, "personal_team", "Your personal space cannot be left.")
+    home = ensure_personal_team(session, user)
     own_meetings = select(Meeting.id).where(Meeting.owner_user_id == user.id)
     session.execute(
         update(Task)
@@ -183,13 +296,13 @@ def leave(session: Session, user: User, now: datetime) -> Team:
             Task.meeting_id.in_(own_meetings),
         )
         .values(
-            team_id=fresh.id,
+            team_id=home.id,
             assignee_user_id=case((Task.assignee_user_id == user.id, user.id), else_=None),
             # The old team's projects and milestones stay with it.
             project_id=None,
             milestone_id=None,
             check_project=False,
-            # ...and so do its sprints: the task is in the new team's Backlog.
+            # ...and so do its sprints: the task is in their Backlog.
             sprint_id=None,
             carried=False,
         )
@@ -231,9 +344,7 @@ def leave(session: Session, user: User, now: datetime) -> Team:
     )
     session.delete(member)
     session.flush()
-    session.add(TeamMember(team_id=fresh.id, user_id=user.id, role="owner"))
-    session.flush()
-    return fresh
+    return home
 
 
 def apply_share_default(session: Session, meeting: Meeting) -> None:
@@ -245,7 +356,7 @@ def apply_share_default(session: Session, meeting: Meeting) -> None:
     Only the meetings of the team's owner and admins are covered: an admin switching the default
     on must not publish a member's calls; a member shares their own with the switch on the
     meeting page."""
-    member = membership(session, meeting.owner_user_id)
+    member = default_membership(session, meeting.owner_user_id)
     if member is None or member.role not in MANAGER_ROLES:
         return
     team = session.get(Team, member.team_id)

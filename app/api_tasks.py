@@ -74,11 +74,11 @@ def present(
             )
         )
     }
-    member = tasks.membership(session, viewer)
+    members = tasks.memberships(session, viewer)  # the viewer may be on several teams
     indexes: dict[int, TranscriptIndex] = {}
     out = []
     for task in rows:
-        allowed = tasks.permissions(task, viewer, member)
+        allowed = tasks.permissions(task, viewer, members.get(task.team_id))
         meeting = meetings.get(task.meeting_id) if task.meeting_id else None
         # Where the quote was said: only for a meeting the viewer may read (an assignee of a
         # private meeting's task gets the quote and nothing around it, spec 8.2).

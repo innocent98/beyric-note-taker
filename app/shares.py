@@ -83,15 +83,16 @@ def used_today(session: Session, user_id: int, now: datetime) -> int:
 def _team_members_by_email(
     session: Session, sender: User, emails: list[str]
 ) -> dict[str, tuple[int, str | None]]:
-    """The active members of the sender's team among `emails`: address -> (user id, name)."""
-    team_id = session.scalar(select(TeamMember.team_id).where(TeamMember.user_id == sender.id))
-    if team_id is None:
-        return {}
+    """The active members, among `emails`, of any team the sender belongs to: address -> (user id,
+    name). Being linked to an account decides nothing about what they may read: the mail's "Open
+    notes" button asks the one rule (`visibility.via_team`) at send time."""
+    their_teams = select(TeamMember.team_id).where(TeamMember.user_id == sender.id)
     rows = session.execute(
         select(User.email, User.id, User.name)
+        .distinct()
         .join(TeamMember, TeamMember.user_id == User.id)
         .where(
-            TeamMember.team_id == team_id,
+            TeamMember.team_id.in_(their_teams),
             User.status == "active",
             func.lower(User.email).in_(emails),
         )

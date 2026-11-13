@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
-from app import linear, slack, tasks, titles, vault
+from app import linear, slack, tasks, titles, vault, visibility
 from app.models import Integration, IntegrationPost, Meeting, Task, TrackerIssue, User
 
 logger = logging.getLogger(__name__)
@@ -162,7 +162,7 @@ def notify_meeting(
             return False
         # Only a meeting shared with the team: a private meeting's tasks are not visible to
         # teammates (`tasks.visible`), so they must not reach the team's channel either.
-        if meeting.shared_team_id != team_id:
+        if not visibility.in_team(meeting, team_id):
             return False
         if row.status == "failing" and row.last_error == slack.TEXT["gone"]:
             return False  # Slack says the webhook is gone: no more tries until it is reconnected
@@ -326,7 +326,7 @@ def sync_tasks(
     made = 0
     try:
         row = get(session, team_id, LINEAR)
-        if row is None or meeting.shared_team_id != team_id:
+        if row is None or not visibility.in_team(meeting, team_id):
             return 0
         if row.status == "failing" and row.last_error in (
             linear.TEXT["auth"],

@@ -330,22 +330,33 @@ def new_assignees(tasks: list[Task], owner_id: int) -> list[int]:
 def visible(user: User):
     """The `where` condition for "this caller may see this task". Deleted (tombstoned) tasks are
     never visible."""
-    their_team = select(TeamMember.team_id).where(TeamMember.user_id == user.id).scalar_subquery()
+    their_teams = select(TeamMember.team_id).where(TeamMember.user_id == user.id)
     readable = Task.meeting_id.in_(select(Meeting.id).where(can_read_clause(user)))
     return and_(
         Task.deleted_at.is_(None),
         or_(
             # Assigned to them AND still on that task's team: a person who left or was removed
-            # keeps no window into the old team's tasks (a done task still names them).
-            and_(Task.assignee_user_id == user.id, Task.team_id == their_team),
+            # keeps no window into the old team's tasks (a done task still names them). A person
+            # may be on several teams: any of them counts.
+            and_(Task.assignee_user_id == user.id, Task.team_id.in_(their_teams)),
             readable,
-            and_(Task.meeting_id.is_(None), Task.team_id == their_team),
+            and_(Task.meeting_id.is_(None), Task.team_id.in_(their_teams)),
         ),
     )
 
 
-def membership(session: Session, user: User) -> TeamMember | None:
-    return session.scalars(select(TeamMember).where(TeamMember.user_id == user.id)).first()
+def membership(session: Session, user: User, team_id: int | None = None) -> TeamMember | None:
+    """The caller's membership of `team_id` (a task's team, for what they may do to the task), or
+    naming none, of their default team (`teams.default_membership`)."""
+    return teams.membership(session, user.id, team_id)
+
+
+def memberships(session: Session, user: User) -> dict[int, TeamMember]:
+    """Every membership of the caller by team id, for a list of tasks from several teams."""
+    return {
+        m.team_id: m
+        for m in session.scalars(select(TeamMember).where(TeamMember.user_id == user.id))
+    }
 
 
 @dataclass(frozen=True)
@@ -582,8 +593,7 @@ def update(session: Session, user: User, task: Task, changes: dict, now: datetim
     """Apply a partial change (`title`, `status`, `assignee_user_id`, `due_date`). A field given
     with the value it already has is not a change. The whole request is refused (`TaskForbidden`)
     if any real change is more than the caller may make, and nothing is applied. Commits."""
-    member = membership(session, user)
-    allowed = permissions(task, user, member)
+    allowed = permissions(task, user, membership(session, user, task.team_id))
     real = {k: v for k, v in changes.items() if getattr(task, k) != v}
     if "title" in real:
         real["title"] = _title(real["title"])
@@ -646,7 +656,7 @@ def delete(session: Session, user: User, task: Task) -> None:
     cleared, so the same bullet does not bring it back when the notes are read again (this is how a
     suggested task is dismissed: the person who owns its meeting may dismiss it too). Commits."""
     if not (
-        permissions(task, user, membership(session, user)).delete
+        permissions(task, user, membership(session, user, task.team_id)).delete
         or (task.suggested and owns_meeting_of(session, user, task))
     ):
         raise TaskForbidden
@@ -673,7 +683,7 @@ def owns_meeting_of(session: Session, user: User, task: Task) -> bool:
 def can_decide(session: Session, user: User, task: Task) -> bool:
     """Whether the caller may accept or dismiss this suggested task: whoever may edit it, or the
     person who owns its meeting. A teammate who may merely read it may not."""
-    return permissions(task, user, membership(session, user)).edit or owns_meeting_of(
+    return permissions(task, user, membership(session, user, task.team_id)).edit or owns_meeting_of(
         session, user, task
     )
 
