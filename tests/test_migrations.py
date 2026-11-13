@@ -1694,3 +1694,29 @@ def test_0041_adds_a_nullable_events_column_and_round_trips(scratch_url):
     }
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0042_follows_0041():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0042").down_revision == "0041"
+
+
+def test_0042_widens_the_ledger_kinds_for_the_vocabulary_pass_and_round_trips(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0041")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:  # rows the old constraint allows stay
+        conn.execute(text("insert into ai_runs (kind, model) values ('label', 'm')"))
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # not yet a kind
+        conn.execute(text("insert into ai_runs (kind, model) values ('vocabulary', 'm')"))
+    command.upgrade(cfg, "0042")
+    with engine.begin() as conn:
+        conn.execute(text("insert into ai_runs (kind, model) values ('vocabulary', 'm')"))
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # still a closed list
+        conn.execute(text("insert into ai_runs (kind, model) values ('other', 'm')"))
+    command.downgrade(cfg, "0041")  # the vocabulary rows go, the others stay
+    assert _rows(engine, "select kind from ai_runs order by id") == [("label",)]
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # the old check is back
+        conn.execute(text("insert into ai_runs (kind, model) values ('vocabulary', 'm')"))
+    command.upgrade(cfg, "head")
+    engine.dispose()

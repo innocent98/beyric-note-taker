@@ -73,6 +73,7 @@ AI_RUN_KINDS = (
     "ask",
     "topics",
     "shadow",
+    "vocabulary",
 )
 AI_RUN_STATUSES = ("ok", "failed", "pending")
 # `pending` waits for the worker (or for a retry), `running` is being worked on, `done` is finished,

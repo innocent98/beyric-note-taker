@@ -28,10 +28,12 @@ from app import (
     mail_templates,
     placement,
     series,
+    skribby,
     teams,
     titles,
     transcript_source,
     usage,
+    vocabulary_pass,
     workspace,
 )
 from app.audio import AudioError, NoSpeechError
@@ -787,6 +789,56 @@ def _terms(session: Session, owner_user_id: int) -> list[str]:
     )
 
 
+def _apply_vocabulary(session: Session, meeting: Meeting, text: str, openai_client) -> str:
+    """Skribby's transcript with the owner's vocabulary applied, when that is needed and possible:
+    only in skribby mode (the caller), only when the model Skribby transcribes with cannot take the
+    vocabulary itself (`skribby.takes_vocabulary`) and the owner has at least one term. A cheap
+    model call that may only fix the spelling of words that sound like a term; its answer is
+    checked and the original kept when it fails the checks (`app/vocabulary_pass.py`). Its cost is
+    one `vocabulary` ledger row, written in the commit that saves the transcript. Never raises and
+    never stops the meeting: any failure is the original text, logged by exception class only."""
+    try:
+        if skribby.takes_vocabulary(get_settings().skribby_transcription_model):
+            return text  # Skribby's model was sent the vocabulary when the bot was
+        with session.begin_nested():  # a failed read must not abort the transaction
+            terms = _terms(session, meeting.owner_user_id)
+        if not terms:
+            return text
+        spent: list = []
+        result = vocabulary_pass.apply_vocabulary(text, terms, client=openai_client, usage=spent)
+        try:
+            with session.begin_nested():
+                ai_runs.record_usage(
+                    session,
+                    meeting.id,
+                    "vocabulary",
+                    get_settings().notes_model,
+                    spent,
+                    user_id=meeting.owner_user_id,
+                )
+        except Exception as exc:  # the spend is lost from the ledger, the meeting is not
+            logger.warning(
+                "meeting %s: the vocabulary pass ledger row was not saved (%s)",
+                meeting.id,
+                type(exc).__name__,
+            )
+        logger.info(
+            "meeting %s: vocabulary pass: %d of %d sections applied (%d words changed), "
+            "%d kept as they were",
+            meeting.id,
+            result.applied,
+            result.sections,
+            result.changed_words,
+            sum(result.discarded.values()),
+        )
+        return result.text
+    except Exception as exc:
+        logger.warning(
+            "meeting %s: the vocabulary pass was not made (%s)", meeting.id, type(exc).__name__
+        )
+        return text
+
+
 def _skribby_mode(meeting: Meeting) -> bool:
     """Whether this meeting's notes are to be made from Skribby's own transcript: the setting says
     so AND Skribby ran the meeting (a Vexa meeting always uses our transcription)."""
@@ -975,8 +1027,9 @@ def _step_transcribing(session: Session, meeting: Meeting, vexa, openai_client) 
                 # speaker labelling are skipped (it already carries the names). Saved, with the
                 # names, in this one commit, BEFORE the provider's copy is deleted (that is the
                 # speakers step's, after this commit).
-                meeting.transcript = found.text
-                meeting.speaker_transcript = found.text
+                text = _apply_vocabulary(session, meeting, found.text, openai_client)
+                meeting.transcript = text
+                meeting.speaker_transcript = text
                 meeting.speakers_incomplete = not found.complete
                 meeting.transcript_source = transcript_source.SKRIBBY
                 logger.info(
