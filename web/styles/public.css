@@ -52,8 +52,15 @@
 .preview-owner { display: flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--ink-2); }
 
 /* ---- Landing (Landing.dc.html) ---- */
-.ld { overflow-x: hidden; background: var(--surface); font-size: 1rem; line-height: 1.55; }
+/* `overflow-x: hidden` would make .ld a scroll container, and a sticky header inside one sticks to
+   it instead of the window (it scrolled away). `clip` cuts the same overflow without that; the
+   `hidden` line is for a browser that does not know `clip`. */
+.ld { overflow-x: hidden; overflow-x: clip; background: var(--surface); font-size: 1rem; line-height: 1.55; }
 .ld a { text-decoration: none; }
+/* "Skip to content" and every `#...` link land below the sticky headers: .ld-header is 68px + 1px
+   border, .lg-header 64px + 1px. The sections and the legal h2s carry their own margin. */
+.ld #main { scroll-margin-top: 69px; }
+.lg #main { scroll-margin-top: 65px; }
 .ld-header { position: sticky; top: 0; z-index: 20; border-bottom: 1px solid var(--border-soft); background: var(--header-blur); backdrop-filter: blur(10px); }
 .ld-header-in { display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); max-width: 1200px; height: 68px; margin: 0 auto; padding: 0 var(--space-6); }
 .ld-nav { display: flex; flex-wrap: wrap; gap: 28px; font-size: var(--text-base); font-weight: 500; }
@@ -115,7 +122,7 @@
 .ld-tools-in { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: clamp(20px, 4vw, 48px); max-width: 1200px; margin: 0 auto; padding: 28px var(--space-6); color: var(--text-faint); font-size: var(--text-md); font-weight: 600; letter-spacing: -0.01em; }
 .ld-tools-label { color: var(--text-3); font-size: var(--text-sm); font-weight: 500; }
 
-.ld-section { max-width: 1200px; margin: 0 auto; padding: 112px var(--space-6); scroll-margin-top: 68px; }
+.ld-section { max-width: 1200px; margin: 0 auto; padding: 112px var(--space-6); scroll-margin-top: 69px; }
 .ld-heading { display: flex; flex-direction: column; gap: 14px; max-width: 720px; }
 .ld-eyebrow { color: var(--teal); font-size: var(--text-sm); font-weight: 600; letter-spacing: 0.06em; }
 .ld-eyebrow-mint { color: var(--teal-mint); }
@@ -153,7 +160,7 @@
 .ld-task-foot { display: flex; align-items: center; justify-content: space-between; color: var(--text-2); font-weight: 550; }
 .ld-due-soon { color: var(--warning); }
 
-.ld-night { background: var(--night); color: var(--on-night); scroll-margin-top: 68px; }
+.ld-night { background: var(--night); color: var(--on-night); scroll-margin-top: 69px; }
 .ld-features { display: flex; flex-direction: column; gap: 56px; }
 .ld-features-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--space-8); }
 .ld-features-head .ld-heading { max-width: 640px; }
@@ -175,7 +182,7 @@
 .ld-security-title { margin-top: 6px; font-size: 1rem; font-weight: 600; }
 .ld-security-item p { margin: 0; color: var(--ink-3); font-size: var(--text-base); line-height: 1.6; }
 
-.ld-faq { border-top: 1px solid var(--border-soft); background: var(--bg); scroll-margin-top: 68px; }
+.ld-faq { border-top: 1px solid var(--border-soft); background: var(--bg); scroll-margin-top: 69px; }
 .ld-faq-in { display: flex; flex-direction: column; gap: 40px; max-width: 820px; margin: 0 auto; padding: 104px var(--space-6); }
 .ld-faq-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-xl); background: var(--surface); }
 .ld-faq-list details { border-bottom: 1px solid var(--border-soft); }
