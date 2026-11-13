@@ -71,12 +71,6 @@ def reverse_turn(line):
     return f"{label}: " + " ".join(reversed(rest.split(" ")))
 
 
-def every_fifth_word_is_a_term(section):
-    """Only listed terms, but far too many of them: 20% of the words."""
-    words = section.split(" ")
-    return " ".join("Beyric" if i % 5 == 3 and "\n" not in w else w for i, w in enumerate(words))
-
-
 def fix(section):
     return section.replace("Bayrick", "Beyric")
 
@@ -146,7 +140,6 @@ def test_pieces_join_back_to_the_transcript_exactly():
             "unlisted_edit",
             lambda s: s.replace("for notes", "for Beyric notes").replace(" w1 ", " "),
         ),
-        ("changed_words", lambda s: every_fifth_word_is_a_term(s)),
     ],
 )
 def test_an_answer_that_fails_a_check_is_discarded_and_the_original_kept(why, reply, caplog):
@@ -197,6 +190,10 @@ def test_an_edit_that_is_exactly_a_listed_term_is_accepted(before, after, terms)
         ("pay Beyric two million now", "pay two million now"),  # a word dropped
         ("we use Bayrick now", "we use Beyric Labs now"),  # more than the term
         ("we use Bayrick now", "we use Beyrick now"),  # near the term, not the term
+        ("we did not agree now", "we did Beyric agree now"),  # a term laid over "not"
+        ("we did no work now", "we did Beyric work now"),  # ... or over "no"
+        ("we paid 2 million now", "we paid Beyric million now"),  # ... or over a number
+        ("we paid two million now", "we paid Beyric now"),  # ... or over unrelated words
     ],
 )
 def test_any_other_edit_is_refused_even_when_the_counts_would_pass(before, after):
@@ -206,6 +203,24 @@ def test_any_other_edit_is_refused_even_when_the_counts_would_pass(before, after
         "unlisted_edit",
         "word_count",
     )
+
+
+def test_even_real_term_fixes_are_refused_when_they_are_a_fifth_of_the_words():
+    many = " ".join(["we use Bayrick today friends"] * 12)  # 20% of the words are the term
+    original = f"[Ada]: {many}"
+    assert vocabulary_pass.check(original, fix(original), TERMS) == "changed_words"
+    few = f"[Ada]: we use Bayrick here {filler(95)}"
+    assert vocabulary_pass.check(few, fix(few), TERMS) is None
+
+
+def test_a_short_word_may_change_case_to_a_term_but_not_become_one():
+    pad = filler(95)
+    case_only = vocabulary_pass.check(
+        f"[Ada]: ask ada now {pad}", f"[Ada]: ask Ada now {pad}", ["Ada"]
+    )
+    assert case_only is None
+    turned = vocabulary_pass.check(f"[Ada]: no work {pad}", f"[Ada]: Noa work {pad}", ["Noa"])
+    assert turned == "unlisted_edit"
 
 
 def test_a_speaker_telling_the_model_to_change_a_fact_cannot_change_it():
@@ -287,7 +302,7 @@ class VocabularyModel(FakeOpenAI):
         self.chats += 1
         self.vocabulary_calls += 1
         section = block(kwargs["messages"][1]["content"], "transcript")
-        text = self.reply(section) if self.reply else section.replace("alpha7", "Beyric")
+        text = self.reply(section) if self.reply else section.replace("alpha7", "Alfa7")
         return SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content=text), finish_reason="stop")],
             usage=SimpleNamespace(prompt_tokens=900, completion_tokens=800),
@@ -304,11 +319,11 @@ def test_in_skribby_mode_the_owners_terms_are_applied_and_the_cost_is_in_the_led
     session, skribby_meeting, mode
 ):
     mode()
-    with_terms(session, skribby_meeting, "Beyric")
+    with_terms(session, skribby_meeting, "Alfa7")
     openai = VocabularyModel()
     run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
-    assert "Beyric" in skribby_meeting.transcript and "alpha7 " not in skribby_meeting.transcript
+    assert "Alfa7" in skribby_meeting.transcript and "alpha7 " not in skribby_meeting.transcript
     assert skribby_meeting.speaker_transcript == skribby_meeting.transcript
     assert skribby_meeting.transcript.split("\n")[0].startswith("[Ada]: alpha")
     assert skribby_meeting.transcript_source == "skribby"
@@ -334,7 +349,7 @@ def test_an_owner_with_no_terms_makes_no_call(session, skribby_meeting, mode):
 
 def test_only_the_owners_own_terms_are_sent(session, skribby_meeting, mode, stranger):
     mode()
-    with_terms(session, skribby_meeting, "Beyric")
+    with_terms(session, skribby_meeting, "Alfa7")
     session.add(VocabularyTerm(owner_user_id=stranger.id, term="Secret"))
     session.commit()
     seen = []
@@ -348,11 +363,11 @@ def test_only_the_owners_own_terms_are_sent(session, skribby_meeting, mode, stra
 
     openai.chat.completions.create = spy
     run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
-    assert "Beyric" in seen and all("Secret" not in x for x in seen)
+    assert "Alfa7" in seen and all("Secret" not in x for x in seen)
 
 
 def test_own_mode_never_makes_the_call(session, skribby_meeting):
-    with_terms(session, skribby_meeting, "Beyric")
+    with_terms(session, skribby_meeting, "Alfa7")
     openai = VocabularyModel()
     run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)  # default: own
     assert skribby_meeting.transcript_source == "own"
@@ -361,7 +376,7 @@ def test_own_mode_never_makes_the_call(session, skribby_meeting):
 
 def test_a_vexa_meeting_in_skribby_mode_never_makes_the_call(session, meeting, mode):
     mode()
-    with_terms(session, meeting, "Beyric")
+    with_terms(session, meeting, "Alfa7")
     openai = VocabularyModel()
     run(session, meeting, FakeVexa(done(long_segments())), openai)  # bot_provider is vexa
     assert meeting.transcript_source == "own" and openai.vocabulary_calls == 0
@@ -376,7 +391,7 @@ def test_a_model_that_takes_the_vocabulary_is_not_asked_again(
     settings = real()
     settings.skribby_transcription_model = "soniox/stt-async-v6"  # startup allows only ElevenLabs
     monkeypatch.setattr(pipeline, "get_settings", lambda: settings)
-    with_terms(session, skribby_meeting, "Beyric")
+    with_terms(session, skribby_meeting, "Alfa7")
     openai = VocabularyModel()
     run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
     assert skribby_meeting.transcript_source == "skribby"
@@ -387,12 +402,12 @@ def test_a_discarded_answer_keeps_skribbys_text_and_is_still_billed(
     session, skribby_meeting, mode, caplog
 ):
     mode()
-    with_terms(session, skribby_meeting, "Beyric")
+    with_terms(session, skribby_meeting, "Alfa7")
     openai = VocabularyModel(reply=lambda s: s.replace("[Ada]:", "[Adam]:"))
     with caplog.at_level(logging.INFO):
         run(session, skribby_meeting, FakeVexa(done(long_segments())), openai)
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
-    assert "[Adam]" not in skribby_meeting.transcript and "Beyric" not in skribby_meeting.transcript
+    assert "[Adam]" not in skribby_meeting.transcript and "Alfa7" not in skribby_meeting.transcript
     assert skribby_meeting.transcript.startswith("[Ada]: alpha0")
     assert "kept as it was (labels)" in caplog.text
     assert len(ledger(session, skribby_meeting.id, "vocabulary")) == 1
@@ -402,7 +417,7 @@ def test_a_failing_pass_or_ledger_write_never_stops_the_meeting(
     session, skribby_meeting, mode, monkeypatch, caplog
 ):
     mode()
-    with_terms(session, skribby_meeting, "Beyric")
+    with_terms(session, skribby_meeting, "Alfa7")
 
     def boom(*args, **kwargs):
         raise RuntimeError(f"nope {SECRET}")
@@ -420,7 +435,7 @@ def test_a_failing_ledger_write_costs_only_the_row(
     session, skribby_meeting, mode, monkeypatch, caplog
 ):
     mode()
-    with_terms(session, skribby_meeting, "Beyric")
+    with_terms(session, skribby_meeting, "Alfa7")
     real = vocabulary_pass.apply_vocabulary
 
     def one_call_but_a_broken_ledger(text, terms, *, client=None, usage=None):
@@ -434,7 +449,7 @@ def test_a_failing_ledger_write_costs_only_the_row(
     with caplog.at_level(logging.WARNING):
         run(session, skribby_meeting, FakeVexa(done(long_segments())), VocabularyModel())
     assert (skribby_meeting.status, skribby_meeting.step) == ("ready", "done")
-    assert "Beyric" in skribby_meeting.transcript  # the corrected text is still used
+    assert "Alfa7" in skribby_meeting.transcript  # the corrected text is still used
     assert "ledger row was not saved" in caplog.text
     assert ledger(session, skribby_meeting.id, "vocabulary") == []
 
@@ -443,7 +458,7 @@ def test_the_evidence_and_the_shadow_numbers_are_unaffected_by_the_pass(
     session, skribby_meeting, mode
 ):
     mode()
-    with_terms(session, skribby_meeting, "Beyric")
+    with_terms(session, skribby_meeting, "Alfa7")
     poll = replace(done(long_segments()), evidence=EVIDENCE)
     run(session, skribby_meeting, FakeVexa(poll), VocabularyModel())
     [row] = rows(session)
