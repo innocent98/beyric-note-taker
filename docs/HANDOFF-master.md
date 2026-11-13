@@ -1,6 +1,59 @@
 # Beyric Note Taker: master handoff
 
-**Updated 2026-11-10 00:15 WAT by the eighteenth lead: read the FIRST update block below, then the second.** **Written:** 2026-11-09, about 13:45 WAT, by the sixteenth lead session for the seventeenth (Adebayo starts it himself; this session does not). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6 to #131 and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail. **Sections 00, 1, 4, 5 and 6 were rewritten at this handoff and are current; sections 0, 2, 3 and 7 are standing rules, decisions, designs and recipes (the 2026-11-08/09 additions are marked).**
+**Updated 2026-11-13 about 20:30 WAT by the nineteenth lead: read the FIRST update block below, then the two after it.** **Written:** 2026-11-09, about 13:45 WAT, by the sixteenth lead session for the seventeenth (Adebayo starts it himself; this session does not). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6 to #131 and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail. **Sections 00, 1, 4, 5 and 6 were rewritten at this handoff and are current; sections 0, 2, 3 and 7 are standing rules, decisions, designs and recipes (the 2026-11-08/09 additions are marked).**
+
+## UPDATE 2026-11-13, about 20:30 WAT, nineteenth lead for the twentieth: READ THIS BLOCK FIRST, then the 18th lead's block below it
+
+This block supersedes the blocks below wherever they disagree. Start the next session with: "Read `docs/HANDOFF-master.md` and continue as the lead." Verified with live commands in the session unless marked "not verified".
+
+### A. State right now
+
+| Thing | State |
+|---|---|
+| `main` | `a829d00` (#173), Alembic head **0042**. #172 (`032774c`) deployed green; the deploy of `a829d00` was still waiting on main's ci when this was written (not verified finished). No open PR. |
+| Merged since the last block | #165 handoff, #166 evidence kept 7 days (0040), #167 and #168 diarize experiment, #169 bake-off tool, #170 Meet's speaker timeline kept with the evidence (0041), #171 bake-off scored against Meet's timeline, #172 ElevenLabs single-transcript readiness, #173 vocabulary post-pass (0042, ledger kind `vocabulary`). |
+| Server `.env` | `SKRIBBY_TRANSCRIPTION_MODEL=elevenlabs/scribe-v2` since **18:31 WAT 2026-11-13** (his paste of `printenv` in the worker). `TRANSCRIPT_SOURCE` is still `own` and `TRANSCRIPT_SHADOW_PERCENT` 0: **nothing of the one-transcript path is on.** Revert of the model: the same `sed` with `soniox/stt-async-v6`. |
+| Bot | Skribby live (Vexa stopped). Meeting 34 (Fri 2026-11-13, Meet, 7 people spoke by Meet's own timeline) came back with 5 Skribby tags, 3 named, 2 "Unknown speaker", on `soniox/stt-async-v6` (the v5 to v6 flip had not helped). |
+| Sessions | `elevenlabs-single` archived (its two PRs merged). `bake-off-scored-against` (PR #171) was done but still had live work when archiving was tried: archive it when idle. Worktrees kept: `skribby-check`, `bakeoff`, `teams-test` and the older ones listed in the 18th lead's block; `docs-1113` is this docs PR's. |
+| Audio of meeting 34 | kept until about **2026-11-20**: a bake-off or comparison on it must be run before then. |
+
+### B. What was found and decided (his words in chat unless marked lead's rec)
+
+| Topic | Detail |
+|---|---|
+| Who is at fault for meeting 34 | **Skribby's diarization** (the voice split by the transcription model), proven against Meet's own speaking timeline (`scripts/skribby_segments_report.py 34`): 5 tags for 7 speakers, small speakers merged into others. Names that are right come from Meet's speaking signal (Skribby participant events), not from any model. Our alignment step (`app/notes.py::label_transcript`, by share of text, no times) is **still unmeasured** for 34. |
+| Model bake-off (#171) | window 21:00-31:00, 6 Meet speakers: `elevenlabs/scribe-v2` 6 voices, separated 4; `assemblyai/universal-3-5-pro` 5, separated 2; `soniox/stt-async-v6` 4, separated 1; `deepgram/nova-3` 3, separated 0. One window; small speakers had 5 to 16 s. Cost about 0.21 USD. His words: "Yes, give me the command" (the flip). |
+| Vexa hosted | he floated going back ("just thinking out loud"). Lead's view: wait for the bake-off; Vexa hosted keeps the anonymous-guest refusals (about 1 in 4, vendor-stated) and costs 0.50 USD an hour with transcript (vendor-stated). Not chosen. |
+| Text comparison (two windows of meeting 34, by reading) | our gpt-transcribe 1213 and 1148 words with 37 and 23 dropped passages marked by an ellipsis; ElevenLabs 1507 and 1382 with 1 and 2; Soniox v6's live text 1646 and 1445 with 0. ElevenLabs more complete; every model misspells his product names inconsistently; his vocabulary list holds **one** term so vocabulary was not tested. One meeting, mostly French, no ground truth. |
+| Decision: ONE transcript | his words: "okay good. we might also remove the sonix v5 since its already deprecated" and "Yes, start the build session": move to Skribby's text as the only transcript if it holds up (saves about 0.27 USD an hour: about 0.83 today, 0.56 after; estimates) and drops the share-of-text alignment step. Built, **not switched on** (#172, #173). Fallback to gpt-transcribe stays for a bad Skribby transcript; a sampled shadow check (`TRANSCRIPT_SHADOW_PERCENT`, about 0.07 USD an hour averaged at 25%) is optional for the first week. |
+| Facts read from Skribby's pages (2026-11-13) | `skribby.io/pricing` and `/docs/guides/billing`: custom vocabulary is **not listed for `elevenlabs/scribe-v2`** (listed for Soniox v6, Groq Whisper, Mistral Voxtral Mini 2, Gladia; the two pages disagree on Deepgram, AssemblyAI, Speechmatics); `soniox/stt-async-v5` is deprecated; the Billing page says nothing about speaker names per model. |
+| Merges | "Yes, merge quick" (#171), "Yes, merge #172", "merge #173 when CI is green"; and on #173's branch "Merge main in" (no force-push: the auto-mode checker blocked the session's force-push). |
+
+### C. Needs Adebayo (his own steps; the 18th lead's list C 1 to 5 below still stands)
+
+1. Put his **product names in his vocabulary list** (one term today).
+2. After the next real meeting, tell the lead the meeting id so the lead reads its evidence.
+3. Archive the `bake-off-scored-against` session from the sidebar if the lead has not.
+4. Later, the flip (see D 2): he edits `.env` and restarts.
+
+### D. Next for the lead, in order
+
+1. **The next live meeting on ElevenLabs: do the speaker NAMES still come through?** Read `scripts/skribby_segments_report.py <id>` (he runs it, lead server reads are blocked); count tags and named tags against Meet's timeline. If names are lost, revert the model line.
+2. If names hold: give him the `.env` lines for the one-transcript flip, `TRANSCRIPT_SOURCE=skribby` and `TRANSCRIPT_SHADOW_PERCENT=10` to `25` for a week, then 0; restart web, worker, scheduler only when no meeting is on; read `docker compose exec -T web python scripts/transcript_shadow_report.py` after a week. Optionally compare a mostly-English meeting first. Evidence is now kept in that mode (#172), so a bad meeting can still be diagnosed.
+3. Measure our alignment (`label_transcript`) on meeting 34 if the one-transcript flip is NOT made; with one transcript the step disappears.
+4. Idea, unbuilt and needs a design: name speakers from Meet's own timeline instead of the tags (the truth source we measured against).
+5. Vexa cleanup: start Vexa for an hour about **2026-11-16** so its hourly job deletes old recordings, then stop it. The rest of the 18th lead's D list (Microsoft and Google verification, C18 notice, Zoom retest).
+6. The checklist counts and module table are from 2026-11-10 and were not recounted (only the Skribby lines were reconciled).
+
+### E. How we work (added today)
+
+- The lead cannot read the server over ssh: he runs one combined command; a one-off script can be sent on stdin: `ssh haven-respite 'cd /opt/beyric-note-taker && docker compose exec -T worker python - <args>' < script.py > out.txt` (the worker container has the audio and the Skribby key; nothing is installed). The comparison script of today was a scratch file and is not in the repo.
+- `gh pr merge --auto` merges at once here because the repo has no required checks; when he says "merge when green", check `gh pr checks` and merge after it is green. #171 landed with its PR shards pending that way (main's own ci gated the deploy).
+- Stacked PRs: retarget the child to main before merging the base; no force-push (merge `origin/main` into the child instead).
+- Every brief to a session says: no AI attribution anywhere, no `claude/` branch names, fast local checks only, never the full suite.
+- A model flip or a restart cuts a recording in progress: ask for "no meeting on" before any restart.
+
+---
 
 ## UPDATE 2026-11-10, 00:15 WAT, eighteenth lead for the nineteenth: READ THIS BLOCK FIRST, then the 17th lead's block below it
 
