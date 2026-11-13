@@ -653,7 +653,7 @@ No whole designed screen is missing. The designer's main file draws one desktop 
 - [ ] Landing line "at rest with AES-256" conflicts with `docs/sop/2026-11-02-public-pages.md` (no disk encryption set up): the riskiest line before Google verification
 - [ ] Reshoot the parity shots after the W-phase merges (meeting page shows W6 or W8 alone)
 
-## Multi-team (spec `docs/superpowers/specs/2026-11-13-multi-team-design.md`, PR #178; approach A plus Move; four stages, each its own PR, deployed one at a time)
+## Multi-team (spec `docs/superpowers/specs/2026-11-13-multi-team-design.md`, PR #178 merged, approved 2026-11-13; approach A plus Move; four stages, each its own PR, deployed one at a time)
 
 Goal: one person has a permanent personal team and may belong to several teams; a meeting is shared to one team or moved (team-owned) to one. Staged so nothing flag-days: `MULTI_TEAM_ENABLED` stays off until stage 3 is live.
 
@@ -666,14 +666,14 @@ Goal: one person has a permanent personal team and may belong to several teams; 
   - [x] Teams module under `MULTI_TEAM_ENABLED`: join adds a membership and moves nothing, leave creates no team of one, personal team never left, joined, invited into or its owner removed; flag off keeps today's join and `409 already_on_team`
   - [x] Setting `MULTI_TEAM_ENABLED` (default false) in `app/config.py`, `.env.example`, `deploy/README.md`
   - [ ] CI green on the pushed head, review, merge (lead), deploy with the flag off, check the backfill on the server (counts of personal teams made)
-- [ ] **Stage 2: API, team-owned meetings and Move (dark)**: gated by his two decisions in the spec section 9 (account deletion and moved meetings; who may move)
+- [ ] **Stage 2: API, team-owned meetings and Move (dark)**: his two decisions are settled (spec section 9, 2026-11-13): a moved meeting stays with the team when its recorder deletes their account (shown as "Former member", name and email removed); any recorder may move a meeting into any team they belong to
   - [ ] `GET /api/teams`, `POST /api/teams` (three owned teams per account, checked in the route), an explicit team per request on every team-implicit route
   - [ ] Team-owned meetings (`owner_team_id`), the Move route, write rule (recorder plus the team's owner and admins), move back by owner or admin
   - [ ] Tasks follow the meeting (re-home on share, unshare, move); series, mail and integrations per team (spec 6.9); per-person invitation limit; one auto-share team per person
   - [ ] Leak tests for moved meetings (survive the recorder leaving), series, topics, agenda and Ask; `docs/fe-integration-guide-teams.md` from live captures
 - [ ] **Stage 3: frontend**: team switcher in the shell, teams list, create team, share-or-move control (designer's files in `docs/ui/`; lead-designed where they have nothing, marked so)
 - [ ] **Stage 4: switch on**: `MULTI_TEAM_ENABLED=true` only after stage 3 is live; first check that every live account has a personal team (flag-off joiners may not)
-- Open for Adebayo (section 9 of the spec): what happens to a moved meeting when its recorder deletes their account; who may move a meeting into a team; the lawyer's reading of the privacy and terms wording for moved meetings
+- Open outside the code: the privacy policy and terms (today they promise that deleting an account deletes the person's meetings) must be changed and read by his lawyer before `MULTI_TEAM_ENABLED` is switched on
 
 ## Deferred follow-ups from the 2026-11-06 merge queue
 
