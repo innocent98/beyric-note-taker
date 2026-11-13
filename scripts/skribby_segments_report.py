@@ -142,6 +142,34 @@ def _anchor(record, spans) -> tuple[float | None, str]:
         return None, "times are Unix time but the bot's `recording` status time was not kept"
 
 
+def heard_by_tag(items: list[dict]) -> dict:
+    """Each tag's timed segments as `(start, end)` seconds (tag -> list); untagged or untimed
+    segments are left out."""
+    heard: dict = {}
+    for item in items:
+        a, b = _seconds(item.get("start")), _seconds(item.get("end"))
+        if a is not None and b is not None and b > a and item.get("speaker") is not None:
+            heard.setdefault(item["speaker"], []).append((a, b))
+    return heard
+
+
+def clock_fit(spans: dict, heard: dict) -> tuple[int, float, float]:
+    """How well Meet's clock fits the segments' clock: `(best shift, overlap now, overlap at the
+    best shift)`. `spans` is each participant's speaking intervals already placed on the
+    transcript's clock; `heard` is `heard_by_tag`. The shift is whole seconds, up to
+    SEARCH_SECONDS either way, by which Meet's times would be moved later."""
+    union = _merge([span for v in spans.values() for span in v])
+
+    def total_overlap(shift_meet: int) -> float:
+        """Overlap if Meet's times were moved `shift_meet` seconds later."""
+        return sum(
+            _overlap(union, a - shift_meet, b - shift_meet) for v in heard.values() for a, b in v
+        )
+
+    best = max(range(-SEARCH_SECONDS, SEARCH_SECONDS + 1), key=total_overlap)
+    return best, total_overlap(0), total_overlap(best)
+
+
 def timeline_section(items: list[dict], tags: dict, record, offset: float = 0.0) -> list[str]:
     """The lines of the "Meet's own speaker timeline" section."""
     head = ["", "== Meet's own speaker timeline (Skribby participant events; not proven live) =="]
@@ -161,22 +189,10 @@ def timeline_section(items: list[dict], tags: dict, record, offset: float = 0.0)
     names = list(spans)
     out = [*head, "", "  Seconds speaking according to Meet:"]
     out += [f"    {n}: {sum(b - a for a, b in spans[n]):.1f} s" for n in names]
-    heard: dict[str, list[tuple[float, float]]] = {}
-    for item in items:
-        a, b = _seconds(item.get("start")), _seconds(item.get("end"))
-        if a is not None and b is not None and b > a and item.get("speaker") is not None:
-            heard.setdefault(item["speaker"], []).append((a, b))
+    heard = heard_by_tag(items)
     if not heard:
         return [*out, "", "  No Skribby segment has both a tag and times, so nothing to compare."]
-    union = _merge([span for v in spans.values() for span in v])
-
-    def total_overlap(shift_meet: int) -> float:
-        """Overlap if Meet's times were moved `shift_meet` seconds later."""
-        return sum(
-            _overlap(union, a - shift_meet, b - shift_meet) for v in heard.values() for a, b in v
-        )
-
-    best = max(range(-SEARCH_SECONDS, SEARCH_SECONDS + 1), key=total_overlap)
+    best, here, there = clock_fit(spans, heard)
     cols = "".join(f"{n[:NAME_WIDTH]:>{NAME_WIDTH + 2}}" for n in names)
     out += ["", "  Overlap in seconds between each tag's segments and each participant speaking:"]
     out.append(f"    {'tag':<6}{cols}{'tag total':>11}  derived name -> verdict")
@@ -198,7 +214,6 @@ def timeline_section(items: list[dict], tags: dict, record, offset: float = 0.0)
         out.append(
             f"    {str(tag):<6}{row}{total:>11.1f}  {derived or 'Unknown speaker'} -> {verdict}"
         )
-    here, there = total_overlap(0), total_overlap(best)
     if best != 0 and there > here * 1.1:
         out.append(
             f"\n  Clock check: moving the Meet times {best:+d} s would raise the total overlap "
