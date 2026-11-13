@@ -13,7 +13,7 @@ ${SITE_NAME} is run by ${LEGAL_NAME}, Lagos, Nigeria. It is in a private pilot w
 
 ## What it does
 
-- Joins a Google Meet or Zoom call from a link and records the audio.
+- Joins a Google Meet, Microsoft Teams or Zoom call from a link and records the audio.
 - Produces a transcript and notes: a summary, decisions and action items.
 - Notes follow a template you choose, and a vocabulary list keeps names and terms spelled correctly.
 - Coming soon: connect Google Calendar so the note taker joins chosen meetings by itself.
