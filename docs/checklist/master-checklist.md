@@ -666,13 +666,19 @@ Goal: one person has a permanent personal team and may belong to several teams; 
   - [x] Teams module under `MULTI_TEAM_ENABLED`: join adds a membership and moves nothing, leave creates no team of one, personal team never left, joined, invited into or its owner removed; flag off keeps today's join and `409 already_on_team`
   - [x] Setting `MULTI_TEAM_ENABLED` (default false) in `app/config.py`, `.env.example`, `deploy/README.md`
   - [ ] CI green on the pushed head, review, merge (lead), deploy with the flag off, check the backfill on the server (counts of personal teams made)
+  - [x] Review fix: `remove_users` and `transfer_owner` clear `is_personal` when a team is handed to an heir (tested)
+  - [x] Review tests: Ask, decision search, series page, topics and suggested agenda with two memberships; the post-migration shape with the switch off through the API (`GET /api/team`, leave, `already_on_team`); two accepts at once
 - [ ] **Stage 2: API, team-owned meetings and Move (dark)**: his two decisions are settled (spec section 9, 2026-11-13): a moved meeting stays with the team when its recorder deletes their account (shown as "Former member", name and email removed); any recorder may move a meeting into any team they belong to
   - [ ] `GET /api/teams`, `POST /api/teams` (three owned teams per account, checked in the route), an explicit team per request on every team-implicit route
   - [ ] Team-owned meetings (`owner_team_id`), the Move route, write rule (recorder plus the team's owner and admins), move back by owner or admin
   - [ ] Tasks follow the meeting (re-home on share, unshare, move); series, mail and integrations per team (spec 6.9); per-person invitation limit; one auto-share team per person
   - [ ] Leak tests for moved meetings (survive the recorder leaving), series, topics, agenda and Ask; `docs/fe-integration-guide-teams.md` from live captures
+- [ ] **Stage 2 prerequisites from the stage-1 review** (SOP `docs/sop/2026-11-13-multi-team-stage-1.md`, not fixed in stage 1 on purpose)
+  - [ ] Moved meetings: the recorder reads and owns one only while a member of the owning team; the team's owner and admins may change it; `app/deletion.py` must not delete moved meetings on account deletion (spec 6.4, 9.1). Change `can_read_clause`, `owns()` and `deletion.py` together, with leak tests. Scenario: Ada moves a meeting to X, leaves X, and still reads and deletes it
+  - [ ] The share route takes a team in the request. Today it uses `ensure_team`, so with two ordinary teams and the switch on, Share returns 200 but goes to the personal team; replace `test_a_person_with_two_ordinary_teams_can_share_a_meeting_and_the_default_team_is_used`
 - [ ] **Stage 3: frontend**: team switcher in the shell, teams list, create team, share-or-move control (designer's files in `docs/ui/`; lead-designed where they have nothing, marked so)
-- [ ] **Stage 4: switch on**: `MULTI_TEAM_ENABLED=true` only after stage 3 is live; first check that every live account has a personal team (flag-off joiners may not)
+- [ ] **Stage 4: switch on**: `MULTI_TEAM_ENABLED=true` only after stage 3 is live
+  - [ ] Prerequisite (stage-1 review): while the switch is off the one-personal-team rule drifts (a joiner's personal team is dissolved; the inviter of a team of one is left with none; an invitation made into a team of one while off may be unredeemable once on). Needs a second backfill so every live account has a personal team, and a plan for pending invitations (list, revoke and re-send from an ordinary team)
 - Open outside the code: the privacy policy and terms (today they promise that deleting an account deletes the person's meetings) must be changed and read by his lawyer before `MULTI_TEAM_ENABLED` is switched on
 
 ## Deferred follow-ups from the 2026-11-06 merge queue

@@ -120,7 +120,9 @@ def remove_users(session: Session, user_ids: list[int]) -> None:
         if heir is None:
             session.delete(team)
         else:
-            team.owner_user_id, heir.role = heir.user_id, "owner"
+            # A team handed on is an ordinary team, whatever it was: the heir may already own a
+            # personal team, and `uq_teams_one_personal_per_owner` must never block a deletion.
+            team.owner_user_id, heir.role, team.is_personal = heir.user_id, "owner", False
     session.flush()
 
 
@@ -400,4 +402,5 @@ def transfer_owner(session: Session, team_id: int, new_owner_user_id: int) -> No
     ):
         member.role = "admin"
     heir.role, team.owner_user_id = "owner", heir.user_id
+    team.is_personal = False  # handed on: an ordinary team (the heir may own a personal one)
     session.flush()

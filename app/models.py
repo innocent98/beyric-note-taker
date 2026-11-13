@@ -765,8 +765,9 @@ class Meeting(Base):
         BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
     )
     # Stage 2 of the multi-team design: the team that OWNS the meeting (moved to it), as opposed to
-    # one it is merely shared with. Null for every row and unused until stage 2 fills it; the one
-    # rule in `app/visibility.py` already reads it.
+    # one it is merely shared with. Null for every row and unused until stage 2 fills it. The
+    # read rule in `app/visibility.py` matches it; the write and recorder rules for a moved meeting
+    # are stage 2 work (see that module's docstring).
     owner_team_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
     )

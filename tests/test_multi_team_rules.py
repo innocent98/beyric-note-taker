@@ -405,3 +405,36 @@ def test_a_meeting_can_name_its_owning_team_and_loses_it_when_the_team_goes(
     session.refresh(meeting)
     assert meeting.owner_team_id is None
     assert session.get(Meeting, meeting.id) is not None
+
+
+# ---- handing a team on never trips the one-personal-team rule ----
+
+
+def flagged_personal_with_a_second_member(session):
+    """The hand-built shape (an old fixture, or a flag-off team of one that somebody joined):
+    a team flagged personal that has a second member, who also owns a personal team of their own."""
+    ada, bola = person(session, "ada@example.test"), person(session, "bola@example.test")
+    shared = teams.personal_team(session, ada.id)
+    session.add(TeamMember(team_id=shared.id, user_id=bola.id, role="member"))
+    session.commit()
+    return ada, bola, shared
+
+
+def test_deleting_the_owner_of_a_flagged_personal_team_with_a_second_member_is_not_blocked(
+    session, owner
+):
+    ada, bola, shared = flagged_personal_with_a_second_member(session)
+    teams.remove_users(session, [ada.id])  # would hit uq_teams_one_personal_per_owner
+    session.commit()
+    session.refresh(shared)
+    assert shared.owner_user_id == bola.id and shared.is_personal is False
+    assert teams.personal_team(session, bola.id).id != shared.id  # her own personal team is intact
+
+
+def test_handing_a_flagged_personal_team_to_a_member_makes_it_an_ordinary_team(session, owner):
+    ada, bola, shared = flagged_personal_with_a_second_member(session)
+    teams.transfer_owner(session, shared.id, bola.id)
+    session.commit()
+    session.refresh(shared)
+    assert shared.owner_user_id == bola.id and shared.is_personal is False
+    assert teams.personal_team(session, bola.id) is not None

@@ -3,7 +3,14 @@
 `visible_meetings(user)` is the only way any service learns which meetings a caller may read: the
 caller's own meetings, plus meetings shared to, or owned by, ANY team the caller belongs to (a
 person may belong to several: multi-team design, 2026-11-13). `owner_team_id` is filled from stage 2
-on (a meeting moved to a team); until then only `shared_team_id` can match. Everything derived from
+on (a meeting moved to a team); until then only `shared_team_id` can match.
+
+NOT YET DONE for team-owned meetings (stage 2 prerequisites, see docs/sop/2026-11-13-multi-team-
+stage-1.md): the clause below only lets a team's members READ a moved meeting. Spec 6.4 also says
+the recorder keeps reading it only while they are a member of the owning team, and that the team
+(not only the recorder) may change it. So `can_read_clause` (its `owner_user_id == user.id`
+branch) and `owns()` must change in stage 2, and `deletion.py` must stop deleting moved meetings.
+Until then nothing sets `owner_team_id`, so none of this can happen. Everything derived from
 a meeting (notes, transcript, translations, exports, decisions, open questions, tasks) is read
 through it. Nothing else compares `shared_team_id` or `owner_team_id`: code that needs to ask "is
 this meeting the team's" uses `in_team`, `in_team_clause`, `via_team` or `meeting_team_ids` below,

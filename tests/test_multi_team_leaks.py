@@ -159,7 +159,7 @@ def test_a_meeting_shared_to_a_personal_team_is_readable_by_nobody_else(session,
 
 
 def test_a_meeting_owned_by_a_team_is_read_by_that_teams_members_only(session, world):
-    """Stage 2 fills `owner_team_id`; the rule already honours it (unused until then)."""
+    """Stage 2 fills `owner_team_id`; the READ clause already matches it (writes: stage 2)."""
     world.private.owner_team_id = world.x.id
     session.commit()
     assert world.private.id in ids_of(session, world.pat)

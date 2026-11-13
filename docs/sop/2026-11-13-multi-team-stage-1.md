@@ -45,7 +45,9 @@ All on a scratch Postgres 17 on this Mac (not the CI container), with the projec
 (0.17.3): `ruff check .` and `ruff format --check .` clean.
 
 - New tests, all passing: `tests/test_multi_team_leaks.py` (17), `tests/test_multi_team_rules.py`
-  (27), `tests/test_migrations.py -k 0043` (4: follows 0042; backfill on seven shapes; upgrade,
+  (29), `tests/test_multi_team_derived.py` (9: Ask, decision search, series page, topics, suggested
+  agenda with two memberships), `tests/test_multi_team_flag_off.py` (4: the post-migration shape
+  with the switch off, and two accepts at once), `tests/test_migrations.py -k 0043` (4: follows 0042; backfill on seven shapes; upgrade,
   downgrade, upgrade; the refusals) plus `test_migration_matches_models` and `test_single_head`.
 - The leak tests were written before the code (they could not even import `ensure_personal_team`).
   A mutation check (the multi-team subqueries put back to the old single-team ones) makes 15 of the
@@ -73,6 +75,36 @@ All on a scratch Postgres 17 on this Mac (not the CI container), with the projec
 - Roll back: revert the code and leave the schema (safe). `alembic downgrade 0042` works only while
   nobody has two memberships (see above); the message names how many do.
 
+## Prerequisites recorded by the Opus review (not fixed in this PR on purpose)
+
+None of these can happen while the switch is off and `owner_team_id` is empty; each must be done
+before the stage named. The checklist repeats them.
+
+1. **Stage 2, team-owned meetings.** Today `can_read_clause` always lets the recorder read their
+   own meeting (`owner_user_id == user.id`) and `owns()` is recorder-only. Spec 6.4 and 9.1 need
+   the opposite for a moved meeting: the recorder reads it only while a member of the owning team,
+   the team's owner and admins may change it, and it survives the recorder's account deletion
+   (shown as "Former member"), but `app/deletion.py` (about line 172) still deletes every meeting
+   the account owns, moved ones included. Scenario: Ada moves a meeting to X, leaves X, and still
+   reads and deletes it; or deletes her account and the team loses the meeting. Change
+   `can_read_clause`, `owns()` and `deletion.py` together, with leak tests for each. The
+   visibility docstring now says so instead of claiming the rule already honours team ownership.
+2. **Stage 2, the share route.** `POST /api/meetings/{id}/share` uses `teams.ensure_team`, the
+   default team. With two ordinary teams and the switch on, Share answers 200 but goes to the
+   personal team (readable by nobody else). `tests/test_multi_team_leaks.py::
+   test_a_person_with_two_ordinary_teams_can_share_a_meeting_and_the_default_team_is_used`
+   asserts exactly this and must be replaced when the route takes a team (spec 6.3: the team is in
+   the request, the recorder must be a member, not personal).
+3. **Stage 4, switching on.** While the switch is off the one-personal-team rule drifts: someone
+   who accepts an invitation has their personal team dissolved; the owner of a team of one that
+   somebody joins keeps the team but has no personal team; and an invitation made INTO a team of
+   one while off (still allowed, as today) can no longer be redeemed once the switch is on, because
+   by then that team may be flagged personal again or `join` refuses it (`personal_team`). Before
+   the switch-on: a second backfill (every live account gets a personal team; the check query is
+   under Follow-ups) and a plan for pending invitations (list the live invitations whose team is a
+   team of one or flagged personal; revoke and re-send them from an ordinary team, or tell their
+   senders).
+
 ## Follow-ups
 
 - Flag-off joiners (people who accept an invitation after this ships) still have their personal
@@ -83,5 +115,9 @@ All on a scratch Postgres 17 on this Mac (not the CI container), with the projec
   where t.owner_user_id = u.id and t.is_personal)` must be 0, or run the helper for the rest).
 - The listed routes still act on the default team; stage 2 adds an explicit team per route and the
   rest of the spec (team-owned meetings, Move, tasks following the meeting, series and mail per team).
+  A person with two ordinary teams reads the personal team's series, not X's, until then (a 404,
+  never a leak: `tests/test_multi_team_derived.py`).
 - `tasks`, `/api/tasks` and `/api/decisions` already read across all of a person's teams (through
   the one rule); a team-scoped board is stage 2.
+- Handing a team on (`remove_users`, `transfer_owner`) now clears `is_personal`, so the one-personal-
+  team index can never block an account deletion (found in review, tested).
