@@ -1,6 +1,6 @@
 # Multi-team design: one person, a personal space and several teams
 
-Status: DRAFT for Adebayo's approval (2026-11-13). Nothing in this document is built. Facts about today's code were read from `origin/main` on 2026-11-13 (paths and lines below); the rest is design. "His call" means Adebayo said it in chat; "my call" means the lead proposes it and he may overturn it.
+Status: APPROVED by Adebayo 2026-11-13 (approach A plus the Move action; his two open decisions settled the same day, section 9). Nothing in this document is built. Facts about today's code were read from `origin/main` on 2026-11-13 (paths and lines below); the rest is design. "His call" means Adebayo said it in chat; "my call" means the lead proposes it and he may overturn it.
 
 ## 1. Intent and why
 
@@ -101,7 +101,7 @@ Tasks extracted from a meeting belong to the meeting's team when it is shared or
 
 Staged so nothing flag-days. **Order changed 2026-11-13 at Adebayo's request (his call: "go with A plus move"): the team-owned meeting and the Move action come in stage 2, not last**, because a company keeps its meeting history when someone leaves only if the team can own meetings.
 1. **Schema and rules (dark):** add `teams.is_personal` with a partial unique index (one personal team per owner). Backfill rule (my call): a team with exactly one member and **no pending invitations, no integrations, no projects, sprints or milestones** is that person's personal team; a solo team that has any of those stays a normal team (its owner also gets a separate new personal team, and the old team's content stays where it is). **Important backfill:** people who today sit in a team with others have no personal team (it was dissolved when they joined): create one for each of them. Add the ownership column or flag for moved meetings (unused until stage 2). Add `UNIQUE(team_id, user_id)`, then drop the old unique index on `user_id`. Rewrite the one visibility rule, the teams module (`join` no longer dissolves, `leave` creates no new team of one), the lookups in section 8, the default-team compatibility rule, and the setting `MULTI_TEAM_ENABLED` (default off). Downgrade is only defined while nobody has two memberships; the real roll-back is to revert the code and leave the schema.
-2. **API, team-owned meetings and Move (dark):** `GET /api/teams`, `POST /api/teams`, an explicit team on every team-implicit route, and the moved-meeting rules of 6.4 with the Move route, tasks following the meeting (6.6), series, mail and integrations (6.9). **Gated by the two "Theirs" decisions in section 9.**
+2. **API, team-owned meetings and Move (dark):** `GET /api/teams`, `POST /api/teams`, an explicit team on every team-implicit route, and the moved-meeting rules of 6.4 with the Move route, tasks following the meeting (6.6), series, mail and integrations (6.9). Both open decisions are settled (section 9); the only outside gate is the privacy wording before the switch-on.
 3. **Frontend:** the switcher, the teams list, create team, the share-or-move control.
 4. **Switch on:** `MULTI_TEAM_ENABLED` goes on only after stage 3 is live.
 Each stage is its own PR (or small group), CI green, deployed one at a time. **`MULTI_TEAM_ENABLED`, default off (my call), gates joining a second team and creating a team** (a second membership is refused while it is off): stages 1 and 2 ship dark, so no one with an old client ever lands on a screen that does not understand two teams.
@@ -118,9 +118,9 @@ Frontend: `web/lib/api/client.ts:393-404` (the `team` namespace), `web/lib/api/s
 
 ## 9. Open items
 
-"Theirs" (only Adebayo can decide; both gate stage 2, the move action, so stage 1 can be built now):
-1. **Account deletion and moved meetings.** A moved meeting holds other people's words and belongs to the team; if the recorder deletes their account, do their moved meetings stay with the team (the record stays, the recorder's name is removed) or go with them? Staying needs a privacy-policy and terms change his lawyer reads (the promise today is that deleting an account deletes the person's meetings).
-2. **Who may move.** Any recorder moves their meeting into any team they belong to (my call), or only owners and admins of the team accept a moved meeting?
+**Decided 2026-11-13** (his words: "Go with your call on both"):
+1. **Account deletion and moved meetings: the moved meeting stays with the team.** When the recorder deletes their account, the record stays, and the recorder is shown as "Former member"; their name and email are removed from it. The Move action asks for confirmation in plain words ("This meeting will belong to the team. It stays with the team even if you leave or delete your account."). The privacy policy and terms, which today promise that deleting an account deletes the person's meetings, must be changed and read by his lawyer **before `MULTI_TEAM_ENABLED` is switched on** (stage 2 itself ships dark, so the wording is the only outside gate). Tracked in the checklist and the handoff.
+2. **Who may move: any recorder may move their meeting into any team they belong to.** A team setting to require an owner's or admin's acceptance can come later if teams ask for it.
 
 My calls to check (all marked "my call" above): three owned teams per account (checked in the route, not by a database constraint); one auto-share team per person; moved meetings writable by the recorder plus team owners and admins; the recorder cannot pull a moved meeting back; hours charged to the recorder; explicit team per request with a default-team rule for old clients; `MULTI_TEAM_ENABLED` off until the frontend is live; existing tasks not re-homed; the backfill rule for personal teams; a per-person invitation limit; one mail per person per meeting; no integrations on the personal team; posts not recalled.
 
