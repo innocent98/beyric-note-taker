@@ -16,3 +16,6 @@ TRANSLATE_PROMPT_VERSION = "translate-v1"
 ASK_PROMPT_VERSION = "ask-v1"
 # Keeps coming up: finding the topics that recur across a series' last meetings (app/topics.py).
 TOPICS_PROMPT_VERSION = "topics-v1"
+# Correcting the spelling of the owner's vocabulary in a Skribby transcript, for a model that cannot
+# take the vocabulary itself (app/vocabulary_pass.py).
+VOCABULARY_PROMPT_VERSION = "vocabulary-v1"
