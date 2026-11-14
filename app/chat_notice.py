@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import User
-from app.titles import clean_title, mail_line
+from app.titles import clean_title, defang_name_domains, mail_line
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +46,12 @@ def notice_text(bot_name: str | None, owner_name: str | None) -> str:
     empty bot name cannot happen with a real setting, but the line would still read ("Hi, I'm the
     note taker.")."""
     # The bot's name was checked when it was set (`app.bot_names`: no web address, no hidden
-    # characters) or is the operator's own, so it is only made one plain line and cut: defanging it
-    # would print "Dr[.]Smith". The OWNER's name (any display name) still gets the full treatment.
-    bot = clean_title(bot_name, NAME_LIMIT) or "the note taker"
+    # characters) or is the operator's own. The wide mail defanging would print "Dr[.]Smith", so the
+    # bot's name is made one plain line, cut, and only a lower-case `label.tld` token has its dots
+    # written "[.]" (`defang_name_domains`): a domain the check let through (`evil.click`, not on
+    # its short list) must not reach everyone's chat as a link. The OWNER's name (any display name)
+    # still gets the full treatment.
+    bot = defang_name_domains(clean_title(bot_name, NAME_LIMIT)) or "the note taker"
     owner = mail_line(owner_name, NAME_LIMIT)
     # "The host" begins the second sentence, so it needs its capital; a real name is left as typed.
     first = owner or FALLBACK_OWNER.capitalize()

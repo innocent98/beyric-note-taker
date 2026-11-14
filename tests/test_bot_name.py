@@ -643,10 +643,29 @@ def test_the_listed_domains_are_the_ones_the_sop_names():
     )
 
 
-def test_the_notice_no_longer_defangs_the_bot_name_but_still_defangs_the_owner():
+def test_the_notice_keeps_a_surname_dot_but_defangs_a_domain_in_the_bot_name_and_the_owner():
     text = chat_notice.notice_text("Dr.Smith", "Ada from acme.example")
     assert text.startswith("Hi, I'm Dr.Smith. ")
     assert "Dr[.]Smith" not in text and "acme[.]example" in text
+    for name in ("St.Mary", "J.Smith", "Mr.Jones"):
+        assert chat_notice.notice_text(name, "Ada").startswith(f"Hi, I'm {name}. ")
+    # A domain the validation's short list does not know (the operator's own name, or an old row)
+    # never reaches the chat as a link: its dots are written [.].
+    assert chat_notice.notice_text("evil.click", "Ada").startswith("Hi, I'm evil[.]click. ")
+    assert chat_notice.notice_text("Visit a.b.zip now", "Ada").startswith(
+        "Hi, I'm Visit a[.]b[.]zip now. "
+    )
+    # Dot look-alikes count as dots, in the check and in the notice.
+    assert chat_notice.notice_text("evil\u3002click", "Ada").startswith("Hi, I'm evil[.]click. ")
+
+
+@pytest.mark.parametrize(
+    "raw", ["evil\u3002com", "evil\uff0ecom", "evil\uff61com", "Notes\u3002ai"]
+)
+def test_a_dot_look_alike_before_a_listed_domain_is_a_web_address(raw):
+    with pytest.raises(BotNameInvalid) as caught:
+        clean_bot_name(raw)
+    assert str(caught.value) == bot_names.HAS_LINK
 
 
 # ---- the soft warning ----

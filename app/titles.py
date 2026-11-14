@@ -116,10 +116,33 @@ _TLD_LINK = re.compile(
 )
 
 
+# Full stops that read as a dot in a web address but are not U+002E: ideographic full stop,
+# fullwidth full stop, halfwidth ideographic full stop. The link check and the chat defanging
+# treat them as dots.
+_DOT_LOOKALIKES = str.maketrans({"\u3002": ".", "\uff0e": ".", "\uff61": "."})
+_NAME_DOMAIN = re.compile(r"(?<![\w-])[\w-]+(?:\.[\w-]+)*\.[^\W\d_]{2,}(?![\w-])")
+
+
+def defang_name_domains(name: str) -> str:
+    """A typed NAME for the meeting chat, with the dots of anything that could be linked written
+    "[.]": a `label.tld` token whose last part is all lower case ("evil.click" becomes
+    "evil[.]click"). A last part that starts a capital ("Dr.Smith", "St.Mary") reads as an
+    abbreviation or a surname and is left alone, which is why this is narrower than `mail_line`.
+    Dot look-alikes count as dots."""
+    plain = name.translate(_DOT_LOOKALIKES)
+
+    def swap(found: re.Match) -> str:
+        token = found.group()
+        return token.replace(".", "[.]") if token.rsplit(".", 1)[1].islower() else token
+
+    return _NAME_DOMAIN.sub(swap, plain)
+
+
 def looks_like_link(text: str) -> bool:
     """Whether a typed name reads as a web address: it holds `://`, starts a word with `www.`,
     is a link to a meeting host written bare, or is `label.tld` with a TLD from `LINK_TLDS`.
     Narrower than `mail_line`'s defanging on purpose (see `LINK_TLDS`)."""
+    text = text.translate(_DOT_LOOKALIKES)
     return bool(URL.search(text) or "://" in text or _TLD_LINK.search(text))
 
 
