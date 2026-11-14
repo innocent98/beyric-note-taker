@@ -136,18 +136,40 @@ _ANY_DOT_LINK = re.compile(
 )
 
 
+_INVISIBLE_MARKS = re.compile(
+    "[\u200c\u200d\u034f\u180b-\u180d\u180f\ufe00-\ufe0f\U000e0100-\U000e01ef]"
+)
+
+
 def tidy_dots(text: str) -> str:
     """`text` without the joiners that sit next to a dot (see `_JOINERS_AT_DOTS`)."""
     return _JOINERS_AT_DOTS.sub("", text)
+
+
+def without_joiners(text: str) -> str:
+    """`text` with every zero-width joiner and non-joiner, combining grapheme joiner (U+034F) and
+    variation selector (the Mongolian and supplementary ones too) removed: the copy the link checks
+    and the defanging look at, because such a mark inside the label or the top-level domain
+    ("evil.c<ZWJ>om") draws nothing and splits the word for a regex while a person still reads
+    "evil.com"."""
+    return _INVISIBLE_MARKS.sub("", text)
 
 
 def defang_text(plain: str) -> str:
     """Running text for a mail or an alert with the dots of anything that could be linked written
     "[.]": a bare domain (`_DOMAINISH`) and a listed domain written with a dot look-alike or a
     joiner next to the dot ("evil。com", "evil<ZWJ>.com"). Dot look-alikes are not touched
-    elsewhere: in CJK text they are ordinary full stops."""
-    plain = _ANY_DOT_LINK.sub(lambda found: re.sub(_DOT, "[.]", found.group()), tidy_dots(plain))
-    return _DOMAINISH.sub(lambda found: found.group().replace(".", "[.]"), plain)
+    elsewhere: in CJK text they are ordinary full stops. The checks run on a copy without any
+    joiner (`without_joiners`); the text keeps its joiners (an emoji sequence) unless that copy
+    held something to defang."""
+
+    def fang(text: str) -> str:
+        text = _ANY_DOT_LINK.sub(lambda found: re.sub(_DOT, "[.]", found.group()), text)
+        return _DOMAINISH.sub(lambda found: found.group().replace(".", "[.]"), text)
+
+    bare = without_joiners(plain)
+    fanged = fang(bare)
+    return fanged if fanged != bare else fang(tidy_dots(plain))
 
 
 # The only first labels left alone in a dotted name: a single letter (an initial, "J.Smith") or a
@@ -161,9 +183,15 @@ def defang_name_domains(name: str) -> str:
     "[.]": every `label.tld` token ("evil.click" and "Evil.Click" become "evil[.]click" and
     "Evil[.]Click"), except one dot after a single letter or a title with a capitalised word after
     it ("J.Smith", "Dr.Smith", "St.Mary"), which reads as an initial or an abbreviation. "x.click",
-    "t.co", "dr.click" and "J.Co" are defanged. Dot look-alikes count as dots."""
-    plain = tidy_dots(name).translate(_DOT_LOOKALIKES)
+    "t.co", "dr.click" and "J.Co" are defanged. Dot look-alikes count as dots, and the check runs on
+    a copy without any joiner (`without_joiners`): the name keeps its joiners (an emoji sequence)
+    unless that copy held something to defang."""
+    bare = without_joiners(name).translate(_DOT_LOOKALIKES)
+    fanged = _defang_name(bare)
+    return fanged if fanged != bare else _defang_name(tidy_dots(name).translate(_DOT_LOOKALIKES))
 
+
+def _defang_name(plain: str) -> str:
     def swap(found: re.Match) -> str:
         token = found.group()
         first, _, rest = token.partition(".")
@@ -183,9 +211,13 @@ def defang_name_domains(name: str) -> str:
 def looks_like_link(text: str) -> bool:
     """Whether a typed name reads as a web address: it holds `://`, starts a word with `www.`,
     is a link to a meeting host written bare, or is `label.tld` with a TLD from `LINK_TLDS`.
-    Narrower than `mail_line`'s defanging on purpose (see `LINK_TLDS`)."""
-    text = tidy_dots(text).translate(_DOT_LOOKALIKES)
-    return bool(URL.search(text) or "://" in text or _TLD_LINK.search(text))
+    Narrower than `mail_line`'s defanging on purpose (see `LINK_TLDS`). Checked on the text as typed
+    and on a copy without any joiner (`without_joiners`), so "evil.c<ZWJ>om" is a link."""
+    for seen in (tidy_dots(text), without_joiners(text)):
+        seen = seen.translate(_DOT_LOOKALIKES)
+        if URL.search(seen) or "://" in seen or _TLD_LINK.search(seen):
+            return True
+    return False
 
 
 def mail_line(text: str | None, limit: int) -> str:
