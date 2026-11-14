@@ -105,6 +105,12 @@ def alert_name(title: str | None, platform: str | None, native_id: str | None) -
     )
 
 
+def looks_like_link(text: str) -> bool:
+    """Whether `text` reads as a web address: one with a scheme or `www.`, a meeting-host link
+    written bare, or a bare domain ("evil.example")."""
+    return bool(URL.search(text) or _DOMAINISH.search(text) or "://" in text)
+
+
 def mail_line(text: str | None, limit: int) -> str:
     """Words somebody said in a meeting (a task title) as one plain line for a mail: a web address
     is replaced by "[link removed]" and a bare domain has its dots written "[.]", because a mail

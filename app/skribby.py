@@ -877,6 +877,7 @@ class SkribbyClient:
         canonical_url: str,
         vocabulary: list[str] | None = None,
         chat_notice: str | None = None,
+        bot_name: str | None = None,
     ) -> dict[str, Any]:
         stop_options: dict[str, Any] = {
             "waiting_room_timeout": WAITING_ROOM_MINUTES,
@@ -901,7 +902,10 @@ class SkribbyClient:
             "transcription_model": self._model,
             "service": SERVICES[platform],
             "meeting_url": canonical_url,
-            "bot_name": self._bot_name,
+            # The person's own note taker name for this meeting (`app/bot_names.py`), else the
+            # server default. Sent on every platform, signed in or not: whether Skribby shows it on
+            # a signed-in Google Meet bot is unproven (`docs/sop/2026-11-14-per-user-bot-name.md`).
+            "bot_name": (bot_name or "").strip() or self._bot_name,
             "custom_metadata": {"app": "beyric-note-taker", "meeting_code": code},
             "stop_options": stop_options,
         }
@@ -1280,9 +1284,25 @@ class SkribbyProvider:
 
     # ---- looking at a bot ----
 
-    def _look(self, bot_id: str, *, timeout: float | None = None) -> BotMeeting:
+    def _look(
+        self,
+        bot_id: str,
+        *,
+        timeout: float | None = None,
+        own_names: tuple[str, ...] = (),
+    ) -> BotMeeting:
         body = self._client.get_bot(bot_id, timeout=timeout)
-        info = map_bot(body, self._clock(), bot_id, self._client.own_names)
+        # Never a speaker: the server default and the account's name (`client.own_names`), the
+        # meeting's own stored name when the caller knows it (`own_names`), and the name Skribby
+        # itself says the bot has (`bot_name` in the body, possibly cut to the platform's limit), so
+        # a custom name is excluded even when the caller could not say it.
+        reported = body.get("bot_name")
+        names = (
+            *self._client.own_names,
+            *own_names,
+            *((reported,) if isinstance(reported, str) else ()),
+        )
+        info = map_bot(body, self._clock(), bot_id, tuple(dict.fromkeys(n for n in names if n)))
         info.vexa_id = bot_id
         if info.recording_id is not None:
             self._remember_handle(bot_id)
@@ -1297,15 +1317,20 @@ class SkribbyProvider:
     # So can the line the bot posts in the meeting chat when it joins (`chat_notice=`, see
     # `app.chat_notice`): off unless the caller was told to send one.
     accepts_chat_notice = True
+    # And the name of the bot (`bot_name=`, the person's own note taker name), and, when looking at
+    # a bot, the names it goes by (`own_names=`), so a custom name is never named as a speaker.
+    accepts_bot_name = True
+    accepts_own_names = True
 
     def send_bot(
         self,
         meeting_url: str,
         vocabulary: list[str] | None = None,
         chat_notice: str | None = None,
+        bot_name: str | None = None,
     ) -> str:
         platform, code, canonical = _parse(meeting_url)  # UnsupportedMeetingUrl for a bad link
-        payload = self._client.payload(platform, code, canonical, vocabulary, chat_notice)
+        payload = self._client.payload(platform, code, canonical, vocabulary, chat_notice, bot_name)
         lock = threading.Lock()
         state: dict[str, Any] = {"started": False, "bot_id": None, "abandoned": False}
 
@@ -1385,18 +1410,22 @@ class SkribbyProvider:
             if info.status not in TERMINAL:
                 raise SkribbyDuplicateBot("send_bot refused: a bot is already in that meeting")
 
-    def get_meeting(self, platform: str, native_id: str) -> BotMeeting:
+    def get_meeting(
+        self, platform: str, native_id: str, own_names: tuple[str, ...] = ()
+    ) -> BotMeeting:
         """The newest bot we know on the code. Skribby cannot look up by meeting code, so a bot we
         have no record of (an unconfirmed send whose answer was lost) is not found."""
         for bot_id in self._candidates(platform, native_id):
             try:
-                return self._look(bot_id)
+                return self._look(bot_id, own_names=own_names)
             except SkribbyNotFound:
                 self._forget_bot(bot_id)
         raise SkribbyNotFound("get_meeting failed: no bot of ours is known on that meeting")
 
-    def get_meeting_by_id(self, vexa_meeting_id: str | int) -> BotMeeting:
-        return self._look(bot_uuid(vexa_meeting_id))
+    def get_meeting_by_id(
+        self, vexa_meeting_id: str | int, own_names: tuple[str, ...] = ()
+    ) -> BotMeeting:
+        return self._look(bot_uuid(vexa_meeting_id), own_names=own_names)
 
     def get_speaker_events(self, vexa_meeting_id: str | int) -> dict[str, Any] | None:
         """Who was speaking when, from the meeting platform itself (see `speaker_events_record`),

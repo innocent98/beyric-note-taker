@@ -1,0 +1,22 @@
+{
+  "note": "What the stand-in Skribby received on `POST /bot`, in order: the three meetings above. Only `bot_name` (and the platform) are relevant here; the rest is the app's usual body.",
+  "content": {
+    "received": [
+      {
+        "service": "gmeet",
+        "bot_name": "Alex from Product",
+        "has_authentication": false
+      },
+      {
+        "service": "zoom",
+        "bot_name": "Alex from Product",
+        "has_authentication": false
+      },
+      {
+        "service": "gmeet",
+        "bot_name": "Beyric Meeting Support",
+        "has_authentication": false
+      }
+    ]
+  }
+}

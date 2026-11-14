@@ -1,0 +1,8 @@
+{
+  "note": "`meetings.bot_name` of the three meetings (a database read; this column is not in any API answer).",
+  "content": {
+    "custom": "Alex from Product",
+    "zoom": "Alex from Product",
+    "default": "Beyric Meeting Support"
+  }
+}

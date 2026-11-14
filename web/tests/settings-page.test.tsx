@@ -42,6 +42,7 @@ vi.mock("@/lib/api/server", () => ({
         email: { get: async () => ({ notify_email: true }) },
         language: { get: async () => ({ default_language: "en" }) },
         timeZone: { get: async () => ({ time_zone: "UTC", is_set: false }) },
+        botName: { get: async () => ({ bot_name: null, bot_name_default: "Beyric Meeting Support" }) },
         tasks: { get: async () => ({ auto_create_tasks: true, email_assignees: true }) },
         reminders: { get: async () => ({ notify_reminders: true }) },
       },

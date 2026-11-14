@@ -1,0 +1,607 @@
+# ruff: noqa: F811
+"""A per-user note taker name (`users.bot_name`, `meetings.bot_name`, `app/bot_names.py`): the
+validation, the server default when empty, the name stored on the meeting and sent to Skribby for a
+manual meeting and for a calendar join, the speaker naming by elimination ignoring it, the owner's
+"Admit" line, the chat notice, and old meetings with a null name."""
+
+import json
+from datetime import UTC, datetime
+from types import SimpleNamespace
+
+import pytest
+from sqlalchemy import select
+
+from app import bot_names, chat_notice, pipeline, services, transcript_source
+from app.bot_names import NAME_LIMIT, BotNameInvalid, clean_bot_name
+from app.models import Meeting, Template, User
+from app.placement import PlacementRequest, place_bot
+from app.skribby import SkribbyClient, SkribbyProvider, map_bot
+from tests.test_api import Api, anon, api, error_of  # noqa: F401  (fixtures used by name)
+from tests.test_skribby_provider import (
+    BASE,
+    BOT,
+    NOW,
+    OTHER,
+    URL,
+    accept,
+    bot,
+    make,
+    segment,
+)
+from tests.test_web import (  # noqa: F401
+    OTHER_EMAIL,
+    anon_client,
+    app,
+    fake_openai,
+    fake_vexa,
+    make_settings,
+    make_user,
+    owner,
+    stranger,
+)
+
+pytestmark = pytest.mark.httpx_mock(
+    assert_all_responses_were_requested=False, can_send_already_matched_responses=True
+)
+
+ROUTE = "/api/settings/bot-name"
+DEFAULT = "Beyric Meeting Support"
+ZOOM = "https://us05web.zoom.us/j/123456789?pwd=x"
+TEAMS = "https://teams.live.com/meet/9876543210"
+
+
+def posted(httpx_mock) -> dict:
+    (request,) = [r for r in httpx_mock.get_requests() if r.method == "POST"]
+    return json.loads(request.content)
+
+
+# ---- the validation ----
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Alex from Product", "Alex from Product"),
+        ("  Alex   from \t Product \n", "Alex from Product"),  # trimmed, inner whitespace collapsed
+        ("Notes 📝 for Ada", "Notes 📝 for Ada"),  # an emoji is a plain character
+        ("Zoë Müller", "Zoë Müller"),
+        ("Ada (Notes)", "Ada (Notes)"),
+        ("A" * NAME_LIMIT, "A" * NAME_LIMIT),  # exactly the limit is fine
+        ("", None),
+        ("   \n ", None),  # clearing the setting
+        (None, None),
+    ],
+)
+def test_a_good_name_is_cleaned_and_an_empty_one_clears(raw, expected):
+    assert clean_bot_name(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "A" * (NAME_LIMIT + 1),  # Teams' limit is 50
+        "Alex \u202efrom Product",  # a bidirectional override
+        "Alex \u2066Product\u2069",  # bidirectional isolates
+        "Alex\u200bProduct",  # a zero-width space
+        "Alex\x00Product",  # a control character (not whitespace)
+        "alex@acme.com",
+        "Alex <alex@acme.com>",
+        "alex@acme",
+        "https://acme.com/alex",
+        "www.acme.com",
+        "Alex from acme.com",
+        "meet.google.com/abc-defg-hij",
+    ],
+)
+def test_a_bad_name_is_refused_with_plain_words(raw):
+    with pytest.raises(BotNameInvalid) as caught:
+        clean_bot_name(raw)
+    assert str(caught.value).endswith(".") and "\n" not in str(caught.value)
+
+
+def test_each_refusal_says_what_is_wrong():
+    assert str(pytest.raises(BotNameInvalid, clean_bot_name, "A" * 51).value) == bot_names.TOO_LONG
+    assert str(pytest.raises(BotNameInvalid, clean_bot_name, "a@b.co").value) == bot_names.HAS_EMAIL
+    assert str(pytest.raises(BotNameInvalid, clean_bot_name, "x.example").value) == (
+        bot_names.HAS_LINK
+    )
+    junk = pytest.raises(BotNameInvalid, clean_bot_name, "a\u202eb")
+    assert str(junk.value) == bot_names.HAS_JUNK
+
+
+def test_a_zero_width_joiner_in_an_emoji_sequence_is_kept():
+    family = "Team \U0001f468\u200d\U0001f469\u200d\U0001f467"
+    assert clean_bot_name(family) == family
+
+
+# ---- the one helper ----
+
+
+def test_the_default_is_the_server_one_and_a_chosen_name_wins():
+    settings = make_settings(skribby_bot_name="Service Desk")
+    nobody = SimpleNamespace(bot_name=None)
+    chosen = SimpleNamespace(bot_name="Alex from Product")
+    assert bot_names.bot_name_for_user(settings, nobody, "skribby") == "Service Desk"
+    assert bot_names.bot_name_for_user(settings, None, "skribby") == "Service Desk"
+    assert bot_names.bot_name_for_user(settings, chosen, "skribby") == "Alex from Product"
+    assert bot_names.default_name(settings, "skribby") == "Service Desk"
+    # Vexa takes no per-user name: it keeps its own, and stores none.
+    assert bot_names.bot_name_for_user(settings, chosen, "vexa") == settings.bot_name
+    assert bot_names.stored_name(settings, chosen, "vexa") is None
+    assert bot_names.stored_name(settings, chosen, "skribby") == "Alex from Product"
+
+
+@pytest.mark.parametrize("platform", ["zoom", "teams"])
+def test_the_name_shown_is_ours_on_zoom_and_teams_even_with_an_account(platform):
+    # Zoom and Teams bots join as guests (only a Meet bot signs in), whatever the account setting.
+    settings = make_settings(
+        skribby_bot_name=DEFAULT, skribby_account_id=OTHER, skribby_account_name="Signed In"
+    )
+    assert (
+        bot_names.shown_name(settings, provider="skribby", platform=platform, stored="Alex")
+        == "Alex"
+    )
+    assert (
+        bot_names.shown_name(settings, provider="skribby", platform=platform, stored=None)
+        == DEFAULT
+    )
+
+
+def test_a_signed_in_meet_bot_keeps_naming_the_account_until_the_name_is_proven():
+    settings = make_settings(
+        skribby_bot_name=DEFAULT, skribby_account_id=OTHER, skribby_account_name="Signed In"
+    )
+    kwargs = {"provider": "skribby", "platform": "google_meet", "stored": "Alex"}
+    assert bot_names.shown_name(settings, **kwargs) == "Signed In"  # today's behaviour, kept
+    proven = settings.model_copy(update={"bot_name_applies_when_signed_in": True})
+    assert bot_names.shown_name(proven, **kwargs) == "Alex"
+    # With no account name set, the best guess is the name that was sent.
+    nameless = make_settings(skribby_bot_name=DEFAULT, skribby_account_id=OTHER)
+    assert bot_names.shown_name(nameless, **kwargs) == "Alex"
+    # A guest Meet bot (no account) shows the name that was sent.
+    guest = make_settings(skribby_bot_name=DEFAULT)
+    assert bot_names.shown_name(guest, **kwargs) == "Alex"
+
+
+def test_the_flag_is_off_by_default():
+    assert make_settings().bot_name_applies_when_signed_in is False
+
+
+def test_own_names_are_the_stored_name_and_the_account_name():
+    settings = make_settings(skribby_bot_name=DEFAULT, skribby_account_name="Signed In")
+    assert bot_names.own_names(settings, "Alex") == ("Alex", "Signed In")
+    assert bot_names.own_names(settings, None) == (DEFAULT, "Signed In")
+
+
+# ---- the settings route ----
+
+
+def test_the_default_is_shown_from_the_server_and_nothing_is_set(api, app, session, owner):
+    # Under Skribby (the provider in production) the default is SKRIBBY_BOT_NAME; under Vexa,
+    # BOT_NAME.
+    app.state.settings = make_settings(
+        bot_provider="skribby", skribby_api_key="key-for-tests", skribby_bot_name="Service Desk"
+    )
+    assert api.get(ROUTE).json() == {"bot_name": None, "bot_name_default": "Service Desk"}
+    app.state.settings = make_settings(bot_provider="vexa")
+    assert api.get(ROUTE).json()["bot_name_default"] == make_settings().bot_name
+
+
+def test_saving_trims_stores_and_reads_back(api, session, owner):
+    response = api.put(ROUTE, {"bot_name": "  Alex   from Product "})
+    assert response.status_code == 200
+    assert response.json()["bot_name"] == "Alex from Product"
+    session.expire_all()
+    assert session.scalar(select(User.bot_name).where(User.id == owner.id)) == "Alex from Product"
+    assert api.get(ROUTE).json()["bot_name"] == "Alex from Product"
+
+
+@pytest.mark.parametrize("empty", [None, "", "   "])
+def test_clearing_goes_back_to_the_default(api, session, owner, empty):
+    api.put(ROUTE, {"bot_name": "Alex"})
+    assert api.put(ROUTE, {"bot_name": empty}).json()["bot_name"] is None
+    session.expire_all()
+    assert session.scalar(select(User.bot_name).where(User.id == owner.id)) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ("A" * 51, bot_names.TOO_LONG),
+        ("alex@acme.com", bot_names.HAS_EMAIL),
+        ("https://acme.com", bot_names.HAS_LINK),
+        ("Alex \u202eProduct", bot_names.HAS_JUNK),
+    ],
+)
+def test_a_bad_name_is_422_with_a_plain_message_and_changes_nothing(
+    api, session, owner, value, message
+):
+    api.put(ROUTE, {"bot_name": "Kept Name"})
+    response = api.put(ROUTE, {"bot_name": value})
+    assert response.status_code == 422
+    assert error_of(response, 422, "bot_name_invalid")["message"] == message
+    session.expire_all()
+    assert session.scalar(select(User.bot_name).where(User.id == owner.id)) == "Kept Name"
+
+
+def test_one_person_cannot_read_or_change_another_persons_name(api, session, owner, stranger):
+    stranger.bot_name = "Other Person"
+    session.commit()
+    assert api.get(ROUTE).json()["bot_name"] is None  # the caller's own row only
+    api.put(ROUTE, {"bot_name": "Mine"})
+    session.expire_all()
+    assert session.get(User, stranger.id).bot_name == "Other Person"
+    assert session.get(User, owner.id).bot_name == "Mine"
+
+
+def test_the_route_needs_a_login(anon):
+    assert anon.get(ROUTE).status_code == 401
+    assert anon.put(ROUTE, {"bot_name": "X"}).status_code in (401, 403)
+
+
+def test_a_write_without_the_csrf_token_is_refused(api, owner):
+    assert api.put(ROUTE, {"bot_name": "X"}, csrf=False).status_code == 403
+
+
+# ---- Skribby is sent the name ----
+
+
+@pytest.mark.parametrize("link", [URL, ZOOM, TEAMS])
+def test_the_name_is_sent_as_bot_name_on_every_platform(httpx_mock, link):
+    accept(httpx_mock)
+    provider, _ = make()
+    provider.send_bot(link, bot_name="Alex from Product")
+    assert posted(httpx_mock)["bot_name"] == "Alex from Product"
+
+
+def test_without_a_name_the_server_default_is_sent(httpx_mock):
+    accept(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    provider.send_bot(URL)
+    assert posted(httpx_mock)["bot_name"] == "Service Desk"
+    httpx_mock.reset()
+    accept(httpx_mock)
+    again, _ = make(bot_name="Service Desk")
+    again.send_bot(URL, bot_name="   ")  # a blank name never replaces the default
+    assert posted(httpx_mock)["bot_name"] == "Service Desk"
+
+
+def test_a_signed_in_meet_bot_is_still_sent_the_name_but_authentication_is_unchanged(httpx_mock):
+    accept(httpx_mock)
+    provider, _ = make(account_id=OTHER)
+    provider.send_bot(URL, bot_name="Alex from Product")
+    body = posted(httpx_mock)
+    assert body["bot_name"] == "Alex from Product"
+    assert body["authentication"] == {"account_id": OTHER, "always_authenticate": True}
+
+
+# ---- a manual meeting and a calendar join record and send the name ----
+
+
+def make_template(session, user) -> Template:
+    template = Template(owner_user_id=user.id, name="General", instructions="Write notes.")
+    session.add(template)
+    session.commit()
+    return template
+
+
+def request_for(user, template, code="abc-defg-hij", source="manual", platform="google_meet"):
+    return PlacementRequest(
+        user_id=user.id,
+        platform=platform,
+        native_id=code,
+        meeting_url=f"https://meet.google.com/{code}",
+        template_id=template.id,
+        source=source,
+    )
+
+
+@pytest.mark.parametrize("source", ["manual", "calendar"])
+def test_the_name_is_sent_and_stored_on_the_meeting(session, httpx_mock, source):
+    user = make_user(session, bot_name="Alex from Product")
+    template = make_template(session, user)
+    accept(httpx_mock)
+    provider, _ = make(bot_name=DEFAULT)
+    meeting = place_bot(
+        session,
+        provider,
+        request_for(user, template, source=source),
+        now=datetime.now(UTC),
+        settings=make_settings(),
+    )
+    assert posted(httpx_mock)["bot_name"] == "Alex from Product"
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).bot_name == "Alex from Product"
+
+
+def test_a_person_without_a_name_gets_the_server_default_sent_and_stored(session, httpx_mock):
+    user = make_user(session)
+    template = make_template(session, user)
+    accept(httpx_mock)
+    provider, _ = make(bot_name=DEFAULT)
+    meeting = place_bot(
+        session,
+        provider,
+        request_for(user, template),
+        now=datetime.now(UTC),
+        settings=make_settings(skribby_bot_name=DEFAULT),
+    )
+    assert posted(httpx_mock)["bot_name"] == DEFAULT
+    assert meeting.bot_name == DEFAULT  # what was actually used, so a later change of default
+    # cannot rewrite which name this bot joined with
+
+
+def test_manual_create_meeting_uses_the_owners_name(session, httpx_mock):
+    user = make_user(session, bot_name="Sam from Sales")
+    template = make_template(session, user)
+    accept(httpx_mock)
+    provider, _ = make()
+    meeting = services.create_meeting(
+        session, provider, user, URL, template.id, make_settings(skribby_bot_name=DEFAULT)
+    )
+    assert posted(httpx_mock)["bot_name"] == "Sam from Sales"
+    assert meeting.bot_name == "Sam from Sales"
+
+
+def test_changing_the_setting_later_does_not_change_a_meeting_already_sent(session, httpx_mock):
+    user = make_user(session, bot_name="First Name")
+    template = make_template(session, user)
+    accept(httpx_mock)
+    provider, _ = make()
+    meeting = place_bot(
+        session,
+        provider,
+        request_for(user, template),
+        now=datetime.now(UTC),
+        settings=make_settings(),
+    )
+    user.bot_name = "Second Name"
+    session.commit()
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).bot_name == "First Name"
+
+
+def test_a_provider_that_takes_no_name_is_sent_none_and_stores_none(session, fake_vexa):
+    user = make_user(session, bot_name="Alex from Product")
+    template = make_template(session, user)
+    meeting = place_bot(
+        session,
+        fake_vexa,
+        request_for(user, template),
+        now=datetime.now(UTC),
+        settings=make_settings(),
+    )
+    assert meeting.bot_name is None
+    assert fake_vexa.sent  # sent without a name argument: the fake takes only the link
+
+
+class NamedProvider:
+    """A provider that takes a name and records it (the shape of Skribby's, no network)."""
+
+    name = "skribby"
+    accepts_bot_name = True
+    accepts_chat_notice = True
+    accepts_own_names = True
+    region = "eu"
+
+    def __init__(self):
+        self.sent: list[dict] = []
+        self.next = 0
+
+    def send_bot(self, meeting_url, vocabulary=None, chat_notice=None, bot_name=None):
+        self.sent.append({"url": meeting_url, "bot_name": bot_name, "chat_notice": chat_notice})
+        self.next += 1
+        return f"00000000-0000-0000-0000-{self.next:012d}"
+
+    def get_meeting_by_id(self, vexa_meeting_id, own_names=()):
+        self.looked = own_names
+        return SimpleNamespace(own=own_names)
+
+    def get_meeting(self, platform, native_id, own_names=()):
+        self.looked = own_names
+        return SimpleNamespace(own=own_names)
+
+
+def test_a_resend_uses_the_owners_current_name_and_stores_it(session):
+    user = make_user(session, bot_name="Old Name")
+    template = make_template(session, user)
+    provider = NamedProvider()
+    meeting = place_bot(
+        session,
+        provider,
+        request_for(user, template),
+        now=datetime.now(UTC),
+        settings=make_settings(),
+    )
+    assert provider.sent[0]["bot_name"] == "Old Name"
+    user.bot_name = "New Name"
+    session.commit()
+    assert pipeline.send_again(meeting, provider) is True
+    session.commit()
+    assert provider.sent[1]["bot_name"] == "New Name"
+    session.expire_all()
+    assert session.get(Meeting, meeting.id).bot_name == "New Name"
+
+
+# ---- the elimination step never names the bot as a speaker ----
+
+ADA_AND_BOT = [("Ada Example", 1), ("Alex from Product", 0.8)]
+
+
+def test_a_custom_bot_name_is_never_a_speaker_by_elimination():
+    items = [
+        segment("Ada Example", "one", tag="1"),
+        segment(None, "two", tag="2", candidates=ADA_AND_BOT),
+    ]
+    from unittest.mock import patch
+
+    from app.config import get_settings
+
+    with patch.object(get_settings(), "skribby_name_by_elimination", True):
+        # Without the custom name in the list, the bot's own name WOULD be the only name left.
+        leaked = map_bot(bot("finished", transcript=items), NOW)
+        assert [s["speaker"] for s in leaked.segments] == ["Ada Example", "Alex from Product"]
+        # With the meeting's own stored name, it is removed and the tag stays unknown.
+        safe = map_bot(bot("finished", transcript=items), NOW, own_names=("Alex from Product",))
+        assert [s["speaker"] for s in safe.segments] == ["Ada Example", ""]
+
+
+def test_the_provider_adds_the_name_skribby_reports_and_the_one_the_caller_knows(httpx_mock):
+    from unittest.mock import patch
+
+    from app.config import get_settings
+
+    items = [
+        segment("Ada Example", "one", tag="1"),
+        segment(None, "two", tag="2", candidates=ADA_AND_BOT),
+    ]
+    provider, _ = make()
+    # (a) Skribby's own get-bot body carries `bot_name`: that alone is enough.
+    httpx_mock.add_response(
+        method="GET",
+        url=f"{BASE}/bot/{BOT}",
+        json=bot("finished", transcript=items, bot_name="Alex from Product"),
+    )
+    with patch.object(get_settings(), "skribby_name_by_elimination", True):
+        info = provider.get_meeting_by_id(BOT)
+        assert [s["speaker"] for s in info.segments] == ["Ada Example", ""]
+    # (b) The caller's stored name works even when the body says nothing about the name.
+    httpx_mock.reset()
+    httpx_mock.add_response(
+        method="GET", url=f"{BASE}/bot/{BOT}", json=bot("finished", transcript=items)
+    )
+    with patch.object(get_settings(), "skribby_name_by_elimination", True):
+        info = provider.get_meeting_by_id(BOT, own_names=("Alex from Product",))
+        assert [s["speaker"] for s in info.segments] == ["Ada Example", ""]
+
+
+def test_the_pipeline_passes_the_meetings_stored_name_to_a_provider_that_takes_it():
+    provider = NamedProvider()
+    meeting = SimpleNamespace(
+        bot_name="Alex from Product",
+        vexa_meeting_id="00000000-0000-0000-0000-000000000001",
+        platform="google_meet",
+        native_id="abc-defg-hij",
+    )
+    pipeline._lookup(provider, meeting)
+    assert provider.looked == ("Alex from Product",)
+    meeting.vexa_meeting_id = None
+    provider.looked = ()
+    pipeline._lookup(provider, meeting)
+    assert provider.looked == ("Alex from Product",)
+    meeting.bot_name = None  # an old meeting: nothing extra, the provider's own names apply
+    provider.looked = ("unset",)
+    pipeline._lookup(provider, meeting)
+    assert provider.looked == ()
+
+
+def test_a_provider_without_the_option_is_never_given_it():
+    from tests.test_pipeline import FakeVexa
+
+    meeting = SimpleNamespace(
+        bot_name="Alex", vexa_meeting_id="7", platform="google_meet", native_id="abc"
+    )
+    # FakeVexa's lookups take no `own_names`: a call that passed it would raise a TypeError.
+    fake = FakeVexa(SimpleNamespace(status="active"))
+    assert pipeline._lookup(fake, meeting).status == "active"
+    meeting.vexa_meeting_id = None
+    assert pipeline._lookup(fake, meeting).status == "active"
+
+
+# ---- the chat notice and the "Admit" line ----
+
+
+def test_the_chat_notice_names_the_bot_with_the_name_it_joins_with(session):
+    user = make_user(session, name="Ada Lovelace")
+    settings = make_settings(bot_chat_notice_enabled=True, skribby_bot_name=DEFAULT)
+    provider, _ = make()
+    options = transcript_source.send_options(
+        session,
+        provider,
+        user.id,
+        settings,
+        bot_name="Alex from Product",
+        shown_bot_name="Alex from Product",
+    )
+    assert options["bot_name"] == "Alex from Product"
+    assert options["chat_notice"].startswith("Hi, I'm Alex from Product. Ada Lovelace added me")
+    # No name given: the server default, as before this feature.
+    plain = transcript_source.send_options(session, provider, user.id, settings)
+    assert plain["chat_notice"].startswith(f"Hi, I'm {DEFAULT}.")
+    assert "bot_name" not in plain
+    assert chat_notice.notice_bot_name(settings) == DEFAULT
+
+
+def test_the_notice_in_a_placed_meeting_carries_the_owners_name(session):
+    user = make_user(session, name="Ada Lovelace", bot_name="Alex from Product")
+    template = make_template(session, user)
+    provider = NamedProvider()
+    settings = make_settings(bot_chat_notice_enabled=True, skribby_bot_name=DEFAULT)
+    place_bot(
+        session, provider, request_for(user, template), now=datetime.now(UTC), settings=settings
+    )
+    assert provider.sent[0]["chat_notice"].startswith("Hi, I'm Alex from Product.")
+
+
+def meeting_row(**fields) -> Meeting:
+    base = {
+        "owner_user_id": 1,
+        "url": URL,
+        "platform": "google_meet",
+        "native_id": "abc-defg-hij",
+        "template_id": 1,
+        "status": "bot_sent",
+        "bot_provider": "skribby",
+        "completion_reason": "awaiting_admission",
+        "bot_state_seen_at": datetime.now(UTC),
+    }
+    return Meeting(**{**base, **fields})
+
+
+def test_the_admit_line_names_the_bot_of_that_meeting(monkeypatch):
+    settings = make_settings(skribby_bot_name=DEFAULT)
+    monkeypatch.setattr(services, "get_settings", lambda: settings)
+    monkeypatch.setattr(services, "BOT_STATE_STALE_POLLS", 10**9)
+    line = services.status_text(meeting_row(platform="zoom", bot_name="Alex from Product"))
+    assert line == "Waiting to be let in. Admit 'Alex from Product' in the meeting"
+    # An old meeting (null name) reads the server default, as before.
+    old = services.status_text(meeting_row(platform="zoom", bot_name=None))
+    assert old == f"Waiting to be let in. Admit '{DEFAULT}' in the meeting"
+
+
+def test_the_admit_line_keeps_the_account_name_on_a_signed_in_meet_bot(monkeypatch):
+    settings = make_settings(
+        skribby_bot_name=DEFAULT, skribby_account_id=OTHER, skribby_account_name="Signed In"
+    )
+    monkeypatch.setattr(services, "get_settings", lambda: settings)
+    monkeypatch.setattr(services, "BOT_STATE_STALE_POLLS", 10**9)
+    meet = meeting_row(bot_name="Alex from Product")
+    assert services.status_text(meet) == "Waiting to be let in. Admit 'Signed In' in the meeting"
+    proven = settings.model_copy(update={"bot_name_applies_when_signed_in": True})
+    monkeypatch.setattr(services, "get_settings", lambda: proven)
+    assert "Admit 'Alex from Product'" in services.status_text(meet)
+
+
+def test_an_old_meeting_has_a_null_name_and_the_default_is_used(session):
+    user = make_user(session)
+    template = make_template(session, user)
+    old = Meeting(
+        owner_user_id=user.id,
+        url=URL,
+        platform="google_meet",
+        native_id="old-aaaa-bbb",
+        template_id=template.id,
+    )
+    session.add(old)
+    session.commit()
+    assert old.bot_name is None
+    assert bot_names.own_names(make_settings(skribby_bot_name=DEFAULT), old.bot_name)[0] == DEFAULT
+
+
+def test_the_clients_own_names_still_include_the_server_default_and_the_account():
+    client = SkribbyClient(
+        api_key="k" * 8, base_url=BASE, bot_name=DEFAULT, account_name="Signed In"
+    )
+    assert client.own_names == (DEFAULT, "Signed In")
+    provider = SkribbyProvider(client)
+    assert provider is not None

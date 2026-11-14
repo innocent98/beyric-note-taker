@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/shell";
 import { EmailSettingsSection } from "@/components/app/email-settings-section";
 import { SettingsCalendar } from "@/components/app/settings-calendar";
+import { SettingsBotName } from "@/components/app/settings-bot-name";
 import { SettingsLanguage } from "@/components/app/settings-language";
 import { SettingsTimeZone } from "@/components/app/settings-time-zone";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
@@ -50,10 +51,11 @@ export default async function SettingsPage({
   const sprints = team ? await api.sprints.list().catch(() => null) : null;
   const reminderMail = await api.settings.reminders.get().catch(() => null);
   const linear = await api.integrations.linear.get().catch(() => null);
-  const [email, language, timeZone] = await Promise.all([
+  const [email, language, timeZone, botName] = await Promise.all([
     load(api.settings.email.get()),
     load(api.settings.language.get()),
     load(api.settings.timeZone.get()),
+    load(api.settings.botName.get()),
   ]);
   return (
     <AppShell current="settings" reviewOpen={await getReviewOpen()}
@@ -63,6 +65,7 @@ export default async function SettingsPage({
         <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} templates={templates} />
         <SettingsPlannedSections tasks={tasksSettings} slack={slack} linear={linear} team={team} reminderMail={reminderMail} sprints={sprints} />
         <SettingsTimeZone initial={timeZone.time_zone} />
+        <SettingsBotName initial={botName} />
         <SettingsLanguage initial={language.default_language} />
         <EmailSettingsSection email={email} />
       </div>

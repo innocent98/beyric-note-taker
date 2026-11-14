@@ -1735,6 +1735,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/bot-name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Bot Name
+         * @description The name the note taker joins this person's meetings with: their own when set, else null with
+         *     the server's default beside it (`bot_name_default`).
+         */
+        get: operations["read_bot_name"];
+        /**
+         * Write Bot Name
+         * @description Set the caller's note taker name, or clear it (null or empty = the server default). It
+         *     applies to the meetings made from now on; a bot already sent keeps the name it joined with.
+         */
+        put: operations["write_bot_name"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/email": {
         parameters: {
             query?: never;
@@ -2699,6 +2725,18 @@ export interface components {
             review_open: number;
             /** Tasks New */
             tasks_new: number;
+        };
+        /** BotNameIn */
+        BotNameIn: {
+            /** Bot Name */
+            bot_name?: string | null;
+        };
+        /** BotNameOut */
+        BotNameOut: {
+            /** Bot Name */
+            bot_name: string | null;
+            /** Bot Name Default */
+            bot_name_default: string;
         };
         /**
          * CalendarOut
@@ -10402,6 +10440,104 @@ export interface operations {
                 };
             };
             /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_bot_name: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotNameOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_bot_name: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BotNameIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotNameOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `bot_name_invalid` */
             422: {
                 headers: {
                     [name: string]: unknown;

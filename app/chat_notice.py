@@ -36,8 +36,8 @@ FALLBACK_OWNER = "the host"
 
 
 def notice_bot_name(settings: Settings, provider: str = "skribby") -> str:
-    """The name the notice gives the bot: the one it joins with. The ONE place that decides it, so a
-    per-user bot name later is a change here and nowhere else."""
+    """The name the notice gives the bot when the caller names none: the server default. A meeting's
+    own name comes from `app.bot_names.shown_name`, passed to `send_options`."""
     return settings.bot_name_for(provider)
 
 
@@ -57,12 +57,17 @@ def notice_text(bot_name: str | None, owner_name: str | None) -> str:
 
 
 def send_options(
-    session: Session | None, provider, owner_user_id: int, settings: Settings
+    session: Session | None,
+    provider,
+    owner_user_id: int,
+    settings: Settings,
+    bot_name: str | None = None,
 ) -> dict[str, Any]:
     """`{"chat_notice": "<the line>"}` for `provider.send_bot`, or nothing: only with
     `BOT_CHAT_NOTICE_ENABLED`, only for a provider that takes one (`accepts_chat_notice`,
     Skribby's). Reading the owner's name can fail without stopping the send: the line then says
-    "the host"."""
+    "the host". `bot_name` is the name the host sees for this meeting's bot (`app.bot_names.
+    shown_name`); without one the server default is used."""
     if not settings.bot_chat_notice_enabled or not getattr(
         type(provider), "accepts_chat_notice", False
     ):
@@ -76,4 +81,4 @@ def send_options(
                 name = session.scalar(select(User.name).where(User.id == owner_user_id))
         except Exception:  # a database hiccup must not stop the bot from being sent
             logger.warning("the owner's name could not be read for the chat notice")
-    return {"chat_notice": notice_text(notice_bot_name(settings), name)}
+    return {"chat_notice": notice_text(bot_name or notice_bot_name(settings), name)}

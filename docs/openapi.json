@@ -750,6 +750,49 @@
         "title": "BadgesOut",
         "type": "object"
       },
+      "BotNameIn": {
+        "additionalProperties": false,
+        "properties": {
+          "bot_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Name"
+          }
+        },
+        "title": "BotNameIn",
+        "type": "object"
+      },
+      "BotNameOut": {
+        "properties": {
+          "bot_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Name"
+          },
+          "bot_name_default": {
+            "title": "Bot Name Default",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bot_name",
+          "bot_name_default"
+        ],
+        "title": "BotNameOut",
+        "type": "object"
+      },
       "CalendarOut": {
         "description": "The calendar settings page's whole state. `state` is for choosing what to draw\n(`not_connected` shows the Connect button; `connected` and `degraded` show the connected card;\n`needs_reconnect` shows it with a Connect again button); `state_text` is the sentence for it.\n`connected` is true while the calendar can still be read (`connected` or `degraded`).\n`account_email` is the account that was connected (shown as the connected address), and\n`provider` which calendar it is (`google` or `microsoft`); both are null when none is.\n`last_sync_at` is the last time the calendar was read in full, null before the first sync.\n`last_error` is the last failure in plain words, null when the last attempt worked.\n`rule` is the person's auto-join rule (`all`, `organizer` or `none`; `all` until they choose)\nand `rule_text` its label (\"Joining all meetings\"). `calendar_template_id` is the person's own\ntemplate chosen for calendar meetings, null for the default (their first, oldest, template).\n`auto_join_paused` is true while the operator has stopped calendar auto-join for everyone\n(`AUTOJOIN_ENABLED=false`): the rows still show what the rule says, but no bot is sent, and\n`auto_join_paused_text` is the line to show (null when it is not paused).\n`microsoft_enabled` is true when the server has the Outlook calendar switched on: draw the\n\"Connect Microsoft Outlook\" button live only then (while it is false the page looks as it did\nbefore Outlook existed).\n`bot_invite_email` is the note taker's Google address, set only when it is true that adding it\nto an event's guest list lets the bot skip the waiting room on Google Meet (the server runs the\nsigned-in Skribby bot and has the address set); null otherwise, and then draw no tip. Zoom and\nTeams meetings still wait for the host. It is a public address, not a secret.\n`upcoming` is empty unless connected.",
         "properties": {
@@ -14178,6 +14221,118 @@
           }
         },
         "summary": "Write Auto Share",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/bot-name": {
+      "get": {
+        "description": "The name the note taker joins this person's meetings with: their own when set, else null with\nthe server's default beside it (`bot_name_default`).",
+        "operationId": "read_bot_name",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotNameOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Bot Name",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Set the caller's note taker name, or clear it (null or empty = the server default). It\napplies to the meetings made from now on; a bot already sent keeps the name it joined with.",
+        "operationId": "write_bot_name",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotNameIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BotNameOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`bot_name_invalid`"
+          }
+        },
+        "summary": "Write Bot Name",
         "tags": [
           "settings"
         ]

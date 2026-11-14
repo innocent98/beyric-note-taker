@@ -1,0 +1,26 @@
+{
+  "note": "Trimmed and inner whitespace collapsed: the answer is what was stored.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/bot-name",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "bot_name": "  Alex   from  Product "
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "bot_name": "Alex from Product",
+      "bot_name_default": "Beyric Meeting Support"
+    }
+  }
+}

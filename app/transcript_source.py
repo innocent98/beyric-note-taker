@@ -191,7 +191,12 @@ def overlap(skribby_spoken: str, own_text: str) -> Overlap:
 
 
 def send_options(
-    session: Session | None, provider, owner_user_id: int, settings: Settings
+    session: Session | None,
+    provider,
+    owner_user_id: int,
+    settings: Settings,
+    bot_name: str | None = None,
+    shown_bot_name: str | None = None,
 ) -> dict[str, Any]:
     """Extra keyword arguments for `provider.send_bot`: the owner's vocabulary, only in `skribby`
     mode, only for a provider that takes it (Skribby's `custom_vocabulary`) and only when the
@@ -199,9 +204,19 @@ def send_options(
     Skribby's model that transcribes. Our own transcription reads the vocabulary itself. Reading
     it can fail without stopping the send: no vocabulary is then sent. The chat notice
     (`app.chat_notice`, off by default) rides in the same dictionary: this is the one place both
-    callers of `send_bot` already go through."""
-    return _vocabulary_options(session, provider, owner_user_id, settings) | (
-        chat_notice.send_options(session, provider, owner_user_id, settings)
+    callers of `send_bot` already go through. So does the note taker's name (`bot_name`, only for a
+    provider that takes one: `accepts_bot_name`, Skribby's; `app/bot_names.py` decides it): the
+    caller computes it once, stores it on the meeting and passes it here, so what is sent and what
+    is stored cannot differ. `shown_bot_name` is what the notice calls the bot."""
+    options: dict[str, Any] = {}
+    if bot_name and getattr(type(provider), "accepts_bot_name", False):
+        options["bot_name"] = bot_name
+    return (
+        options
+        | _vocabulary_options(session, provider, owner_user_id, settings)
+        | chat_notice.send_options(
+            session, provider, owner_user_id, settings, bot_name=shown_bot_name
+        )
     )
 
 

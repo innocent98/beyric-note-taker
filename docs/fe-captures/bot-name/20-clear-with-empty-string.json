@@ -1,0 +1,26 @@
+{
+  "note": "`\"\"` clears too.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/bot-name",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "bot_name": ""
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "bot_name": null,
+      "bot_name_default": "Beyric Meeting Support"
+    }
+  }
+}

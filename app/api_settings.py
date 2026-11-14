@@ -7,15 +7,17 @@ from the path or the body.
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import auth, services, signup, teams, timezones, translation
+from app import auth, bot_names, services, signup, teams, timezones, translation
 from app.api_schemas import (
     AutoShareIn,
     AutoShareOut,
+    BotNameIn,
+    BotNameOut,
     EmailPreferencesIn,
     EmailPreferencesOut,
     ErrorResponse,
@@ -149,6 +151,44 @@ def write_time_zone(
     )
     session.commit()
     return TimeZoneOut(time_zone=name, is_set=True)
+
+
+def _bot_name_out(request: Request, user: User) -> BotNameOut:
+    """The name and the default beside it, read from the server's own settings: the default is what
+    the bot provider in use is called when the person sets none (`SKRIBBY_BOT_NAME`)."""
+    return BotNameOut(
+        bot_name=user.bot_name,
+        bot_name_default=bot_names.default_name(request.app.state.settings, None),
+    )
+
+
+@router.get("/bot-name")
+def read_bot_name(request: Request, user: User = Depends(auth.current_user)) -> BotNameOut:
+    """The name the note taker joins this person's meetings with: their own when set, else null with
+    the server's default beside it (`bot_name_default`)."""
+    return _bot_name_out(request, user)
+
+
+@router.put(
+    "/bot-name",
+    responses={422: {"model": ErrorResponse, "description": "`bot_name_invalid`"}},
+)
+def write_bot_name(
+    request: Request,
+    body: BotNameIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> BotNameOut:
+    """Set the caller's note taker name, or clear it (null or empty = the server default). It
+    applies to the meetings made from now on; a bot already sent keeps the name it joined with."""
+    try:
+        name = bot_names.clean_bot_name(body.bot_name)
+    except bot_names.BotNameInvalid as exc:
+        raise services.Refused(422, "bot_name_invalid", str(exc)) from None
+    session.execute(update(User).where(User.id == user.id).values(bot_name=name))
+    session.commit()
+    session.refresh(user)
+    return _bot_name_out(request, user)
 
 
 @router.get("/auto-share")

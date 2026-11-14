@@ -1,0 +1,23 @@
+{
+  "note": "Refusals changed nothing.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/settings/bot-name",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "bot_name": "Notes 📝 for Ada",
+      "bot_name_default": "Beyric Meeting Support"
+    }
+  }
+}

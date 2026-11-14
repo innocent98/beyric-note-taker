@@ -200,6 +200,12 @@ class Settings(BaseSettings):
     # recorder ("Bot", "Notetaker", "Recording", "AI") raise Google's bot detection, and a name
     # that sounds like a person or a service desk does not.
     skribby_bot_name: str = "Beyric Meeting Support"
+    # Whether a person's own note taker name (`users.bot_name`) is what the HOST sees on a signed-in
+    # Google Meet bot. Earlier leads recorded that Skribby ignores `bot_name` once the bot is signed
+    # in; nobody has tested it live. OFF (the default): the owner's "Admit '...'" line keeps naming
+    # the account's own name on Meet. Turn it on only after the live check in
+    # `docs/sop/2026-11-14-per-user-bot-name.md` shows the custom name in Meet's participant list.
+    bot_name_applies_when_signed_in: bool = False
     # Extra hosts a recording may be fetched from, comma separated (a name, or any subdomain of it).
     # Skribby's own domain and Amazon's storage are always allowed; anything else is refused until
     # an operator has seen where the recordings really are (`scripts/skribby_live_check.py` prints

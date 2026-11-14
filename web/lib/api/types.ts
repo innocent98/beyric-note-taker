@@ -80,6 +80,7 @@ export type FieldError = Schemas["FieldError"];
 export type EmailPreferences = Schemas["EmailPreferencesOut"];
 export type LanguagePreferences = Schemas["LanguagePreferencesOut"];
 export type TimeZonePreferences = Schemas["TimeZoneOut"];
+export type BotNamePreferences = Schemas["BotNameOut"];
 export type RecordingAck = Schemas["RecordingAckOut"];
 export type Translation = Schemas["TranslationOut"];
 export type TranslationBrief = Schemas["TranslationBrief"];

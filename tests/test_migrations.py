@@ -2045,3 +2045,42 @@ def test_0046_adds_the_recording_ack_columns_and_leaves_existing_accounts_null(s
     assert not names & {"recording_ack_at", "recording_ack_version"}
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0047_adds_the_bot_name_columns_and_leaves_existing_rows_null(scratch_url):
+    cfg = alembic_config(scratch_url)
+    before = ScriptDirectory.from_config(cfg).get_revision("0047").down_revision
+    command.upgrade(cfg, before)
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, name) values ('old@example.test', 'Old')"))
+        user_id = conn.execute(text("select id from users where name = 'Old'")).scalar_one()
+        conn.execute(
+            text("insert into templates (owner_user_id, name, instructions) values (:u, 'T', 'x')"),
+            {"u": user_id},
+        )
+        template_id = conn.execute(
+            text("select id from templates where owner_user_id = :u"), {"u": user_id}
+        ).scalar_one()
+        conn.execute(
+            text(
+                "insert into meetings (owner_user_id, url, platform, native_id, template_id) "
+                "values (:u, 'https://meet.google.com/abc-defg-hij', 'google_meet', "
+                "'abc-defg-hij', :t)"
+            ),
+            {"u": user_id, "t": template_id},
+        )
+    command.upgrade(cfg, "head")
+    inspector = inspect(engine)
+    for table in ("users", "meetings"):
+        column = {c["name"]: c for c in inspector.get_columns(table)}["bot_name"]
+        assert column["nullable"] and column["type"].length == 50
+    with engine.connect() as conn:  # rows from before keep the server default (a null name)
+        names = conn.execute(text("select bot_name from users")).scalars().all()
+        assert names and set(names) == {None}
+        assert conn.execute(text("select bot_name from meetings")).scalars().all() == [None]
+    command.downgrade(cfg, before)
+    for table in ("users", "meetings"):
+        assert "bot_name" not in {c["name"] for c in inspect(engine).get_columns(table)}
+    command.upgrade(cfg, "head")
+    engine.dispose()

@@ -712,6 +712,21 @@ class TimeZoneIn(Body):
     time_zone: str
 
 
+class BotNameOut(BaseModel):
+    # The name the person chose for the note taker, or null while they use the server default.
+    bot_name: str | None
+    # The server default, read from the server (never hard-coded in the page): what the bot is
+    # called when `bot_name` is null. Shown as the form's placeholder and in its help text.
+    bot_name_default: str
+
+
+class BotNameIn(Body):
+    # Trimmed and checked by the server: at most 50 characters after whitespace is collapsed, no
+    # hidden or control characters, no email address, no web address; anything else is 422
+    # `bot_name_invalid` with a plain message. Null or an empty string clears it (the default).
+    bot_name: str | None = None
+
+
 class LanguagePreferencesIn(Body):
     # `en`, `fr` or `es`; anything else is 422 `language_unsupported`.
     default_language: str

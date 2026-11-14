@@ -1,0 +1,68 @@
+# SOP: each person can choose the name of their note taker ("Note taker name")
+
+**What shipped.** A person can set their own note taker name in Settings. Empty means the server default (`SKRIBBY_BOT_NAME`). The name is sent to Skribby as `bot_name` for every meeting that person's bot joins (manual, calendar auto-join, resend) and the name actually used is stored on the meeting. Branch `feature/per-user-bot-name`, PR opened 2026-11-14 (not merged by this work). Migration **0047**. **Whether the name shows on a signed-in Google Meet bot is unproven** (see "How to prove it live").
+
+## Why
+
+Every bot joined with the one server-wide name. The owner wanted people to pick a name their attendees recognise, with the server value as the default and the shared Google login `note@beyrictech.com` unchanged.
+
+## What Skribby's own pages say (read 2026-11-14, all three opened)
+
+- `https://skribby.io/docs/guides/bot-naming`: `bot_name` "controls how your bot appears to meeting participants". Limits: **Teams 50** ("strictly enforced"; a longer name is cut at the last space before the limit), **Google Meet 60, Zoom 64**; the API accepts any length without an error and the cut happens silently at join. Meet and Zoom run name-based bot detection (generic terms such as "Bot", "Notetaker", "Recorder", product names such as "Otter", recording words such as "Recording" are more likely to be flagged: denied access, an endless waiting room, flagged as automated); names that look like real participants are much less likely to be flagged. **Teams does not seem to use name-based detection.** On authenticated bots the page says only that they are "treated as legitimate participants", which makes name-based detection "largely irrelevant", and that authentication "significantly reduces detection risk regardless of name". **It does not say which name an authenticated bot displays.**
+- `https://skribby.io/docs/rest-api/bot-operations/createbot`: `bot_name` is a required string, "The name of the bot that'll join the meeting" (example "Alex from Acme"); over-limit names are shortened; "the bot's returned `bot_name` may differ from what you sent if it was shortened". **It says nothing about how `bot_name` interacts with `authentication`.**
+- `https://skribby.io/docs/rest-api/bot-operations/getbot`: the bot body carries `bot_name`, "Name of the bot as it appears in the meeting" (cut to the platform limit if needed). We use this for the elimination step (below). Whether it echoes what we sent or what the platform really shows for a signed-in bot is not stated.
+
+So the earlier leads' note (`app/config.py`: "Skribby ignores `bot_name` once it is signed in") is **neither confirmed nor contradicted** by Skribby's pages. No page refused to open. Nobody has tested it live.
+
+## How
+
+| Piece | What and why |
+|---|---|
+| Helper | `app/bot_names.py`, the one place. `clean_bot_name` (validation), `bot_name_for_user(settings, user, provider)` (the name to send), `stored_name` (what goes in `meetings.bot_name`), `shown_name` (what the host sees, for the "Admit" line and the chat notice), `own_names` (the bot's names for the elimination step) |
+| Validation | Server side, plain 422 `bot_name_invalid`. Trim and collapse inner whitespace; empty clears; at most **50** characters (Teams' limit, so the name is intact on every platform); **refused, not rewritten,** when `titles.clean_title` would remove anything (control characters other than whitespace, bidirectional characters, zero-width space; a zero-width joiner in an emoji sequence stays); refused when it looks like an email (`x@y`), or a web address (`titles.looks_like_link`: a scheme, `www.`, a meeting-host link, or a bare domain such as `acme.example`). Note a bare `Dr.Smith` also reads as a domain and is refused (the message says "web address") |
+| Storage | `users.bot_name` String(50) null; `meetings.bot_name` String(50) null = server default (every old row, and providers that take no name) |
+| Where it is decided | `app/placement.py::place_bot` computes the name ONCE, sends it, and stores it on the new meeting, so what was sent is what is stored. Every send goes through it (manual `services.create_meeting`, calendar auto-join and send-now via the join runner, the scheduler). `app/pipeline.py::send_again` (resend and hand retry) uses the owner's CURRENT name (they may have changed it because the old one was refused) and stores it |
+| Skribby call | `SkribbyClient.payload(..., bot_name)`: `bot_name` is the person's name, else the server default, on **every platform, signed in or not**. `accepts_bot_name` marks a provider that takes one; Vexa (stopped) is never sent a name and stores none. The authentication logic is untouched (Meet still signs in with `SKRIBBY_ACCOUNT_ID`) |
+| (a) Elimination | `SkribbyProvider._look` builds the bot's own names from: the server default and account name (`client.own_names`, as before), the meeting's stored name (`own_names=` passed by `pipeline._lookup`), and the `bot_name` Skribby reports in the get-bot body. So a custom name is never named as a speaker even when the caller cannot say it |
+| (b) "Admit '...'" line | `services.status_text` now names the name of THAT meeting through `bot_names.shown_name`. **Kept:** on a signed-in Google Meet bot the line still names the account's own name (`SKRIBBY_ACCOUNT_NAME`), because that is what the host saw before and the custom name is unproven there. **New switch `BOT_NAME_APPLIES_WHEN_SIGNED_IN` (default `false`)**: turn it on after the live check shows the custom name in Meet's list, and the line names the custom name there too. **Decision where the brief was silent / changed behaviour:** on Zoom and Teams the bot is always a guest (only Meet authenticates), so the line there now names the name we sent; before, with an account configured, it named the account name even on Zoom and Teams, which was wrong |
+| (c) Chat notice | `chat_notice.send_options(..., bot_name=)` takes the name from the same helper (`shown_name`), so the line says "Hi, I'm <the name the host sees>" (the account name on a signed-in Meet bot until the switch above is on) |
+| (d) Other pages | No mail and no page shows the bot's name apart from the "Admit" line (in the meeting answer's `status_text`) and the chat notice |
+| API | `GET` and `PUT /api/settings/bot-name`, `{bot_name, bot_name_default}` (separate route, like time zone and language: there is no single settings route). The default is read from the server's settings for the provider in use |
+| UI | `web/components/app/settings-bot-name.tsx`, placed in `web/app/settings/page.tsx` between the Time zone and Default notes language cards. **LEAD-DESIGNED, not in the designer's file:** it reuses the Time zone card (`card pl-language`), `Field`, and the primary and secondary `pl-btn` buttons, and invents no style. The label "Note taker name", the help text and the "Alex from Product" example are the owner's approved wording; the placeholder and the help text's default come from `bot_name_default`. Save and Clear. The 422 text is shown as it comes (the shared helper hides other 422 texts as developer text) |
+| Rejected | A per-meeting name field; rewriting a bad name quietly; showing the stored name in an API answer (nothing needs it); changing the Google login or auth logic |
+
+## What's involved
+
+`app/bot_names.py` (new), `alembic/versions/0047_bot_name.py`, `app/models.py` (`User.bot_name`, `Meeting.bot_name`), `app/config.py` (`bot_name_applies_when_signed_in`), `app/placement.py`, `app/pipeline.py` (`_lookup`, `send_again`, `_owner_bot_name`), `app/skribby.py` (`payload`, `send_bot`, `_look`, `get_meeting*`, `accepts_bot_name`, `accepts_own_names`), `app/transcript_source.py`, `app/chat_notice.py`, `app/services.py` (`status_text`), `app/titles.py` (`looks_like_link`), `app/api_settings.py`, `app/api_schemas.py`, `docs/openapi.json`, `web/` (component, page, client, types, generated schema), `.env.example`, `deploy/README.md`. Tests: `tests/test_bot_name.py` (63), `tests/test_migrations.py` (0047), `web/tests/settings-bot-name.test.tsx`, `web/tests/settings-page.test.tsx` (one mock line).
+
+## Verification
+
+`ruff check .`, `ruff format --check .`, `npm run lint`, `npm run typecheck` clean. Tests run on a scratch Postgres 17 and only for the files touched: `test_bot_name.py` (validation cases: emoji, 50 and 51 characters, whitespace, email, URL, bare domain, bidi, zero-width, control; default when empty; the name stored and sent to a faked Skribby for manual, calendar and resend; Zoom, Teams and signed-in Meet bodies; the elimination step with and without the custom name; the pipeline passing the stored name; the chat notice text; the "Admit" line and the signed-in switch; old meetings with a null name; the route), `test_chat_notice`, `test_skribby_provider`, `test_transcript_source`, `test_placement`, `test_bot_live_state`, `test_end_meeting`, `test_send_now`, `test_skribby_e2e` (all green), the openapi drift test, the 0047 migration test, and the web tests for the card, the Settings page and the guards. Migration 0047: up, down, up on a scratch Postgres, single head. **Live capture** (`scripts/capture_bot_name.py`, `docs/fe-captures/bot-name/`): the real app under uvicorn with the real Skribby client pointed at a local stand-in, which recorded the `POST /bot` bodies: `bot_name` was the person's name for a Meet and a Zoom meeting, and the server default after clearing. The full suite and the browser run are for CI.
+
+**Not verified:** anything against the real Skribby or a real meeting. In particular (1) whether a signed-in Meet bot shows the custom name, (2) what Zoom and Teams show, (3) whether Skribby's get-bot `bot_name` echoes what was sent. The UI card was tested in unit tests only; not looked at in a browser against the live API.
+
+## How to prove it live (one meeting per platform)
+
+Do this once with a custom name set, then report to the lead. Use a test account and a meeting you host.
+
+1. In Settings set "Note taker name" to something plain and recognisable, for example `Test Name Zed`. Check `GET /api/settings/bot-name` shows it.
+2. **Google Meet** (the signed-in bot, `note@beyrictech.com`): start a meeting, paste its link in the app. When the bot knocks, **read the participant list and the "Admit" prompt in Meet** itself. Write down exactly what the name there is: `Test Name Zed`, the account's own name, or something else. Admit it, check the list again once it is in.
+3. **Zoom**: the same, read the Participants panel (the bot is a guest and waits for the host to admit).
+4. **Teams**: the same, in the lobby and in the roster.
+5. In each platform, also look at the meeting's page in the app: the "Admit '...'" line (it will name the account name on Meet until the switch below is on).
+6. Optionally ask Skribby's dashboard or `GET /bot/{id}` what `bot_name` says for the Meet bot.
+
+**Report back to the lead:** per platform: the name shown in the list, the name in the "Admit" prompt, whether the bot was admitted or refused, and the name on the app's line. A one-line summary: "custom name shows on Meet: yes/no, Zoom: yes/no, Teams: yes/no".
+
+**Operator note (one line, decide after the result):** if the custom name shows on signed-in Meet, set `BOT_NAME_APPLIES_WHEN_SIGNED_IN=true` (restart web, worker, scheduler) so the "Admit" line and the chat notice name it; if it does NOT, keep it `false`, and tell users in Settings help (a copy change for the lead to decide) that on Meet the shared account name shows. Whether the server default `SKRIBBY_BOT_NAME` should change depends on the Meet and Zoom result: Skribby says recorder-sounding names ("Beyric Note Taker (recording)") raise detection on Meet and Zoom; a name that looks like a participant does not.
+
+## Operate / roll back
+
+Deploy: the migration (0047) runs with the deploy; both columns are nullable, so the old code ignores them. Nothing to configure; optional `BOT_NAME_APPLIES_WHEN_SIGNED_IN` (default false). Roll back: revert the code first, then `alembic downgrade 0046` (drops both columns; the stored names are lost, every bot then uses the server default again).
+
+## Follow-ups
+
+- The live check above (the only way to settle the signed-in Meet question).
+- If it shows the custom name on Meet, flip `BOT_NAME_APPLIES_WHEN_SIGNED_IN` and consider dropping the stale comment in `app/config.py` about `skribby_account_name`.
+- Team-level default name (a team's brand) if wanted later; not asked.
+- Vexa is stopped: it keeps one server name and ignores the setting.

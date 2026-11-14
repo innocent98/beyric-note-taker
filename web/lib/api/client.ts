@@ -21,6 +21,7 @@ import type {
   FieldError,
   LanguagePreferences,
   TimeZonePreferences,
+  BotNamePreferences,
   RecordingAck,
   Meeting,
   MeetingList,
@@ -430,6 +431,12 @@ export function createApi(options: ApiOptions = {}) {
         get: () => request<TimeZonePreferences>("GET", "/api/settings/time-zone"),
         set: (time_zone: string) =>
           request<TimeZonePreferences>("PUT", "/api/settings/time-zone", { body: { time_zone }, write: true }),
+      },
+      // The person's own note taker name (GET and PUT /api/settings/bot-name); null clears it.
+      botName: {
+        get: () => request<BotNamePreferences>("GET", "/api/settings/bot-name"),
+        set: (bot_name: string | null) =>
+          request<BotNamePreferences>("PUT", "/api/settings/bot-name", { body: { bot_name }, write: true }),
       },
       // The three switches of the Tasks card (GET and PUT /api/settings/tasks); all are sent together.
       tasks: {
