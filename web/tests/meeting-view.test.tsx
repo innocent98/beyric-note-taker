@@ -437,7 +437,7 @@ describe("delete meeting", () => {
     await userEvent.click(screen.getByRole("button", { name: "Delete meeting" }));
     await userEvent.click(within(screen.getByRole("group", { name: "Delete this meeting?" })).getByRole("button", { name: "Delete meeting" }));
     expect(mocks.remove).toHaveBeenCalledWith(7);
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/meetings"));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/"));
     expect(sessionStorage.getItem("beyric:meeting-deleted")).toBe("1");
   });
 
@@ -446,7 +446,7 @@ describe("delete meeting", () => {
     show(ready());
     await userEvent.click(screen.getByRole("button", { name: "Delete meeting" }));
     await userEvent.click(within(screen.getByRole("group", { name: "Delete this meeting?" })).getByRole("button", { name: "Delete meeting" }));
-    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/meetings"));
+    await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/"));
   });
 
   it.each([

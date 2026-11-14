@@ -87,7 +87,7 @@ describe("the page the designer drew", () => {
     expect(screen.getByText("Attendees")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "All meetings" }).getAttribute("href"),
-    ).toBe("/meetings");
+    ).toBe("/");
   });
 
   it("draws the three score tiles, Overdue plain while nothing is late", () => {

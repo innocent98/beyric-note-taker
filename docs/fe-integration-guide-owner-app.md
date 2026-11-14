@@ -711,7 +711,7 @@ _Capture: `docs/fe-captures/owner-app/56-meetings-list-bad-limit.json`_
 
 #### 5.1a The date filter: `from` and `to`
 
-`GET /api/meetings` takes two optional query parameters, `from` and `to`, each a day written `YYYY-MM-DD`. They keep only the meetings made on those calendar days, **both days included**. The Meetings page's date filter (lead-designed: the designer's files have no filter) sends them; the page keeps the range in its own address, `/meetings?from=2026-11-01&to=2026-11-07`, so a filtered view can be reloaded and shared.
+`GET /api/meetings` takes two optional query parameters, `from` and `to`, each a day written `YYYY-MM-DD`. They keep only the meetings made on those calendar days, **both days included**. The Meetings page's date filter (lead-designed: the designer's files have no filter) sends them; the page keeps the range in its own address, `/?from=2026-11-01&to=2026-11-07`, so a filtered view can be reloaded and shared.
 
 | Rule | Detail |
 |---|---|

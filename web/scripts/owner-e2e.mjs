@@ -81,7 +81,7 @@ check("GET / has a nonce CSP without unsafe-inline", /nonce-/.test(csp) && !/uns
 check("GET / offers Sign in, not Open the app", r.text.includes("Sign in") && !r.text.includes("Open the app"));
 check("GET / is not cached", /no-store|private/.test(r.headers.get("cache-control") ?? ""), r.headers.get("cache-control"));
 
-for (const path of ["/meetings", "/templates", "/vocabulary", "/meetings/1"]) {
+for (const path of ["/templates", "/vocabulary", "/meetings/1"]) {
   r = await send("GET", path);
   check(`GET ${path} logged out goes to /login`, [307, 308, 303].includes(r.status) && loc(r).endsWith("/login"), `${r.status} ${loc(r)}`);
 }
@@ -104,15 +104,10 @@ const loggedIn = new Map(jar);
 
 // 3. Pages as the owner
 r = await send("GET", "/");
-check("GET / logged in: the landing page with Open the app (to /meetings), not Sign in", r.status === 200 && r.text.includes("Your meetings, turned into finished work.") && r.text.includes("Open the app") && r.text.includes('href="/meetings"') && !r.text.includes("Get started"), `status ${r.status}`);
-check("GET / logged in is not noindex", !/noindex/.test(r.text), "robots meta present");
-r = await send("GET", "/welcome");
-check("GET /welcome redirects permanently to /", r.status === 308 && (loc(r) === "/" || loc(r).endsWith("/")), `${r.status} ${loc(r)}`);
-r = await send("GET", "/meetings");
-check("GET /meetings logged in: Meetings, the new-meeting form, a log-out button", r.status === 200 && r.text.includes("Send note taker") && r.text.includes('aria-label="Log out"'), `status ${r.status}`);
-check("GET /meetings logged in is noindex", /noindex/.test(r.text), "no robots meta");
+check("GET / logged in: Meetings, the new-meeting form, a log-out button", r.status === 200 && r.text.includes("Send note taker") && r.text.includes('aria-label="Log out"'), `status ${r.status}`);
+check("GET / logged in is noindex", /noindex/.test(r.text), "no robots meta");
 r = await send("GET", "/login");
-check("GET /login logged in goes to /meetings", [307, 308, 303].includes(r.status) && loc(r).endsWith("/meetings"), `${r.status} ${loc(r)}`);
+check("GET /login logged in goes to /", [307, 308, 303].includes(r.status) && (loc(r) === "/" || loc(r).endsWith("/")), `${r.status} ${loc(r)}`);
 r = await send("GET", "/styleguide");
 check("GET /styleguide logged in: the style guide", r.status === 200 && r.text.includes("Style guide"), `status ${r.status}`);
 r = await send("GET", "/privacy");
@@ -128,7 +123,7 @@ r = await write("PUT", `/api/templates/${templateId}`, { name: TEMPLATE, instruc
 check("update the template: 200", r.status === 200 && r.body?.instructions === "Two lines per person.", `${r.status} ${r.text}`);
 r = await send("GET", "/templates");
 check("GET /templates shows the new template, server rendered", r.status === 200 && r.text.includes(TEMPLATE), `status ${r.status}`);
-r = await send("GET", "/meetings");
+r = await send("GET", "/");
 check("the new-meeting form offers the template", r.text.includes(TEMPLATE));
 
 // 5. Vocabulary
@@ -150,8 +145,8 @@ if (meetings.length > 0) {
   const m = meetings[0];
   r = await send("GET", `/meetings/${m.id}`);
   check(`GET /meetings/${m.id} renders the meeting`, r.status === 200 && r.text.includes(m.title), `status ${r.status}`);
-  r = await send("GET", "/meetings");
-  check("GET /meetings lists the meetings", r.text.includes(m.title));
+  r = await send("GET", "/");
+  check("GET / lists the meetings", r.text.includes(m.title));
 } else {
   console.log("note  no meetings in this database: meeting pages were not loaded (seed with scripts/seed-owner-states.sql)");
 }

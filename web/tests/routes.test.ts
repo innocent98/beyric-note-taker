@@ -35,8 +35,7 @@ describe("routes", () => {
     expect(isNextPage("/series/12")).toBe(true);
     expect(isNextPage("/series/12/agenda")).toBe(false);
     expect(isNextPage("/meetings/12/cancel")).toBe(false);
-    expect(isNextPage("/meetings")).toBe(true);
-    expect(isNextPage("/welcome")).toBe(false); // a redirect to `/` in next.config.ts, not a page
+    expect(isNextPage("/meetings")).toBe(false);
     expect(isNextPage("/privacy/extra")).toBe(false);
     expect(isNextPage("/logout")).toBe(false);
     expect(isNextPage("/api/session")).toBe(false);

@@ -23,7 +23,7 @@ describe("set up your workspace", () => {
     expect(screen.getByLabelText("Workspace name").getAttribute("placeholder")).toBe("e.g. Beyric");
     expect(screen.getByText("Connect your calendar")).toBeTruthy();
     expect(screen.getByText("The note taker joins upcoming meetings that have a video link.")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Skip for now" }).getAttribute("href")).toBe("/meetings");
+    expect(screen.getByRole("link", { name: "Skip for now" }).getAttribute("href")).toBe("/");
     expect(screen.getByRole("button", { name: "Continue to Beyric" })).toBeTruthy();
   });
 
@@ -40,7 +40,7 @@ describe("set up your workspace", () => {
     await userEvent.type(screen.getByLabelText("Workspace name"), "  Beyric ");
     await userEvent.click(screen.getByRole("button", { name: "Continue to Beyric" }));
     expect(mocks.update).toHaveBeenCalledWith({ name: "Beyric" });
-    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/meetings"));
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledWith("/"));
   });
 
   it("shows the API's refusal and stays", async () => {

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+import type React from "react";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import MeetingsPage from "@/app/meetings/page";
+import HomePage from "@/app/page";
 import { MeetingList } from "@/components/app/meeting-list";
 import { TimeZoneProvider } from "@/components/app/time-zone-context";
 import type { MeetingList as MeetingListData, MeetingSummary, Template } from "@/lib/api/types";
@@ -15,7 +16,7 @@ import { captured } from "./helpers";
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), refresh: vi.fn(), push: vi.fn(), serverList: vi.fn() }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/meetings",
+  usePathname: () => "/",
   redirect: (to: string) => {
     throw new Error(`redirect:${to}`);
   },
@@ -41,8 +42,7 @@ vi.mock("@/lib/api/server", () => {
     getTimeZone: async () => null,
     load: <T,>(call: Promise<T>) => call,
     serverApi,
-    requireOwner: serverApi,
-  };
+    };
 });
 
 const templates = captured<{ templates: Template[] }>("11-templates-seeded.json").templates;
@@ -100,7 +100,7 @@ describe("the filter box", () => {
     render(<MeetingList initial={first} templates={templates} />);
     await userEvent.type(screen.getByLabelText("From"), "2026-11-01");
     await userEvent.type(screen.getByLabelText("To"), "2026-11-07{Enter}");
-    expect(mocks.push).toHaveBeenLastCalledWith("/meetings?from=2026-11-01&to=2026-11-07", { scroll: false });
+    expect(mocks.push).toHaveBeenLastCalledWith("/?from=2026-11-01&to=2026-11-07", { scroll: false });
     await userEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(mocks.push).toHaveBeenCalledTimes(2);
   });
@@ -109,7 +109,7 @@ describe("the filter box", () => {
     render(<MeetingList initial={first} templates={templates} />);
     await userEvent.type(screen.getByLabelText("To"), "2026-11-07");
     await userEvent.click(screen.getByRole("button", { name: "Apply" }));
-    expect(mocks.push).toHaveBeenLastCalledWith("/meetings?to=2026-11-07", { scroll: false });
+    expect(mocks.push).toHaveBeenLastCalledWith("/?to=2026-11-07", { scroll: false });
   });
 
   it("refuses From after To in plain words and does not change the address", async () => {
@@ -130,12 +130,18 @@ describe("the filter box", () => {
       </TimeZoneProvider>,
     );
     await userEvent.click(screen.getByRole("button", { name: "Today" }));
-    expect(mocks.push).toHaveBeenLastCalledWith("/meetings?from=2026-11-15&to=2026-11-15", { scroll: false });
+    expect(mocks.push).toHaveBeenLastCalledWith("/?from=2026-11-15&to=2026-11-15", { scroll: false });
     await userEvent.click(screen.getByRole("button", { name: "Last 7 days" }));
-    expect(mocks.push).toHaveBeenLastCalledWith("/meetings?from=2026-11-09&to=2026-11-15", { scroll: false });
+    expect(mocks.push).toHaveBeenLastCalledWith("/?from=2026-11-09&to=2026-11-15", { scroll: false });
     await userEvent.click(screen.getByRole("button", { name: "Last 30 days" }));
-    expect(mocks.push).toHaveBeenLastCalledWith("/meetings?from=2026-10-17&to=2026-11-15", { scroll: false });
+    expect(mocks.push).toHaveBeenLastCalledWith("/?from=2026-10-17&to=2026-11-15", { scroll: false });
     expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("2026-10-17");
+  });
+
+  it("changes the address of whichever page draws the list (basePath), so the filter can move with the page", async () => {
+    render(<MeetingList initial={first} templates={templates} basePath="/somewhere" />);
+    await userEvent.click(screen.getByRole("button", { name: "Today" }));
+    expect(mocks.push).toHaveBeenLastCalledWith("/somewhere?from=2026-11-14&to=2026-11-14", { scroll: false });
   });
 
   it("starts with the range from the address, and Clear removes it", async () => {
@@ -143,7 +149,7 @@ describe("the filter box", () => {
     expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("2026-11-09");
     expect((screen.getByLabelText("To") as HTMLInputElement).value).toBe("2026-11-12");
     await userEvent.click(screen.getByRole("button", { name: "Clear" }));
-    expect(mocks.push).toHaveBeenLastCalledWith("/meetings", { scroll: false });
+    expect(mocks.push).toHaveBeenLastCalledWith("/", { scroll: false });
   });
 
   it("can be used from the keyboard alone: every control is a labelled input or a button in tab order", async () => {
@@ -223,8 +229,14 @@ describe("a filtered list", () => {
 });
 
 describe("the page the server renders", () => {
-  const render1 = async (params: Record<string, string>) =>
-    renderToStaticMarkup(await MeetingsPage({ searchParams: Promise.resolve(params) }));
+  // `HomePage` returns the async `MeetingsPage` element for a signed-in owner; run that one too.
+  const render1 = async (params: Record<string, string>) => {
+    const element = (await HomePage({ searchParams: Promise.resolve(params) })) as {
+      type: (props: unknown) => Promise<React.ReactElement>;
+      props: unknown;
+    };
+    return renderToStaticMarkup(await element.type(element.props));
+  };
 
   it("asks the API for the range in the address and draws the filter with it", async () => {
     mocks.serverList.mockResolvedValue(page([meeting(3, "2026-11-12T10:00:00Z")]));

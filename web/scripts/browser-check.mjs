@@ -2,7 +2,7 @@
 // Loads pages in a real Chromium and fails on any console error or Content-Security-Policy
 // violation, and proves the page hydrated and the CSP header is the strict one.
 //
-//   PLAYWRIGHT=/path/to/playwright/index.mjs node scripts/browser-check.mjs http://127.0.0.1:3000 / /privacy
+//   PLAYWRIGHT=/path/to/playwright/index.mjs node scripts/browser-check.mjs http://127.0.0.1:3000 /welcome /privacy
 //
 // Playwright is not a dependency of this app (CI does not run this); point PLAYWRIGHT at an
 // installed copy, or leave it unset to use `import("playwright")`.

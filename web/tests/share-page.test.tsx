@@ -152,7 +152,7 @@ describe("share page, signed in", () => {
     arriveAt("#none");
     render(<ShareFlow signedIn templates={templates} />);
     expect((await screen.findByRole("alert")).textContent).toMatch(/could not find a Google Meet, Microsoft Teams or Zoom meeting link/);
-    expect(screen.getByRole("link", { name: "Go to Meetings" }).getAttribute("href")).toBe("/meetings");
+    expect(screen.getByRole("link", { name: "Go to Meetings" }).getAttribute("href")).toBe("/");
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
@@ -222,7 +222,7 @@ describe("login round trip", () => {
 
   it("goes to the Meetings page when nothing is waiting", async () => {
     await signIn();
-    expect(mocks.replace).toHaveBeenCalledWith("/meetings");
+    expect(mocks.replace).toHaveBeenCalledWith("/");
   });
 });
 

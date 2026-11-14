@@ -3,7 +3,7 @@ import { DAYS, MONTHS } from "@/lib/format";
 // The date filter of the Meetings list (lead-designed). A range is two calendar days, `YYYY-MM-DD`,
 // both included, in the owner's own time zone: the same days the server filters by
 // (`GET /api/meetings?from=&to=`, docs/fe-integration-guide-owner-app.md 5.1a) and the same day
-// headings the list draws. The range lives in the address (`/meetings?from=2026-11-01&to=2026-11-07`)
+// headings the list draws. The range lives in the address (`/?from=2026-11-01&to=2026-11-07`)
 // so a filtered view can be reloaded and shared; the dates are not sensitive.
 
 export type DayRange = { from: string | null; to: string | null };

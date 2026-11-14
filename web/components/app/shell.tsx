@@ -44,7 +44,7 @@ export function AppShell({
       </a>
       <ShellNav>
         <nav className="nav" aria-label="Main">
-          <NavLink href="/meetings" label="Meetings" current={current === "meetings"} />
+          <NavLink href="/" label="Meetings" current={current === "meetings"} />
           <NavLink href="/ask" label="Ask Beyric" current={current === "ask"} />
           <NavLink href="/tasks" label="Tasks" current={current === "tasks"} badge={tasksNew ?? 0} />
           <NavLink href="/projects" label="Projects" current={current === "projects"} />

@@ -1,6 +1,7 @@
+import type React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import MeetingsPage from "@/app/meetings/page";
+import HomePage from "@/app/page";
 import type { CalendarState, MeetingList } from "@/lib/api/types";
 import { calendarBody, captured } from "./helpers";
 
@@ -21,26 +22,25 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/app/recurring-cards", () => ({
   RecurringCards: () => <div data-testid="recurring-cards" />,
 }));
-vi.mock("@/lib/api/server", () => {
-  const serverApi = async () => ({
+vi.mock("@/lib/api/server", () => ({
+  getSession: async () => ({ authenticated: true }),
+  getReviewOpen: async () => null,
+  getTasksNew: async () => 0,
+  getUnreadNotifications: async () => null,
+  getShellUser: async () => null,
+  getTimeZone: async () => null,
+  load: <T,>(call: Promise<T>) => call,
+  serverApi: async () => ({
     meetings: { list: async () => captured<MeetingList>("53-meetings-list.json") },
     templates: { list: async () => [{ id: 1, name: "General", instructions: "x", is_default: true }] },
     calendar: { get: async () => calendarBody<CalendarState>("09-state-connected-with-upcoming.json") },
-  });
-  return {
-    getSession: async () => ({ authenticated: true }),
-    getReviewOpen: async () => null,
-    getTasksNew: async () => 0,
-    getUnreadNotifications: async () => null,
-    getShellUser: async () => null,
-    getTimeZone: async () => null,
-    load: <T,>(call: Promise<T>) => call,
-    serverApi,
-    requireOwner: serverApi,
-  };
-});
+  }),
+}));
 
-const render = async () => renderToStaticMarkup(await MeetingsPage());
+const render = async () => {
+  const element = (await HomePage()) as { type: (props: unknown) => Promise<React.ReactElement>; props: unknown };
+  return renderToStaticMarkup(await element.type(element.props));
+};
 
 describe("Meetings page", () => {
   it("places the Recurring cards between the Upcoming list and the list of meetings", async () => {

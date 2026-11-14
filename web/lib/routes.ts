@@ -5,7 +5,7 @@
 // matcher spells it `:id`).
 export const NEXT_PAGES = [
   "/",
-  "/meetings",
+  "/welcome",
   "/login",
   "/signup",
   "/verify-email",

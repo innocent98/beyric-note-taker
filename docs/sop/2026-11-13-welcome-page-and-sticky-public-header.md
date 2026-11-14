@@ -1,7 +1,5 @@
 # SOP: `/welcome` (the landing page for everyone) and the sticky public header
 
-> **Superseded in part (2026-11-14):** `/` is now the landing page for everyone and `/welcome` redirects to it; see `2026-11-14-meetings-dashboard-route.md`. The sticky-header part below still stands.
-
 **What shipped.** `/welcome` shows the landing page to everyone, signed in or not; the owner's way home from the public pages leads to it; and the landing header now really stays at the top while scrolling. Branch `feature/welcome-page-and-sticky-nav` (PR opened 2026-11-13, not merged by this work). Web only: no API, migration or server step, no FE guide change. The landing words and the legal pages are untouched.
 
 ## Why

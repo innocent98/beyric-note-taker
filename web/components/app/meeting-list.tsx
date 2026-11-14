@@ -24,7 +24,7 @@ import { plural } from "@/lib/format";
 // a page boundary stays under one heading.
 //
 // The date filter (`range`, lead-designed; components/app/meeting-filter.tsx) is in the address
-// (`/meetings?from=&to=`): applying it navigates, the server renders the first page of that range, and
+// (`/?from=&to=`, on whichever page draws the list: `basePath`): applying it navigates, the server renders the first page of that range, and
 // "Show older meetings" asks for the same range. The refresh above keeps the address, so it keeps the
 // filter. `rangeNotice` says why a damaged address was ignored.
 export function MeetingList({
@@ -32,11 +32,13 @@ export function MeetingList({
   templates,
   range = NO_RANGE,
   rangeNotice = null,
+  basePath = "/",
 }: {
   initial: MeetingListData;
   templates: Template[];
   range?: DayRange;
   rangeNotice?: string | null;
+  basePath?: string;
 }) {
   const router = useRouter();
   // Older pages belong to the range they were fetched for: another range starts again from the
@@ -107,7 +109,7 @@ export function MeetingList({
   }
 
   function applyRange(next: DayRange) {
-    router.push(`/meetings${rangeQuery(next)}`, { scroll: false });
+    router.push(`${basePath}${rangeQuery(next)}`, { scroll: false });
   }
 
   const head = (

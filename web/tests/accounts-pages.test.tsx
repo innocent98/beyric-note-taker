@@ -192,7 +192,7 @@ describe("sign-up form", () => {
     expect(screen.getByText("Accept the Terms and the Privacy Policy to create an account.")).toBeTruthy();
     await user.click(screen.getByRole("checkbox"));
     await user.click(screen.getByRole("button", { name: "Continue with Google" }));
-    expect(assign).toHaveBeenCalledWith("/api/auth/google/start?return_to=%2Fmeetings&accept_terms=true");
+    expect(assign).toHaveBeenCalledWith("/api/auth/google/start?return_to=%2F&accept_terms=true");
     vi.unstubAllGlobals();
   });
 
@@ -488,7 +488,7 @@ describe("sign-in additions", () => {
   it("shows Continue with Google only when google_signin is true, as a link that needs no JavaScript", () => {
     const { unmount } = render(<LoginForm google />);
     const link = screen.getByRole("link", { name: "Continue with Google" });
-    expect(link.getAttribute("href")).toBe("/api/auth/google/start?return_to=%2Fmeetings");
+    expect(link.getAttribute("href")).toBe("/api/auth/google/start?return_to=%2F");
     unmount();
     render(<LoginForm />);
     expect(screen.queryByRole("link", { name: "Continue with Google" })).toBeNull();

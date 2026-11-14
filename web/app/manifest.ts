@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: SITE_NAME,
     short_name: "Beyric Notes",
     description: SITE_DESCRIPTION,
-    start_url: "/meetings",
+    start_url: "/",
     scope: "/",
     display: "standalone",
     background_color: BRAND.bgLight,

@@ -19,11 +19,6 @@ const nextConfig: NextConfig = {
     // Next's default proxy timeout is 30 s and would cut those requests off.
     proxyTimeout: 310_000,
   },
-  // /welcome was the landing page for a signed-in owner while `/` was their Meetings page. `/` is the
-  // landing page for everyone now, so old links to /welcome go there for good.
-  async redirects() {
-    return [{ source: "/welcome", destination: "/", permanent: true }];
-  },
   async rewrites() {
     return {
       beforeFiles: [],

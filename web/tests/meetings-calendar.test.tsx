@@ -1,6 +1,7 @@
+import type React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import MeetingsPage from "@/app/meetings/page";
+import HomePage from "@/app/page";
 import { ApiError } from "@/lib/api/client";
 import type { CalendarState, MeetingList } from "@/lib/api/types";
 import { calendarBody, captured } from "./helpers";
@@ -19,25 +20,20 @@ vi.mock("next/navigation", () => ({
   },
   useRouter: () => ({ refresh: vi.fn() }),
 }));
-vi.mock("@/lib/api/server", () => {
-  const serverApi = async () => ({
+vi.mock("@/lib/api/server", () => ({
+  getSession: async () => ({ authenticated: true }),
+  getReviewOpen: async () => null,
+  getTasksNew: async () => 0,
+  getUnreadNotifications: async () => null,
+  getShellUser: async () => null,
+  getTimeZone: async () => null,
+  load: <T,>(call: Promise<T>) => call,
+  serverApi: async () => ({
     meetings: { list: async () => captured<MeetingList>("53-meetings-list.json") },
     templates: { list: async () => [{ id: 1, name: "General", instructions: "x", is_default: true }] },
     calendar: { get: () => state.calendar!() },
-  });
-  return {
-    getSession: async () => ({ authenticated: true }),
-    getReviewOpen: async () => null,
-    getTasksNew: async () => 0,
-    getUnreadNotifications: async () => null,
-    getShellUser: async () => null,
-    getTimeZone: async () => null,
-    load: <T,>(call: Promise<T>) => call,
-    serverApi,
-    requireOwner: serverApi,
-  };
-});
-
+  }),
+}));
 
 const notConnected = calendarBody<CalendarState>("05-state-not-connected.json");
 const withEvents = calendarBody<CalendarState>("09-state-connected-with-upcoming.json");
@@ -46,7 +42,11 @@ beforeEach(() => {
   state.calendar = async () => notConnected;
 });
 
-const render = async () => renderToStaticMarkup(await MeetingsPage());
+// `HomePage` returns the async `MeetingsPage` element; run that one too (static rendering cannot).
+const render = async () => {
+  const element = (await HomePage()) as { type: (props: unknown) => Promise<React.ReactElement>; props: unknown };
+  return renderToStaticMarkup(await element.type(element.props));
+};
 
 describe("Meetings page calendar", () => {
   it("draws the Connect calendar band between the new-meeting form and the list when nothing is connected", async () => {
