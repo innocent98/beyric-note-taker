@@ -5,18 +5,21 @@ Only the caller's own row is ever read or written: the account is the logged-in 
 from the path or the body.
 """
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import auth, services, timezones, translation
+from app import auth, services, signup, timezones, translation
 from app.api_schemas import (
     EmailPreferencesIn,
     EmailPreferencesOut,
     ErrorResponse,
     LanguagePreferencesIn,
     LanguagePreferencesOut,
+    RecordingAckOut,
     TimeZoneIn,
     TimeZoneOut,
 )
@@ -88,6 +91,26 @@ def write_language_preferences(
     )
     session.commit()
     return LanguagePreferencesOut(default_language=body.default_language)
+
+
+@router.post("/recording-ack")
+def acknowledge_recording(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> RecordingAckOut:
+    """The one-time card on the Meetings page for accounts older than the sign-up box: the person
+    confirms they will tell the people in their meetings that Beyric records them. Stores the time
+    and the wording's version the first time; later calls change nothing. It never gates anything
+    else, so the bot, auto-join and every other route work whether or not it was ever called."""
+    # One conditional statement: the first call wins, a second (or a double click) changes nothing.
+    session.execute(
+        update(User)
+        .where(User.id == user.id, User.recording_ack_at.is_(None))
+        .values(
+            recording_ack_at=datetime.now(UTC), recording_ack_version=signup.RECORDING_ACK_VERSION
+        )
+    )
+    session.commit()
+    return RecordingAckOut(recording_acknowledged=True)
 
 
 @router.get("/time-zone")

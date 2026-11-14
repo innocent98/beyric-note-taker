@@ -108,6 +108,12 @@ export function capturedAccount(file: string): AccountCapture {
   return JSON.parse(read(join(REPO, "docs/fe-captures/pilot-accounts", file)));
 }
 
+// A capture from the running API for the recording-consent box (docs/fe-captures/recording-ack/<file>,
+// `python scripts/capture_recording_ack.py`): the whole exchange.
+export function recordingCapture(file: string): AccountCapture {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/recording-ack", file)));
+}
+
 // The body of an account capture.
 export function accountBody<T>(file: string): T {
   return capturedAccount(file).response.body as T;

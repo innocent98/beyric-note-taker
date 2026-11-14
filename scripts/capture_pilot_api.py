@@ -302,7 +302,13 @@ def run(app, base, engine, settings) -> None:
         "signup-while-closed",
         "POST",
         "/api/signup",
-        body={"name": "Ada Example", "email": ADA, "password": ADA_PASSWORD, "accept_terms": True},
+        body={
+            "name": "Ada Example",
+            "email": ADA,
+            "password": ADA_PASSWORD,
+            "accept_terms": True,
+            "accept_recording": True,
+        },
         note="Sign-up before the admin opens the pilot.",
     )
 
@@ -341,7 +347,13 @@ def run(app, base, engine, settings) -> None:
     visitor.call("pilot-open", "GET", "/api/pilot")
 
     # --- sign-up ---
-    form = {"name": "Ada Example", "email": ADA, "password": ADA_PASSWORD, "accept_terms": True}
+    form = {
+        "name": "Ada Example",
+        "email": ADA,
+        "password": ADA_PASSWORD,
+        "accept_terms": True,
+        "accept_recording": True,
+    }
     visitor.call(
         "signup-weak-password", "POST", "/api/signup", body={**form, "password": "password"}
     )
@@ -437,7 +449,13 @@ def run(app, base, engine, settings) -> None:
         "ben-signup",
         "POST",
         "/api/signup",
-        body={"name": "Ben Example", "email": BEN, "password": BEN_PASSWORD, "accept_terms": True},
+        body={
+            "name": "Ben Example",
+            "email": BEN,
+            "password": BEN_PASSWORD,
+            "accept_terms": True,
+            "accept_recording": True,
+        },
     )
     ben.call(
         "resend-unverified",
@@ -533,6 +551,7 @@ def run(app, base, engine, settings) -> None:
             "email": "third@example.test",
             "password": ADA_PASSWORD,
             "accept_terms": True,
+            "accept_recording": True,
         },
         note="Unconfirmed accounts hold no place: the pilot (3 places) is still open.",
     )
@@ -551,6 +570,7 @@ def run(app, base, engine, settings) -> None:
             "email": "late@example.test",
             "password": ADA_PASSWORD,
             "accept_terms": True,
+            "accept_recording": True,
         },
     )
     ben_link = token_of(outbox(engine, "verify_email", BEN))
@@ -587,6 +607,7 @@ def run(app, base, engine, settings) -> None:
             "email": "later@example.test",
             "password": ADA_PASSWORD,
             "accept_terms": True,
+            "accept_recording": True,
         },
     )
 
@@ -688,6 +709,7 @@ def run(app, base, engine, settings) -> None:
             "email": "mallory@example.test",
             "password": ADA_PASSWORD,
             "accept_terms": True,
+            "accept_recording": True,
             "invite_token": invite_token,
         },
     )
@@ -700,6 +722,7 @@ def run(app, base, engine, settings) -> None:
             "email": WAIT,
             "password": WAIT_PASSWORD,
             "accept_terms": True,
+            "accept_recording": True,
             "invite_token": invite_token,
         },
         note="Works for the invited address only, even if the pilot is full or closed.",
@@ -713,6 +736,7 @@ def run(app, base, engine, settings) -> None:
             "email": WAIT,
             "password": WAIT_PASSWORD,
             "accept_terms": True,
+            "accept_recording": True,
             "invite_token": invite_token,
         },
     )
@@ -870,10 +894,12 @@ def run(app, base, engine, settings) -> None:
     google.call(
         "google-start",
         "GET",
-        "/api/auth/google/start?accept_terms=true&return_to=/meetings",
+        "/api/auth/google/start?accept_terms=true&accept_recording=true&return_to=/meetings",
         note="302 to Google's consent screen (the real URL the app builds); sets the flow cookie.",
     )
-    start = google.http.get("/api/auth/google/start?accept_terms=true&return_to=/meetings")
+    start = google.http.get(
+        "/api/auth/google/start?accept_terms=true&accept_recording=true&return_to=/meetings"
+    )
     state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
     admin.call(
         "admin-pilot-closed-again",
@@ -893,7 +919,7 @@ def run(app, base, engine, settings) -> None:
         f"/api/auth/google/callback?code=abc&state={state}",
         note="A flow finished in a browser that did not start it: refused.",
     )
-    start = google.http.get("/api/auth/google/start?accept_terms=true")
+    start = google.http.get("/api/auth/google/start?accept_terms=true&accept_recording=true")
     state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
     google.call(
         "google-callback-pilot-closed",
@@ -923,7 +949,7 @@ def run(app, base, engine, settings) -> None:
     google.call(
         "google-callback-unknown-state", "GET", "/api/auth/google/callback?code=abc&state=nonsense"
     )
-    start = google.http.get("/api/auth/google/start?accept_terms=true")
+    start = google.http.get("/api/auth/google/start?accept_terms=true&accept_recording=true")
     state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
     google.call(
         "google-callback-denied",
@@ -931,7 +957,9 @@ def run(app, base, engine, settings) -> None:
         f"/api/auth/google/callback?error=access_denied&state={state}",
         note="The person pressed Cancel at Google.",
     )
-    start = google.http.get("/api/auth/google/start?accept_terms=true&return_to=/meetings")
+    start = google.http.get(
+        "/api/auth/google/start?accept_terms=true&accept_recording=true&return_to=/meetings"
+    )
     state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
     google.call(
         "google-callback-ok",
@@ -963,7 +991,7 @@ def run(app, base, engine, settings) -> None:
     StandInGoogle.identity = google_oauth.Identity(
         "g-capture-2", "latecomer@example.test", "Late Comer"
     )
-    start = full.http.get("/api/auth/google/start?accept_terms=true")
+    start = full.http.get("/api/auth/google/start?accept_terms=true&accept_recording=true")
     state = parse_qs(urlparse(start.headers["location"]).query)["state"][0]
     full.call(
         "google-callback-pilot-full",
@@ -979,7 +1007,13 @@ def run(app, base, engine, settings) -> None:
     app.state.public_limits = PublicLimits()
     rate = Recorder(base, "rate-limited-visitor")
     rate.call("rate-session", "GET", "/api/session")
-    weak = {"name": "R", "email": "rate@example.test", "password": "password", "accept_terms": True}
+    weak = {
+        "name": "R",
+        "email": "rate@example.test",
+        "password": "password",
+        "accept_terms": True,
+        "accept_recording": True,
+    }
     for _ in range(5):
         rate.http.post("/api/signup", json=weak, headers={"X-CSRF-Token": rate.csrf})
     rate.call(

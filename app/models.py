@@ -137,6 +137,12 @@ class User(Base):
     session_epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     terms_version: Mapped[str | None] = mapped_column(String(32))
+    # When the person confirmed they will tell the people in their meetings that Beyric records
+    # them, and which wording (`signup.RECORDING_ACK_VERSION`). Set at sign-up, or later by the
+    # one-time card on the Meetings page for accounts older than the box; null until then. It
+    # never gates a meeting, the bot or auto-join.
+    recording_ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    recording_ack_version: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # When the admin deleted the account (status `deleted`); the purge gives up a day after it.

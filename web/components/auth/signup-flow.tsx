@@ -18,11 +18,12 @@ import { InviteBanner, LockedEmail } from "./invite-banner";
 import { MailLinks } from "./mail-links";
 import { PasswordField, PasswordRules } from "./password-field";
 import { PilotScreen } from "./pilot-screen";
+import { RECORDING_ACK_MESSAGE, RecordingBox } from "./recording-consent";
 import { useCountdown } from "./use-countdown";
 import { useUrlToken } from "./use-url-token";
 
 type Screen = "form" | "sent" | "closed" | "full";
-type Errors = { name?: string; email?: string; password?: string; terms?: string };
+type Errors = { name?: string; email?: string; password?: string; terms?: string; recording?: string };
 
 const TERMS_MESSAGE = "Accept the Terms and the Privacy Policy to create an account.";
 
@@ -57,6 +58,8 @@ export function SignupFlow({
   const [teamInvite, setTeamInvite] = useState<{ email: string; by: string | null; team: string } | null>(null);
   const [password, setPassword] = useState("");
   const [accepted, setAccepted] = useState(false);
+  // The recording box: never pre-ticked, and the API refuses a sign-up without it.
+  const [recording, setRecording] = useState(false);
   const [show, setShow] = useState(false);
   const [errors, setErrors] = useState<Errors>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -83,6 +86,7 @@ export function SignupFlow({
     };
   }, [invite]);
   const termsRef = useRef<HTMLInputElement>(null);
+  const recordingRef = useRef<HTMLInputElement>(null);
 
   function validate(): Errors {
     const found: Errors = {};
@@ -92,6 +96,7 @@ export function SignupFlow({
     const tooShortOrLong = lengthProblem(password);
     if (tooShortOrLong) found.password = tooShortOrLong;
     if (!accepted) found.terms = TERMS_MESSAGE;
+    if (!recording) found.recording = RECORDING_ACK_MESSAGE;
     return found;
   }
 
@@ -109,6 +114,7 @@ export function SignupFlow({
         email: email.trim(),
         password,
         accept_terms: true,
+        accept_recording: true,
         ...(invite ? { invite_token: invite } : {}),
       });
       setSentTo(email.trim());
@@ -127,11 +133,15 @@ export function SignupFlow({
     }
   }
 
-  // Google needs the box ticked first: it is what lets a NEW account be created (guide section 9).
+  // Google needs both boxes ticked first: they are what lets a NEW account be created (guide section 9).
   function googleGuard(): boolean {
-    if (accepted) return true;
-    setErrors((current) => ({ ...current, terms: TERMS_MESSAGE }));
-    termsRef.current?.focus();
+    if (accepted && recording) return true;
+    setErrors((current) => ({
+      ...current,
+      ...(accepted ? {} : { terms: TERMS_MESSAGE }),
+      ...(recording ? {} : { recording: RECORDING_ACK_MESSAGE }),
+    }));
+    (accepted ? recordingRef : termsRef).current?.focus();
     return false;
   }
 
@@ -191,7 +201,7 @@ export function SignupFlow({
 
   // A team's invitation is the designer's "Join your team" screen (Auth.dc.html:171-208): banner,
   // locked email, name, password, "Join Beyric". The same state and the same sign-up call as the
-  // form below; the terms box stays because the API needs `accept_terms`, and the Google button is
+  // form below; the terms and recording boxes stay because the API needs `accept_terms` and `accept_recording`, and the Google button is
   // not drawn (that sign-up does not carry the invitation).
   if (teamInvite) {
     return (
@@ -245,6 +255,7 @@ export function SignupFlow({
             </AppLink>
             .
           </Checkbox>
+          <RecordingBox ref={recordingRef} checked={recording} error={errors.recording} onChange={setRecording} />
           <Button size="field" block disabled={pending}>
             {pending ? "Joining..." : "Join Beyric"}
           </Button>
@@ -264,7 +275,7 @@ export function SignupFlow({
       ) : null}
       {google ? (
         <div className="auth-sso">
-          <GoogleButton acceptTerms={accepted} guard={googleGuard} />
+          <GoogleButton acceptTerms={accepted} acceptRecording={recording} guard={googleGuard} />
           <div className="auth-or">or use your email</div>
         </div>
       ) : null}
@@ -324,6 +335,7 @@ export function SignupFlow({
           </AppLink>
           .
         </Checkbox>
+        <RecordingBox ref={recordingRef} checked={recording} error={errors.recording} onChange={setRecording} />
         <Button size="field" block disabled={pending}>
           {pending ? "Creating account..." : "Create account"}
         </Button>

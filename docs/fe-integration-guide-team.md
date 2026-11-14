@@ -551,7 +551,8 @@ Response body:
 *capture `19-signup-without-link.json`*  
 No link: the pilot is closed, 403 `pilot_closed`.
 
-Request body:
+Request body (**since 2026-11-14 it also needs `"accept_recording": true`**, the recording-consent box,
+see `docs/fe-integration-guide-recording-ack.md`; this capture predates the field):
 ```json
 {
   "name": "Ada Lovelace",

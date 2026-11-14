@@ -30,6 +30,7 @@ const SHOWABLE = new Set([
   "invite_invalid",
   "password_too_weak",
   "terms_required",
+  "recording_ack_required",
   "invalid_email",
   "invalid_name",
   "validation_error",
@@ -49,7 +50,7 @@ export function isCode(error: unknown, ...codes: string[]): boolean {
 }
 
 // Which field a sign-up or reset error belongs under; anything else is shown above the form.
-export function fieldOf(error: unknown): "password" | "email" | "name" | "terms" | null {
+export function fieldOf(error: unknown): "password" | "email" | "name" | "terms" | "recording" | null {
   if (!(error instanceof ApiError)) return null;
   switch (error.code) {
     case "password_too_weak":
@@ -60,6 +61,8 @@ export function fieldOf(error: unknown): "password" | "email" | "name" | "terms"
       return "name";
     case "terms_required":
       return "terms";
+    case "recording_ack_required":
+      return "recording";
     default:
       return null;
   }
@@ -71,6 +74,7 @@ export const LOGIN_ERRORS = {
   google_failed: "We could not sign you in with Google. Please try again.",
   google_denied: "Google sign-in was cancelled. You can try again, or sign in with your email and password.",
   terms_required: "To create an account with Google, accept the Terms and the Privacy Policy first. Start on the sign-up page.",
+  recording_ack_required: "To create an account with Google, tick the box about telling the people in your meetings that Beyric records them. Start on the sign-up page.",
   pilot_closed: "Sign-up is not open yet. Check back soon or join the waiting list.",
   account_suspended: "This account is suspended.",
   email_unsupported: "We cannot accept that Google address yet because it has letters outside a to z. Use another Google account or your email and password.",
@@ -84,12 +88,13 @@ export function loginErrorMessage(code: string | undefined): string | null {
 }
 
 // Codes after which a visitor needs somewhere to go (the sign-up page, where the waitlist is).
-export const LOGIN_ERRORS_WITH_SIGNUP: ReadonlySet<string> = new Set(["terms_required", "pilot_closed"]);
+export const LOGIN_ERRORS_WITH_SIGNUP: ReadonlySet<string> = new Set(["terms_required", "recording_ack_required", "pilot_closed"]);
 
 // A full page load to Google's consent screen through our own route (section 9). `accept_terms`
-// goes on only when the visitor ticked the box.
-export function googleStartUrl(acceptTerms: boolean): string {
+// and `accept_recording` go on only when the visitor ticked the box.
+export function googleStartUrl(acceptTerms: boolean, acceptRecording = false): string {
   const query = new URLSearchParams({ return_to: "/" });
   if (acceptTerms) query.set("accept_terms", "true");
+  if (acceptRecording) query.set("accept_recording", "true");
   return `/api/auth/google/start?${query.toString()}`;
 }

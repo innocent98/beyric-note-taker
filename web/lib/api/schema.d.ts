@@ -237,9 +237,9 @@ export interface paths {
          *     `google_flow` cookie of the browser that started the flow). Always a redirect, never JSON:
          *     success goes to the stored `return_to` with a new session; a failure goes to
          *     `/login?error=<code>` with `google_denied`, `google_failed`, `terms_required`,
-         *     `account_suspended`, `pilot_closed` or `email_unsupported`; a full pilot goes to
-         *     `/pilot-full` and sets a 15-minute cookie that `GET /api/pilot` reads as `prefill_email`
-         *     (the address is never put in a URL).
+         *     `recording_ack_required`, `account_suspended`, `pilot_closed` or `email_unsupported`; a full
+         *     pilot goes to `/pilot-full` and sets a 15-minute cookie that `GET /api/pilot` reads as
+         *     `prefill_email` (the address is never put in a URL).
          */
         get: operations["google_callback"];
         put?: never;
@@ -261,7 +261,8 @@ export interface paths {
          * Google Start
          * @description Send the browser to Google's consent screen (scopes `openid email profile` only). Public;
          *     navigate to it, do not fetch it. `accept_terms=true` must be sent by the sign-up screen: it
-         *     is what lets a NEW account be created (an existing one signs in without it). `return_to` is
+         *     and `accept_recording=true` (the recording box) are what let a NEW account be created (an
+         *     existing one signs in without either). `return_to` is
          *     a relative path to land on afterwards; anything else becomes `/`. 404
          *     `google_signin_unavailable` when the server has no Google client configured.
          */
@@ -1691,6 +1692,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/recording-ack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge Recording
+         * @description The one-time card on the Meetings page for accounts older than the sign-up box: the person
+         *     confirms they will tell the people in their meetings that Beyric records them. Stores the time
+         *     and the wording's version the first time; later calls change nothing. It never gates anything
+         *     else, so the bot, auto-join and every other route work whether or not it was ever called.
+         */
+        post: operations["acknowledge_recording"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/reminders": {
         parameters: {
             query?: never;
@@ -1789,8 +1813,9 @@ export interface paths {
          *     is registered. The account cannot sign in until the emailed link is confirmed. Errors that do
          *     not depend on the address: 403 `pilot_closed`, 409 `pilot_full`, 403
          *     `password_signup_disabled`, 400 `invite_invalid`, 422 `password_too_weak`, `invalid_email`,
-         *     `invalid_name`, `terms_required`, 429 `too_many_requests` (5 sign-ups per hour per address)
-         *     and `server_busy`. `accept_terms` must be true: the account records the version accepted.
+         *     `invalid_name`, `terms_required`, `recording_ack_required`, 429 `too_many_requests` (5
+         *     sign-ups per hour per address) and `server_busy`. `accept_terms` and `accept_recording` must
+         *     be true: the account records the version of each that was accepted.
          *     A second sign-up for the same address within a minute is answered 202 and does nothing.
          */
         post: operations["sign_up"];
@@ -3511,6 +3536,11 @@ export interface components {
             /** Resolved */
             resolved?: boolean | null;
         };
+        /** RecordingAckOut */
+        RecordingAckOut: {
+            /** Recording Acknowledged */
+            recording_acknowledged: boolean;
+        };
         /**
          * RecurringOut
          * @description The cards, soonest next occurrence first; empty when no calendar is connected or it holds no
@@ -3834,6 +3864,11 @@ export interface components {
         };
         /** SignUp */
         SignUp: {
+            /**
+             * Accept Recording
+             * @default false
+             */
+            accept_recording: boolean;
             /** Accept Terms */
             accept_terms: boolean;
             /** Email */
@@ -4404,6 +4439,8 @@ export interface components {
             is_admin: boolean;
             /** Name */
             name: string | null;
+            /** Recording Acknowledged */
+            recording_acknowledged: boolean;
             /** Time Zone */
             time_zone?: string | null;
         };
@@ -5199,6 +5236,7 @@ export interface operations {
         parameters: {
             query?: {
                 accept_terms?: boolean;
+                accept_recording?: boolean;
                 return_to?: string | null;
             };
             header?: never;
@@ -10008,6 +10046,53 @@ export interface operations {
                 };
             };
             /** @description `language_unsupported` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    acknowledge_recording: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecordingAckOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -80,6 +80,7 @@ export type FieldError = Schemas["FieldError"];
 export type EmailPreferences = Schemas["EmailPreferencesOut"];
 export type LanguagePreferences = Schemas["LanguagePreferencesOut"];
 export type TimeZonePreferences = Schemas["TimeZoneOut"];
+export type RecordingAck = Schemas["RecordingAckOut"];
 export type Translation = Schemas["TranslationOut"];
 export type TranslationBrief = Schemas["TranslationBrief"];
 // `en` is the original; only `fr` and `es` are translated into.

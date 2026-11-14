@@ -58,6 +58,10 @@ class UserOut(BaseModel):
     # The IANA zone the person chose on Settings; null until they do (times are then UTC in mail,
     # and the browser's own zone on the pages).
     time_zone: str | None = None
+    # Whether the person has confirmed the recording box (at sign-up, or on the card on the
+    # Meetings page). False only for accounts older than the box that have not clicked it yet;
+    # nothing is blocked while it is false.
+    recording_acknowledged: bool
 
 
 class UsageOut(BaseModel):
@@ -101,6 +105,9 @@ class SignUp(Body):
     email: str = Field(max_length=2000)
     password: str = Field(max_length=2000)
     accept_terms: bool  # must be true: sign-up refuses with 422 `terms_required` otherwise
+    # Must be true (the recording box): sign-up refuses with 422 `recording_ack_required`
+    # otherwise, also when the field is missing.
+    accept_recording: bool = False
     invite_token: str | None = Field(default=None, max_length=2000)
 
 
@@ -645,6 +652,11 @@ class LanguagePreferencesOut(BaseModel):
     # `en` means the original (no translation); `fr` or `es` opens meetings in that language
     # when a translation exists.
     default_language: Literal["en", "fr", "es"]
+
+
+class RecordingAckOut(BaseModel):
+    # Always true in an answer: the acknowledgement is stored (the first time it is made).
+    recording_acknowledged: bool
 
 
 class TimeZoneOut(BaseModel):

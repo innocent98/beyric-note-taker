@@ -80,8 +80,11 @@ Request (#18):
 ```json
 { "name": "Ada Example", "email": "ada@example.test", "password": "<password>", "accept_terms": true }
 ```
-`invite_token` (string) is optional. The body is strict: an unknown field is a 422 (#16), a missing one
-too (#15), and `accept_terms` must be the boolean `true`.
+**Since 2026-11-14 the body also needs `"accept_recording": true`** (the recording-consent box, see
+`docs/fe-integration-guide-recording-ack.md`; the capture above was made before the field existed, so
+its body lacks it). `invite_token` (string) is optional. The body is strict: an unknown field is a 422
+(#16), a missing one too (#15), and `accept_terms` must be the boolean `true`. A missing or false
+`accept_recording` is the 422 `recording_ack_required` below, not a `validation_error`.
 
 **Response for a new address, an address that already has an account, and a repeat within a minute is
 identical: 202** (#18, #19, #31):
@@ -109,6 +112,7 @@ Errors (all independent of whether the address exists):
 | 400 | `invite_invalid` | That invitation is not valid any more. Join the waiting list to get a new one. | #82, #84 |
 | 422 | `password_too_weak` | That password is too common. Choose one that is harder to guess. | #12. Other messages of this code: `Use at least 8 characters.`, `Use at most 128 characters.` (the first two are **not captured live**, from `app/passwords.py`) |
 | 422 | `terms_required` | Accept the Terms and the Privacy Policy to create an account. | #13 |
+| 422 | `recording_ack_required` | Confirm that you will tell the people in your meetings that Beyric will record them. | asked after the terms. Captured in `docs/fe-captures/recording-ack/` (#02, #03), see `docs/fe-integration-guide-recording-ack.md` |
 | 422 | `invalid_email` | Enter a valid email address. | #14. ASCII addresses only for now; an address with accented letters is refused |
 | 422 | `invalid_name` | Enter your name (up to 200 characters). | **not captured live**; tested |
 | 422 | `validation_error` | Some fields are missing or not valid. (+ `fields`) | #15, #16 |
@@ -119,7 +123,8 @@ Errors (all independent of whether the address exists):
 Passwords: 8 to 128 characters, not on a list of common passwords, no other rules.
 
 **Terms:** `accept_terms: true` is stored with the version accepted (the "Last updated" date of the
-Terms and Privacy pages). Show the checkbox beside links to both pages.
+Terms and Privacy pages). Show the checkbox beside links to both pages. The recording box under it is
+stored the same way (`recording_ack_at`, `recording_ack_version`); see the recording guide.
 
 **Nginx** sits in front: more than about 11 calls to the account routes in a moment from one address
 get a 429 from nginx itself, **whose body is not our JSON** (nginx's own page). **Not captured through
@@ -201,9 +206,11 @@ removed if they ask again.
 Show the button only when `GET /api/pilot` says `google_signin: true`.
 
 1. **Navigate the browser** (a full page load, not `fetch`) to
-   `/api/auth/google/start?accept_terms=true&return_to=/meetings`. `accept_terms=true` must be sent
-   when the person ticked the terms checkbox next to the button; without it an **existing** account
-   still signs in but a **new** one is refused (`terms_required`). `return_to` is a path on this site;
+   `/api/auth/google/start?accept_terms=true&accept_recording=true&return_to=/meetings`.
+   `accept_terms=true` must be sent when the person ticked the terms checkbox next to the button, and
+   (since 2026-11-14) `accept_recording=true` when they ticked the recording box; without them an
+   **existing** account still signs in but a **new** one is refused (`terms_required`, then
+   `recording_ack_required`). `return_to` is a path on this site;
    anything else becomes `/`. The answer is a **302** to Google's consent screen, which asks for
    `openid email profile` only (#108). It also sets a short `google_flow` cookie.
 2. Google sends the browser to `/api/auth/google/callback`, which **always redirects**:
@@ -214,6 +221,7 @@ Show the button only when `GET /api/pilot` says `google_signin: true`.
 | `/login?error=google_failed` | anything wrong: unknown or reused state, expired flow, the flow finished in another browser, a bad token | #110, #114 |
 | `/login?error=google_denied` | the person pressed Cancel at Google | #115 |
 | `/login?error=terms_required` | a new account and `accept_terms` was not sent | #113 |
+| `/login?error=recording_ack_required` | a new account, the terms were sent but `accept_recording` was not | captured in `docs/fe-captures/recording-ack/` (#11) |
 | `/login?error=pilot_closed` | a new account while the pilot is closed | #111 |
 | `/login?error=account_suspended` | the account is suspended | **not captured live**; tested |
 | `/login?error=email_unsupported` | Google's address has non-ASCII letters (not supported yet) | **not captured live**; tested |
@@ -374,7 +382,7 @@ created_at}`, never a link. **Item shape not captured live** (tested).
 7. **A mail can be dropped silently** (1 per minute per address). Do not show a "resend" button as instantly usable; a 30 to 60 second wait is honest.
 8. **A suspended account is signed out on its next request** (401 `not_authenticated`): handle a sudden 401 with the sign-in screen, not an error. Suspending also ends old sessions for good.
 9. **`account.reset_link_issued` is a security notice**: show it in the bell with its `warning` severity. It means the administrator made a one-time reset link for this user at their request; whoever uses that link can sign in as them.
-10. **Google sign-up needs the terms checkbox ticked first**, and the button must pass `accept_terms=true`.
+10. **Google sign-up needs the terms checkbox AND the recording box ticked first**, and the button must pass `accept_terms=true&accept_recording=true`.
 11. **Admin screens must treat `emailed: false` as "copy this link and send it yourself"** and show the link once.
 
 ## 14a. Email preferences and the skipped-mail notice (added 2026-11-04)

@@ -314,17 +314,17 @@ def run(base: str, engine) -> None:
     ada.call("ada-session", "GET", "/api/session")
     ada.call(
         "signup-without-link", "POST", "/api/signup",
-        body={"name": ADA[1], "email": ADA[0], "password": ADA[2], "accept_terms": True},
+        body={"name": ADA[1], "email": ADA[0], "password": ADA[2], "accept_terms": True, "accept_recording": True},
         note="No link: the pilot is closed, 403 `pilot_closed`.",
     )  # fmt: skip
     ada.call(
         "signup-with-someone-elses-link", "POST", "/api/signup",
-        body={"name": "Eve", "email": "eve2@example.test", "password": ADA[2], "accept_terms": True, "invite_token": ada_link},
+        body={"name": "Eve", "email": "eve2@example.test", "password": ADA[2], "accept_terms": True, "accept_recording": True, "invite_token": ada_link},
         note="A link works for its own address only: 400 `invite_invalid`.",
     )  # fmt: skip
     ada.call(
         "signup-with-link", "POST", "/api/signup",
-        body={"name": ADA[1], "email": ADA[0], "password": ADA[2], "accept_terms": True, "invite_token": ada_link},
+        body={"name": ADA[1], "email": ADA[0], "password": ADA[2], "accept_terms": True, "accept_recording": True, "invite_token": ada_link},
         note="202, as for every sign-up. The pilot is closed and this still works.",
     )  # fmt: skip
     verify = link_for(engine, ADA[0], "verify_email")
