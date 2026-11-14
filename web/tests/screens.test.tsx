@@ -128,6 +128,47 @@ describe("new meeting form", () => {
     expect(screen.getByText("Tell participants that this meeting will be recorded.")).toBeTruthy();
   });
 
+  it("sends the title when one is typed, trimmed", async () => {
+    mocks.create.mockResolvedValue(captured<Meeting>("33-meeting-create.json"));
+    render(<NewMeetingForm templates={templates} busy={false} />);
+    await userEvent.type(screen.getByLabelText("Meeting link"), "https://meet.google.com/abc-defg-hij");
+    await userEvent.type(screen.getByLabelText("Title (optional)"), "  Weekly planning ");
+    await userEvent.click(screen.getByRole("button", { name: "Send note taker" }));
+    expect(mocks.create).toHaveBeenCalledWith({
+      url: "https://meet.google.com/abc-defg-hij",
+      template_id: templates[0].id,
+      title: "Weekly planning",
+    });
+  });
+
+  it("leaves the title out of the request when it is empty or only spaces", async () => {
+    mocks.create.mockResolvedValue(captured<Meeting>("33-meeting-create.json"));
+    render(<NewMeetingForm templates={templates} busy={false} />);
+    await userEvent.type(screen.getByLabelText("Meeting link"), "https://meet.google.com/abc-defg-hij");
+    await userEvent.type(screen.getByLabelText("Title (optional)"), "   ");
+    await userEvent.click(screen.getByRole("button", { name: "Send note taker" }));
+    expect(mocks.create).toHaveBeenCalledWith({ url: "https://meet.google.com/abc-defg-hij", template_id: templates[0].id });
+    expect(mocks.create.mock.calls[0][0]).not.toHaveProperty("title");
+  });
+
+  it("offers a plain optional title field that is not required and stops at 200 characters", () => {
+    render(<NewMeetingForm templates={templates} busy={false} />);
+    const field = screen.getByLabelText("Title (optional)") as HTMLInputElement;
+    expect(field.required).toBe(false);
+    expect(field.maxLength).toBe(200);
+    expect(field.placeholder).toMatch(/what is this meeting about/i);
+  });
+
+  it("keeps the typed title after the link is refused", async () => {
+    mocks.create.mockRejectedValue(new ApiError(400, "invalid_meeting_url", "That is not a link."));
+    render(<NewMeetingForm templates={templates} busy={false} />);
+    await userEvent.type(screen.getByLabelText("Meeting link"), "https://example.com/x");
+    await userEvent.type(screen.getByLabelText("Title (optional)"), "Weekly planning");
+    await userEvent.click(screen.getByRole("button", { name: "Send note taker" }));
+    await screen.findByText("That is not a link.");
+    expect((screen.getByLabelText("Title (optional)") as HTMLInputElement).value).toBe("Weekly planning");
+  });
+
   it("keeps what was typed and shows the API's message when the link is refused", async () => {
     mocks.create.mockRejectedValue(
       new ApiError(400, "invalid_meeting_url", "That is not a Google Meet or Zoom link. Paste the full meeting link."),

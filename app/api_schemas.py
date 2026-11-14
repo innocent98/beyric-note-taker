@@ -157,6 +157,10 @@ class WaitlistAccepted(BaseModel):
 class NewMeeting(Body):
     url: str
     template_id: int
+    # An optional name for the meeting. Cleaned like a calendar event's title (one plain line, cut
+    # at 200 characters); blank or only spaces means no title, so the list shows "Google Meet
+    # <code>". The 1000 is only a guard against a huge body, not the stored length.
+    title: str | None = Field(default=None, max_length=1000)
 
 
 class Regenerate(Body):

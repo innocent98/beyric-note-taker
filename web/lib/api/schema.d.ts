@@ -3245,6 +3245,8 @@ export interface components {
         NewMeeting: {
             /** Template Id */
             template_id: number;
+            /** Title */
+            title?: string | null;
             /** Url */
             url: string;
         };

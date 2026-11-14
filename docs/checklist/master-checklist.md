@@ -806,3 +806,7 @@ Legal and business
 
 - [x] A heading above each day on the Meetings list (Today, Yesterday, `Mon 9 Nov`, year only when not this year) in the owner's own zone, from `created_at`; one heading per day across "Show older meetings" and live refreshes (pure rule `web/lib/day-groups.ts`, tests `day-groups` and `meeting-list-days`). Lead-designed at Adebayo's request: the designer's file has no date groups. Looked at in a browser on a fixtures page at desktop and 375 px; not on the real page
 - [ ] A row can drop out of the list after a live refresh that follows "Show older meetings" (pre-existing, found 2026-11-13; see the SOP's follow-ups)
+
+## Meetings page changes (2026-11-14, three small PRs from one session)
+
+- [x] Optional title for a pasted-link meeting (`feature/meeting-optional-title`, SOP `docs/sop/2026-11-14-meeting-optional-title.md`; lead-designed form field): `title` on `POST /api/meetings`, cleaned like a calendar title, blank = the fallback name; live captures `docs/fe-captures/meeting-title/`, guide 5.3a

@@ -1,0 +1,35 @@
+{
+  "note": "A number is not text: 422 validation_error on `title`.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "url": "https://meet.google.com/yyy-zzzz-aaa",
+      "template_id": 2,
+      "title": 5
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "title",
+            "message": "Input should be a valid string"
+          }
+        ]
+      }
+    }
+  }
+}
