@@ -659,6 +659,11 @@ export interface paths {
          *     by the same `created_at` the list's day headings use. They work with `before_id`,
          *     `has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not
          *     a date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.
+         *
+         *     `tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the
+         *     caller has NO stored zone: the page sends its browser's zone, which is the zone it writes its
+         *     day headings in, so the filter's days are always the headings' days. A stored zone wins and
+         *     `tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.
          */
         get: operations["list_meetings"];
         put?: never;
@@ -6379,6 +6384,7 @@ export interface operations {
                 before_id?: number | null;
                 from?: string | null;
                 to?: string | null;
+                tz?: string | null;
             };
             header?: never;
             path?: never;

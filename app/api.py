@@ -379,6 +379,7 @@ def list_meetings(
     before_id: int | None = Query(None, ge=1, le=services.MAX_ID),
     from_day: str | None = Query(None, alias="from"),
     to_day: str | None = Query(None, alias="to"),
+    tz: str | None = Query(None),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MeetingList:
@@ -389,10 +390,16 @@ def list_meetings(
     days, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),
     by the same `created_at` the list's day headings use. They work with `before_id`,
     `has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not
-    a date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes."""
+    a date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.
+
+    `tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the
+    caller has NO stored zone: the page sends its browser's zone, which is the zone it writes its
+    day headings in, so the filter's days are always the headings' days. A stored zone wins and
+    `tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know."""
     first = services.parse_day(from_day, "From")
     last = services.parse_day(to_day, "To")
-    zone = session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user.id))
+    stored = session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user.id))
+    zone = services.pick_zone(stored, tz)
     created_from, created_before = services.day_range_utc(zone, first, last)
     rows = services.list_meetings(session, user, limit + 1, before_id, created_from, created_before)
     page = rows[:limit]

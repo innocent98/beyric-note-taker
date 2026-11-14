@@ -1,0 +1,68 @@
+{
+  "note": "Still no stored zone, but the page sends its browser's zone as `tz` (the zone its day headings use): Lagos days, so Meeting b (00:30), c and d (23:30), not e.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings?from=2026-11-07&to=2026-11-07&tz=Africa/Lagos",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "meetings": [
+        {
+          "id": 4,
+          "title": "Meeting d",
+          "platform": "google_meet",
+          "native_id": "mtg-d-ddd",
+          "status": "ready",
+          "step": "done",
+          "status_text": "Ready",
+          "status_tone": "success",
+          "template_id": 2,
+          "template_name": "Client call",
+          "created_at": "2026-11-07T22:30:00Z",
+          "tasks_count": 0
+        },
+        {
+          "id": 3,
+          "title": "Meeting c",
+          "platform": "google_meet",
+          "native_id": "mtg-c-ccc",
+          "status": "ready",
+          "step": "done",
+          "status_text": "Ready",
+          "status_tone": "success",
+          "template_id": 2,
+          "template_name": "Client call",
+          "created_at": "2026-11-07T12:00:00Z",
+          "tasks_count": 0
+        },
+        {
+          "id": 2,
+          "title": "Meeting b",
+          "platform": "google_meet",
+          "native_id": "mtg-b-bbb",
+          "status": "ready",
+          "step": "done",
+          "status_text": "Ready",
+          "status_tone": "success",
+          "template_id": 2,
+          "template_name": "Client call",
+          "created_at": "2026-11-06T23:30:00Z",
+          "tasks_count": 0
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null,
+      "worker_stale": true,
+      "refresh_after_seconds": null
+    }
+  }
+}

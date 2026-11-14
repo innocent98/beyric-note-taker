@@ -104,6 +104,23 @@ def run(server_base, engine) -> None:
         "?from=2026-11-07&to=2026-11-07",
         "No time zone stored yet, so the days are UTC days: 7 Nov UTC holds Meeting c, d and e.",
     )
+    get(
+        "range-tz-lagos-no-zone-stored",
+        "?from=2026-11-07&to=2026-11-07&tz=Africa/Lagos",
+        "Still no stored zone, but the page sends its browser's zone as `tz` (the zone its day "
+        "headings use): Lagos days, so Meeting b (00:30), c and d (23:30), not e.",
+    )
+    get(
+        "range-tz-new-york-no-zone-stored",
+        "?from=2026-11-06&to=2026-11-06&tz=America/New_York",
+        "A New York browser (UTC-5): the 6th there runs from 05:00 UTC on the 6th to 05:00 UTC on "
+        "the 7th, so Meeting a (17:30) and b (18:30), whose UTC times are 22:30 and 23:30.",
+    )
+    get(
+        "error-unknown-tz",
+        "?from=2026-11-07&tz=Mars/Base",
+        "A zone the server does not know: 422 `invalid_time_zone`, used or not.",
+    )
     owner.call(
         "set-time-zone",
         "PUT",
@@ -115,6 +132,11 @@ def run(server_base, engine) -> None:
         "range-one-day-lagos",
         "?from=2026-11-07&to=2026-11-07",
         "The same request now means the 7th in Lagos: Meeting b (00:30), c and d (23:30), not e.",
+    )
+    get(
+        "range-stored-zone-wins-over-tz",
+        "?from=2026-11-07&to=2026-11-07&tz=America/New_York",
+        "Now Lagos is stored, so `tz` is ignored: the same Lagos days as without it.",
     )
     get("range-two-days", "?from=2026-11-07&to=2026-11-08", "Both days are included whole.")
     get("range-only-from", "?from=2026-11-08", "Only `from`: that day and everything after.")

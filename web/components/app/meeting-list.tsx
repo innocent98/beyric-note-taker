@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Alert, Badge, Button, Card, EmptyState, Icon, ListRow, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
@@ -9,9 +9,10 @@ import { api } from "@/lib/api/browser";
 import type { MeetingList as MeetingListData, MeetingSummary, Template } from "@/lib/api/types";
 import { LocalTime, useDisplayTimeZone } from "@/components/app/local-time";
 import { MeetingFilter } from "@/components/app/meeting-filter";
+import { useStoredTimeZone } from "@/components/app/time-zone-context";
 import { NO_RANGE, isFiltered, rangeHeading, rangeQuery, type DayRange } from "@/lib/date-range";
 import { dayKey, groupByDay } from "@/lib/day-groups";
-import { plural } from "@/lib/format";
+import { browserTimeZone, plural } from "@/lib/format";
 
 // The list of meetings, newest first. The first page comes from the server render; older pages are
 // fetched on request with before_id (docs/fe-integration-guide-owner-app.md 5.1). The page asks for a
@@ -27,23 +28,33 @@ import { plural } from "@/lib/format";
 // (`/?from=&to=`, on whichever page draws the list: `basePath`): applying it navigates, the server renders the first page of that range, and
 // "Show older meetings" asks for the same range. The refresh above keeps the address, so it keeps the
 // filter. `rangeNotice` says why a damaged address was ignored.
+//
+// The days are the days of the day headings. With a zone stored on Settings the server knows it and
+// cuts the days there. With none, the headings use the browser's zone, which the server cannot know
+// on the first render: the address then carries it (`tz`, `rangeZone`), the filter and "Show older
+// meetings" send it, and an address with another zone (a link someone else sent, or none) is
+// replaced once, in the browser, with this browser's own, so the list is re-rendered for the days the
+// headings show.
 export function MeetingList({
   initial,
   templates,
   range = NO_RANGE,
   rangeNotice = null,
+  rangeZone = null,
   basePath = "/",
 }: {
   initial: MeetingListData;
   templates: Template[];
   range?: DayRange;
   rangeNotice?: string | null;
+  rangeZone?: string | null;
   basePath?: string;
 }) {
   const router = useRouter();
+  const stored = useStoredTimeZone();
   // Older pages belong to the range they were fetched for: another range starts again from the
   // server's first page, with no effect to reset anything.
-  const rangeId = rangeQuery(range);
+  const rangeId = rangeQuery(range, rangeZone);
   const [paged, setPaged] = useState<{ rangeId: string; older: MeetingSummary[]; hasMore: boolean; before: number | null } | null>(null);
   const current = paged && paged.rangeId === rangeId ? paged : null;
   const older = current?.older ?? [];
@@ -89,13 +100,29 @@ export function MeetingList({
   const days = groupByDay(meetings, timeZone, now);
   const filtered = isFiltered(range);
   const today = dayKey(now.toISOString(), timeZone);
+  // The zone the page asks with: only when nothing is stored, and then the zone the headings use.
+  const askZone = stored ? undefined : timeZone;
+
+  // No stored zone and an address cut in another zone: replace it, once, with this browser's. `timeZone`
+  // is UTC during the first render in the browser (to match the server's), so the browser's own zone
+  // is read directly here, in an effect, which only ever runs in the browser.
+  const corrected = useRef(false);
+  const addressKey = rangeQuery(range, rangeZone);
+  useEffect(() => {
+    if (stored || !filtered || corrected.current) return;
+    const zone = browserTimeZone();
+    if (zone === rangeZone) return;
+    corrected.current = true;
+    router.replace(`${basePath}${rangeQuery(range, zone)}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addressKey stands for range and rangeZone
+  }, [stored, filtered, addressKey, basePath, router]);
 
   async function loadOlder() {
     if (before === null || loading) return;
     setLoading(true);
     setFailed(false);
     try {
-      const page = await api.meetings.list({ before_id: before, from: range.from ?? undefined, to: range.to ?? undefined });
+      const page = await api.meetings.list({ before_id: before, from: range.from ?? undefined, to: range.to ?? undefined, tz: filtered ? askZone : undefined });
       setPaged({
         rangeId,
         older: [...older, ...page.meetings],
@@ -109,7 +136,7 @@ export function MeetingList({
   }
 
   function applyRange(next: DayRange) {
-    router.push(`${basePath}${rangeQuery(next)}`, { scroll: false });
+    router.push(`${basePath}${rangeQuery(next, askZone ?? null)}`, { scroll: false });
   }
 
   const head = (

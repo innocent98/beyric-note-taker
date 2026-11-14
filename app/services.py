@@ -416,6 +416,20 @@ def parse_day(text_value: str | None, which: str) -> date | None:
     return day
 
 
+def pick_zone(stored: str | None, asked: str | None) -> str | None:
+    """The zone a list filter's days are in: the person's stored one when they have chosen one on
+    Settings, else the `tz` the page asked with (the browser's own zone, which is the zone the
+    page writes its day headings in when nothing is stored), else UTC (None). A name the server
+    does not know is a plain 422, whether or not it ends up used, so a mistake never hides."""
+    if asked is not None and asked != "" and not timezones.is_known(asked):
+        raise Refused(
+            422,
+            "invalid_time_zone",
+            "That time zone is not known. Write a name such as Africa/Lagos or America/New_York.",
+        )
+    return stored or (asked or None)
+
+
 def day_range_utc(
     zone_name: str | None, first: date | None, last: date | None
 ) -> tuple[datetime | None, datetime | None]:

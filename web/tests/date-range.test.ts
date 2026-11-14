@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, isDay, isFiltered, NO_RANGE, plainDay, presets, rangeHeading, rangeProblem, rangeQuery, readRange } from "@/lib/date-range";
+import { addDays, isDay, isZone, isFiltered, NO_RANGE, plainDay, presets, rangeHeading, rangeProblem, rangeQuery, readRange } from "@/lib/date-range";
 
 describe("date range helpers", () => {
   it("accepts only real days written YYYY-MM-DD", () => {
@@ -18,10 +18,10 @@ describe("date range helpers", () => {
   });
 
   it("reads the range from the address, and ignores a damaged one with a line about why", () => {
-    expect(readRange({ from: "2026-11-01", to: "2026-11-07" })).toEqual({ range: { from: "2026-11-01", to: "2026-11-07" }, notice: null });
+    expect(readRange({ from: "2026-11-01", to: "2026-11-07" })).toEqual({ range: { from: "2026-11-01", to: "2026-11-07" }, notice: null, zone: null });
     expect(readRange({ to: "2026-11-07" }).range).toEqual({ from: null, to: "2026-11-07" });
-    expect(readRange({})).toEqual({ range: NO_RANGE, notice: null });
-    expect(readRange({ from: "" , to: "" })).toEqual({ range: NO_RANGE, notice: null });
+    expect(readRange({})).toEqual({ range: NO_RANGE, notice: null, zone: null });
+    expect(readRange({ from: "", to: "" })).toEqual({ range: NO_RANGE, notice: null, zone: null });
     expect(readRange({ from: ["2026-11-01", "2026-12-01"] }).range.from).toBe("2026-11-01");
     const bad = readRange({ from: "garbage", to: "2026-11-07" });
     expect(bad.range).toEqual(NO_RANGE);
@@ -61,5 +61,17 @@ describe("date range helpers", () => {
     expect(rangeHeading({ from: "2026-11-14", to: "2026-11-14" }, today)).toBe("Meetings on Sat 14 Nov");
     expect(rangeHeading({ from: "2026-11-08", to: null }, today)).toBe("Meetings from Sun 8 Nov");
     expect(rangeHeading({ from: null, to: "2025-01-02" }, today)).toBe("Meetings up to Thu 2 Jan 2025");
+  });
+
+  it("keeps the zone of the address only when it is a real zone, and rangeQuery writes it with a range only", () => {
+    expect(isZone("America/New_York")).toBe(true);
+    expect(isZone("Africa/Lagos")).toBe(true);
+    expect(isZone("UTC")).toBe(true);
+    for (const bad of ["Mars/Base", "not a zone", "../etc", "", "x".repeat(70)]) expect(isZone(bad), bad).toBe(false);
+    expect(readRange({ from: "2026-11-01", tz: "America/New_York" }).zone).toBe("America/New_York");
+    expect(readRange({ from: "2026-11-01", tz: "Mars/Base" }).zone).toBeNull();
+    expect(readRange({ from: "garbage", tz: "America/New_York" }).zone).toBeNull();
+    expect(rangeQuery({ from: "2026-11-01", to: "2026-11-07" }, "America/New_York")).toBe("?from=2026-11-01&to=2026-11-07&tz=America%2FNew_York");
+    expect(rangeQuery(NO_RANGE, "America/New_York")).toBe("");
   });
 });

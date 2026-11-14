@@ -8753,7 +8753,7 @@
     },
     "/api/meetings": {
       "get": {
-        "description": "The caller's meetings, plus any shared with their team, newest first. For the next page\npass `before_id` = `next_before_id`.\n\n`from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar\ndays, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),\nby the same `created_at` the list's day headings use. They work with `before_id`,\n`has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not\na date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.",
+        "description": "The caller's meetings, plus any shared with their team, newest first. For the next page\npass `before_id` = `next_before_id`.\n\n`from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar\ndays, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),\nby the same `created_at` the list's day headings use. They work with `before_id`,\n`has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not\na date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.\n\n`tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the\ncaller has NO stored zone: the page sends its browser's zone, which is the zone it writes its\nday headings in, so the filter's days are always the headings' days. A stored zone wins and\n`tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.",
         "operationId": "list_meetings",
         "parameters": [
           {
@@ -8816,6 +8816,22 @@
                 }
               ],
               "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tz",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tz"
             }
           }
         ],

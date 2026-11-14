@@ -709,23 +709,26 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/56-meetings-list-bad-limit.json`_
 
-#### 5.1a The date filter: `from` and `to`
+#### 5.1a The date filter: `from`, `to` and `tz`
 
-`GET /api/meetings` takes two optional query parameters, `from` and `to`, each a day written `YYYY-MM-DD`. They keep only the meetings made on those calendar days, **both days included**. The Meetings page's date filter (lead-designed: the designer's files have no filter) sends them; the page keeps the range in its own address, `/?from=2026-11-01&to=2026-11-07`, so a filtered view can be reloaded and shared.
+`GET /api/meetings` takes optional query parameters `from` and `to`, each a day written `YYYY-MM-DD`. They keep only the meetings made on those calendar days, **both days included**. The Meetings page's date filter (lead-designed: the designer's files have no filter) sends them; the page keeps the range in its own address, `/?from=2026-11-01&to=2026-11-07`, so a filtered view can be reloaded and shared.
 
 | Rule | Detail |
 |---|---|
-| Whose days | The **caller's own** days: their stored time zone (Settings > Time zone, `docs/fe-integration-guide-settings-time-zone.md`; UTC when none is stored), not the recorder's and not UTC. A meeting at 23:30 on the 7th in Lagos is on the 7th, whatever UTC says |
+| Whose days | The **caller's own** days, chosen so that the filter's day is always the day the **page's headings** show. With a time zone stored on Settings (`user.time_zone` of `GET /api/session`, `docs/fe-integration-guide-settings-time-zone.md`) the server cuts the days in it. With **none stored** (the default state: only Settings sets it) the page writes its headings in the **browser's** zone, which the server cannot know, so the page sends it as `tz`. With neither: UTC days |
+| `tz` | Optional, an IANA name (`America/New_York`). Used **only when no zone is stored**; a stored zone wins and `tz` is then ignored. Send it with every filtered request (first page, `before_id` pages) when `user.time_zone` is `null`, and never when it is set. 422 `invalid_time_zone` for a name the server does not know, even when it would be ignored. `tz` without `from` or `to` changes nothing. Blank means none |
 | Which timestamp | `created_at`, the one the list shows and the day headings use |
 | Open ends | `from` alone: that day and after. `to` alone: that day and before. Neither, or both empty (`?from=&to=`): the list exactly as before |
-| With paging | Works with `limit`, `before_id`, `has_more` and `next_before_id`: pass the same `from` and `to` on every page. `has_more` counts only meetings in the range |
+| With paging | Works with `limit`, `before_id`, `has_more` and `next_before_id`: pass the same `from`, `to` and `tz` on every page. `has_more` counts only meetings in the range |
 | Visibility | Unchanged: the filter only narrows what the caller may already read (their own and their team's shared meetings) |
 | Empty result | 200 with `meetings: []`, `has_more: false`, `next_before_id: null` (never a 404) |
-| Refused | **422** `invalid_date` (not a real `YYYY-MM-DD` day, or a year outside 1900 to 2200; the message says `From` or `To`) and **422** `invalid_date_range` (`from` after `to`). Both use the usual `{"error": {"code", "message"}}` shape, with no `fields` list |
+| Refused | **422** `invalid_date` (not a real `YYYY-MM-DD` day, or a year outside 1900 to 2200; the message says `From` or `To`), **422** `invalid_date_range` (`from` after `to`) and **422** `invalid_time_zone`. All use the usual `{"error": {"code", "message"}}` shape, with no `fields` list |
 
-**Nesting trap:** the parameters are `from` and `to`, but the object they filter is not changed: `created_at` in the response is still a UTC instant. To draw a day in the owner's zone use the zone the page already uses for times (`user.time_zone` of `GET /api/session`); do not cut the string.
+**Nesting trap:** the parameters are `from`, `to` and `tz`, but the object they filter is not changed: `created_at` in the response is still a UTC instant. To draw a day use the zone the page already uses for times; do not cut the string.
 
-**What the page does with it:** From and To boxes with Apply, quick buttons Today, Last 7 days (today and the six days before it) and Last 30 days (today and the 29 before), computed in the owner's zone, and Clear. With a filter on, the list's heading names the range and an empty result reads "No meetings in this range.".
+**UX consequence the page handles, and any other client must too:** with no stored zone the first server render of `/?from=...` cannot know the browser's zone. The page puts the browser's zone in its own address (`&tz=America%2FNew_York`) when a range is applied, and an address with another zone (a link from someone elsewhere) or none is replaced once in the browser with the browser's own, which re-renders the list for the days the headings show. For a moment the list may show the days of the zone in the link. A zone stored on Settings makes all of this unnecessary.
+
+**What the page does with it:** From and To boxes with Apply, quick buttons Today, Last 7 days (today and the six days before it) and Last 30 days (today and the 29 before), computed in the zone of the headings, and Clear. With a filter on, the list's heading names the range and an empty result reads "No meetings in this range.".
 
 The six meetings used below are inserted by SQL with chosen times around midnight in Lagos (UTC+1); the capture's notes list which is which.
 
@@ -781,7 +784,7 @@ _Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`
 
 _Capture: `docs/fe-captures/meetings-date-filter/04-list-no-filter.json`_
 
-No time zone stored yet: the days are UTC days. The 7th holds the meetings at 12:00, 22:30 and 23:30 UTC:
+No zone stored and no `tz`: UTC days. The 7th holds the meetings at 12:00, 22:30 and 23:30 UTC:
 
 ```http
 GET /api/meetings?from=2026-11-07&to=2026-11-07
@@ -818,6 +821,97 @@ _Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`
 
 _Capture: `docs/fe-captures/meetings-date-filter/05-range-utc-no-zone-stored.json`_
 
+No zone stored, the page sends its browser's zone (Lagos) as `tz`: the 7th in Lagos. The meeting at 22:30 UTC on the 6th (00:30 on the 7th there) is in, the one at 23:30 UTC on the 7th (00:30 on the 8th) is out:
+
+```http
+GET /api/meetings?from=2026-11-07&to=2026-11-07&tz=Africa/Lagos
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 4,
+      "title": "Meeting d",
+      "created_at": "2026-11-07T22:30:00Z"
+    },
+    {
+      "id": 3,
+      "title": "Meeting c",
+      "created_at": "2026-11-07T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "title": "Meeting b",
+      "created_at": "2026-11-06T23:30:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/06-range-tz-lagos-no-zone-stored.json`_
+
+A New York browser (UTC-5), the 6th there: the meetings at 22:30 and 23:30 UTC on the 6th are 17:30 and 18:30 in New York:
+
+```http
+GET /api/meetings?from=2026-11-06&to=2026-11-06&tz=America/New_York
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 2,
+      "title": "Meeting b",
+      "created_at": "2026-11-06T23:30:00Z"
+    },
+    {
+      "id": 1,
+      "title": "Meeting a",
+      "created_at": "2026-11-06T22:30:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/07-range-tz-new-york-no-zone-stored.json`_
+
+A zone the server does not know:
+
+```http
+GET /api/meetings?from=2026-11-07&tz=Mars/Base
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 422
+content-type: application/json
+```
+```json
+{
+  "error": {
+    "code": "invalid_time_zone",
+    "message": "That time zone is not known. Write a name such as Africa/Lagos or America/New_York."
+  }
+}
+```
+
+_Capture: `docs/fe-captures/meetings-date-filter/08-error-unknown-tz.json`_
+
 The owner then picks Lagos on Settings:
 
 ```http
@@ -840,9 +934,9 @@ content-type: application/json
 }
 ```
 
-_Capture: `docs/fe-captures/meetings-date-filter/06-set-time-zone.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/09-set-time-zone.json`_
 
-The same request is now the 7th in Lagos: the meeting at 22:30 UTC on the 6th (00:30 on the 7th there) is in, the one at 23:30 UTC on the 7th (00:30 on the 8th) is out:
+The same request without `tz` is now the 7th in Lagos:
 
 ```http
 GET /api/meetings?from=2026-11-07&to=2026-11-07
@@ -877,7 +971,44 @@ HTTP 200
 ```
 _Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
 
-_Capture: `docs/fe-captures/meetings-date-filter/07-range-one-day-lagos.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/10-range-one-day-lagos.json`_
+
+A `tz` sent anyway is ignored: a stored zone wins:
+
+```http
+GET /api/meetings?from=2026-11-07&to=2026-11-07&tz=America/New_York
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 4,
+      "title": "Meeting d",
+      "created_at": "2026-11-07T22:30:00Z"
+    },
+    {
+      "id": 3,
+      "title": "Meeting c",
+      "created_at": "2026-11-07T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "title": "Meeting b",
+      "created_at": "2026-11-06T23:30:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/11-range-stored-zone-wins-over-tz.json`_
 
 Two days, both whole:
 
@@ -919,7 +1050,7 @@ HTTP 200
 ```
 _Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
 
-_Capture: `docs/fe-captures/meetings-date-filter/08-range-two-days.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/12-range-two-days.json`_
 
 Only `from`:
 
@@ -951,7 +1082,7 @@ HTTP 200
 ```
 _Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
 
-_Capture: `docs/fe-captures/meetings-date-filter/09-range-only-from.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/13-range-only-from.json`_
 
 Only `to`:
 
@@ -978,7 +1109,7 @@ HTTP 200
 ```
 _Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
 
-_Capture: `docs/fe-captures/meetings-date-filter/10-range-only-to.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/14-range-only-to.json`_
 
 Paging inside a range, page 1 (`limit=2`):
 
@@ -1010,7 +1141,7 @@ HTTP 200
 ```
 _Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
 
-_Capture: `docs/fe-captures/meetings-date-filter/11-range-paging-page-1.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/15-range-paging-page-1.json`_
 
 Page 2: the first page's `next_before_id` as `before_id`, the same `from` and `to`:
 
@@ -1042,7 +1173,7 @@ HTTP 200
 ```
 _Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
 
-_Capture: `docs/fe-captures/meetings-date-filter/12-range-paging-page-2.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/16-range-paging-page-2.json`_
 
 A range with no meetings:
 
@@ -1063,7 +1194,7 @@ HTTP 200
 ```
 _Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
 
-_Capture: `docs/fe-captures/meetings-date-filter/13-range-empty.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/17-range-empty.json`_
 
 Blank values are the same as none:
 
@@ -1115,7 +1246,7 @@ HTTP 200
 ```
 _Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
 
-_Capture: `docs/fe-captures/meetings-date-filter/14-range-blank-values.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/18-range-blank-values.json`_
 
 `from` after `to`:
 
@@ -1137,7 +1268,7 @@ content-type: application/json
 }
 ```
 
-_Capture: `docs/fe-captures/meetings-date-filter/15-error-from-after-to.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/19-error-from-after-to.json`_
 
 A day that does not exist:
 
@@ -1159,7 +1290,7 @@ content-type: application/json
 }
 ```
 
-_Capture: `docs/fe-captures/meetings-date-filter/16-error-not-a-date.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/20-error-not-a-date.json`_
 
 Another layout (it names `To`):
 
@@ -1181,9 +1312,9 @@ content-type: application/json
 }
 ```
 
-_Capture: `docs/fe-captures/meetings-date-filter/17-error-wrong-layout.json`_
+_Capture: `docs/fe-captures/meetings-date-filter/21-error-wrong-layout.json`_
 
-**Not exercised live:** a teammate reading a shared meeting through a range (covered by `tests/test_meetings_date_filter.py`, not captured), and a day that starts at a clock change (test only). The page itself was checked by component tests against these shapes.
+**Not exercised live:** a teammate reading a shared meeting through a range, a day that starts at a clock change, and a New York day with `tz` for a meeting at 20:00 versus 21:00 (covered by `tests/test_meetings_date_filter.py`, not captured; the New York capture above uses the 6th). The page itself was checked by component tests against these shapes.
 
 Re-derive with `python scripts/capture_meetings_date_filter.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres` (run from `scripts/`, with the repo root on `PYTHONPATH`).
 
@@ -2611,7 +2742,7 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | Regenerate: ok, not ready, no template, OpenAI failure | Verified live **with a fake OpenAI** | `59`–`62` |
 | Real OpenAI regenerate, its duration, edge timeouts | **NOT EXERCISED** | `deploy/nginx.conf` |
 | Template create, update, duplicate, empty, too long, unknown | Verified live | `22`–`28` |
-| `GET /api/meetings?from=&to=`: UTC days without a stored zone, Lagos days with one, one day, two days, only `from`, only `to`, paging inside a range, empty range, blank values, `from` after `to` (422), not a date (422), wrong layout (422) | Verified live | `docs/fe-captures/meetings-date-filter/04`–`17` |
+| `GET /api/meetings?from=&to=&tz=`: UTC days without a stored zone, the browser's zone as `tz` (Lagos, New York) without a stored zone, Lagos days with one, a stored zone winning over `tz`, one day, two days, only `from`, only `to`, paging inside a range, empty range, blank values, `from` after `to` (422), not a date (422), wrong layout (422), unknown `tz` (422) | Verified live | `docs/fe-captures/meetings-date-filter/04`-`21` |
 | The filter for a teammate reading a shared meeting; a day starting at a clock change; the filter box in a real browser | Test only / **NOT EXERCISED** live | `tests/test_meetings_date_filter.py`, `web/tests/meetings-date-filter.test.tsx` |
 | Vocabulary add, list, duplicate, invalid, delete, delete twice | Verified live | `13`–`21` |
 | Validation errors (missing field, wrong type, unknown field, bad JSON, not an object) | Verified live (the unknown-field case is a test) | `06`, `07`, `28`, `32`, `70`, `71` |

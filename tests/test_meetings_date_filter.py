@@ -139,6 +139,57 @@ def test_a_day_with_a_clock_change_is_still_a_whole_day(api, session, template):
     assert got == [inside_end.id, inside_start.id] and outside.id not in got
 
 
+# ---- no stored zone: the page says which zone its headings use (`tz`) ----
+
+
+def test_a_new_york_user_with_no_stored_zone_gets_the_days_their_headings_show(
+    api, session, template
+):
+    """The page writes its day headings in the browser's zone when nothing is stored, so it sends
+    that zone as `tz`. 20:00 on Tue 10 Nov in New York (UTC-5) is 01:00 UTC on the 11th, and
+    21:00 on the 9th is 02:00 UTC on the 10th: by UTC days the filter would return exactly the
+    wrong one."""
+    tuesday_evening = make(session, template, datetime(2026, 11, 11, 1, 0, tzinfo=UTC))
+    monday_evening = make(session, template, datetime(2026, 11, 10, 2, 0, tzinfo=UTC))
+    day = "from=2026-11-10&to=2026-11-10"
+    assert ids(listed(api, f"?{day}&tz=America/New_York")) == [tuesday_evening.id]
+    assert ids(listed(api, f"?{day}&tz=America/New_York&limit=1")) == [tuesday_evening.id]
+    # without `tz` the days are UTC days, as before: the other meeting
+    assert ids(listed(api, f"?{day}")) == [monday_evening.id]
+
+
+def test_a_lagos_user_with_no_stored_zone_gets_lagos_days(api, session, template):
+    inside = make(session, template, at(10, 22, 30))  # 23:30 on the 10th in Lagos
+    outside = make(session, template, at(10, 23, 30))  # 00:30 on the 11th in Lagos
+    got = ids(listed(api, "?from=2026-11-10&to=2026-11-10&tz=Africa/Lagos"))
+    assert got == [inside.id] and outside.id not in got
+
+
+def test_a_stored_zone_wins_over_tz(api, session, template):
+    set_zone(api, "Africa/Lagos")
+    late = make(session, template, at(7, 22, 30))  # 23:30 on the 7th in Lagos
+    early = make(session, template, at(7, 23, 30))  # 00:30 on the 8th in Lagos
+    # the page would not send `tz` here, but if it does the stored zone decides
+    assert ids(listed(api, "?from=2026-11-07&to=2026-11-07&tz=America/New_York")) == [late.id]
+    assert ids(listed(api, "?from=2026-11-08&to=2026-11-08&tz=Pacific/Auckland")) == [early.id]
+
+
+def test_tz_alone_changes_nothing_and_a_blank_tz_is_none(api, session, template):
+    a, b = make(session, template, at(1)), make(session, template, at(9))
+    assert ids(listed(api, "?tz=America/New_York")) == [b.id, a.id]
+    assert listed(api, "?from=2026-11-01&to=2026-11-01&tz=") == listed(
+        api, "?from=2026-11-01&to=2026-11-01"
+    )
+
+
+@pytest.mark.parametrize("tz", ["Mars/Base", "not a zone", "../etc/passwd", "x" * 200, "UTC+99"])
+def test_an_unknown_tz_is_a_plain_422_even_when_a_stored_zone_would_win(api, tz):
+    error = error_of(api.get(f"/api/meetings?from=2026-11-07&tz={tz}"), 422, "invalid_time_zone")
+    assert error["message"].startswith("That time zone is not known.")
+    set_zone(api, "Africa/Lagos")
+    error_of(api.get(f"/api/meetings?from=2026-11-07&tz={tz}"), 422, "invalid_time_zone")
+
+
 # ---- paging inside a range ----
 
 

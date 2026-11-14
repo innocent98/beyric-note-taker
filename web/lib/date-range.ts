@@ -31,22 +31,41 @@ export function rangeProblem(from: string | null, to: string | null): string | n
   return null;
 }
 
+// A time zone name the browser's own database knows ("America/New_York"); anything else is not one.
+export function isZone(text: string): boolean {
+  if (!/^[A-Za-z0-9_+\-/]{1,64}$/.test(text)) return false;
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: text });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // The range in the address, from `searchParams`. A value that cannot be used is left out, and `notice`
 // says so, so a damaged link shows every meeting with a line about why, never an error page.
-export function readRange(params: Record<string, string | string[] | undefined>): { range: DayRange; notice: string | null } {
+//
+// `zone` is the `tz` of the address: the zone the days were chosen in, kept only while the owner has no
+// zone stored on Settings (the page then writes its day headings in the browser's zone, so the server
+// must cut the days in that zone too). A `tz` that is not a zone is dropped without a notice.
+export function readRange(params: Record<string, string | string[] | undefined>): { range: DayRange; notice: string | null; zone: string | null } {
   const one = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
   const from = one(params.from) || null;
   const to = one(params.to) || null;
+  const asked = one(params.tz) || null;
+  const zone = asked !== null && isZone(asked) ? asked : null;
   const problem = rangeProblem(from, to);
-  if (problem) return { range: NO_RANGE, notice: `The dates in the address could not be used (${problem.replace(/\.$/, "")}), so every meeting is shown.` };
-  return { range: { from, to }, notice: null };
+  if (problem) return { range: NO_RANGE, notice: `The dates in the address could not be used (${problem.replace(/\.$/, "")}), so every meeting is shown.`, zone: null };
+  return { range: { from, to }, notice: null, zone };
 }
 
-// "?from=2026-11-01&to=2026-11-07", "" for no range.
-export function rangeQuery(range: DayRange): string {
+// "?from=2026-11-01&to=2026-11-07", "" for no range. `zone` goes on as `tz` only with a range, and only
+// when the owner has no stored zone (the caller passes null then).
+export function rangeQuery(range: DayRange, zone: string | null = null): string {
   const query = new URLSearchParams();
   if (range.from) query.set("from", range.from);
   if (range.to) query.set("to", range.to);
+  if (zone && (range.from || range.to)) query.set("tz", zone);
   const text = query.toString();
   return text ? `?${text}` : "";
 }
