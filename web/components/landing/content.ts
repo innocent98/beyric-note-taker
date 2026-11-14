@@ -1,6 +1,9 @@
 // The words and icon paths of the landing page, as drawn in the designer's Landing.dc.html.
 // Copy is the designer's. Where a line describes a feature the app does not have yet, it is listed
 // in docs/ui/parity-report.md ("Copy that runs ahead of the product") so the owner can decide.
+// Exception, 2026-11-14: the first security card says only what is true (TLS in transit, calendar
+// tokens stored encrypted). No disk or database encryption is set up, so no line may claim
+// encryption of recordings or notes at rest, or "end to end" (docs/sop/2026-11-14-landing-security-copy.md).
 
 export const FEATURES: ReadonlyArray<{ title: string; body: string; icon: string }> = [
   { title: "Tasks, sprints and backlogs", body: "Action items land on a board, grouped by project and sprint. Unfinished work rolls into the next sprint on its own.", icon: "M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" },
@@ -12,7 +15,7 @@ export const FEATURES: ReadonlyArray<{ title: string; body: string; icon: string
 ];
 
 export const SECURITY: ReadonlyArray<{ title: string; body: string; icon: string }> = [
-  { title: "Encrypted end to end", body: "Data is encrypted in transit with TLS 1.2 or higher and at rest with AES-256.", icon: "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4" },
+  { title: "Encrypted in transit", body: "Traffic to the site is encrypted with TLS, and the sign-in tokens for connected calendars are stored encrypted.", icon: "M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4" },
   { title: "Never used for training", body: "Your audio, transcripts and notes are not used to train any processing service, ours or anyone else’s.", icon: "M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z" },
   { title: "Visible to everyone", body: "The note taker appears in the participant list under a clear name while it records, and anyone can ask the host to remove it.", icon: "M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" },
   { title: "You control retention", body: "Delete a meeting, export your notes or close your account at any time. Audio is removed automatically after a set period.", icon: "M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" },
