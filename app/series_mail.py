@@ -334,7 +334,12 @@ def queue_due_reminders(session: Session, now: datetime) -> int:
     id to have any. Returns how many mails were queued."""
     horizon = now + timedelta(minutes=max(w[0] for w in WINDOWS.values()) + 1)
     queued = 0
-    team_rows = session.scalars(select(Team).where(Team.reminders_on.is_(True))).all()
+    teams_on = select(Team).where(Team.reminders_on.is_(True))
+    if series.follow_enabled():
+        # One mail per person per occurrence, from the row that wins: an ordinary team before a
+        # personal one, then the lower team id (not whatever order the table happens to give).
+        teams_on = teams_on.order_by(Team.is_personal, Team.id)
+    team_rows = session.scalars(teams_on).all()
     for team in team_rows:
         member_ids = select(TeamMember.user_id).where(TeamMember.team_id == team.id)
         events = list(

@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.api_schemas import Body, MeetingRef, Platform, SeriesRef, TaskOut, UtcDatetime
+from app.api_schemas import Body, MeetingRef, Platform, SeriesRef, TaskOut, TeamRef, UtcDatetime
 
 
 class ProjectLink(BaseModel):
@@ -22,8 +22,12 @@ class SeriesCard(BaseModel):
 
     id: int
     title: str
+    # The team this row belongs to (a row is one team's, or a person's personal space's): send its
+    # id as `X-Team-Id` for the task drawer. Always present.
+    team: TeamRef
     cadence: str
     platform: Platform | None
+    # Null on a personal-space row (`SERIES_FOLLOW_MEETINGS`): hide the "next meeting" chip.
     next_starts_at: UtcDatetime | None
     next_text: str | None
     unfinished_tasks: int
@@ -98,6 +102,8 @@ class AgendaSuggestion(BaseModel):
 class SeriesPage(BaseModel):
     id: int
     title: str
+    # The team this row belongs to; see `SeriesCard.team`.
+    team: TeamRef
     cadence: str
     platform: Platform | None
     timezone: str
