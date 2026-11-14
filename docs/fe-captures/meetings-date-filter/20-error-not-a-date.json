@@ -1,0 +1,24 @@
+{
+  "note": "A day that does not exist: 422 `invalid_date`.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings?from=2026-02-30",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_date",
+        "message": "From is not a date. Write it as YYYY-MM-DD, for example 2026-11-14."
+      }
+    }
+  }
+}

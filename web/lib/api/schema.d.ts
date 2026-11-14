@@ -654,6 +654,17 @@ export interface paths {
          * List Meetings
          * @description The caller's meetings, plus any shared with their team, newest first. For the next page
          *     pass `before_id` = `next_before_id`.
+         *
+         *     `from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar
+         *     days, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),
+         *     by the same `created_at` the list's day headings use. They work with `before_id`,
+         *     `has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not
+         *     a date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.
+         *
+         *     `tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the
+         *     caller has NO stored zone: the page sends its browser's zone, which is the zone it writes its
+         *     day headings in, so the filter's days are always the headings' days. A stored zone wins and
+         *     `tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.
          */
         get: operations["list_meetings"];
         put?: never;
@@ -6632,6 +6643,9 @@ export interface operations {
             query?: {
                 limit?: number;
                 before_id?: number | null;
+                from?: string | null;
+                to?: string | null;
+                tz?: string | null;
             };
             header?: never;
             path?: never;
@@ -6666,7 +6680,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Malformed request */
+            /** @description `invalid_date`, `invalid_date_range` */
             422: {
                 headers: {
                     [name: string]: unknown;

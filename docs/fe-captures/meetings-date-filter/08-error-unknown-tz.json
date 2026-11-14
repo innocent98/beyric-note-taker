@@ -1,0 +1,24 @@
+{
+  "note": "A zone the server does not know: 422 `invalid_time_zone`, used or not.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings?from=2026-11-07&tz=Mars/Base",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_time_zone",
+        "message": "That time zone is not known. Write a name such as Africa/Lagos or America/New_York."
+      }
+    }
+  }
+}

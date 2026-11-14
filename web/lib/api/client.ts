@@ -275,7 +275,10 @@ export function createApi(options: ApiOptions = {}) {
         write: true,
       }),
     meetings: {
-      list: (query: { limit?: number; before_id?: number } = {}) =>
+      // `from` and `to` (YYYY-MM-DD, both included, the caller's own days) keep a range
+      // (docs/fe-integration-guide-owner-app.md 5.1a); with neither the list is as it always was. `tz` is
+      // the zone of those days when the caller has none stored (the browser's own).
+      list: (query: { limit?: number; before_id?: number; from?: string; to?: string; tz?: string } = {}) =>
         request<MeetingList>("GET", "/api/meetings", { query }),
       get: (id: number) => request<Meeting>("GET", `/api/meetings/${id}`),
       create: (body: NewMeeting) => request<Meeting>("POST", "/api/meetings", { body, write: true }),

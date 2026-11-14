@@ -224,6 +224,7 @@ form.inline { display: inline; }
 .meta-line > * + *::before { content: "\00b7"; margin-right: 8px; color: var(--separator); }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 14px var(--space-5); border-bottom: 1px solid var(--border-soft); }
 .card-head h2 { font-size: var(--text-md); }
+.card-head .meta { flex-shrink: 0; white-space: nowrap; } /* a long heading (the date filter's range) wraps, the count does not */
 .card-foot { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-5); border-top: 1px solid var(--border-soft); }
 .empty { padding: var(--space-8) var(--space-5); text-align: center; color: var(--text-3); }
 .empty strong { display: block; margin-bottom: 4px; color: var(--text); font-weight: 600; }

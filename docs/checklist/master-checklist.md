@@ -814,3 +814,4 @@ Legal and business
 ## Meetings page changes (2026-11-14, three small PRs from one session)
 
 - [x] Optional title for a pasted-link meeting (`feature/meeting-optional-title`, SOP `docs/sop/2026-11-14-meeting-optional-title.md`; lead-designed form field): `title` on `POST /api/meetings`, cleaned like a calendar title, blank = the fallback name; live captures `docs/fe-captures/meeting-title/`, guide 5.3a
+- [x] Date filter on the Meetings list (`feature/meetings-date-filter`, SOP `docs/sop/2026-11-14-meetings-date-filter.md`; lead-designed): `from` / `to` on `GET /api/meetings` (the caller's own days, both included, with paging) and a filter above the list on the dashboard at `/` (From, To, Apply, Today, Last 7 days, Last 30 days, Clear), range kept in `/?from=&to=`; live captures `docs/fe-captures/meetings-date-filter/`, guide 5.1a

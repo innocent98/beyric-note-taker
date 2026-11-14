@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Button, Card, EmptyState, Icon, ListRow, Toast } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Icon, ListRow, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { DELETED_FLAG } from "@/lib/deleted-flag";
 import { api } from "@/lib/api/browser";
 import type { MeetingList as MeetingListData, MeetingSummary, Template } from "@/lib/api/types";
 import { LocalTime, useDisplayTimeZone } from "@/components/app/local-time";
-import { groupByDay } from "@/lib/day-groups";
-import { plural } from "@/lib/format";
+import { MeetingFilter } from "@/components/app/meeting-filter";
+import { useStoredTimeZone } from "@/components/app/time-zone-context";
+import { NO_RANGE, isFiltered, rangeHeading, rangeQuery, type DayRange } from "@/lib/date-range";
+import { dayKey, groupByDay } from "@/lib/day-groups";
+import { browserTimeZone, plural } from "@/lib/format";
 
 // The list of meetings, newest first. The first page comes from the server render; older pages are
 // fetched on request with before_id (docs/fe-integration-guide-owner-app.md 5.1). The page asks for a
@@ -20,10 +23,42 @@ import { plural } from "@/lib/format";
 // own times are written in. A meeting is under the day of the `created_at` its row shows. The groups
 // are made from the whole list (first page and every older page together), so a day that runs over
 // a page boundary stays under one heading.
-export function MeetingList({ initial, templates }: { initial: MeetingListData; templates: Template[] }) {
+//
+// The date filter (`range`, lead-designed; components/app/meeting-filter.tsx) is in the address
+// (`/?from=&to=`, on whichever page draws the list: `basePath`): applying it navigates, the server renders the first page of that range, and
+// "Show older meetings" asks for the same range. The refresh above keeps the address, so it keeps the
+// filter. `rangeNotice` says why a damaged address was ignored.
+//
+// The days are the days of the day headings. With a zone stored on Settings the server knows it and
+// cuts the days there. With none, the headings use the browser's zone, which the server cannot know
+// on the first render: the address then carries it (`tz`, `rangeZone`), the filter and "Show older
+// meetings" send it, and an address with another zone (a link someone else sent, or none) is
+// replaced once, in the browser, with this browser's own, so the list is re-rendered for the days the
+// headings show.
+export function MeetingList({
+  initial,
+  templates,
+  range = NO_RANGE,
+  rangeNotice = null,
+  rangeZone = null,
+  basePath = "/",
+}: {
+  initial: MeetingListData;
+  templates: Template[];
+  range?: DayRange;
+  rangeNotice?: string | null;
+  rangeZone?: string | null;
+  basePath?: string;
+}) {
   const router = useRouter();
-  const [older, setOlder] = useState<MeetingSummary[]>([]);
-  const [paging, setPaging] = useState<{ hasMore: boolean; before: number | null } | null>(null);
+  const stored = useStoredTimeZone();
+  // Older pages belong to the range they were fetched for: another range starts again from the
+  // server's first page, with no effect to reset anything.
+  const rangeId = rangeQuery(range, rangeZone);
+  const [paged, setPaged] = useState<{ rangeId: string; older: MeetingSummary[]; hasMore: boolean; before: number | null } | null>(null);
+  const current = paged && paged.rangeId === rangeId ? paged : null;
+  const older = current?.older ?? [];
+  const paging = current ? { hasMore: current.hasMore, before: current.before } : null;
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [toast, flash] = useToast();
@@ -63,33 +98,65 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
   const before = paging ? paging.before : initial.next_before_id;
   const names = new Map(templates.map((t) => [t.id, t.name]));
   const days = groupByDay(meetings, timeZone, now);
+  const filtered = isFiltered(range);
+  const today = dayKey(now.toISOString(), timeZone);
+  // The zone the page asks with: only when nothing is stored, and then the zone the headings use.
+  const askZone = stored ? undefined : timeZone;
+
+  // No stored zone and an address cut in another zone: replace it, once, with this browser's. `timeZone`
+  // is UTC during the first render in the browser (to match the server's), so the browser's own zone
+  // is read directly here, in an effect, which only ever runs in the browser.
+  const corrected = useRef(false);
+  const addressKey = rangeQuery(range, rangeZone);
+  useEffect(() => {
+    if (stored || !filtered || corrected.current) return;
+    const zone = browserTimeZone();
+    if (zone === rangeZone) return;
+    corrected.current = true;
+    router.replace(`${basePath}${rangeQuery(range, zone)}`, { scroll: false });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- addressKey stands for range and rangeZone
+  }, [stored, filtered, addressKey, basePath, router]);
 
   async function loadOlder() {
     if (before === null || loading) return;
     setLoading(true);
     setFailed(false);
     try {
-      const page = await api.meetings.list({ before_id: before });
-      setOlder((current) => [...current, ...page.meetings]);
-      setPaging({ hasMore: page.has_more, before: page.next_before_id });
+      const page = await api.meetings.list({ before_id: before, from: range.from ?? undefined, to: range.to ?? undefined, tz: filtered ? askZone : undefined });
+      setPaged({
+        rangeId,
+        older: [...older, ...page.meetings],
+        hasMore: page.has_more,
+        before: page.next_before_id,
+      });
     } catch {
       setFailed(true);
     }
     setLoading(false);
   }
 
+  function applyRange(next: DayRange) {
+    router.push(`${basePath}${rangeQuery(next, askZone ?? null)}`, { scroll: false });
+  }
+
+  const head = (
+    <div className="card-head">
+      <h2 suppressHydrationWarning>{rangeHeading(range, today)}</h2>
+      <span className="meta">
+        {plural(meetings.length, "meeting")}
+        {hasMore ? "+" : ""}
+      </span>
+    </div>
+  );
+
   return (
     <>
+    {meetings.length > 0 || filtered ? <MeetingFilter range={range} today={today} onApply={applyRange} /> : null}
+    {rangeNotice ? <Alert kind="notice">{rangeNotice}</Alert> : null}
     <Card flush>
       {meetings.length > 0 ? (
         <>
-          <div className="card-head">
-            <h2>Recent</h2>
-            <span className="meta">
-              {plural(meetings.length, "meeting")}
-              {hasMore ? "+" : ""}
-            </span>
-          </div>
+          {head}
           {days.map((day) => (
             <div className="day-group" key={day.key}>
               <h3 className="day-head" id={`meetings-day-${day.key}`} suppressHydrationWarning>
@@ -141,6 +208,11 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
               {failed ? <span className="meta">Could not load older meetings. Try again.</span> : null}
             </div>
           ) : null}
+        </>
+      ) : filtered ? (
+        <>
+          {head}
+          <EmptyState title="No meetings in this range.">Try other dates, or clear the filter to see every meeting.</EmptyState>
         </>
       ) : (
         <EmptyState title="No meetings yet.">Paste a meeting link above to send the note taker.</EmptyState>

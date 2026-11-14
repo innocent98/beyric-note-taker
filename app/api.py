@@ -400,16 +400,41 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
     )
 
 
-@router.get("/meetings", tags=["meetings"])
+@router.get(
+    "/meetings",
+    tags=["meetings"],
+    responses={
+        422: {"model": ErrorResponse, "description": "`invalid_date`, `invalid_date_range`"}
+    },
+)
 def list_meetings(
     limit: int = Query(LIST_DEFAULT, ge=1, le=LIST_MAX),
     before_id: int | None = Query(None, ge=1, le=services.MAX_ID),
+    from_day: str | None = Query(None, alias="from"),
+    to_day: str | None = Query(None, alias="to"),
+    tz: str | None = Query(None),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MeetingList:
     """The caller's meetings, plus any shared with their team, newest first. For the next page
-    pass `before_id` = `next_before_id`."""
-    rows = services.list_meetings(session, user, limit + 1, before_id)
+    pass `before_id` = `next_before_id`.
+
+    `from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar
+    days, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),
+    by the same `created_at` the list's day headings use. They work with `before_id`,
+    `has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not
+    a date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.
+
+    `tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the
+    caller has NO stored zone: the page sends its browser's zone, which is the zone it writes its
+    day headings in, so the filter's days are always the headings' days. A stored zone wins and
+    `tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know."""
+    first = services.parse_day(from_day, "From")
+    last = services.parse_day(to_day, "To")
+    stored = session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user.id))
+    zone = services.pick_zone(stored, tz)
+    created_from, created_before = services.day_range_utc(zone, first, last)
+    rows = services.list_meetings(session, user, limit + 1, before_id, created_from, created_before)
     page = rows[:limit]
     names = services.template_names(session, page)
     counts = tasks.counts_for_meetings(session, user, [m.id for m in page])

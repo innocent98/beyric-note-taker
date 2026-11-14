@@ -1,0 +1,24 @@
+{
+  "note": "Another layout: 422 `invalid_date`, naming To.",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings?to=07/11/2026",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_date",
+        "message": "To is not a date. Write it as YYYY-MM-DD, for example 2026-11-14."
+      }
+    }
+  }
+}
