@@ -650,7 +650,84 @@ def test_the_card_and_the_page_name_the_rows_team(app, session, world, pats):
         pats.me: pats.me_row,
     }
     for team_id, row in expected.items():
-        name = session.get(Team, team_id).name
+        team = session.get(Team, team_id)
+        want = {"id": team_id, "name": team.name, "is_personal": team.is_personal}
         [card] = cards_of(pat, team_id)
-        assert card["team"] == {"id": team_id, "name": name}
-        assert page_of(pat, row)["team"] == {"id": team_id, "name": name}
+        assert card["team"] == want
+        assert page_of(pat, row)["team"] == want
+
+
+# ---- PR 3: three one-line leftovers of the PR 2 Opus review (NITs 1, 3 and 6) ----
+
+
+def _join_at(session, user, meeting, starts):
+    """A join row for `meeting` that started at `starts` (what the cadence reads)."""
+    from app.models import ScheduledJoin
+
+    session.add(
+        ScheduledJoin(
+            user_id=user.id,
+            platform="google_meet",
+            native_id="abc-defg-hij",
+            meeting_url="https://meet.google.com/abc-defg-hij",
+            starts_at=starts,
+            ends_at=starts + timedelta(hours=1),
+            run_at=starts,
+            deadline_at=starts + timedelta(hours=1),
+            state="completed",
+            meeting_id=meeting.id,
+        )
+    )
+    session.commit()
+
+
+def test_the_cadence_reads_only_the_start_times_of_meetings_in_the_rows_scope(
+    monkeypatch, session, world, pats, mixed
+):
+    """NIT 1: in a mixed legacy row Pat's X card must not take its cadence from Wednesday (Y)."""
+    from app import api_series
+
+    _join_at(session, world.pat, pats.monday, MONDAY)
+    _join_at(session, world.pat, pats.wednesday, WEDNESDAY)
+    seen = []
+    monkeypatch.setattr(
+        api_series, "describe_cadence", lambda starts, zone: seen.append(set(starts)) or "x"
+    )
+    api_series._timing(session, mixed, None, NOW, world.pat)
+    assert seen == [{MONDAY}]
+
+
+def test_resolving_the_question_of_a_meeting_outside_the_rows_scope_closes_no_twin_in_scope(
+    session, world, pats, mixed
+):
+    """NIT 3, the other direction: Wednesday (Y scope) still points at X's legacy row; resolving
+    its question must not close the same words on Monday (X scope), though Pat may change both."""
+    from app.models import OpenQuestion
+
+    for meeting in (pats.monday, pats.wednesday):
+        question_in(session, meeting, "Same words", position=5, carry=True)
+    wednesday_question = session.scalars(
+        select(OpenQuestion).where(
+            OpenQuestion.meeting_id == pats.wednesday.id, OpenQuestion.text == "Same words"
+        )
+    ).one()
+    series_rules._resolve(session, world.pat, wednesday_question, pats.wednesday, NOW)
+    session.commit()
+    monday_question = session.scalars(
+        select(OpenQuestion).where(
+            OpenQuestion.meeting_id == pats.monday.id, OpenQuestion.text == "Same words"
+        )
+    ).one()
+    session.refresh(wednesday_question)
+    assert wednesday_question.resolved_at is not None  # the question asked about is closed
+    assert monday_question.resolved_at is None
+
+
+def test_the_team_on_the_payload_says_whether_it_is_personal(app, session, world, pats):
+    pat = sign_in(app, PAT)
+    [team_card] = cards_of(pat, world.x.id)
+    [personal_card] = cards_of(pat, pats.me)
+    assert team_card["team"]["is_personal"] is False
+    assert personal_card["team"]["is_personal"] is True
+    assert page_of(pat, pats.x_row)["team"]["is_personal"] is False
+    assert page_of(pat, pats.me_row)["team"]["is_personal"] is True

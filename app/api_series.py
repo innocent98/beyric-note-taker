@@ -28,7 +28,7 @@ from app import (
     team_admin,
     timezones,
 )
-from app.api_schemas import ErrorResponse, MeetingRef, QuestionOut, SeriesRef, TeamRef
+from app.api_schemas import ErrorResponse, MeetingRef, QuestionOut, SeriesRef
 from app.calendar_recurring import describe_cadence, next_text
 from app.db import get_session
 from app.models import (
@@ -64,6 +64,7 @@ from app.series_schemas import (
     SeriesPage,
     SeriesPatch,
     SeriesProjectIn,
+    SeriesTeam,
     TopicOut,
 )
 from app.visibility import can_read_clause
@@ -96,9 +97,13 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _team_ref(session: Session, found: Series) -> TeamRef:
+def _team_ref(session: Session, found: Series) -> SeriesTeam:
     team = session.get(Team, found.team_id)
-    return TeamRef(id=found.team_id, name=team.name if team is not None else "")
+    return SeriesTeam(
+        id=found.team_id,
+        name=team.name if team is not None else "",
+        is_personal=team is not None and team.is_personal,
+    )
 
 
 def _team_member_ids(found: Series):
@@ -137,7 +142,7 @@ def _timing(
         session.scalars(
             select(ScheduledJoin.starts_at)
             .join(Meeting, Meeting.id == ScheduledJoin.meeting_id)
-            .where(Meeting.series_id == found.id, can_read_clause(viewer))
+            .where(series.in_row(session, found), can_read_clause(viewer))
         )
     )
     cadence = describe_cadence(starts, zone)

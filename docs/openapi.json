@@ -3971,7 +3971,7 @@
             ]
           },
           "team": {
-            "$ref": "#/components/schemas/TeamRef"
+            "$ref": "#/components/schemas/SeriesTeam"
           },
           "title": {
             "title": "Title",
@@ -4156,7 +4156,7 @@
             "type": "array"
           },
           "team": {
-            "$ref": "#/components/schemas/TeamRef"
+            "$ref": "#/components/schemas/SeriesTeam"
           },
           "timezone": {
             "title": "Timezone",
@@ -4262,6 +4262,30 @@
           "title"
         ],
         "title": "SeriesRef",
+        "type": "object"
+      },
+      "SeriesTeam": {
+        "description": "The row's team. `is_personal` is true for someone's personal space: label it \"Personal\",\nhide \"Send agenda\" (it has nobody to send to) and expect no \"Keeps coming up\" and no next\nmeeting there.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_personal": {
+            "title": "Is Personal",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_personal"
+        ],
+        "title": "SeriesTeam",
         "type": "object"
       },
       "SessionState": {

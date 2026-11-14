@@ -3932,6 +3932,7 @@ export interface components {
             /** Platform */
             platform: ("google_meet" | "zoom" | "teams") | null;
             project: components["schemas"]["ProjectLink"] | null;
+            team: components["schemas"]["SeriesTeam"];
             /** Title */
             title: string;
             /** Unfinished Tasks */
@@ -3981,6 +3982,7 @@ export interface components {
             sprint_note: string | null;
             /** Suggested Agenda */
             suggested_agenda: components["schemas"]["AgendaSuggestion"][];
+            team: components["schemas"]["SeriesTeam"];
             /** Timezone */
             timezone: string;
             /** Title */
@@ -4009,6 +4011,20 @@ export interface components {
             id: number;
             /** Title */
             title: string;
+        };
+        /**
+         * SeriesTeam
+         * @description The row's team. `is_personal` is true for someone's personal space: label it "Personal",
+         *     hide "Send agenda" (it has nobody to send to) and expect no "Keeps coming up" and no next
+         *     meeting there.
+         */
+        SeriesTeam: {
+            /** Id */
+            id: number;
+            /** Is Personal */
+            is_personal: boolean;
+            /** Name */
+            name: string;
         };
         /** SessionState */
         SessionState: {
