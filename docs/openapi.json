@@ -5314,6 +5314,7 @@
         "type": "object"
       },
       "TeamCreate": {
+        "additionalProperties": false,
         "properties": {
           "name": {
             "title": "Name",
@@ -14009,7 +14010,7 @@
         ]
       },
       "put": {
-        "description": "Choose the team new meetings are shared to automatically (one at most), or null for none. The\ncaller must belong to it and it must not be their personal space. It applies once, when a\nmeeting's notes are first written; a meeting already written is not touched.",
+        "description": "Choose the team new meetings are shared to automatically (one at most), or null for none. The\ncaller must belong to it and it must not be their personal space. It applies once, when a\nmeeting's notes are first written; a meeting already written is not touched. 409\n`multi_team_disabled` while the switch is off.",
         "operationId": "write_auto_share",
         "requestBody": {
           "content": {
@@ -14070,7 +14071,7 @@
                 }
               }
             },
-            "description": "`personal_team`"
+            "description": "`personal_team`, `multi_team_disabled`"
           },
           "422": {
             "content": {

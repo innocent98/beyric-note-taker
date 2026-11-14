@@ -382,10 +382,17 @@ def attach(session: Session, user: User, meeting: Meeting, series_id: int | None
         session.flush()
         return None
     series = get(session, user, series_id)
-    if series is None:
+    if series is None or series.team_id != meeting_team_id(session, user, meeting):
         raise SeriesRefused(404, "not_found", "No such recurring meeting.")
     join(session, meeting, series)
     return series
+
+
+def meeting_team_id(session: Session, recorder: User, meeting: Meeting) -> int:
+    """The team a meeting's series must belong to: the team that owns it, else the one it is shared
+    with, else (a private meeting) its recorder's default team, as before multi-team. A series of
+    any other team would mail people named in the meeting, in a team that cannot read it."""
+    return meeting.owner_team_id or meeting.shared_team_id or team_id_of(session, recorder)
 
 
 def reused_code(session: Session, meeting: Meeting) -> bool:
@@ -421,7 +428,8 @@ def make_from_reused_link(session: Session, user: User, meeting: Meeting) -> Ser
             "not_reused",
             "This link has not been used for another meeting, so it is not recurring.",
         )
-    made = create(session, user, titles.meeting_name(meeting))
+    team_id = meeting_team_id(session, user, meeting)
+    made = create(session, user, titles.meeting_name(meeting), team_id)
     others = session.scalars(
         select(Meeting).where(
             Meeting.owner_user_id == user.id,
@@ -431,7 +439,8 @@ def make_from_reused_link(session: Session, user: User, meeting: Meeting) -> Ser
         )
     )
     for row in others:
-        row.series_id = made.id
+        if meeting_team_id(session, user, row) == team_id:  # never mix two teams in one series
+            row.series_id = made.id
     session.flush()
     return made
 

@@ -586,7 +586,7 @@ Quinn owns Y and is only in Y, so Y is their default:
 ```
 
 `POST /api/teams` `{"name": ...}` makes a team the caller owns (201, the same shape as one list row).
-At most **three owned teams** besides the personal space (the personal space and teams the person only
+While the switch is off `can_create_more` is **0** (nothing can be created). At most **three owned teams** besides the personal space (the personal space and teams the person only
 belongs to do not count); `can_create_more` in the list says how many remain.
 
 `POST /api/teams` as **Pat** with body `{"name": "  Side project "}` → **201**  
@@ -770,7 +770,7 @@ A series is made in the recorder's **default team** when the calendar links it, 
 `X-Team-Id` when made by hand. `GET /api/series` lists **one team's** series (header, else default).
 **By id** (`GET /api/series/{id}` and its sub-routes, the series on a meeting's page) a series is read
 through **its own team**: a person on two teams opens the series of either with no header, and a series
-of a team they are not in is **404 `not_found`**. A series page lists only the occurrences the viewer
+of a team they are not in is **404 `not_found`**. **A meeting can only join a series of its own team** (`PUT /api/meetings/{id}/series`): the team that owns it, else the team it is shared with, else (a private meeting) the person's default team; any other series is **404 `not_found`** (*not captured live; tested in `tests/test_multi_team_guard.py`*). A series page lists only the occurrences the viewer
 may read, so a meeting its recorder shared to a *different* team is not part of this team's series.
 
 `POST /api/series` as **Pat** with body `{"title": "Client sync"}` → **201**  
@@ -824,7 +824,7 @@ may read, so a meeting its recorder shared to a *different* team is not part of 
 Each person may choose **one** team their new meetings are shared to automatically, once, when the
 notes are first written (never when the bot joins). A person who chose none keeps today's rule (the
 team switch on `PATCH /api/team`, for the team's owners and admins). The choice reads as `null` after
-the person leaves that team. **Say so on the settings screen:** "New meetings are shared with this
+the person leaves that team. While the switch is off the setting is refused with **409 `multi_team_disabled`** (message `Choosing a team for new meetings is not available yet.`) and reads as `null` (*not captured live; tested*). **Say so on the settings screen:** "New meetings are shared with this
 team when their notes are ready."
 
 `GET /api/settings/auto-share` as **Pat** → **200**  

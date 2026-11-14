@@ -30,7 +30,15 @@ def upgrade() -> None:
             nullable=True,
         ),
     )
+    # Deleting a team nulls this column: the partial index keeps that from scanning every row.
+    op.create_index(
+        "ix_user_settings_auto_share_team_id",
+        "user_settings",
+        ["auto_share_team_id"],
+        postgresql_where=sa.text("auto_share_team_id is not null"),
+    )
 
 
 def downgrade() -> None:
+    op.drop_index("ix_user_settings_auto_share_team_id", table_name="user_settings")
     op.drop_column("user_settings", "auto_share_team_id")

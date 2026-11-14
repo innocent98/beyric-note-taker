@@ -264,8 +264,54 @@ clean; `scripts/export_openapi.py --check` clean.
 - Roll back: revert the code; the column is harmless; `alembic downgrade 0044` drops it.
 - Still do not turn on `MULTI_TEAM_ENABLED` before stage 3 and the privacy wording.
 
+## Review fixes (Opus review of #184, head 2937695)
+
+No blocker (no request acts on a team the caller is not in; the role always comes from the named
+team's membership). Fixed, tests first (`tests/test_multi_team_guard.py`, 14, each mutation-checked):
+
+1. **Flag-off equivalence:** `PUT /api/settings/auto-share` answers `409 multi_team_disabled` while the
+   switch is off, and `teams.auto_share_team` returns none while off, so `apply_share_default` follows
+   today's team-wide rule only. A row written while on lies dormant and returns with the switch.
+2. **Cross-team series attach:** `series.attach` refuses (404) a series whose team is not the meeting's
+   (`series.meeting_team_id`: the owning team, else the shared team, else the recorder's default team);
+   "Make recurring from a reused link" makes the series in the meeting's team and only adds other
+   meetings of the same team. Otherwise people named in a meeting could be mailed by another team's
+   series about a meeting they cannot read.
+3. **Race on `POST /api/teams`:** `teams.create_owned_team` locks the person's row before it counts, so
+   two creates at once end at three (two sessions test).
+4. **The permission guard tests the review named:** a manager of A who is a plain member of Y and names
+   Y in `X-Team-Id` is refused (403 `team_forbidden`) on every manager write (invite, team edit, member
+   edit and removal, invitation resend and revoke, Slack and Linear, projects, milestones, sprint close);
+   the same writes with A's header work; ids of Y under A's header are 404; `POST /api/tasks` in A with
+   a project, sprint or person of Y is 422; a member of Y who manages A cannot rename or link Y's series;
+   an empty `X-Team-Id` is 422; a write with no header from someone on several teams lands in the
+   personal team (tested and documented).
+5. Nits: `can_create_more` is 0 while the switch is off; `TeamCreate` is strict like the other bodies;
+   a partial index on `user_settings.auto_share_team_id` in `0045` (migration round trip tested).
+
 ## Follow-ups
 
 - The frontend must send `X-Team-Id` from the switcher (stage 3); `web/lib/api/schema.d.ts` is not
   regenerated here (the frontend is stage 3's).
 - There is no route to delete a team or hand one on (the pilot admin does the hand-over by script); the three-owned-teams cap therefore never frees up by itself.
+
+Recorded, no code now:
+- The reminder dedupe can drop a mail: a reminder row queued for one team's series counts even if it is
+  skipped at send time (the person left that team, opted out); which team's content wins is arbitrary
+  (teams are iterated in no order). It never mails anyone extra. Outlook gives each mailbox its own
+  recurring-event id, so the dedupe never applies there (two mails). For the series stage.
+- With the switch on, Slack or Linear can be connected to a personal team by sending its id in
+  `X-Team-Id` (spec 6.9: none in this release). Not a leak. **Fix in stage 3, when the integrations
+  screen gets the team switcher** (refuse with `409 personal_team` while the switch is on; with it off
+  the team of one must stay allowed).
+- `GET /api/teams` writes (`ensure_personal_team`) while the switch is off: kept on purpose, it is the
+  only place a missing personal team is made, and a team of one changes nothing for routes that name
+  no team.
+- Reusing an expired invitation keeps its old `created_at`, so it never counts against the caps (the
+  per-team cap had this gap before; the per-person cap inherits it).
+- The per-person hourly cap (20) equals the daily one (20), so it can never be the one that refuses;
+  see the decision above (no flag-off change). A real hourly limit needs a lower per-team hourly cap.
+- A stale `auto_share_team_id` stays in the row after the person leaves that team; it reads as none
+  and comes back if they rejoin.
+- **Stage 3:** the frontend, and any CORS or proxy configuration, must send and allow the
+  `X-Team-Id` header (not verified: no CORS middleware was found under `app/`).

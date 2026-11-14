@@ -177,6 +177,26 @@ def rehome_tasks(session: Session, meeting: Meeting, target: Team | None = None)
     )
 
 
+def create_owned_team(session: Session, user: User, name: str) -> Team:
+    """Make a team the person owns: at most `MAX_OWNED_TEAMS` besides the personal one (409
+    `team_limit`). The person's row is locked first, so two creates at once count one after the
+    other. In the caller's transaction (flushes, no commit)."""
+    session.execute(select(User.id).where(User.id == user.id).with_for_update())
+    owned = session.scalar(
+        select(func.count())
+        .select_from(Team)
+        .where(Team.owner_user_id == user.id, Team.is_personal.is_(False))
+    )
+    if owned >= MAX_OWNED_TEAMS:
+        raise TeamChangeRefused(409, "team_limit", f"You can own up to {MAX_OWNED_TEAMS} teams.")
+    team = Team(owner_user_id=user.id, name=name, is_personal=False)
+    session.add(team)
+    session.flush()
+    session.add(TeamMember(team_id=team.id, user_id=user.id, role="owner"))
+    session.flush()
+    return team
+
+
 def doomed_teams(session: Session, user_id: int) -> list[int]:
     """The teams that go when this account is deleted: those it owns that nobody else is in (see
     `remove_users`, which deletes them). What the team owned is not the team's to keep then:
@@ -443,7 +463,11 @@ def leave(session: Session, user: User, now: datetime, team_id: int | None = Non
 
 def auto_share_team(session: Session, user: User) -> int | None:
     """The team the person chose for new meetings (`user_settings.auto_share_team_id`), only while
-    they are still a member of it and it is not a personal space; else None."""
+    they are still a member of it and it is not a personal space; else None. Always None while
+    `MULTI_TEAM_ENABLED` is off: then only today's team-wide rule applies (owners and admins), and a
+    row written while the switch was on lies dormant (it comes back if the switch does)."""
+    if not multi_team_enabled():
+        return None
     team_id = session.scalar(
         select(UserSettings.auto_share_team_id).where(UserSettings.user_id == user.id)
     )

@@ -905,7 +905,7 @@ class TeamList(BaseModel):
     can_create_more: int
 
 
-class TeamCreate(BaseModel):
+class TeamCreate(Body):
     name: str
 
 

@@ -141,7 +141,7 @@ def read_auto_share(
     "/auto-share",
     responses={
         404: {"model": ErrorResponse, "description": "A team the caller is not in"},
-        409: {"model": ErrorResponse, "description": "`personal_team`"},
+        409: {"model": ErrorResponse, "description": "`personal_team`, `multi_team_disabled`"},
     },
 )
 def write_auto_share(
@@ -151,7 +151,12 @@ def write_auto_share(
 ) -> AutoShareOut:
     """Choose the team new meetings are shared to automatically (one at most), or null for none. The
     caller must belong to it and it must not be their personal space. It applies once, when a
-    meeting's notes are first written; a meeting already written is not touched."""
+    meeting's notes are first written; a meeting already written is not touched. 409
+    `multi_team_disabled` while the switch is off."""
+    if not teams.multi_team_enabled():
+        raise services.Refused(
+            409, "multi_team_disabled", "Choosing a team for new meetings is not available yet."
+        )
     if body.team_id is not None:
         member = teams.membership(session, user.id, body.team_id)
         team = session.get(Team, body.team_id) if member is not None else None

@@ -72,7 +72,11 @@ def list_teams(
     session.commit()
     return TeamList(
         teams=_summaries(session, user),
-        can_create_more=max(0, teams.MAX_OWNED_TEAMS - _owned_count(session, user)),
+        can_create_more=(
+            max(0, teams.MAX_OWNED_TEAMS - _owned_count(session, user))
+            if teams.multi_team_enabled()
+            else 0
+        ),
     )
 
 
@@ -99,15 +103,9 @@ def create_team(
     if not name:
         raise Refused(422, "invalid_name", "Give the team a name.")
     teams.ensure_personal_team(session, user)
-    if _owned_count(session, user) >= teams.MAX_OWNED_TEAMS:
-        raise Refused(
-            409,
-            "team_limit",
-            f"You can own up to {teams.MAX_OWNED_TEAMS} teams.",
-        )
-    team = Team(owner_user_id=user.id, name=name, is_personal=False)
-    session.add(team)
-    session.flush()
-    session.add(TeamMember(team_id=team.id, user_id=user.id, role="owner"))
+    try:
+        team = teams.create_owned_team(session, user, name)
+    except teams.TeamChangeRefused as exc:
+        raise Refused(exc.status, exc.code, exc.message) from None
     session.commit()
     return next(t for t in _summaries(session, user) if t.id == team.id)

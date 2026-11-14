@@ -2015,6 +2015,8 @@ def test_0045_adds_the_auto_share_team_empty_for_every_row_and_clears_with_the_t
         "and contype = 'f' and confrelid = 'teams'::regclass",
     )
     assert rule == [("n",)]  # ON DELETE SET NULL
+    index = "select indexname from pg_indexes where tablename = 'user_settings'"
+    assert ("ix_user_settings_auto_share_team_id",) in _rows(engine, index)
     command.downgrade(cfg, "0044")
     assert "auto_share_team_id" not in {
         c["name"] for c in inspect(engine).get_columns("user_settings")
