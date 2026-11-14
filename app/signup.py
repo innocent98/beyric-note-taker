@@ -40,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 # The "Last updated" date of the terms and privacy pages the person accepted at sign-up. Bump it
 # with the pages: it is recorded on the account (`users.terms_version`).
-TERMS_VERSION = "2026-11-04"
+TERMS_VERSION = "2026-11-14"
 # The date of the wording of the recording-consent box ("I understand that I'm responsible for
 # telling the people in my meetings ..."), recorded on the account (`users.recording_ack_version`).
 # Bump it when that wording changes.

@@ -141,3 +141,28 @@ def test_the_pages_do_not_promise_to_tell_anyone_about_a_change(anon_client):
         for promise in ("material change", "we will tell you by email", "before they take effect"):
             assert promise not in page, (path, promise)
         assert "30 days before it takes effect" not in page
+
+
+def test_the_pages_say_what_happens_to_a_meeting_moved_to_a_team(anon_client):
+    """Multi-team (the owner's wording, 2026-11-14): a moved meeting belongs to the team and stays
+    with it when its recorder leaves or closes their account (shown as a "Former member"); a
+    meeting only shared is deleted with the account. The retention list and terms say the same."""
+    privacy = text(anon_client, PRIVACY)
+    assert (
+        "A moved meeting stays with the team even if you leave the team or close your account. "
+        "If you close your account, your name and email address are removed from it and it is "
+        'shown as from a "Former member".' in privacy
+    )
+    assert (
+        "Meetings you moved to a team are an exception: they stay with the team when you close "
+        "your account" in privacy
+    )
+    assert "Meetings you only shared with a team are deleted when you close your account" in privacy
+    assert (
+        "We keep only an empty record with no name or email address, so that meetings moved to "
+        'a team remain linked to a "Former member".' in privacy
+    )
+    terms = text(anon_client, TERMS)
+    assert "A meeting you move to a team belongs to that team" in terms
+    assert "This does not apply to meetings you moved to a team" in terms
+    assert "who you invite to your team and for what you choose to share" not in terms
