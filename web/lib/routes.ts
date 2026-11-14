@@ -6,6 +6,7 @@
 export const NEXT_PAGES = [
   "/",
   "/welcome",
+  "/pricing",
   "/login",
   "/signup",
   "/verify-email",
