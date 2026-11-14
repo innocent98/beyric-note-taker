@@ -477,7 +477,11 @@ export interface paths {
         };
         /**
          * List Decisions
-         * @description Everything the caller's meetings decided, newest meeting first, grouped by meeting. `q`
+         * @description Everything the active team's meetings decided, newest meeting first, grouped by meeting.
+         *     The team is the `X-Team-Id` header (404 `not_found` "No such team." for a team the caller is
+         *     not in), else their default team while multi-team is on; a decision belongs to its meeting's
+         *     team (an ordinary team: meetings shared or moved to it; the personal team: the caller's own that
+         *     no team has). `q`
          *     matches a decision's words or its meeting's title (a title match shows all of that meeting's
          *     decisions). `status` keeps one tab's decisions. `limit` counts meetings, not decisions. For
          *     the next page pass `before_id` = `next_before_id`. A decision the caller hid is not listed.
@@ -652,8 +656,15 @@ export interface paths {
         };
         /**
          * List Meetings
-         * @description The caller's meetings, plus any shared with their team, newest first. For the next page
-         *     pass `before_id` = `next_before_id`.
+         * @description The active team's meetings, newest first. For the next page pass `before_id` =
+         *     `next_before_id`.
+         *
+         *     The team is the `X-Team-Id` header (404 `not_found` "No such team." for a team the caller is not
+         *     in), else their default team while multi-team is on. An ordinary team lists the meetings shared
+         *     to it or moved to it, whoever recorded them; the personal team lists only the meetings the
+         *     caller recorded that are neither shared nor moved. The list only narrows what the caller may
+         *     read: a meeting opened by its link opens whatever team is active. With multi-team off and no
+         *     header, the caller's meetings plus any shared with their team, as before.
          *
          *     `from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar
          *     days, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),
@@ -1414,8 +1425,10 @@ export interface paths {
         };
         /**
          * List Review
-         * @description The caller's "Please check" items from their meetings: `state=open` (default) or
-         *     `checked`. Newest meeting first, in the order of the notes.
+         * @description The caller's "Please check" items from the active team's meetings: `state=open` (default) or
+         *     `checked`. Newest meeting first, in the order of the notes. The team is the `X-Team-Id` header
+         *     (404 `not_found` "No such team." for a team the caller is not in), else their default team while
+         *     multi-team is on; `open_count` counts the same team's items.
          */
         get: operations["list_review"];
         put?: never;
@@ -1682,6 +1695,10 @@ export interface paths {
          *
          *     Public. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,
          *     it names the user and reports their recorded hours (`usage`).
+         *
+         *     The `badges` count one team's items: the `X-Team-Id` header, else the person's default team
+         *     (with multi-team off and no header: everything they can see, as before). A team the caller is
+         *     not in is NOT an error here (this call is every page's first): it counts the default team.
          */
         get: operations["read_session"];
         put?: never;
@@ -2153,7 +2170,8 @@ export interface paths {
          *     and/or set the reminders before recurring meetings: `reminders_on` and `reminder_timing`.
          *     Changing a sprint setting redraws the open sprints. The default applies,
          *     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
-         *     member's meetings are never shared by it. 403 `team_forbidden`.
+         *     member's meetings are never shared by it. 403 `team_forbidden`. A person's own personal team
+         *     keeps its name while multi-team is on: 409 `personal_team` for a `name` on it.
          */
         patch: operations["update_team"];
         trace?: never;
@@ -6035,7 +6053,10 @@ export interface operations {
                 limit?: number;
                 before_id?: number | null;
             };
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6759,7 +6780,10 @@ export interface operations {
                 to?: string | null;
                 tz?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9390,7 +9414,10 @@ export interface operations {
             query?: {
                 state?: "open" | "checked";
             };
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10257,7 +10284,10 @@ export interface operations {
     read_session: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
