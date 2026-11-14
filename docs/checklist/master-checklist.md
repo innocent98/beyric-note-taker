@@ -706,8 +706,13 @@ Goal: one person has a permanent personal team and may belong to several teams; 
     - [x] Leak cases 2 to 9, 10 to 12 (readers' half), 16 (`tests/test_series_readers.py`, 25 tests; 21 mutations, 20 killed and one equivalent)
     - [x] PR 1 leftovers: hand-made sibling named from the meeting and twin found by either title, S1 and "every state" tests strengthened, the empty-card re-key respects the team cap, PR 1 SOP and runbook step 4 fixed
     - [ ] CI green on the pushed head, Opus review of the leak-critical code, merge (the lead, on Adebayo's word)
-  - [ ] **S3: docs and switch-on**: FE integration guide section with live captures, this checklist, the flag on after the backfill ran
-  - [ ] **F1 (frontend, small)**: show the row's team on the series page; send it as `X-Team-Id` for the task drawer; hide "next meeting" on personal rows
+  - [x] **S3: docs, screens and the switch-on runbook** (branch `feature/series-follow-docs-and-screens`, PR number added when opened; SOP `docs/sop/2026-11-14-series-follow-switch-on.md`; FE guide `docs/fe-integration-guide-series-teams.md`; no migration; the flag stays off until Adebayo runs the steps)
+    - [x] FE guide from 49 real captures (`docs/fe-captures/series-follow/`, `scripts/capture_series_follow.py`): the `team` field, the lists and pages per team, the personal row, 404s, empty states, share and unshare following, the backfill output, the straggler round; each behaviour marked verified live or not
+    - [x] Frontend (lead-designed, marked): the team (or "Personal") on the Recurring cards and the Series page; a personal row has no "Next meeting" and no "Send agenda"; empty rows in plain words; the task drawer's people in the row's team; `schema.d.ts` regenerated (F1 below)
+    - [x] `team.is_personal` on the series payload; cadence scoped; `_resolve` source scoped (PR 2 review NITs 6, 1, 3; 9 and 11 too; 2, 4, 7, 8 left on purpose, see the SOP table)
+    - [x] Server runbook in the form he runs: look first, dry run, backfill, switch on and recreate (stops if a meeting is running), the backfill again (stops unless all three services have the switch), what to look at, roll back
+    - [ ] CI green on the pushed head, Opus review of the runbook and the code changes, merge (the lead, on Adebayo's word)
+    - [ ] **Adebayo runs the server steps** (steps 0 to 5 of the SOP, one sitting, no meeting running); the flag is then ON
   - [ ] Decision: ghost empty cards after a row loses its last meeting (see the S1 SOP, Follow-ups)
 - [x] **Stage 3: frontend, dark** (PR opened 2026-11-14, number added when known; no migration; SOP `docs/sop/2026-11-14-multi-team-stage-3.md`; FE guide sections 14 to 16; parity `docs/ui/parity-report.md` "Multi-team (stage 3)"; four pieces are lead-designed and marked so, for the designer)
   - [x] The frontend learns the switch from `multi_team` in `GET /api/session` (one read-only boolean, tested, captured live 02, 03, 71)

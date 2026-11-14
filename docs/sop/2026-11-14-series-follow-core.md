@@ -80,95 +80,26 @@ script was also run once (dry run, then `--apply`) against an empty scratch data
 **Not verified:** against production data (the counts are unknown; the dry run on the server says),
 and not in a browser or against a real calendar.
 
-## Operate: the server command (Adebayo, after this PR is merged and deployed)
+## Operate: the server steps (Adebayo, after PR 3 is merged and deployed)
 
-Order, and why: the backfill makes today's rows pure, but until the flag is on and the services have
-been recreated with it, the old code keeps mixing rows (every share, unshare, leave and calendar link
-does), and a share that commits during the backfill can slip past it. So the backfill runs **twice**:
-before the flag, and again after it is on and web, worker and scheduler have been recreated (from then
-on the hooks keep rows pure, and the second run must find nothing). Run step 2 close to the
-switch-on, not days earlier; see "Flag off after the backfill" below.
+**Moved.** The runbook (look first, dry run, backfill, switch on and recreate, the backfill again, what to look
+at on the site, roll back) is in `docs/sop/2026-11-14-series-follow-switch-on.md`, written in the form he runs
+(`ssh haven-respite 'bash -s' <<'EOF'`), with guards that stop by themselves when a meeting is being recorded
+or when a service does not have the switch. It replaces the blocks that were here (PR 1's, which did the same
+without the guards). The reasons that still hold:
 
-1. **Dry run** (below). Changes nothing.
-2. **Backfill** (below). Flag still off.
-3. **Switch the flag on** (`SERIES_FOLLOW_MEETINGS=true` in `.env`, then
-   `docker compose up -d --force-recreate web worker scheduler`): PR 3 gives the exact command, and
-   only after PR 2 is deployed. **Recreate, do not `restart`:** the flag reaches the containers
-   through `env_file`, and a plain `docker compose restart` does not re-read `.env` (the file would
-   say true while the services still run with it off; `docs/sop/2026-11-02-web-pages.md` says the
-   same).
-4. **Backfill once more** (the block under "Step 4" below): it must report **0** meetings moved
-   and **0** rows split. A number above 0 means a straggler slipped in; the run has fixed it, and
-   the lead should be told the number. **Check first** that all three running services have the
-   flag (the block prints it from inside each container, not from the file): a pass while one of
-   them still runs with the flag off proves nothing, because the old code is still mixing rows. **If the run
-   stops with a deadlock error, run it again:** the backfill is one transaction and a share
-   committing at the same time can deadlock with it; nothing was saved and a second run is safe.
-
-**Step 1, the dry run.** It prints the deployed commit, the two switches, and what the backfill
-would do. It changes nothing. A good result: the commit is the merge of this PR (or later),
-`SERIES_FOLLOW_MEETINGS` is missing or `false`, `MULTI_TEAM_ENABLED=true`, and the counts start with
-`DRY RUN: nothing was changed.` followed by nine lines of numbers.
-
-```bash
-ssh haven-respite 'bash -s' <<'EOF'
-cd /opt/beyric-note-taker
-echo "--- deployed commit:"
-git log -1 --oneline
-echo "--- the two switches (SERIES_FOLLOW_MEETINGS should be missing or false, MULTI_TEAM_ENABLED true):"
-grep -E '^(SERIES_FOLLOW_MEETINGS|MULTI_TEAM_ENABLED)=' .env || echo "(neither is set)"
-echo "--- dry run, changes nothing:"
-docker compose exec -T web python scripts/backfill_series_follow.py </dev/null
-EOF
-```
-
-**Steps 2 and 4, do it, then prove it is finished.** It saves the split, then runs the dry run again.
-A good result: the first report starts `APPLIED: the database was changed.`; the second report
-starts `DRY RUN` and says **"Rows that held a meeting of another team or of the personal space: 0"**
-and "Meetings moved to the row of their own team or personal space: 0" (nothing left to move).
-"Meetings taken out of their series (the team had no room)" should be 0; if it is not, tell the
-lead the number. **"Meetings left alone (their recorder's account is gone)" is not a failure and is
-not 0 on a repeat run:** it counts, every run, private meetings of an account that is deleted
-(a suspended account's meetings are NOT left alone: they move like anyone's). "Rows left with no meeting after the split" is information for the ghost-card decision
-(see Follow-ups), also not a failure.
-
-```bash
-ssh haven-respite 'bash -s' <<'EOF'
-cd /opt/beyric-note-taker
-echo "--- applying the split:"
-docker compose exec -T web python scripts/backfill_series_follow.py --apply </dev/null
-echo "--- checking: a second pass must find nothing left to move:"
-docker compose exec -T web python scripts/backfill_series_follow.py </dev/null
-EOF
-```
-
-**Step 4, the same backfill after the flag is on.** One block: it prints the flag as each of the
-three running services sees it (a good result: `true` and `true` for each of `web`, `worker` and
-`scheduler`; anything else, or a line missing, means that service was not recreated: run
-`docker compose up -d --force-recreate web worker scheduler`, then this block again), applies the backfill
-(which fixes a straggler) and then runs the dry run (which must say 0 moved, 0 split). "Personal
-spaces made" can be above 0 here only because a sign-up during the run made a personal space: it
-counts every personal team made between the start and the end of the run, so a busy minute
-inflates it. It is information, not a failure.
-
-```bash
-ssh haven-respite 'bash -s' <<'EOF'
-cd /opt/beyric-note-taker
-echo "--- the flag inside each running service (SERIES_FOLLOW_MEETINGS then MULTI_TEAM_ENABLED: true and true, three times):"
-for s in web worker scheduler; do
-  echo "$s:"
-  docker compose exec -T $s printenv SERIES_FOLLOW_MEETINGS MULTI_TEAM_ENABLED </dev/null
-done
-echo "--- applying, fixes any straggler (a deadlock error: just run this block again):"
-docker compose exec -T web python scripts/backfill_series_follow.py --apply </dev/null
-echo "--- checking: this must say 0 moved and 0 split:"
-docker compose exec -T web python scripts/backfill_series_follow.py </dev/null
-EOF
-```
-
-**Roll back.** Nothing needs undoing while the flag is off. The split rows stay split; there is no
-merge-back script (a follow-up only if wanted). Switching the flag off (set `false`, then `docker compose up -d --force-recreate web worker
-scheduler`) restores today's readers.
+- The backfill makes today's rows pure, but until the flag is on **and the services have been recreated** with it,
+  the old code keeps mixing rows (every share, unshare, leave and calendar link does), and a share that
+  commits during the backfill can slip past it. So it runs **twice**: before the flag, and again after the
+  recreate, when the second run must find nothing.
+- **Recreate, do not `restart`**: the flag reaches the containers through `env_file`, and a plain
+  `docker compose restart` does not re-read `.env` (`docs/sop/2026-11-02-web-pages.md` says the same).
+- If a run stops with a deadlock error, run it again: the backfill is one transaction and a share committing at
+  the same time can deadlock with it; nothing was saved and a second run is safe.
+- "Meetings left alone (their recorder's account is gone)" is not a failure and is not 0 on a repeat run: it
+  counts, every run, private meetings of an account that is deleted (a suspended account's meetings are NOT left
+  alone: they move like anyone's). "Rows left with no meeting after the split" is information for the ghost-card
+  decision (see Follow-ups), also not a failure.
 
 ### Flag off after the backfill (read before running step 2 early)
 
@@ -197,5 +128,6 @@ display catches up at switch-on. That is why step 2 belongs right before the swi
   moves them); a hand-made row's rename can show in its sibling (the title is the match key; fixed in PR 2).
 - PR 2 (built: `docs/sop/2026-11-14-series-follow-readers.md`): scoped readers, topic source,
   deterministic reminder order, `team` on the series payload, "next meeting" hidden on personal
-  rows. PR 3: docs, FE guide with live captures, the switch-on.
+  rows. PR 3 (built: `docs/sop/2026-11-14-series-follow-switch-on.md`): docs, FE guide with live
+  captures, the frontend, the switch-on runbook.
 - A merge-back script, only if the split has to be undone.
