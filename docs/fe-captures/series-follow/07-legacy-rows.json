@@ -10,6 +10,11 @@
       },
       {
         "id": 3,
+        "team_id": 4,
+        "recurring": "rid-1on1"
+      },
+      {
+        "id": 4,
         "team_id": 2,
         "recurring": "rid-sync"
       }

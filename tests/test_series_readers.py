@@ -731,3 +731,12 @@ def test_the_team_on_the_payload_says_whether_it_is_personal(app, session, world
     assert personal_card["team"]["is_personal"] is True
     assert page_of(pat, pats.x_row)["team"]["is_personal"] is False
     assert page_of(pat, pats.me_row)["team"]["is_personal"] is True
+
+
+def test_the_page_says_whether_it_lists_only_its_scope(app, session, world, pats, monkeypatch):
+    """PR 3 review S3: with the flag off a personal row still holds shared meetings and has a next
+    date, so the frontend must not say "your private meetings" or hide the next meeting."""
+    pat = sign_in(app, PAT)
+    assert page_of(pat, pats.me_row)["scoped"] is True
+    monkeypatch.setattr(series_rules, "follow_enabled", lambda: False)
+    assert page_of(pat, pats.me_row)["scoped"] is False

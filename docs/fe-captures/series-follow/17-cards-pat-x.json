@@ -16,7 +16,7 @@
       "timezone": "UTC",
       "series": [
         {
-          "id": 10,
+          "id": 13,
           "title": "Design sync",
           "team": {
             "id": 4,

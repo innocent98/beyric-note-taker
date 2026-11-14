@@ -3978,6 +3978,8 @@ export interface components {
             platform: ("google_meet" | "zoom" | "teams") | null;
             /** Questions */
             questions: components["schemas"]["CarriedQuestion"][];
+            /** Scoped */
+            scoped: boolean;
             /** Sprint Note */
             sprint_note: string | null;
             /** Suggested Agenda */
@@ -4014,9 +4016,9 @@ export interface components {
         };
         /**
          * SeriesTeam
-         * @description The row's team. `is_personal` is true for someone's personal space: label it "Personal",
-         *     hide "Send agenda" (it has nobody to send to) and expect no "Keeps coming up" and no next
-         *     meeting there.
+         * @description The row's team. `is_personal` is true for someone's personal space: label it "Personal".
+         *     What a personal row lists and hides (no next meeting, no "Keeps coming up", nobody to send the
+         *     agenda to) holds only while `SeriesPage.scoped` is true.
          */
         SeriesTeam: {
             /** Id */

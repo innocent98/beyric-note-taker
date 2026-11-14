@@ -60,7 +60,7 @@ so they do not depend on the writers being perfect.
 | `app/series_mail.py` | `queue_due_reminders`: deterministic team order (flag on) |
 | `app/api_series.py`, `app/series_schemas.py` | `team` on the card and the page; no upcoming date on a personal row |
 | `docs/openapi.json` | `team` on `SeriesCard` and `SeriesPage` (regenerated with every router loaded, as the test does) |
-| `tests/test_series_readers.py` | 25 new tests (PR 3 added three more: 28) |
+| `tests/test_series_readers.py` | 25 new tests (PR 3 added four more: 29) |
 | `tests/test_series_follow.py` | the two PR 1 tests strengthened, three new carry tests (now 47) |
 | `docs/sop/2026-11-14-series-follow-core.md`, `docs/checklist/master-checklist.md` | PR 1 SOP fixes, S2 ticked |
 

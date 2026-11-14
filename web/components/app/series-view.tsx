@@ -78,9 +78,10 @@ function TaskRow({
 }
 
 // `multiTeam`: the server's multi-team switch is on (the page knows it from the teams list). Then the
-// page says which team (or "Personal") the row is, says what it lists, sends the row's team with the
-// call for the task drawer's people (the tab's team may be another), and on a personal row draws no
-// "Next meeting" box and no "Send agenda" (no next date is given there, and nobody else is on it).
+// page says which team (or "Personal") the row is and sends the row's team with the call for the task
+// drawer's people (the tab's team may be another). While the page is also `scoped` (the server's
+// SERIES_FOLLOW_MEETINGS is on) it says what the page lists, and a personal row draws no "Next meeting"
+// box and no "Send agenda" (no next date is given there, and nobody else is on it).
 export function SeriesView({ initial, multiTeam = false }: { initial: SeriesPage; multiTeam?: boolean }) {
   const today = useToday();
   const [page, setPage] = useState(initial);
@@ -190,7 +191,10 @@ export function SeriesView({ initial, multiTeam = false }: { initial: SeriesPage
       finished: p.finished.map((t) => (t.id === next.id ? next : t)),
     }));
   const noSend = page.agenda_recipients === 0;
-  const personal = multiTeam && page.team.is_personal;
+  // `scoped`: the server's follow rule is on. Off, a personal team's row is the old one (it can hold shared
+  // meetings and has a next date), so nothing below is hidden or said about it.
+  const scoped = multiTeam && page.scoped;
+  const personal = scoped && page.team.is_personal;
   // The score tiles: the open tasks whose day has passed (in the person's zone) are the Overdue
   // tile; the rest of the open ones are Still open.
   const overdue = page.unfinished.filter((t) => isOverdue(t.due_date, today)).length;
@@ -208,7 +212,7 @@ export function SeriesView({ initial, multiTeam = false }: { initial: SeriesPage
             .filter(Boolean)
             .join(" · ")}
         </div>
-        {multiTeam ? <div className="sr-note sr-scope">{scopeNote(page.team)}</div> : null}
+        {scoped ? <div className="sr-note sr-scope">{scopeNote(page.team)}</div> : null}
       </div>
       <div role="status" aria-live="polite">
         {error ? <Alert kind="error">{error}</Alert> : null}
@@ -422,7 +426,7 @@ export function SeriesView({ initial, multiTeam = false }: { initial: SeriesPage
               <Icon name="chevron" size={14} />
             </AppLink>
           ))}
-          {page.past_meetings.length === 0 ? <div className="sr-past-none">{noPastText(multiTeam ? page.team : null)}</div> : null}
+          {page.past_meetings.length === 0 ? <div className="sr-past-none">{noPastText(scoped ? page.team : null)}</div> : null}
           <div className="sr-side-title sr-side-gap">Attendees</div>
           <div className="sr-people">
             {page.attendees.length === 0 ? <div className="sr-past-none">Nobody yet.</div> : null}

@@ -3,7 +3,7 @@
   "as": "Ada",
   "request": {
     "method": "GET",
-    "path": "/api/series/9",
+    "path": "/api/series/11",
     "headers": {
       "Cookie": "session=<cookie>"
     },
@@ -12,13 +12,14 @@
   "response": {
     "status": 200,
     "body": {
-      "id": 9,
+      "id": 11,
       "title": "Standup",
       "team": {
         "id": 1,
         "name": "My team",
         "is_personal": true
       },
+      "scoped": true,
       "cadence": "Weekly on Saturdays, 20:00",
       "platform": "google_meet",
       "timezone": "UTC",

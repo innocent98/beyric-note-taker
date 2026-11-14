@@ -12,7 +12,7 @@ label the frontend shows while multi-team is on.
 ## What shipped
 
 1. The FE integration guide `docs/fe-integration-guide-series-teams.md`, every body copied from the real
-   captures in `docs/fe-captures/series-follow/` (49 exchanges made by `scripts/capture_series_follow.py`
+   captures in `docs/fe-captures/series-follow/` (51 exchanges made by `scripts/capture_series_follow.py`
    against the running app on a scratch Postgres 17, including the real backfill script's output).
 2. The small frontend changes the readers need: the Recurring cards and the Series page say which team (or
    "Personal") a row is; a personal row draws no "Next meeting" and no "Send agenda"; empty rows say so in
@@ -33,9 +33,10 @@ run without guessing what a good result looks like.
 | Piece | Decision |
 |---|---|
 | Captures first | The guide is generated from the capture files, not written from the schema. The script tells the story in the order the server steps run: legacy rows with the flag off, the real backfill (dry run, apply, dry run), the flag on, every list and page for three people, the errors, a share and an unshare, and a "straggler" round (an out-of-scope meeting put back by hand: readers hide it, the flag-on backfill moves it, the next dry run says 0). The flag is flipped inside the running process with `get_settings.cache_clear()`; that is the one place it differs from the containers |
+| `scoped` on the page | **Added after the PR 204 review (S3).** `SeriesPage.scoped` is true while the follow flag is on. A personal team's row is the old row while it is off (a person on two teams has a personal *default* team whose row holds shared meetings and a real next date, from the deploy until step 3 and after any roll back), so the frontend hides the "Next meeting" box, says "your private meetings" and uses the empty words only while `scoped`. Rejected: inferring it from `next_text` being null (ambiguous), a flag on `/api/session` (more surface for one boolean) |
 | `team.is_personal` | New `SeriesTeam(TeamRef)` on the series card and page only (NIT 6): a personal team is named "My team", so the frontend needs a flag to say "Personal", hide "Send agenda" and tell "no next date" from "personal row". The meeting object's `team` (`TeamRef`, no flag) is untouched |
 | Where the team shows | Only while the session says `multi_team` is on (the page already knows it from the teams list). With it off every page is what it was: asserted in `web/tests/series-follow.test.tsx` |
-| Personal row | No "Next meeting" box and no "Send agenda" button (it has no next date and nobody else on it: 409 `no_attendees`, captured). Not hidden when multi-team is off (a pilot user's solo team) |
+| Personal row | While `scoped`: no "Next meeting" box and no "Send agenda" button (it has no next date and nobody else on it: 409 `no_attendees`, captured). Not hidden when multi-team or the follow flag is off |
 | Task drawer team | `api.tasks.list({limit: 1}, row team)` while multi-team is on: the tab's team may differ from the row's (F1 of the PR 2 SOP) |
 | Runbook shape | Six blocks, each one `ssh haven-respite 'bash -s' <<'EOF'`, `</dev/null` on every `docker` call except the psql check that has its own heredoc. Step 3 (and the roll back) **refuse to recreate while a meeting is being recorded or processed or a join is live or due within ten minutes**; step 4 **refuses to run the backfill unless all three services print `true`**. Rejected: one giant block (he could not tell which step failed); a pre-recreate backup of `.env` (a second copy of the secrets on disk; the roll back is flipping one line) |
 | Empty card left as it is | The ghost empty card (a row that loses its last meeting) is **not** changed: it is still an open decision; the frontend renders it cleanly and the guide shows the real response |
@@ -56,6 +57,24 @@ run without guessing what a good result looks like.
 | 10 | `openapi.json` gained two unrelated `maxLength` lines | **Noted in the PR body**: correct, harmless, the file on main was stale |
 | 11 | `send_agenda` on a personal row | **Done in the frontend**: the button is not drawn on a personal row (`team.is_personal`) |
 
+### The PR 204 Opus review (head `fbcbbabe`), all applied in a second commit
+
+| # | Finding | Disposition |
+|---|---|---|
+| B1 | guide's team-row body did not match capture 24 (fields tidied or dropped) | **Fixed**: pasted verbatim, only the task trimmed with a marker. Every JSON body of the guide was then checked against its capture by script (keys, values, lengths; trims only with a marker): 0 problems |
+| S1 | runbook step 5 and the guide said a private recurring meeting "left the team's list" | **Fixed, and captured live**: an all-private recurring meeting (Ada's 1:1) leaves an **empty card in the team** for its creator (captures 14, 50, 51; the dry run says `Rows left with no meeting after the split: 1`). Step 5 item 5 and guide section 1 now say so |
+| S2 | roll back did not say switching on again needs the backfill again | **Fixed**: "start again from Step 0" |
+| S3 | frontend hid a real "Next meeting" box with the flag off | **Fixed** with `SeriesPage.scoped` (above) and tests (an unscoped page keeps its Next meeting and Send agenda and says nothing false) |
+| S4 | step 3 and roll back recreated even if the `.env` edit failed | **Fixed**: `grep -qx` after the edit stops before the recreate; run against a stub whose `sed -i` fails |
+| N1 | step 4 checked only `SERIES_FOLLOW_MEETINGS` | **Fixed**: both switches, in all three services |
+| N2 | step 0 silent about `MULTI_TEAM_ENABLED` not true | **Fixed**: "stop and tell the lead" |
+| N3 | steps 1 and 2 have no in-progress guard | **Fixed**: a line saying a stuck backfill means a meeting is being processed (wait, or Ctrl-C: nothing is saved until the end) |
+| N4 | "commit is the merge of this PR" not judgeable | **Fixed**: step 0 prints `OK` when this runbook file is in the deployed code |
+| N5 | wrong capture cited (26) | **Fixed**: cites 14 (Ada has no event of Design sync in the script) |
+| N6 | task drawer with a personal team id not in the verification table | **Added** as not exercised live |
+| N7 | `SeriesTeam` docstring said "no next meeting" without the flag | **Fixed**: points to `scoped` |
+| N8 | no warning against merging during the sitting | **Fixed** (in the order text before step 0) |
+
 ## What's involved
 
 | File | Change |
@@ -63,17 +82,19 @@ run without guessing what a good result looks like.
 | `app/api_series.py`, `app/series_schemas.py` | `SeriesTeam` with `is_personal`; `_timing` scoped |
 | `app/series.py` | `_resolve` skips the twins when the source is out of scope |
 | `docs/openapi.json`, `web/lib/api/schema.d.ts` | regenerated (`SeriesTeam`) |
-| `tests/test_series_readers.py` | three new tests, one expectation widened (now 28) |
-| `scripts/capture_series_follow.py`, `docs/fe-captures/series-follow/` | the live capture and its 49 files |
+| `tests/test_series_readers.py` | four new tests, one expectation widened (now 29) |
+| `scripts/capture_series_follow.py`, `docs/fe-captures/series-follow/` | the live capture and its 51 files |
 | `docs/fe-integration-guide-series-teams.md` | the guide |
 | `web/lib/series-team.ts`, `web/components/app/series-view.tsx`, `recurring-cards.tsx`, `web/app/page.tsx`, `web/app/series/[id]/page.tsx`, `web/styles/pages.css` | the team label, the personal row, the empty words |
-| `web/tests/series-follow.test.tsx`, `web/scripts/mock-api.mjs` | 13 tests on the captures; the mock sends `team` |
+| `web/tests/series-follow.test.tsx`, `web/scripts/mock-api.mjs` | 16 tests on the captures; the mock sends `team` and `scoped` |
 | `docs/sop/2026-11-14-series-follow-core.md`, `...-readers.md`, `deploy/README.md`, `docs/checklist/master-checklist.md`, `docs/ui/parity-report.md` | pointers, counts, checklist, parity note |
 
 ## Verification
 
 * **The captures** are real responses of the real app; section 9 of the guide marks each behaviour verified live
   or not.
+* **After the PR 204 review:** `tests/test_series_readers.py` 29 passed; 16 tests in `web/tests/series-follow.test.tsx`;
+  the runbook guards re-run against the stub `docker` (quiet, busy, edit fails, both switches).
 * **Backend, bounded** (CI runs the rest): `ruff check`, `ruff format --check`, `tests/test_series_readers.py`
   (28), `tests/test_series_follow.py`, `tests/test_series.py` and `tests/test_api.py::test_the_committed_openapi_file_matches_the_routes`.
   The three new tests were run before the fixes and failed (3 failed), then passed with them.
@@ -103,7 +124,8 @@ moves a meeting to the right Standup entry.
 recreate in step 3 the old code is still running and can mix an entry again (a share does it), which is why
 step 4 runs the backfill a **second time** and expects nothing to move. **No meeting may be recording or
 being processed during step 3**: the recreate restarts the worker and the scheduler. Step 3 checks that
-itself and stops without changing anything if one is.
+itself and stops without changing anything if one is. **Do not merge anything to `main` during steps 2 to 4:**
+a deploy would recreate the services in the middle of the sitting (harmless, but it muddies the checks).
 
 Every block is one command to paste into your terminal. It goes to the server with `ssh`, runs there, and
 prints what it did; each `docker` call has `</dev/null` so it cannot swallow the rest of the script.
@@ -111,16 +133,19 @@ prints what it did; each `docker` call has `</dev/null` so it cannot swallow the
 ### Step 0. Look first (changes nothing)
 
 Checks that the right code is running, the switch is not on yet, and that nothing is being recorded.
-**A good result:** the commit is the merge of this PR or later; `SERIES_FOLLOW_MEETINGS` is missing or
+**A good result:** line 1 says `OK: this runbook is in the deployed code`; `SERIES_FOLLOW_MEETINGS` is missing or
 `false` and `MULTI_TEAM_ENABLED=true`; web, worker and scheduler each say `running` (or `Up`); the last line
 is two numbers, `0 0` (meetings being recorded or processed, then calendar joins live or due within ten
-minutes). If the last line is not `0 0`, wait and run step 0 again.
+minutes). If the last line is not `0 0`, wait and run step 0 again. **If `MULTI_TEAM_ENABLED` is not `true`, stop
+and tell the lead:** the whole feature does nothing without it. If line 1 says `NOT DEPLOYED YET`, the merge
+has not reached the server; stop.
 
 ```bash
 ssh haven-respite 'bash -s' <<'EOF'
 cd /opt/beyric-note-taker
-echo "--- 1. the code that is running (the commit must be the merge of the PR that carries this runbook, or later):"
+echo "--- 1. the code that is running (the next line must say OK: this runbook is part of the deployed code):"
 git log -1 --oneline
+test -f docs/sop/2026-11-14-series-follow-switch-on.md && echo "OK: this runbook is in the deployed code" || echo "NOT DEPLOYED YET: the merge of the runbook's PR is not on the server; stop here"
 echo "--- 2. the two switches (SERIES_FOLLOW_MEETINGS must be missing or false; MULTI_TEAM_ENABLED must be true):"
 grep -E '^(SERIES_FOLLOW_MEETINGS|MULTI_TEAM_ENABLED)=' .env || echo "(neither is set in .env)"
 echo "--- 3. the services (web, worker, scheduler must each say running, or Up):"
@@ -168,7 +193,9 @@ Saves the split, then runs the dry run again. **A good result:** the first repor
 `APPLIED: the database was changed.` with the same numbers as step 1; the second starts `DRY RUN` and says
 **`Rows that held a meeting of another team or of the personal space: 0`** and
 **`Meetings moved to the row of their own team or personal space: 0`**. (If the run stops with a
-deadlock error, run the block again: it is one transaction, nothing was saved, and a second run is safe.)
+deadlock error, run the block again: it is one transaction, nothing was saved, and a second run is safe. If steps
+1 or 2 seem stuck for more than a few minutes, a meeting is being processed and holds a lock the backfill waits
+for: wait, or stop it with Ctrl-C (nothing is saved until the end) and run step 0 again.)
 
 ```bash
 ssh haven-respite 'bash -s' <<'EOF'
@@ -214,6 +241,7 @@ else
   printf '\nSERIES_FOLLOW_MEETINGS=true\n' >> .env
 fi
 grep -E '^(SERIES_FOLLOW_MEETINGS|MULTI_TEAM_ENABLED)=' .env
+grep -qx 'SERIES_FOLLOW_MEETINGS=true' .env || { echo "STOPPED: could not set the switch in .env, so nothing was recreated. Tell the lead what the lines above say."; exit 1; }
 echo "--- recreating web, worker and scheduler (the site is unreachable for a few seconds):"
 docker compose up -d --force-recreate web worker scheduler </dev/null
 sleep 20
@@ -240,12 +268,13 @@ spaces made" can be above 0 only if somebody signed up during the run. A deadloc
 ```bash
 ssh haven-respite 'bash -s' <<'EOF'
 cd /opt/beyric-note-taker
-echo "--- the switch as each running service sees it (must be true, three times, or this stops):"
+echo "--- the two switches as each running service sees it (SERIES_FOLLOW_MEETINGS and MULTI_TEAM_ENABLED must both be true, in all three, or this stops):"
 for s in web worker scheduler; do
   value=$(docker compose exec -T $s printenv SERIES_FOLLOW_MEETINGS </dev/null)
-  echo "$s: $value"
-  if [ "$value" != "true" ]; then
-    echo "STOPPED: $s does not have the switch on, so a pass now would prove nothing. Run step 3 again."
+  multi=$(docker compose exec -T $s printenv MULTI_TEAM_ENABLED </dev/null)
+  echo "$s: SERIES_FOLLOW_MEETINGS=$value MULTI_TEAM_ENABLED=$multi"
+  if [ "$value" != "true" ] || [ "$multi" != "true" ]; then
+    echo "STOPPED: $s does not have both switches on, so a pass now would prove nothing. Run step 3 again (if MULTI_TEAM_ENABLED is not true, stop and tell the lead)."
     exit 1
   fi
 done
@@ -270,9 +299,13 @@ In a browser, signed in as yourself (use the team switcher at the top of the sid
 4. **Open the same meeting from Personal**: it says `Personal` and
    `Your private meetings of this series. The ones you share with a team are on that team's page.`; there is
    **no "Next meeting" box and no "Send agenda to attendees" button**.
-5. **Expected, not a bug:** if you are on one team only, your **private** recurring meetings left the team's
-   list and are under Personal now (that is the rule: a team's page shows what is shared with it).
-6. A card or page that says `None of your private meetings are in this series right now.` is a recurring entry
+5. **Expected, not a bug:** if you are on one team only and **all** the meetings of a recurring meeting were
+   private, **its card stays on the team's Meetings page but is empty** (`0 unfinished tasks`, `0 open
+   questions`; opened, its page says `No meeting of this series is shared with <team> right now.`). Its meetings
+   are under Personal. That is the "empty card" open decision, and the number of such cards is the dry run's
+   `Rows left with no meeting after the split` line. A recurring meeting that has some shared meetings stays
+   on the team's page with only those. Neither is a failed switch-on.
+6. A **Personal** card or page that says `None of your private meetings are in this series right now.` is a recurring entry
    whose last private meeting you shared with a team. It stays as an empty card; whether it should disappear
    is an open decision, not a fault.
 7. Optional: open a recurring meeting's page, share it to a team, and check it appears on the team's
@@ -284,8 +317,10 @@ Turn the switch off and recreate; it stops by itself if a meeting is being recor
 entries stay split** (there is no merge-back script). With the switch off the old readers list by the person's
 default team, so a one-team person's private recurring meetings, which now sit under their Personal entry,
 can show on their team's page as an empty card (the real meetings are under Personal) until the switch is on
-again; nothing is lost. **A good
-result:** `false` three times.
+again; nothing is lost. **To switch on again later, start again from Step 0**: while the switch is off, the old
+code runs again and every meeting recorded or shared in that time mixes the entries again, so the backfill has
+to run again (the flag-on readers hide such a meeting from the team's page until it does). **A good result:**
+`false` three times.
 
 ```bash
 ssh haven-respite 'bash -s' <<'EOF'
@@ -307,6 +342,7 @@ fi
 echo "--- turning the switch off in .env:"
 sed -i 's/^SERIES_FOLLOW_MEETINGS=.*/SERIES_FOLLOW_MEETINGS=false/' .env
 grep -E '^(SERIES_FOLLOW_MEETINGS|MULTI_TEAM_ENABLED)=' .env
+grep -qx 'SERIES_FOLLOW_MEETINGS=false' .env || { echo "STOPPED: could not set the switch in .env, so nothing was recreated. Tell the lead what the lines above say."; exit 1; }
 echo "--- recreating web, worker and scheduler (the site is unreachable for a few seconds):"
 docker compose up -d --force-recreate web worker scheduler </dev/null
 sleep 20

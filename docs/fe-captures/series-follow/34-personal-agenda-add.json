@@ -3,7 +3,7 @@
   "as": "Ada",
   "request": {
     "method": "POST",
-    "path": "/api/series/9/agenda",
+    "path": "/api/series/11/agenda",
     "headers": {
       "X-CSRF-Token": "<csrf-B>",
       "Cookie": "session=<cookie>"

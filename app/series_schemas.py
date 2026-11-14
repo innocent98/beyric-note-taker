@@ -17,9 +17,9 @@ class ProjectLink(BaseModel):
 
 
 class SeriesTeam(TeamRef):
-    """The row's team. `is_personal` is true for someone's personal space: label it "Personal",
-    hide "Send agenda" (it has nobody to send to) and expect no "Keeps coming up" and no next
-    meeting there."""
+    """The row's team. `is_personal` is true for someone's personal space: label it "Personal".
+    What a personal row lists and hides (no next meeting, no "Keeps coming up", nobody to send the
+    agenda to) holds only while `SeriesPage.scoped` is true."""
 
     is_personal: bool
 
@@ -112,6 +112,10 @@ class SeriesPage(BaseModel):
     title: str
     # The team this row belongs to; see `SeriesCard.team`.
     team: SeriesTeam
+    # True while `SERIES_FOLLOW_MEETINGS` is on: the page lists only the meetings of its team scope,
+    # and a personal row has no next meeting. False: the row is the old one (a personal team's row
+    # can then hold shared meetings and has a next date), so draw the page as it was.
+    scoped: bool
     cadence: str
     platform: Platform | None
     timezone: str

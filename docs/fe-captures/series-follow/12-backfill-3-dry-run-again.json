@@ -4,7 +4,7 @@
     "args": [],
     "output": [
       "DRY RUN: nothing was changed. Run again with --apply to do it.",
-      "Recurring-meeting rows looked at: 5",
+      "Recurring-meeting rows looked at: 7",
       "Rows that held a meeting of another team or of the personal space: 0",
       "Meetings moved to the row of their own team or personal space: 0",
       "New rows made for them: 0",

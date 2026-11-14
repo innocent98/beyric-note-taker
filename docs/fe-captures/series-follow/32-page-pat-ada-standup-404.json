@@ -3,7 +3,7 @@
   "as": "Pat",
   "request": {
     "method": "GET",
-    "path": "/api/series/9",
+    "path": "/api/series/11",
     "headers": {
       "Cookie": "session=<cookie>"
     },

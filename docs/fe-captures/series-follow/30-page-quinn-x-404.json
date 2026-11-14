@@ -3,7 +3,7 @@
   "as": "Quinn",
   "request": {
     "method": "GET",
-    "path": "/api/series/10",
+    "path": "/api/series/13",
     "headers": {
       "Cookie": "session=<cookie>"
     },

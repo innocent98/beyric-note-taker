@@ -343,6 +343,7 @@ def _page(session: Session, user: User, found: Series) -> SeriesPage:
         id=found.id,
         title=_initial_title(found),
         team=_team_ref(session, found),
+        scoped=series.follow_enabled(),
         cadence=cadence,
         platform=_platform(found),
         timezone=timezones.zone(zone_name).key,

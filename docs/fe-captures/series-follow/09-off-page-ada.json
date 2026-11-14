@@ -19,6 +19,7 @@
         "name": "Platform team",
         "is_personal": false
       },
+      "scoped": false,
       "cadence": "Weekly on Saturdays, 20:00",
       "platform": "google_meet",
       "timezone": "UTC",
@@ -42,7 +43,7 @@
           "source": "ai",
           "assigned_on": "2026-10-31",
           "done_at": null,
-          "created_at": "2026-11-14T22:29:42.147561Z",
+          "created_at": "2026-11-14T22:40:42.607060Z",
           "from_meeting": true,
           "meeting": {
             "id": 1,
@@ -81,7 +82,7 @@
           "source": "ai",
           "assigned_on": "2026-11-07",
           "done_at": null,
-          "created_at": "2026-11-14T22:29:42.160180Z",
+          "created_at": "2026-11-14T22:40:42.618988Z",
           "from_meeting": true,
           "meeting": {
             "id": 2,

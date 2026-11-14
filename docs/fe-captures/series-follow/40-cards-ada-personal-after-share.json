@@ -16,7 +16,23 @@
       "timezone": "UTC",
       "series": [
         {
-          "id": 9,
+          "id": 12,
+          "title": "1:1",
+          "team": {
+            "id": 1,
+            "name": "My team",
+            "is_personal": true
+          },
+          "cadence": "Weekly on Saturdays, 20:00",
+          "platform": "google_meet",
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 1,
+          "open_questions": 1,
+          "project": null
+        },
+        {
+          "id": 11,
           "title": "Standup",
           "team": {
             "id": 1,

@@ -6,7 +6,7 @@
     ],
     "output": [
       "APPLIED: the database was changed.",
-      "Recurring-meeting rows looked at: 5",
+      "Recurring-meeting rows looked at: 7",
       "Rows that held a meeting of another team or of the personal space: 1",
       "Meetings moved to the row of their own team or personal space: 1",
       "New rows made for them: 0",

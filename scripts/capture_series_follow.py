@@ -330,6 +330,11 @@ def seed(engine) -> dict:
         # Ada's Standup: A1 two weeks ago shared to X, A2 last week private.
         a1 = meeting(ada, ada_cal, "rid-standup", "Standup", 2, "A1 shared", shared_team_id=x.id)
         a2 = meeting(ada, ada_cal, "rid-standup", "Standup", 3, "A2 private")
+        # Ada's 1:1: ALL of its meetings are private. Legacy: one row in team X holding it; after the
+        # backfill its X row is empty (a card with no meeting) and the meeting is under her personal space.
+        a3 = meeting(ada, ada_cal, "rid-1on1", "1:1", 3, "A3 private 1:1")
+        for weeks in range(7):
+            event(ada, ada_cal, "rid-1on1", "1:1", weeks)
         for weeks in range(7):  # the rest of the weekly calendar, the future ones are "next"
             event(ada, ada_cal, "rid-standup", "Standup", weeks)
         # Pat's Design sync: P3 private (three weeks ago), P1 shared to X, P2 shared to Y.
@@ -342,7 +347,7 @@ def seed(engine) -> dict:
         )
         for weeks in range(7):
             event(pat, pat_cal, "rid-sync", "Design sync", weeks)
-        rows = {"a1": a1, "a2": a2, "p1": p1, "p2": p2, "p3": p3}
+        rows = {"a1": a1, "a2": a2, "a3": a3, "p1": p1, "p2": p2, "p3": p3}
         return {
             "ids": {k: v.id for k, v in rows.items()},
             "x": x.id,
@@ -665,6 +670,20 @@ def run(base: str, seeded: dict, engine) -> None:
         "/api/series",
         team=x,
         note="Control: X's list again, unchanged by the straggler round trip.",
+    )
+    # ---- an all-private row left empty in the team ----
+    empty_x = row_of("rid-1on1", x)
+    ada.call(
+        "page-ada-x-emptied-row",
+        "GET",
+        f"/api/series/{empty_x}",
+        note="AN ALL-PRIVATE ROW LEFT EMPTY IN THE TEAM: Ada's 1:1 had only private meetings, so the backfill moved them to her personal row and X's 1:1 row has no meeting. It stays on X's list for her (its creator) as an empty card (capture 14 lists it with 0 and 0); opened, every list is empty.",
+    )
+    pat.call(
+        "page-pat-x-emptied-row-404",
+        "GET",
+        f"/api/series/{empty_x}",
+        note="Pat is in X but the empty card is Ada's alone (she made it): 404 for him, and it is not on his list (capture 17).",
     )
 
 

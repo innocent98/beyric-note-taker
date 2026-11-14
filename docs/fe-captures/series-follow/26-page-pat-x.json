@@ -3,7 +3,7 @@
   "as": "Pat",
   "request": {
     "method": "GET",
-    "path": "/api/series/10",
+    "path": "/api/series/13",
     "headers": {
       "Cookie": "session=<cookie>"
     },
@@ -12,13 +12,14 @@
   "response": {
     "status": 200,
     "body": {
-      "id": 10,
+      "id": 13,
       "title": "Design sync",
       "team": {
         "id": 4,
         "name": "Platform team",
         "is_personal": false
       },
+      "scoped": true,
       "cadence": "Weekly on Saturdays, 20:00",
       "platform": "google_meet",
       "timezone": "UTC",
@@ -29,7 +30,7 @@
       "agenda_recipients": 0,
       "unfinished": [
         {
-          "id": 4,
+          "id": 5,
           "title": "Follow up on P1 shared to X",
           "status": "todo",
           "assignee": null,
@@ -42,10 +43,10 @@
           "source": "ai",
           "assigned_on": "2026-10-31",
           "done_at": null,
-          "created_at": "2026-11-14T22:29:42.183266Z",
+          "created_at": "2026-11-14T22:40:42.659249Z",
           "from_meeting": true,
           "meeting": {
-            "id": 4,
+            "id": 5,
             "title": "Design sync",
             "platform": "google_meet",
             "created_at": "2026-10-31T20:00:00Z"
@@ -72,10 +73,10 @@
       "finished": [],
       "questions": [
         {
-          "id": 4,
+          "id": 5,
           "text": "Who owns P1 shared to X?",
           "meeting": {
-            "id": 4,
+            "id": 5,
             "title": "Design sync",
             "platform": "google_meet",
             "created_at": "2026-10-31T20:00:00Z"
@@ -93,7 +94,7 @@
       ],
       "past_meetings": [
         {
-          "id": 4,
+          "id": 5,
           "title": "Design sync",
           "created_at": "2026-10-31T20:00:00Z",
           "duration_seconds": 1500,

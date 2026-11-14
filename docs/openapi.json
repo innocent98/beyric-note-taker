@@ -4137,6 +4137,10 @@
             "title": "Questions",
             "type": "array"
           },
+          "scoped": {
+            "title": "Scoped",
+            "type": "boolean"
+          },
           "sprint_note": {
             "anyOf": [
               {
@@ -4185,6 +4189,7 @@
           "id",
           "title",
           "team",
+          "scoped",
           "cadence",
           "platform",
           "timezone",
@@ -4265,7 +4270,7 @@
         "type": "object"
       },
       "SeriesTeam": {
-        "description": "The row's team. `is_personal` is true for someone's personal space: label it \"Personal\",\nhide \"Send agenda\" (it has nobody to send to) and expect no \"Keeps coming up\" and no next\nmeeting there.",
+        "description": "The row's team. `is_personal` is true for someone's personal space: label it \"Personal\".\nWhat a personal row lists and hides (no next meeting, no \"Keeps coming up\", nobody to send the\nagenda to) holds only while `SeriesPage.scoped` is true.",
         "properties": {
           "id": {
             "title": "Id",

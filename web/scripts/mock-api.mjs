@@ -627,7 +627,7 @@ seriesPages[1].sprint_note = "Opens Sprint 13";
 seriesPages[3].sprint_note = null;
 // The row's team: the captures are older than the `team` field (docs/fe-captures/series-follow/ has the real shape).
 const seriesTeam = { id: 1, name: "Mock team", is_personal: false };
-Object.values(seriesPages).forEach((page) => (page.team = seriesTeam));
+Object.values(seriesPages).forEach((page) => Object.assign(page, { team: seriesTeam, scoped: true }));
 const projectLink = (id) => {
   const project = projects.find((p) => p.id === seriesProject[id]);
   return project ? { id: project.id, name: project.name } : null;
