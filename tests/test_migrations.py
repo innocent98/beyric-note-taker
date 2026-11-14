@@ -1720,3 +1720,249 @@ def test_0042_widens_the_ledger_kinds_for_the_vocabulary_pass_and_round_trips(sc
         conn.execute(text("insert into ai_runs (kind, model) values ('vocabulary', 'm')"))
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+# ---- 0043 multi-team schema ----
+
+
+def test_0043_follows_0042():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0043").down_revision == "0042"
+
+
+def _multi_team_fixtures(engine) -> dict[str, int]:
+    """People in the shapes the backfill must tell apart, at revision 0042 (one team each, or a
+    team with others). Returns user ids by short name."""
+    ids: dict[str, int] = {}
+    with engine.begin() as conn:
+        conn.execute(text("delete from team_members"))  # the admin 0019 gave a team: start clean
+        conn.execute(text("delete from teams"))
+
+        def user(name, status="active"):
+            ids[name] = conn.execute(
+                text("insert into users (email, status) values (:e, :s) returning id"),
+                {"e": f"{name}@example.test", "s": status},
+            ).scalar()
+
+        def team(name, *members):
+            tid = conn.execute(
+                text("insert into teams (owner_user_id, name) values (:o, :n) returning id"),
+                {"o": ids[members[0]], "n": name},
+            ).scalar()
+            for i, who in enumerate(members):
+                conn.execute(
+                    text("insert into team_members (team_id, user_id, role) values (:t, :u, :r)"),
+                    {"t": tid, "u": ids[who], "r": "owner" if i == 0 else "member"},
+                )
+            return tid
+
+        for name in ("ada", "bola", "chi", "dayo", "emeka", "femi", "gina", "hana"):
+            user(name)
+        user("gone", status="deleted")
+        ids["owner"] = conn.execute(
+            text("select id from users where email = :e"), {"e": OWNER_EMAIL}
+        ).scalar()
+        team("admin solo", "owner")  # the admin 0006 made: a solo team like any other
+        team("ada solo", "ada")  # one member, nothing else: a personal team
+        bola = team("bola solo with an invitation", "bola")
+        chi = team("chi solo with an integration", "chi")
+        dayo = team("dayo solo with a project", "dayo")
+        many = team("many", "emeka", "femi", "gina")
+        hana = team("hana solo, old invitation revoked", "hana")
+        conn.execute(
+            text(
+                "insert into team_invites (team_id, email, token_hash, expires_at) "
+                "values (:t, 'new@example.test', 'h1', now() + interval '7 days')"
+            ),
+            {"t": bola},
+        )
+        conn.execute(
+            text(
+                "insert into team_invites (team_id, email, token_hash, expires_at, revoked_at) "
+                "values (:t, 'old@example.test', 'h2', now() + interval '7 days', now())"
+            ),
+            {"t": hana},
+        )
+        conn.execute(
+            text(
+                "insert into integrations (team_id, kind, config_enc, key_version) "
+                "values (:t, 'slack_webhook', '\\x00', 1)"
+            ),
+            {"t": chi},
+        )
+        conn.execute(
+            text("insert into projects (team_id, name, color) values (:t, 'P', '#112233')"),
+            {"t": dayo},
+        )
+        conn.execute(
+            text("insert into tasks (team_id, title) values (:t, 'Shared task')"), {"t": many}
+        )
+    return ids
+
+
+def _personal_state(engine) -> list[tuple]:
+    return _rows(
+        engine,
+        "select u.email, count(*), count(*) filter (where t.is_personal), "
+        "count(*) filter (where not t.is_personal) "
+        "from team_members m join users u on u.id = m.user_id join teams t on t.id = m.team_id "
+        "group by u.email order by u.email",
+    )
+
+
+EXPECTED_AFTER_0043 = [
+    # email, memberships, personal, ordinary
+    ("ada@example.test", 1, 1, 0),  # the solo team is the personal team
+    ("bola@example.test", 2, 1, 1),  # a pending invitation: it stays a team, a personal one is new
+    ("chi@example.test", 2, 1, 1),  # an integration
+    ("dayo@example.test", 2, 1, 1),  # a project
+    ("emeka@example.test", 2, 1, 1),  # in a team with others: a new personal team, same team
+    ("femi@example.test", 2, 1, 1),
+    ("gina@example.test", 2, 1, 1),
+    ("hana@example.test", 1, 1, 0),  # only a revoked invitation: still personal
+    (OWNER_EMAIL, 1, 1, 0),  # the admin 0006 made: a clean solo team too
+]  # the deleted account gets nothing
+
+
+def test_0043_backfills_personal_teams_and_keeps_every_membership_and_every_team(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0042")
+    engine = create_engine(scratch_url)
+    ids = _multi_team_fixtures(engine)
+    command.upgrade(cfg, "0043")
+
+    assert _personal_state(engine) == EXPECTED_AFTER_0043
+    # 7 teams before; 6 new personal teams (bola, chi, dayo, emeka, femi, gina), none for the
+    # admin, ada and hana, whose solo teams became personal
+    assert _rows(engine, "select count(*), count(*) filter (where is_personal) from teams") == [
+        (13, 9)
+    ]
+    # nothing moved: the many-member team still has its three members and its task
+    assert _rows(
+        engine,
+        "select count(*) from team_members m join teams t on t.id = m.team_id "
+        "where t.name = 'many' and not t.is_personal",
+    ) == [(3,)]
+    assert _rows(engine, "select t.name from tasks k join teams t on t.id = k.team_id") == [
+        ("many",)
+    ]
+    # the personal teams are the person's own: owner of it, its only member, no deleted account
+    assert _rows(
+        engine,
+        "select count(*) from teams t where t.is_personal and "
+        "(select count(*) from team_members m where m.team_id = t.id) = 1 "
+        "and exists (select 1 from team_members m where m.team_id = t.id "
+        "and m.user_id = t.owner_user_id and m.role = 'owner')",
+    ) == [(9,)]
+    assert _rows(engine, "select count(*) from team_members where user_id = :u", u=ids["gone"]) == [
+        (0,)
+    ]
+    # the new rules: one membership per (team, person), several per person, one personal team
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text(
+                "insert into team_members (team_id, user_id, role) "
+                "select team_id, user_id, 'admin' from team_members limit 1"
+            )
+        )
+    with engine.begin() as conn:  # a second team for ada is fine now
+        conn.execute(
+            text(
+                "insert into team_members (team_id, user_id, role) "
+                "select t.id, :u, 'member' from teams t where t.name = 'many'"
+            ),
+            {"u": ids["ada"]},
+        )
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:
+        conn.execute(
+            text("insert into teams (owner_user_id, is_personal) values (:u, true)"),
+            {"u": ids["ada"]},
+        )
+    indexes = {i["name"] for i in inspect(engine).get_indexes("team_members")}
+    assert {"ix_team_members_team_id", "ix_team_members_user_id"} <= indexes
+    assert "owner_team_id" in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    engine.dispose()
+
+
+def test_0043_upgrade_downgrade_upgrade_round_trips_on_all_three_shapes(scratch_url):
+    """A one-member team, a many-member team, and solo teams with an invitation or an integration:
+    down restores exactly the old shape (one membership each, same teams, the old unique back),
+    and up again gives the same result."""
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0042")
+    engine = create_engine(scratch_url)
+    _multi_team_fixtures(engine)
+    before = _rows(engine, "select owner_user_id, name, id from teams order by id")
+    members_before = _rows(
+        engine, "select team_id, user_id, role from team_members order by team_id, user_id"
+    )
+
+    command.upgrade(cfg, "0043")
+    command.downgrade(cfg, "0042")
+    assert _rows(engine, "select owner_user_id, name, id from teams order by id") == before
+    assert (
+        _rows(engine, "select team_id, user_id, role from team_members order by team_id, user_id")
+        == members_before
+    )
+    assert "is_personal" not in {c["name"] for c in inspect(engine).get_columns("teams")}
+    assert "owner_team_id" not in {c["name"] for c in inspect(engine).get_columns("meetings")}
+    with pytest.raises(sa.exc.IntegrityError), engine.begin() as conn:  # one team per person again
+        conn.execute(
+            text(
+                "insert into team_members (team_id, user_id, role) "
+                "select (select min(id) from teams), user_id, 'member' from team_members "
+                "where team_id <> (select min(id) from teams) limit 1"
+            )
+        )
+
+    command.upgrade(cfg, "0043")
+    assert _personal_state(engine) == EXPECTED_AFTER_0043
+    engine.dispose()
+
+
+def test_0043_downgrade_refuses_while_somebody_belongs_to_two_teams(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0042")
+    engine = create_engine(scratch_url)
+    ids = _multi_team_fixtures(engine)
+    command.upgrade(cfg, "0043")
+    with engine.begin() as conn:  # Bola has a team of her own: joining another makes two real teams
+        conn.execute(
+            text(
+                "insert into team_members (team_id, user_id, role) "
+                "select t.id, :u, 'member' from teams t where t.name = 'many'"
+            ),
+            {"u": ids["bola"]},
+        )
+    with pytest.raises(RuntimeError, match=r"Cannot downgrade 0043: 1 account\(s\)"):
+        command.downgrade(cfg, "0042")
+    # nothing was changed: the migration did not half-run (the revision and the schema are intact)
+    assert _rows(engine, "select version_num from alembic_version") == [("0043",)]
+    assert "is_personal" in {c["name"] for c in inspect(engine).get_columns("teams")}
+    not_bola = [r for r in EXPECTED_AFTER_0043 if r[0] != "bola@example.test"]
+    state = [r for r in _personal_state(engine) if r[0] != "bola@example.test"]
+    assert state == not_bola  # nobody else was touched
+
+    # A personal team that holds a task is not dropped either, even for someone with one other team
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "delete from team_members where user_id = :u and team_id in "
+                "(select id from teams where name = 'many')"
+            ),
+            {"u": ids["bola"]},
+        )
+        conn.execute(
+            text(
+                "insert into tasks (team_id, title) "
+                "select t.id, 'Mine' from teams t where t.owner_user_id = :u and t.is_personal"
+            ),
+            {"u": ids["bola"]},
+        )
+    with pytest.raises(RuntimeError, match=r"Cannot downgrade 0043"):
+        command.downgrade(cfg, "0042")
+    with engine.begin() as conn:  # once the task is gone it can go
+        conn.execute(text("delete from tasks where title = 'Mine'"))
+    command.downgrade(cfg, "0042")
+    command.upgrade(cfg, "head")
+    engine.dispose()

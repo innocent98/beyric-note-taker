@@ -653,6 +653,34 @@ No whole designed screen is missing. The designer's main file draws one desktop 
 - [ ] Landing line "at rest with AES-256" conflicts with `docs/sop/2026-11-02-public-pages.md` (no disk encryption set up): the riskiest line before Google verification
 - [ ] Reshoot the parity shots after the W-phase merges (meeting page shows W6 or W8 alone)
 
+## Multi-team (spec `docs/superpowers/specs/2026-11-13-multi-team-design.md`, PR #178 merged, approved 2026-11-13; approach A plus Move; four stages, each its own PR, deployed one at a time)
+
+Goal: one person has a permanent personal team and may belong to several teams; a meeting is shared to one team or moved (team-owned) to one. Staged so nothing flag-days: `MULTI_TEAM_ENABLED` stays off until stage 3 is live.
+
+- [ ] **Stage 1: schema and rules, dark** (branch `feature/multi-team-stage1-schema-and-rules`, SOP `docs/sop/2026-11-13-multi-team-stage-1.md`, migration 0043; PR open, not merged; CI and review pending)
+  - [x] Leak tests first: `tests/test_multi_team_leaks.py` (person in X and Y reads X only through X; person only in Y sees nothing of X: meetings, notes, transcript, translations, exports, decisions, open questions, tasks, "Open notes" button; unsharing hides again; no lookup raises with two memberships). Verified locally on a scratch Postgres; a mutation check makes 15 of 17 fail
+  - [x] Migration 0043: `teams.is_personal` + partial unique index, `UNIQUE(team_id, user_id)` replacing `UNIQUE(user_id)`, `team_members(user_id)` index, `meetings.owner_team_id` (unused until stage 2), backfill, downgrade refused with a clear message while anyone has two memberships; upgrade, downgrade, upgrade tested on three fixtures (scratch Postgres)
+  - [x] One visibility rule over all of a person's teams (`app/visibility.py`), plus `via_team`, `in_team`, `in_team_clause`, `meeting_team_ids`, `is_shared` so nothing else compares `shared_team_id`
+  - [x] Single-team lookups fixed: `teams`, `tasks`, `team_admin`, `shares`, `series`, `series_mail`, `mail_templates`, `api_tasks`, `api` share route, `workspace` (default team); also found missing from the spec's inventory: `integrations.py` (2), `topics.py`, `team_invites.py`, `ask.py` and `api.py` display flags
+  - [x] Default-team compatibility rule in ONE helper (`teams.default_membership`)
+  - [x] Teams module under `MULTI_TEAM_ENABLED`: join adds a membership and moves nothing, leave creates no team of one, personal team never left, joined, invited into or its owner removed; flag off keeps today's join and `409 already_on_team`
+  - [x] Setting `MULTI_TEAM_ENABLED` (default false) in `app/config.py`, `.env.example`, `deploy/README.md`
+  - [ ] CI green on the pushed head, review, merge (lead), deploy with the flag off, check the backfill on the server (counts of personal teams made)
+  - [x] Review fix: `remove_users` and `transfer_owner` clear `is_personal` when a team is handed to an heir (tested)
+  - [x] Review tests: Ask, decision search, series page, topics and suggested agenda with two memberships; the post-migration shape with the switch off through the API (`GET /api/team`, leave, `already_on_team`); two accepts at once
+- [ ] **Stage 2: API, team-owned meetings and Move (dark)**: his two decisions are settled (spec section 9, 2026-11-13): a moved meeting stays with the team when its recorder deletes their account (shown as "Former member", name and email removed); any recorder may move a meeting into any team they belong to
+  - [ ] `GET /api/teams`, `POST /api/teams` (three owned teams per account, checked in the route), an explicit team per request on every team-implicit route
+  - [ ] Team-owned meetings (`owner_team_id`), the Move route, write rule (recorder plus the team's owner and admins), move back by owner or admin
+  - [ ] Tasks follow the meeting (re-home on share, unshare, move); series, mail and integrations per team (spec 6.9); per-person invitation limit; one auto-share team per person
+  - [ ] Leak tests for moved meetings (survive the recorder leaving), series, topics, agenda and Ask; `docs/fe-integration-guide-teams.md` from live captures
+- [ ] **Stage 2 prerequisites from the stage-1 review** (SOP `docs/sop/2026-11-13-multi-team-stage-1.md`, not fixed in stage 1 on purpose)
+  - [ ] Moved meetings: the recorder reads and owns one only while a member of the owning team; the team's owner and admins may change it; `app/deletion.py` must not delete moved meetings on account deletion (spec 6.4, 9.1). Change `can_read_clause`, `owns()` and `deletion.py` together, with leak tests. Scenario: Ada moves a meeting to X, leaves X, and still reads and deletes it
+  - [ ] The share route takes a team in the request. Today it uses `ensure_team`, so with two ordinary teams and the switch on, Share returns 200 but goes to the personal team; replace `test_a_person_with_two_ordinary_teams_can_share_a_meeting_and_the_default_team_is_used`
+- [ ] **Stage 3: frontend**: team switcher in the shell, teams list, create team, share-or-move control (designer's files in `docs/ui/`; lead-designed where they have nothing, marked so)
+- [ ] **Stage 4: switch on**: `MULTI_TEAM_ENABLED=true` only after stage 3 is live
+  - [ ] Prerequisite (stage-1 review): while the switch is off the one-personal-team rule drifts (a joiner's personal team is dissolved; the inviter of a team of one is left with none; an invitation made into a team of one while off may be unredeemable once on). Needs a second backfill so every live account has a personal team, and a plan for pending invitations (list, revoke and re-send from an ordinary team)
+- Open outside the code: the privacy policy and terms (today they promise that deleting an account deletes the person's meetings) must be changed and read by his lawyer before `MULTI_TEAM_ENABLED` is switched on
+
 ## Deferred follow-ups from the 2026-11-06 merge queue
 
 - [ ] **Series agenda recipient count** (automated review, Medium, W8 `app/api_series.py`): `series.recipients()` counts attendees of the last three meetings including ones the caller cannot read; names are already filtered, the count is not. Decide: count only visible attendees (then the count can differ from who gets the mail) or keep as is

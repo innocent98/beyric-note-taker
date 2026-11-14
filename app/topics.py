@@ -32,7 +32,7 @@ from openai import OpenAI
 from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.orm import Session
 
-from app import ai_runs, titles
+from app import ai_runs, titles, visibility
 from app import series as series_rules
 from app.ai_versions import TOPICS_PROMPT_VERSION
 from app.config import get_settings
@@ -95,7 +95,7 @@ def source_meetings(session: Session, series: Series) -> list[Meeting]:
             .where(
                 Meeting.series_id == series.id,
                 Meeting.status == "ready",
-                Meeting.shared_team_id == series.team_id,
+                visibility.in_team_clause(series.team_id),
                 Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
             )
             .order_by(Meeting.created_at.desc(), Meeting.id.desc())

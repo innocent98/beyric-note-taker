@@ -97,16 +97,18 @@ def test_ensure_team_is_idempotent(session):
     assert session.scalars(select(Team)).all() == [first]
 
 
-def test_a_user_cannot_be_in_two_teams(session, owner, stranger):
+def test_a_user_cannot_be_in_the_same_team_twice(session, owner, stranger):
+    """Was "cannot be in two teams": multi-team (migration 0043) lets a person belong to several,
+    one membership each (`MULTI_TEAM_ENABLED` decides whether the app makes a second)."""
     from sqlalchemy.exc import IntegrityError
 
     one, two = teams.ensure_team(session, owner), teams.ensure_team(session, stranger)
     session.commit()
-    session.add(TeamMember(team_id=two.id, user_id=owner.id, role="member"))
+    assert one.id != two.id
+    session.add(TeamMember(team_id=one.id, user_id=owner.id, role="admin"))
     with pytest.raises(IntegrityError):
         session.commit()
     session.rollback()
-    assert one.id != two.id
 
 
 def test_a_role_outside_owner_admin_member_is_refused(session, owner):

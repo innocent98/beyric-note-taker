@@ -59,6 +59,7 @@ from app.notes_document import (
     build_notes_document,
     export_filename,
 )
+from app.visibility import via_team
 
 SIGNATURE = "Beyric Note Taker, a product of Beyrichq LTD"
 
@@ -588,13 +589,13 @@ def _tasks_assigned(
         return Skip("assignees_not_emailed")
     if not notes_ready_wanted(session, recipient):  # their email preference
         return Skip("opted_out")
-    team_id = session.scalar(select(TeamMember.team_id).where(TeamMember.user_id == recipient.id))
+    their_teams = select(TeamMember.team_id).where(TeamMember.user_id == recipient.id)
     tasks = list(
         session.scalars(
             select(Task)
             .where(
                 Task.meeting_id == meeting.id,
-                Task.team_id == team_id,
+                Task.team_id.in_(their_teams),
                 Task.assignee_user_id == recipient.id,
                 Task.source == "ai",
                 Task.deleted_at.is_(None),
@@ -610,7 +611,7 @@ def _tasks_assigned(
     zone = owner_time_zone(session, owner)
     meeting_day = timezones.localise(meeting.created_at, zone)[0].date()
     today = timezones.localise(now, zone)[0].date()
-    shared = meeting.shared_team_id is not None and meeting.shared_team_id == team_id
+    shared = via_team(session, recipient, meeting)  # the one rule: may they read it as a teammate
     owner_name = clean_line(owner.name or owner.email.split("@")[0], 60)
     # An assignee of a private meeting's task is not told its title (spec 8.2), only whose it was.
     name = meeting_name(meeting) if shared else f"A meeting of {owner_name}"
@@ -787,12 +788,7 @@ def _notes_shared(
         ]
     base = settings.public_base_url.rstrip("/")
     member = session.get(User, recipient.user_id) if recipient.user_id else None
-    member_team = (
-        session.scalar(select(TeamMember.team_id).where(TeamMember.user_id == member.id))
-        if member is not None and member.status == "active"
-        else None
-    )
-    if member_team is not None and meeting.shared_team_id == member_team:
+    if member is not None and member.status == "active" and via_team(session, member, meeting):
         blocks.append(Button("Open notes", f"{base}/meetings/{meeting.id}"))
     attachments = _share_attachments(share, meeting, notes, words, now)
     if attachments:

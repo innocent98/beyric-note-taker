@@ -37,12 +37,17 @@ def not_found() -> Refused:
     return Refused(404, "not_found", "No such team member.")
 
 
-def my_membership(session: Session, user: User) -> TeamMember:
-    """The caller's membership, made if the account somehow has none (every account has a team)."""
-    member = teams.membership(session, user.id)
-    if member is None:
+def my_membership(session: Session, user: User, team_id: int | None = None) -> TeamMember:
+    """The caller's membership of `team_id`, or naming none, of their default team (their only
+    ordinary team, else their personal one: `teams.default_membership`), made if the account
+    somehow has none (every account has a team). Naming a team the caller is not in is a 404, as
+    for any team that is not theirs."""
+    member = teams.membership(session, user.id, team_id)
+    if member is None and team_id is None:
         teams.ensure_team(session, user)
         member = teams.membership(session, user.id)
+    if member is None:
+        raise Refused(404, "not_found", "No such team.")
     return member
 
 
@@ -167,7 +172,10 @@ def remove_member(session: Session, me: TeamMember, target: TeamMember, now: dat
     if not can_remove(me, target):
         raise forbidden()
     user = session.get(User, target.user_id)
-    teams.leave(session, user, now)
+    try:
+        teams.leave(session, user, now, team_id=target.team_id)
+    except teams.TeamChangeRefused as exc:
+        raise Refused(exc.status, exc.code, exc.message) from None
 
 
 def open_task_counts(session: Session, team_id: int) -> dict[int, int]:

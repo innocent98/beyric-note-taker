@@ -34,7 +34,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import mail, mail_summary, series, sprints, timezones, titles
+from app import mail, mail_summary, series, sprints, teams, timezones, titles
 from app.config import Settings
 from app.mail_layout import (
     Block,
@@ -194,8 +194,7 @@ def _recipient(
         return Skip("recipient_inactive")
     if to != user.email.lower():
         return Skip("recipient_changed")
-    member = session.scalars(select(TeamMember).where(TeamMember.user_id == user.id)).first()
-    if member is None or member.team_id != found.team_id:
+    if teams.membership(session, user.id, found.team_id) is None:
         return Skip("left_team")
     if not _wants(session, user):
         return Skip("opted_out")
@@ -282,10 +281,7 @@ def _series_agenda(
     sender = session.get(User, send.sender_user_id) if send.sender_user_id else None
     if sender is None or sender.status != "active":
         return Skip("sender_gone")
-    sender_member = session.scalars(
-        select(TeamMember).where(TeamMember.user_id == sender.id)
-    ).first()
-    if sender_member is None or sender_member.team_id != found.team_id:
+    if teams.membership(session, sender.id, found.team_id) is None:
         return Skip("sender_left_team")
     lines, questions, unfinished = _agenda_content(session, user, found)
     if not (lines or questions or unfinished):

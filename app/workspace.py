@@ -269,6 +269,8 @@ def run_extraction(
     _reconcile(session, ReviewItem, meeting_id, parsed.please_check, owner_user_id=owner_id)
     team_id, members, fresh = None, [], frozenset()
     if make_tasks:
+        # The owner's default team (their only ordinary team, else their personal one). Stage 2 of
+        # the multi-team design files a meeting's tasks by the team the meeting belongs to.
         team_id = teams.ensure_team(session, session.get(User, owner_id)).id
         members = tasks.members_of(session, team_id)
         # What the notes parser can read of each action bullet, so a failed call still leaves tasks.

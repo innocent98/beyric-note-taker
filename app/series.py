@@ -47,7 +47,7 @@ from app.models import (
     User,
 )
 from app.notes_document import parse_transcript
-from app.visibility import can_read_clause, owns, visible_meetings
+from app.visibility import can_read_clause, meeting_team_ids, owns, visible_meetings
 
 logger = logging.getLogger(__name__)
 
@@ -86,16 +86,18 @@ def _clean(text: str | None, limit: int) -> str:
 
 
 def team_id_of(session: Session, user: User) -> int:
+    """The team a series is made in and read from: the person's default team (their only ordinary
+    team, else their personal one: `teams.default_membership`)."""
     return teams.ensure_team(session, user).id
 
 
-def membership(session: Session, user: User) -> TeamMember | None:
-    return session.scalars(select(TeamMember).where(TeamMember.user_id == user.id)).first()
+def membership(session: Session, user: User, team_id: int | None = None) -> TeamMember | None:
+    return teams.membership(session, user.id, team_id)
 
 
 def is_manager(session: Session, user: User, team_id: int) -> bool:
-    member = membership(session, user)
-    return member is not None and member.team_id == team_id and member.role in MANAGER_ROLES
+    member = membership(session, user, team_id)
+    return member is not None and member.role in MANAGER_ROLES
 
 
 def _seen_by(user: User):
@@ -689,9 +691,7 @@ def can_change_question(session: Session, viewer: User, meeting: Meeting) -> boo
     """The meeting's owner, or an owner or admin of the team the meeting is shared with."""
     if owns(viewer, meeting):
         return True
-    return meeting.shared_team_id is not None and is_manager(
-        session, viewer, meeting.shared_team_id
-    )
+    return any(is_manager(session, viewer, t) for t in meeting_team_ids(meeting))
 
 
 def set_question(
