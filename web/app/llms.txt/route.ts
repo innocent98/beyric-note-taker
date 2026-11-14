@@ -1,7 +1,7 @@
 import { SITE_DESCRIPTION, SITE_NAME, SITE_URL, LEGAL_NAME } from "@/lib/site";
 
 // A plain-text summary for language-model crawlers (llmstxt.org). Same rule as the JSON-LD:
-// only what is true of the pilot today.
+// only what is true of the pilot today (docs/sop/2026-11-14-landing-security-copy.md).
 export const dynamic = "force-static";
 
 export function GET() {
@@ -9,14 +9,14 @@ export function GET() {
 
 > ${SITE_DESCRIPTION}
 
-${SITE_NAME} is run by ${LEGAL_NAME}, Lagos, Nigeria. It is in a private pilot with a small group of testers; there is no public sign-up yet.
+${SITE_NAME} is run by ${LEGAL_NAME}, Lagos, Nigeria. It is in a pilot with a limited number of accounts, free during the pilot, with an hours limit on each account. The sign-up page says whether places are open; when the pilot is full or closed there is a waiting list.
 
 ## What it does
 
 - Joins a Google Meet, Microsoft Teams or Zoom call from a link and records the audio.
 - Produces a transcript and notes: a summary, decisions and action items.
 - Notes follow a template you choose, and a vocabulary list keeps names and terms spelled correctly.
-- Coming soon: connect Google Calendar so the note taker joins chosen meetings by itself.
+- Connect Google Calendar so the note taker joins the meetings your rules choose by itself.
 
 ## Pages
 
