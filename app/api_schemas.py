@@ -743,14 +743,18 @@ class DisplayNameOut(BaseModel):
 class DisplayNameIn(Body):
     # 1 to 100 characters after whitespace is collapsed; control, direction and invisible
     # characters are removed. Empty (or nothing visible) is 422 `name_invalid`, so is a longer name.
-    name: str
+    # `max_length` only keeps an absurd body from being cleaned at all (422 `validation_error`):
+    # far above the rule, so every ordinary too-long name still gets `name_invalid` and its words.
+    name: str = Field(max_length=2000)
 
 
 class BotNameIn(Body):
     # Trimmed and checked by the server: at most 50 characters after whitespace is collapsed, no
     # hidden or control characters, no email address, no web address; anything else is 422
     # `bot_name_invalid` with a plain message. Null or an empty string clears it (the default).
-    bot_name: str | None = None
+    # `max_length` is far above the rule (see `DisplayNameIn`): only an absurd body is refused by
+    # the model, with 422 `validation_error`.
+    bot_name: str | None = Field(default=None, max_length=2000)
 
 
 class LanguagePreferencesIn(Body):

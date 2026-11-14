@@ -16,10 +16,11 @@ once more without it (`SkribbyClient.create`): a bad parameter must not stop a b
 Both names are typed by somebody (the owner's display name, the `SKRIBBY_BOT_NAME` setting) and end
 up in a chat everyone in the meeting reads, so each is cleaned like any other text we put in
 front of other people (`app.titles.mail_line`: one plain line, a web address replaced, a bare domain
-defanged, cut) and cut short, which also bounds the whole message.
+defanged, cut) and cut short, which also bounds the whole message (see `NAME_LIMIT`).
 """
 
 import logging
+import re
 from typing import Any
 
 from sqlalchemy import select
@@ -31,14 +32,38 @@ from app.titles import clean_title, defang_name_domains, mail_line
 
 logger = logging.getLogger(__name__)
 
-NAME_LIMIT = 60  # characters of each name; the whole line then stays under about 250
+# Characters of each name, cut BEFORE defanging. The bot's name then grows by 2 characters per
+# defanged dot: at most about 100 in the line (98 for "ab.ab.ab..." cut at 60). The owner's name
+# is cut to 60 AFTER defanging. With the fixed words and the owner's name twice, the whole line is
+# about 130 for ordinary names and 340 at the very worst.
+NAME_LIMIT = 60
 FALLBACK_OWNER = "the host"
+# An at sign could turn into a mention in a chat client ("@everyone"): it is written out in the
+# line (the name itself stays as typed everywhere else). The fullwidth and small forms count too.
+_AT_SIGNS = re.compile("[@\uff20\ufe6b]")
+
+
+def _write_out_at(text: str) -> str:
+    return _AT_SIGNS.sub("(at)", text)
 
 
 def notice_bot_name(settings: Settings, provider: str = "skribby") -> str:
     """The name the notice gives the bot when the caller names none: the server default. A meeting's
     own name comes from `app.bot_names.shown_name`, passed to `send_options`."""
     return settings.bot_name_for(provider)
+
+
+def _bot_part(bot_name: str | None) -> str:
+    """How the line writes the bot's name: one plain line, cut, domains defanged, at signs written
+    out."""
+    return _write_out_at(defang_name_domains(clean_title(bot_name, NAME_LIMIT))) or "the note taker"
+
+
+def names_the_bot(notice: str, bot_name: str) -> bool:
+    """Whether `notice` (built by `notice_text`) calls the bot `bot_name`. The line holds the
+    cleaned and defanged name, not the typed one, so a substring test of the typed name is wrong
+    both ways ("Alex.Coach" is "Alex[.]Coach" in the line; "A" is inside "Ada")."""
+    return notice.startswith(f"Hi, I'm {_bot_part(bot_name)}. ")
 
 
 def notice_text(bot_name: str | None, owner_name: str | None) -> str:
@@ -51,8 +76,8 @@ def notice_text(bot_name: str | None, owner_name: str | None) -> str:
     # written "[.]" (`defang_name_domains`): a domain the check let through (`evil.click`, not on
     # its short list) must not reach everyone's chat as a link. The OWNER's name (any display name)
     # still gets the full treatment.
-    bot = defang_name_domains(clean_title(bot_name, NAME_LIMIT)) or "the note taker"
-    owner = mail_line(owner_name, NAME_LIMIT)
+    bot = _bot_part(bot_name)
+    owner = _write_out_at(mail_line(owner_name, NAME_LIMIT))
     # "The host" begins the second sentence, so it needs its capital; a real name is left as typed.
     first = owner or FALLBACK_OWNER.capitalize()
     owner = owner or FALLBACK_OWNER

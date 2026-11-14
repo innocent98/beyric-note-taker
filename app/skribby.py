@@ -40,6 +40,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from app import chat_notice
 from app.bot_provider import (
     SEND_DEADLINE_SECONDS,
     BotDuplicate,
@@ -1008,7 +1009,11 @@ class SkribbyClient:
                     notice = payload.get("initial_chat_message")
                     if isinstance(notice, str) and fallback_notice:
                         payload["initial_chat_message"] = fallback_notice
-                    elif isinstance(notice, str) and custom and custom in notice:
+                    elif (
+                        isinstance(notice, str)
+                        and custom
+                        and chat_notice.names_the_bot(notice, custom)
+                    ):
                         payload.pop("initial_chat_message")  # it names the refused name
                     if used is not None:
                         used["bot_name"] = self._bot_name

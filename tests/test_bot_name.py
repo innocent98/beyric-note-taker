@@ -1054,3 +1054,107 @@ def test_the_mail_cleaning_handles_look_alikes_but_leaves_cjk_sentences_alone():
 def test_a_joiner_inside_an_emoji_sequence_is_kept_in_the_notice():
     family = "Team \U0001f468‍\U0001f469‍\U0001f467"
     assert chat_notice.notice_text(family, "Ada").startswith(f"Hi, I'm {family}. ")
+
+
+# ---- hardening round 2: the consent line on every platform, joiners anywhere, "@", max_length ----
+
+ZWJ = "‍"
+PLATFORM_LINKS = {
+    "google_meet": "https://meet.google.com/abc-defg-hij",
+    "zoom": ZOOM,
+    "teams": TEAMS,
+}
+
+
+@pytest.mark.parametrize("platform", sorted(PLATFORM_LINKS))
+@pytest.mark.parametrize("typed", ["Alex.Coach", "A"])
+def test_a_refused_name_never_costs_the_consent_line_on_any_platform(
+    session, httpx_mock, platform, typed
+):
+    user = make_user(session, name="Ada Lovelace", bot_name=typed)
+    template = make_template(session, user)
+    refuse(httpx_mock, "bot_name invalid")
+    accept(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    settings = make_settings(bot_chat_notice_enabled=True, skribby_bot_name="Service Desk")
+    req = PlacementRequest(
+        user_id=user.id,
+        platform=platform,
+        native_id="room-1",
+        meeting_url=PLATFORM_LINKS[platform],
+        template_id=template.id,
+        source="manual",
+    )
+    meeting = place_bot(session, provider, req, now=datetime.now(UTC), settings=settings)
+    sent = posts(httpx_mock)
+    final = sent[-1]
+    assert final["bot_name"] == "Service Desk" and meeting.bot_name == "Service Desk"
+    # The consent line is there, names the bot that really joined, and still names the owner.
+    assert final["initial_chat_message"].startswith("Hi, I'm Service Desk. Ada Lovelace added me")
+    assert "If you'd rather not be recorded" in final["initial_chat_message"]
+
+
+def test_a_direct_caller_without_a_fallback_keeps_a_notice_that_only_contains_the_letters(
+    httpx_mock,
+):
+    # No fallback line given: a notice that does not NAME the refused name is kept, even when the
+    # name is one letter that appears somewhere inside it ("Ada", "added", "rather").
+    refuse(httpx_mock, "bot_name too odd")
+    accept(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    notice = chat_notice.notice_text("Beyric Note Taker", "Ada")
+    provider.send_bot(URL, bot_name="A", chat_notice=notice)
+    _, second = posts(httpx_mock)
+    assert second["bot_name"] == "Service Desk" and second["initial_chat_message"] == notice
+
+
+def test_a_direct_caller_without_a_fallback_drops_a_notice_that_names_the_refused_name(
+    httpx_mock,
+):
+    # The notice holds the cleaned and defanged name ("Alex[.]Coach"), not the typed one, so it
+    # must be recognised as naming the bot without a plain substring match.
+    refuse(httpx_mock, "bot_name too odd")
+    accept(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    notice = chat_notice.notice_text("Alex.Coach", "Ada")
+    provider.send_bot(URL, bot_name="Alex.Coach", chat_notice=notice)
+    _, second = posts(httpx_mock)
+    assert second["bot_name"] == "Service Desk" and "initial_chat_message" not in second
+
+
+@pytest.mark.parametrize("tail", ["evil.c‍om", "evil.co‌m", "e‍vil.com", "evil.com".replace(".", ".‍")])
+def test_a_joiner_anywhere_in_a_web_address_is_refused_as_a_bot_name(tail):
+    with pytest.raises(BotNameInvalid) as caught:
+        clean_bot_name(tail)
+    assert str(caught.value) == bot_names.HAS_LINK
+
+
+def test_a_joiner_anywhere_in_a_domain_is_defanged_in_the_notice_for_both_names():
+    text = chat_notice.notice_text("evil.c‍lick", "Ada evil.c‌om")
+    assert "evil[.]click" in text and "evil[.]com" in text
+    assert ZWJ not in text and "‌" not in text
+
+
+def test_a_name_with_a_joiner_and_no_domain_keeps_it_in_the_notice():
+    family = "Team \U0001f468‍\U0001f469‍\U0001f467"
+    text = chat_notice.notice_text(family, f"Ada {family}")
+    assert text.count(family) == 3  # the bot once, the owner twice
+
+
+def test_an_at_sign_is_written_out_in_the_notice_only():
+    text = chat_notice.notice_text("@here", "@everyone Ada ＠all")
+    assert "@" not in text and "＠" not in text
+    assert "I'm (at)here." in text and "(at)everyone Ada (at)all added me" in text
+    # The stored name stays as typed: only the line posted into the chat changes.
+    assert clean_bot_name("@here") == "@here"
+
+
+def test_the_name_models_have_a_generous_max_length_and_keep_their_own_codes(api, owner):
+    # Between the rule (50) and the model's cap: still the plain `bot_name_invalid`.
+    assert error_of(api.put(ROUTE, {"bot_name": "N" * 500}), 422, "bot_name_invalid")
+    # Far beyond any name: refused by the model before any cleaning runs.
+    huge = api.put(ROUTE, {"bot_name": "N" * 5000})
+    assert error_of(huge, 422, "validation_error")["fields"][0]["field"] == "bot_name"
+    assert error_of(api.put("/api/settings/name", {"name": "N" * 500}), 422, "name_invalid")
+    huge = api.put("/api/settings/name", {"name": "N" * 5000})
+    assert error_of(huge, 422, "validation_error")["fields"][0]["field"] == "name"
