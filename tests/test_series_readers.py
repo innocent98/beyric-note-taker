@@ -441,9 +441,10 @@ def test_the_personal_row_mails_nobody_else(session, world, pats):
     with pytest.raises(series_mail.AgendaRefused) as refused:
         series_mail.send_agenda(session, world.pat, pats.me_row, NOW)
     assert refused.value.code == "no_attendees"
-    assert series_rules.recipients(session, pats.me_row) == [
-        a for a in series_rules.recipients(session, pats.me_row) if a.user_id == world.pat.id
-    ]
+    # Ada (X's owner) is named in the private meeting: she is not a member of the personal team,
+    # so she is not matched, whatever team's members the code would look at
+    speak(session, pats.tuesday, "Owner")
+    assert [a.user_id for a in series_rules.recipients(session, pats.me_row)] == [world.pat.id]
 
 
 # ---- case 8: reminder mail ----
@@ -517,10 +518,10 @@ def test_ask_never_answers_a_member_of_x_from_an_occurrence_of_another_scope(
     ada_api = api  # the signed-in owner: Ada, in X
     assert post(ada_api, "zanzibar plan").json()["kind"] == "none"
     assert model.calls == []
-    # Ask and the series page agree on what is readable
-    page = page_of(ada_api, pats.x_row)
-    readable = {m.id for m in session.scalars(visibility.visible_meetings(world.ada))}
-    assert set(past_ids(page)) <= readable
+    # and Ask's own count of what it can search is Ada's readable meetings, none of the others
+    assert ada_api.get("/api/ask/scope").json()["meetings"] == len(
+        list(session.scalars(visibility.visible_meetings(world.ada)))
+    )
 
 
 # ---- case 10: a person who left X ----
@@ -550,7 +551,7 @@ def test_a_person_who_left_x_loses_xs_rows_mail_and_topic_and_keeps_the_meeting_
     assert pat.get(f"/api/series/{pats.x_row.id}").status_code == 404
     assert get(pat, "/api/series", world.x.id).status_code == 404
     assert past_ids(page_of(ada, pats.x_row)) == [ada_monday.id]
-    assert page_of(ada, pats.x_row)["topics"] == []  # the topic cited a meeting now private
+    assert page_of(ada, pats.x_row)["topics"] == []  # a cited meeting is private now (readability)
     mine = page_of(pat, pats.me_row)
     assert set(past_ids(mine)) == {pats.tuesday.id, pats.monday.id}  # it follows him, private
     assert world.pat.id not in {a.user_id for a in series_rules.recipients(session, pats.x_row)}
@@ -629,7 +630,7 @@ def test_a_deleted_recorders_moved_meeting_stays_readable_and_gets_no_mail(
 
 
 def test_a_personal_row_hides_next_meeting_and_a_team_row_shows_it(app, session, world, pats):
-    event = calendar_event(session, world.pat, RID, NOW + timedelta(days=5))
+    calendar_event(session, world.pat, RID, NOW + timedelta(days=5))  # on his own calendar
     pat = sign_in(app, PAT)
     [team_card] = cards_of(pat, world.x.id)
     assert team_card["next_starts_at"] is not None and team_card["next_text"]
@@ -639,7 +640,6 @@ def test_a_personal_row_hides_next_meeting_and_a_team_row_shows_it(app, session,
     assert team_page["next_starts_at"] is not None
     assert personal_page["next_starts_at"] is None
     assert personal_page["next_text"] is None and personal_page["sprint_note"] is None
-    assert event.id  # the personal page reads his calendar, which has the team's occurrence
 
 
 def test_the_card_and_the_page_name_the_rows_team(app, session, world, pats):

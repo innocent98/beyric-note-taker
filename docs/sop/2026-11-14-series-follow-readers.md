@@ -66,7 +66,8 @@ so they do not depend on the writers being perfect.
 
 ## Verification
 
-The new test file was written **before** the code: 13 of its 24 tests then failed; the other 11
+The new test file was written **before** the code: 13 of the 24 tests it had then failed (the
+25th, the meeting page's Series row, came after); the other 11
 pin behaviour that already held (the personal row mails nobody else, a leaver's access, Ask, a
 moved meeting's recorder). The mutation check below, not the red run, is what shows the tests
 bite.
@@ -123,6 +124,27 @@ section 8).
   when `next_starts_at` is null (it already is for a null).
 - **PR 3:** the FE integration guide with live captures (the new `team` field, the 404s, the
   personal row), the server step, the switch-on.
+**From the Opus review of this PR (no blocker; the should-fix is applied: every "restart" for the
+flag in the PR 1 SOP, `deploy/README.md`, `app/config.py` and `.env.example` is now
+`docker compose up -d --force-recreate web worker scheduler`, and step 4 prints the flag from
+inside each running service). Not built, listed so none is lost:**
+
+- `_seen_by` does not require the in-scope meeting to be `ready` (the note says "ready"): a row
+  whose only in-scope meeting is still processing lists a card with no past meetings.
+- `_resolve` scopes the twins but not the source: in a mixed legacy row, resolving a Y-scope
+  question can resolve the same words on an X-scope meeting for someone who may change both. Fix:
+  skip the twins when the source meeting is not itself `in_row`.
+- A hand-made sibling is now also found by the meeting's own name, so a generic title ("Standup")
+  can join an unrelated hand-made row of that name in the new team. Not a leak (the meeting is
+  that team's); a misgrouping, and the backfill does it irreversibly.
+- `team` on the payload has no `is_personal`, and `next_starts_at: null` means both "personal row"
+  and "no known next date": add `team.is_personal` (additive) before F1.
+- The topics job still claims personal rows every recheck and clears them at once; exclude them
+  in the claim query.
+- `send_agenda` on a personal row answers "nobody on your team": F1 hides "Send agenda" there
+  (`agenda_recipients` is already 0).
+- `docs/openapi.json` also gained two unrelated `maxLength: 2000` lines (`BotNameIn.bot_name`,
+  `DisplayNameIn.name`): the committed file on main was stale; correct and harmless.
 - Ghost empty cards (PR 1 follow-up) remain a decision for Adebayo or the lead.
 - A reminder from the personal row can still reach its owner when his ordinary team's row has
   nothing to say (by design: the one mail comes from the first row with something to say).
