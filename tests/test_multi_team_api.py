@@ -394,3 +394,65 @@ def test_the_auto_share_choice_is_cleared_when_the_team_is_deleted(app, session,
     session.commit()
     row = session.scalars(select(UserSettings).where(UserSettings.user_id == world.pat.id)).one()
     assert row.auto_share_team_id is None
+
+
+# ---- a moved meeting of a deleted recorder is still the team's to work on ----
+
+
+def _recorder_deleted(session, world, meeting):
+    """Ada deleted her account; her hollow row stays `deleted` and the team keeps the meeting."""
+    meeting.owner_team_id = world.x.id
+    meeting.shared_team_id = None
+    world.ada.status = "deleted"
+    session.commit()
+
+
+def test_the_worker_still_translates_and_re_reads_a_moved_meeting_of_a_deleted_recorder(
+    session, world
+):
+    from app import translation, workspace
+    from app.models import MeetingTranslation
+
+    _recorder_deleted(session, world, world.private)
+    world.private.extraction_status = "pending"
+    world.private.notes = "## Summary\nShort.\n"
+    session.add(
+        MeetingTranslation(
+            meeting_id=world.private.id,
+            language="es",
+            status="translating",
+            source_hash="s",
+            model="m",
+        )
+    )
+    session.commit()
+    now = datetime.now(UTC)
+    claimed = workspace.claim_next(session, now)
+    assert (
+        claimed is not None and claimed.id == world.private.id
+    )  # re-read for tasks after a rewrite
+    session.commit()
+    row = translation._claim(session, now)
+    assert row is not None and row.meeting_id == world.private.id  # not stuck "translating"
+
+
+def test_the_worker_still_leaves_alone_an_unmoved_meeting_of_a_deleted_recorder(session, world):
+    from app import translation, workspace
+
+    world.private.extraction_status = "pending"
+    world.private.notes = "## Summary\nShort.\n"
+    world.ada.status = "deleted"
+    session.commit()
+    assert workspace.claim_next(session, datetime.now(UTC)) is None  # the purge deletes it
+    assert translation._claim(session, datetime.now(UTC)) is None
+
+
+def test_repeat_topics_still_read_a_moved_meeting_of_a_deleted_recorder(session, template, world):
+    from app import topics
+
+    weekly = Series(team_id=world.x.id, owner_user_id=world.pat.id, title="Monday planning")
+    session.add(weekly)
+    session.commit()
+    meeting = meeting_in(session, template, weekly)
+    _recorder_deleted(session, world, meeting)
+    assert [m.id for m in topics.source_meetings(session, weekly)] == [meeting.id]

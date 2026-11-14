@@ -37,7 +37,7 @@ from app import series as series_rules
 from app.ai_versions import TOPICS_PROMPT_VERSION
 from app.config import get_settings
 from app.extraction import key_points
-from app.models import TOPIC_REASONS, Decision, Meeting, Series, SeriesTopic, User
+from app.models import TOPIC_REASONS, Decision, Meeting, Series, SeriesTopic
 from app.words import stems as _stems
 
 logger = logging.getLogger(__name__)
@@ -96,7 +96,7 @@ def source_meetings(session: Session, series: Series) -> list[Meeting]:
                 Meeting.series_id == series.id,
                 Meeting.status == "ready",
                 visibility.in_team_clause(series.team_id),
-                Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
+                visibility.recorder_not_being_deleted(),
             )
             .order_by(Meeting.created_at.desc(), Meeting.id.desc())
             .limit(series_rules.PAGE_LIST_LIMIT)

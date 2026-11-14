@@ -147,10 +147,12 @@ and an integration it connected is nulled.
 
 ## Follow-ups and known gaps
 
-- **8. (2b fixes it)** A moved meeting whose recorder deleted their account is still treated as "being
-  deleted" by the worker claim, translation (`app/translation.py` `_claim`), extraction and the topics
-  query, because the hollow row stays `status = 'deleted'`: translations of it stay `translating` and
-  a rewrite never refreshes its tasks. The filters become "owner deleted AND not team-owned".
+- **8. Fixed in 2b.** A moved meeting whose recorder deleted their account was treated as "being
+  deleted" by the worker claim, translation (`_claim`), extraction (`claim_next` and the backfills) and
+  the topics query, because the hollow row stays `status = 'deleted'`: translations stayed
+  `translating` and a rewrite never refreshed its tasks. Those filters now use
+  `visibility.recorder_not_being_deleted()` ("owner deleted AND not team-owned"); an unmoved meeting
+  of a deleted account is still left to the purge. Tested (and mutation-checked).
 - **9.** Translation quota: `daily_count` counts the caller's own meetings' queued translations plus
   their ledger rows, but the ledger row is written under the meeting's recorder, so a team admin's
   translations of moved meetings eat the recorder's daily allowance and never the admin's. Decide at
@@ -213,6 +215,7 @@ The spec called series "the riskiest" piece. Sized by reading `app/series.py`, `
 | Reminders | `series_mail._already_reminded`: once a person was reminded for a recurring event's occurrence by one series, a series of another team for the same event stays quiet | Spec 6.9: one mail per person per meeting. A per-person key on `series_reminders` was rejected (a migration for a rule a query can hold) |
 | Invitation caps | `team_invites._check_caps` also counts the inviter's invitations over **all** teams: 20 in an hour, 20 in a day (revoked included) | **My call: both equal the per-team daily cap**, so a person with one team (and everyone while the switch is off) never hits them first: no flag-off change. With three teams they are held to one team's allowance, not three |
 | Auto-share team | `user_settings.auto_share_team_id` (migration `0045`, nullable, `ON DELETE SET NULL`), `GET/PUT /api/settings/auto-share`. `teams.apply_share_default` shares to the chosen team (any role in it: it is their own choice for their own meeting), else the team switch for owners and admins as before. A team they left reads as none | Reusing `teams.share_new_meetings` as a per-person flag was rejected: it is a team-wide setting for owners and admins |
+| Moved meeting of a deleted recorder | The worker claims, translation, extraction and the topics input no longer skip it (follow-up 8 of part 2a) | The hollow row keeps `status = 'deleted'`; the filter is "owner deleted AND not team-owned" in one helper |
 | Integrations | Already by team id; a meeting's post goes to the team it is shared or moved to because the extractor files by `teams.team_for_meeting` (2a) and `notify_meeting` posts only for `in_team`. The routes take the header | Posts already made are not recalled when a meeting is unshared, moved or re-homed (a Slack post cannot be unsent). The FE guide says to tell the person |
 
 ## What's involved
