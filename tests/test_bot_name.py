@@ -89,6 +89,13 @@ def test_a_good_name_is_cleaned_and_an_empty_one_clears(raw, expected):
         "alex@acme",
         "https://acme.com/alex",
         "www.acme.com",
+        "www.x",
+        "Notes.ai",
+        "\u8bcd.com",  # a label in another script, a TLD from the list
+        "\u2800",  # Braille blank: draws nothing
+        "\u034f\u034f",  # combining grapheme joiner only
+        "  \u2800 \u200d ",  # invisible characters and spaces only
+        "\ufe0f",  # a bare variation selector
         "Alex from acme.com",
         "meet.google.com/abc-defg-hij",
     ],
@@ -102,9 +109,7 @@ def test_a_bad_name_is_refused_with_plain_words(raw):
 def test_each_refusal_says_what_is_wrong():
     assert str(pytest.raises(BotNameInvalid, clean_bot_name, "A" * 51).value) == bot_names.TOO_LONG
     assert str(pytest.raises(BotNameInvalid, clean_bot_name, "a@b.co").value) == bot_names.HAS_EMAIL
-    assert str(pytest.raises(BotNameInvalid, clean_bot_name, "x.example").value) == (
-        bot_names.HAS_LINK
-    )
+    assert str(pytest.raises(BotNameInvalid, clean_bot_name, "x.com").value) == (bot_names.HAS_LINK)
     junk = pytest.raises(BotNameInvalid, clean_bot_name, "a\u202eb")
     assert str(junk.value) == bot_names.HAS_JUNK
 
@@ -182,7 +187,12 @@ def test_the_default_is_shown_from_the_server_and_nothing_is_set(api, app, sessi
     app.state.settings = make_settings(
         bot_provider="skribby", skribby_api_key="key-for-tests", skribby_bot_name="Service Desk"
     )
-    assert api.get(ROUTE).json() == {"bot_name": None, "bot_name_default": "Service Desk"}
+    assert api.get(ROUTE).json() == {
+        "bot_name": None,
+        "bot_name_default": "Service Desk",
+        "warning": None,
+        "bot_name_applies_when_signed_in": False,
+    }
     app.state.settings = make_settings(bot_provider="vexa")
     assert api.get(ROUTE).json()["bot_name_default"] == make_settings().bot_name
 
@@ -605,3 +615,255 @@ def test_the_clients_own_names_still_include_the_server_default_and_the_account(
     assert client.own_names == (DEFAULT, "Signed In")
     provider = SkribbyProvider(client)
     assert provider is not None
+
+
+# ---- the narrower "web address" rule ----
+
+
+@pytest.mark.parametrize(
+    "raw", ["Dr.Smith", "Mr.Jones", "St.Mary", "J.Smith", "词.词", "Alex.Coach", "v2.1 notes"]
+)
+def test_a_name_with_a_dot_is_fine_unless_it_ends_in_one_of_the_listed_domains(raw):
+    assert clean_bot_name(raw) == raw
+
+
+@pytest.mark.parametrize("raw", ["acme.com", "Notes.AI", "www.x", "Alex at acme.io", "a.b.co"])
+def test_a_listed_domain_is_still_a_web_address(raw):
+    with pytest.raises(BotNameInvalid) as caught:
+        clean_bot_name(raw)
+    assert str(caught.value) == bot_names.HAS_LINK
+
+
+def test_the_listed_domains_are_the_ones_the_sop_names():
+    from app.titles import LINK_TLDS
+
+    assert (
+        LINK_TLDS
+        == "com net org io ai co app dev me us uk ng info biz xyz link live gg tv ly".split()
+    )
+
+
+def test_the_notice_no_longer_defangs_the_bot_name_but_still_defangs_the_owner():
+    text = chat_notice.notice_text("Dr.Smith", "Ada from acme.example")
+    assert text.startswith("Hi, I'm Dr.Smith. ")
+    assert "Dr[.]Smith" not in text and "acme[.]example" in text
+
+
+# ---- the soft warning ----
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Meeting Bot",
+        "bot",
+        "Alex's Notetaker",
+        "Alex Note taker",
+        "Alex NoteTaker",
+        "Recording Team",
+        "Transcription",
+        "Alex AI",
+        "ai helper",
+        "Alex (AI)",
+    ],
+)
+def test_a_name_that_sounds_like_a_recorder_gets_the_soft_warning(name):
+    assert (
+        bot_names.recorder_warning(name)
+        == "Google Meet and Zoom may refuse bots with names like this."
+    )
+    assert clean_bot_name(name) == name  # a warning, never a refusal
+
+
+@pytest.mark.parametrize(
+    "name", ["Alex from Product", "Robot Ada", "Aida", "Sam's Notes", None, ""]
+)
+def test_an_ordinary_name_has_no_warning(name):
+    assert bot_names.recorder_warning(name) is None
+
+
+def test_the_answer_carries_the_warning_and_the_save_still_works(api, session, owner):
+    response = api.put(ROUTE, {"bot_name": "Alex's AI Notetaker"})
+    assert response.status_code == 200
+    assert response.json()["bot_name"] == "Alex's AI Notetaker"
+    assert response.json()["warning"] == bot_names.RECORDER_WARNING
+    assert api.get(ROUTE).json()["warning"] == bot_names.RECORDER_WARNING
+    plain = api.put(ROUTE, {"bot_name": "Alex from Product"}).json()
+    assert plain["warning"] is None
+    assert api.put(ROUTE, {"bot_name": None}).json()["warning"] is None
+
+
+def test_the_flag_is_in_the_answer_read_only_and_follows_the_server(api, app, owner):
+    app.state.settings = make_settings(bot_name_applies_when_signed_in=False)
+    assert api.get(ROUTE).json()["bot_name_applies_when_signed_in"] is False
+    app.state.settings = make_settings(bot_name_applies_when_signed_in=True)
+    assert api.get(ROUTE).json()["bot_name_applies_when_signed_in"] is True
+    # Read only: the body takes no such field.
+    assert (
+        api.put(ROUTE, {"bot_name": "X", "bot_name_applies_when_signed_in": False}).status_code
+        == 422
+    )
+
+
+# ---- Skribby refuses the name ----
+
+REFUSED = {"method": "POST", "url": f"{BASE}/bot"}
+
+
+def posts(httpx_mock) -> list[dict]:
+    return [json.loads(r.content) for r in httpx_mock.get_requests() if r.method == "POST"]
+
+
+def refuse(httpx_mock, text='{"detail":"invalid value"}', status=422):
+    httpx_mock.add_response(**REFUSED, status_code=status, text=text)
+
+
+def test_a_refused_name_is_retried_once_with_the_default_and_the_notice_that_named_it_goes(
+    httpx_mock, caplog
+):
+    refuse(httpx_mock, '{"detail":[{"loc":["body","bot_name"],"msg":"invalid"}]}')
+    accept(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    with caplog.at_level("WARNING"):
+        bot_id = provider.send_bot(
+            URL,
+            bot_name="Alex from Product",
+            chat_notice="Hi, I'm Alex from Product. Ada added me.",
+        )
+    first, second = posts(httpx_mock)
+    assert first["bot_name"] == "Alex from Product" and "initial_chat_message" in first
+    assert second["bot_name"] == "Service Desk"
+    assert "initial_chat_message" not in second  # it named the refused name
+    assert bot_id.bot_name == "Service Desk"  # the name the accepted create really carried
+    assert (
+        "Alex from Product" not in caplog.text
+        and "without the person's own note taker name" in caplog.text
+    )
+
+
+def test_a_refusal_that_blames_only_the_notice_keeps_the_name(httpx_mock):
+    refuse(httpx_mock, "initial_chat_message is not supported")
+    accept(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    bot_id = provider.send_bot(URL, bot_name="Alex from Product", chat_notice="Hi there")
+    first, second = posts(httpx_mock)
+    assert second["bot_name"] == "Alex from Product" and "initial_chat_message" not in second
+    assert getattr(bot_id, "bot_name", None) is None  # the name asked for was used
+
+
+def test_a_refusal_that_blames_nothing_in_particular_drops_both(httpx_mock):
+    refuse(httpx_mock, "bad request", status=400)
+    accept(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    bot_id = provider.send_bot(URL, bot_name="Alex from Product", chat_notice="Hi, I'm Alex.")
+    _, second = posts(httpx_mock)
+    assert second["bot_name"] == "Service Desk" and "initial_chat_message" not in second
+    assert bot_id.bot_name == "Service Desk"
+
+
+def test_a_notice_that_does_not_name_the_bot_is_kept_when_only_the_name_goes(httpx_mock):
+    refuse(httpx_mock, "bot_name too odd")
+    accept(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    provider.send_bot(URL, bot_name="Alex from Product", chat_notice="Hi, I'm the account name.")
+    _, second = posts(httpx_mock)
+    assert second["initial_chat_message"] == "Hi, I'm the account name."
+
+
+def test_the_default_name_is_never_retried(httpx_mock):
+    refuse(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    with pytest.raises(Exception, match="HTTP 422"):
+        provider.send_bot(URL)
+    assert len(posts(httpx_mock)) == 1
+
+
+def test_it_is_retried_once_only(httpx_mock):
+    refuse(httpx_mock)
+    refuse(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    with pytest.raises(Exception, match="HTTP 422"):
+        provider.send_bot(URL, bot_name="Alex from Product")
+    assert len(posts(httpx_mock)) == 2
+
+
+def test_a_placed_meeting_stores_the_name_that_was_really_used(session, httpx_mock):
+    user = make_user(session, bot_name="Alex from Product")
+    template = make_template(session, user)
+    refuse(httpx_mock, "bot_name invalid")
+    accept(httpx_mock)
+    provider, _ = make(bot_name=DEFAULT)
+    meeting = place_bot(
+        session,
+        provider,
+        request_for(user, template),
+        now=datetime.now(UTC),
+        settings=make_settings(),
+    )
+    assert [p["bot_name"] for p in posts(httpx_mock)] == ["Alex from Product", DEFAULT]
+    assert meeting.bot_name == DEFAULT
+    assert session.get(User, user.id).bot_name == "Alex from Product"  # the setting is untouched
+
+
+def test_a_resend_stores_the_name_that_was_really_used(session):
+    from app.skribby import SentBotId
+
+    class Refusing(NamedProvider):
+        def send_bot(self, meeting_url, vocabulary=None, chat_notice=None, bot_name=None):
+            super().send_bot(meeting_url, vocabulary, chat_notice, bot_name)
+            sent = SentBotId("00000000-0000-0000-0000-000000000009")
+            sent.bot_name = "Service Desk"
+            return sent
+
+    user = make_user(session, bot_name="Old Name")
+    template = make_template(session, user)
+    provider = NamedProvider()
+    meeting = place_bot(
+        session,
+        provider,
+        request_for(user, template),
+        now=datetime.now(UTC),
+        settings=make_settings(),
+    )
+    assert pipeline.send_again(meeting, Refusing()) is True
+    assert meeting.bot_name == "Service Desk"
+
+
+# ---- the owner's name for a resend ----
+
+
+def test_with_no_session_the_default_is_sent_and_a_failed_read_keeps_the_stored_name():
+    from contextlib import contextmanager
+
+    settings = make_settings(skribby_bot_name=DEFAULT)
+    meeting = SimpleNamespace(id=1, bot_name="Stored Name", owner_user_id=1)
+    assert pipeline._owner_bot_name(None, meeting, settings, "skribby") == DEFAULT
+    assert pipeline._owner_bot_name(None, meeting, settings, "vexa") is None
+
+    class Broken:
+        @contextmanager
+        def begin_nested(self):
+            yield
+
+        def get(self, *args):
+            raise RuntimeError("database hiccup")
+
+    assert pipeline._owner_bot_name(Broken(), meeting, settings, "skribby") == "Stored Name"
+    meeting.bot_name = None
+    assert pipeline._owner_bot_name(Broken(), meeting, settings, "skribby") == DEFAULT
+
+
+# ---- an Admit line with HTML characters ----
+
+
+def test_a_name_with_html_characters_is_text_in_the_line_and_escaped_where_it_is_drawn(monkeypatch):
+    from app.web import templates
+
+    settings = make_settings(skribby_bot_name=DEFAULT)
+    monkeypatch.setattr(services, "get_settings", lambda: settings)
+    monkeypatch.setattr(services, "BOT_STATE_STALE_POLLS", 10**9)
+    meeting = meeting_row(platform="zoom", bot_name='Tom & <b>Jerry</b> {x} "q"')
+    line = services.status_text(meeting)
+    assert line == "Waiting to be let in. Admit 'Tom & <b>Jerry</b> {x} \"q\"' in the meeting"
+    drawn = templates.env.from_string("{{ status_text(m) }}").render(m=meeting)
+    assert "<b>" not in drawn and "&lt;b&gt;Jerry&lt;/b&gt;" in drawn and "&amp;" in drawn

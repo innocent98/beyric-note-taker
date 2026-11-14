@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({ set: vi.fn() }));
 vi.mock("@/lib/api/browser", () => ({ api: { settings: { botName: { set: mocks.set } } } }));
 
 const DEFAULT = "Beyric Meeting Support";
+const PAYLOAD = { bot_name: null, bot_name_default: DEFAULT, warning: null, bot_name_applies_when_signed_in: false };
+const MEET_SENTENCE = "On Google Meet this name may not show yet; we are still checking.";
 const field = () => screen.getByRole("textbox", { name: "Note taker name" }) as HTMLInputElement;
 
 beforeEach(() => mocks.set.mockReset());
@@ -23,7 +25,7 @@ afterEach(() => {
 
 describe("the card", () => {
   it("has the approved title and help text, naming the server default from the payload", () => {
-    render(<SettingsBotName initial={{ bot_name: null, bot_name_default: DEFAULT }} />);
+    render(<SettingsBotName initial={PAYLOAD} />);
     expect(screen.getByRole("heading", { level: 2, name: "Note taker name" })).toBeTruthy();
     expect(
       screen.getByText(
@@ -35,13 +37,13 @@ describe("the card", () => {
   });
 
   it("shows another server default, never a hard-coded one", () => {
-    render(<SettingsBotName initial={{ bot_name: null, bot_name_default: "Acme Notes" }} />);
+    render(<SettingsBotName initial={{ ...PAYLOAD, bot_name_default: "Acme Notes" }} />);
     expect(field().placeholder).toBe("Acme Notes");
     expect(screen.getByText(/Leave it empty to use “Acme Notes”/)).toBeTruthy();
   });
 
   it("starts with the saved name, Save off until it changes, Clear on", () => {
-    render(<SettingsBotName initial={{ bot_name: "Alex from Product", bot_name_default: DEFAULT }} />);
+    render(<SettingsBotName initial={{ ...PAYLOAD, bot_name: "Alex from Product" }} />);
     expect(field().value).toBe("Alex from Product");
     expect((screen.getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole("button", { name: "Clear" }) as HTMLButtonElement).disabled).toBe(false);
@@ -50,8 +52,8 @@ describe("the card", () => {
 
 describe("saving and clearing", () => {
   it("sends the typed name and keeps what the server answers", async () => {
-    mocks.set.mockResolvedValue({ bot_name: "Sam from Sales", bot_name_default: DEFAULT });
-    render(<SettingsBotName initial={{ bot_name: null, bot_name_default: DEFAULT }} />);
+    mocks.set.mockResolvedValue({ ...PAYLOAD, bot_name: "Sam from Sales" });
+    render(<SettingsBotName initial={PAYLOAD} />);
     await userEvent.type(field(), "  Sam   from Sales ");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(mocks.set).toHaveBeenCalledWith("  Sam   from Sales ");
@@ -60,8 +62,8 @@ describe("saving and clearing", () => {
   });
 
   it("Clear sends null and empties the field", async () => {
-    mocks.set.mockResolvedValue({ bot_name: null, bot_name_default: DEFAULT });
-    render(<SettingsBotName initial={{ bot_name: "Alex from Product", bot_name_default: DEFAULT }} />);
+    mocks.set.mockResolvedValue(PAYLOAD);
+    render(<SettingsBotName initial={{ ...PAYLOAD, bot_name: "Alex from Product" }} />);
     await userEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(mocks.set).toHaveBeenCalledWith(null);
     expect(field().value).toBe("");
@@ -72,9 +74,43 @@ describe("saving and clearing", () => {
     mocks.set.mockImplementation(async () => {
       throw new ApiError(422, "bot_name_invalid", "Don't put an email address in the name.");
     });
-    render(<SettingsBotName initial={{ bot_name: null, bot_name_default: DEFAULT }} />);
+    render(<SettingsBotName initial={PAYLOAD} />);
     await userEvent.type(field(), "alex@acme.com");
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Don't put an email address in the name.")).toBeTruthy();
+  });
+});
+
+describe("the lines the lead added", () => {
+  it("says the name may not show on Google Meet while the server's switch is off", () => {
+    render(<SettingsBotName initial={PAYLOAD} />);
+    expect(screen.getByText(MEET_SENTENCE)).toBeTruthy();
+  });
+
+  it("drops that sentence when the server's switch is on", () => {
+    render(<SettingsBotName initial={{ ...PAYLOAD, bot_name_applies_when_signed_in: true }} />);
+    expect(screen.queryByText(MEET_SENTENCE)).toBeNull();
+  });
+
+  it("shows the soft warning for a saved recorder-like name, and a save still works", async () => {
+    const warning = "Google Meet and Zoom may refuse bots with names like this.";
+    render(<SettingsBotName initial={{ ...PAYLOAD, bot_name: "Alex AI Notetaker", warning }} />);
+    expect(screen.getByText(warning)).toBeTruthy();
+    mocks.set.mockResolvedValue({ ...PAYLOAD, bot_name: "Alex from Product" });
+    await userEvent.clear(field());
+    await userEvent.type(field(), "Alex from Product");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Note taker name saved")).toBeTruthy();
+    expect(screen.queryByText(warning)).toBeNull();
+  });
+
+  it("shows the warning that comes back from a save", async () => {
+    const warning = "Google Meet and Zoom may refuse bots with names like this.";
+    mocks.set.mockResolvedValue({ ...PAYLOAD, bot_name: "Meeting Bot", warning });
+    render(<SettingsBotName initial={PAYLOAD} />);
+    await userEvent.type(field(), "Meeting Bot");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(warning)).toBeTruthy();
+    expect(field().value).toBe("Meeting Bot");
   });
 });

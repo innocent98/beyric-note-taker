@@ -12,12 +12,17 @@ import type { BotNamePreferences } from "@/lib/api/types";
 //   LEAD-DESIGNED, NOT IN THE DESIGNER'S FILE: no design covers it. The card reuses the Time zone /
 //   Default notes language card (`card pl-language`), the standard `Field` and the standard
 //   secondary and primary buttons, and invents no style. The label, the help text and the example
-//   are the owner's approved wording.
+//   are the owner's approved wording. Two lines the lead added after review (also lead-designed):
+//   "On Google Meet this name may not show yet; we are still checking." under the help text while
+//   the server's `bot_name_applies_when_signed_in` is false (the live check is not done), and the
+//   soft `warning` (a notice, never an error) under the field for a name that sounds like a
+//   recorder. The warning comes from the server; a save is never blocked by it.
 // The server default is read from the server (`bot_name_default`) and shown in the help text and as
 // the placeholder; it is never written in this file. An empty value is the default: "Clear" and
 // "Save" with an empty field both send null. The server checks the name (50 characters, no hidden
 // characters, no email or web address) and answers a plain message that is shown under the field.
 export function SettingsBotName({ initial }: { initial: BotNamePreferences }) {
+  const [warning, setWarning] = useState<string | null>(initial.warning ?? null);
   const [saved, setSaved] = useState<string>(initial.bot_name ?? "");
   const [value, setValue] = useState<string>(initial.bot_name ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +42,7 @@ export function SettingsBotName({ initial }: { initial: BotNamePreferences }) {
       const text = stored.bot_name ?? "";
       setSaved(text);
       setValue(text);
+      setWarning(stored.warning ?? null);
       flash(message);
     } catch (caught) {
       // The 422 text of this route is written for the person (the shared helper keeps other 422
@@ -63,6 +69,9 @@ export function SettingsBotName({ initial }: { initial: BotNamePreferences }) {
             "”. Choose a name your attendees will recognise as your notes taker, such as “Alex from Product”. Don't use another person's name, and don't hide that it records. Google Meet and Zoom may refuse bots whose names look like recorders."
           }
         </p>
+        {initial.bot_name_applies_when_signed_in ? null : (
+          <p className="set-sub">On Google Meet this name may not show yet; we are still checking.</p>
+        )}
       </div>
       <form
         className="pl-language-control"
@@ -96,6 +105,7 @@ export function SettingsBotName({ initial }: { initial: BotNamePreferences }) {
           </button>
         </div>
         {error ? <Alert kind="error">{error}</Alert> : null}
+        {warning && !error ? <Alert kind="notice">{warning}</Alert> : null}
       </form>
       <Toast message={toast} />
     </section>

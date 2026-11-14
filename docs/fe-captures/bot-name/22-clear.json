@@ -1,13 +1,16 @@
 {
-  "note": "Refusals changed nothing.",
+  "note": "`null` clears.",
   "client": "signed-in user",
   "request": {
-    "method": "GET",
+    "method": "PUT",
     "path": "/api/settings/bot-name",
     "headers": {
+      "X-CSRF-Token": "<csrf-B>",
       "Cookie": "device=<cookie>; session=<cookie>"
     },
-    "body": null
+    "body": {
+      "bot_name": null
+    }
   },
   "response": {
     "status": 200,
@@ -16,8 +19,10 @@
       "cache-control": "no-store"
     },
     "body": {
-      "bot_name": "Notes 📝 for Ada",
-      "bot_name_default": "Beyric Meeting Support"
+      "bot_name": null,
+      "bot_name_default": "Beyric Meeting Support",
+      "warning": null,
+      "bot_name_applies_when_signed_in": false
     }
   }
 }

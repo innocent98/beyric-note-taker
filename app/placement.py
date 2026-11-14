@@ -312,6 +312,9 @@ def place_bot(
     except BaseException:  # the host said no, or anything else: no meeting, free the slot
         session.rollback()
         raise
+    # The provider answers with the name it really used when it had to fall back to the default
+    # because the person's own name was refused (`skribby.SentBotId`): that is what is stored.
+    sent_name = getattr(vexa_id, "bot_name", None) or sent_name
     meeting = Meeting(
         owner_user_id=user.id,
         url=req.meeting_url,

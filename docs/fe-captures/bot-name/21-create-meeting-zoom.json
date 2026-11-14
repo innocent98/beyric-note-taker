@@ -1,32 +1,37 @@
 {
-  "note": "A meeting made before the feature (null name): the server default, as before.",
+  "note": "A Zoom meeting by the same person.",
   "client": "signed-in user",
   "request": {
-    "method": "GET",
-    "path": "/api/meetings/4",
+    "method": "POST",
+    "path": "/api/meetings",
     "headers": {
+      "X-CSRF-Token": "<csrf-B>",
       "Cookie": "device=<cookie>; session=<cookie>"
     },
-    "body": null
+    "body": {
+      "url": "https://us02web.zoom.us/j/81234567890",
+      "template_id": 1
+    }
   },
   "response": {
-    "status": 200,
+    "status": 201,
     "headers": {
       "content-type": "application/json",
-      "cache-control": "no-store"
+      "cache-control": "no-store",
+      "location": "/api/meetings/2"
     },
     "body": {
-      "id": 4,
-      "title": "Google Meet ggg-hhhh-iii",
-      "platform": "google_meet",
-      "native_id": "ggg-hhhh-iii",
+      "id": 2,
+      "title": "Zoom 81234567890",
+      "platform": "zoom",
+      "native_id": "81234567890",
       "status": "bot_sent",
       "step": "waiting",
-      "status_text": "Waiting to be let in. Admit 'Beyric Meeting Support' in the meeting",
+      "status_text": "Bot sent",
       "status_tone": "warning",
       "template_id": 1,
       "template_name": "General",
-      "created_at": "2026-11-14T13:15:11.150660Z",
+      "created_at": "2026-11-14T13:41:27.158276Z",
       "tasks_count": 0,
       "failure_reason": null,
       "bot_invite_email": null,

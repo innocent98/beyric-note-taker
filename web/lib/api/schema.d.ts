@@ -2735,8 +2735,15 @@ export interface components {
         BotNameOut: {
             /** Bot Name */
             bot_name: string | null;
+            /**
+             * Bot Name Applies When Signed In
+             * @default false
+             */
+            bot_name_applies_when_signed_in: boolean;
             /** Bot Name Default */
             bot_name_default: string;
+            /** Warning */
+            warning?: string | null;
         };
         /**
          * CalendarOut

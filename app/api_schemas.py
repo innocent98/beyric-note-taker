@@ -718,6 +718,12 @@ class BotNameOut(BaseModel):
     # The server default, read from the server (never hard-coded in the page): what the bot is
     # called when `bot_name` is null. Shown as the form's placeholder and in its help text.
     bot_name_default: str
+    # The soft warning for a name that sounds like a recorder ("Bot", "Notetaker", "Recording",
+    # "Transcription", "AI", whole words): `null` for an ordinary name. It never stops a save.
+    warning: str | None = None
+    # The server's switch (`BOT_NAME_APPLIES_WHEN_SIGNED_IN`), read only. While it is false the
+    # name may not show on the signed-in Google Meet bot, and the page says so in one sentence.
+    bot_name_applies_when_signed_in: bool = False
 
 
 class BotNameIn(Body):

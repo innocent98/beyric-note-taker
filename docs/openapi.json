@@ -781,9 +781,25 @@
             ],
             "title": "Bot Name"
           },
+          "bot_name_applies_when_signed_in": {
+            "default": false,
+            "title": "Bot Name Applies When Signed In",
+            "type": "boolean"
+          },
           "bot_name_default": {
             "title": "Bot Name Default",
             "type": "string"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
           }
         },
         "required": [

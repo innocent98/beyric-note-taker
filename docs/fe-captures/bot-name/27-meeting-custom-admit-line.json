@@ -1,37 +1,32 @@
 {
-  "note": "A Zoom meeting by the same person.",
+  "note": "Waiting to be let in: the line names the name this meeting's bot joined with.",
   "client": "signed-in user",
   "request": {
-    "method": "POST",
-    "path": "/api/meetings",
+    "method": "GET",
+    "path": "/api/meetings/1",
     "headers": {
-      "X-CSRF-Token": "<csrf-B>",
       "Cookie": "device=<cookie>; session=<cookie>"
     },
-    "body": {
-      "url": "https://us02web.zoom.us/j/81234567890",
-      "template_id": 1
-    }
+    "body": null
   },
   "response": {
-    "status": 201,
+    "status": 200,
     "headers": {
       "content-type": "application/json",
-      "cache-control": "no-store",
-      "location": "/api/meetings/2"
+      "cache-control": "no-store"
     },
     "body": {
-      "id": 2,
-      "title": "Zoom 81234567890",
-      "platform": "zoom",
-      "native_id": "81234567890",
+      "id": 1,
+      "title": "Google Meet abc-defg-hij",
+      "platform": "google_meet",
+      "native_id": "abc-defg-hij",
       "status": "bot_sent",
       "step": "waiting",
-      "status_text": "Bot sent",
+      "status_text": "Waiting to be let in. Admit 'Alex from Product' in the meeting",
       "status_tone": "warning",
       "template_id": 1,
       "template_name": "General",
-      "created_at": "2026-11-14T13:15:11.115164Z",
+      "created_at": "2026-11-14T13:41:27.130023Z",
       "tasks_count": 0,
       "failure_reason": null,
       "bot_invite_email": null,

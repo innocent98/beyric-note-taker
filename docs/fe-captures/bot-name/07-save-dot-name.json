@@ -1,5 +1,5 @@
 {
-  "note": "A bare domain counts as a web address.",
+  "note": "A dot is fine unless it ends in a listed domain: `Dr.Smith` is accepted.",
   "client": "signed-in user",
   "request": {
     "method": "PUT",
@@ -9,20 +9,20 @@
       "Cookie": "device=<cookie>; session=<cookie>"
     },
     "body": {
-      "bot_name": "Alex from acme.example"
+      "bot_name": "Dr.Smith"
     }
   },
   "response": {
-    "status": 422,
+    "status": 200,
     "headers": {
       "content-type": "application/json",
       "cache-control": "no-store"
     },
     "body": {
-      "error": {
-        "code": "bot_name_invalid",
-        "message": "Don't put a web address in the name."
-      }
+      "bot_name": "Dr.Smith",
+      "bot_name_default": "Beyric Meeting Support",
+      "warning": null,
+      "bot_name_applies_when_signed_in": false
     }
   }
 }

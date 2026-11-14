@@ -25,6 +25,7 @@ and collapsed, so a pasted name with a newline is one line). The rules are in `c
 """
 
 import re
+import unicodedata
 
 from app import titles
 from app.config import Settings
@@ -39,6 +40,18 @@ PROVIDERS_WITH_A_NAME = ("skribby",)
 _SPACES = re.compile(r"\s+")
 # One character on each side of an at sign: "alex@acme.com" and "alex@acme" alike.
 _EMAIL = re.compile(r"\S@\S")
+
+# Characters that draw nothing but are not format characters (`titles.clean_title` keeps them):
+# a name made only of these (and spaces) would be a blank name in the participant list.
+_DRAWS_NOTHING = frozenset("\u2800\u034f\u115f\u1160\u3164\uffa0\u180e\u200c\u200d")
+
+# Words that make Google Meet and Zoom more likely to refuse a bot (Skribby's bot-naming guide:
+# names with "Bot", "Notetaker", "Recording", "Transcription" and the like raise name detection).
+# A SOFT warning only: the name still saves. Whole words, any case.
+_RECORDER_WORDS = re.compile(
+    r"(?<![\w])(?:bot|notetaker|note\s*taker|recording|transcription|ai)(?![\w])", re.IGNORECASE
+)
+RECORDER_WARNING = "Google Meet and Zoom may refuse bots with names like this."
 
 TOO_LONG = f"Use {NAME_LIMIT} characters or fewer."
 HAS_JUNK = (
@@ -68,6 +81,8 @@ def clean_bot_name(raw: str | None) -> str | None:
     cleaned = titles.clean_title(collapsed, limit=len(collapsed) + 1)
     if cleaned != collapsed:
         raise BotNameInvalid(HAS_JUNK)
+    if not any(_draws_something(char) for char in collapsed):
+        raise BotNameInvalid(HAS_JUNK)
     if len(collapsed) > NAME_LIMIT:
         raise BotNameInvalid(TOO_LONG)
     if _EMAIL.search(collapsed):
@@ -75,6 +90,19 @@ def clean_bot_name(raw: str | None) -> str | None:
     if titles.looks_like_link(collapsed):
         raise BotNameInvalid(HAS_LINK)
     return collapsed
+
+
+def _draws_something(char: str) -> bool:
+    """Whether `char` shows in a participant list: not a space, not a bare combining mark or
+    variation selector, not one of the characters that draw nothing."""
+    if char in _DRAWS_NOTHING or char.isspace():
+        return False
+    return unicodedata.category(char) not in ("Mn", "Me", "Mc") and not "\ufe00" <= char <= "\ufe0f"
+
+
+def recorder_warning(name: str | None) -> str | None:
+    """The soft warning for a stored name that sounds like a recorder, else None."""
+    return RECORDER_WARNING if name and _RECORDER_WORDS.search(name) else None
 
 
 def default_name(settings: Settings, provider: str | None) -> str:

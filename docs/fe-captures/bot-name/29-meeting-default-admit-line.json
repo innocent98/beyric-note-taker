@@ -1,37 +1,32 @@
 {
-  "note": "A manual meeting. The stand-in Skribby received the name: see the next file.",
+  "note": "The meeting sent after clearing: the server default.",
   "client": "signed-in user",
   "request": {
-    "method": "POST",
-    "path": "/api/meetings",
+    "method": "GET",
+    "path": "/api/meetings/3",
     "headers": {
-      "X-CSRF-Token": "<csrf-B>",
       "Cookie": "device=<cookie>; session=<cookie>"
     },
-    "body": {
-      "url": "https://meet.google.com/abc-defg-hij",
-      "template_id": 1
-    }
+    "body": null
   },
   "response": {
-    "status": 201,
+    "status": 200,
     "headers": {
       "content-type": "application/json",
-      "cache-control": "no-store",
-      "location": "/api/meetings/1"
+      "cache-control": "no-store"
     },
     "body": {
-      "id": 1,
-      "title": "Google Meet abc-defg-hij",
+      "id": 3,
+      "title": "Google Meet ddd-eeee-fff",
       "platform": "google_meet",
-      "native_id": "abc-defg-hij",
+      "native_id": "ddd-eeee-fff",
       "status": "bot_sent",
       "step": "waiting",
-      "status_text": "Bot sent",
+      "status_text": "Waiting to be let in. Admit 'Beyric Meeting Support' in the meeting",
       "status_tone": "warning",
       "template_id": 1,
       "template_name": "General",
-      "created_at": "2026-11-14T13:15:11.087473Z",
+      "created_at": "2026-11-14T13:41:27.180014Z",
       "tasks_count": 0,
       "failure_reason": null,
       "bot_invite_email": null,

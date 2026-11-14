@@ -17,7 +17,9 @@
     },
     "body": {
       "bot_name": null,
-      "bot_name_default": "Beyric Meeting Support"
+      "bot_name_default": "Beyric Meeting Support",
+      "warning": null,
+      "bot_name_applies_when_signed_in": false
     }
   }
 }

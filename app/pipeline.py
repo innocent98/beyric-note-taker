@@ -480,7 +480,9 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     meeting.provider_copy_deleted_at = None
     meeting.provider_copy_attempts, meeting.provider_copy_next_try_at = 0, None
     meeting.bot_region = provider_region(vexa)
-    meeting.bot_name = sent if bot_names.takes_name(provider) else None
+    # The name the provider really used: the default when it refused the owner's own (`SentBotId`).
+    used = getattr(vexa_id, "bot_name", None) or sent
+    meeting.bot_name = used if bot_names.takes_name(provider) else None
     meeting.vexa_meeting_id = None if vexa_id is None else str(vexa_id)
     meeting.bot_provider = provider_name(vexa)  # a hand retry goes to the provider in use now
     meeting.vexa_recording_id = None

@@ -156,9 +156,12 @@ def write_time_zone(
 def _bot_name_out(request: Request, user: User) -> BotNameOut:
     """The name and the default beside it, read from the server's own settings: the default is what
     the bot provider in use is called when the person sets none (`SKRIBBY_BOT_NAME`)."""
+    settings = request.app.state.settings
     return BotNameOut(
         bot_name=user.bot_name,
-        bot_name_default=bot_names.default_name(request.app.state.settings, None),
+        bot_name_default=bot_names.default_name(settings, None),
+        warning=bot_names.recorder_warning(user.bot_name),
+        bot_name_applies_when_signed_in=settings.bot_name_applies_when_signed_in,
     )
 
 

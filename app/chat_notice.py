@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import User
-from app.titles import mail_line
+from app.titles import clean_title, mail_line
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,10 @@ def notice_text(bot_name: str | None, owner_name: str | None) -> str:
     """The approved line, with both names cleaned and cut. An empty owner name is "the host"; an
     empty bot name cannot happen with a real setting, but the line would still read ("Hi, I'm the
     note taker.")."""
-    bot = mail_line(bot_name, NAME_LIMIT) or "the note taker"
+    # The bot's name was checked when it was set (`app.bot_names`: no web address, no hidden
+    # characters) or is the operator's own, so it is only made one plain line and cut: defanging it
+    # would print "Dr[.]Smith". The OWNER's name (any display name) still gets the full treatment.
+    bot = clean_title(bot_name, NAME_LIMIT) or "the note taker"
     owner = mail_line(owner_name, NAME_LIMIT)
     # "The host" begins the second sentence, so it needs its capital; a real name is left as typed.
     first = owner or FALLBACK_OWNER.capitalize()

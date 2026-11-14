@@ -1,9 +1,9 @@
 {
-  "note": "Waiting to be let in: the line names the name this meeting's bot joined with.",
+  "note": "The same for the Zoom meeting.",
   "client": "signed-in user",
   "request": {
     "method": "GET",
-    "path": "/api/meetings/1",
+    "path": "/api/meetings/2",
     "headers": {
       "Cookie": "device=<cookie>; session=<cookie>"
     },
@@ -16,17 +16,17 @@
       "cache-control": "no-store"
     },
     "body": {
-      "id": 1,
-      "title": "Google Meet abc-defg-hij",
-      "platform": "google_meet",
-      "native_id": "abc-defg-hij",
+      "id": 2,
+      "title": "Zoom 81234567890",
+      "platform": "zoom",
+      "native_id": "81234567890",
       "status": "bot_sent",
       "step": "waiting",
       "status_text": "Waiting to be let in. Admit 'Alex from Product' in the meeting",
       "status_tone": "warning",
       "template_id": 1,
       "template_name": "General",
-      "created_at": "2026-11-14T13:15:11.087473Z",
+      "created_at": "2026-11-14T13:41:27.158276Z",
       "tasks_count": 0,
       "failure_reason": null,
       "bot_invite_email": null,

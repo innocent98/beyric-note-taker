@@ -8,41 +8,55 @@ A person can choose the name people see when their note taker joins their meetin
 
 ## 2. Endpoints (all need a login; writes need `X-CSRF-Token`)
 
-### `GET /api/settings/bot-name` -> 200 [04, 06, 14]
+### `GET /api/settings/bot-name` -> 200 [04, 06, 09, 17]
 
 ```json
-{ "bot_name": null, "bot_name_default": "Beyric Meeting Support" }
+{
+  "bot_name": null,
+  "bot_name_default": "Beyric Meeting Support",
+  "warning": null,
+  "bot_name_applies_when_signed_in": false
+}
 ```
 
-After a save: `{ "bot_name": "Alex from Product", "bot_name_default": "Beyric Meeting Support" }` (06 is read after a save of the name below; 14 is read after the refusals and still holds the previous good value).
+After a save the same four fields come back with `bot_name` set (06 is read after a save; 17 is read after the refusals and still holds the previous good value).
 
 - `bot_name` is **`null` when none is set (present, never absent)**. `bot_name_default` is read from the server (`SKRIBBY_BOT_NAME` while Skribby is the provider): use it for the placeholder and the help text. Never hard-code it.
+- `warning` is `null`, or the soft warning (below). Present on every answer.
+- `bot_name_applies_when_signed_in` is the server's switch `BOT_NAME_APPLIES_WHEN_SIGNED_IN`, **read only**: `false` today. While it is `false` the card shows "On Google Meet this name may not show yet; we are still checking." under the help text; when it is `true` that sentence is not drawn.
 - Not signed in: 401 `{"error":{"code":"not_authenticated","message":"Log in first."}}` [03].
+- Sending `bot_name_applies_when_signed_in` (or any unknown field) in a PUT is a 422 `validation_error`: the flag is read only (unit test, not captured).
 
-### `PUT /api/settings/bot-name` -> 200 [05, 07, 19, 20]
+### `PUT /api/settings/bot-name` -> 200 [05, 07, 08, 10, 22, 23]
 
 Request `{ "bot_name": "  Alex   from  Product " }` -> response (the stored value, trimmed, inner whitespace collapsed):
 
 ```json
-{ "bot_name": "Alex from Product", "bot_name_default": "Beyric Meeting Support" }
+{
+  "bot_name": "Alex from Product",
+  "bot_name_default": "Beyric Meeting Support",
+  "warning": null,
+  "bot_name_applies_when_signed_in": false
+}
 ```
 
-- An emoji is accepted: `{"bot_name": "Notes 📝 for Ada"}` is stored as sent [07].
-- **Clear** with `{"bot_name": null}` [19] or `{"bot_name": ""}` [20] (also whitespace only): 200 with `"bot_name": null`.
+- An emoji is accepted: `{"bot_name": "Notes 📝 for Ada"}` is stored as sent [10]. A dot is accepted unless the name ends in a listed domain: `{"bot_name": "Dr.Smith"}` is stored as sent [07].
+- **Soft warning** [08, 09]: `{"bot_name": "Alex's AI Notetaker"}` is **saved (200)** and the answer has `"warning": "Google Meet and Zoom may refuse bots with names like this."` (the same on a later GET). It fires for the whole words Bot, Notetaker, Note taker, Recording, Transcription and AI, in any case. Draw it as a notice under the field, never as an error, and never block the save. The browser does not repeat the rule: it shows the `warning` of the last answer.
+- **Clear** with `{"bot_name": null}` [22] or `{"bot_name": ""}` [23] (also whitespace only): 200 with `"bot_name": null`.
 - The card's Save with an empty field should send `null`.
 
 ### Errors
 
 | Case | Status | Body (exact) | Capture |
 |---|---|---|---|
-| 51 characters or more (the limit is 50, counted after whitespace is collapsed) | 422 | `{"error":{"code":"bot_name_invalid","message":"Use 50 characters or fewer."}}` | 08 |
-| Looks like an email (`x@y`) | 422 | `... "message":"Don't put an email address in the name."` | 09 |
-| Looks like a web address (`https://...`, `www.`, or a bare domain such as `Alex from acme.example`) | 422 | `... "message":"Don't put a web address in the name."` | 10, 11 |
-| Hidden or control characters (a bidirectional override, a zero-width space, a control character) | 422 | `... "message":"Use plain letters, numbers and punctuation only: that name has hidden or control characters."` | 12 |
-| `bot_name` not a string (for example `12`) | 422 | `{"error":{"code":"validation_error","message":"Some fields are missing or not valid.","fields":[{"field":"bot_name","message":"Input should be a valid string"}]}}` | 13 |
-| No `X-CSRF-Token` | 403 | `{"error":{"code":"csrf_rejected","message":"Missing or wrong X-CSRF-Token header. Read it from GET /api/session."}}` | 15 |
+| 51 characters or more (the limit is 50, counted after whitespace is collapsed) | 422 | `{"error":{"code":"bot_name_invalid","message":"Use 50 characters or fewer."}}` | 11 |
+| Looks like an email (`x@y`) | 422 | `... "message":"Don't put an email address in the name."` | 12 |
+| Looks like a web address: `://`, `www.`, a meeting-host link, or `label.tld` with a TLD from the short list `com net org io ai co app dev me us uk ng info biz xyz link live gg tv ly` (`Alex from acme.com`, `Notes.ai`). `Dr.Smith`, `St.Mary` and `Alex.Coach` are fine | 422 | `... "message":"Don't put a web address in the name."` | 13, 14 |
+| Hidden or control characters (a bidirectional override, a zero-width space, a control character), or a name made only of characters that draw nothing (Braille blank U+2800, U+034F, a bare variation selector) | 422 | `... "message":"Use plain letters, numbers and punctuation only: that name has hidden or control characters."` | 15 (the override; the invisible-only names are unit tests) |
+| `bot_name` not a string (for example `12`) | 422 | `{"error":{"code":"validation_error","message":"Some fields are missing or not valid.","fields":[{"field":"bot_name","message":"Input should be a valid string"}]}}` | 16 |
+| No `X-CSRF-Token` | 403 | `{"error":{"code":"csrf_rejected","message":"Missing or wrong X-CSRF-Token header. Read it from GET /api/session."}}` | 18 |
 
-A refused write changes nothing [14].
+A refused write changes nothing [17].
 
 ## 3. Traps
 
@@ -53,36 +67,38 @@ A refused write changes nothing [14].
 
 ## 4. UX consequences the page must surface
 
+- Under the help text, **while `bot_name_applies_when_signed_in` is `false`**, one plain sentence: "On Google Meet this name may not show yet; we are still checking." (added after review, lead-designed).
 - The help text is the owner's approved wording: "This is the name people see when the note taker joins your meetings. Leave it empty to use “<default>”. Choose a name your attendees will recognise as your notes taker, such as “Alex from Product”. Don't use another person's name, and don't hide that it records. Google Meet and Zoom may refuse bots whose names look like recorders." The default in it is `bot_name_default`.
 - **On Google Meet the name may not show.** The bot there is signed in as a shared Google account, and it is unproven whether Skribby shows the custom name for a signed-in bot. Until the live check is done, the app's "Waiting to be let in. Admit '...' in the meeting" line (the `status_text` of `GET /api/meetings/{id}`) names the **account's own name** on a signed-in Meet bot, not the custom one. On Zoom and Teams it names the custom name. Do not add copy that promises the custom name on Meet.
 - A change applies to the **next** meeting. A meeting already sent keeps its name.
 
 ## 5. What the meeting answer shows (the "Admit" line)
 
-`GET /api/meetings/{id}` -> `status_text` while the bot waits [24 to 27]:
+`GET /api/meetings/{id}` -> `status_text` while the bot waits [27 to 30]:
 
 | Meeting | `status_text` |
 |---|---|
-| sent with the name "Alex from Product" (Meet, guest) [24] | `Waiting to be let in. Admit 'Alex from Product' in the meeting` |
-| the same for a Zoom meeting [25] | `Waiting to be let in. Admit 'Alex from Product' in the meeting` |
-| sent after clearing (server default) [26] | `Waiting to be let in. Admit 'Beyric Meeting Support' in the meeting` |
-| a meeting from before the feature (null name) [27] | `Waiting to be let in. Admit 'Beyric Meeting Support' in the meeting` |
+| sent with the name "Alex from Product" (Meet, guest) [27] | `Waiting to be let in. Admit 'Alex from Product' in the meeting` |
+| the same for a Zoom meeting [28] | `Waiting to be let in. Admit 'Alex from Product' in the meeting` |
+| sent after clearing (server default) [29] | `Waiting to be let in. Admit 'Beyric Meeting Support' in the meeting` |
+| a meeting from before the feature (null name) [30] | `Waiting to be let in. Admit 'Beyric Meeting Support' in the meeting` |
 
 The capture server has no signed-in account, so the signed-in Meet row of the table in the SOP is **not captured** (it comes from the unit tests: the line names the account's own name).
 
 ## 6. What was sent to Skribby (stand-in)
 
-[22] records the bodies a stand-in Skribby received from the real app and client: `{"service": "gmeet", "bot_name": "Alex from Product", ...}`, then zoom with the same name, then gmeet with `"Beyric Meeting Support"` after clearing. [23] is the stored `meetings.bot_name` of the three.
+[25] records the bodies a stand-in Skribby received from the real app and client: `{"service": "gmeet", "bot_name": "Alex from Product", ...}`, then zoom with the same name, then gmeet with `"Beyric Meeting Support"` after clearing. [26] is the stored `meetings.bot_name` of the three.
 
 ## 7. Verification table
 
 | Behaviour | Verified |
 |---|---|
-| GET/PUT shapes, null default, clear, trimming, emoji | live (#04 to #07, #19, #20) |
-| 401, 403, every 422 string and the validation-error shape | live (#03, #08 to #13, #15) |
-| A refusal changes nothing | live (#14) |
-| The name sent as `bot_name` for Meet and Zoom, default after clearing | live against a stand-in Skribby (#22, #23); the real Skribby was not called |
-| `status_text` names the custom name / default / null-name meeting | live (#24 to #27) |
-| Signed-in Meet "Admit" line, Teams body, calendar auto-join and resend paths | unit tests only (`tests/test_bot_name.py`); not captured |
+| GET/PUT shapes, null default, clear, trimming, emoji, dotted name, the flag | live (#04 to #07, #10, #22, #23) |
+| The soft warning (saved, `warning` set, also on GET) | live (#08, #09) |
+| 401, 403, every 422 string and the validation-error shape | live (#03, #11 to #16, #18) |
+| A refusal changes nothing | live (#17) |
+| The name sent as `bot_name` for Meet and Zoom, default after clearing | live against a stand-in Skribby (#25, #26); the real Skribby was not called |
+| `status_text` names the custom name / default / null-name meeting | live (#27 to #30) |
+| The flag set to `true` in the answer, invisible-only names, signed-in Meet "Admit" line, Teams body, calendar auto-join, send now, retries, Skribby refusing a name | unit tests only (`tests/test_bot_name.py`, `tests/test_bot_name_paths.py`); not captured |
 | What a participant sees in Meet, Zoom, Teams | **not verified** (see the SOP, "How to prove it live") |
 | The card in a browser against the live API | not verified; unit tests and the mock-free component test only |

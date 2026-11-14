@@ -114,6 +114,23 @@ def run(app, server_base, engine) -> None:
     )
     user.call("read-after-save", "GET", "/api/settings/bot-name")
     user.call(
+        "save-dot-name",
+        "PUT",
+        "/api/settings/bot-name",
+        body={"bot_name": "Dr.Smith"},
+        note="A dot is fine unless it ends in a listed domain: `Dr.Smith` is accepted.",
+    )
+    user.call(
+        "save-recorder-like-name",
+        "PUT",
+        "/api/settings/bot-name",
+        body={"bot_name": "Alex's AI Notetaker"},
+        note="The soft warning: the save works and `warning` says Meet and Zoom may refuse it.",
+    )
+    user.call(
+        "read-with-warning", "GET", "/api/settings/bot-name", note="The warning is also on read."
+    )
+    user.call(
         "save-emoji",
         "PUT",
         "/api/settings/bot-name",
@@ -124,7 +141,11 @@ def run(app, server_base, engine) -> None:
         ("refused-too-long", "A" * 51, "51 characters: Teams' limit is 50."),
         ("refused-email", "alex@acme.example", "Looks like an email address."),
         ("refused-link", "https://acme.example/alex", "Looks like a web address."),
-        ("refused-bare-domain", "Alex from acme.example", "A bare domain counts as a web address."),
+        (
+            "refused-bare-domain",
+            "Alex from acme.com",
+            "`label.tld` with a TLD from the short list in `app/titles.py` is a web address.",
+        ),
         ("refused-bidi", "Alex \u202eProduct", "A bidirectional override character."),
     ):
         user.call(

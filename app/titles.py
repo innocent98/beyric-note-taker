@@ -105,10 +105,22 @@ def alert_name(title: str | None, platform: str | None, native_id: str | None) -
     )
 
 
+# The top-level domains a person's typed NAME is refused for ("Notes.ai", "acme.com"). Short on
+# purpose: a name is not clickable in Meet, Zoom or Teams, and the wide `_DOMAINISH` rule used for
+# mail text refused "Dr.Smith", "St.Mary" and any "word.word" in any script. The label may be in
+# any script ("词.com" is refused), the TLD must be one of these ASCII ones, whole ("Alex.Coach" is
+# fine).
+LINK_TLDS = "com net org io ai co app dev me us uk ng info biz xyz link live gg tv ly".split()
+_TLD_LINK = re.compile(
+    r"(?<![\w-])[\w-]+(?:\.[\w-]+)*\.(?:" + "|".join(LINK_TLDS) + r")(?![\w-])", re.IGNORECASE
+)
+
+
 def looks_like_link(text: str) -> bool:
-    """Whether `text` reads as a web address: one with a scheme or `www.`, a meeting-host link
-    written bare, or a bare domain ("evil.example")."""
-    return bool(URL.search(text) or _DOMAINISH.search(text) or "://" in text)
+    """Whether a typed name reads as a web address: it holds `://`, starts a word with `www.`,
+    is a link to a meeting host written bare, or is `label.tld` with a TLD from `LINK_TLDS`.
+    Narrower than `mail_line`'s defanging on purpose (see `LINK_TLDS`)."""
+    return bool(URL.search(text) or "://" in text or _TLD_LINK.search(text))
 
 
 def mail_line(text: str | None, limit: int) -> str:

@@ -1,5 +1,5 @@
 {
-  "note": "An emoji is a plain character and is accepted.",
+  "note": "The soft warning: the save works and `warning` says Meet and Zoom may refuse it.",
   "client": "signed-in user",
   "request": {
     "method": "PUT",
@@ -9,7 +9,7 @@
       "Cookie": "device=<cookie>; session=<cookie>"
     },
     "body": {
-      "bot_name": "Notes 📝 for Ada"
+      "bot_name": "Alex's AI Notetaker"
     }
   },
   "response": {
@@ -19,8 +19,10 @@
       "cache-control": "no-store"
     },
     "body": {
-      "bot_name": "Notes 📝 for Ada",
-      "bot_name_default": "Beyric Meeting Support"
+      "bot_name": "Alex's AI Notetaker",
+      "bot_name_default": "Beyric Meeting Support",
+      "warning": "Google Meet and Zoom may refuse bots with names like this.",
+      "bot_name_applies_when_signed_in": false
     }
   }
 }
