@@ -170,3 +170,16 @@ Built app, `web/scripts/mock-api.mjs` (`--multi-team on` for the new screens, de
 **Design-covered screens are unchanged with the switch off**: the Meetings list, the meeting page, the sidebar and phone top bar/drawer, and Settings, shot with `parity-shots.mjs` (design left, page right) as `app-multi-team-off-meetings|detail|settings|nav-closed|nav-drawer-<width>.jpg`. The page still shows the old "Share with team" switch and no switcher; the markup is also asserted in `web/tests/team-switcher.test.tsx` ("with the switch off draws nothing new"). With the switch on, the only change to a design-covered screen is the switcher above the sidebar links, a "Teams" link after "Team", the team card where the share switch was, and a "Team" row in Details.
 
 **Not verified:** Safari and Firefox; real FastAPI; a screen reader; the top-bar switcher truncates a long team name when closed ("My team (perso…" at 390 px; the open list shows it whole). The switch-off parity images were taken from the same build as the switch-on ones, not from `main`'s build.
+
+## Recurring meetings follow the meetings (S3), 2026-11-14
+
+No screenshots were taken for this change. The designer's file draws a Recurring card and a Series page for one team, with no team on either, so the additions are **LEAD-DESIGNED** (marked in `web/lib/series-team.ts`, the two components and `docs/sop/2026-11-14-series-follow-switch-on.md`) and only appear while the server's multi-team switch is on; with it off both screens are what they were (asserted in `web/tests/series-follow.test.tsx`, "with the switch off"). They reuse the existing classes (`rec-cadence`, `sr-sub`, `sr-note`, `sr-past-none`); the only new rule is `.sr-scope` (a 4 px top margin).
+
+| Lead-designed piece | Where | Words |
+|---|---|---|
+| The row's team on the cadence line | Recurring card, Series header | `Weekly on Saturdays, 20:00 · Platform team`, or `· Personal` |
+| What the page lists | one line under the Series header | `The meetings of this series that are shared with <team>.` / `Your private meetings of this series. The ones you share with a team are on that team's page.` |
+| Personal row | Series page | no "Next meeting" box, no "Send agenda to attendees" |
+| Empty row | Past meetings, Attendees | `None of your private meetings are in this series right now.` / `No meeting of this series is shared with <team> right now.` / `Nobody yet.` |
+
+**Not verified:** a browser pass at 1440, 768 and 390 px; the longest team names on the card's cadence line.

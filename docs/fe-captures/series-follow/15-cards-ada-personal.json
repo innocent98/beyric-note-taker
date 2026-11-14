@@ -1,0 +1,53 @@
+{
+  "note": "Ada's personal space: the Standup row of her PRIVATE meeting (A2). `team.is_personal` is true and the next meeting is null (hidden on personal rows).",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "X-Team-Id": "1",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "id": 12,
+          "title": "1:1",
+          "team": {
+            "id": 1,
+            "name": "My team",
+            "is_personal": true
+          },
+          "cadence": "Weekly on Saturdays, 20:00",
+          "platform": "google_meet",
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 1,
+          "open_questions": 1,
+          "project": null
+        },
+        {
+          "id": 11,
+          "title": "Standup",
+          "team": {
+            "id": 1,
+            "name": "My team",
+            "is_personal": true
+          },
+          "cadence": "Weekly on Saturdays, 20:00",
+          "platform": "google_meet",
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 1,
+          "open_questions": 1,
+          "project": null
+        }
+      ]
+    }
+  }
+}

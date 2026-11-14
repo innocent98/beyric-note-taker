@@ -1,0 +1,37 @@
+{
+  "note": "Quinn, team Y: Pat's Design sync (P2 is shared to Y, so Quinn may read it). Not Pat's X or personal rows.",
+  "as": "Quinn",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "id": 14,
+          "title": "Design sync",
+          "team": {
+            "id": 5,
+            "name": "Client Y",
+            "is_personal": false
+          },
+          "cadence": "Weekly on Saturdays, 20:00",
+          "platform": "google_meet",
+          "next_starts_at": "2026-11-21T20:00:00Z",
+          "next_text": "Sat 21 Nov, 20:00",
+          "unfinished_tasks": 1,
+          "open_questions": 1,
+          "project": null
+        }
+      ]
+    }
+  }
+}

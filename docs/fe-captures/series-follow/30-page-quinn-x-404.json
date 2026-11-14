@@ -1,0 +1,21 @@
+{
+  "note": "Quinn is not in X: 404 for X's row, the same answer as for a row that does not exist.",
+  "as": "Quinn",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/13",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such recurring meeting"
+      }
+    }
+  }
+}

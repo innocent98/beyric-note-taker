@@ -1080,7 +1080,12 @@ def _resolve(
 ) -> None:
     twins = [question]
     row = session.get(Series, meeting.series_id) if meeting.series_id is not None else None
-    if row is not None:
+    # Twins are looked for only when the question's own meeting is in the row's scope: in a legacy
+    # mixed row a question of another scope must not close the same words on this row's meetings.
+    if row is not None and (
+        session.scalar(select(Meeting.id).where(Meeting.id == meeting.id, in_row(session, row)))
+        is not None
+    ):
         rows = session.execute(
             select(OpenQuestion, Meeting)
             .join(Meeting, Meeting.id == OpenQuestion.meeting_id)

@@ -99,7 +99,7 @@ async function MeetingsPage({ api, range, notice, zone }: { api: Api; range: Day
         <RecordingAckCard acknowledged={session?.user?.recording_acknowledged ?? true} />
         <NewMeetingForm templates={templates} busy={busy} />
         <MeetingsCalendar state={calendar} notRecorded={notRecorded} />
-        <RecurringCards />
+        <RecurringCards multiTeam={session?.multi_team ?? false} />
         <MeetingList initial={list} templates={templates} range={range} rangeNotice={notice} rangeZone={zone} basePath="/" />
       </div>
     </AppShell>

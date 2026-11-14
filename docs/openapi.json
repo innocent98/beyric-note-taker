@@ -3971,7 +3971,7 @@
             ]
           },
           "team": {
-            "$ref": "#/components/schemas/TeamRef"
+            "$ref": "#/components/schemas/SeriesTeam"
           },
           "title": {
             "title": "Title",
@@ -4137,6 +4137,10 @@
             "title": "Questions",
             "type": "array"
           },
+          "scoped": {
+            "title": "Scoped",
+            "type": "boolean"
+          },
           "sprint_note": {
             "anyOf": [
               {
@@ -4156,7 +4160,7 @@
             "type": "array"
           },
           "team": {
-            "$ref": "#/components/schemas/TeamRef"
+            "$ref": "#/components/schemas/SeriesTeam"
           },
           "timezone": {
             "title": "Timezone",
@@ -4185,6 +4189,7 @@
           "id",
           "title",
           "team",
+          "scoped",
           "cadence",
           "platform",
           "timezone",
@@ -4262,6 +4267,30 @@
           "title"
         ],
         "title": "SeriesRef",
+        "type": "object"
+      },
+      "SeriesTeam": {
+        "description": "The row's team. `is_personal` is true for someone's personal space: label it \"Personal\".\nWhat a personal row lists and hides (no next meeting, no \"Keeps coming up\", nobody to send the\nagenda to) holds only while `SeriesPage.scoped` is true.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_personal": {
+            "title": "Is Personal",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "is_personal"
+        ],
+        "title": "SeriesTeam",
         "type": "object"
       },
       "SessionState": {

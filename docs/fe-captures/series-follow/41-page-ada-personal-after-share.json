@@ -1,0 +1,48 @@
+{
+  "note": "EMPTY STATE: the personal page of that emptied row: no past meetings, no tasks, no questions, no attendees, `next_*` null. Everything is a plain empty list, nothing is missing or null apart from the three `next_*` fields. The one agenda line typed earlier is still there (lines stay on their row).",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/11",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": 11,
+      "title": "Standup",
+      "team": {
+        "id": 1,
+        "name": "My team",
+        "is_personal": true
+      },
+      "scoped": true,
+      "cadence": "Weekly on Saturdays, 20:00",
+      "platform": "google_meet",
+      "timezone": "UTC",
+      "next_starts_at": null,
+      "next_text": null,
+      "sprint_note": null,
+      "can_rename": true,
+      "agenda_recipients": 0,
+      "unfinished": [],
+      "finished_since_text": null,
+      "finished": [],
+      "questions": [],
+      "agenda": [
+        {
+          "id": 1,
+          "text": "Prepare my own notes",
+          "can_remove": true
+        }
+      ],
+      "topics": [],
+      "suggested_agenda": [],
+      "past_meetings": [],
+      "attendees": []
+    }
+  }
+}

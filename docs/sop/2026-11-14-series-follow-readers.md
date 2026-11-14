@@ -60,7 +60,7 @@ so they do not depend on the writers being perfect.
 | `app/series_mail.py` | `queue_due_reminders`: deterministic team order (flag on) |
 | `app/api_series.py`, `app/series_schemas.py` | `team` on the card and the page; no upcoming date on a personal row |
 | `docs/openapi.json` | `team` on `SeriesCard` and `SeriesPage` (regenerated with every router loaded, as the test does) |
-| `tests/test_series_readers.py` | 25 new tests |
+| `tests/test_series_readers.py` | 25 new tests (PR 3 added four more: 29) |
 | `tests/test_series_follow.py` | the two PR 1 tests strengthened, three new carry tests (now 47) |
 | `docs/sop/2026-11-14-series-follow-core.md`, `docs/checklist/master-checklist.md` | PR 1 SOP fixes, S2 ticked |
 
@@ -106,9 +106,9 @@ scratch Postgres 17: `tests/test_series.py`, `test_series_mail.py`, `test_series
 `tests/test_api.py::test_the_committed_openapi_file_matches_the_routes`. The flag is off in every
 test of the old files, so they are the byte-for-byte proof for the flag-off paths.
 **Not verified:** against production data or a real calendar, in a browser, or the frontend with
-the new `team` field (F1); the cadence text on a personal row; a reminder mail rendered by a real
-mail provider; and `_timing`'s cadence still counts a mixed row's out-of-scope joined meetings
-(only ones the viewer may read; not changed, not a leak).
+the new `team` field (F1: done in PR 3); the cadence text on a personal row; a reminder mail
+rendered by a real mail provider. (`_timing`'s cadence used to count a mixed row's out-of-scope joined
+meetings: scoped in PR 3.)
 
 ## Operate / roll back
 
@@ -119,11 +119,14 @@ section 8).
 
 ## Follow-ups
 
-- **F1 (frontend):** show the row's team on the series page, send it as `X-Team-Id` for the task
-  drawer, regenerate `web/lib/api/schema.d.ts` (`npm run gen:api`), hide the "next meeting" chip
-  when `next_starts_at` is null (it already is for a null).
-- **PR 3:** the FE integration guide with live captures (the new `team` field, the 404s, the
-  personal row), the server step, the switch-on.
+- **F1 (frontend):** DONE in PR 3 (`docs/sop/2026-11-14-series-follow-switch-on.md`): the row's team on
+  the card and the page, sent as `X-Team-Id` for the task drawer's people, `schema.d.ts` regenerated,
+  no "next meeting" box on a personal row, "Send agenda" not drawn on one.
+- **PR 3:** done: the FE integration guide with live captures
+  (`docs/fe-integration-guide-series-teams.md`), the runbook, the switch-on.
+**Status of the 11 NITs of the Opus review of this PR: see the table in `docs/sop/2026-11-14-series-follow-switch-on.md`
+(1, 3, 6, 9 and 11 done in PR 3; 2, 4, 7 and 8 left on purpose; 5 and 10 need nothing).**
+
 **From the Opus review of this PR (no blocker; the should-fix is applied: every "restart" for the
 flag in the PR 1 SOP, `deploy/README.md`, `app/config.py` and `.env.example` is now
 `docker compose up -d --force-recreate web worker scheduler`, and step 4 prints the flag from
@@ -148,5 +151,4 @@ inside each running service). Not built, listed so none is lost:**
 - Ghost empty cards (PR 1 follow-up) remain a decision for Adebayo or the lead.
 - A reminder from the personal row can still reach its owner when his ordinary team's row has
   nothing to say (by design: the one mail comes from the first row with something to say).
-- `_timing` (cadence) reads the joined meetings of the whole row, not the scope: harmless once
-  rows are pure; scope it if the cadence of a mixed row ever matters.
+- `_timing` (cadence) read the joined meetings of the whole row, not the scope: **fixed in PR 3**.

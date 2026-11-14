@@ -26,15 +26,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function SeriesPage({ params }: Props) {
   const series = await fetchSeries(parseId((await params).id));
+  const teams = await getShellTeams();
   return (
     <AppShell
       current="meetings"
       reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()}
-      unread={await getUnreadNotifications()} user={await getShellUser()} teams={await getShellTeams()}
+      unread={await getUnreadNotifications()} user={await getShellUser()} teams={teams}
       timeZone={await getTimeZone()}
     >
-      <SeriesView initial={series} />
+      <SeriesView initial={series} multiTeam={teams !== null} />
     </AppShell>
   );
 }

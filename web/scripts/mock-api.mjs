@@ -625,13 +625,16 @@ const seriesPages = { 1: seriesCapture("11"), 3: seriesCapture("14") };
 // the sprints mock, so the real rule gives "Opens Sprint 13"; Friday review has no line (no rule for "Closes").
 seriesPages[1].sprint_note = "Opens Sprint 13";
 seriesPages[3].sprint_note = null;
+// The row's team: the captures are older than the `team` field (docs/fe-captures/series-follow/ has the real shape).
+const seriesTeam = { id: 1, name: "Mock team", is_personal: false };
+Object.values(seriesPages).forEach((page) => Object.assign(page, { team: seriesTeam, scoped: true }));
 const projectLink = (id) => {
   const project = projects.find((p) => p.id === seriesProject[id]);
   return project ? { id: project.id, name: project.name } : null;
 };
 const seriesCards = () => {
   const body = seriesCapture("08");
-  return { ...body, series: body.series.map((card) => ({ ...card, project: projectLink(card.id) })) };
+  return { ...body, series: body.series.map((card) => ({ ...card, team: seriesTeam, project: projectLink(card.id) })) };
 };
 if (values.overdue) {
   seriesPages[1].unfinished.slice(0, 2).forEach((t) => (t.due_date = "2026-10-30"));
@@ -794,7 +797,7 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { series: meeting.series });
   }
   if (path === "/api/series" && method === "POST") {
-    return json(res, 201, { id: 9, title: String(data?.title ?? ""), cadence: "Recurring", platform: null, next_starts_at: null, next_text: null, unfinished_tasks: 0, open_questions: 0, project: null });
+    return json(res, 201, { id: 9, title: String(data?.title ?? ""), cadence: "Recurring", platform: null, next_starts_at: null, next_text: null, unfinished_tasks: 0, open_questions: 0, project: null, team: seriesTeam });
   }
   // Series (W8): see the block above the server.
   if (path === "/api/series" && method === "GET") return json(res, 200, seriesCards());

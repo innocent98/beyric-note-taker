@@ -1,0 +1,22 @@
+{
+  "note": "Send agenda on a personal row: nobody else is on it. 409 `no_attendees`. The frontend hides the button here (`team.is_personal`).",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/11/agenda/send",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "no_attendees",
+        "message": "There is nobody on your team to send it to yet. The agenda goes to teammates who were in the last three meetings."
+      }
+    }
+  }
+}

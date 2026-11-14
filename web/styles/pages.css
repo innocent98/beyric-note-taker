@@ -442,6 +442,7 @@
 .sr-h2-row .sr-h2 { margin: 0; }
 .sr-count { font-size: var(--text-xs); color: var(--teal); font-weight: 550; }
 .sr-note { margin-bottom: 10px; font-size: var(--text-xs); color: var(--text-3); }
+.sr-scope { margin: 4px 0 0; }
 .sr-list { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); }
 .sr-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--border-softer); cursor: pointer; }
 .sr-row-done { grid-template-columns: 16px minmax(0, 1fr) auto; }

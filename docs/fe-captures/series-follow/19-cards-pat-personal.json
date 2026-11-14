@@ -1,0 +1,37 @@
+{
+  "note": "Pat's personal space: Design sync with P3 only (private). Not Ada's Standup.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "id": 4,
+          "title": "Design sync",
+          "team": {
+            "id": 2,
+            "name": "My team",
+            "is_personal": true
+          },
+          "cadence": "Weekly on Saturdays, 20:00",
+          "platform": "google_meet",
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 1,
+          "open_questions": 1,
+          "project": null
+        }
+      ]
+    }
+  }
+}

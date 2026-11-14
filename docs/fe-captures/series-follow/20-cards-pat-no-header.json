@@ -1,0 +1,36 @@
+{
+  "note": "No header: Pat's default team is his personal space (two ordinary teams), so the personal list.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "id": 4,
+          "title": "Design sync",
+          "team": {
+            "id": 2,
+            "name": "My team",
+            "is_personal": true
+          },
+          "cadence": "Weekly on Saturdays, 20:00",
+          "platform": "google_meet",
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 1,
+          "open_questions": 1,
+          "project": null
+        }
+      ]
+    }
+  }
+}
