@@ -31,6 +31,7 @@ export const config = {
   matcher: [
     "/",
     "/welcome",
+    "/pricing",
     "/login",
     "/signup",
     "/verify-email",

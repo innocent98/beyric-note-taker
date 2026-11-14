@@ -840,12 +840,14 @@ Legal and business
 - [x] Optional title for a pasted-link meeting (`feature/meeting-optional-title`, SOP `docs/sop/2026-11-14-meeting-optional-title.md`; lead-designed form field): `title` on `POST /api/meetings`, cleaned like a calendar title, blank = the fallback name; live captures `docs/fe-captures/meeting-title/`, guide 5.3a
 - [x] Date filter on the Meetings list (`feature/meetings-date-filter`, SOP `docs/sop/2026-11-14-meetings-date-filter.md`; lead-designed): `from` / `to` on `GET /api/meetings` (the caller's own days, both included, with paging) and a filter above the list on the dashboard at `/` (From, To, Apply, Today, Last 7 days, Last 30 days, Clear), range kept in `/?from=&to=`; live captures `docs/fe-captures/meetings-date-filter/`, guide 5.1a
 
-## Public pages redesign (audit 2026-11-14, spec `docs/superpowers/specs/2026-11-14-public-pages-audit.md`; nothing built yet, every line waits for his answers to the spec's section 6)
+## Public pages redesign (audit 2026-11-14, spec `docs/superpowers/specs/2026-11-14-public-pages-audit.md`; landing v2 and /pricing built in one PR, 2026-11-14; the lines below the build wait on his decisions)
 
 - [x] Audit of the designer's new Landing, Pricing and dashboard files against `main` (read-only; the dashboard design is the 7 Nov design plus CRM only)
-- [ ] Copy-only fix on the live landing: remove "AES-256" and "Encrypted end to end" (no disk encryption exists); fix `llms.txt` and the JSON-LD offer
-- [ ] Privacy Policy: add Skribby and its transcription sub-processors, correct "no other company receives the recording" (live text line 87); lawyer reads it with the multi-team wording (#191)
-- [ ] Landing v2 from the new design with every claim cut to what is shipped (no HubSpot, Jira, Asana, timestamps, "every attendee", "unlimited"); our footer (Beyrichq LTD, `privacy@`) and our signed-in `/welcome`
-- [ ] `/pricing` page with placeholders only, header link and sitemap (only after his yes; no numbers until he decides)
+- [x] Copy-only fix on the live landing: remove "AES-256" and "Encrypted end to end" (no disk encryption exists); fix `llms.txt` and the JSON-LD offer (#197)
+- [x] Privacy Policy: add Skribby and its transcription sub-processors, correct "no other company receives the recording" (#198 merged)
+- [ ] Lawyer reads the Privacy Policy and Terms, with the multi-team wording (#191)
+- [x] Landing v2 from the new design with every claim cut to what is shipped (no HubSpot, Jira, Asana, timestamps, "every attendee", "unlimited", "free"); our footer (Beyrichq LTD, `privacy@`) and our signed-in `/welcome`; invite-only said plainly (PR open 2026-11-14, SOP `docs/sop/2026-11-14-landing-v2-and-pricing.md`, parity report and shots in `docs/ui/parity/landing-v2/`)
+- [x] `/pricing` page with placeholders only ("To be announced", Trial / Team / Team Plus), header and footer link, sitemap, robots, `llms.txt`; all plan data in `web/components/pricing/content.ts` (same PR)
+- [ ] Adebayo decides plan names, prices and hours, then one edit in `web/components/pricing/content.ts`
 - [ ] Billing spec (plan model, shared team hours, gating, downgrade, provider layer for NGN and USD), then plans and billing, then real numbers on the pricing page
 - [ ] Later and separate: chat notice live, transcript turn times, per-team retention, translation languages, Jira or Asana, CRM (deferred; needs team rules first)

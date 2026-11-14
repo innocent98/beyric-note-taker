@@ -46,6 +46,8 @@
   --teal-line: #DCEAE6;       /* borders on teal washes */
   --teal-ring: #E0EFEB;       /* focus ring around inputs */
   --teal-on-panel: #CFE5E0;   /* body text on solid teal */
+  --teal-on-panel-soft: #E2F0EC; /* the lede of the landing's closing band */
+  --teal-column: #F8FBFA;     /* the highlighted column of the pricing table */
   --teal-on-panel-line: #4E9A8F;
 
   /* Semantic colours */
@@ -113,6 +115,8 @@
   --night-line-hover: #3B4743;
   --on-night: #FFFFFF;
   --on-night-2: #A9B3AF;
+  --on-night-3: #C3CBC7;      /* the line under a toast title on the landing */
+  --on-night-body: #B4BDB9;   /* body text in the dark landing cards */
   --on-teal: #FFFFFF;
 
   /* Type */
@@ -141,6 +145,7 @@
   --radius-md: 10px;
   --radius-lg: 12px;
   --radius-xl: 16px;
+  --radius-panel: 18px;  /* the landing mock-up panels and the pricing cards */
   --radius-pill: 999px;
   --shadow-pop: 0 12px 32px rgba(20, 25, 23, 0.14);
   --shadow-hero: 0 30px 60px rgba(20, 25, 23, 0.1), 0 2px 6px rgba(20, 25, 23, 0.04);

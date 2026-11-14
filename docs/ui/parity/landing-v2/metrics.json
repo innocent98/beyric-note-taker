@@ -1,0 +1,92 @@
+{
+ "landing-1440-design": {
+  "h": 7489,
+  "sw": 1440,
+  "iw": 1440,
+  "errors": []
+ },
+ "landing-1440-ours": {
+  "h": 7572,
+  "sw": 1440,
+  "iw": 1440,
+  "errors": [
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=V8I7LJaAkWF-uJCmCJuli' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE",
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=V8I7LJaAkWF-uJCmCJuli' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE"
+  ]
+ },
+ "landing-768-design": {
+  "h": 9640,
+  "sw": 768,
+  "iw": 768,
+  "errors": []
+ },
+ "landing-768-ours": {
+  "h": 9702,
+  "sw": 768,
+  "iw": 768,
+  "errors": [
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=Mj2HkH3vqbHseGuA4iF9F' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE",
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=Mj2HkH3vqbHseGuA4iF9F' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE"
+  ]
+ },
+ "landing-390-design": {
+  "h": 13358,
+  "sw": 390,
+  "iw": 390,
+  "errors": []
+ },
+ "landing-390-ours": {
+  "h": 13027,
+  "sw": 390,
+  "iw": 390,
+  "errors": [
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=n3GwufdE9n8kViAAnIB_v' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE",
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=n3GwufdE9n8kViAAnIB_v' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE"
+  ]
+ },
+ "pricing-1440-design": {
+  "h": 3363,
+  "sw": 1440,
+  "iw": 1440,
+  "errors": []
+ },
+ "pricing-1440-ours": {
+  "h": 3240,
+  "sw": 1440,
+  "iw": 1440,
+  "errors": [
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=gufo1S2ZpsiHYhnm_xYEr' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE",
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=gufo1S2ZpsiHYhnm_xYEr' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE"
+  ]
+ },
+ "pricing-768-design": {
+  "h": 3773,
+  "sw": 768,
+  "iw": 768,
+  "errors": []
+ },
+ "pricing-768-ours": {
+  "h": 3664,
+  "sw": 768,
+  "iw": 768,
+  "errors": [
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=dTvGlvdt_cDNG4TmKdbpW' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE",
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=dTvGlvdt_cDNG4TmKdbpW' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE"
+  ]
+ },
+ "pricing-390-design": {
+  "h": 4611,
+  "sw": 390,
+  "iw": 390,
+  "errors": []
+ },
+ "pricing-390-ours": {
+  "h": 4446,
+  "sw": 390,
+  "iw": 390,
+  "errors": [
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=_AJulEqEHgeJBGtzG15JN' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE",
+   "WebSocket connection to 'ws://127.0.0.1:3100/_next/hmr?id=_AJulEqEHgeJBGtzG15JN' failed: Error during WebSocket handshake: net::ERR_INVALID_HTTP_RESPONSE"
+  ]
+ }
+}

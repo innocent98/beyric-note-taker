@@ -102,28 +102,28 @@ describe("landing page", () => {
     </>,
   );
 
-  it("has the designer's sections, the anchors in its header, and five questions", () => {
-    for (const id of ["workflow", "features", "security", "faq"]) {
+  it("has the designer's sections, the anchors in its header, and six questions", () => {
+    for (const id of ["product", "teams", "security", "features", "faq"]) {
       expect(html).toContain(`id="${id}"`);
-      expect(html).toContain(`href="#${id}"`);
     }
-    expect(html.match(/<details/g)).toHaveLength(5);
+    for (const id of ["product", "teams", "security"]) expect(html).toContain(`href="#${id}"`);
+    expect(html).toContain('href="/pricing"');
+    expect(html.match(/<details/g)).toHaveLength(6);
     expect(html).toContain("Your meetings, turned into finished work.");
   });
 
   it("links only to places that exist, with the sign-up buttons on /signup and no prototype file", () => {
     const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
     expect(hrefs.filter((h) => !h.startsWith("#"))).toEqual(
-      expect.arrayContaining(["/login", "/signup", "/privacy", "/terms", "mailto:privacy@beyrictech.com"]),
+      expect.arrayContaining(["/login", "/signup", "/pricing", "/privacy", "/terms", "mailto:privacy@beyrictech.com"]),
     );
     expect(hrefs.some((h) => /\.dc\.html|register/i.test(h))).toBe(false);
   });
 
-  it("has the designer's three sign-up buttons: Get started, Get started free, Create your account", () => {
-    for (const label of ["Get started", "Get started free", "Create your account"]) {
-      const link = [...html.matchAll(/<a [^>]*href="\/signup"[^>]*>(.*?)<\/a>/g)].map((m) => m[1].replace(/<[^>]*>/g, "").trim());
-      expect(link, label).toContain(label);
-    }
+  it("has the sign-up buttons Get started and Create your account, and no 'free' wording", () => {
+    const link = [...html.matchAll(/<a [^>]*href="\/signup"[^>]*>(.*?)<\/a>/g)].map((m) => m[1].replace(/<[^>]*>/g, "").trim());
+    expect(link).toEqual(expect.arrayContaining(["Get started", "Create your account"]));
     expect(html).not.toContain("See the app");
+    expect(html.replace(/<[^>]*>/g, " ")).not.toMatch(/\bfree\b/i);
   });
 });
