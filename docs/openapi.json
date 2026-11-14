@@ -10293,7 +10293,7 @@
     },
     "/api/meetings/{meeting_id}/shares": {
       "get": {
-        "description": "The shares of a meeting, newest first, for \"Shared with ...\": who each went to and whether\nit was sent. Only the person who recorded the meeting sees them.",
+        "description": "The shares of a meeting, newest first, for \"Shared with ...\": who each went to and whether\nit was sent. Only the person who recorded the meeting sees them, even on a meeting moved to a\nteam (its owners and admins get 404: the addresses are the recorder's).",
         "operationId": "list_shares",
         "parameters": [
           {
@@ -10364,7 +10364,7 @@
         ]
       },
       "post": {
-        "description": "Mail the notes of a ready meeting to up to 10 people, each in their own mail, sent as the\ncaller (`Reply-To` is the caller, the footer names them). The mail holds the Summary,\nDecisions, Action items and Open questions, abridged; a PDF or Word file with every section\ncan be attached, with the transcript if ticked. Nobody outside the caller's team gets a link\nto the notes. A language that is not translated yet is translated first: the answer is still\n202 and `status` is `waiting_translation`. Limits: 10 recipients a share and 20 a day per\naccount (429 `share_limit`). Needs a confirmed email.",
+        "description": "Mail the notes of a ready meeting to up to 10 people, each in their own mail, sent as the\ncaller (`Reply-To` is the caller, the footer names them). The mail holds the Summary,\nDecisions, Action items and Open questions, abridged; a PDF or Word file with every section\ncan be attached, with the transcript if ticked. Nobody outside the caller's team gets a link\nto the notes. A language that is not translated yet is translated first: the answer is still\n202 and `status` is `waiting_translation`. Limits: 10 recipients a share and 20 a day per\naccount (429 `share_limit`). Needs a confirmed email. Only the person who recorded the meeting\n(a team admin of a meeting moved to the team gets 404: the mail goes out as its sender).",
         "operationId": "create_share",
         "parameters": [
           {
