@@ -151,8 +151,11 @@ and an integration it connected is nulled.
   deleted" by the worker claim, translation (`_claim`), extraction (`claim_next` and the backfills) and
   the topics query, because the hollow row stays `status = 'deleted'`: translations stayed
   `translating` and a rewrite never refreshed its tasks. Those filters now use
-  `visibility.recorder_not_being_deleted()` ("owner deleted AND not team-owned"); an unmoved meeting
-  of a deleted account is still left to the purge. Tested (and mutation-checked).
+  `visibility.recorder_not_being_deleted()` ("owner deleted AND not owned by a team that still has a
+  live member"); an unmoved meeting of a deleted account, and a meeting of a team that goes with the
+  account, are still left to the purge (a security review pointed out that exempting every team-owned
+  meeting would keep sending a doomed team's meeting to the model during the deletion window).
+  Tested (and mutation-checked).
 - **9.** Translation quota: `daily_count` counts the caller's own meetings' queued translations plus
   their ledger rows, but the ledger row is written under the meeting's recorder, so a team admin's
   translations of moved meetings eat the recorder's daily allowance and never the admin's. Decide at

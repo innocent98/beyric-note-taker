@@ -456,3 +456,20 @@ def test_repeat_topics_still_read_a_moved_meeting_of_a_deleted_recorder(session,
     meeting = meeting_in(session, template, weekly)
     _recorder_deleted(session, world, meeting)
     assert [m.id for m in topics.source_meetings(session, weekly)] == [meeting.id]
+
+
+def test_nothing_more_is_sent_for_a_meeting_of_a_team_that_goes_with_the_deleted_account(
+    session, world
+):
+    """The team's only live member is the account being deleted: the purge will give the meeting
+    back or delete it, so the worker must not translate or re-read it in the meantime."""
+    from app import translation, workspace
+
+    alone = new_team(session, world.ada, "Alone")
+    world.private.owner_team_id = alone.id
+    world.private.extraction_status = "pending"
+    world.private.notes = "## Summary\nShort.\n"
+    world.ada.status = "deleted"
+    session.commit()
+    assert workspace.claim_next(session, datetime.now(UTC)) is None
+    assert translation._claim(session, datetime.now(UTC)) is None
