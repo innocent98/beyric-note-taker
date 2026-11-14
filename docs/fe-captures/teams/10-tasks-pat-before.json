@@ -1,0 +1,32 @@
+{
+  "note": "Pat sees none of them: the meeting is private.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/tasks",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "tasks": [],
+      "people": [
+        {
+          "user_id": 2,
+          "name": "Pat Example",
+          "is_you": true
+        }
+      ],
+      "attention": {
+        "needs_owner": 0,
+        "unverified": 0,
+        "check_project": 0
+      },
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

@@ -1402,7 +1402,7 @@ Ids are integers. `0`, ids above 2147483647 and anything that is not 1 to 10 dig
 
 ### 5.3 `POST /api/meetings`: send a bot (write)
 
-Body: `{"url": string, "template_id": number}`. Returns **201** with the full meeting detail and a `Location` header.
+Body: `{"url": string, "template_id": number}` and, optionally, `"title": string` (5.3a). Returns **201** with the full meeting detail and a `Location` header. The examples in this section send no `title`.
 
 ```http
 POST /api/meetings
@@ -1560,6 +1560,277 @@ location: /api/meetings/2
 ```
 _The Zoom link (it carries a password) is not in the response. Response trimmed to the fields that matter here; the capture file has all of them._
 _Capture: `docs/fe-captures/owner-app/40-meeting-create-zoom.json`_
+
+#### 5.3a The optional `title`
+
+`POST /api/meetings` takes an optional `title`: a name for a pasted-link meeting. Without one a pasted link has no calendar event to take a name from, so the list and the page call it `Google Meet <code>` (or `Zoom <id>`, `Microsoft Teams`). The "New meeting" form shows it as an optional field, "Title (optional)", and sends it only when it is filled. (The field is lead-designed: the designer's file has no such field.)
+
+| Sent | Result |
+|---|---|
+| a non-blank string | **201**; `title` in the response is the cleaned text (below) |
+| key absent, `null`, `""` or only whitespace | **201**; no title is stored and `title` is the fallback name, exactly as before this field existed |
+| a string over 1000 characters, or anything that is not a string | **422** `validation_error` with `fields[0].field` = `"title"` |
+
+Cleaning is the one calendar titles get: control characters, newlines and tabs become spaces, runs of spaces become one, the ends are trimmed, and the text is cut to **200 characters** with the last one an ellipsis (`…`). Markup is **not** stripped: `<b>Plan</b>` comes back as those characters. Draw `title` as text (React does this for you; never `dangerouslySetInnerHTML`). `title` is the same field on the list (`GET /api/meetings`, 5.1), the detail and everywhere else a meeting is named; a meeting made from a calendar event is unaffected.
+
+**Nesting trap:** the request key is `title` and the response key is `title`, but they are not the same string. The response is the *display name*: it is never empty, because a missing title is replaced by the fallback. If the form needs to know whether a title was set, it already knows: it is what was typed.
+
+With a title:
+
+```http
+POST /api/meetings
+X-CSRF-Token: <csrf-B>
+Cookie: session=<cookie>
+```
+```json
+{"url": "https://meet.google.com/aaa-bbbb-ccc", "template_id": 2, "title": "Weekly planning"}
+```
+
+```http
+HTTP 201
+content-type: application/json
+location: /api/meetings/1
+```
+```json
+{
+  "id": 1,
+  "title": "Weekly planning",
+  "native_id": "aaa-bbbb-ccc",
+  "status": "bot_sent"
+}
+```
+_Trimmed to these fields; every other field is as in the full body above in 5.3. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meeting-title/04-create-with-title.json`_
+
+Without one (the key is absent):
+
+```http
+POST /api/meetings
+X-CSRF-Token: <csrf-B>
+Cookie: session=<cookie>
+```
+```json
+{"url": "https://meet.google.com/ddd-eeee-fff", "template_id": 2}
+```
+
+```http
+HTTP 201
+content-type: application/json
+location: /api/meetings/2
+```
+```json
+{
+  "id": 2,
+  "title": "Google Meet ddd-eeee-fff",
+  "native_id": "ddd-eeee-fff",
+  "status": "bot_sent"
+}
+```
+_Trimmed to these fields; every other field is as in the full body above in 5.3. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meeting-title/05-create-without-title.json`_
+
+`title: null` and `title: "   "` (only spaces) give the same fallback, both 201: `06-create-title-null.json`, `07-create-title-blank.json`.
+
+Cleaned (a newline, a tab, a control character and extra spaces):
+
+```http
+POST /api/meetings
+X-CSRF-Token: <csrf-B>
+Cookie: session=<cookie>
+```
+```json
+{"url": "https://meet.google.com/mmm-nnnn-ooo", "template_id": 2, "title": "  Q4\n\tplanning \u0000 with   spaces  "}
+```
+
+```http
+HTTP 201
+content-type: application/json
+location: /api/meetings/5
+```
+```json
+{
+  "id": 5,
+  "title": "Q4 planning with spaces",
+  "native_id": "mmm-nnnn-ooo",
+  "status": "bot_sent"
+}
+```
+_Trimmed to these fields; every other field is as in the full body above in 5.3. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meeting-title/08-create-title-cleaned.json`_
+
+Markup is kept as text:
+
+```http
+POST /api/meetings
+X-CSRF-Token: <csrf-B>
+Cookie: session=<cookie>
+```
+```json
+{"url": "https://meet.google.com/ppp-qqqq-rrr", "template_id": 2, "title": "<b>Plan</b> & \"review\""}
+```
+
+```http
+HTTP 201
+content-type: application/json
+location: /api/meetings/6
+```
+```json
+{
+  "id": 6,
+  "title": "<b>Plan</b> & \"review\"",
+  "native_id": "ppp-qqqq-rrr",
+  "status": "bot_sent"
+}
+```
+_Trimmed to these fields; every other field is as in the full body above in 5.3. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meeting-title/09-create-title-markup.json`_
+
+300 characters are cut to 200, the last an ellipsis (the request body is 300 `x`; see the capture for the full text):
+
+```json
+{
+  "request_title": "(300 x characters)",
+  "response_title_length": 200,
+  "response_title_ends_with": "…"
+}
+```
+
+_This block is a summary computed from the capture, not a response body: `docs/fe-captures/meeting-title/10-create-title-long.json` has the real one._
+
+Refused:
+
+(the request `title` below is abbreviated; the capture has all 1001 characters)
+
+```http
+POST /api/meetings
+X-CSRF-Token: <csrf-B>
+Cookie: session=<cookie>
+```
+```json
+{"url": "https://meet.google.com/vvv-wwww-xxx", "template_id": 2, "title": "(1001 y characters)"}
+```
+
+```http
+HTTP 422
+content-type: application/json
+```
+```json
+{
+  "error": {
+    "code": "validation_error",
+    "message": "Some fields are missing or not valid.",
+    "fields": [
+      {
+        "field": "title",
+        "message": "String should have at most 1000 characters"
+      }
+    ]
+  }
+}
+```
+
+_Capture: `docs/fe-captures/meeting-title/11-create-title-huge.json`_
+
+```http
+POST /api/meetings
+X-CSRF-Token: <csrf-B>
+Cookie: session=<cookie>
+```
+```json
+{"url": "https://meet.google.com/yyy-zzzz-aaa", "template_id": 2, "title": 5}
+```
+
+```http
+HTTP 422
+content-type: application/json
+```
+```json
+{
+  "error": {
+    "code": "validation_error",
+    "message": "Some fields are missing or not valid.",
+    "fields": [
+      {
+        "field": "title",
+        "message": "Input should be a valid string"
+      }
+    ]
+  }
+}
+```
+
+_Capture: `docs/fe-captures/meeting-title/12-create-title-not-text.json`_
+
+A refused link stays refused, with the title ignored:
+
+```http
+POST /api/meetings
+X-CSRF-Token: <csrf-B>
+Cookie: session=<cookie>
+```
+```json
+{"url": "https://example.com/x", "template_id": 2, "title": "Weekly"}
+```
+
+```http
+HTTP 400
+content-type: application/json
+```
+```json
+{
+  "error": {
+    "code": "invalid_meeting_url",
+    "message": "That is not a Google Meet, Zoom or Microsoft Teams link. Paste the full meeting link."
+  }
+}
+```
+
+_Capture: `docs/fe-captures/meeting-title/13-create-bad-link-with-title.json`_
+
+The list names each meeting by its title (oldest last; only `id` and `title` shown, one title cut here for reading):
+
+```json
+[
+  {
+    "id": 7,
+    "title": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx... (200 characters, cut here for reading)"
+  },
+  {
+    "id": 6,
+    "title": "<b>Plan</b> & \"review\""
+  },
+  {
+    "id": 5,
+    "title": "Q4 planning with spaces"
+  },
+  {
+    "id": 4,
+    "title": "Google Meet jjj-kkkk-lll"
+  },
+  {
+    "id": 3,
+    "title": "Google Meet ggg-hhhh-iii"
+  },
+  {
+    "id": 2,
+    "title": "Google Meet ddd-eeee-fff"
+  },
+  {
+    "id": 1,
+    "title": "Weekly planning"
+  }
+]
+```
+
+_Capture: `docs/fe-captures/meeting-title/14-meetings-list.json`_
+
+**Not exercised live:** a title typed in a real browser form (the form is covered by component tests against these shapes), and how the title appears in mail, Slack, the notification bell and exports (not exercised or captured here).
+
+Re-derive with `python scripts/capture_meeting_title.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres` (run from `scripts/`, with the repo root on `PYTHONPATH`).
 
 ### 5.4 `POST /api/meetings/{id}/cancel` (write)
 
@@ -2664,6 +2935,7 @@ Both the `bot_left_early` and `speakers_incomplete` flags are verified live (`48
 17. **A 409 on End means the state moved** (the bot left on its own, the worker moved the meeting, or it was ended already): show the message and refetch, as for Cancel. `meeting_busy` is the exception: nothing moved, the worker was busy with the row; show the message and let the owner press again.
 18. **`Checking on the bot...` is not an error.** It means the worker has not looked recently (Vexa slow, or the worker busy); `can_end` can still be `true` and the button still works. If `worker_stale` is `true` show the meeting-level banner as well.
 19. **The bot may leave on its own.** With `BOT_LEFT_ALONE_SECONDS` (default 300) the bot leaves after that long with nobody else speaking, so a quiet meeting (a long screen-share with no talking) can be cut short; the notes are written from what it recorded. The window starts when the bot is let in, so a bot admitted early while the host waits silently for others can leave before the meeting starts. The owner is not warned and is not told afterwards that this is why it left (nothing in the API says so; Vexa counts it as a normal end): do not promise "the bot stays until you end it".
+20. **The "Title (optional)" field is plain text, and the server shortens it.** Cap the input at 200 characters so nothing is cut silently, keep what was typed after a refusal, and never render a title as HTML. A blank title is not an error: the meeting is simply named by its platform and code.
 
 ## 9. Re-deriving everything here
 
@@ -2742,6 +3014,8 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | Regenerate: ok, not ready, no template, OpenAI failure | Verified live **with a fake OpenAI** | `59`–`62` |
 | Real OpenAI regenerate, its duration, edge timeouts | **NOT EXERCISED** | `deploy/nginx.conf` |
 | Template create, update, duplicate, empty, too long, unknown | Verified live | `22`–`28` |
+| `POST /api/meetings` with `title`: given, absent, `null`, blank, cleaned, markup kept, cut at 200, over 1000 (422), not text (422), refused link with a title (400), the list naming it | Verified live | `docs/fe-captures/meeting-title/04`–`14` |
+| The title in mail, Slack, the bell and exports; the field in a real browser | **NOT EXERCISED** (the route is tested in `tests/test_api.py`, the form in `web/tests/screens.test.tsx`) | |
 | `GET /api/meetings?from=&to=&tz=`: UTC days without a stored zone, the browser's zone as `tz` (Lagos, New York) without a stored zone, Lagos days with one, a stored zone winning over `tz`, one day, two days, only `from`, only `to`, paging inside a range, empty range, blank values, `from` after `to` (422), not a date (422), wrong layout (422), unknown `tz` (422) | Verified live | `docs/fe-captures/meetings-date-filter/04`-`21` |
 | The filter for a teammate reading a shared meeting; a day starting at a clock change; the filter box in a real browser | Test only / **NOT EXERCISED** live | `tests/test_meetings_date_filter.py`, `web/tests/meetings-date-filter.test.tsx` |
 | Vocabulary add, list, duplicate, invalid, delete, delete twice | Verified live | `13`–`21` |

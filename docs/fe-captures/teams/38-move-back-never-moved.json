@@ -1,0 +1,22 @@
+{
+  "note": "Not moved now: 409.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/move-back",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "not_moved",
+        "message": "This meeting does not belong to a team."
+      }
+    }
+  }
+}

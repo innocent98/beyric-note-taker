@@ -1,0 +1,22 @@
+{
+  "note": "A plain member cannot change it: 404, like any meeting that is not theirs to change.",
+  "as": "Pat",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/meetings/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

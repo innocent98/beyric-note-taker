@@ -127,7 +127,7 @@ def _present_decisions(
                 ),
                 replaces=replaces[decision.id],
                 related_tasks=related[decision.id],
-                can_edit=owns(user, meeting),
+                can_edit=owns(session, user, meeting),
             )
         )
     return out
