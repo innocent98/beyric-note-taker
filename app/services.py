@@ -429,6 +429,16 @@ def owned_meeting_or_404(session: Session, user: User, meeting_id: int) -> Meeti
     return meeting
 
 
+def recorded_meeting_or_404(session: Session, user: User, meeting_id: int) -> Meeting:
+    """A meeting the caller RECORDED and may still change: for what is the recorder's even on a
+    team's meeting (email shares: who the notes were mailed to, and mailing them as themselves).
+    A team admin who may change a moved meeting gets 404 here."""
+    meeting = owned_meeting_or_404(session, user, meeting_id)
+    if not visibility.recorded_by(session, user, meeting):
+        raise HTTPException(404, "No such meeting")
+    return meeting
+
+
 def _own_template(session: Session, user_id: int, template_id: int | None) -> Template | None:
     if not _in_range(template_id):
         return None

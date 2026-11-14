@@ -1984,7 +1984,12 @@ def test_0044_adds_users_purged_at_empty_for_every_row_and_downgrades_cleanly(sc
     assert columns["purged_at"]["nullable"] is True
     rows = _rows(engine, "select purged_at from users")
     assert rows and all(row == (None,) for row in rows)  # the seeded admin and the one inserted
+    xor = "select conname from pg_constraint where conrelid = 'meetings'::regclass"
+    assert ("ck_meetings_team_xor",) in _rows(
+        engine, xor
+    )  # never owned by one team, shared to another
     command.downgrade(cfg, "0043")
+    assert ("ck_meetings_team_xor",) not in _rows(engine, xor)
     assert "purged_at" not in {c["name"] for c in inspect(engine).get_columns("users")}
     command.upgrade(cfg, "head")
     engine.dispose()

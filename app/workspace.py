@@ -217,6 +217,18 @@ def owner_prefs(session: Session, owner_id: int) -> OwnerPrefs:
     return OwnerPrefs(row[0], row[1], row[2] or DEFAULT_TIMEZONE, row[3])
 
 
+def _recorder_can_read(session: Session, meeting_id: int, recorder_id: int) -> bool:
+    recorder = session.get(User, recorder_id)
+    if recorder is None:
+        return False
+    return (
+        session.scalar(
+            select(Meeting.id).where(Meeting.id == meeting_id, can_read_clause(recorder))
+        )
+        is not None
+    )
+
+
 def run_extraction(
     session: Session,
     meeting: Meeting,
@@ -266,7 +278,10 @@ def run_extraction(
 
     _reconcile(session, Decision, meeting_id, parsed.decisions)
     _reconcile(session, OpenQuestion, meeting_id, parsed.open_questions)
-    _reconcile(session, ReviewItem, meeting_id, parsed.please_check, owner_user_id=owner_id)
+    if _recorder_can_read(session, meeting_id, owner_id):
+        # Not for a recorder who left the team the meeting was moved to: they cannot read it, so
+        # the "Please check" bullets of a rewrite are not theirs to receive.
+        _reconcile(session, ReviewItem, meeting_id, parsed.please_check, owner_user_id=owner_id)
     team_id, members, fresh = None, [], frozenset()
     if make_tasks:
         # The meeting's team: the one that owns it, else the one it is shared with, else (switch
@@ -336,7 +351,13 @@ def run_extraction(
     post_to_slack = None
     if checked is not None and full:
         # The meeting may have been shared, moved or left a team while the model was asked: file
-        # into the team it belongs to now, never the one it did then.
+        # into the team it belongs to now, never the one it did then. The session does not expire
+        # on commit (`app/db.py`), so the object still holds what it read before the model call:
+        # re-read the two team columns, and hold the row until the commit below so a move or an
+        # unshare waits for the writes that follow.
+        session.refresh(
+            meeting, attribute_names=["owner_team_id", "shared_team_id"], with_for_update=True
+        )
         team_id = teams.team_for_meeting(session, meeting).id
         members = tasks.members_of(session, team_id)
         live = tasks.reconcile(
@@ -717,10 +738,17 @@ def hide_decision(session: Session, user: User, decision_id: int) -> bool:
 
 
 def open_review_count(session: Session, user: User) -> int:
+    """Open review items of meetings the caller may still READ: a person who left the team a
+    meeting was moved to keeps no window into it through this screen (`can_read_clause`)."""
     return session.scalar(
         select(func.count())
         .select_from(ReviewItem)
-        .where(ReviewItem.owner_user_id == user.id, ReviewItem.checked_at.is_(None))
+        .join(Meeting, Meeting.id == ReviewItem.meeting_id)
+        .where(
+            ReviewItem.owner_user_id == user.id,
+            ReviewItem.checked_at.is_(None),
+            can_read_clause(user),
+        )
     )
 
 
@@ -733,7 +761,7 @@ def list_review(
     rows = session.execute(
         select(ReviewItem, Meeting)
         .join(Meeting, Meeting.id == ReviewItem.meeting_id)
-        .where(ReviewItem.owner_user_id == user.id, state)
+        .where(ReviewItem.owner_user_id == user.id, state, can_read_clause(user))
         .order_by(ReviewItem.meeting_id.desc(), ReviewItem.position)
         .limit(REVIEW_LIMIT + 1)
     ).all()
@@ -745,7 +773,11 @@ def review_item(session: Session, user: User, item_id: int) -> tuple[ReviewItem,
     row = session.execute(
         select(ReviewItem, Meeting)
         .join(Meeting, Meeting.id == ReviewItem.meeting_id)
-        .where(ReviewItem.id == item_id, ReviewItem.owner_user_id == user.id)
+        .where(
+            ReviewItem.id == item_id,
+            ReviewItem.owner_user_id == user.id,
+            can_read_clause(user),
+        )
     ).first()
     return (row[0], row[1]) if row else None
 

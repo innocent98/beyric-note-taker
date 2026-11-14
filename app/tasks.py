@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 from app import filing, sprints, teams, titles
 from app.extraction import UNCLEAR, CheckedAction, fingerprint, normalise
 from app.models import Meeting, Milestone, Project, Task, Team, TeamMember, User
-from app.visibility import can_read_clause
+from app.visibility import can_read_clause, owns
 
 logger = logging.getLogger(__name__)
 
@@ -681,13 +681,13 @@ def delete(session: Session, user: User, task: Task) -> None:
 
 
 def owns_meeting_of(session: Session, user: User, task: Task) -> bool:
-    """Whether the caller recorded the meeting the task came from (the owner of a meeting may decide
-    its suggestions whatever their role on the team)."""
-    return (
-        task.meeting_id is not None
-        and session.scalar(select(Meeting.owner_user_id).where(Meeting.id == task.meeting_id))
-        == user.id
-    )
+    """Whether the caller may change the meeting the task came from (the recorder of a meeting, or
+    for a moved meeting a member who recorded it or the team's owner or admin: `visibility.owns`,
+    the one write rule, whatever their role on the task's team)."""
+    if task.meeting_id is None:
+        return False
+    meeting = session.get(Meeting, task.meeting_id)
+    return meeting is not None and owns(session, user, meeting)
 
 
 def can_decide(session: Session, user: User, task: Task) -> bool:
