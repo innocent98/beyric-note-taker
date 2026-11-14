@@ -1,0 +1,18 @@
+{
+  "note": "The recurring rows as the calendar link leaves them with the flag OFF: ONE row per person and event, in the recorder's DEFAULT team (Ada: team X; Pat, who is in two teams: his personal team), each holding every meeting of that event (shared, private, other team).",
+  "content": {
+    "flag": "off",
+    "rows": [
+      {
+        "id": 1,
+        "team_id": 4,
+        "recurring": "rid-standup"
+      },
+      {
+        "id": 3,
+        "team_id": 2,
+        "recurring": "rid-sync"
+      }
+    ]
+  }
+}

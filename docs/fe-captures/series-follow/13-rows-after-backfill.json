@@ -1,0 +1,33 @@
+{
+  "note": "The rows after the backfill: one row per team scope. Ada's Standup has a row in X and one in her personal team; Pat's Design sync has one in X, one in Y and one in his personal team. Same recurring id, separate rows.",
+  "content": {
+    "flag": "on",
+    "rows": [
+      {
+        "id": 1,
+        "team_id": 4,
+        "recurring": "rid-standup"
+      },
+      {
+        "id": 3,
+        "team_id": 2,
+        "recurring": "rid-sync"
+      },
+      {
+        "id": 9,
+        "team_id": 1,
+        "recurring": "rid-standup"
+      },
+      {
+        "id": 10,
+        "team_id": 4,
+        "recurring": "rid-sync"
+      },
+      {
+        "id": 11,
+        "team_id": 5,
+        "recurring": "rid-sync"
+      }
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "note": "A line typed on the personal page.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/series/9/agenda",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "text": "Prepare my own notes"
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 1,
+      "text": "Prepare my own notes",
+      "can_remove": true
+    }
+  }
+}

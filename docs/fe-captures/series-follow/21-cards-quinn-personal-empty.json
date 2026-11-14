@@ -1,0 +1,20 @@
+{
+  "note": "EMPTY STATE: Quinn's personal space has no recurring meeting. 200 with an empty list, not an error.",
+  "as": "Quinn",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "X-Team-Id": "3",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "timezone": "UTC",
+      "series": []
+    }
+  }
+}

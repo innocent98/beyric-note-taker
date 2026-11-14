@@ -1,0 +1,20 @@
+{
+  "note": "The real `scripts/backfill_series_follow.py` with --apply, exactly as it printed.",
+  "content": {
+    "args": [
+      "--apply"
+    ],
+    "output": [
+      "APPLIED: the database was changed.",
+      "Recurring-meeting rows looked at: 5",
+      "Rows that held a meeting of another team or of the personal space: 1",
+      "Meetings moved to the row of their own team or personal space: 1",
+      "New rows made for them: 0",
+      "Meetings taken out of their series (the team had no room): 0",
+      "Meetings left alone (their recorder's account is gone): 0",
+      "Personal spaces made for people who had none: 0",
+      "Rows left with no meeting after the split: 0",
+      "...of which still hold waiting agenda lines: 0"
+    ]
+  }
+}

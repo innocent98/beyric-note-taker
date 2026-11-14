@@ -1,0 +1,121 @@
+{
+  "note": "After the backfill A2 is back in the personal row.",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/9",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": 9,
+      "title": "Standup",
+      "team": {
+        "id": 1,
+        "name": "My team",
+        "is_personal": true
+      },
+      "cadence": "Weekly on Saturdays, 20:00",
+      "platform": "google_meet",
+      "timezone": "UTC",
+      "next_starts_at": null,
+      "next_text": null,
+      "sprint_note": null,
+      "can_rename": true,
+      "agenda_recipients": 0,
+      "unfinished": [
+        {
+          "id": 2,
+          "title": "Follow up on A2 private",
+          "status": "todo",
+          "assignee": null,
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": null,
+          "is_new": false,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-07",
+          "done_at": null,
+          "created_at": "2026-11-14T22:29:42.160180Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 2,
+            "title": "Standup",
+            "platform": "google_meet",
+            "created_at": "2026-11-07T20:00:00Z"
+          },
+          "project_id": null,
+          "milestone_id": null,
+          "sprint_id": null,
+          "carried": false,
+          "check_project": false,
+          "suggested": false,
+          "confidence": null,
+          "reason": null,
+          "quote_speaker": null,
+          "quote_line": null,
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": true,
+          "can_delete": true,
+          "can_decide": false
+        }
+      ],
+      "finished_since_text": "Sat 7 Nov",
+      "finished": [],
+      "questions": [
+        {
+          "id": 2,
+          "text": "Who owns A2 private?",
+          "meeting": {
+            "id": 2,
+            "title": "Standup",
+            "platform": "google_meet",
+            "created_at": "2026-11-07T20:00:00Z"
+          },
+          "can_update": true
+        }
+      ],
+      "agenda": [
+        {
+          "id": 1,
+          "text": "Prepare my own notes",
+          "can_remove": true
+        }
+      ],
+      "topics": [],
+      "suggested_agenda": [
+        {
+          "kind": "questions",
+          "text": "Settle 1 open question carried over"
+        }
+      ],
+      "past_meetings": [
+        {
+          "id": 2,
+          "title": "Standup",
+          "created_at": "2026-11-07T20:00:00Z",
+          "duration_seconds": 1500,
+          "tasks_count": 1
+        }
+      ],
+      "attendees": [
+        {
+          "name": "Ada Example",
+          "is_teammate": true
+        },
+        {
+          "name": "Guest Visitor",
+          "is_teammate": false
+        }
+      ]
+    }
+  }
+}
