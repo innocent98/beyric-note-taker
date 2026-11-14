@@ -698,7 +698,14 @@ Goal: one person has a permanent personal team and may belong to several teams; 
     - [x] Tests first, a mutation check, ruff, bounded local tests
     - [ ] CI green on the pushed head, Opus review of the leak-critical code, merge (the lead, on Adebayo's word)
     - [ ] Server: Adebayo runs the dry run, then `--apply`, **just before the switch-on** (commands in the SOP and the PR body)
-  - [ ] **S2: readers and mail, dark**: scoped `list_for`, `get`, `meetings_of`, carried questions, counts, `_resolve`, `_series_meeting_ids`, the topics source (`topics.source_meetings`), deterministic reminder order (ordinary team before personal, then lower team id), `team` on the series card and page (additive), "next meeting" hidden on personal rows; leak cases 2 to 9, 12 (mail to the hollow account), 16
+  - [x] **S2: readers and mail, dark** (branch `feature/series-follow-readers`, PR number added when opened; SOP `docs/sop/2026-11-14-series-follow-readers.md`; no migration)
+    - [x] Scoped `list_for`, `get`, `of_meeting`, `meetings_of`, carried questions, counts, `_resolve`, `_series_meeting_ids`, attendees and recipients (through `meetings_of`), via `series.in_row` / `rows_in_scope`
+    - [x] The topics source and the read side: none on a personal row, a topic citing another scope's meeting hidden
+    - [x] Deterministic reminder order (ordinary team before personal, then lower team id), one mail per person per occurrence
+    - [x] `team` `{id, name}` on the series card and page (additive, always present; `docs/openapi.json` updated, `web/lib/api/schema.d.ts` left for F1); "next meeting" (`next_starts_at`, `next_text`, `sprint_note`) null on personal rows
+    - [x] Leak cases 2 to 9, 10 to 12 (readers' half), 16 (`tests/test_series_readers.py`, 25 tests; 21 mutations, 20 killed and one equivalent)
+    - [x] PR 1 leftovers: hand-made sibling named from the meeting and twin found by either title, S1 and "every state" tests strengthened, the empty-card re-key respects the team cap, PR 1 SOP and runbook step 4 fixed
+    - [ ] CI green on the pushed head, Opus review of the leak-critical code, merge (the lead, on Adebayo's word)
   - [ ] **S3: docs and switch-on**: FE integration guide section with live captures, this checklist, the flag on after the backfill ran
   - [ ] **F1 (frontend, small)**: show the row's team on the series page; send it as `X-Team-Id` for the task drawer; hide "next meeting" on personal rows
   - [ ] Decision: ghost empty cards after a row loses its last meeting (see the S1 SOP, Follow-ups)

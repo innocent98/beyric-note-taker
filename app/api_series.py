@@ -28,7 +28,7 @@ from app import (
     team_admin,
     timezones,
 )
-from app.api_schemas import ErrorResponse, MeetingRef, QuestionOut, SeriesRef
+from app.api_schemas import ErrorResponse, MeetingRef, QuestionOut, SeriesRef, TeamRef
 from app.calendar_recurring import describe_cadence, next_text
 from app.db import get_session
 from app.models import (
@@ -39,6 +39,7 @@ from app.models import (
     ScheduledJoin,
     Series,
     Task,
+    Team,
     TeamMember,
     User,
     UserSettings,
@@ -95,6 +96,11 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+def _team_ref(session: Session, found: Series) -> TeamRef:
+    team = session.get(Team, found.team_id)
+    return TeamRef(id=found.team_id, name=team.name if team is not None else "")
+
+
 def _team_member_ids(found: Series):
     return select(TeamMember.user_id).where(TeamMember.team_id == found.team_id)
 
@@ -137,6 +143,8 @@ def _timing(
     cadence = describe_cadence(starts, zone)
     ahead = [event.starts_at for event in events if event.starts_at > now]
     upcoming = min(ahead) if ahead else None
+    if series.is_personal_row(session, found):
+        upcoming = None  # a personal row reads the person's own calendar, team occurrences too
     return (
         cadence,
         upcoming.astimezone(UTC) if upcoming else None,
@@ -221,6 +229,7 @@ def list_series(
             SeriesCard(
                 id=found.id,
                 title=_initial_title(found),
+                team=_team_ref(session, found),
                 cadence=cadence,
                 platform=_platform(found),
                 next_starts_at=upcoming,
@@ -258,6 +267,7 @@ def create_series(
     return SeriesCard(
         id=found.id,
         title=_initial_title(found),
+        team=_team_ref(session, found),
         cadence=cadence,
         platform=_platform(found),
         next_starts_at=upcoming,
@@ -327,6 +337,7 @@ def _page(session: Session, user: User, found: Series) -> SeriesPage:
     return SeriesPage(
         id=found.id,
         title=_initial_title(found),
+        team=_team_ref(session, found),
         cadence=cadence,
         platform=_platform(found),
         timezone=timezones.zone(zone_name).key,
@@ -438,6 +449,7 @@ def patch_series(
     return SeriesCard(
         id=found.id,
         title=_initial_title(found),
+        team=_team_ref(session, found),
         cadence=cadence,
         platform=_platform(found),
         next_starts_at=upcoming,
@@ -478,6 +490,7 @@ def put_series_project(
     return SeriesCard(
         id=found.id,
         title=_initial_title(found),
+        team=_team_ref(session, found),
         cadence=cadence,
         platform=_platform(found),
         next_starts_at=upcoming,

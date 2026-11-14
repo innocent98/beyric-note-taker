@@ -88,12 +88,16 @@ def source_meetings(session: Session, series: Series) -> list[Meeting]:
     meeting some of them may not read. A private meeting, the series owner's own included, is
     never an input. (A person's meetings leave the team's series when they leave the team, and a
     meeting of an account being deleted is treated as absent, as `visibility.can_read_clause`
-    does.)"""
+    does.) With `SERIES_FOLLOW_MEETINGS` on the row's scope decides (an ordinary team's is the
+    same rule: shared to or owned by it) and a PERSONAL row has no input at all: "Keeps coming up"
+    never reads a person's private meetings."""
+    if series_rules.is_personal_row(session, series):
+        return []
     return list(
         session.scalars(
             select(Meeting)
             .where(
-                Meeting.series_id == series.id,
+                series_rules.in_row(session, series),
                 Meeting.status == "ready",
                 visibility.in_team_clause(series.team_id),
                 visibility.recorder_not_being_deleted(),

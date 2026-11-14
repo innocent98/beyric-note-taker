@@ -124,19 +124,30 @@ def test_the_flag_is_off_by_default_and_needs_multi_team_too(monkeypatch):
 
 def test_the_scope_clause_and_the_python_rule_agree_on_every_state(session, world, template):
     """`scope_clause(team)` and `scope_team_of(meeting)` are one rule written twice (a query and a
-    value): they must never disagree, for an ordinary team and for a personal one."""
-    personal = teams.personal_team(session, world.ada.id)
-    states = {
-        "private": {},
-        "shared_own_personal": {"shared_team_id": personal.id},  # migration 0043's solo teams
-        "shared_x": {"shared_team_id": world.x.id},
-        "shared_y": {"shared_team_id": world.y.id},
-        "moved_x": {"owner_team_id": world.x.id},
-        "moved_y": {"owner_team_id": world.y.id},
-    }
-    made = {name: ready(session, template, **fields) for name, fields in states.items()}
+    value): they must never disagree. Every state a meeting can reach, for every recorder who can
+    reach it, against every team that exists (both ordinary ones and each person's personal one).
+
+    Reachable: private; shared to the recorder's OWN personal team (migration 0043's solo teams and
+    `apply_share_default`); shared to, or moved to, an ordinary team the recorder is in. Not
+    reachable, so not listed: shared to SOMEONE ELSE's personal team (joining a personal team is
+    refused, and a flag-off join, `transfer_owner` and `remove_users` all clear `is_personal`);
+    moved to a personal team (`move()` refuses it); shared AND moved (`ck_meetings_team_xor`)."""
+    people = {world.ada: [world.x], world.pat: [world.x, world.y]}
+    made: dict[str, Meeting] = {}
+    for who, member_of in people.items():
+        mine = teams.personal_team(session, who.id)
+        states = {"private": {}, "shared_own_personal": {"shared_team_id": mine.id}}
+        for team in member_of:
+            states[f"shared_{team.name}"] = {"shared_team_id": team.id}
+            states[f"moved_{team.name}"] = {"owner_team_id": team.id}
+        for name, fields in states.items():
+            made[f"{who.id}:{name}"] = ready(session, template, owner_user_id=who.id, **fields)
     session.commit()
-    for team in (session.get(type(personal), world.x.id), personal):
+    every_team = [world.x, world.y, world.z] + [
+        teams.personal_team(session, u.id) for u in (world.ada, world.pat, world.quinn, world.zed)
+    ]
+    assert len(made) == 4 + 6 and len(every_team) == 7  # Ada's four states, Pat's six
+    for team in every_team:
         in_scope = set(
             session.scalars(
                 select(Meeting.id).where(
@@ -146,19 +157,18 @@ def test_the_scope_clause_and_the_python_rule_agree_on_every_state(session, worl
             )
         )
         for name, meeting in made.items():
-            home = visibility.scope_team_of(
-                session, meeting
-            )  # a team id, or None = recorder's personal
-            expected = home == team.id if home is not None else team.is_personal
+            home = visibility.scope_team_of(session, meeting)  # an ordinary team id, or None
+            expected = (
+                home == team.id
+                if home is not None
+                else team.is_personal and team.owner_user_id == meeting.owner_user_id
+            )
             assert (meeting.id in in_scope) == expected, (name, team.id)
-    assert {n: visibility.scope_team_of(session, m) for n, m in made.items()} == {
-        "private": None,
-        "shared_own_personal": None,
-        "shared_x": world.x.id,
-        "shared_y": world.y.id,
-        "moved_x": world.x.id,
-        "moved_y": world.y.id,
-    }
+    homes = {n: visibility.scope_team_of(session, m) for n, m in made.items()}
+    assert homes[f"{world.ada.id}:private"] is None
+    assert homes[f"{world.pat.id}:shared_own_personal"] is None
+    assert homes[f"{world.pat.id}:shared_X"] == world.x.id
+    assert homes[f"{world.pat.id}:moved_Y"] == world.y.id
 
 
 def test_the_personal_scope_is_the_recorders_own_private_meetings_only(session, world, template):
@@ -325,7 +335,8 @@ def test_a_hand_made_series_follows_a_same_titled_row_and_never_a_calendar_one(
     sibling = session.get(Series, first.series_id)
     assert sibling.id != calendar_twin.id  # a calendar row is not a hand-made one's twin
     assert sibling.team_id == personal_of(session, world.ada)
-    assert sibling.calendar_recurring_id is None and sibling.title == "Weekly sync"
+    assert sibling.calendar_recurring_id is None
+    assert sibling.title == "Standup"  # named from the meeting, not from the source row's title
     # a third meeting goes to a row that already exists
     third = put(session, template, made, who=world.ada, team=world.x.id, when=LATER)
     meeting_teams.unshare(session, third)
@@ -830,10 +841,16 @@ def test_the_backfill_skips_a_meeting_whose_recorder_is_gone(session, world, tem
 
 
 def test_a_meeting_shared_to_its_recorders_own_personal_team_is_private(session, world, template):
-    """Migration 0043 made every solo team of one personal and kept what was shared to it."""
+    """Migration 0043 made every solo team of one personal and kept what was shared to it. Both
+    halves of the rule must treat it as the recorder's private meeting: the clause lists it in the
+    recorder's personal row (it fails if the clause only takes `shared_team_id IS NULL`), and the
+    value says None, so an account that is gone leaves it alone (it fails if the value says the
+    personal team's id)."""
     ada_personal = personal_of(session, world.ada)
     mine = standup(session, ada_personal, owner_id=world.ada.id)
     meeting = put(session, template, mine, who=world.ada, team=ada_personal)
+    assert [m.id for m in series_rules.meetings_of(session, mine, world.ada)] == [meeting.id]
+    assert visibility.scope_team_of(session, meeting) is None
     placed = series_rules.place_meeting(session, meeting)
     assert placed.series.id == mine.id and not placed.moved  # already where it belongs
     report = split_mixed_series(session, apply=False)
@@ -842,6 +859,9 @@ def test_a_meeting_shared_to_its_recorders_own_personal_team_is_private(session,
     event = calendar_event(session, world.ada, "rid-7", MONDAY)
     auto = calendar_meeting(session, template, world.ada, event, shared_team_id=ada_personal)
     assert series_rules.link_from_calendar(session, auto).team_id == ada_personal
+    world.ada.status = "deleted"
+    session.commit()
+    assert series_rules.place_meeting(session, meeting).skipped  # private: nobody to take it to
 
 
 def test_a_new_row_is_named_from_the_calendar_event_never_from_the_source_rows_rename(
@@ -931,3 +951,65 @@ def test_the_backfill_counts_rows_left_empty_and_personal_spaces_made(session, w
     assert report.rows_left_empty == 1 and report.rows_left_empty_with_lines == 1
     text = "\n".join(report.lines())
     assert "Waiting line" not in text and "eve@" not in text
+
+
+# ---- PR 2 carries (the Opus re-check of PR 1) ----
+
+
+def test_a_rename_of_a_hand_made_row_in_x_never_reaches_a_new_sibling_row(session, world, template):
+    """A hand-made row has no calendar event to name a sibling from; the meeting names it. A new
+    row in Y, or in a leaver's personal space, never carries the internal name X gave its row."""
+    internal = "Sync: Bob performance plan"
+    legacy = Series(team_id=world.x.id, owner_user_id=world.ada.id, title=internal)
+    session.add(legacy)
+    session.commit()
+    shared = put(session, template, legacy, who=world.pat, team=world.x.id, title="Weekly sync")
+    meeting_teams.share(session, world.pat, shared, world.y.id)
+    made = session.get(Series, shared.series_id)
+    assert made.team_id == world.y.id and made.title == "Weekly sync"
+    left = put(session, template, legacy, who=world.pat, team=world.x.id, title="Planning")
+    teams.leave(session, world.pat, datetime.now(UTC), team_id=world.x.id)
+    session.commit()
+    personal = session.get(Series, left.series_id)
+    assert personal.team_id == personal_of(session, world.pat) and personal.title == "Planning"
+    others = {s.title for s in session.scalars(select(Series)) if s.id != legacy.id}
+    assert internal not in others
+
+
+def test_a_hand_made_sibling_is_found_by_the_meetings_name_as_well_as_the_source_title(
+    session, world, template
+):
+    legacy = Series(team_id=world.x.id, owner_user_id=world.ada.id, title="Renamed in X")
+    existing = Series(team_id=world.y.id, owner_user_id=world.quinn.id, title="Weekly sync")
+    twin = Series(team_id=world.y.id, owner_user_id=world.quinn.id, title="Renamed in X")
+    session.add_all([legacy, existing])
+    session.commit()
+    meeting = put(session, template, legacy, who=world.pat, team=world.x.id, title="Weekly sync")
+    meeting_teams.share(session, world.pat, meeting, world.y.id)
+    assert meeting.series_id == existing.id  # found by the meeting's own name, not remade
+    session.add(twin)
+    session.commit()
+    other = put(session, template, legacy, who=world.pat, team=world.x.id, title="Other")
+    meeting_teams.share(session, world.pat, other, world.y.id)
+    assert other.series_id == twin.id  # and by the source title, as before
+
+
+def test_the_empty_card_rekey_never_pushes_a_team_past_its_limit(
+    session, world, template, monkeypatch
+):
+    monkeypatch.setattr(series_rules, "MAX_SERIES_PER_TEAM", 2)
+    ada_personal = personal_of(session, world.ada)
+    standup(session, ada_personal, rid="a", title="A", owner_id=world.ada.id)
+    standup(session, ada_personal, rid="b", title="B", owner_id=world.ada.id)  # personal is full
+    event = calendar_event(session, world.ada, RID, MONDAY)
+    scheduled = join_for(session, world.ada, event, state="scheduled")
+    assert series_rules.sync_from_joins(session, MONDAY) == 1
+    card = row_of(session, world.x.id)  # Ada's default team, empty
+    meeting = ready(session, template, source="calendar", created_at=event.starts_at)  # private
+    scheduled.meeting_id, scheduled.state = meeting.id, "completed"
+    session.commit()
+    assert series_rules.link_from_calendar(session, meeting) is None  # no room for another row
+    session.commit()
+    assert session.get(Series, card.id).team_id == world.x.id  # the card was not re-keyed
+    count = select(func.count()).select_from(Series).where(Series.team_id == ada_personal)
+    assert session.scalar(count) == 2  # still the limit, never 3

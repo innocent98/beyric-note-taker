@@ -756,6 +756,7 @@
           "bot_name": {
             "anyOf": [
               {
+                "maxLength": 2000,
                 "type": "string"
               },
               {
@@ -1473,6 +1474,7 @@
         "additionalProperties": false,
         "properties": {
           "name": {
+            "maxLength": 2000,
             "title": "Name",
             "type": "string"
           }
@@ -3968,6 +3970,9 @@
               }
             ]
           },
+          "team": {
+            "$ref": "#/components/schemas/TeamRef"
+          },
           "title": {
             "title": "Title",
             "type": "string"
@@ -3980,6 +3985,7 @@
         "required": [
           "id",
           "title",
+          "team",
           "cadence",
           "platform",
           "next_starts_at",
@@ -4149,6 +4155,9 @@
             "title": "Suggested Agenda",
             "type": "array"
           },
+          "team": {
+            "$ref": "#/components/schemas/TeamRef"
+          },
           "timezone": {
             "title": "Timezone",
             "type": "string"
@@ -4175,6 +4184,7 @@
         "required": [
           "id",
           "title",
+          "team",
           "cadence",
           "platform",
           "timezone",

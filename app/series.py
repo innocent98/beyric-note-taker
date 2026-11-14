@@ -25,16 +25,23 @@ to or owned by it; for a personal team, its owner's private ones), one row per r
 team scope. `follow_meeting` moves a meeting to the row of its scope when it changes team. Off,
 none of that runs and a row is the recorder's default team's, as it always was.
 
+**The readers follow it too (PR 2).** With the flag on every reader of a row's meetings (the page,
+the cards and their counts, carried questions, unfinished tasks, attendees, the repeat topics, the
+mail) also asks for the row's scope (`in_row`, `rows_in_scope`), so a meeting of another scope that
+a legacy row still points at is never shown, counted, mailed or fed to the model, whatever the
+writers did. A personal row has no repeat topics (never read, never shown).
+
 This module imports neither the services nor the API (the pipeline imports it).
 """
 
 import logging
 import re
+from collections import defaultdict
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, false, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -51,6 +58,7 @@ from app.models import (
     SeriesAgendaSend,
     SeriesTopic,
     Task,
+    Team,
     TeamMember,
     User,
 )
@@ -61,6 +69,7 @@ from app.visibility import (
     owns,
     recorded_by,
     scope_team_of,
+    series_scope_clause,
     visible_meetings,
 )
 
@@ -135,7 +144,48 @@ def is_manager(session: Session, user: User, team_id: int) -> bool:
     return member is not None and member.role in MANAGER_ROLES
 
 
-def _seen_by(user: User):
+def in_row(session: Session, series: Series):
+    """`where` condition on `meetings`: in this row. With the flag on, also in the row's SCOPE
+    (`visibility.series_scope_clause` of its team), so a meeting of another scope that a legacy row
+    still points at is out. Off: exactly `series_id == series.id`, as before."""
+    if not follow_enabled():
+        return Meeting.series_id == series.id
+    team = session.get(Team, series.team_id)
+    if team is None:
+        return false()
+    return and_(Meeting.series_id == series.id, series_scope_clause(team))
+
+
+def rows_in_scope(session: Session, series_ids: Iterable[int]):
+    """`in_row` for several rows at once (one query for their teams): the condition is true for a
+    meeting that is in one of the rows and, with the flag on, in that row's scope."""
+    ids = list(series_ids)
+    if not follow_enabled():
+        return Meeting.series_id.in_(ids)
+    by_team: dict[int, list[int]] = defaultdict(list)
+    for series_id, team_id in session.execute(
+        select(Series.id, Series.team_id).where(Series.id.in_(ids))
+    ):
+        by_team[team_id].append(series_id)
+    found = {t.id: t for t in session.scalars(select(Team).where(Team.id.in_(list(by_team))))}
+    parts = [
+        and_(Meeting.series_id.in_(row_ids), series_scope_clause(found[team_id]))
+        for team_id, row_ids in by_team.items()
+        if team_id in found
+    ]
+    return or_(*parts) if parts else false()
+
+
+def is_personal_row(session: Session, series: Series) -> bool:
+    """A row of someone's personal team, with the flag on: it has no repeat topics and no "next
+    meeting" (Adebayo, 2026-11-14), and nobody but its owner is ever in it."""
+    if not follow_enabled():
+        return False
+    team = session.get(Team, series.team_id)
+    return team is not None and team.is_personal
+
+
+def _seen_by(user: User, team: Team | None = None):
     """A series the caller's team owns is shown to the caller only when the caller made it, has a
     meeting of it they may read, or have its recurring event on their own calendar. A series made
     by hand is no different: it is named after a person's meeting ("Make this a recurring
@@ -146,8 +196,11 @@ def _seen_by(user: User):
     With the flag on, "made it" and "has the event on their calendar" show an EMPTY card (made
     before the first recording) and nothing more: once a row has any meeting, only a meeting the
     caller may read lists it, so a creator whose own meetings went to their personal row does not
-    keep seeing the team's card."""
+    keep seeing the team's card. With the flag on `team` is the row's team and the meeting must
+    also be in its scope (`team` missing fails closed)."""
     readable = select(Meeting.id).where(Meeting.series_id == Series.id, can_read_clause(user))
+    if follow_enabled():
+        readable = readable.where(series_scope_clause(team) if team is not None else false())
     own_event = select(CalendarEvent.id).where(
         CalendarEvent.user_id == user.id,
         CalendarEvent.recurring_event_id == Series.calendar_recurring_id,
@@ -165,9 +218,18 @@ def get(session: Session, user: User, series_id: int) -> Series | None:
     series of either through the same URL (no team has to be named for an id), and a series of a
     team they are not in does not exist for them."""
     mine = select(TeamMember.team_id).where(TeamMember.user_id == user.id)
-    return session.scalars(
-        select(Series).where(Series.id == series_id, Series.team_id.in_(mine), _seen_by(user))
+    if not follow_enabled():
+        return session.scalars(
+            select(Series).where(Series.id == series_id, Series.team_id.in_(mine), _seen_by(user))
+        ).first()
+    found = session.scalars(
+        select(Series).where(Series.id == series_id, Series.team_id.in_(mine))
     ).first()
+    if found is None:
+        return None
+    team = session.get(Team, found.team_id)
+    seen = session.scalar(select(Series.id).where(Series.id == found.id, _seen_by(user, team)))
+    return found if seen is not None else None
 
 
 def list_for(session: Session, user: User, team_id: int | None = None) -> list[Series]:
@@ -177,10 +239,11 @@ def list_for(session: Session, user: User, team_id: int | None = None) -> list[S
     member = membership(session, user, team_id)
     if member is None:
         return []
+    team = session.get(Team, member.team_id) if follow_enabled() else None
     return list(
         session.scalars(
             select(Series)
-            .where(Series.team_id == member.team_id, _seen_by(user))
+            .where(Series.team_id == member.team_id, _seen_by(user, team))
             .order_by(Series.title, Series.id)
             .limit(MAX_SERIES_PER_TEAM)
         )
@@ -192,7 +255,17 @@ def of_meeting(session: Session, user: User, meeting: Meeting) -> Series | None:
     meeting whose series is another team's (its owner left that team) shows no series."""
     if meeting.series_id is None:
         return None
-    return get(session, user, meeting.series_id)
+    found = get(session, user, meeting.series_id)
+    if found is not None and follow_enabled():
+        # A legacy row that still holds a meeting of another scope: that meeting is not in it.
+        if (
+            session.scalar(
+                select(Meeting.id).where(Meeting.id == meeting.id, in_row(session, found))
+            )
+            is None
+        ):
+            return None
+    return found
 
 
 # ---- making and linking ----
@@ -331,8 +404,8 @@ def _rekey_empty_card(session: Session, recorder: User, recurring_id: str, scope
             Series.team_id == scope_id, Series.calendar_recurring_id == recurring_id
         )
     )
-    if held or history or taken is not None:
-        return
+    if held or history or taken is not None or _is_full(session, scope_id):
+        return  # a re-key is a row more in the scope's team: never past its limit
     card.team_id = scope_id
     session.flush()
 
@@ -649,12 +722,14 @@ def _row_for_scope(
 ) -> tuple[Series | None, bool]:
     """The row of `current`'s recurring meeting in the team `scope_id`, made when the team has none:
     (row, made). A calendar row is found by its recurring id; a hand-made one (no id) by the same
-    title among that team's hand-made rows. A new row is made by the recorder and NEVER copies the
-    project link (a project belongs to one team) or the agenda lines (they are the team's). A
-    calendar row is titled from the calendar event, else the meeting's own title, never from the
-    source row, whose name may be one its team renamed it to (a hand-made row has to keep the
-    source title: that is how its twin is found). No row (None) when the team has as many as
-    fit."""
+    title among that team's hand-made rows: the source row's title, or the meeting's own name (the
+    row a person makes from a meeting is named after it, `make_from_reused_link`). A new row is
+    made by the recorder and NEVER copies the project link (a project belongs to one team) or the
+    agenda lines (they are the team's). It is titled from the calendar event, else the meeting's
+    own title, never from the source row, whose name may be one its team renamed it to (a rename
+    in X must not reach Y's new row or a leaver's personal row). No row (None) when the team has
+    as many as fit."""
+    own_title = _clean(titles.meeting_name(meeting), MAX_TITLE_CHARS) or UNTITLED
     if current.calendar_recurring_id is not None:
         found = session.scalars(
             select(Series).where(
@@ -668,7 +743,7 @@ def _row_for_scope(
             .where(
                 Series.team_id == scope_id,
                 Series.calendar_recurring_id.is_(None),
-                Series.title == current.title,
+                Series.title.in_({current.title, own_title}),
             )
             .order_by(Series.id)
         ).first()
@@ -688,7 +763,10 @@ def _row_for_scope(
         )
     else:
         made = Series(
-            team_id=scope_id, owner_user_id=creator, title=current.title, platform=current.platform
+            team_id=scope_id,
+            owner_user_id=creator,
+            title=own_title,
+            platform=current.platform,
         )
         session.add(made)
         session.flush()
@@ -750,7 +828,7 @@ def meetings_of(
     content."""
     query = (
         select(Meeting)
-        .where(Meeting.series_id == series.id, Meeting.status == "ready")
+        .where(in_row(session, series), Meeting.status == "ready")
         .order_by(Meeting.created_at.desc(), Meeting.id.desc())
     )
     if viewer is not None:
@@ -837,8 +915,8 @@ def recipients(session: Session, series: Series) -> list[Attendee]:
 # ---- carry-over: tasks and questions ----
 
 
-def _series_meeting_ids(series: Series):
-    return select(Meeting.id).where(Meeting.series_id == series.id)
+def _series_meeting_ids(session: Session, series: Series):
+    return select(Meeting.id).where(in_row(session, series))
 
 
 def unfinished_tasks(session: Session, viewer: User, series: Series) -> list[Task]:
@@ -851,7 +929,7 @@ def unfinished_tasks(session: Session, viewer: User, series: Series) -> list[Tas
             .where(
                 tasks.visible(viewer),
                 tasks.confirmed(),
-                Task.meeting_id.in_(_series_meeting_ids(series)),
+                Task.meeting_id.in_(_series_meeting_ids(session, series)),
                 Task.status != "done",
             )
             .order_by(Task.id)
@@ -872,7 +950,7 @@ def finished_since(
         .where(
             tasks.visible(viewer),
             tasks.confirmed(),
-            Task.meeting_id.in_(_series_meeting_ids(series)),
+            Task.meeting_id.in_(_series_meeting_ids(session, series)),
             Task.status == "done",
             Task.done_at.is_not(None),
         )
@@ -892,7 +970,7 @@ def carried_questions(
         select(OpenQuestion, Meeting)
         .join(Meeting, Meeting.id == OpenQuestion.meeting_id)
         .where(
-            Meeting.series_id == series.id,
+            in_row(session, series),
             can_read_clause(viewer),
             OpenQuestion.carry.is_(True),
             OpenQuestion.resolved_at.is_(None),
@@ -918,6 +996,7 @@ def counts_for(
     ids = list(series_ids)
     if not ids:
         return {}
+    in_rows = rows_in_scope(session, ids)
     task_counts = dict(
         session.execute(
             select(Meeting.series_id, func.count(Task.id))
@@ -925,7 +1004,7 @@ def counts_for(
             .where(
                 tasks.visible(viewer),
                 tasks.confirmed(),
-                Meeting.series_id.in_(ids),
+                in_rows,
                 Task.status != "done",
             )
             .group_by(Meeting.series_id)
@@ -937,7 +1016,7 @@ def counts_for(
             .join(OpenQuestion, OpenQuestion.meeting_id == Meeting.id)
             .where(
                 can_read_clause(viewer),
-                Meeting.series_id.in_(ids),
+                in_rows,
                 OpenQuestion.carry.is_(True),
                 OpenQuestion.resolved_at.is_(None),
             )
@@ -1000,12 +1079,13 @@ def _resolve(
     session: Session, viewer: User, question: OpenQuestion, meeting: Meeting, now: datetime
 ) -> None:
     twins = [question]
-    if meeting.series_id is not None:
+    row = session.get(Series, meeting.series_id) if meeting.series_id is not None else None
+    if row is not None:
         rows = session.execute(
             select(OpenQuestion, Meeting)
             .join(Meeting, Meeting.id == OpenQuestion.meeting_id)
             .where(
-                Meeting.series_id == meeting.series_id,
+                in_row(session, row),
                 OpenQuestion.fingerprint == question.fingerprint,
                 OpenQuestion.id != question.id,
                 OpenQuestion.resolved_at.is_(None),
@@ -1013,8 +1093,8 @@ def _resolve(
             )
         ).all()
         twins += [q for q, m in rows if can_change_question(session, viewer, m)]
-    for row in twins:
-        row.resolved_at, row.resolved_by = now, viewer.id
+    for each in twins:
+        each.resolved_at, each.resolved_by = now, viewer.id
 
 
 # ---- agenda ----
@@ -1131,6 +1211,8 @@ def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView
     unshared, moved or deleted the topic is hidden (the job recomputes soon after: sharing marks
     the series stale). Text the model wrote must never reach someone who cannot read what it was
     written from. `meetings` are the cited meetings, oldest first."""
+    if is_personal_row(session, series):
+        return []  # no "Keeps coming up" on the personal page (Adebayo, 2026-11-14)
     rows = list(
         session.scalars(
             select(SeriesTopic)
@@ -1151,7 +1233,7 @@ def topics_for(session: Session, viewer: User, series: Series) -> list[TopicView
         m.id: m
         for m in session.scalars(
             visible_meetings(viewer).where(
-                Meeting.id.in_(wanted), Meeting.series_id == series.id, Meeting.status == "ready"
+                Meeting.id.in_(wanted), in_row(session, series), Meeting.status == "ready"
             )
         )
     }
