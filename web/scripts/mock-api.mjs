@@ -50,6 +50,11 @@ const { values } = parseArgs({
     notrecorded: { type: "string", default: "none" },
     sendnow: { type: "string", default: "ok" },
     "multi-team": { type: "string", default: "off" },
+    // With --multi-team on: "two" (default) = personal (default) + Product team + Client Y; "one" = personal + Product
+    // team, and then the ordinary team is the default (app/teams.py default_membership: the only ordinary team).
+    teams: { type: "string", default: "two" },
+    // Print each request's X-Team-Id to stdout (for looking at which team a screen asked for).
+    "log-team": { type: "boolean", default: false },
   },
 });
 
@@ -62,9 +67,9 @@ const multiTeam = values["multi-team"] === "on";
 const roleOf = values.role ?? "owner";
 const myTeams = multiTeam
   ? [
-      { id: 1, name: "My team", role: "owner", member_count: 1, is_personal: true, is_default: true, can_manage: true },
-      { id: 2, name: "Product team", role: roleOf, member_count: 4, is_personal: false, is_default: false, can_manage: roleOf !== "member" },
-      { id: 3, name: "Client Y", role: "member", member_count: 2, is_personal: false, is_default: false, can_manage: false },
+      { id: 1, name: "My team", role: "owner", member_count: 1, is_personal: true, is_default: values.teams !== "one", can_manage: true },
+      { id: 2, name: "Product team", role: roleOf, member_count: 4, is_personal: false, is_default: values.teams === "one", can_manage: roleOf !== "member" },
+      ...(values.teams === "one" ? [] : [{ id: 3, name: "Client Y", role: "member", member_count: 2, is_personal: false, is_default: false, can_manage: false }]),
     ]
   : [];
 const MAX_OWNED = 3;
@@ -673,12 +678,20 @@ let notifyReminders = true;
 const tasksAtStart = JSON.stringify(tasks);
 const agendaAtStart = JSON.stringify(Object.fromEntries(Object.entries(seriesPages).map(([id, p]) => [id, p.agenda])));
 
+const teamLog = [];
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const path = url.pathname.replace(/\/$/, "");
   const loggedIn = /(^|;\s*)session=owner/.test(req.headers.cookie ?? "");
   const method = req.method ?? "GET";
   const data = ["POST", "PUT", "PATCH"].includes(method) ? await readJson(req) : (req.resume(), null);
+  if (values["log-team"] && path.startsWith("/api/")) {
+    const line = `${method} ${path} X-Team-Id=${req.headers["x-team-id"] ?? "-"}`;
+    console.log(line);
+    teamLog.push(line);
+  }
+  // Not part of the API: `/__mock/teamlog` answers the lines logged since the last call (needs --log-team), then clears them.
+  if (path === "/__mock/teamlog") return json(res, 200, { lines: teamLog.splice(0) });
 
   // Not part of the API: `/__mock/set?decisions=failed&review=empty` changes the Decisions and Review
   // states while the mock runs (the Next build proxies the browser's calls to one address, so one mock
@@ -753,8 +766,11 @@ const server = http.createServer(async (req, res) => {
     return json(res, 401, { error: { code: "not_authenticated", message: "Log in to continue." } });
   }
   if (path === "/api/meetings" && method === "GET") {
-    const meetings = values.empty ? [] : details.map(summary).reverse();
-    return json(res, 200, { meetings, has_more: false, next_before_id: null, worker_stale: values.stale || values.empty });
+    // With --multi-team on, each title carries the team the request named, so a screenshot shows which team's list it is.
+    const named = multiTeam ? requestedTeam(req) : null;
+    const tag = named ? `[${named.name}] ` : "";
+    const meetings = values.empty ? [] : details.map(summary).reverse().map((m) => (tag ? { ...m, title: `${tag}${m.title}` } : m));
+    return json(res, 200, { meetings, has_more: false, next_before_id: null, refresh_after_seconds: null, worker_stale: values.stale || values.empty });
   }
   if (path === "/api/team/invites/accept" && method === "POST") {
     if (data?.token === "onteam") return json(res, 409, { error: { code: "already_on_team", message: "You are on another team. Leave it first, then accept this invitation." } });

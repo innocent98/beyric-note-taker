@@ -4,15 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
-import {
-  isTeamPage,
-  NOTICE_PARAM,
-  TEAM_GONE_MESSAGE,
-  TEAM_GONE_NOTICE,
-  TEAM_PARAM,
-  withTeam,
-  writeStoredTeam,
-} from "@/lib/active-team";
+import { isLeavingForTeamSwitch, NOTICE_PARAM, planSync, TEAM_GONE_MESSAGE, writeStoredTeam } from "@/lib/active-team";
 import type { TeamSummary } from "@/lib/api/types";
 import { useActiveTeam } from "@/components/app/use-active-team";
 
@@ -29,35 +21,30 @@ export function ActiveTeamSync({ teams }: { teams: TeamSummary[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const { fromUrl, stored, stale, defaultId } = useActiveTeam(teams);
+  const { stored } = useActiveTeam(teams);
   const [toast, flash] = useToast(7000);
-  const noticed = params?.get(NOTICE_PARAM) === TEAM_GONE_NOTICE;
 
   useEffect(() => {
-    if (noticed) {
+    // The switcher has started loading another team's page: this page is on its way out and its address
+    // names the old team, so nothing here may write the team (see beginTeamSwitch).
+    if (isLeavingForTeamSwitch()) return;
+    const step = planSync({ pathname, params, teams, stored });
+    if (step.kind === "notice") {
       writeStoredTeam(null);
       flash(TEAM_GONE_MESSAGE);
       // Take the notice out of the address, so a reload does not show it again.
       const url = new URL(window.location.href);
       url.searchParams.delete(NOTICE_PARAM);
       window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-      return;
-    }
-    if (stale) {
+    } else if (step.kind === "stale") {
       writeStoredTeam(null);
       flash(TEAM_GONE_MESSAGE);
-      return;
+    } else if (step.kind === "remember") {
+      writeStoredTeam(step.teamId);
+    } else if (step.kind === "follow") {
+      router.replace(step.href);
     }
-    if (fromUrl !== null && teams.some((t) => t.id === fromUrl)) {
-      const remembered = fromUrl === defaultId ? null : fromUrl;
-      if (remembered !== stored) writeStoredTeam(remembered);
-      return;
-    }
-    if (isTeamPage(pathname) && params?.get(TEAM_PARAM) === null && stored !== null) {
-      const query = params.toString();
-      router.replace(withTeam(`${pathname}${query ? `?${query}` : ""}`, stored));
-    }
-  }, [noticed, stale, fromUrl, stored, defaultId, teams, pathname, params, router, flash]);
+  }, [stored, teams, pathname, params, router, flash]);
 
   return <Toast message={toast} />;
 }
