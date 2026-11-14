@@ -28,6 +28,7 @@ from starlette.convertors import Convertor, register_url_convertor
 from app import (
     ai_runs,
     auth,
+    bot_names,
     deletion,
     edge,
     passwords,
@@ -301,7 +302,14 @@ def status_text(meeting: Meeting, now: datetime | None = None) -> str:
         if text:
             if bot_state_is_stale(meeting, now):
                 return BOT_STATE_UNSURE_TEXT
-            return text.format(bot=get_settings().bot_name_for(meeting.bot_provider))
+            return text.format(
+                bot=bot_names.shown_name(
+                    get_settings(),
+                    provider=meeting.bot_provider,
+                    platform=meeting.platform,
+                    stored=meeting.bot_name,
+                )
+            )
         if meeting.terminal_seen_at is not None and reason not in JOIN_FAILURE_MARKS:
             return CALL_ENDED_TEXT  # Vexa said the call is over and the recording is being made
         return "Bot sent"

@@ -1,0 +1,22 @@
+{
+  "note": "The owner account made by the migration has no name: `name` is `null`.",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/settings/name",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "name": null
+    }
+  }
+}

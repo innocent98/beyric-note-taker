@@ -53,7 +53,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from app import titles, transcript_source, usage
+from app import bot_names, titles, transcript_source, usage
 from app.bot_provider import (
     BotDuplicate,
     BotId,
@@ -278,10 +278,27 @@ def place_bot(
     except PlacementRefused:
         session.rollback()  # also releases the lock
         raise
+    effective = settings or get_settings()
+    provider = provider_name(vexa)
+    # The note taker name for this meeting (the person's own, else the server default): computed
+    # once, sent, and stored on the meeting below, so what was sent is what is recorded.
+    sent_name = bot_names.stored_name(effective, user, provider)
     try:
         vexa_id = vexa.send_bot(
             req.meeting_url,
-            **transcript_source.send_options(session, vexa, user.id, settings or get_settings()),
+            **transcript_source.send_options(
+                session,
+                vexa,
+                user.id,
+                effective,
+                bot_name=sent_name,
+                shown_bot_name=bot_names.shown_name(
+                    effective, provider=provider, platform=req.platform, stored=sent_name
+                ),
+                fallback_shown_bot_name=bot_names.shown_name(
+                    effective, provider=provider, platform=req.platform, stored=None
+                ),
+            ),
         )
     except BotDuplicate:  # a bot that is not ours is there (another host, a race)...
         if not req.adopt_orphan:
@@ -298,6 +315,9 @@ def place_bot(
     except BaseException:  # the host said no, or anything else: no meeting, free the slot
         session.rollback()
         raise
+    # The provider answers with the name it really used when it had to fall back to the default
+    # because the person's own name was refused (`skribby.SentBotId`): that is what is stored.
+    sent_name = getattr(vexa_id, "bot_name", None) or sent_name
     meeting = Meeting(
         owner_user_id=user.id,
         url=req.meeting_url,
@@ -305,8 +325,9 @@ def place_bot(
         native_id=req.native_id,
         template_id=template_id,
         vexa_meeting_id=None if vexa_id is None else str(vexa_id),
-        bot_provider=provider_name(vexa),
+        bot_provider=provider,
         bot_region=provider_region(vexa),
+        bot_name=sent_name,
         started_polling_at=now,
         source=req.source,
         title=titles.event_title(req.title),

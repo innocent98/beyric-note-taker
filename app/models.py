@@ -143,6 +143,9 @@ class User(Base):
     # never gates a meeting, the bot or auto-join.
     recording_ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     recording_ack_version: Mapped[str | None] = mapped_column(String(32))
+    # The name this person chose for the note taker (Settings); null = the server default. Cleaned
+    # and checked by `app/bot_names.py` before it is stored.
+    bot_name: Mapped[str | None] = mapped_column(String(50))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # When the admin deleted the account (status `deleted`); the purge gives up a day after it.
@@ -740,6 +743,9 @@ class Meeting(Base):
     # The hosted provider's region the bot was sent to (`eu`, `jp`); null for Vexa. Skribby's two
     # regions are separate accounts: a bot sent to one is not found in the other.
     bot_region: Mapped[str | None] = mapped_column(String(8))
+    # The note taker name sent with this meeting's bot when it was created (`app/bot_names.py`);
+    # null = the server default (meetings made before migration 0047, providers that take no name).
+    bot_name: Mapped[str | None] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(16), default="bot_sent", server_default="bot_sent")
     step: Mapped[str] = mapped_column(String(16), default="waiting", server_default="waiting")
     failure_reason: Mapped[str | None] = mapped_column(Text)

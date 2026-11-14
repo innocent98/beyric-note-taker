@@ -716,6 +716,43 @@ class TimeZoneIn(Body):
     time_zone: str
 
 
+class BotNameOut(BaseModel):
+    # The name the person chose for the note taker, or null while they use the server default.
+    bot_name: str | None
+    # The server default, read from the server (never hard-coded in the page): what the bot is
+    # called when `bot_name` is null. Shown as the form's placeholder and in its help text.
+    bot_name_default: str
+    # The soft warning for a name that sounds like a recorder ("Bot", "Notetaker", "Recording",
+    # "Transcription", "AI", whole words): `null` for an ordinary name. It never stops a save.
+    warning: str | None = None
+    # The server's switch (`BOT_NAME_APPLIES_WHEN_SIGNED_IN`), read only.
+    bot_name_applies_when_signed_in: bool = False
+    # The name the signed-in Google Meet bot always shows (the Google account's own name,
+    # `SKRIBBY_ACCOUNT_NAME`), or `null` when the page should say nothing about Meet's name (no
+    # signed-in account, no account name set, or the switch above is on). The page says: "On Google
+    # Meet the note taker always shows its own name, "<this>". Your name shows on Zoom and Teams."
+    meet_account_name: str | None = None
+
+
+class DisplayNameOut(BaseModel):
+    # The caller's name as stored (`null` for an account that never had one: the first Google
+    # sign-in without a name and the owner account made by the migration).
+    name: str | None
+
+
+class DisplayNameIn(Body):
+    # 1 to 100 characters after whitespace is collapsed; control, direction and invisible
+    # characters are removed. Empty (or nothing visible) is 422 `name_invalid`, so is a longer name.
+    name: str
+
+
+class BotNameIn(Body):
+    # Trimmed and checked by the server: at most 50 characters after whitespace is collapsed, no
+    # hidden or control characters, no email address, no web address; anything else is 422
+    # `bot_name_invalid` with a plain message. Null or an empty string clears it (the default).
+    bot_name: str | None = None
+
+
 class LanguagePreferencesIn(Body):
     # `en`, `fr` or `es`; anything else is 422 `language_unsupported`.
     default_language: str

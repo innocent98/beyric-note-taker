@@ -150,6 +150,15 @@ UUID_BITS_DROPPED = 68
 _NAME_BAD_CHARS = re.compile(r"[\[\]:<>]")
 
 
+class SentBotId(str):
+    """The id `send_bot` returns, carrying the note taker name the bot was REALLY sent with when
+    that is not the one asked for: Skribby refused the person's name and the create was made again
+    with the server default (`SkribbyClient.create`). `bot_name` is that name; absent, the name
+    asked for was used. Callers store it on the meeting (`getattr(bot_id, "bot_name", None)`)."""
+
+    bot_name: str | None = None
+
+
 class SkribbyError(BotProviderError):
     """HTTP failure or connection problem talking to Skribby. Treat as retryable."""
 
@@ -666,6 +675,15 @@ def map_bot(
     return BotMeeting(status="requested")
 
 
+def _refusal_text(response: httpx.Response) -> str:
+    """What Skribby said about a refused create, lower-cased and bounded, only to see which
+    parameter it names. Never logged."""
+    try:
+        return response.text[:4000].lower()
+    except Exception:  # an unreadable body: nothing is blamed in particular
+        return ""
+
+
 def _handle_for(bot_id: Any) -> int | None:
     try:
         return recording_handle(bot_uuid(bot_id if bot_id is not None else ""))
@@ -877,6 +895,7 @@ class SkribbyClient:
         canonical_url: str,
         vocabulary: list[str] | None = None,
         chat_notice: str | None = None,
+        bot_name: str | None = None,
     ) -> dict[str, Any]:
         stop_options: dict[str, Any] = {
             "waiting_room_timeout": WAITING_ROOM_MINUTES,
@@ -901,7 +920,10 @@ class SkribbyClient:
             "transcription_model": self._model,
             "service": SERVICES[platform],
             "meeting_url": canonical_url,
-            "bot_name": self._bot_name,
+            # The person's own note taker name for this meeting (`app/bot_names.py`), else the
+            # server default. Sent on every platform, signed in or not: whether Skribby shows it on
+            # a signed-in Google Meet bot is unproven (`docs/sop/2026-11-14-per-user-bot-name.md`).
+            "bot_name": (bot_name or "").strip() or self._bot_name,
             "custom_metadata": {"app": "beyric-note-taker", "meeting_code": code},
             "stop_options": stop_options,
         }
@@ -930,7 +952,12 @@ class SkribbyClient:
         with self._http(connect=SEND_CONNECT_SECONDS) as client:
             return client.post("/bot", json=payload)
 
-    def create(self, payload: dict[str, Any]) -> str:
+    def create(
+        self,
+        payload: dict[str, Any],
+        used: dict[str, Any] | None = None,
+        fallback_notice: str | None = None,
+    ) -> str:
         """`POST /bot`; the new bot's id. Errors follow the interface: never connected is plain,
         no clear answer is `SkribbySendUncertain`, a 4xx is plain.
 
@@ -938,17 +965,53 @@ class SkribbyClient:
         service: if Skribby answers a validation error (400 or 422) to a create that carries either,
         the create is made ONCE more without them (a 4xx means no bot was made, so this cannot make
         two) and that is logged by name, never with the terms or the line. A bot without the owner's
-        vocabulary or the chat line beats no bot."""
+        vocabulary or the chat line beats no bot.
+
+        The same goes for a person's own note taker name: if the create carried a `bot_name` other
+        than the server default and Skribby answers 400 or 422, the create is made once more with
+        the default (the answer's own text decides what is dropped: a refusal that names only
+        `bot_name` keeps the optional fields, one that names only an optional field keeps the name,
+        anything else drops both). The chat notice names the bot, so when the name is replaced it
+        is replaced too, with `fallback_notice` (the same line built with the default name): the
+        consent line must still go out and must not name a bot that did not join. Without a
+        fallback (a direct caller) a notice that holds the refused name is dropped. When the name
+        was replaced, `used["bot_name"]` (the dictionary the caller passed) is the default that the
+        accepted create carried."""
         try:
             response = self._post_bot(payload)
             optional = [name for name in OPTIONAL_PARAMETERS if name in payload]
-            if response.status_code in VOCABULARY_RETRY_STATUSES and optional:
+            custom_name = payload.get("bot_name") != self._bot_name
+            if response.status_code in VOCABULARY_RETRY_STATUSES and (optional or custom_name):
+                said = _refusal_text(response)
+                name_blamed = custom_name and "bot_name" in said
+                optional_blamed = [n for n in optional if n in said]
+                drop_name = custom_name and (name_blamed or not optional_blamed)
+                drop_optional = optional and (optional_blamed or not name_blamed)
+                dropped = []
+                if drop_name:
+                    dropped.append("person's own note taker name")
+                if drop_optional:
+                    dropped += [OPTIONAL_PARAMETERS[name] for name in optional]
                 logger.warning(
                     "Skribby refused the bot create with HTTP %s; retrying once without the %s",
                     response.status_code,
-                    " and the ".join(OPTIONAL_PARAMETERS[name] for name in optional),
+                    " and the ".join(dropped),
                 )
-                payload = {k: v for k, v in payload.items() if k not in OPTIONAL_PARAMETERS}
+                custom = payload["bot_name"] if drop_name else None
+                payload = {
+                    k: v
+                    for k, v in payload.items()
+                    if not (drop_optional and k in OPTIONAL_PARAMETERS)
+                }
+                if drop_name:
+                    payload["bot_name"] = self._bot_name
+                    notice = payload.get("initial_chat_message")
+                    if isinstance(notice, str) and fallback_notice:
+                        payload["initial_chat_message"] = fallback_notice
+                    elif isinstance(notice, str) and custom and custom in notice:
+                        payload.pop("initial_chat_message")  # it names the refused name
+                    if used is not None:
+                        used["bot_name"] = self._bot_name
                 response = self._post_bot(payload)
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             raise SkribbyError(f"send_bot failed: {self._scrub(str(exc))}") from None
@@ -1280,9 +1343,25 @@ class SkribbyProvider:
 
     # ---- looking at a bot ----
 
-    def _look(self, bot_id: str, *, timeout: float | None = None) -> BotMeeting:
+    def _look(
+        self,
+        bot_id: str,
+        *,
+        timeout: float | None = None,
+        own_names: tuple[str, ...] = (),
+    ) -> BotMeeting:
         body = self._client.get_bot(bot_id, timeout=timeout)
-        info = map_bot(body, self._clock(), bot_id, self._client.own_names)
+        # Never a speaker: the server default and the account's name (`client.own_names`), the
+        # meeting's own stored name when the caller knows it (`own_names`), and the name Skribby
+        # itself says the bot has (`bot_name` in the body, possibly cut to the platform's limit), so
+        # a custom name is excluded even when the caller could not say it.
+        reported = body.get("bot_name")
+        names = (
+            *self._client.own_names,
+            *own_names,
+            *((reported,) if isinstance(reported, str) else ()),
+        )
+        info = map_bot(body, self._clock(), bot_id, tuple(dict.fromkeys(n for n in names if n)))
         info.vexa_id = bot_id
         if info.recording_id is not None:
             self._remember_handle(bot_id)
@@ -1297,17 +1376,23 @@ class SkribbyProvider:
     # So can the line the bot posts in the meeting chat when it joins (`chat_notice=`, see
     # `app.chat_notice`): off unless the caller was told to send one.
     accepts_chat_notice = True
+    # And the name of the bot (`bot_name=`, the person's own note taker name), and, when looking at
+    # a bot, the names it goes by (`own_names=`), so a custom name is never named as a speaker.
+    accepts_bot_name = True
+    accepts_own_names = True
 
     def send_bot(
         self,
         meeting_url: str,
         vocabulary: list[str] | None = None,
         chat_notice: str | None = None,
+        bot_name: str | None = None,
+        chat_notice_fallback: str | None = None,
     ) -> str:
         platform, code, canonical = _parse(meeting_url)  # UnsupportedMeetingUrl for a bad link
-        payload = self._client.payload(platform, code, canonical, vocabulary, chat_notice)
+        payload = self._client.payload(platform, code, canonical, vocabulary, chat_notice, bot_name)
         lock = threading.Lock()
-        state: dict[str, Any] = {"started": False, "bot_id": None, "abandoned": False}
+        state: dict[str, Any] = {"started": False, "bot_id": None, "abandoned": False, "name": None}
 
         def attempt() -> str:
             self._refuse_if_held(platform, code)
@@ -1315,10 +1400,12 @@ class SkribbyProvider:
                 if state["abandoned"]:  # the caller already gave up: nothing may be sent now
                     raise SkribbyError("send_bot abandoned before anything was sent")
                 state["started"] = True
-            bot_id = self._client.create(payload)
+            used: dict[str, Any] = {}
+            bot_id = self._client.create(payload, used, chat_notice_fallback)
             with lock:
                 late = state["abandoned"]
                 state["bot_id"] = bot_id
+                state["name"] = used.get("bot_name")
             if late:  # the caller gave up on this send: the bot exists and must not be lost
                 self._keep_late_bot(platform, code, bot_id)
             return bot_id
@@ -1339,6 +1426,10 @@ class SkribbyProvider:
                     "send_bot failed: no answer within the deadline"
                 ) from None
         self._remember_bot((platform, code), bot_id)
+        fallback = state.get("name")
+        if fallback:
+            bot_id = SentBotId(bot_id)
+            bot_id.bot_name = fallback
         return bot_id
 
     def _keep_late_bot(self, platform: str, code: str, bot_id: str) -> None:
@@ -1385,18 +1476,22 @@ class SkribbyProvider:
             if info.status not in TERMINAL:
                 raise SkribbyDuplicateBot("send_bot refused: a bot is already in that meeting")
 
-    def get_meeting(self, platform: str, native_id: str) -> BotMeeting:
+    def get_meeting(
+        self, platform: str, native_id: str, own_names: tuple[str, ...] = ()
+    ) -> BotMeeting:
         """The newest bot we know on the code. Skribby cannot look up by meeting code, so a bot we
         have no record of (an unconfirmed send whose answer was lost) is not found."""
         for bot_id in self._candidates(platform, native_id):
             try:
-                return self._look(bot_id)
+                return self._look(bot_id, own_names=own_names)
             except SkribbyNotFound:
                 self._forget_bot(bot_id)
         raise SkribbyNotFound("get_meeting failed: no bot of ours is known on that meeting")
 
-    def get_meeting_by_id(self, vexa_meeting_id: str | int) -> BotMeeting:
-        return self._look(bot_uuid(vexa_meeting_id))
+    def get_meeting_by_id(
+        self, vexa_meeting_id: str | int, own_names: tuple[str, ...] = ()
+    ) -> BotMeeting:
+        return self._look(bot_uuid(vexa_meeting_id), own_names=own_names)
 
     def get_speaker_events(self, vexa_meeting_id: str | int) -> dict[str, Any] | None:
         """Who was speaking when, from the meeting platform itself (see `speaker_events_record`),

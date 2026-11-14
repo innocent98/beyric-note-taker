@@ -1,0 +1,28 @@
+{
+  "note": "`label.tld` with a TLD from the short list in `app/titles.py` is a web address.",
+  "client": "signed-in user",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/bot-name",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": {
+      "bot_name": "Alex from acme.com"
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "bot_name_invalid",
+        "message": "Don't put a web address in the name."
+      }
+    }
+  }
+}

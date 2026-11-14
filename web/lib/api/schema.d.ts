@@ -1735,6 +1735,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/bot-name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Bot Name
+         * @description The name the note taker joins this person's meetings with: their own when set, else null with
+         *     the server's default beside it (`bot_name_default`).
+         */
+        get: operations["read_bot_name"];
+        /**
+         * Write Bot Name
+         * @description Set the caller's note taker name, or clear it (null or empty = the server default). It
+         *     applies to the meetings made from now on; a bot already sent keeps the name it joined with.
+         */
+        put: operations["write_bot_name"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/email": {
         parameters: {
             query?: never;
@@ -1780,6 +1806,32 @@ export interface paths {
          *     when that translation already exists, otherwise it opens in the original with an offer.
          */
         put: operations["write_language_preferences"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Display Name
+         * @description The caller's own display name, or null when the account has none.
+         */
+        get: operations["read_display_name"];
+        /**
+         * Write Display Name
+         * @description Set the caller's display name: 1 to 100 characters, cleaned like other user text. It is
+         *     shown to teammates and said by the note taker in the meeting chat when it joins. 422
+         *     `name_invalid` for an empty name (it cannot be blanked) or a longer one.
+         */
+        put: operations["write_display_name"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2700,6 +2752,27 @@ export interface components {
             /** Tasks New */
             tasks_new: number;
         };
+        /** BotNameIn */
+        BotNameIn: {
+            /** Bot Name */
+            bot_name?: string | null;
+        };
+        /** BotNameOut */
+        BotNameOut: {
+            /** Bot Name */
+            bot_name: string | null;
+            /**
+             * Bot Name Applies When Signed In
+             * @default false
+             */
+            bot_name_applies_when_signed_in: boolean;
+            /** Bot Name Default */
+            bot_name_default: string;
+            /** Meet Account Name */
+            meet_account_name?: string | null;
+            /** Warning */
+            warning?: string | null;
+        };
         /**
          * CalendarOut
          * @description The calendar settings page's whole state. `state` is for choosing what to draw
@@ -2946,6 +3019,16 @@ export interface components {
              * @constant
              */
             status: "disconnected";
+        };
+        /** DisplayNameIn */
+        DisplayNameIn: {
+            /** Name */
+            name: string;
+        };
+        /** DisplayNameOut */
+        DisplayNameOut: {
+            /** Name */
+            name: string | null;
         };
         /** EmailIn */
         EmailIn: {
@@ -10441,6 +10524,104 @@ export interface operations {
             };
         };
     };
+    read_bot_name: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotNameOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_bot_name: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BotNameIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BotNameOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `bot_name_invalid` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     read_email_preferences: {
         parameters: {
             query?: never;
@@ -10627,6 +10808,104 @@ export interface operations {
                 };
             };
             /** @description `language_unsupported` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_display_name: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisplayNameOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_display_name: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisplayNameIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisplayNameOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `name_invalid` */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -24,6 +24,7 @@ from app import (
     ai_runs,
     alerts,
     audio,
+    bot_names,
     mail,
     mail_templates,
     placement,
@@ -227,9 +228,15 @@ def audio_path(meeting_id: int) -> Path:
 def _lookup(vexa, meeting: Meeting) -> BotMeeting:
     """Ask Vexa about this meeting by its Vexa id, so a reused link cannot pick up an earlier
     recording. Rows without an id (made before it was stored) fall back to the meeting code."""
+    # The meeting's own stored note taker name goes along (`own_names`, Skribby's provider only), so
+    # a custom bot name is never named as a speaker by elimination; null = the server default,
+    # which the provider already knows.
+    extra: dict = {}
+    if meeting.bot_name and getattr(type(vexa), "accepts_own_names", False):
+        extra["own_names"] = (meeting.bot_name,)
     if meeting.vexa_meeting_id:
-        return vexa.get_meeting_by_id(meeting.vexa_meeting_id)
-    return vexa.get_meeting(meeting.platform, meeting.native_id)
+        return vexa.get_meeting_by_id(meeting.vexa_meeting_id, **extra)
+    return vexa.get_meeting(meeting.platform, meeting.native_id, **extra)
 
 
 def _lock(session: Session, meeting_id: int) -> Meeting | None:
@@ -408,6 +415,23 @@ def _delete_replaced_record(meeting: Meeting, default) -> None:
         )
 
 
+def _owner_bot_name(session, meeting: Meeting, settings, provider: str) -> str | None:
+    """The name to send for a resent bot: the owner's own when they set one, else the server
+    default. A failed read of the owner must not stop the send, so it falls back to the meeting's
+    own stored name, then to the default."""
+    if not bot_names.takes_name(provider):
+        return None
+    owner = None
+    if session is not None:
+        try:
+            with session.begin_nested():
+                owner = session.get(User, meeting.owner_user_id)
+        except Exception:  # a database hiccup must not stop the bot from being sent
+            logger.warning("meeting %s: the owner's note taker name could not be read", meeting.id)
+            return meeting.bot_name or bot_names.default_name(settings, provider)
+    return bot_names.bot_name_for_user(settings, owner, provider)
+
+
 def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool:
     """Send a fresh bot to the same link and point the meeting at it. The caller commits.
 
@@ -416,11 +440,27 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     settle, and counts as sent. A Vexa duplicate refusal (a bot that is not ours is in that
     meeting) is raised when `raise_duplicate`, else it is a plain failure."""
     unconfirmed = False
+    session = object_session(meeting)
+    settings = get_settings()
+    provider = provider_name(vexa)
+    # The owner's CURRENT note taker name (they may have changed it because the old one was
+    # refused); stored on the meeting once the send is accepted.
+    sent = _owner_bot_name(session, meeting, settings, provider)
     try:
         vexa_id = vexa.send_bot(
             meeting.url,
             **transcript_source.send_options(
-                object_session(meeting), vexa, meeting.owner_user_id, get_settings()
+                session,
+                vexa,
+                meeting.owner_user_id,
+                settings,
+                bot_name=sent,
+                shown_bot_name=bot_names.shown_name(
+                    settings, provider=provider, platform=meeting.platform, stored=sent
+                ),
+                fallback_shown_bot_name=bot_names.shown_name(
+                    settings, provider=provider, platform=meeting.platform, stored=None
+                ),
             ),
         )
     except BotDuplicate:
@@ -443,6 +483,9 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
     meeting.provider_copy_deleted_at = None
     meeting.provider_copy_attempts, meeting.provider_copy_next_try_at = 0, None
     meeting.bot_region = provider_region(vexa)
+    # The name the provider really used: the default when it refused the owner's own (`SentBotId`).
+    used = getattr(vexa_id, "bot_name", None) or sent
+    meeting.bot_name = used if bot_names.takes_name(provider) else None
     meeting.vexa_meeting_id = None if vexa_id is None else str(vexa_id)
     meeting.bot_provider = provider_name(vexa)  # a hand retry goes to the provider in use now
     meeting.vexa_recording_id = None

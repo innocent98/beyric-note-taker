@@ -4,6 +4,8 @@ import { AppShell } from "@/components/app/shell";
 import { EmailSettingsSection } from "@/components/app/email-settings-section";
 import { SettingsAutoShare } from "@/components/app/settings-auto-share";
 import { SettingsCalendar } from "@/components/app/settings-calendar";
+import { SettingsYourName } from "@/components/app/settings-your-name";
+import { SettingsBotName } from "@/components/app/settings-bot-name";
 import { SettingsLanguage } from "@/components/app/settings-language";
 import { SettingsTimeZone } from "@/components/app/settings-time-zone";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
@@ -56,10 +58,12 @@ export default async function SettingsPage({
   // Per person, only while the switch is on: the team this person's new meetings are shared to (null: none).
   const autoShare = teams ? await api.settings.autoShare.get().catch(() => null) : null;
   const noIntegrations = teams !== null && team?.is_personal === true;
-  const [email, language, timeZone] = await Promise.all([
+  const [email, language, timeZone, botName, yourName] = await Promise.all([
     load(api.settings.email.get()),
     load(api.settings.language.get()),
     load(api.settings.timeZone.get()),
+    load(api.settings.botName.get()),
+    load(api.settings.name.get()),
   ]);
   return (
     <AppShell current="settings" reviewOpen={await getReviewOpen()}
@@ -70,6 +74,8 @@ export default async function SettingsPage({
         <SettingsPlannedSections tasks={tasksSettings} slack={slack} linear={linear} integrations={!noIntegrations} team={team} reminderMail={reminderMail} sprints={sprints} />
         {teams && autoShare ? <SettingsAutoShare initial={autoShare.team_id} teams={teams.teams} /> : null}
         <SettingsTimeZone initial={timeZone.time_zone} />
+        <SettingsYourName initial={yourName} />
+        <SettingsBotName initial={botName} />
         <SettingsLanguage initial={language.default_language} />
         <EmailSettingsSection email={email} />
       </div>
