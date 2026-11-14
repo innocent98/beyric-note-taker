@@ -888,7 +888,7 @@ def test_could_not_join_mail_draws_send_it_again_as_a_link_to_the_meetings_page(
     )
     assert "Google Meet btp-tkio-gtb" in button.html and "11:58 UTC" in button.text
     assert "Send it again" in button.html and "Send it again" in button.text
-    assert f'href="{settings.public_base_url}/"' in button.html
+    assert f'href="{settings.public_base_url}/meetings"' in button.html
     monkeypatch.setattr(mail_templates, "SEND_AGAIN_PATH", None)  # the switch still works
     plain = mail_templates.render_link(
         mail_templates.NOT_JOINED, payload, "a@example.test", settings
