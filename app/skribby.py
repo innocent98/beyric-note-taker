@@ -85,8 +85,14 @@ TIME_LIMIT_MARGIN_MINUTES = 30  # (and the waiting room's allowance too: see `pa
 # `SKRIBBY_DOWNLOAD_HOSTS` adds a host once an operator has seen where recordings really live.
 DOWNLOAD_HOSTS = ("skribby.io", "amazonaws.com")
 MAX_DOWNLOAD_BYTES = 1 << 30
-# A validation error to a create that carried `custom_vocabulary`: retried once without it.
+# A validation error to a create that carried an optional parameter nobody has seen accepted live
+# (`custom_vocabulary`, `initial_chat_message`): retried once without them. A bot without the
+# owner's vocabulary or the chat line beats no bot.
 VOCABULARY_RETRY_STATUSES = (400, 422)
+OPTIONAL_PARAMETERS = {
+    "custom_vocabulary": "custom vocabulary",
+    "initial_chat_message": "chat notice",
+}
 # The transcription models Skribby lists WITH custom vocabulary on BOTH its pages,
 # skribby.io/pricing (the "Custom Vocab" capability) and skribby.io/docs/guides/billing
 # ("custom vocab"), read 2026-11-13: Soniox v6, Groq Whisper Large v3 and v3 Turbo, Mistral
@@ -870,6 +876,7 @@ class SkribbyClient:
         code: str,
         canonical_url: str,
         vocabulary: list[str] | None = None,
+        chat_notice: str | None = None,
     ) -> dict[str, Any]:
         stop_options: dict[str, Any] = {
             "waiting_room_timeout": WAITING_ROOM_MINUTES,
@@ -911,6 +918,12 @@ class SkribbyClient:
         terms = _keywords(vocabulary or [])
         if terms and takes_vocabulary(self._model):
             body["custom_vocabulary"] = terms
+        # The line the bot posts in the meeting chat when it joins. Skribby's create-bot page: an
+        # optional string, "Whenever the bot joins the meeting, it'll send this message to the
+        # chat", with no stated limit and no per-platform list (read 2026-11-14), so it is never
+        # sent unless the caller was asked to (`BOT_CHAT_NOTICE_ENABLED`, `app.chat_notice`).
+        if chat_notice:
+            body["initial_chat_message"] = chat_notice
         return body
 
     def _post_bot(self, payload: dict[str, Any]) -> httpx.Response:
@@ -921,19 +934,21 @@ class SkribbyClient:
         """`POST /bot`; the new bot's id. Errors follow the interface: never connected is plain,
         no clear answer is `SkribbySendUncertain`, a 4xx is plain.
 
-        `custom_vocabulary` has never been exercised against the real service: if Skribby answers
-        a validation error (400 or 422) to a create that carries it, the create is made ONCE more
-        without it (a 4xx means no bot was made, so this cannot make two) and that is logged, with
-        no terms. A bot without the owner's vocabulary beats no bot."""
+        `custom_vocabulary` and `initial_chat_message` have never been exercised against the real
+        service: if Skribby answers a validation error (400 or 422) to a create that carries either,
+        the create is made ONCE more without them (a 4xx means no bot was made, so this cannot make
+        two) and that is logged by name, never with the terms or the line. A bot without the owner's
+        vocabulary or the chat line beats no bot."""
         try:
             response = self._post_bot(payload)
-            if response.status_code in VOCABULARY_RETRY_STATUSES and "custom_vocabulary" in payload:
+            optional = [name for name in OPTIONAL_PARAMETERS if name in payload]
+            if response.status_code in VOCABULARY_RETRY_STATUSES and optional:
                 logger.warning(
-                    "Skribby refused the bot create with HTTP %s; retrying once without the "
-                    "custom vocabulary",
+                    "Skribby refused the bot create with HTTP %s; retrying once without the %s",
                     response.status_code,
+                    " and the ".join(OPTIONAL_PARAMETERS[name] for name in optional),
                 )
-                payload = {k: v for k, v in payload.items() if k != "custom_vocabulary"}
+                payload = {k: v for k, v in payload.items() if k not in OPTIONAL_PARAMETERS}
                 response = self._post_bot(payload)
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
             raise SkribbyError(f"send_bot failed: {self._scrub(str(exc))}") from None
@@ -1279,10 +1294,18 @@ class SkribbyProvider:
 
     # The owner's vocabulary can be passed to `send_bot` (`vocabulary=`): callers check this.
     accepts_vocabulary = True
+    # So can the line the bot posts in the meeting chat when it joins (`chat_notice=`, see
+    # `app.chat_notice`): off unless the caller was told to send one.
+    accepts_chat_notice = True
 
-    def send_bot(self, meeting_url: str, vocabulary: list[str] | None = None) -> str:
+    def send_bot(
+        self,
+        meeting_url: str,
+        vocabulary: list[str] | None = None,
+        chat_notice: str | None = None,
+    ) -> str:
         platform, code, canonical = _parse(meeting_url)  # UnsupportedMeetingUrl for a bad link
-        payload = self._client.payload(platform, code, canonical, vocabulary)
+        payload = self._client.payload(platform, code, canonical, vocabulary, chat_notice)
         lock = threading.Lock()
         state: dict[str, Any] = {"started": False, "bot_id": None, "abandoned": False}
 

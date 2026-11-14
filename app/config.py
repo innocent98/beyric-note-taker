@@ -236,6 +236,10 @@ class Settings(BaseSettings):
     vexa_base_url: str = "http://localhost:8056"
     vexa_api_key: str = Field(default="", repr=False)
     bot_name: str = "Beyric Note Taker (recording)"
+    # The line the bot posts in the meeting chat when it joins ("Hi, I'm <bot>. <owner> added me to
+    # record this meeting ..."): Skribby only (`app/chat_notice.py`). OFF until one real meeting on
+    # each platform has shown it works; a Skribby refusal of the parameter is retried without it.
+    bot_chat_notice_enabled: bool = False
 
     def bot_name_for(self, provider: str | None) -> str:
         """The name the host sees in the meeting for the provider that ran a meeting, for the
