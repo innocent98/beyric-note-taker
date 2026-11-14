@@ -1,0 +1,22 @@
+{
+  "note": "",
+  "as": "Ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/meetings/1/share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "meeting_team_owned",
+        "message": "This meeting belongs to a team. An owner or admin of the team can move it back first."
+      }
+    }
+  }
+}

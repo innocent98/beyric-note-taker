@@ -1,0 +1,24 @@
+{
+  "note": "Ada is not in Y: 404, the same answer as for a team that does not exist.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "team_id": 5
+    }
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such team."
+      }
+    }
+  }
+}

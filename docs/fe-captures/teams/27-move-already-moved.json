@@ -1,0 +1,24 @@
+{
+  "note": "Already the team's: another team is refused until it is moved back.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/move",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "team_id": 6
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "already_moved",
+        "message": "This meeting already belongs to another team. An owner or admin of that team can move it back first."
+      }
+    }
+  }
+}

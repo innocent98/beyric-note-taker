@@ -141,6 +141,9 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # When the admin deleted the account (status `deleted`); the purge gives up a day after it.
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when the account was erased but its row had to stay because a team owns a meeting this
+    # person recorded (`app/deletion.py`): name, email and credentials are gone, the row is hollow.
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # A keyed hash of the client address an unconfirmed account was made from
     # (`ratelimit.origin_key`), so the sign-up flood defence can tell one address's rows from
     # another's. Set at creation and never changed by a later submission; null for older rows.

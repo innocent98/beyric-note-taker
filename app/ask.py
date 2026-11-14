@@ -41,7 +41,7 @@ from app.extraction import normalise
 from app.models import AiRun, Decision, Meeting, Task, User, UserSettings
 from app.notes import NONE_NOTED, UNKNOWN_SPEAKER
 from app.services import Refused
-from app.visibility import can_read_clause, is_shared, visible_meetings
+from app.visibility import can_read_clause, former_or_name, is_shared, visible_meetings
 from app.words import WORD_CAP as _WORD_CAP
 from app.words import stem as _stem
 from app.words import stems as _stems
@@ -552,8 +552,7 @@ def _owner_names(session: Session, user: User, meetings) -> dict[int, str]:
     if not other:
         return {}
     return {
-        u.id: titles.clean_title(u.name, 100) or u.email.split("@")[0]
-        for u in session.scalars(select(User).where(User.id.in_(other)))
+        u.id: former_or_name(u) for u in session.scalars(select(User).where(User.id.in_(other)))
     }
 
 

@@ -33,7 +33,7 @@ from app.api_schemas import (
 from app.db import get_session
 from app.extraction import TranscriptIndex
 from app.models import Meeting, Task, Team, User, UserSettings
-from app.visibility import can_read_clause
+from app.visibility import can_read_clause, owns
 
 router = APIRouter()
 
@@ -138,7 +138,7 @@ def present(
                 can_claim=allowed.claim,
                 can_delete=allowed.delete,
                 can_decide=task.suggested
-                and (allowed.edit or (meeting is not None and meeting.owner_user_id == viewer.id)),
+                and (allowed.edit or (meeting is not None and owns(session, viewer, meeting))),
             )
         )
     return out

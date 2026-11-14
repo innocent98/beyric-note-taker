@@ -39,13 +39,14 @@ import logging
 import shutil
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app import placement, teams
 from app.bot_provider import BotNotFound, provider_for
 from app.models import (
     AuthToken,
+    Base,
     MailOutbox,
     Meeting,
     Milestone,
@@ -119,6 +120,57 @@ def delete_provider_copy(provider, meeting: Meeting, recording_id: int | None) -
         provider.delete_bot_record(meeting.vexa_meeting_id)
 
 
+def meetings_to_delete(session: Session, user_id: int) -> list[Meeting]:
+    """The meetings that go with this account: the ones they recorded that no team owns, and the
+    ones moved to a team that is itself going (the account is its only member: `teams.remove_users`
+    deletes the team). A meeting moved to a team that stays is the team's (spec 6.4, 9.1): it is
+    kept and its recorder becomes a "Former member". A team that goes also takes the meetings moved
+    to it by someone whose account is already gone; one moved by a recorder whose account still
+    exists goes back to them (the foreign key nulls `owner_team_id`: spec 6.8)."""
+    doomed = teams.doomed_teams(session, user_id)
+    gone = select(User.id).where(User.status == "deleted")
+    return list(
+        session.scalars(
+            select(Meeting)
+            .where(
+                or_(
+                    and_(
+                        Meeting.owner_user_id == user_id,
+                        or_(Meeting.owner_team_id.is_(None), Meeting.owner_team_id.in_(doomed)),
+                    ),
+                    and_(Meeting.owner_team_id.in_(doomed), Meeting.owner_user_id.in_(gone)),
+                )
+            )
+            .order_by(Meeting.id)
+        )
+    )
+
+
+def erase_account_row(session: Session, user: User, now: datetime) -> None:
+    """Erase the person but keep the row: a team owns meetings they recorded and `meetings.
+    owner_user_id` points here. Name, email, credentials and every row that hung on the account
+    go, exactly what deleting the row would have done through the foreign keys; the row stays
+    `deleted`, with `purged_at` set so the worker does not purge it again. The meetings show its
+    recorder as "Former member"."""
+    for table in Base.metadata.sorted_tables:
+        for key in table.foreign_keys:
+            if key.column.table.name != "users" or key.column.name != "id":
+                continue
+            if key.ondelete == "CASCADE":
+                session.execute(delete(table).where(key.parent == user.id))
+            elif key.ondelete == "SET NULL":
+                session.execute(
+                    update(table).where(key.parent == user.id).values({key.parent.name: None})
+                )
+    user.email = f"former-member-{user.id}@invalid.invalid"
+    user.name = user.password_hash = user.google_sub = user.signup_origin = None
+    user.email_verified_at = user.terms_accepted_at = user.terms_version = None
+    user.hours_cap_seconds, user.is_admin = None, False
+    user.session_epoch += 1
+    user.status, user.purged_at = "deleted", now
+    session.flush()
+
+
 def purge_user(
     session: Session, user: User, vexa, now: datetime | None = None, *, force: bool = False
 ) -> None:
@@ -126,7 +178,8 @@ def purge_user(
     settled (nothing is deleted then). With `force`, Vexa is not called at all: the caller has
     given up waiting and recorded that."""
     now = now or datetime.now(UTC)
-    meetings = list(session.scalars(select(Meeting).where(Meeting.owner_user_id == user.id)))
+    meetings = meetings_to_delete(session, user.id)
+    meeting_ids = [meeting.id for meeting in meetings]
     if not force:
         stopped: set[int] = set()
         for meeting in meetings:
@@ -155,38 +208,53 @@ def purge_user(
     session.execute(
         delete(Milestone).where(
             Milestone.confirmed_at.is_(None),
-            Milestone.source_meeting_id.in_(
-                select(Meeting.id).where(Meeting.owner_user_id == user_id)
-            ),
+            Milestone.source_meeting_id.in_(meeting_ids),
         )
     )
     # What the bot provider sent about who spoke goes first (the meetings' deletion would cascade
     # to it; this does not rely on that).
     session.execute(
-        delete(SkribbySegmentEvidence).where(
-            SkribbySegmentEvidence.meeting_id.in_(
-                select(Meeting.id).where(Meeting.owner_user_id == user_id)
-            )
-        )
+        delete(SkribbySegmentEvidence).where(SkribbySegmentEvidence.meeting_id.in_(meeting_ids))
     )
-    session.execute(delete(Meeting).where(Meeting.owner_user_id == user_id))  # tasks cascade
+    session.execute(delete(Meeting).where(Meeting.id.in_(meeting_ids)))  # tasks cascade
     # Tasks they typed in go with them (spec 4); other people's tasks they held become unassigned
     # by the foreign key.
     session.execute(delete(Task).where(Task.created_by_user_id == user_id, Task.source == "manual"))
     session.execute(delete(VocabularyTerm).where(VocabularyTerm.owner_user_id == user_id))
-    session.execute(delete(Template).where(Template.owner_user_id == user_id))
+    # A template a kept meeting was written with stays, taken out of use (`deleted_at`): the
+    # meeting still names it. Every other template goes.
+    mine = select(Template.id).where(Template.owner_user_id == user_id)
+    in_use = select(Meeting.template_id).where(Meeting.template_id.in_(mine))
+    session.execute(
+        update(Template)
+        .where(
+            Template.owner_user_id == user_id,
+            Template.deleted_at.is_(None),
+            Template.id.in_(in_use),
+        )
+        .values(deleted_at=now)
+    )
+    session.execute(
+        delete(Template).where(Template.owner_user_id == user_id, Template.id.not_in(in_use))
+    )
     teams.remove_users(session, [user_id])
-    session.execute(delete(User).where(User.id == user_id))
+    # A meeting a team owns outlives its recorder: erase the person but keep the row it points to.
+    # (or a template a surviving meeting still names: nothing else holds the row).
+    kept = session.scalar(
+        select(func.count()).select_from(Meeting).where(Meeting.owner_user_id == user_id)
+    ) or session.scalar(
+        select(func.count()).select_from(Template).where(Template.owner_user_id == user_id)
+    )
+    if kept:
+        erase_account_row(session, user, now)
+    else:
+        session.execute(delete(User).where(User.id == user_id))
     session.commit()
 
 
 def _give_up(session: Session, user: User, now: datetime) -> None:
     """Stop waiting for Vexa: log, tell every admin in the app, delete our rows anyway."""
-    meeting_ids = list(
-        session.scalars(
-            select(Meeting.id).where(Meeting.owner_user_id == user.id).order_by(Meeting.id)
-        )
-    )
+    meeting_ids = [meeting.id for meeting in meetings_to_delete(session, user.id)]
     logger.error(
         "user %s: gave up waiting for Vexa after %s; deleting our rows, the Vexa copy of meetings "
         "%s could not be confirmed deleted",
@@ -222,7 +290,13 @@ def purge_deleted(session: Session, vexa) -> int:
     down or not settled, a bad value, a database error) is logged by type only and leaves that
     user marked for the next pass, until a day has passed (see the module docstring); it never
     stops the others and never reaches the worker's loop."""
-    ids = list(session.scalars(select(User.id).where(User.status == "deleted").order_by(User.id)))
+    ids = list(
+        session.scalars(
+            select(User.id)
+            .where(User.status == "deleted", User.purged_at.is_(None))
+            .order_by(User.id)
+        )
+    )
     purged = 0
     for user_id in ids:
         now = datetime.now(UTC)
