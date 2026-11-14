@@ -1,10 +1,11 @@
-# Frontend integration guide: teams (multi-team, stage 2a: the meeting and its team)
+# Frontend integration guide: teams (multi-team, stage 2: the meeting and its team, the teams list, an explicit team per request)
 
 **Status: dark.** Everything here works only when the server runs with `MULTI_TEAM_ENABLED=true`
 (off by default, and it stays off until the frontend of stage 3 is live). With the switch off nothing
-below changes for anyone except one thing: `POST /api/meetings/{id}/move` answers **409
-`multi_team_disabled`** and `can_move` is always `false`. Stage 2b (the teams list, create team, an
-explicit team on every team-implicit route) is documented in its own section when it ships.
+below changes for anyone except two things: `POST /api/meetings/{id}/move` and `POST /api/teams`
+answer **409 `multi_team_disabled`**, and `can_move` is always `false`. Sections 1 to 8 are stage 2a
+(the meeting and its team), sections 9 to 13 are stage 2b (the teams list, creating a team, an
+explicit team per request, series, the auto-share team).
 
 **Every payload, status and error string below was copied from a real response captured against the
 running app** (`scripts/capture_teams_api.py`, a scratch database with the real migrations, uvicorn,
@@ -511,7 +512,384 @@ this is documented from the rules in `app/deletion.py`, not captured): the meeti
 is deleted go back to their recorder as private meetings if that account still exists, otherwise they
 are deleted with the team. A team is deleted today only by the last member's account deletion.
 
-## 9. Verification table
+## 9. The teams list and creating a team (stage 2b)
+
+`GET /api/teams` is what the switcher reads. **`is_default`** marks the team a request with **no**
+`X-Team-Id` acts on (see section 10): a person with exactly one ordinary team has that one; with two or more
+it is their personal space. The personal space is made here if the account has none.
+
+`GET /api/teams` as **Pat** → **200**  
+*Pat's teams (X, owned by Pat since Ada handed it over, Y, and the personal space). `is_default` marks the one a request with no X-Team-Id acts on: with two ordinary teams it is the personal space.* (capture `46-teams-list.json`)
+```json
+{
+  "teams": [
+    {
+      "id": 2,
+      "name": "My team",
+      "role": "owner",
+      "member_count": 1,
+      "is_personal": true,
+      "is_default": true,
+      "can_manage": true
+    },
+    {
+      "id": 4,
+      "name": "Platform team",
+      "role": "owner",
+      "member_count": 1,
+      "is_personal": false,
+      "is_default": false,
+      "can_manage": true
+    },
+    {
+      "id": 5,
+      "name": "Client Y",
+      "role": "member",
+      "member_count": 2,
+      "is_personal": false,
+      "is_default": false,
+      "can_manage": false
+    }
+  ],
+  "can_create_more": 2
+}
+```
+
+Quinn owns Y and is only in Y, so Y is their default:
+
+`GET /api/teams` as **Quinn** → **200**  
+*Quinn owns Y: their default is Y (their only ordinary team).* (capture `47-teams-list-quinn.json`)
+```json
+{
+  "teams": [
+    {
+      "id": 3,
+      "name": "My team",
+      "role": "owner",
+      "member_count": 1,
+      "is_personal": true,
+      "is_default": false,
+      "can_manage": true
+    },
+    {
+      "id": 5,
+      "name": "Client Y",
+      "role": "owner",
+      "member_count": 2,
+      "is_personal": false,
+      "is_default": true,
+      "can_manage": true
+    }
+  ],
+  "can_create_more": 2
+}
+```
+
+`POST /api/teams` `{"name": ...}` makes a team the caller owns (201, the same shape as one list row).
+At most **three owned teams** besides the personal space (the personal space and teams the person only
+belongs to do not count); `can_create_more` in the list says how many remain.
+
+`POST /api/teams` as **Pat** with body `{"name": "  Side project "}` → **201**  
+*The name is trimmed. 201; the caller is the owner.* (capture `48-teams-create.json`)
+```json
+{
+  "id": 7,
+  "name": "Side project",
+  "role": "owner",
+  "member_count": 1,
+  "is_personal": false,
+  "is_default": false,
+  "can_manage": true
+}
+```
+
+`POST /api/teams` as **Pat** with body `{"name": "   "}` → **422**  
+(capture `49-teams-create-empty-name.json`)
+```json
+{
+  "error": {
+    "code": "invalid_name",
+    "message": "Give the team a name."
+  }
+}
+```
+
+`POST /api/teams` as **Pat** with body `{"name": "One too many"}` → **409**  
+*Pat now owns three teams besides the personal one (X, Side project, Book club); Y, which Pat only belongs to, does not count.* (capture `51-teams-create-over-limit.json`)
+```json
+{
+  "error": {
+    "code": "team_limit",
+    "message": "You can own up to 3 teams."
+  }
+}
+```
+
+After the second team the list says `can_create_more: 0` (capture `52-teams-list-after.json`).
+While the switch is off `POST /api/teams` answers **409 `multi_team_disabled`**, message `Creating a
+team is not available yet.` *Not captured live* (the capture server runs with the switch on; tested in
+`tests/test_multi_team_api.py::test_creating_a_team_is_refused_while_the_switch_is_off`).
+
+## 10. Which team a request is about: the `X-Team-Id` header
+
+The team-implicit routes (`/api/team*`, `/api/tasks` (list and create), `/api/projects*`,
+`/api/milestones*`, `/api/sprints*`, `/api/series` (list and create), `/api/integrations/*`) take an
+**explicit team per request** in the header **`X-Team-Id: <id>`**. Nothing is remembered on the server
+between requests, so two browser tabs can work on two teams. **Send it on every one of those calls
+from the team switcher**; without it a route acts on the default team (what today's frontend gets).
+
+No header (Pat's default is the personal space):
+
+`GET /api/team` as **Pat** → **200**  
+*No header: the default team, here the personal space (`is_personal` true).* (capture `53-team-no-header.json`)
+*Trimmed to the fields that matter here; the full `MeetingDetail` is in the capture.*
+```json
+{
+  "id": 2,
+  "name": "My team",
+  "is_personal": true,
+  "my_role": "owner",
+  "member_count": 1,
+  "can_manage": true
+}
+```
+
+With the header, for team X and for team Y:
+
+`GET /api/team` as **Pat** → **200**  
+*`X-Team-Id` names the team for this request only.* (capture `54-team-header-x.json`)
+*Trimmed to the fields that matter here; the full `MeetingDetail` is in the capture.*
+```json
+{
+  "id": 4,
+  "name": "Platform team",
+  "is_personal": false,
+  "my_role": "owner",
+  "member_count": 1,
+  "can_manage": true
+}
+```
+
+`GET /api/team` as **Pat** → **200**  
+(capture `55-team-header-y.json`)
+*Trimmed to the fields that matter here; the full `MeetingDetail` is in the capture.*
+```json
+{
+  "id": 5,
+  "name": "Client Y",
+  "is_personal": false,
+  "my_role": "member",
+  "member_count": 2,
+  "can_manage": false
+}
+```
+
+Errors: a team the caller is not in is **404 `not_found`** (message `No such team.`), the same as a
+team that does not exist; a header that is not an id is a **422 validation error**; a team the caller is
+in but may not change is the usual **403 `team_forbidden`**.
+
+`GET /api/team` as **Quinn** → **404**  
+*A team the caller is not in: 404, the same answer as for a team that does not exist.* (capture `56-team-header-not-my-team.json`)
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No such team."
+  }
+}
+```
+
+`GET /api/team` as **Pat** → **422**  
+*A header that is not a team id: 422 validation error.* (capture `57-team-header-garbage.json`)
+```json
+{
+  "error": {
+    "code": "validation_error",
+    "message": "Some fields are missing or not valid.",
+    "fields": [
+      {
+        "field": "X-Team-Id",
+        "message": "Input should be a valid integer, unable to parse string as an integer"
+      }
+    ]
+  }
+}
+```
+
+`PATCH /api/team` as **Pat** with body `{"name": "Renamed"}` → **403**  
+*Pat is a plain member of Y: 403 `team_forbidden`.* (capture `58-team-patch-as-member.json`)
+```json
+{
+  "error": {
+    "code": "team_forbidden",
+    "message": "Only an owner or admin of the team can do that."
+  }
+}
+```
+
+**Field-nesting traps:** `GET /api/team` now has `is_personal` (additive); `GET /api/tasks` **with** the
+header is one team's board (its `people`, its `attention` counts), **without** it every team's tasks
+the person may see, as before (`people` are then the default team's). The header never widens what a
+person may read: meetings and tasks are still read through the meeting rule.
+
+Members of Y, as Pat (a plain member) reads them: capture `59-members-y.json`.
+
+A task made by hand belongs to the team named (`POST /api/tasks` with the header), and only that team's
+members see it:
+
+`POST /api/tasks` as **Pat** with body `{"title": "Pay the invoice"}` → **201**  
+*A task made by hand belongs to the team named.* (capture `61-tasks-create-in-y.json`)
+*Trimmed to the fields that matter here; the full `MeetingDetail` is in the capture.*
+```json
+{
+  "id": 3,
+  "title": "Pay the invoice",
+  "source": "manual",
+  "assignee": null
+}
+```
+
+`GET /api/tasks` as **Quinn** → **200**  
+(capture `62-tasks-quinn-sees-it.json`)
+*Trimmed to id, title and assignee; each task has the usual fields (see the tasks guide).*
+```json
+{
+  "tasks": [
+    {
+      "id": 3,
+      "title": "Pay the invoice",
+      "assignee": null
+    }
+  ]
+}
+```
+
+## 11. Series (recurring meetings) belong to one team
+
+A series is made in the recorder's **default team** when the calendar links it, and in the team named by
+`X-Team-Id` when made by hand. `GET /api/series` lists **one team's** series (header, else default).
+**By id** (`GET /api/series/{id}` and its sub-routes, the series on a meeting's page) a series is read
+through **its own team**: a person on two teams opens the series of either with no header, and a series
+of a team they are not in is **404 `not_found`**. A series page lists only the occurrences the viewer
+may read, so a meeting its recorder shared to a *different* team is not part of this team's series.
+
+`POST /api/series` as **Pat** with body `{"title": "Client sync"}` → **201**  
+*A recurring meeting made in team Y.* (capture `63-series-create-in-y.json`)
+```json
+{
+  "id": 1,
+  "title": "Client sync",
+  "cadence": "Recurring",
+  "platform": null,
+  "next_starts_at": null,
+  "next_text": null,
+  "unfinished_tasks": 0,
+  "open_questions": 0,
+  "project": null
+}
+```
+
+`GET /api/series` as **Pat** → **200**  
+(capture `64-series-list-y.json`)
+```json
+{
+  "timezone": "UTC",
+  "series": [
+    {
+      "id": 1,
+      "title": "Client sync",
+      "cadence": "Recurring",
+      "platform": null,
+      "next_starts_at": null,
+      "next_text": null,
+      "unfinished_tasks": 0,
+      "open_questions": 0,
+      "project": null
+    }
+  ]
+}
+```
+
+`GET /api/series` as **Pat** → **200**  
+*X has none.* (capture `65-series-list-x.json`)
+```json
+{
+  "timezone": "UTC",
+  "series": []
+}
+```
+
+## 12. The auto-share team (`/api/settings/auto-share`)
+
+Each person may choose **one** team their new meetings are shared to automatically, once, when the
+notes are first written (never when the bot joins). A person who chose none keeps today's rule (the
+team switch on `PATCH /api/team`, for the team's owners and admins). The choice reads as `null` after
+the person leaves that team. **Say so on the settings screen:** "New meetings are shared with this
+team when their notes are ready."
+
+`GET /api/settings/auto-share` as **Pat** → **200**  
+(capture `66-auto-share-read.json`)
+```json
+{
+  "team_id": null
+}
+```
+
+`PUT /api/settings/auto-share` as **Pat** with body `{"team_id": 5}` → **200**  
+*One team at most; it applies when a meeting's notes are first written.* (capture `67-auto-share-set.json`)
+```json
+{
+  "team_id": 5
+}
+```
+
+`PUT /api/settings/auto-share` as **Pat** with body `{"team_id": 2}` → **409**  
+(capture `68-auto-share-personal.json`)
+```json
+{
+  "error": {
+    "code": "personal_team",
+    "message": "Choose a team. Your personal space is only yours."
+  }
+}
+```
+
+`PUT /api/settings/auto-share` as **Quinn** with body `{"team_id": 4}` → **404**  
+*Quinn is not in X.* (capture `69-auto-share-not-my-team.json`)
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No such team."
+  }
+}
+```
+
+`PUT /api/settings/auto-share` as **Pat** with body `{"team_id": null}` → **200**  
+(capture `70-auto-share-clear.json`)
+```json
+{
+  "team_id": null
+}
+```
+
+## 13. Mail, invitations, integrations (stage 2b)
+
+- **One mail per person per meeting.** The agenda and reminder mails before a recurring meeting are
+  sent once per person and occurrence even when two teams each have a series for the same recurring
+  event. The share mail's "Open notes" button shows only to a person who may read the meeting. Reminder
+  settings (`reminders_on`, `reminder_timing`) are per team (`PATCH /api/team` with the header).
+- **Invitation caps.** Besides the team's own caps there is now a cap **per person across all their
+  teams**: 20 invitations in an hour and 20 in a day, revoked ones included. Over it the answer is the
+  existing **409 `invite_limit`** (`You have reached the limit for invitations. Revoke one, or try
+  again tomorrow.`). *Not captured live* (it needs 20 sends); tested.
+- **Integrations (Slack, Linear)** belong to a team: `GET/PUT/DELETE /api/integrations/*` take the
+  header. A meeting's Slack post goes to the integration of the team the meeting is shared or moved to,
+  and a private meeting's tasks are never posted. Posts already made are **not recalled** when a
+  meeting is unshared, moved or re-homed (a Slack post cannot be unsent): tell the person so in the
+  unshare and move confirmations. *Not captured live* (no Slack in the capture).
+
+## 14. Verification table
 
 | Behaviour | Verified |
 |---|---|
@@ -527,4 +905,10 @@ are deleted with the team. A team is deleted today only by the last member's acc
 | `multi_team_disabled` while the switch is off | **not live** (tested only) |
 | Moved meetings when a team is deleted | **not live** (no route; tested in `tests/test_multi_team_moved.py`) |
 | Share moving from team A to team B | **not live** (tested only) |
-| Mail, Slack and Linear for moved meetings; the teams list; an explicit team on other routes | **stage 2b** |
+| Teams list, create (201, 422, 409 limit), default marking | **verified-live** (46 to 52) |
+| `X-Team-Id`: named team, no header, not my team (404), bad header (422), member forbidden (403) | **verified-live** (53 to 58) |
+| Members list, tasks board and manual task per team | **verified-live** (59 to 62); the board filter is also tested |
+| Series created and listed per team, read by its own team | **verified-live** for create and list (63 to 65); the by-id and not-shared-to-this-team rules are **tested only** |
+| Auto-share team: read, set, personal (409), not mine (404), clear | **verified-live** (66 to 70); the effect on a new meeting's notes is **tested only** |
+| `multi_team_disabled` on `POST /api/teams`; the per-person invitation caps; one reminder per person per occurrence; Slack and Linear per team | **not live** (tested only; no mail or Slack in the capture) |
+| Projects, milestones, sprints and integrations with the header | **not live** (same pattern as the team route; tested in `tests/test_multi_team_api.py`) |

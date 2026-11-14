@@ -1,0 +1,27 @@
+{
+  "note": "",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Book club"
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 8,
+      "name": "Book club",
+      "role": "owner",
+      "member_count": 1,
+      "is_personal": false,
+      "is_default": false,
+      "can_manage": true
+    }
+  }
+}

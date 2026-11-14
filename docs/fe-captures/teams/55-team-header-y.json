@@ -1,0 +1,32 @@
+{
+  "note": "",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/team",
+    "headers": {
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": 5,
+      "name": "Client Y",
+      "is_personal": false,
+      "share_new_meetings": false,
+      "reminders_on": false,
+      "reminder_timing": "both",
+      "my_role": "member",
+      "sprint_length": "week5",
+      "sprint_custom_days": 10,
+      "sprint_align_weekdays": true,
+      "member_count": 2,
+      "pending_invites": 0,
+      "can_manage": false,
+      "can_change_roles": false
+    }
+  }
+}

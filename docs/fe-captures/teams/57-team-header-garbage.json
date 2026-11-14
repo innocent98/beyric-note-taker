@@ -1,0 +1,28 @@
+{
+  "note": "A header that is not a team id: 422 validation error.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/team",
+    "headers": {
+      "X-Team-Id": "abc",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 422,
+    "body": {
+      "error": {
+        "code": "validation_error",
+        "message": "Some fields are missing or not valid.",
+        "fields": [
+          {
+            "field": "X-Team-Id",
+            "message": "Input should be a valid integer, unable to parse string as an integer"
+          }
+        ]
+      }
+    }
+  }
+}

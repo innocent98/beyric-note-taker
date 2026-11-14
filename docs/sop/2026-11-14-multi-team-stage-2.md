@@ -6,9 +6,11 @@ stacked** (both from `origin/main`):
 - **2a, the permission core** (this document's first part): moved meetings, the Move and Move-back
   routes, the share route that takes a team, account deletion that keeps moved meetings, tasks that
   follow the meeting, migration `0044`.
-- **2b, the API surface** (second part, added by the 2b PR): `GET/POST /api/teams`, an explicit team
-  on every team-implicit route, series, mail and integrations per team, the invitation limit, one
-  auto-share team.
+- **2b, the API surface** (the second part below): `GET/POST /api/teams`, an explicit team on every
+  team-implicit route, series, mail and integrations per team, the invitation caps, one auto-share
+  team, migration `0045`. **2b's branch contains 2a's commits** (a merge of 2a's branch): migration
+  `0045` has to follow `0044`, which only 2a adds, so 2b cannot be built on bare `origin/main`
+  and keep one Alembic head. Merge 2a first; then 2b's diff is only its own.
 
 Both ship **dark**: `MULTI_TEAM_ENABLED` is unset (off) everywhere and this change does not touch
 `.env.example` or any deploy file. FE contract: `docs/fe-integration-guide-teams.md` (captured live
@@ -124,3 +126,92 @@ Scratch Postgres 17 on this Mac; the project's own `ruff` (0.17.3): `ruff check 
   them.
 - Series, mail and integrations for moved meetings, and the explicit team on the other routes, are
   stage 2b.
+
+---
+
+# Part 2b: the API surface
+
+**What shipped.** The teams list and team creation; an explicit team per request on the
+team-implicit routes (the `X-Team-Id` header); series read through their own team and listed and
+created per team; a cap on invitations per person across teams; one reminder mail per person per
+occurrence; one auto-share team per person. PR: see the checklist. Migration `0045`.
+
+## The series sizing (done before building it)
+
+The spec called series "the riskiest" piece. Sized by reading `app/series.py`, `app/api_series.py`,
+`app/series_mail.py` and `app/topics.py` before any change:
+
+- A series has **one fixed `team_id`**, made in its recorder's default team when the calendar links
+  it (`link_from_calendar`, `sync_from_joins`: unchanged on purpose, spec 6.9).
+- Only **three things** needed a team: the list (`list_for`), hand-made creation (`create`), and the
+  by-id lookup (`get`). `get` asked "is it my DEFAULT team's"; it now asks "is it a team I am in" (the
+  series' own team), which makes every by-id route and `of_meeting` safe with **no header**: about 3
+  functions in `series.py`, 2 routes in `api_series.py` and one call in `api_projects.py`.
+- `topics.py` and the agenda sends work by `series.team_id` already; `series_mail` checks membership of
+  the series' team. The two risks were the **reminders** (one person, two teams, the same recurring
+  event, one series per team: two mails) and **what a series page shows** (an occurrence shared to a
+  different team). Both are covered below by tests.
+- Size: about 10 call sites and one new function, not a rewrite. Done in this PR.
+
+## How, and what was decided on the way
+
+| Piece | What it does | Decision / alternative rejected |
+|---|---|---|
+| Teams list | `GET /api/teams`: id, name, role, member count, `is_personal`, `is_default`, `can_manage`; `can_create_more`. Makes the personal team if missing (`ensure_personal_team`) | `is_default` is the compatibility rule made visible (`teams.default_membership`) so the switcher can mark it |
+| Create | `POST /api/teams {name}`: the caller owns it; at most `teams.MAX_OWNED_TEAMS` = 3 owned non-personal teams (`409 team_limit`), checked in the route; `409 multi_team_disabled` while the switch is off; `422 invalid_name` | A database constraint was rejected (spec: later a plan setting) |
+| Explicit team | The **`X-Team-Id` header** (`team_admin.requested_team`, one dependency; `team_admin.my_membership(session, user, team_id)`). On `/api/team*`, `/api/tasks` (list, create), `/api/projects*`, `/api/milestones*`, `/api/sprints*`, `/api/series` (list, create), `/api/integrations/*`. A team the caller is not in is `404 not_found` | **Header, not path or query:** one place per route, nothing in the URL to cache or log differently, and the frontend sets it from one interceptor. **Rejected: a server-side "current team"** (two tabs would fight). A path prefix would have changed ~45 URLs |
+| No header | The default team, exactly as stage 1 (`teams.default_membership`): today's frontend and one-team users are unchanged | `GET /api/tasks` with no header still lists every team's tasks, as before |
+| Series by id | `series.get`: a series of a team the caller is in AND visible (`_seen_by`) | Stage 1's "personal team's series, 404 otherwise" is gone; its test was rewritten |
+| Reminders | `series_mail._already_reminded`: once a person was reminded for a recurring event's occurrence by one series, a series of another team for the same event stays quiet | Spec 6.9: one mail per person per meeting. A per-person key on `series_reminders` was rejected (a migration for a rule a query can hold) |
+| Invitation caps | `team_invites._check_caps` also counts the inviter's invitations over **all** teams: 20 in an hour, 20 in a day (revoked included) | **My call: both equal the per-team daily cap**, so a person with one team (and everyone while the switch is off) never hits them first: no flag-off change. With three teams they are held to one team's allowance, not three |
+| Auto-share team | `user_settings.auto_share_team_id` (migration `0045`, nullable, `ON DELETE SET NULL`), `GET/PUT /api/settings/auto-share`. `teams.apply_share_default` shares to the chosen team (any role in it: it is their own choice for their own meeting), else the team switch for owners and admins as before. A team they left reads as none | Reusing `teams.share_new_meetings` as a per-person flag was rejected: it is a team-wide setting for owners and admins |
+| Integrations | Already by team id; a meeting's post goes to the team it is shared or moved to because the extractor files by `teams.team_for_meeting` (2a) and `notify_meeting` posts only for `in_team`. The routes take the header | Posts already made are not recalled when a meeting is unshared, moved or re-homed (a Slack post cannot be unsent). The FE guide says to tell the person |
+
+## What's involved
+
+- Migration `alembic/versions/0045_auto_share_team.py`; `app/models.py` (`UserSettings`).
+- `app/api_teams.py` (new), `app/team_admin.py` (`requested_team`), `app/api_team.py`,
+  `app/api_projects.py`, `app/api_sprints.py`, `app/api_integrations.py`, `app/api_series.py`,
+  `app/api_tasks.py`, `app/api_settings.py`, `app/api_schemas.py`, `app/api.py`, `app/series.py`,
+  `app/series_mail.py`, `app/tasks.py`, `app/team_invites.py`, `app/teams.py`.
+- Tests: `tests/test_multi_team_api.py` (new, 26), `tests/test_series_mail.py` (the two-team reminder
+  test), `tests/test_multi_team_derived.py` (the series test rewritten), `tests/test_team.py` (route
+  classification, `is_personal`), `tests/test_migrations.py` (`0045`).
+- Docs: `docs/fe-integration-guide-teams.md` (sections 9 to 14), `docs/fe-captures/teams/46..70`, the
+  OpenAPI file.
+
+## Verification
+
+Scratch Postgres 17 on this Mac; the project's own `ruff`: `ruff check .` and `ruff format --check .`
+clean; `scripts/export_openapi.py --check` clean.
+
+- **Mutation check** (one at a time, the old behaviour put back): the header ignored, 4 tests fail;
+  series by id through the default team only, 4 fail; no per-person invitation cap, 2 fail; no
+  cross-team reminder dedupe, 1 fails (the first version of that test did not fail: it had no
+  recipient in the twin series; fixed, then it caught the mutation); the tasks board ignoring the
+  team, 1 fails; no limit on owned teams, 3 fail.
+- Bounded runs of the touched areas: see the PR body for the exact counts (the multi-team files, the
+  team, series, series mail, tasks, projects, sprints, integrations, accounts and API files, and the
+  migrations `0043` to `0045`). One run failed first on seven tests: a route called as a plain function
+  without the new argument, the new routes not classified in the route-enumerating test, the new
+  `is_personal` field in an exact-dict test, and the per-person hourly cap tighter than today's
+  per-team daily one (set equal to it); all fixed.
+- Live: the capture script ran the journey over HTTP; the guide is built from the captures.
+- **Not run**: the full suite, shards, e2e, coverage (CI does). **Not proven**: nothing ran against
+  the server, real mail, Slack or Linear. The per-person invitation caps, the reminder dedupe, the
+  header on the projects, sprints and integrations routes and the effect of the auto-share choice on a
+  new meeting are tested but not in the live captures.
+
+## Operate / roll back
+
+- Deploy: `alembic upgrade head` runs `0045` (one nullable column). Nothing changes while the switch
+  is off, apart from the additive header, the new routes and fields; `POST /api/teams` is refused with
+  `multi_team_disabled`.
+- Roll back: revert the code; the column is harmless; `alembic downgrade 0044` drops it.
+- Still do not turn on `MULTI_TEAM_ENABLED` before stage 3 and the privacy wording.
+
+## Follow-ups
+
+- The frontend must send `X-Team-Id` from the switcher (stage 3); `web/lib/api/schema.d.ts` is not
+  regenerated here (the frontend is stage 3's).
+- There is no route to delete a team or hand one on (the pilot admin does the hand-over by script); the three-owned-teams cap therefore never frees up by itself.

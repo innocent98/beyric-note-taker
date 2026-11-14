@@ -213,7 +213,7 @@ def update_member(
     target = team_admin.member_of_my_team(session, me, user_id)
     team_admin.update_member(session, me, target, role=body.role, aliases=body.aliases)
     session.commit()
-    return list_members(session, user)
+    return list_members(team_id=team_id, session=session, user=user)
 
 
 @router.delete(

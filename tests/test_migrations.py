@@ -1986,6 +1986,8 @@ def test_0044_adds_users_purged_at_empty_for_every_row_and_downgrades_cleanly(sc
     assert rows and all(row == (None,) for row in rows)  # the seeded admin and the one inserted
     command.downgrade(cfg, "0043")
     assert "purged_at" not in {c["name"] for c in inspect(engine).get_columns("users")}
+    command.upgrade(cfg, "head")
+    engine.dispose()
 
 
 def test_0045_follows_0044():

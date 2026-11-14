@@ -79,8 +79,10 @@ class Recorder:
     def mask(self, token: str) -> str:
         return self.masks.setdefault(token, f"<csrf-{chr(ord('A') + len(self.masks))}>")
 
-    def call(self, name, method, path, *, body=None, note=""):
+    def call(self, name, method, path, *, body=None, note="", team=None):
         headers = {"X-CSRF-Token": self.csrf} if self.csrf and method != "GET" else {}
+        if team is not None:
+            headers["X-Team-Id"] = str(team)
         had_cookie = "session" in self.http.cookies
         response = self.http.request(method, path, json=body, headers=headers)
         data = response.json() if "json" in response.headers.get("content-type", "") else None
@@ -471,6 +473,122 @@ def run(base: str, seeded: dict, engine) -> None:
         f"/api/meetings/{private}/move-back",
         note="Nobody to give it back to: 409.",
     )
+
+    # ---- stage 2b: the teams list, creating a team, an explicit team per request ----
+    pat.call(
+        "teams-list",
+        "GET",
+        "/api/teams",
+        note="Pat's teams (X, owned by Pat since Ada handed it over, Y, and the personal space). `is_default` marks the one a request with no X-Team-Id acts on: with two ordinary teams it is the personal space.",
+    )
+    quinn.call(
+        "teams-list-quinn",
+        "GET",
+        "/api/teams",
+        note="Quinn owns Y: their default is Y (their only ordinary team).",
+    )
+    pat.call(
+        "teams-create",
+        "POST",
+        "/api/teams",
+        body={"name": "  Side project "},
+        note="The name is trimmed. 201; the caller is the owner.",
+    )
+    pat.call("teams-create-empty-name", "POST", "/api/teams", body={"name": "   "})
+    pat.call("teams-create-second", "POST", "/api/teams", body={"name": "Book club"})
+    pat.call(
+        "teams-create-over-limit",
+        "POST",
+        "/api/teams",
+        body={"name": "One too many"},
+        note="Pat now owns three teams besides the personal one (X, Side project, Book club); Y, which Pat only belongs to, does not count.",
+    )
+    pat.call("teams-list-after", "GET", "/api/teams", note="`can_create_more` is 0 now.")
+    pat.call(
+        "team-no-header",
+        "GET",
+        "/api/team",
+        note="No header: the default team, here the personal space (`is_personal` true).",
+    )
+    pat.call(
+        "team-header-x",
+        "GET",
+        "/api/team",
+        team=x,
+        note="`X-Team-Id` names the team for this request only.",
+    )
+    pat.call("team-header-y", "GET", "/api/team", team=y)
+    quinn.call(
+        "team-header-not-my-team",
+        "GET",
+        "/api/team",
+        team=x,
+        note="A team the caller is not in: 404, the same answer as for a team that does not exist.",
+    )
+    pat.call(
+        "team-header-garbage",
+        "GET",
+        "/api/team",
+        team="abc",
+        note="A header that is not a team id: 422 validation error.",
+    )
+    pat.call(
+        "team-patch-as-member",
+        "PATCH",
+        "/api/team",
+        team=y,
+        body={"name": "Renamed"},
+        note="Pat is a plain member of Y: 403 `team_forbidden`.",
+    )
+    pat.call("members-y", "GET", "/api/team/members", team=y)
+    pat.call(
+        "tasks-header-y",
+        "GET",
+        "/api/tasks",
+        team=y,
+        note="One team's board (trimmed in the guide). Without the header: every team's tasks the caller can see, as before.",
+    )
+    pat.call(
+        "tasks-create-in-y",
+        "POST",
+        "/api/tasks",
+        team=y,
+        body={"title": "Pay the invoice"},
+        note="A task made by hand belongs to the team named.",
+    )
+    quinn.call("tasks-quinn-sees-it", "GET", "/api/tasks", team=y)
+    pat.call(
+        "series-create-in-y",
+        "POST",
+        "/api/series",
+        team=y,
+        body={"title": "Client sync"},
+        note="A recurring meeting made in team Y.",
+    )
+    pat.call("series-list-y", "GET", "/api/series", team=y)
+    pat.call("series-list-x", "GET", "/api/series", team=x, note="X has none.")
+    pat.call("auto-share-read", "GET", "/api/settings/auto-share")
+    pat.call(
+        "auto-share-set",
+        "PUT",
+        "/api/settings/auto-share",
+        body={"team_id": y},
+        note="One team at most; it applies when a meeting's notes are first written.",
+    )
+    pat.call(
+        "auto-share-personal",
+        "PUT",
+        "/api/settings/auto-share",
+        body={"team_id": seeded["pat_home"]},
+    )
+    quinn.call(
+        "auto-share-not-my-team",
+        "PUT",
+        "/api/settings/auto-share",
+        body={"team_id": x},
+        note="Quinn is not in X.",
+    )
+    pat.call("auto-share-clear", "PUT", "/api/settings/auto-share", body={"team_id": None})
 
 
 def main() -> None:

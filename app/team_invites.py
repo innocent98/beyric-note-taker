@@ -40,7 +40,10 @@ MAX_PER_DAY = 20  # invitations a team may create in 24 hours, revoked ones incl
 # Per PERSON, across every team they invite from (multi-team design 6.2): with up to three owned
 # teams the per-team caps alone would triple what one person can send, and an invitation bypasses
 # a closed or full sign-up.
-MAX_PER_PERSON_PER_HOUR = 10
+# Both equal the per-team daily cap on purpose: someone with ONE team (and everyone while the switch
+# is off) can never hit them before they hit the team's, so nothing changes for them; someone with
+# three teams is held to what one team allows instead of three times that.
+MAX_PER_PERSON_PER_HOUR = 20
 MAX_PER_PERSON_PER_DAY = 20
 RESEND_COOLDOWN = timedelta(seconds=60)
 MAX_NAME_CHARS = 100

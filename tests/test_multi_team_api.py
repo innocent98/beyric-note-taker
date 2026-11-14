@@ -9,7 +9,6 @@ The team of a request is the `X-Team-Id` header: explicit per request, nothing k
 # ruff: noqa: F811  (fixtures are imported by name and used as arguments)
 from datetime import UTC, datetime, timedelta
 
-import pytest
 from sqlalchemy import select
 
 from app import team_invites, teams
@@ -282,54 +281,51 @@ def test_a_series_page_never_lists_a_meeting_its_viewer_may_not_read(app, sessio
 # ---- invitations: a limit per person across all their teams ----
 
 
-def test_the_per_person_hourly_cap_counts_every_team_the_person_invites_from(
-    app, session, world, monkeypatch
-):
-    pat_team = new_team(session, world.pat, "P1")
-    other = new_team(session, world.pat, "P2")
-    now = datetime.now(UTC)
+def _spread_invites(session, world, now, *, minutes_ago, revoked=False):
+    """MAX_PER_PERSON invitations by Pat spread over three teams, so that no single team is over
+    its own caps (7 + 7 + 6 pending or created): only the per-person cap can refuse the next."""
+    boxes = [new_team(session, world.pat, f"P{n}") for n in range(3)]
     for n in range(team_invites.MAX_PER_PERSON_PER_HOUR):
         session.add(
             TeamInvite(
-                team_id=pat_team.id if n % 2 else other.id,
+                team_id=boxes[n % 3].id,
                 email=f"x{n}@example.test",
                 role="member",
                 invited_by=world.pat.id,
                 token_hash=f"h{n}",
                 expires_at=now + timedelta(days=7),
-                created_at=now - timedelta(minutes=5),
+                created_at=now - timedelta(minutes=minutes_ago),
+                revoked_at=now - timedelta(minutes=1) if revoked else None,
             )
         )
     session.commit()
-    with pytest.raises(Exception) as caught:
-        team_invites._check_caps(session, pat_team.id, world.pat.id, now)
-    assert getattr(caught.value, "code", None) == "invite_limit"
-    # someone else, or the same person an hour and a bit later, is fine
-    team_invites._check_caps(session, pat_team.id, world.ada.id, now)
-    team_invites._check_caps(session, pat_team.id, world.pat.id, now + timedelta(minutes=61))
+    return boxes, new_team(session, world.pat, "Fresh")
 
 
-def test_the_per_person_daily_cap_counts_every_team(app, session, world):
-    pat_team = new_team(session, world.pat, "P1")
-    other = new_team(session, world.pat, "P2")
+def _refused(session, team, person, now) -> bool:
+    try:
+        team_invites._check_caps(session, team.id, person.id, now)
+    except Exception as exc:
+        assert getattr(exc, "code", None) == "invite_limit"
+        return True
+    return False
+
+
+def test_the_per_person_hourly_cap_counts_every_team_the_person_invites_from(app, session, world):
     now = datetime.now(UTC)
-    for n in range(team_invites.MAX_PER_PERSON_PER_DAY):
-        session.add(
-            TeamInvite(
-                team_id=pat_team.id if n % 2 else other.id,
-                email=f"d{n}@example.test",
-                role="member",
-                invited_by=world.pat.id,
-                token_hash=f"d{n}",
-                expires_at=now + timedelta(days=7),
-                created_at=now - timedelta(hours=3),
-                revoked_at=now - timedelta(hours=2),
-            )
-        )
-    session.commit()
-    with pytest.raises(Exception) as caught:
-        team_invites._check_caps(session, other.id, world.pat.id, now)
-    assert getattr(caught.value, "code", None) == "invite_limit"
+    boxes, fresh = _spread_invites(session, world, now, minutes_ago=5)
+    assert all(not _refused(session, box, world.ada, now) for box in boxes)  # no team is over
+    assert _refused(session, fresh, world.pat, now)  # but Pat is, across all of them
+    assert not _refused(session, fresh, world.ada, now)  # someone else is not
+    # a day and a bit later every window has passed
+    assert not _refused(session, fresh, world.pat, now + timedelta(days=1, minutes=1))
+
+
+def test_the_per_person_daily_cap_counts_revoked_ones_in_every_team(app, session, world):
+    now = datetime.now(UTC)
+    _, fresh = _spread_invites(session, world, now, minutes_ago=180, revoked=True)
+    assert _refused(session, fresh, world.pat, now)  # three hours ago: outside the hour, in the day
+    assert not _refused(session, fresh, world.ada, now)
 
 
 # ---- one auto-share team per person ----

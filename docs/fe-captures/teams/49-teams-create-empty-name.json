@@ -1,0 +1,24 @@
+{
+  "note": "",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "   "
+    }
+  },
+  "response": {
+    "status": 422,
+    "body": {
+      "error": {
+        "code": "invalid_name",
+        "message": "Give the team a name."
+      }
+    }
+  }
+}

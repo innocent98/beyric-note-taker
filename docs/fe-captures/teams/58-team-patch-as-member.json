@@ -1,0 +1,25 @@
+{
+  "note": "Pat is a plain member of Y: 403 `team_forbidden`.",
+  "as": "Pat",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/team",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Renamed"
+    }
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only an owner or admin of the team can do that."
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "note": "A recurring meeting made in team Y.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/series",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "title": "Client sync"
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 1,
+      "title": "Client sync",
+      "cadence": "Recurring",
+      "platform": null,
+      "next_starts_at": null,
+      "next_text": null,
+      "unfinished_tasks": 0,
+      "open_questions": 0,
+      "project": null
+    }
+  }
+}
