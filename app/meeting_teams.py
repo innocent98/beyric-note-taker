@@ -45,8 +45,10 @@ def _lock(session: Session, meeting: Meeting) -> None:
 
 def _touched(session: Session, meeting: Meeting) -> None:
     teams.rehome_tasks(session, meeting)
-    if meeting.series_id is not None:
-        series_rules.mark_topics_stale(session, meeting.series_id)  # the repeat topics may change
+    before = meeting.series_id
+    series_rules.follow_meeting(session, meeting)  # flag on: into the row of its new scope
+    if before is not None:
+        series_rules.mark_topics_stale(session, before)  # the repeat topics may change
 
 
 def _member_team(session: Session, user: User, team_id: int) -> Team:

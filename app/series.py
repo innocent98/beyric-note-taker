@@ -19,6 +19,12 @@ of another team is "no such series" (404). This module never compares `shared_te
 owner or admin of the team who can read the meeting. Agenda lines: any member adds; the author or
 a manager removes. Renaming a series: its creator or a manager.
 
+**Follow the meetings (`SERIES_FOLLOW_MEETINGS`).** With the flag on (`follow_enabled`) a row of a
+team holds exactly the meetings whose SCOPE is that team (`visibility.series_scope_clause`: shared
+to or owned by it; for a personal team, its owner's private ones), one row per recurring event per
+team scope. `follow_meeting` moves a meeting to the row of its scope when it changes team. Off,
+none of that runs and a row is the recorder's default team's, as it always was.
+
 This module imports neither the services nor the API (the pipeline imports it).
 """
 
@@ -28,11 +34,12 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app import tasks, teams, titles
+from app.config import get_settings
 from app.models import (
     CalendarEvent,
     Meeting,
@@ -52,6 +59,7 @@ from app.visibility import (
     meeting_team_ids,
     owns,
     recorded_by,
+    scope_team_of,
     visible_meetings,
 )
 
@@ -97,6 +105,26 @@ def team_id_of(session: Session, user: User) -> int:
     return teams.ensure_team(session, user).id
 
 
+def follow_enabled() -> bool:
+    """`SERIES_FOLLOW_MEETINGS` and `MULTI_TEAM_ENABLED`, both on: a series row then belongs to a
+    team scope and meetings follow it. Read on each call (the settings are cached), so a test may
+    replace this function."""
+    return get_settings().series_follow_meetings and teams.multi_team_enabled()
+
+
+def scope_team_id(session: Session, recorder: User, meeting: Meeting, *, follow: bool) -> int:
+    """The team a meeting's series row belongs to: the team that owns it, else the team it is
+    shared to (`visibility.scope_team_of`), else for a private meeting the recorder's PERSONAL team
+    (`follow`) or, as before multi-team, their default team. In the caller's transaction (it may
+    make a personal team)."""
+    home = scope_team_of(meeting)
+    if home is not None:
+        return home
+    if follow:
+        return teams.ensure_personal_team(session, recorder).id
+    return team_id_of(session, recorder)
+
+
 def membership(session: Session, user: User, team_id: int | None = None) -> TeamMember | None:
     return teams.membership(session, user.id, team_id)
 
@@ -112,17 +140,22 @@ def _seen_by(user: User):
     by hand is no different: it is named after a person's meeting ("Make this a recurring
     meeting?" uses the meeting's own name), so it stays theirs until a meeting of it is shared.
     Else the title, cadence and next date of a teammate's private recurring call (a 1:1) would be
-    published to the team (spec 8.2: private by default)."""
+    published to the team (spec 8.2: private by default).
+
+    With the flag on, "made it" and "has the event on their calendar" show an EMPTY card (made
+    before the first recording) and nothing more: once a row has any meeting, only a meeting the
+    caller may read lists it, so a creator whose own meetings went to their personal row does not
+    keep seeing the team's card."""
     readable = select(Meeting.id).where(Meeting.series_id == Series.id, can_read_clause(user))
     own_event = select(CalendarEvent.id).where(
         CalendarEvent.user_id == user.id,
         CalendarEvent.recurring_event_id == Series.calendar_recurring_id,
     )
-    return or_(
-        Series.owner_user_id == user.id,
-        readable.exists(),
-        own_event.exists(),
-    )
+    mine = or_(Series.owner_user_id == user.id, own_event.exists())
+    if follow_enabled():
+        any_meeting = select(Meeting.id).where(Meeting.series_id == Series.id)
+        return or_(readable.exists(), and_(~any_meeting.exists(), mine))
+    return or_(readable.exists(), mine)
 
 
 def get(session: Session, user: User, series_id: int) -> Series | None:
@@ -170,7 +203,7 @@ def _get_or_create(
     recurring_id: str,
     title: str,
     platform: str | None,
-    owner_id: int,
+    owner_id: int | None,
 ) -> Series:
     """One series per team and recurring id, however many workers ask at once."""
     session.execute(
@@ -225,7 +258,10 @@ def link_from_calendar(session: Session, meeting: Meeting) -> Series | None:
     owner = session.get(User, meeting.owner_user_id)
     if owner is None or owner.status != "active":
         return None
-    team_id = team_id_of(session, owner)
+    follow = follow_enabled()
+    team_id = scope_team_id(session, owner, meeting, follow=follow)
+    if follow:
+        _rekey_empty_card(session, owner, row.recurring_event_id, team_id)
     series = _get_or_create(
         session,
         team_id,
@@ -236,6 +272,42 @@ def link_from_calendar(session: Session, meeting: Meeting) -> Series | None:
     )
     join(session, meeting, series, consume=True)
     return series
+
+
+def _rekey_empty_card(session: Session, recorder: User, recurring_id: str, scope_id: int) -> None:
+    """The recorder's first meeting of a recurring event lands in a scope other than the team their
+    pre-recording card (`sync_from_joins`) was made in: the card goes to that scope instead of
+    staying behind as an empty duplicate. Only the recorder's OWN empty card: no meeting, no waiting
+    agenda line (those are the team's and wait there for its next meeting), no linked project (a
+    project is the old team's), and not already a row of the scope. Anything else stays; the caller
+    makes or finds the scope's row."""
+    default_id = team_id_of(session, recorder)
+    if default_id == scope_id:
+        return
+    card = session.scalars(
+        select(Series).where(
+            Series.team_id == default_id, Series.calendar_recurring_id == recurring_id
+        )
+    ).first()
+    if card is None or card.owner_user_id != recorder.id or card.project_id is not None:
+        return
+    held = session.scalar(
+        select(func.count()).select_from(Meeting).where(Meeting.series_id == card.id)
+    )
+    waiting = session.scalar(
+        select(func.count())
+        .select_from(SeriesAgendaItem)
+        .where(SeriesAgendaItem.series_id == card.id, SeriesAgendaItem.consumed_at.is_(None))
+    )
+    taken = session.scalar(
+        select(Series.id).where(
+            Series.team_id == scope_id, Series.calendar_recurring_id == recurring_id
+        )
+    )
+    if held or waiting or taken is not None:
+        return
+    card.team_id = scope_id
+    session.flush()
 
 
 def join(session: Session, meeting: Meeting, series: Series, *, consume: bool = False) -> None:
@@ -259,6 +331,24 @@ def join(session: Session, meeting: Meeting, series: Series, *, consume: bool = 
             )
             .values(consumed_by_meeting_id=meeting.id, consumed_at=datetime.now(UTC))
         )
+
+
+def _has_row_with_meetings(session: Session, user_id: int, recurring_id: str) -> bool:
+    """Whether a team of the person's has a row of this recurring event that holds a meeting."""
+    mine = select(TeamMember.team_id).where(TeamMember.user_id == user_id)
+    held = select(Meeting.id).where(Meeting.series_id == Series.id)
+    return (
+        session.scalar(
+            select(Series.id)
+            .where(
+                Series.team_id.in_(mine),
+                Series.calendar_recurring_id == recurring_id,
+                held.exists(),
+            )
+            .limit(1)
+        )
+        is not None
+    )
 
 
 def sync_from_joins(session: Session, now: datetime) -> int:
@@ -286,8 +376,11 @@ def sync_from_joins(session: Session, now: datetime) -> int:
         .limit(SYNC_BATCH)
     ).all()
     made = 0
+    follow = follow_enabled()
     for user_id, recurring_id, title, platform in rows:
         user = session.get(User, user_id)
+        if follow and _has_row_with_meetings(session, user_id, recurring_id):
+            continue  # their meetings already have rows (maybe their personal one): no empty card
         team_id = team_id_of(session, user)
         exists = session.scalar(
             select(Series.id).where(
@@ -390,9 +483,10 @@ def attach(session: Session, user: User, meeting: Meeting, series_id: int | None
 
 def meeting_team_id(session: Session, recorder: User, meeting: Meeting) -> int:
     """The team a meeting's series must belong to: the team that owns it, else the one it is shared
-    with, else (a private meeting) its recorder's default team, as before multi-team. A series of
-    any other team would mail people named in the meeting, in a team that cannot read it."""
-    return meeting.owner_team_id or meeting.shared_team_id or team_id_of(session, recorder)
+    with, else (a private meeting) its recorder's PERSONAL team with the flag on, or their default
+    team as before multi-team. A series of any other team would mail people named in the meeting,
+    in a team that cannot read it."""
+    return scope_team_id(session, recorder, meeting, follow=follow_enabled())
 
 
 def reused_code(session: Session, meeting: Meeting) -> bool:
@@ -447,17 +541,23 @@ def make_from_reused_link(session: Session, user: User, meeting: Meeting) -> Ser
 
 def forget_meetings_of(session: Session, user_id: int, team_id: int) -> None:
     """A person leaves a team: their meetings leave that team's series (they never move, and the
-    team must not keep a pointer into meetings it can no longer read)."""
+    team must not keep a pointer into meetings it can no longer read). With the flag on they
+    FOLLOW the person instead: the meeting is private now, so it goes to its recorder's personal
+    row. A meeting the team owns stays in the team's row either way."""
     in_team = select(Series.id).where(Series.team_id == team_id)
-    session.execute(
-        update(Meeting)
-        .where(
-            Meeting.owner_user_id == user_id,
-            Meeting.owner_team_id.is_(None),  # a meeting the team owns stays in its series
-            Meeting.series_id.in_(in_team),
-        )
-        .values(series_id=None)
-    )
+    mine = [
+        Meeting.owner_user_id == user_id,
+        Meeting.owner_team_id.is_(None),  # a meeting the team owns stays in its series
+        Meeting.series_id.in_(in_team),
+    ]
+    if follow_enabled():
+        team_rows = set(session.scalars(in_team))
+        stay = select(Meeting).where(*mine).order_by(Meeting.id)
+        for meeting in session.scalars(stay.execution_options(populate_existing=True)):
+            if follow_meeting(session, meeting) is None or meeting.series_id in team_rows:
+                meeting.series_id = None  # no row to follow to: out of the team's series, as before
+        return
+    session.execute(update(Meeting).where(*mine).values(series_id=None))
 
 
 def move_team_series(session: Session, old_team_id: int, new_team_id: int) -> None:
@@ -487,6 +587,115 @@ def move_team_series(session: Session, old_team_id: int, new_team_id: int) -> No
         session.flush()
         session.delete(old)
     session.flush()
+
+
+# ---- following the meetings (SERIES_FOLLOW_MEETINGS) ----
+
+
+@dataclass(frozen=True)
+class Placement:
+    """What `place_meeting` did: the row the meeting is in now (None: in no series), and whether it
+    moved, whether a new row was made for it, whether it was cut loose because the target team is
+    full, whether it was skipped (a private meeting of an account that is gone)."""
+
+    series: Series | None
+    moved: bool = False
+    made: bool = False
+    cut_loose: bool = False
+    skipped: bool = False
+
+
+def _row_for_scope(
+    session: Session, current: Series, scope_id: int, recorder: User | None
+) -> tuple[Series | None, bool]:
+    """The row of `current`'s recurring meeting in the team `scope_id`, made when the team has none:
+    (row, made). A calendar row is found by its recurring id; a hand-made one (no id) by the same
+    title among that team's hand-made rows. A new row copies title and platform and is made by the
+    recorder; it NEVER copies the project link (a project belongs to one team) or the agenda lines
+    (they are the team's). No row (None) when the team already has as many as fit."""
+    if current.calendar_recurring_id is not None:
+        found = session.scalars(
+            select(Series).where(
+                Series.team_id == scope_id,
+                Series.calendar_recurring_id == current.calendar_recurring_id,
+            )
+        ).first()
+    else:
+        found = session.scalars(
+            select(Series)
+            .where(
+                Series.team_id == scope_id,
+                Series.calendar_recurring_id.is_(None),
+                Series.title == current.title,
+            )
+            .order_by(Series.id)
+        ).first()
+    if found is not None:
+        return found, False
+    count = session.scalar(
+        select(func.count()).select_from(Series).where(Series.team_id == scope_id)
+    )
+    if count >= MAX_SERIES_PER_TEAM:
+        return None, False
+    creator = recorder.id if recorder is not None and recorder.status == "active" else None
+    if current.calendar_recurring_id is not None:
+        made = _get_or_create(
+            session,
+            scope_id,
+            current.calendar_recurring_id,
+            current.title,
+            current.platform,
+            creator,
+        )
+    else:
+        made = Series(
+            team_id=scope_id, owner_user_id=creator, title=current.title, platform=current.platform
+        )
+        session.add(made)
+        session.flush()
+    return made, True
+
+
+def place_meeting(session: Session, meeting: Meeting) -> Placement:
+    """Put the meeting into the row of its scope, whatever the flag says (the backfill calls this
+    directly; the hooks call `follow_meeting`, which checks the flag). A meeting in no series is
+    left alone. When the meeting is in another scope's row, it moves to the scope's row for the
+    same recurring meeting (found or made), and BOTH rows' repeat topics are marked stale. If the
+    scope's team has no room for another row, the meeting is cut loose from its series instead of
+    being left in a row of another scope. Never consumes agenda lines: only the pipeline's link
+    does. In the caller's transaction."""
+    if meeting.series_id is None:
+        return Placement(None)
+    current = session.get(Series, meeting.series_id)
+    if current is None:
+        return Placement(None)
+    recorder = session.get(User, meeting.owner_user_id)
+    if scope_team_of(meeting) is None and (recorder is None or recorder.status != "active"):
+        return Placement(current, skipped=True)  # no personal team to take it to
+    scope_id = scope_team_id(session, recorder, meeting, follow=True)
+    if current.team_id == scope_id:
+        return Placement(current)
+    target, made = _row_for_scope(session, current, scope_id, recorder)
+    meeting.series_id = target.id if target is not None else None
+    mark_topics_stale(session, current.id)
+    if target is not None:
+        mark_topics_stale(session, target.id)
+    session.flush()
+    if target is None:
+        logger.warning(
+            "meeting %s: left its series, the new team has no room for a row", meeting.id
+        )
+        return Placement(None, moved=True, cut_loose=True)
+    return Placement(target, moved=True, made=made)
+
+
+def follow_meeting(session: Session, meeting: Meeting) -> Series | None:
+    """The hook for every change of a meeting's team (share, unshare, move, move back, its
+    recorder leaves, its team is deleted): with the flag on, put the meeting into the row of its
+    scope (`place_meeting`). Off: nothing, exactly as before. Returns the meeting's row."""
+    if not follow_enabled():
+        return None
+    return place_meeting(session, meeting).series
 
 
 # ---- the series' meetings, attendance ----

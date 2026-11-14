@@ -27,7 +27,7 @@ from sqlalchemy import ColumnElement, Select, and_, or_, select
 from sqlalchemy.orm import Session
 
 from app import titles
-from app.models import Meeting, TeamMember, User
+from app.models import Meeting, Team, TeamMember, User
 
 MANAGER_ROLES = ("owner", "admin")
 FORMER_MEMBER = "Former member"
@@ -174,6 +174,30 @@ def in_team(meeting: Meeting, team_id: int) -> bool:
 def in_team_clause(team_id: int) -> ColumnElement[bool]:
     """`in_team` as a `where` condition."""
     return or_(Meeting.shared_team_id == team_id, Meeting.owner_team_id == team_id)
+
+
+def scope_team_of(meeting: Meeting) -> int | None:
+    """The ordinary team a meeting belongs to for a recurring meeting's row ("scope"): the team that
+    owns it, else the team it is shared to; None for a private meeting, which is its recorder's
+    personal scope (docs/superpowers/specs/2026-11-14-series-follow-meetings.md section 3).
+    `series_scope_clause` is the same rule as a query: change them together."""
+    if meeting.owner_team_id is not None:
+        return meeting.owner_team_id
+    return meeting.shared_team_id
+
+
+def series_scope_clause(team: Team) -> ColumnElement[bool]:
+    """`where` condition: the meetings whose scope is `team`. An ordinary team: those shared to or
+    owned by it. A personal team: those its owner recorded that no team has (neither shared nor
+    moved). Narrows only: always combine with `can_read_clause` for a reader. A series row of this
+    team may hold exactly these meetings, and no others."""
+    if team.is_personal:
+        return and_(
+            Meeting.owner_user_id == team.owner_user_id,
+            Meeting.shared_team_id.is_(None),
+            Meeting.owner_team_id.is_(None),
+        )
+    return in_team_clause(team.id)
 
 
 def is_shared(meeting: Meeting) -> bool:
