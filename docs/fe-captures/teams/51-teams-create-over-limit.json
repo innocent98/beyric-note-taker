@@ -1,0 +1,24 @@
+{
+  "note": "Pat now owns three teams besides the personal one (X, Side project, Book club); Y, which Pat only belongs to, does not count.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "One too many"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "team_limit",
+        "message": "You can own up to 3 teams."
+      }
+    }
+  }
+}

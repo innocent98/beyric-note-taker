@@ -1,0 +1,18 @@
+{
+  "note": "",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/settings/auto-share",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "team_id": null
+    }
+  }
+}

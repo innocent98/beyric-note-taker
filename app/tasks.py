@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 
 from app import filing, sprints, teams, titles
 from app.extraction import UNCLEAR, CheckedAction, fingerprint, normalise
-from app.models import Meeting, Milestone, Project, Task, TeamMember, User
+from app.models import Meeting, Milestone, Project, Task, Team, TeamMember, User
 from app.visibility import can_read_clause, owns
 
 logger = logging.getLogger(__name__)
@@ -415,13 +415,18 @@ def list_tasks(
     milestone: int | None = None,
     sprint: str | None = None,
     suggested: bool = False,
+    team_id: int | None = None,
 ) -> tuple[list[Task], bool]:
     """The tasks the caller may see, newest first. `assignee` is `me`, `none` (Needs owner) or a
     user id; `project` is `none` (no project) or a project id; `milestone` is a milestone id;
     `sprint` is `none` (Backlog), `current`, `next` or a sprint id. Suggested tasks are left out
     (the Board and the Backlog); `suggested=True` lists only those instead (the Suggested tasks
-    section). Returns up to `limit` and whether there are more."""
+    section). `team_id` limits the list to one team's board (the caller's membership of it is
+    checked by the route); none lists every team's, as before. Returns up to `limit` and whether
+    there are more."""
     query = select(Task).where(visible(user), Task.suggested.is_(suggested))
+    if team_id is not None:
+        query = query.where(Task.team_id == team_id)
     if assignee == "me":
         query = query.where(Task.assignee_user_id == user.id)
     elif assignee == "none":
@@ -437,7 +442,7 @@ def list_tasks(
     if milestone is not None:
         query = query.where(Task.milestone_id == milestone)
     if sprint is not None:
-        member = membership(session, user)
+        member = membership(session, user, team_id)
         query = query.where(
             sprints.sprint_filter(session, member.team_id if member else None, sprint)
         )
@@ -471,10 +476,13 @@ def counts_for_meetings(session: Session, user: User, meeting_ids: list[int]) ->
     return {meeting_id: count for meeting_id, count in rows}
 
 
-def attention(session: Session, user: User) -> dict[str, int]:
-    """The "needs attention" counts over every open task the caller sees: tasks with no owner, and
-    tasks whose quote could not be found in the transcript, and tasks filed by a guess."""
+def attention(session: Session, user: User, team_id: int | None = None) -> dict[str, int]:
+    """The "needs attention" counts over every open task the caller sees (of one team's board when
+    `team_id` is given): tasks with no owner, and tasks whose quote could not be found in the
+    transcript, and tasks filed by a guess."""
     open_ = and_(visible(user), Task.status != "done", confirmed())
+    if team_id is not None:
+        open_ = and_(open_, Task.team_id == team_id)
     needs_owner = session.scalar(
         select(func.count()).select_from(Task).where(open_, Task.assignee_user_id.is_(None))
     )
@@ -558,11 +566,13 @@ def create(
     today: date,
     project_id: int | None = None,
     sprint_id: int | None | Unset = UNSET,
+    team_id: int | None = None,
 ) -> Task:
-    """A manual task in the caller's team. Anyone on the team may make one. Left out, the sprint
+    """A manual task in the caller's team (`team_id`, a team the route has checked they belong to;
+    none: their default team). Anyone on the team may make one. Left out, the sprint
     follows the due date (the Backlog without one); `None` is the Backlog and an id is that sprint,
     which must be an open sprint of the team's series for the task's project. Commits."""
-    team = teams.ensure_team(session, user)
+    team = session.get(Team, team_id) if team_id is not None else teams.ensure_team(session, user)
     if assignee_user_id is not None:
         _assignable(session, team.id, assignee_user_id)
     check_assignable(session, team.id, project_id, None)

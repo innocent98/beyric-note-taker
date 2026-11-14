@@ -1,0 +1,47 @@
+{
+  "note": "",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/team/members",
+    "headers": {
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "members": [
+        {
+          "user_id": 3,
+          "name": "Quinn Example",
+          "email": "quinn@example.test",
+          "role": "owner",
+          "is_you": false,
+          "aliases": [],
+          "open_tasks": 0,
+          "joined_at": "2026-11-14T09:39:43.032250Z",
+          "can_change_role": false,
+          "can_edit_aliases": false,
+          "can_remove": false
+        },
+        {
+          "user_id": 2,
+          "name": "Pat Example",
+          "email": "pat@example.test",
+          "role": "member",
+          "is_you": true,
+          "aliases": [],
+          "open_tasks": 0,
+          "joined_at": "2026-11-14T09:39:43.032250Z",
+          "can_change_role": false,
+          "can_edit_aliases": true,
+          "can_remove": true
+        }
+      ],
+      "invites": []
+    }
+  }
+}

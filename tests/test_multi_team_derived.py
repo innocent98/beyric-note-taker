@@ -3,9 +3,8 @@ topics and the suggested agenda, with a person in two teams.
 
 Same cast as `tests/test_multi_team_leaks.py` (`world`): Ada records and owns team X; Pat is in X
 and Y; Quinn owns Y and is only in Y; Zed owns Z. Everyone has a personal team, the switch is on.
-A series belongs to ONE team (X here) and a route that names no team acts on the caller's default
-team, so a person with two ordinary teams reads the personal team's series until stage 2 adds an
-explicit team: those cases are asserted as they are (a 404, never a leak, never a 500).
+A series belongs to ONE team (X here): by id it is read through that team's membership; the list
+and the create route act on the team named by the `X-Team-Id` header, else the default team.
 """
 
 # ruff: noqa: F811  (fixtures are imported by name and used as arguments)
@@ -159,15 +158,21 @@ def test_a_person_only_in_y_gets_404_for_the_series_of_x_and_its_agenda(
     assert quinn.get("/api/series").json()["series"] == []
 
 
-def test_a_person_in_two_ordinary_teams_reads_the_personal_teams_series_never_an_error(
+def test_a_person_in_two_ordinary_teams_reads_a_series_through_the_team_it_belongs_to(
     app, session, template, world, weekly_x
 ):
-    """Stage 1: no team is named, so the default team (personal) is used. Not a leak, not a 500."""
+    """Stage 2b: a series is read through ITS OWN team's membership, so a person on X and Y opens
+    the series of X by its id with no team named. The list names its team: the default (personal)
+    team has none, the X header has it, the Y header does not."""
     meeting_in(session, template, weekly_x).shared_team_id = world.x.id
     session.commit()
     pat = sign_in(app, PAT)
-    error_of(pat.get(f"/api/series/{weekly_x.id}"), 404, "not_found")
-    assert pat.get("/api/series").json()["series"] == []
+    assert pat.get(f"/api/series/{weekly_x.id}").status_code == 200
+    assert pat.get("/api/series").json()["series"] == []  # no team named: the personal one
+    as_x = pat.client.get("/api/series", headers={"X-Team-Id": str(world.x.id)})
+    assert [c["id"] for c in as_x.json()["series"]] == [weekly_x.id]
+    as_y = pat.client.get("/api/series", headers={"X-Team-Id": str(world.y.id)})
+    assert as_y.json()["series"] == []
 
 
 def test_the_suggested_agenda_counts_only_what_a_two_team_reader_may_read(

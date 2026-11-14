@@ -388,6 +388,8 @@ def _queue_for(session: Session, found: Series, event: CalendarEvent, kind: str)
     queued = 0
     for person in series.recipients(session, found):
         user = session.get(User, person.user_id)
+        if _already_reminded(session, found, user.id, kind, event.starts_at):
+            continue
         try:
             with session.begin_nested():
                 reminder = SeriesReminder(
@@ -404,6 +406,32 @@ def _queue_for(session: Session, found: Series, event: CalendarEvent, kind: str)
         except IntegrityError:
             continue  # already queued for this person and occurrence
     return queued
+
+
+def _already_reminded(
+    session: Session, found: Series, user_id: int, kind: str, starts_at: datetime
+) -> bool:
+    """One mail per person per meeting, never one per team (multi-team design 6.9): the same
+    recurring event can have a series in each of two teams a person belongs to (each made from
+    its own recorder's calendar); once one of them has reminded this person for this occurrence,
+    the other stays quiet."""
+    if found.calendar_recurring_id is None:
+        return False
+    return (
+        session.scalar(
+            select(SeriesReminder.id)
+            .join(Series, Series.id == SeriesReminder.series_id)
+            .where(
+                SeriesReminder.user_id == user_id,
+                SeriesReminder.kind == kind,
+                SeriesReminder.starts_at == starts_at,
+                Series.calendar_recurring_id == found.calendar_recurring_id,
+                Series.id != found.id,
+            )
+            .limit(1)
+        )
+        is not None
+    )
 
 
 def _when(starts: datetime, ends: datetime | None, zone: str | None) -> str:

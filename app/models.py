@@ -453,6 +453,11 @@ class UserSettings(Base):
 
     __tablename__ = "user_settings"
     __table_args__ = (
+        Index(
+            "ix_user_settings_auto_share_team_id",
+            "auto_share_team_id",
+            postgresql_where=sa.text("auto_share_team_id is not null"),
+        ),
         CheckConstraint(_in("auto_join_rule", AUTO_JOIN_RULES), name="ck_user_settings_rule"),
         CheckConstraint(
             "instant_meet_mode_override is null or "
@@ -492,6 +497,12 @@ class UserSettings(Base):
     # W8: whether this person is emailed the agenda a teammate sends and the reminders before a
     # recurring meeting they attend (Settings > Email).
     notify_reminders: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    # The one team this person's new meetings are shared to when their notes are first written
+    # (multi-team design 6.3); null = none chosen, and the team default (`teams.
+    # share_new_meetings`, owners and admins) applies as before.
+    auto_share_team_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
+    )
 
 
 class CalendarConnection(Base):

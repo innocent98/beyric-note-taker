@@ -1,0 +1,27 @@
+{
+  "note": "The name is trimmed. 201; the caller is the owner.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "  Side project "
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 7,
+      "name": "Side project",
+      "role": "owner",
+      "member_count": 1,
+      "is_personal": false,
+      "is_default": false,
+      "can_manage": true
+    }
+  }
+}

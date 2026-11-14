@@ -270,6 +270,37 @@ def test_the_one_hour_mail_goes_in_its_window_once_per_person(
     assert set(kinds) == {"1h"}
 
 
+def test_one_mail_per_person_per_occurrence_even_when_two_teams_each_have_the_series(
+    session, owner, daniel, weekly, busy, due, template
+):
+    """Multi-team: the same recurring event has a series in each of two teams the people share
+    (each made from its own recorder's calendar). The mail is per person and meeting, not per
+    team: once team A has reminded someone, team B stays quiet."""
+    from app.models import TeamMember
+
+    other = Team(owner_user_id=owner.id, name="Second", is_personal=False, reminders_on=True)
+    session.add(other)
+    session.flush()
+    for person, role in ((owner, "owner"), (daniel, "member")):
+        session.add(TeamMember(team_id=other.id, user_id=person.id, role=role))
+    twin = Series(
+        team_id=other.id,
+        owner_user_id=owner.id,
+        title="Monday planning",
+        calendar_recurring_id="rid-1",
+    )
+    session.add(twin)
+    session.flush()
+    session.add(SeriesAgendaItem(series_id=twin.id, text="Budget", created_by=owner.id))
+    meeting_in(session, template, twin).shared_team_id = other.id
+    session.commit()
+    first = series_mail.queue_due_reminders(session, NOW)
+    assert first == 2  # one mail each for the owner and Daniel, from whichever series ran first
+    assert series_mail.queue_due_reminders(session, NOW) == 0
+    rows = session.scalars(select(SeriesReminder)).all()
+    assert len(rows) == 2 and len({r.user_id for r in rows}) == 2
+
+
 def test_the_thirty_minute_mail_follows_and_the_window_closes(
     session, owner, daniel, weekly, busy, due
 ):

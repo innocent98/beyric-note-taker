@@ -1,0 +1,32 @@
+{
+  "note": "",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/series",
+    "headers": {
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "timezone": "UTC",
+      "series": [
+        {
+          "id": 1,
+          "title": "Client sync",
+          "cadence": "Recurring",
+          "platform": null,
+          "next_starts_at": null,
+          "next_text": null,
+          "unfinished_tasks": 0,
+          "open_questions": 0,
+          "project": null
+        }
+      ]
+    }
+  }
+}

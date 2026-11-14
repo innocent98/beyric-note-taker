@@ -1,0 +1,31 @@
+{
+  "note": "No header: the default team, here the personal space (`is_personal` true).",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/team",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": 2,
+      "name": "My team",
+      "is_personal": true,
+      "share_new_meetings": false,
+      "reminders_on": false,
+      "reminder_timing": "both",
+      "my_role": "owner",
+      "sprint_length": "week5",
+      "sprint_custom_days": 10,
+      "sprint_align_weekdays": true,
+      "member_count": 1,
+      "pending_invites": 0,
+      "can_manage": true,
+      "can_change_roles": true
+    }
+  }
+}

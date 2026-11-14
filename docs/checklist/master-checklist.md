@@ -673,10 +673,11 @@ Goal: one person has a permanent personal team and may belong to several teams; 
   - [x] Review tests: Ask, decision search, series page, topics and suggested agenda with two memberships; the post-migration shape with the switch off through the API (`GET /api/team`, leave, `already_on_team`); two accepts at once
 - [ ] **Stage 2: API, team-owned meetings and Move (dark)**: his two decisions are settled (spec section 9, 2026-11-13): a moved meeting stays with the team when its recorder deletes their account (shown as "Former member", name and email removed); any recorder may move a meeting into any team they belong to. Delivered as two PRs, not stacked; SOP `docs/sop/2026-11-14-multi-team-stage-2.md`; FE guide `docs/fe-integration-guide-teams.md`
   - [x] **2a, the permission core** (PR opened 2026-11-14, number added when known; migration 0044): moved meetings, Move and Move-back routes, the share route's team, account deletion keeps moved meetings, tasks follow the meeting, leak tests first, mutation check (5 mutations, all caught), live captures for the guide
-  - [ ] **2b, the API surface**
-    - [ ] `GET /api/teams`, `POST /api/teams` (three owned teams per account, checked in the route), an explicit team per request on every team-implicit route
-    - [ ] Series, mail and integrations per team (spec 6.9; the series work is sized first, in the 2b PR body); per-person invitation limit; one auto-share team per person
-    - [ ] Leak tests for series, topics, agenda and Ask with an explicit team; `docs/fe-integration-guide-teams.md` extended from live captures
+  - [x] **2b, the API surface** (PR #184 open, migration 0045, Opus review fixed)
+    - [x] `GET /api/teams`, `POST /api/teams` (three owned teams per account, checked in the route, serialised on the person's row), an explicit team per request (the `X-Team-Id` header) on every team-implicit route
+    - [x] Series per team (sized first: ~10 call sites; by-id through the series' own team, list and create per team, a meeting joins only its own team's series), one reminder mail per person per occurrence, per-person invitation caps, one auto-share team per person (`/api/settings/auto-share`, dark while the switch is off), integrations follow the meeting's team (no recall of posts)
+    - [x] Leak and behaviour tests (`tests/test_multi_team_api.py`, `tests/test_multi_team_guard.py`) and mutation checks; `docs/fe-integration-guide-teams.md` extended from live captures (sections 9 to 14)
+    - [ ] For stage 3 (recorded in the SOP): send and allow `X-Team-Id` in the frontend and any proxy; refuse Slack/Linear on a personal team while the switch is on
   - [x] Team-owned meetings (`owner_team_id`), the Move route, write rule (recorder plus the team's owner and admins), move back by owner or admin (2a)
   - [x] Tasks follow the meeting: re-home on share, unshare, move, move back, switch on only (2a); the extractor files by the meeting's team
   - [x] Leak tests for moved meetings, including survive-the-recorder-leaving and survive-account-deletion (2a)
