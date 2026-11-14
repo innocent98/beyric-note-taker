@@ -36,6 +36,13 @@ def _not_your_team() -> Refused:
     return Refused(404, "not_found", "No such team.")
 
 
+def _lock(session: Session, meeting: Meeting) -> None:
+    """Take the meeting's row and re-read it: share, unshare, move and move back each decide from
+    the meeting's team columns, so two at once (two tabs, a double click) must run one after the
+    other, the second seeing what the first did. Held until the route commits."""
+    session.refresh(meeting, with_for_update=True)
+
+
 def _touched(session: Session, meeting: Meeting) -> None:
     teams.rehome_tasks(session, meeting)
     if meeting.series_id is not None:
@@ -65,6 +72,7 @@ def share(session: Session, user: User, meeting: Meeting, team_id: int | None) -
     team as ever (`teams.default_membership`); someone with two or more ordinary teams must say
     which (422 `team_required`), never quietly their personal one. 409 `meeting_team_owned` for a
     moved meeting."""
+    _lock(session, meeting)
     if meeting.owner_team_id is not None:
         raise _team_owned()
     if team_id is None:
@@ -83,6 +91,7 @@ def share(session: Session, user: User, meeting: Meeting, team_id: int | None) -
 
 def unshare(session: Session, meeting: Meeting) -> None:
     """Make the meeting private again. 409 `meeting_team_owned` for a moved meeting."""
+    _lock(session, meeting)
     if meeting.owner_team_id is not None:
         raise _team_owned()
     meeting.shared_team_id = None
@@ -100,6 +109,7 @@ def move(session: Session, user: User, meeting: Meeting, team_id: int) -> None:
             409, "multi_team_disabled", "Moving a meeting to a team is not available yet."
         )
     team = _member_team(session, user, team_id)
+    _lock(session, meeting)
     if meeting.owner_team_id is not None:
         if meeting.owner_team_id == team.id:
             return
@@ -124,6 +134,7 @@ def move_back(session: Session, user: User, meeting: Meeting) -> None:
     403 `team_forbidden` for a member without that role (the recorder cannot pull it back
     alone: the team keeps its history), 409 `not_moved`, 409 `recorder_gone` when the recorder
     deleted their account (there is nobody to give it to)."""
+    _lock(session, meeting)
     if meeting.owner_team_id is None:
         raise Refused(409, "not_moved", "This meeting does not belong to a team.")
     role = teams.membership(session, user.id, meeting.owner_team_id)

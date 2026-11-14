@@ -8,17 +8,31 @@ only reads and marks them, always for one user. A notification that belongs to s
 from datetime import datetime
 
 from fastapi import HTTPException
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Notification, User
+from app.models import Meeting, Notification, User
+from app.visibility import can_read_clause
+
+
+def _about_something_readable(user: User):
+    """A notification that names a meeting is shown only while the person may still read it: one
+    about a meeting moved to a team they have left would otherwise keep its title in their bell."""
+    return or_(
+        Notification.meeting_id.is_(None),
+        Notification.meeting_id.in_(select(Meeting.id).where(can_read_clause(user))),
+    )
 
 
 def unread_count(session: Session, user: User) -> int:
     return session.scalar(
         select(func.count())
         .select_from(Notification)
-        .where(Notification.user_id == user.id, Notification.read_at.is_(None))
+        .where(
+            Notification.user_id == user.id,
+            Notification.read_at.is_(None),
+            _about_something_readable(user),
+        )
     )
 
 
@@ -29,7 +43,7 @@ def list_notifications(
     another page)."""
     query = (
         select(Notification)
-        .where(Notification.user_id == user.id)
+        .where(Notification.user_id == user.id, _about_something_readable(user))
         .order_by(Notification.id.desc())
         .limit(limit)
     )

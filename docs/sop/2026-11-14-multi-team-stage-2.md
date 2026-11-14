@@ -104,23 +104,71 @@ Scratch Postgres 17 on this Mac; the project's own `ruff` (0.17.3): `ruff check 
 - Deploy: `alembic upgrade head` runs `0044` (one nullable column). Nothing changes while the switch
   is off, except that `POST /api/meetings/{id}/share` now also accepts a team and `MeetingDetail`
   carries four new fields (additive).
-- Roll back: revert the code; the column is harmless. `alembic downgrade 0043` drops the column; any
-  erased account row (status `deleted`, `purged_at` set) then looks like a deleted account waiting for
-  its purge, and the **old** purge would delete the moved meetings that point at it. Revert the code
-  first and expect that; with the switch never turned on there are no such rows.
+- **Roll back: before the first Move, revert the code** (the column and the constraint are harmless;
+  `alembic downgrade 0043` drops them). **After the first Move, do NOT revert the code or downgrade:**
+  the old `purge_deleted` has no `purged_at` filter, so it would purge every hollow account row again
+  and delete the moved meetings that point at it with them, and the old `can_read_clause`
+  (`owner_user_id == user.id OR ...`) would let former recorders read moved meetings again. The real
+  rollback after the first Move is to **keep this code and switch the flag off** (`MULTI_TEAM_ENABLED`
+  unset): Move, creating a team and a second membership are refused, and everything already moved
+  stays the team's. With the switch off, moving a meeting back still works but does not re-file its
+  tasks (follow-up 10 below).
 - **Do not turn on `MULTI_TEAM_ENABLED`** before stage 3 and the privacy wording below.
+
+## Review fixes (Opus review of #182, head 47d73e2)
+
+Tests written first (`tests/test_multi_team_review_fixes.py`, 13), then the fixes:
+
+1. **Review screen** (`app/workspace.py` `open_review_count`, `list_review`, `review_item`) now reads
+   through `can_read_clause`: a recorder who left the team has none of the moved meeting's title or
+   "Please check" bullets, and a rewrite writes no review items for a recorder who cannot read it.
+2. **Extraction race:** `run_extraction` re-reads and locks the meeting's team columns (`session.
+   refresh(..., with_for_update=True)`; sessions do not expire on commit) before it files tasks and
+   milestones and before the Slack/Linear post, so a move or unshare during the model call is seen.
+3. **Email shares** (`POST/GET /api/meetings/{id}/shares`) are the recorder's: `services.
+   recorded_meeting_or_404`; a team admin gets 404 (no share history, no share silently dropped as
+   `sender_changed`). The design of "a team admin mails the notes" is for later.
+4. **Team deleted with a moved meeting:** the meeting goes back to its live recorder with its tasks and
+   date proposals re-filed in their personal team (`deletion._give_back_meetings_of_doomed_teams`,
+   always, whatever the switch says), instead of cascading away with the team.
+5. **Race between share and move:** each of share, unshare, move and move back takes the meeting's row
+   (`SELECT ... FOR UPDATE`) first, and migration `0044` adds `ck_meetings_team_xor`: `owner_team_id is
+   null or shared_team_id is null` (a meeting is private, shared with a team or owned by one, never
+   owned by one team and shared with another). Tested with two sessions.
+6. `tasks.owns_meeting_of` uses `visibility.owns`, like the `can_decide` flag.
+7. Notifications: `unread_count` and `list_notifications` hide a notification that names a meeting
+   the person can no longer read (old and new ones), and the recipient-cap notice is not written for
+   a recorder who left. The stale `Meeting.owner_team_id` comment was fixed.
+
+Also tested: an erased account's linked rows (calendar connection, notifications, settings) are gone
+and an integration it connected is nulled.
 
 ## Follow-ups and known gaps
 
+- **8. (2b fixes it)** A moved meeting whose recorder deleted their account is still treated as "being
+  deleted" by the worker claim, translation (`app/translation.py` `_claim`), extraction and the topics
+  query, because the hollow row stays `status = 'deleted'`: translations of it stay `translating` and
+  a rewrite never refreshes its tasks. The filters become "owner deleted AND not team-owned".
+- **9.** Translation quota: `daily_count` counts the caller's own meetings' queued translations plus
+  their ledger rows, but the ledger row is written under the meeting's recorder, so a team admin's
+  translations of moved meetings eat the recorder's daily allowance and never the admin's. Decide at
+  the plans design (hours and quotas per team); recorded.
+- **10.** `move_back` has no switch check and `rehome_tasks` does nothing while the switch is off: after
+  an on-then-off rollback an admin's move-back leaves the tasks in the team (hidden by the meeting
+  rule, but an assignee still sees them). Re-file always on move back, or refuse while off.
+- **11.** Two checks disagree on "personal": `_member_team` refuses any team flagged personal,
+  `ordinary_teams_of` counts a legacy flagged team that someone else owns as ordinary. Only legacy
+  hand-built fixtures can differ.
+- **12. For his lawyer (the privacy wording gate before the switch-on):** deleting an account keeps,
+  for a meeting moved to a team: the meeting (notes, transcript, audio and provider copy), the title,
+  the meeting link (`url`, which can be the person's personal meeting room), and the text of any
+  notes template the meeting was written with (kept, soft-deleted, owned by the hollow row, because a
+  meeting must name its template). The person's name, email and credentials are gone.
 - **Privacy policy and terms** still promise that deleting an account deletes the person's meetings.
   A moved meeting stays with its team (spec 9.1). His lawyer must read the changed wording before the
   switch-on; this PR does not touch those pages.
-- A moved meeting whose recorder deleted their account is skipped by the worker jobs that guard on
-  "the owner is deleted" (re-extraction, translation) and by the Keeps-coming-up topics query
-  (`app/topics.py`): that is deliberate (no more spend, no recorder), but it means such a meeting is
-  not re-extracted or retranslated. Revisit if teams ask.
-- The audio and Vexa/Skribby copy of a kept moved meeting are kept by `purge_user` (the meeting is the
-  team's). A team deleting such a meeting later goes through the normal delete route, which removes
-  them.
+- The audio and the Vexa/Skribby copy of a kept moved meeting are kept by `purge_user` (the meeting is
+  the team's). A team deleting such a meeting later goes through the normal delete route, which
+  removes them.
 - Series, mail and integrations for moved meetings, and the explicit team on the other routes, are
   stage 2b.

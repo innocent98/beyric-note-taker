@@ -146,6 +146,31 @@ def meetings_to_delete(session: Session, user_id: int) -> list[Meeting]:
     )
 
 
+def _give_back_meetings_of_doomed_teams(
+    session: Session, user_id: int, deleted_meeting_ids: list[int]
+) -> None:
+    """The teams that go with this account take what they own with them, but a meeting moved to
+    one by a recorder whose account still exists goes BACK to that recorder (spec 6.8, proposed):
+    private again, its tasks and date proposals re-filed in the recorder's personal team. Without
+    this the foreign key would null `owner_team_id` and the team's deletion would cascade over the
+    tasks and the proposals filed in it. Always, whatever the switch says: the team is going."""
+    doomed = teams.doomed_teams(session, user_id)
+    if not doomed:
+        return
+    for meeting in session.scalars(
+        select(Meeting).where(
+            Meeting.owner_team_id.in_(doomed), Meeting.id.not_in(deleted_meeting_ids)
+        )
+    ):
+        recorder = session.get(User, meeting.owner_user_id)
+        meeting.owner_team_id = None
+        if recorder is not None and recorder.status != "deleted":
+            teams.rehome_tasks(
+                session, meeting, target=teams.ensure_personal_team(session, recorder)
+            )
+    session.flush()
+
+
 def erase_account_row(session: Session, user: User, now: datetime) -> None:
     """Erase the person but keep the row: a team owns meetings they recorded and `meetings.
     owner_user_id` points here. Name, email, credentials and every row that hung on the account
@@ -237,6 +262,7 @@ def purge_user(
     session.execute(
         delete(Template).where(Template.owner_user_id == user_id, Template.id.not_in(in_use))
     )
+    _give_back_meetings_of_doomed_teams(session, user_id, meeting_ids)
     teams.remove_users(session, [user_id])
     # A meeting a team owns outlives its recorder: erase the person but keep the row it points to.
     # (or a template a surviving meeting still names: nothing else holds the row).

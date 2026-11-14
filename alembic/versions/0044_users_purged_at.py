@@ -10,9 +10,15 @@ purge it again. The meeting shows its recorder as "Former member".
 * `users.purged_at`: null for every row; set only on an erased account whose row was kept.
   Additive and nullable, so the old code ignores it.
 
-Downgrade drops the column. A hollow row then looks like a deleted account waiting for its purge,
-which the old purge would try to finish: it deletes the meetings that point at it, including the
-moved ones. Revert the code before downgrading and expect that.
+* `ck_meetings_team_xor` on `meetings`: `owner_team_id is null or shared_team_id is null`. A meeting
+  is private, shared with a team or owned by one, never owned by one team and shared with another
+  (two tabs racing a share and a move could do that). True of every existing row: nothing has an
+  `owner_team_id` yet.
+
+Downgrade drops the constraint and the column. A hollow row then looks like a deleted account
+waiting for its purge, which the old purge would try to finish: it deletes the meetings that point
+at it, including the moved ones. Once anything has been moved, do not downgrade or revert (see
+docs/sop/2026-11-14-multi-team-stage-2.md).
 
 Revision ID: 0044
 Revises: 0043
@@ -30,7 +36,11 @@ depends_on = None
 
 def upgrade() -> None:
     op.add_column("users", sa.Column("purged_at", sa.DateTime(timezone=True), nullable=True))
+    op.create_check_constraint(
+        "ck_meetings_team_xor", "meetings", "owner_team_id is null or shared_team_id is null"
+    )
 
 
 def downgrade() -> None:
+    op.drop_constraint("ck_meetings_team_xor", "meetings", type_="check")
     op.drop_column("users", "purged_at")

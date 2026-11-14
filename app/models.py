@@ -680,6 +680,11 @@ class Meeting(Base):
             "extraction_status is null or " + _in("extraction_status", EXTRACTION_STATUSES),
             name="ck_meetings_extraction_status",
         ),
+        # A meeting is private, shared with a team, or owned by a team: never owned by one team
+        # and shared with another (the read rule would then widen to both).
+        CheckConstraint(
+            "owner_team_id is null or shared_team_id is null", name="ck_meetings_team_xor"
+        ),
         Index("ix_meetings_owner_user_id", "owner_user_id", "id"),
         Index(
             "ix_meetings_series_id",
@@ -768,9 +773,8 @@ class Meeting(Base):
         BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
     )
     # Stage 2 of the multi-team design: the team that OWNS the meeting (moved to it), as opposed to
-    # one it is merely shared with. Null for every row and unused until stage 2 fills it. The
-    # read rule in `app/visibility.py` matches it; the write and recorder rules for a moved meeting
-    # are stage 2 work (see that module's docstring).
+    # one it is merely shared with (`ck_meetings_team_xor`: never both). Null unless moved
+    # (`app/meeting_teams.py`). The read and write rules are in `app/visibility.py`.
     owner_team_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
     )

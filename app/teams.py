@@ -128,17 +128,20 @@ def team_for_meeting(session: Session, meeting: Meeting) -> Team:
     return ensure_team(session, recorder)
 
 
-def rehome_tasks(session: Session, meeting: Meeting) -> None:
+def rehome_tasks(session: Session, meeting: Meeting, target: Team | None = None) -> None:
     """Sharing, unsharing, moving and moving back: the tasks the AI took from the meeting follow it
     to the meeting's team (spec 6.6). Tasks typed in by hand stay where they were made. What
     belonged to the old team goes with it: the project, milestone and sprint are cleared, an
     assignee who is not in the new team is unassigned, and a date proposed from the meeting stays
-    with the meeting. Nothing happens while `MULTI_TEAM_ENABLED` is off: a person with one team
-    has nowhere else to put them, and the old rule (tasks stay, hidden by the meeting check) is
-    the one that applies to a team of several. In the caller's transaction, no commit."""
-    if not multi_team_enabled():
-        return
-    target = team_for_meeting(session, meeting)
+    with the meeting. With no `target` given, nothing happens while `MULTI_TEAM_ENABLED` is off: a
+    person with one team has nowhere else to put them, and the old rule (tasks stay, hidden by the
+    meeting check) is the one that applies to a team of several. A `target` (a team being deleted
+    gives its meetings back: `app/deletion.py`) always re-files. In the caller's transaction, no
+    commit."""
+    if target is None:
+        if not multi_team_enabled():
+            return
+        target = team_for_meeting(session, meeting)
     members = select(TeamMember.user_id).where(TeamMember.team_id == target.id)
     session.execute(
         update(Task)
@@ -160,7 +163,7 @@ def rehome_tasks(session: Session, meeting: Meeting) -> None:
             Milestone.confirmed_at.is_(None),
             Milestone.team_id != target.id,
         )
-        .values(team_id=target.id)
+        .values(team_id=target.id, project_id=None)
     )
 
 
