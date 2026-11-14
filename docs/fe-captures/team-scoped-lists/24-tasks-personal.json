@@ -1,0 +1,33 @@
+{
+  "note": "The personal board is empty, so its badge is 0 (the bug was 41 beside Tasks and an empty list).",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/tasks",
+    "headers": {
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "tasks": [],
+      "people": [
+        {
+          "user_id": 2,
+          "name": "Pat Example",
+          "is_you": true
+        }
+      ],
+      "attention": {
+        "needs_owner": 0,
+        "unverified": 0,
+        "check_project": 0
+      },
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

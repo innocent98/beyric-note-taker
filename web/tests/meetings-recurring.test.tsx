@@ -22,21 +22,25 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/components/app/recurring-cards", () => ({
   RecurringCards: () => <div data-testid="recurring-cards" />,
 }));
-vi.mock("@/lib/api/server", () => ({
-  getSession: async () => ({ authenticated: true }),
-  getReviewOpen: async () => null,
-  getTasksNew: async () => 0,
-  getUnreadNotifications: async () => null,
-  getShellUser: async () => null,
-  getShellTeams: async () => null,
-  getTimeZone: async () => null,
-  load: <T,>(call: Promise<T>) => call,
-  serverApi: async () => ({
+vi.mock("@/lib/api/server", () => {
+  const serverApi = async () => ({
     meetings: { list: async () => captured<MeetingList>("53-meetings-list.json") },
     templates: { list: async () => [{ id: 1, name: "General", instructions: "x", is_default: true }] },
     calendar: { get: async () => calendarBody<CalendarState>("09-state-connected-with-upcoming.json") },
-  }),
-}));
+  });
+  return {
+    getSession: async () => ({ authenticated: true }),
+    getReviewOpen: async () => null,
+    getTasksNew: async () => 0,
+    getUnreadNotifications: async () => null,
+    getShellUser: async () => null,
+    getShellTeams: async () => null,
+    getTimeZone: async () => null,
+    load: <T,>(call: Promise<T>) => call,
+    serverApi,
+    resolveTeam: async () => ({ api: await serverApi(), teams: null, teamId: null }),
+  };
+});
 
 const render = async () => {
   const element = (await HomePage()) as { type: (props: unknown) => Promise<React.ReactElement>; props: unknown };

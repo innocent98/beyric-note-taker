@@ -4,7 +4,9 @@
 //   1. the URL, `?team=<id>`, on the team-scoped pages (Team, Tasks, Projects, Settings). The server
 //      render reads this one: it cannot see the browser's storage.
 //   2. `sessionStorage`, which remembers the choice for the pages that carry no `?team=` (the meeting
-//      page, the Meetings list). sessionStorage belongs to one tab, so a second tab never sees it.
+//      page, Ask, Notifications). sessionStorage belongs to one tab, so a second tab never sees it.
+// Switching team is a FULL page load (components/app/team-switcher.tsx), so every screen reads again
+// for the team it opens on.
 // None of this exists while the server's `multi_team` switch is off: the shell draws no switcher and
 // marks nothing, and `activeTeamForRequest()` answers null.
 
@@ -15,9 +17,16 @@ export const TEAM_STORAGE_KEY = "beyric.active-team";
 // The shell carries this attribute while the switch is on; the interceptor looks for it so that a
 // stale `?team=` in an old bookmark does nothing while the switch is off.
 export const SHELL_MARK = "data-multi-team";
+// The request header proxy.ts sets from a page's `?team=`, for the server render's first call (lib/api/server.ts).
+export const ACTIVE_TEAM_HEADER = "x-active-team";
+// ... and the id of the person's default team, so a call that names no choice still names a team (the
+// lists, the counts and the board then always agree on one team: lib/api/server.ts `resolveTeam`).
+export const SHELL_DEFAULT_TEAM = "data-default-team";
 
-// Pages whose content is one team's: they carry `?team=` in the URL.
-export const TEAM_PAGES = ["/team", "/tasks", "/projects", "/settings"] as const;
+// Pages whose content is one team's: they carry `?team=` in the URL. The Meetings list (the home page
+// `/`), Decisions and Review follow the team too; the meeting page, Ask and Notifications do not (a
+// meeting opens by its link whatever team is active).
+export const TEAM_PAGES = ["/", "/team", "/tasks", "/projects", "/decisions", "/review", "/settings"] as const;
 
 // The largest id the API accepts in `X-Team-Id` (`MAX_ID` in app/services.py): beyond it the server
 // answers 422, so such a value (a hand-edited URL or storage) counts as no team at all.
@@ -106,9 +115,17 @@ export function activeTeam(): number | null {
   return (isTeamPage(window.location.pathname) ? urlTeam() : null) ?? readStoredTeam();
 }
 
-// What the browser's API client sends as `X-Team-Id` (null: send none).
+// The default team the shell names (null while the switch is off or no shell is on the page).
+export function shellDefaultTeam(): number | null {
+  if (typeof document === "undefined") return null;
+  return parseTeamId(document.querySelector(`[${SHELL_MARK}]`)?.getAttribute(SHELL_DEFAULT_TEAM));
+}
+
+// What the browser's API client sends as `X-Team-Id`: the tab's team, else the person's default team, so
+// the screen, its counts and the sidebar badges are always about ONE team (null while the switch is off).
 export function activeTeamForRequest(): number | null {
-  return activeTeam();
+  if (!multiTeamOn()) return null;
+  return activeTeam() ?? shellDefaultTeam();
 }
 
 // The team the API told us is not ours (404 "No such team."): forget it and go to the same page on

@@ -4,12 +4,13 @@ import { AppShell } from "@/components/app/shell";
 import { ReviewView } from "@/components/app/review-view";
 import { ApiError } from "@/lib/api/client";
 import type { ReviewList } from "@/lib/api/types";
-import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireOwner, getShellTeams } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireTeamOwner, getShellTeams } from "@/lib/api/server";
 
 export const metadata: Metadata = { title: "Review", robots: { index: false, follow: false } };
 
-export default async function ReviewPage() {
-  const api = await requireOwner();
+export default async function ReviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  // The log follows the active team (`?team=`, else the default team).
+  const { api } = await requireTeamOwner("/review", await searchParams);
   // A failed first load is the designer's "Could not load review items" state (with Try again), not
   // the error page; a 401 still goes to /login.
   let lists: { open: ReviewList; checked: ReviewList } | null = null;

@@ -21,7 +21,7 @@ from fastapi import Header
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app import tasks, teams, titles
+from app import tasks, teams, titles, visibility
 from app.extraction import normalise
 from app.models import Task, Team, TeamInvite, TeamMember, User
 from app.services import MAX_ID, Refused
@@ -73,6 +73,29 @@ def my_membership(session: Session, user: User, team_id: int | None = None) -> T
     if member is None:
         raise Refused(404, "not_found", "No such team.")
     return member
+
+
+def active_team(session: Session, user: User, team_id: int | None) -> visibility.ActiveTeam | None:
+    """The team a LIST (meetings, decisions, review, the sidebar counts) is about: the named team
+    (404 `No such team.` when the caller is not in it), else their default team while
+    `MULTI_TEAM_ENABLED` is on. With the switch off and no team named: None, no narrowing, the list
+    is what it always was. The result goes to `visibility.readable_in`."""
+    if team_id is None and not teams.multi_team_enabled():
+        return None
+    member = my_membership(session, user, team_id)
+    team = session.get(Team, member.team_id)
+    return visibility.ActiveTeam(id=team.id, personal=teams.is_personal_of(team, user.id))
+
+
+def active_team_or_default(
+    session: Session, user: User, team_id: int | None
+) -> visibility.ActiveTeam | None:
+    """`active_team`, but a team the caller is not in is quietly the default team instead of a 404:
+    for `GET /api/session`, which every page reads first and must never fail over a stale team (the
+    page itself answers a stale `?team=`)."""
+    if team_id is not None and teams.membership(session, user.id, team_id) is None:
+        team_id = None
+    return active_team(session, user, team_id)
 
 
 def require_manager(member: TeamMember) -> None:

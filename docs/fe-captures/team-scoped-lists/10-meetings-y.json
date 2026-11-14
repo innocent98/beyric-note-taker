@@ -1,0 +1,52 @@
+{
+  "note": "Team Y: the meeting Pat MOVED to Y and Quinn's shared one.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings",
+    "headers": {
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "meetings": [
+        {
+          "id": 5,
+          "title": "Quinn shared to Y",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "ready",
+          "step": "done",
+          "status_text": "Ready",
+          "status_tone": "success",
+          "template_id": 9,
+          "template_name": "General",
+          "created_at": "2026-11-14T17:02:20.521115Z",
+          "tasks_count": 0
+        },
+        {
+          "id": 3,
+          "title": "Pat moved to Y",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "ready",
+          "step": "done",
+          "status_text": "Ready",
+          "status_tone": "success",
+          "template_id": 5,
+          "template_name": "General",
+          "created_at": "2026-11-14T17:02:20.521115Z",
+          "tasks_count": 0
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null,
+      "worker_stale": true,
+      "refresh_after_seconds": null
+    }
+  }
+}

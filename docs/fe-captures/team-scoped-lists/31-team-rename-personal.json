@@ -1,0 +1,25 @@
+{
+  "note": "A personal space keeps its name while multi-team is on.",
+  "as": "Pat",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/team",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Renamed"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "personal_team",
+        "message": "Your personal space keeps its name. Make a team to name it yourself."
+      }
+    }
+  }
+}

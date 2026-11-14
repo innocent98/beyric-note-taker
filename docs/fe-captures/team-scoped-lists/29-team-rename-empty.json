@@ -1,0 +1,25 @@
+{
+  "note": "",
+  "as": "Ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/team",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "   "
+    }
+  },
+  "response": {
+    "status": 422,
+    "body": {
+      "error": {
+        "code": "invalid_name",
+        "message": "Give the team a name."
+      }
+    }
+  }
+}

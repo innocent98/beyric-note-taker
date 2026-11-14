@@ -468,11 +468,14 @@ def list_meetings(
     before_id: int | None = None,
     created_from: datetime | None = None,
     created_before: datetime | None = None,
+    active: visibility.ActiveTeam | None = None,
 ) -> list[Meeting]:
-    """Newest first, through the same visibility rule as every other read. `created_from`
+    """Newest first, through the same visibility rule as every other read, narrowed to the active
+    team's list when `active` is given (`visibility.readable_in`). `created_from`
     (inclusive) and `created_before` (exclusive) are instants on `created_at`, the timestamp the
     list and its day headings use; `day_range_utc` makes them from two calendar days."""
-    query = visibility.visible_meetings(user).order_by(Meeting.id.desc()).limit(limit)
+    query = select(Meeting).where(visibility.readable_in(user, active))
+    query = query.order_by(Meeting.id.desc()).limit(limit)
     if before_id is not None:
         query = query.where(Meeting.id < before_id)
     if created_from is not None:

@@ -495,13 +495,14 @@ def attention(session: Session, user: User, team_id: int | None = None) -> dict[
     return {"needs_owner": needs_owner, "unverified": unverified, "check_project": check_project}
 
 
-def new_count(session: Session, user: User) -> int:
-    """`badges.tasks_new`: open tasks the caller sees that are still marked New."""
-    return session.scalar(
-        select(func.count())
-        .select_from(Task)
-        .where(visible(user), Task.is_new.is_(True), Task.status != "done", confirmed())
-    )
+def new_count(session: Session, user: User, team_id: int | None = None) -> int:
+    """`badges.tasks_new`: open tasks the caller sees that are still marked New, in the active team
+    (`team_id`: the same `Task.team_id` filter the board's list applies, so the count beside Tasks
+    equals what the board shows) or, with no team, in every team."""
+    where = [visible(user), Task.is_new.is_(True), Task.status != "done", confirmed()]
+    if team_id is not None:
+        where.append(Task.team_id == team_id)
+    return session.scalar(select(func.count()).select_from(Task).where(*where))
 
 
 def check_assignable(

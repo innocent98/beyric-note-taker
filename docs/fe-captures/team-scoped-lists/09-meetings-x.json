@@ -1,0 +1,52 @@
+{
+  "note": "Team X: meetings shared to X, whoever recorded them (Pat's and Ada's).",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "meetings": [
+        {
+          "id": 4,
+          "title": "Ada shared to X",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "ready",
+          "step": "done",
+          "status_text": "Ready",
+          "status_tone": "success",
+          "template_id": 1,
+          "template_name": "General",
+          "created_at": "2026-11-14T17:02:20.521115Z",
+          "tasks_count": 0
+        },
+        {
+          "id": 2,
+          "title": "Pat shared to X",
+          "platform": "google_meet",
+          "native_id": "abc-defg-hij",
+          "status": "ready",
+          "step": "done",
+          "status_text": "Ready",
+          "status_tone": "success",
+          "template_id": 5,
+          "template_name": "General",
+          "created_at": "2026-11-14T17:02:20.521115Z",
+          "tasks_count": 0
+        }
+      ],
+      "has_more": false,
+      "next_before_id": null,
+      "worker_stale": true,
+      "refresh_after_seconds": null
+    }
+  }
+}

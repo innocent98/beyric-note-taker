@@ -5,7 +5,7 @@ import { ShellNav } from "@/components/app/shell-nav";
 import { TeamNavLink } from "@/components/app/team-nav-link";
 import { TeamSwitcher } from "@/components/app/team-switcher";
 import { IconButton, NavLink } from "@/components/ui";
-import { SHELL_MARK } from "@/lib/active-team";
+import { SHELL_DEFAULT_TEAM, SHELL_MARK } from "@/lib/active-team";
 import type { TeamSummary } from "@/lib/api/types";
 import { initials } from "@/lib/format";
 
@@ -26,9 +26,11 @@ function shownName(user: ShellUser): string {
 // the same answer: the zone every time on the page is written in (null = the browser's own).
 // `user` is `user` of the same answer: the name, initials and email at the foot of the sidebar.
 // `teams` is the person's teams (`GET /api/teams`), given only while the server's multi-team switch is on
-// (`multi_team` of the session): the shell then draws the lead-designed team switcher and a Teams link, and
-// the links to the team screens carry the tab's team. null (the default, and the switch off): the shell is
-// exactly what it was before multi-team.
+// (`multi_team` of the session): the shell then draws the lead-designed team switcher and ONE Teams link (the
+// list; from it a team's page opens, and from that page the way back and "Make a team"), and the links to the
+// screens that follow the team (Meetings, Tasks, Projects, Decisions, Review, Settings) carry the tab's team.
+// The badges beside Tasks and Review count that team only. null (the default, and the switch off): the shell
+// is exactly what it was before multi-team.
 export function AppShell({
   current,
   reviewOpen = null,
@@ -48,29 +50,33 @@ export function AppShell({
   teams?: TeamSummary[] | null;
   children: ReactNode;
 }) {
-  // The four screens that are one team's; a plain link while the switch is off.
-  const scoped = (href: string, label: string, section: NavSection, badge?: number) =>
+  // The screens that are one team's; a plain link while the switch is off. `live` names the badge that is
+  // counted again in the browser when this tab's remembered team is not the one the server rendered.
+  const scoped = (href: string, label: string, section: NavSection, badge?: number, live?: "tasks_new" | "review_open") =>
     teams ? (
-      <TeamNavLink href={href} label={label} teams={teams} current={current === section} badge={badge} />
+      <TeamNavLink href={href} label={label} teams={teams} current={current === section} badge={badge} live={live} />
     ) : (
       <NavLink href={href} label={label} current={current === section} badge={badge} />
     );
   return (
-    <div className="shell" {...(teams ? { [SHELL_MARK]: user?.email ?? "" } : {})}>
+    <div className="shell" {...(teams ? { [SHELL_MARK]: user?.email ?? "", [SHELL_DEFAULT_TEAM]: String(teams.find((t) => t.is_default)?.id ?? teams[0]?.id ?? "") } : {})}>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
       <ShellNav topbar={teams ? <TeamSwitcher teams={teams} variant="topbar" /> : null}>
         {teams ? <TeamSwitcher teams={teams} variant="sidebar" /> : null}
         <nav className="nav" aria-label="Main">
-          <NavLink href="/" label="Meetings" current={current === "meetings"} />
+          {scoped("/", "Meetings", "meetings")}
           <NavLink href="/ask" label="Ask Beyric" current={current === "ask"} />
-          {scoped("/tasks", "Tasks", "tasks", tasksNew ?? 0)}
+          {scoped("/tasks", "Tasks", "tasks", tasksNew ?? 0, "tasks_new")}
           {scoped("/projects", "Projects", "projects")}
-          <NavLink href="/decisions" label="Decisions" current={current === "decisions"} />
-          <NavLink href="/review" label="Review" current={current === "review"} badge={reviewOpen ?? 0} />
-          {scoped("/team", "Team", "team")}
-          {teams ? <NavLink href="/teams" label="Teams" current={current === "teams"} /> : null}
+          {scoped("/decisions", "Decisions", "decisions")}
+          {scoped("/review", "Review", "review", reviewOpen ?? 0, "review_open")}
+          {teams ? (
+            <NavLink href="/teams" label="Teams" current={current === "teams" || current === "team"} />
+          ) : (
+            <NavLink href="/team" label="Team" current={current === "team"} />
+          )}
           <NavLink href="/notifications" label="Notifications" current={current === "notifications"} badge={unread ?? 0} badgeLabel="unread" />
         </nav>
         <div className="nav-label">Configure</div>

@@ -23,9 +23,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn() }),
 }));
 vi.mock("@/lib/api/server", () => ({
-  requireOwner: async () => {
+  requireTeamOwner: async () => {
     if (!state.authenticated) throw new Error("redirect:/login");
-    return {
+    return { teams: null, teamId: null, api: {
       decisions: {
         list: async () => {
           state.calls.push("decisions");
@@ -40,7 +40,7 @@ vi.mock("@/lib/api/server", () => ({
           return workspaceBody<ReviewList>(which === "open" ? "29-review-open.json" : "33-review-checked.json");
         },
       },
-    };
+    } };
   },
   getReviewOpen: async () => state.reviewOpen,
   getTasksNew: async () => 0,
@@ -84,7 +84,7 @@ describe("routes", () => {
 describe("pages", () => {
   it("draws Decisions from GET /api/decisions, with the badge", async () => {
     state.calls = [];
-    const html = renderToStaticMarkup(await DecisionsPage());
+    const html = renderToStaticMarkup(await DecisionsPage({ searchParams: Promise.resolve({}) }));
     expect(state.calls).toEqual(["decisions"]);
     expect(html).toContain("Google Meet nat-aaaa-bbb");
     expect(html).toContain(", 3 open");
@@ -92,7 +92,7 @@ describe("pages", () => {
 
   it("draws Review from the open and the checked lists", async () => {
     state.calls = [];
-    const html = renderToStaticMarkup(await ReviewPage());
+    const html = renderToStaticMarkup(await ReviewPage({ searchParams: Promise.resolve({}) }));
     expect(state.calls.sort()).toEqual(["review:checked", "review:open"]);
     expect(html).toContain("Heard as");
     expect(html).toContain("Mark as checked");
@@ -100,20 +100,20 @@ describe("pages", () => {
 
   it("draw the designer's failed state, not the error page, when the first load fails", async () => {
     state.fail = 500;
-    const decisions = renderToStaticMarkup(await DecisionsPage());
+    const decisions = renderToStaticMarkup(await DecisionsPage({ searchParams: Promise.resolve({}) }));
     expect(decisions).toContain("Could not load decisions. Check your connection and try again.");
-    const review = renderToStaticMarkup(await ReviewPage());
+    const review = renderToStaticMarkup(await ReviewPage({ searchParams: Promise.resolve({}) }));
     expect(review).toContain("Could not load review items. Check your connection and try again.");
     state.fail = 401;
-    await expect(DecisionsPage()).rejects.toThrow("redirect:/login");
-    await expect(ReviewPage()).rejects.toThrow("redirect:/login");
+    await expect(DecisionsPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/login");
+    await expect(ReviewPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/login");
     state.fail = null;
   });
 
   it("send a visitor who is not logged in to /login", async () => {
     state.authenticated = false;
-    await expect(DecisionsPage()).rejects.toThrow("redirect:/login");
-    await expect(ReviewPage()).rejects.toThrow("redirect:/login");
+    await expect(DecisionsPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/login");
+    await expect(ReviewPage({ searchParams: Promise.resolve({}) })).rejects.toThrow("redirect:/login");
     state.authenticated = true;
   });
 });

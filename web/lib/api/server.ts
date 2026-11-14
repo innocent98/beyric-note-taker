@@ -2,7 +2,7 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { ApiError, createApi } from "./client";
-import { parseTeamId, NOTICE_PARAM, TEAM_GONE_NOTICE, TEAM_PARAM } from "@/lib/active-team";
+import { ACTIVE_TEAM_HEADER, parseTeamId, NOTICE_PARAM, TEAM_GONE_NOTICE, TEAM_PARAM } from "@/lib/active-team";
 import type { Pilot, SessionState, TeamList } from "./types";
 
 // FastAPI's address inside the compose network (the same variable next.config.ts reads for the
@@ -19,8 +19,8 @@ const FORWARDED = ["cookie", "x-forwarded-for", "x-forwarded-proto", "x-edge-sec
 
 // The API as a server component or route handler calls it: the visitor's Cookie (and address, for
 // FastAPI's own limits and logs) are passed on. A 401 leaves the page for /login.
-// `teamId` is the team this page is about (`?team=` of a team page), sent as `X-Team-Id` on the
-// team-scoped calls; null or left out: the person's default team, as before multi-team.
+// `teamId` is the team this page is about, sent as `X-Team-Id` on the team-scoped calls (`resolveTeam` makes
+// it from `?team=`, or the default team); null or left out: no header, the API's default team.
 export async function serverApi(
   extra: { onResponse?: (response: Response) => void; teamId?: number | null } = {},
 ) {
@@ -41,11 +41,20 @@ export async function serverApi(
   });
 }
 
+// The team the page's own `?team=` names, handed on by proxy.ts as `x-active-team` (the first answer of
+// a page, the session with its sidebar badges, is read before the page has parsed its own parameters).
+// null when the address names none (the person's default team applies) or the value is not an id.
+async function addressTeam(): Promise<number | null> {
+  return parseTeamId((await headers()).get(ACTIVE_TEAM_HEADER));
+}
+
 // Who is looking, once per request. null when FastAPI cannot be reached: pages that only need to
-// know "owner or not" (the public header, the landing) then treat the visitor as logged out.
+// know "owner or not" (the public header, the landing) then treat the visitor as logged out. The
+// `badges` count the team of the address (`?team=`), else the default team; a team the person is not
+// in is not an error here, it counts the default team (the page itself answers a stale `?team=`).
 export const getSession = cache(async (): Promise<SessionState | null> => {
   try {
-    return await (await serverApi()).session();
+    return await (await serverApi({ teamId: await addressTeam() })).session();
   } catch {
     return null;
   }
@@ -116,13 +125,13 @@ export async function getShellTeams() {
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-// For the team pages (Team, Tasks, Projects, Settings): like `requireOwner`, plus the team the page
-// is about. `?team=<id>` names it; none (or the switch off) means the default team. A team the
-// person is not in (they left, it was deleted, a hand-typed id) is not an error page: the person goes
-// to the same page on the default team with a plain notice. `teams` is the list for the shell.
-export async function requireTeamOwner(path: string, searchParams: SearchParams) {
-  const session = await getSession();
-  if (!session?.authenticated) redirect("/login");
+// The team a page is about, and the API as that team's page calls it. `?team=<id>` names it; none (or the
+// switch off) means the default team. A team the person is not in (they left, it was deleted, a
+// hand-typed id) is not an error page: the person goes to the same page on the default team with a plain
+// notice. `teams` is the list for the shell. While the switch is on every team-scoped call names a team,
+// the default one included (`X-Team-Id`), so the list, its counts and the sidebar badges are always about
+// one team. `teamId` is only what the address named (null: the default).
+export async function resolveTeam(path: string, searchParams: SearchParams) {
   const teams = await getTeams();
   let teamId: number | null = null;
   const raw = searchParams[TEAM_PARAM];
@@ -131,8 +140,17 @@ export async function requireTeamOwner(path: string, searchParams: SearchParams)
     if (asked !== null && teams.teams.some((t) => t.id === asked)) teamId = asked;
     else redirect(`${path}?${NOTICE_PARAM}=${TEAM_GONE_NOTICE}`);
   }
-  const api = await serverApi({ teamId });
+  const named = teams ? (teamId ?? teams.teams.find((t) => t.is_default)?.id ?? null) : null;
+  const api = await serverApi({ teamId: named });
   return { api, teams, teamId };
+}
+
+// For the team pages (Home, Team, Tasks, Projects, Decisions, Review, Settings): like `requireOwner`,
+// plus the team the page is about (`resolveTeam`).
+export async function requireTeamOwner(path: string, searchParams: SearchParams) {
+  const session = await getSession();
+  if (!session?.authenticated) redirect("/login");
+  return resolveTeam(path, searchParams);
 }
 
 // For pages that are only for the owner. Anyone else goes to /login.

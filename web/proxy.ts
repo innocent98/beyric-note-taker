@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { ACTIVE_TEAM_HEADER, parseTeamId, TEAM_PARAM } from "@/lib/active-team";
 import { buildCsp } from "@/lib/csp";
 
 // Runs only for the pages Next owns (the matcher below), so responses proxied from FastAPI keep
@@ -12,6 +13,11 @@ export function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
+  // The team the address names (`?team=`), for the server render's session call (its sidebar badges).
+  // Always rewritten from the address, so a client cannot hand the server a team of its own choosing here.
+  requestHeaders.delete(ACTIVE_TEAM_HEADER);
+  const team = parseTeamId(request.nextUrl.searchParams.get(TEAM_PARAM));
+  if (team !== null) requestHeaders.set(ACTIVE_TEAM_HEADER, String(team));
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);

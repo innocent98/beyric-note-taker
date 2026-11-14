@@ -38,19 +38,34 @@ describe("which calls carry the team", () => {
     "/api/integrations/slack",
     "/api/integrations/linear/teams",
     "/api/meetings/12/milestones",
+    // The reads that show one team at a time (owner's request 2026-11-14).
+    "/api/meetings",
+    "/api/meetings?limit=10&from=2026-11-01",
+    "/api/decisions",
+    "/api/decisions?status=approved",
+    "/api/review?state=checked",
+    "/api/session",
   ])("%s is team-scoped", (path) => {
     expect(isTeamScoped(path)).toBe(true);
   });
 
   it.each([
-    "/api/session",
+    ["POST", "/api/meetings"],
+    ["POST", "/api/session"],
+    ["DELETE", "/api/session"],
+  ])("%s %s is not: only the READ shows a team", (method, path) => {
+    expect(isTeamScoped(path, method)).toBe(false);
+  });
+
+  it.each([
     "/api/teams",
     "/api/team/invites/preview",
     "/api/team/invites/accept",
     "/api/tasks/5",
     "/api/series/3",
     "/api/series/3/agenda",
-    "/api/meetings",
+    "/api/decisions/4",
+    "/api/review/4/check",
     "/api/meetings/12",
     "/api/meetings/12/share",
     "/api/settings/auto-share",
@@ -66,7 +81,7 @@ describe("the header", () => {
     const { api, calls } = setup({ teamId: () => 5 });
     await api.team.get();
     await api.teams.list();
-    await api.meetings.list();
+    await api.meetings.get(12).catch(() => undefined);
     expect(calls.map(sent)).toEqual(["5", undefined, undefined]);
   });
 

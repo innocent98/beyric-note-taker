@@ -7,7 +7,8 @@ import { NewMeetingForm } from "@/components/app/new-meeting-form";
 import { RecurringCards } from "@/components/app/recurring-cards";
 import { LandingPage } from "@/components/landing/landing-page";
 import { Alert, PageHead } from "@/components/ui";
-import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, getSession, load, serverApi, getShellTeams } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, getSession, load, resolveTeam, getShellTeams } from "@/lib/api/server";
+import type { Api } from "@/lib/api/client";
 import type { CalendarState, NotRecordedItem } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
 import { isFiltered, readRange, type DayRange } from "@/lib/date-range";
@@ -33,13 +34,17 @@ export default async function HomePage({
   // so a filtered view can be reloaded and shared. A damaged value is ignored with a line about it. The
   // filter only reads `searchParams` and the list only knows its own `basePath`, so it moves with the
   // page if the Meetings page ever gets an address of its own.
-  const { range, notice, zone } = readRange((await searchParams) ?? {});
-  return <MeetingsPage range={range} notice={notice} zone={zone} />;
+  const params = (await searchParams) ?? {};
+  const { range, notice, zone } = readRange(params);
+  // The list follows the active team (`?team=`, else the default team; lead-designed, owner's request 2026-11-14):
+  // a team lists the meetings shared or moved to it, the personal space the ones only the person has.
+  const { api } = await resolveTeam("/", params);
+  return <MeetingsPage api={api} range={range} notice={notice} zone={zone} />;
 }
 
 // The calendar is optional on this page: while the server has it off (404 `calendar_unavailable`)
 // or cannot answer, the page is drawn without it.
-async function getCalendar(api: Awaited<ReturnType<typeof serverApi>>): Promise<CalendarState | null> {
+async function getCalendar(api: Api): Promise<CalendarState | null> {
   try {
     return await api.calendar.get();
   } catch {
@@ -48,7 +53,7 @@ async function getCalendar(api: Awaited<ReturnType<typeof serverApi>>): Promise<
 }
 
 // Not recorded is optional too: no list is drawn when it cannot be read.
-async function getNotRecorded(api: Awaited<ReturnType<typeof serverApi>>): Promise<NotRecordedItem[]> {
+async function getNotRecorded(api: Api): Promise<NotRecordedItem[]> {
   try {
     return (await api.calendar.notRecorded()).items;
   } catch {
@@ -60,8 +65,7 @@ async function getNotRecorded(api: Awaited<ReturnType<typeof serverApi>>): Promi
 // zone from the page that built the link); with none in the address it is UTC for this first render and
 // the browser replaces the address with its own zone at once (see MeetingList). A stored zone wins on
 // the server, so `tz` is only sent when there is none.
-async function MeetingsPage({ range, notice, zone }: { range: DayRange; notice: string | null; zone: string | null }) {
-  const api = await serverApi();
+async function MeetingsPage({ api, range, notice, zone }: { api: Api; range: DayRange; notice: string | null; zone: string | null }) {
   const stored = await getTimeZone();
   const tz = stored === null && isFiltered(range) ? (zone ?? undefined) : undefined;
   const firstPage = () =>

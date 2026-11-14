@@ -1,0 +1,35 @@
+{
+  "note": "An owner or admin renames an ordinary team.",
+  "as": "Ada",
+  "request": {
+    "method": "PATCH",
+    "path": "/api/team",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Platform"
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": 4,
+      "name": "Platform",
+      "is_personal": false,
+      "share_new_meetings": false,
+      "reminders_on": false,
+      "reminder_timing": "both",
+      "my_role": "owner",
+      "sprint_length": "week5",
+      "sprint_custom_days": 10,
+      "sprint_align_weekdays": true,
+      "member_count": 2,
+      "pending_invites": 0,
+      "can_manage": true,
+      "can_change_roles": true
+    }
+  }
+}

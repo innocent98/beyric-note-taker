@@ -8271,7 +8271,7 @@
     },
     "/api/decisions": {
       "get": {
-        "description": "Everything the caller's meetings decided, newest meeting first, grouped by meeting. `q`\nmatches a decision's words or its meeting's title (a title match shows all of that meeting's\ndecisions). `status` keeps one tab's decisions. `limit` counts meetings, not decisions. For\nthe next page pass `before_id` = `next_before_id`. A decision the caller hid is not listed.\n`counts` and `due_this_week` are over the whole log, whatever `q` and `status` say.",
+        "description": "Everything the active team's meetings decided, newest meeting first, grouped by meeting.\nThe team is the `X-Team-Id` header (404 `not_found` \"No such team.\" for a team the caller is\nnot in), else their default team while multi-team is on; a decision belongs to its meeting's\nteam (an ordinary team: meetings shared or moved to it; the personal team: the caller's own that\nno team has). `q`\nmatches a decision's words or its meeting's title (a title match shows all of that meeting's\ndecisions). `status` keeps one tab's decisions. `limit` counts meetings, not decisions. For\nthe next page pass `before_id` = `next_before_id`. A decision the caller hid is not listed.\n`counts` and `due_this_week` are over the whole log, whatever `q` and `status` say.",
         "operationId": "list_decisions",
         "parameters": [
           {
@@ -8341,6 +8341,26 @@
                 }
               ],
               "title": "Before Id"
+            }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -9291,7 +9311,7 @@
     },
     "/api/meetings": {
       "get": {
-        "description": "The caller's meetings, plus any shared with their team, newest first. For the next page\npass `before_id` = `next_before_id`.\n\n`from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar\ndays, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),\nby the same `created_at` the list's day headings use. They work with `before_id`,\n`has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not\na date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.\n\n`tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the\ncaller has NO stored zone: the page sends its browser's zone, which is the zone it writes its\nday headings in, so the filter's days are always the headings' days. A stored zone wins and\n`tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.",
+        "description": "The active team's meetings, newest first. For the next page pass `before_id` =\n`next_before_id`.\n\nThe team is the `X-Team-Id` header (404 `not_found` \"No such team.\" for a team the caller is not\nin), else their default team while multi-team is on. An ordinary team lists the meetings shared\nto it or moved to it, whoever recorded them; the personal team lists only the meetings the\ncaller recorded that are neither shared nor moved. The list only narrows what the caller may\nread: a meeting opened by its link opens whatever team is active. With multi-team off and no\nheader, the caller's meetings plus any shared with their team, as before.\n\n`from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar\ndays, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),\nby the same `created_at` the list's day headings use. They work with `before_id`,\n`has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not\na date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.\n\n`tz` (optional, an IANA name such as `America/New_York`) is the zone for the days when the\ncaller has NO stored zone: the page sends its browser's zone, which is the zone it writes its\nday headings in, so the filter's days are always the headings' days. A stored zone wins and\n`tz` is then ignored. 422 `invalid_time_zone` for a name the server does not know.",
         "operationId": "list_meetings",
         "parameters": [
           {
@@ -9370,6 +9390,26 @@
                 }
               ],
               "title": "Tz"
+            }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -12881,7 +12921,7 @@
     },
     "/api/review": {
       "get": {
-        "description": "The caller's \"Please check\" items from their meetings: `state=open` (default) or\n`checked`. Newest meeting first, in the order of the notes.",
+        "description": "The caller's \"Please check\" items from the active team's meetings: `state=open` (default) or\n`checked`. Newest meeting first, in the order of the notes. The team is the `X-Team-Id` header\n(404 `not_found` \"No such team.\" for a team the caller is not in), else their default team while\nmulti-team is on; `open_count` counts the same team's items.",
         "operationId": "list_review",
         "parameters": [
           {
@@ -12896,6 +12936,26 @@
               ],
               "title": "State",
               "type": "string"
+            }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -14070,8 +14130,30 @@
         ]
       },
       "get": {
-        "description": "Whether the cookie is a logged-in session, plus the CSRF token to send on writes.\n\nPublic. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,\nit names the user and reports their recorded hours (`usage`).",
+        "description": "Whether the cookie is a logged-in session, plus the CSRF token to send on writes.\n\nPublic. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,\nit names the user and reports their recorded hours (`usage`).\n\nThe `badges` count one team's items: the `X-Team-Id` header, else the person's default team\n(with multi-team off and no header: everything they can see, as before). A team the caller is\nnot in is NOT an error here (this call is every page's first): it counts the default team.",
         "operationId": "read_session",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -16185,7 +16267,7 @@
         ]
       },
       "patch": {
-        "description": "Rename the team, switch \"Share new meetings\", set the sprint length, custom days and Monday\nto Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other length),\nand/or set the reminders before recurring meetings: `reminders_on` and `reminder_timing`.\nChanging a sprint setting redraws the open sprints. The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`.",
+        "description": "Rename the team, switch \"Share new meetings\", set the sprint length, custom days and Monday\nto Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other length),\nand/or set the reminders before recurring meetings: `reminders_on` and `reminder_timing`.\nChanging a sprint setting redraws the open sprints. The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`. A person's own personal team\nkeeps its name while multi-team is on: 409 `personal_team` for a `name` on it.",
         "operationId": "update_team",
         "parameters": [
           {

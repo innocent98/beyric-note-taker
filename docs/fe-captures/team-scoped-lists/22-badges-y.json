@@ -1,0 +1,38 @@
+{
+  "note": "`badges` count the named team only.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {
+      "X-Team-Id": "5",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "authenticated": true,
+      "csrf_token": "<csrf-B>",
+      "user": {
+        "email": "pat@example.test",
+        "name": "Pat Example",
+        "is_admin": false,
+        "email_verified": true,
+        "time_zone": null,
+        "recording_acknowledged": false
+      },
+      "usage": {
+        "used_seconds": 0,
+        "cap_seconds": 18000
+      },
+      "unread_notifications": 0,
+      "badges": {
+        "review_open": 1,
+        "tasks_new": 1
+      },
+      "multi_team": true
+    }
+  }
+}

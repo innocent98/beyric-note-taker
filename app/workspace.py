@@ -38,7 +38,13 @@ from app.models import (
     User,
     UserSettings,
 )
-from app.visibility import can_read_clause, owns, recorder_not_being_deleted
+from app.visibility import (
+    ActiveTeam,
+    can_read_clause,
+    owns,
+    readable_in,
+    recorder_not_being_deleted,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -531,15 +537,18 @@ def list_decisions(
     limit: int,
     before_id: int | None,
     status: str | None = None,
+    active: ActiveTeam | None = None,
 ) -> tuple[list[tuple[Meeting, list[Decision]]], bool]:
     """The decisions of the meetings the caller may read (their own and those shared with their
-    team: `visibility`), newest meeting first, grouped by meeting, hidden ones left out.
+    team: `visibility`) that are on the active team's list (`active`: a decision belongs to its
+    meeting's team; None: every team), newest meeting first, grouped by meeting, hidden ones left
+    out.
 
     A search matches the decision's words or its meeting's title (the calendar title, or the
     meeting code); a title match brings every decision of that meeting. Returns the groups of up
     to `limit` meetings and whether there are more; `before_id` is the last meeting id of the
     previous page. `status` keeps only decisions with that status (a tab of the screen)."""
-    shown = [can_read_clause(user), Decision.hidden_at.is_(None)]
+    shown = [readable_in(user, active), Decision.hidden_at.is_(None)]
     if status is not None:
         shown.append(Decision.status == status)
     if query and query.strip():
@@ -569,13 +578,15 @@ def list_decisions(
     return [(m, by_meeting[m.id]) for m in meetings], more
 
 
-def decision_counts(session: Session, user: User) -> dict[str, int]:
-    """How many decisions the caller's log holds, in all and per status (the tab counts). Hidden
-    ones are not in the log; a search or a tab does not change these."""
+def decision_counts(
+    session: Session, user: User, active: ActiveTeam | None = None
+) -> dict[str, int]:
+    """How many decisions the caller's log holds (on the active team's list), in all and per status
+    (the tab counts). Hidden ones are not in the log; a search or a tab does not change these."""
     rows = session.execute(
         select(Decision.status, func.count())
         .join(Meeting)
-        .where(can_read_clause(user), Decision.hidden_at.is_(None))
+        .where(readable_in(user, active), Decision.hidden_at.is_(None))
         .group_by(Decision.status)
     )
     counts = {status: 0 for status in DECISION_STATUSES}
@@ -589,9 +600,12 @@ def week_of(day: date) -> tuple[date, date]:
     return monday, monday + timedelta(days=6)
 
 
-def due_this_week(session: Session, user: User, now: datetime | None = None) -> int:
-    """How many approved or proposed decisions the caller may read have a revisit date in this
-    week (Monday to Sunday) of the caller's own time zone. Not a notification: the banner only."""
+def due_this_week(
+    session: Session, user: User, now: datetime | None = None, active: ActiveTeam | None = None
+) -> int:
+    """How many approved or proposed decisions the caller may read (on the active team's list) have
+    a revisit date in this week (Monday to Sunday) of the caller's own time zone. Not a
+    notification: the banner only."""
     zone = session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user.id))
     today = timezones.localise(now or datetime.now(UTC), zone)[0].date()
     monday, sunday = week_of(today)
@@ -600,7 +614,7 @@ def due_this_week(session: Session, user: User, now: datetime | None = None) -> 
         .select_from(Decision)
         .join(Meeting)
         .where(
-            can_read_clause(user),
+            readable_in(user, active),
             Decision.hidden_at.is_(None),
             Decision.status.in_(("approved", "proposed")),
             Decision.revisit_on.between(monday, sunday),
@@ -737,9 +751,10 @@ def hide_decision(session: Session, user: User, decision_id: int) -> bool:
     return True
 
 
-def open_review_count(session: Session, user: User) -> int:
-    """Open review items of meetings the caller may still READ: a person who left the team a
-    meeting was moved to keeps no window into it through this screen (`can_read_clause`)."""
+def open_review_count(session: Session, user: User, active: ActiveTeam | None = None) -> int:
+    """Open review items of meetings the caller may still READ and that are on the active team's
+    list: a person who left the team a meeting was moved to keeps no window into it through this
+    screen (`can_read_clause`). The same filter as `list_review`, so the count equals the list."""
     return session.scalar(
         select(func.count())
         .select_from(ReviewItem)
@@ -747,21 +762,22 @@ def open_review_count(session: Session, user: User) -> int:
         .where(
             ReviewItem.owner_user_id == user.id,
             ReviewItem.checked_at.is_(None),
-            can_read_clause(user),
+            readable_in(user, active),
         )
     )
 
 
 def list_review(
-    session: Session, user: User, checked: bool
+    session: Session, user: User, checked: bool, active: ActiveTeam | None = None
 ) -> tuple[list[tuple[ReviewItem, Meeting]], bool]:
-    """The caller's open (or checked) review items, newest meeting first, in notes order. At
-    most `REVIEW_LIMIT` come back; the flag says whether there were more."""
+    """The caller's open (or checked) review items of the active team's meetings, newest meeting
+    first, in notes order. At most `REVIEW_LIMIT` come back; the flag says whether there were
+    more."""
     state = ReviewItem.checked_at.is_not(None) if checked else ReviewItem.checked_at.is_(None)
     rows = session.execute(
         select(ReviewItem, Meeting)
         .join(Meeting, Meeting.id == ReviewItem.meeting_id)
-        .where(ReviewItem.owner_user_id == user.id, state, can_read_clause(user))
+        .where(ReviewItem.owner_user_id == user.id, state, readable_in(user, active))
         .order_by(ReviewItem.meeting_id.desc(), ReviewItem.position)
         .limit(REVIEW_LIMIT + 1)
     ).all()

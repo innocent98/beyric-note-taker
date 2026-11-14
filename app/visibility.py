@@ -21,6 +21,8 @@ A meeting nobody may read is "no such meeting" (404, never 403), and the platfor
 route into team content: `is_admin` is not consulted here.
 """
 
+from dataclasses import dataclass
+
 from sqlalchemy import ColumnElement, Select, and_, or_, select
 from sqlalchemy.orm import Session
 
@@ -91,6 +93,38 @@ def can_read_clause(user: User) -> ColumnElement[bool]:
 def visible_meetings(user: User) -> Select[tuple[Meeting]]:
     """`select(Meeting)` limited to what `user` may read. Add filters, ordering and limits."""
     return select(Meeting).where(can_read_clause(user))
+
+
+@dataclass(frozen=True)
+class ActiveTeam:
+    """The team a LIST is about (the `X-Team-Id` header, else the person's default team): its id and
+    whether it is the caller's own personal team. Made by `team_admin.active_team`."""
+
+    id: int
+    personal: bool
+
+
+def active_team_clause(user: User, active: ActiveTeam) -> ColumnElement[bool]:
+    """Which meetings belong on the active team's list: for an ordinary team, those shared to it or
+    owned by (moved to) it, whoever recorded them; for the caller's personal team, only those they
+    recorded that no team has (neither shared nor moved). It only NARROWS a list: always combine it
+    with the read rule (`readable_in`), never use it alone."""
+    if active.personal:
+        return and_(
+            Meeting.owner_user_id == user.id,
+            Meeting.shared_team_id.is_(None),
+            Meeting.owner_team_id.is_(None),
+        )
+    return in_team_clause(active.id)
+
+
+def readable_in(user: User, active: ActiveTeam | None) -> ColumnElement[bool]:
+    """The `where` condition for "the caller may read this meeting AND it is on the active team's
+    list" (`active` None: every meeting they may read, as before). Meetings, decisions, review
+    items and the sidebar counts all filter through this one function: a count equals its list."""
+    if active is None:
+        return can_read_clause(user)
+    return and_(can_read_clause(user), active_team_clause(user, active))
 
 
 def owns(session: Session, user: User, meeting: Meeting) -> bool:

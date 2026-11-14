@@ -46,9 +46,10 @@ describe("parseTeamId", () => {
 });
 
 describe("links", () => {
-  it("only the team screens are team pages", () => {
-    for (const p of ["/team", "/tasks", "/projects", "/settings", "/tasks/", "/tasks?x=1"]) expect(isTeamPage(p)).toBe(true);
-    for (const p of ["/", "/teams", "/meetings/3", "/ask", "/settings/x"]) expect(isTeamPage(p)).toBe(false);
+  it("only the screens that follow the team are team pages (Meetings is the home page)", () => {
+    for (const p of ["/", "/?from=2026-11-01", "/team", "/tasks", "/projects", "/decisions", "/review", "/settings", "/tasks/", "/tasks?x=1"])
+      expect(isTeamPage(p)).toBe(true);
+    for (const p of ["/teams", "/meetings/3", "/ask", "/notifications", "/settings/x"]) expect(isTeamPage(p)).toBe(false);
   });
   it("withTeam sets, replaces and removes ?team= and keeps the rest", () => {
     expect(withTeam("/tasks", 5)).toBe("/tasks?team=5");

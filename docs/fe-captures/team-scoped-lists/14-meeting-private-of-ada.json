@@ -1,0 +1,22 @@
+{
+  "note": "Ada's private meeting is nobody else's, whatever team is named.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/6",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

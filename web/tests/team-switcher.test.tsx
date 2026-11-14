@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ActiveTeamSync } from "@/components/app/active-team-sync";
 import { AppShell } from "@/components/app/shell";
-import { TeamSwitcher } from "@/components/app/team-switcher";
+import { pageLoad, TeamSwitcher } from "@/components/app/team-switcher";
 import { SHELL_MARK, TEAM_STORAGE_KEY } from "@/lib/active-team";
 import type { TeamList } from "@/lib/api/types";
 import { teamsBody } from "./helpers";
@@ -36,6 +36,10 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
+// The switcher loads the page again (a full load): jsdom cannot, so what it was asked to load is recorded.
+const load = vi.spyOn(pageLoad, "to").mockImplementation(() => undefined);
+beforeEach(() => load.mockClear());
+
 const select = () => screen.getByRole("combobox", { name: "Team" }) as HTMLSelectElement;
 
 describe("the switcher", () => {
@@ -55,19 +59,35 @@ describe("the switcher", () => {
     expect(screen.getByRole("combobox", { name: "Team" })).toBeTruthy();
   });
 
-  it("on a team page the choice goes into the URL and is remembered for this tab", () => {
+  it("on a team page the choice goes into the URL, is remembered for this tab, and the page is LOADED again", () => {
     at("/tasks");
     render(<TeamSwitcher teams={teams} variant="sidebar" />);
     fireEvent.change(select(), { target: { value: "4" } });
     expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":4");
-    expect(nav.push).toHaveBeenCalledWith("/tasks?team=4");
+    expect(load).toHaveBeenCalledWith("/tasks?team=4");
+    expect(nav.push).not.toHaveBeenCalled(); // never a client-side transition: a full page load
+  });
+
+  it.each(["/", "/decisions", "/review"])("switching on %s (a page that follows the team) loads it again on the new team", (path) => {
+    at(path);
+    render(<TeamSwitcher teams={teams} variant="sidebar" />);
+    fireEvent.change(select(), { target: { value: "5" } });
+    expect(load).toHaveBeenCalledWith(`${path}?team=5`);
+  });
+
+  it("on a page that is not one team's (the meeting page, Ask) the same page is loaded again, the choice remembered", () => {
+    at("/meetings/12");
+    render(<TeamSwitcher teams={teams} variant="sidebar" />);
+    fireEvent.change(select(), { target: { value: "4" } });
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":4");
+    expect(load).toHaveBeenCalledWith("/meetings/12");
   });
 
   it("keeps the rest of the query (the Settings page after the calendar's callback)", () => {
     at("/settings", "calendar=connected");
     render(<TeamSwitcher teams={teams} variant="sidebar" />);
     fireEvent.change(select(), { target: { value: "5" } });
-    expect(nav.push).toHaveBeenCalledWith("/settings?calendar=connected&team=5");
+    expect(load).toHaveBeenCalledWith("/settings?calendar=connected&team=5");
   });
 
   it("choosing the default team forgets the choice and drops ?team=", () => {
@@ -77,7 +97,7 @@ describe("the switcher", () => {
     expect(select().value).toBe("4");
     fireEvent.change(select(), { target: { value: "2" } });
     expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBeNull();
-    expect(nav.push).toHaveBeenCalledWith("/tasks");
+    expect(load).toHaveBeenCalledWith("/tasks");
   });
 
   it("on a page that is not one team's (the Meetings list) it only remembers the choice", () => {
@@ -130,9 +150,35 @@ describe("the shell", () => {
       </AppShell>,
     );
     const hrefs = Array.from(container.querySelectorAll("aside a")).map((a) => a.getAttribute("href"));
-    for (const href of ["/tasks?team=4", "/projects?team=4", "/team?team=4", "/settings?team=4"]) expect(hrefs).toContain(href);
+    for (const href of ["/?team=4", "/tasks?team=4", "/projects?team=4", "/decisions?team=4", "/review?team=4", "/settings?team=4"])
+      expect(hrefs).toContain(href);
     expect(hrefs).toContain("/teams"); // the Teams list is not one team's
     expect(hrefs).toContain("/ask");
+  });
+
+  it("has ONE Teams entry (no separate Team link) while the switch is on, and the plain Team link while it is off", () => {
+    const { container } = render(
+      <AppShell current="team" teams={teams}>
+        x
+      </AppShell>,
+    );
+    const links = Array.from(container.querySelectorAll("aside nav a")).map((a) => [a.textContent, a.getAttribute("href"), a.getAttribute("aria-current")]);
+    expect(links.filter(([text]) => /^Teams?$/.test(String(text)))).toEqual([["Teams", "/teams", "page"]]); // a team's page is under Teams
+    expect(links.map(([, href]) => href)).not.toContain("/team");
+    cleanup();
+    const off = render(<AppShell current="team">x</AppShell>);
+    const offLinks = Array.from(off.container.querySelectorAll("aside nav a")).map((a) => a.getAttribute("href"));
+    expect(offLinks).toContain("/team");
+    expect(offLinks).not.toContain("/teams");
+  });
+
+  it("names the default team on the shell, so a call with no choice still names a team", () => {
+    const { container } = render(
+      <AppShell current="tasks" teams={teams}>
+        x
+      </AppShell>,
+    );
+    expect(container.querySelector(`[${SHELL_MARK}]`)?.getAttribute("data-default-team")).toBe("2");
   });
 });
 
@@ -151,9 +197,16 @@ describe("keeping the tab's team in step", () => {
     expect(nav.replace).toHaveBeenCalledWith("/projects?team=5");
   });
 
-  it("does not touch a page that is not one team's", () => {
+  it("the Meetings list (the home page) follows the remembered team too", () => {
     window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":5");
     at("/");
+    render(<ActiveTeamSync teams={teams} />);
+    expect(nav.replace).toHaveBeenCalledWith("/?team=5");
+  });
+
+  it("does not touch a page that is not one team's", () => {
+    window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":5");
+    at("/ask");
     render(<ActiveTeamSync teams={teams} />);
     expect(nav.replace).not.toHaveBeenCalled();
   });
