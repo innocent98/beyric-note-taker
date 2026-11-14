@@ -150,16 +150,14 @@ def test_the_pages_say_what_happens_to_a_meeting_moved_to_a_team(anon_client):
     privacy = text(anon_client, PRIVACY)
     assert (
         "A moved meeting stays with the team even if you leave the team or close your account. "
+        "If you are the only member of a team when you close your account, the team and the "
+        "meetings moved to it are deleted with your account. "
         "If you close your account, your name and email address are removed from it and it is "
         'shown as from a "Former member".' in privacy
     )
     assert (
         "Meetings you moved to a team are an exception: they stay with the team when you close "
         "your account" in privacy
-    )
-    assert (
-        "If you are the only member of a team when you close your account, the team and the "
-        "meetings moved to it are deleted with your account." in privacy
     )
     assert (
         "A team whose only member closes their account is deleted with it, and so are the "
