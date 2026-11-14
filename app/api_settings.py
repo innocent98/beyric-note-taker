@@ -10,8 +10,10 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import auth, services, timezones, translation
+from app import auth, services, teams, timezones, translation
 from app.api_schemas import (
+    AutoShareIn,
+    AutoShareOut,
     EmailPreferencesIn,
     EmailPreferencesOut,
     ErrorResponse,
@@ -21,7 +23,7 @@ from app.api_schemas import (
     TimeZoneOut,
 )
 from app.db import get_session
-from app.models import User, UserSettings
+from app.models import Team, User, UserSettings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -124,3 +126,47 @@ def write_time_zone(
     )
     session.commit()
     return TimeZoneOut(time_zone=name, is_set=True)
+
+
+@router.get("/auto-share")
+def read_auto_share(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> AutoShareOut:
+    """The one team this person's new meetings are shared to when their notes are first written
+    (never when the bot joins), or null. A team they have since left reads as null."""
+    return AutoShareOut(team_id=teams.auto_share_team(session, user))
+
+
+@router.put(
+    "/auto-share",
+    responses={
+        404: {"model": ErrorResponse, "description": "A team the caller is not in"},
+        409: {"model": ErrorResponse, "description": "`personal_team`"},
+    },
+)
+def write_auto_share(
+    body: AutoShareIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> AutoShareOut:
+    """Choose the team new meetings are shared to automatically (one at most), or null for none. The
+    caller must belong to it and it must not be their personal space. It applies once, when a
+    meeting's notes are first written; a meeting already written is not touched."""
+    if body.team_id is not None:
+        member = teams.membership(session, user.id, body.team_id)
+        team = session.get(Team, body.team_id) if member is not None else None
+        if team is None:
+            raise services.Refused(404, "not_found", "No such team.")
+        if team.is_personal:
+            raise services.Refused(
+                409, "personal_team", "Choose a team. Your personal space is only yours."
+            )
+    session.execute(
+        insert(UserSettings)
+        .values(user_id=user.id, auto_share_team_id=body.team_id)
+        .on_conflict_do_update(
+            index_elements=["user_id"], set_={"auto_share_team_id": body.team_id}
+        )
+    )
+    session.commit()
+    return AutoShareOut(team_id=body.team_id)

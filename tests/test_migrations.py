@@ -1966,3 +1966,31 @@ def test_0043_downgrade_refuses_while_somebody_belongs_to_two_teams(scratch_url)
     command.downgrade(cfg, "0042")
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0045_follows_0044():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0045").down_revision == "0044"
+
+
+def test_0045_adds_the_auto_share_team_empty_for_every_row_and_clears_with_the_team(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0044")
+    engine = create_engine(scratch_url)
+    command.upgrade(cfg, "0045")
+    columns = {c["name"]: c for c in inspect(engine).get_columns("user_settings")}
+    assert columns["auto_share_team_id"]["nullable"] is True
+    rows = _rows(engine, "select auto_share_team_id from user_settings")
+    assert all(row == (None,) for row in rows)
+    rule = _rows(
+        engine,
+        "select confdeltype from pg_constraint where conrelid = 'user_settings'::regclass "
+        "and contype = 'f' and confrelid = 'teams'::regclass",
+    )
+    assert rule == [("n",)]  # ON DELETE SET NULL
+    command.downgrade(cfg, "0044")
+    assert "auto_share_team_id" not in {
+        c["name"] for c in inspect(engine).get_columns("user_settings")
+    }
+    command.upgrade(cfg, "head")
+    engine.dispose()

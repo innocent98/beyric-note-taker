@@ -120,20 +120,21 @@ def _seen_by(user: User):
 
 
 def get(session: Session, user: User, series_id: int) -> Series | None:
-    """The series, only when it belongs to the caller's team and the caller may see it: anything
-    else is None (404)."""
-    member = membership(session, user)
-    if member is None:
-        return None
+    """The series, only when it belongs to a team the caller is in and the caller may see it:
+    anything else is None (404). The series' OWN team decides, so a person on two teams reads the
+    series of either through the same URL (no team has to be named for an id), and a series of a
+    team they are not in does not exist for them."""
+    mine = select(TeamMember.team_id).where(TeamMember.user_id == user.id)
     return session.scalars(
-        select(Series).where(
-            Series.id == series_id, Series.team_id == member.team_id, _seen_by(user)
-        )
+        select(Series).where(Series.id == series_id, Series.team_id.in_(mine), _seen_by(user))
     ).first()
 
 
-def list_for(session: Session, user: User) -> list[Series]:
-    member = membership(session, user)
+def list_for(session: Session, user: User, team_id: int | None = None) -> list[Series]:
+    """The Recurring cards of one team: `team_id` (the route has checked the caller is in it) or,
+    naming none, the caller's default team. A series whose meetings were shared to ANOTHER team
+    is not part of this team's list: only what the caller may read counts (`_seen_by`)."""
+    member = membership(session, user, team_id)
     if member is None:
         return []
     return list(
@@ -302,12 +303,13 @@ def sync_from_joins(session: Session, now: datetime) -> int:
     return made
 
 
-def create(session: Session, user: User, title: str) -> Series:
-    """A recurring meeting made by hand (no calendar id), in the caller's team."""
+def create(session: Session, user: User, title: str, team_id: int | None = None) -> Series:
+    """A recurring meeting made by hand (no calendar id), in `team_id` (the route has checked the
+    caller is in it) or, naming none, the caller's default team."""
     clean = _clean(title, MAX_TITLE_CHARS)
     if not clean:
         raise SeriesRefused(422, "invalid_title", "Give the recurring meeting a name.")
-    team_id = team_id_of(session, user)
+    team_id = team_id if team_id is not None else team_id_of(session, user)
     count = session.scalar(
         select(func.count()).select_from(Series).where(Series.team_id == team_id)
     )

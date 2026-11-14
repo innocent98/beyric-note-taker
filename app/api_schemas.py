@@ -647,6 +647,18 @@ class LanguagePreferencesOut(BaseModel):
     default_language: Literal["en", "fr", "es"]
 
 
+class AutoShareOut(BaseModel):
+    # The team the caller's new meetings are shared to when their notes are first written, or null
+    # when they chose none (the team default, if any, then applies to owners and admins as before).
+    team_id: int | None
+
+
+class AutoShareIn(Body):
+    # A team the caller belongs to (404 for any other, 409 `personal_team` for their personal
+    # space), or null to choose none.
+    team_id: int | None = None
+
+
 class TimeZoneOut(BaseModel):
     # The stored IANA zone name, or "UTC" when none was ever chosen.
     time_zone: str
@@ -846,9 +858,38 @@ InviteStatus = Literal["pending", "expired"]
 InviteOutcome = Literal["sent", "resent", "already_member", "already_invited", "invalid_email"]
 
 
+class TeamSummary(BaseModel):
+    """One of the caller's teams, as the switcher lists it."""
+
+    id: int
+    name: str
+    # The caller's role in it.
+    role: TeamRole
+    # Active members, the caller included.
+    member_count: int
+    # The caller's own permanent space: never left, nobody is invited into it, nothing is shared
+    # to it. Show it as "Personal", not as a team to share with.
+    is_personal: bool
+    # The team a request with no `X-Team-Id` acts on (what the frontend before multi-team uses).
+    is_default: bool
+    can_manage: bool
+
+
+class TeamList(BaseModel):
+    teams: list[TeamSummary]
+    # How many more teams the caller may create now (they may own three).
+    can_create_more: int
+
+
+class TeamCreate(BaseModel):
+    name: str
+
+
 class TeamOut(BaseModel):
     id: int
     name: str
+    # True for the caller's personal space (see `TeamSummary.is_personal`).
+    is_personal: bool = False
     # The team default for "Share with team": new meetings of the team's owner and admins are
     # shared when their notes are first written. Off by default; members' meetings are never
     # shared by it.

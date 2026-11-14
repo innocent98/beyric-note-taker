@@ -89,6 +89,7 @@ def present(
 @router.get("/sprints", tags=["sprints"], responses=NOT_FOUND)
 def list_sprints(
     project: int | None = Query(None, ge=1, le=services.MAX_ID),
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> SprintList:
@@ -96,7 +97,7 @@ def list_sprints(
     `project` it is the team's series, counting the tasks of every project; with a project it is
     that project's series (its own when it has a sprint length of its own, else the team's)
     counting that project's tasks. The first call for a team makes its first two sprints."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team = session.get(Team, me.team_id)
     key, found = None, None
     if project is not None:
@@ -144,6 +145,7 @@ def list_sprints(
 )
 def close_sprint(
     sprint_id: int,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> SprintClosed:
@@ -151,7 +153,7 @@ def close_sprint(
     sprint and are marked carried over; the next sprint starts today (its end date does not
     change) and a new next is made. 409 `sprint_not_current` for a sprint that is closed or is
     still the next one."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     sprint = _sprint_or_404(session, me, sprint_id)
     team_admin.require_manager(me)
     team = session.get(Team, me.team_id)

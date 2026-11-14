@@ -15,18 +15,42 @@ says so; routes commit.
 """
 
 from datetime import datetime
+from typing import Annotated
 
+from fastapi import Header
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import tasks, teams, titles
 from app.extraction import normalise
 from app.models import Task, Team, TeamInvite, TeamMember, User
-from app.services import Refused
+from app.services import MAX_ID, Refused
 
 MANAGER_ROLES = teams.MANAGER_ROLES
 MAX_ALIASES, MAX_ALIAS_CHARS = tasks.MAX_ALIASES, tasks.MAX_ALIAS_CHARS
 FORBIDDEN_MESSAGE = "Only an owner or admin of the team can do that."
+
+
+TEAM_HEADER = "X-Team-Id"
+
+
+def requested_team(
+    x_team_id: Annotated[
+        int | None,
+        Header(
+            alias=TEAM_HEADER,
+            ge=1,
+            le=MAX_ID,
+            description="The team this request is about. Omitted: the caller's default team "
+            "(their only team other than the personal one, else the personal one). A team the "
+            "caller is not in is 404 `not_found`.",
+        ),
+    ] = None,
+) -> int | None:
+    """The explicit team of a team-implicit route (multi-team design 6.7): the `X-Team-Id` header,
+    per request. Nothing is kept on the server between requests, so two browser tabs on two teams
+    never fight over a "current team". Pass the result to `my_membership`."""
+    return x_team_id
 
 
 def forbidden(message: str = FORBIDDEN_MESSAGE) -> Refused:

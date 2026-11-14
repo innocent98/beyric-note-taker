@@ -31,6 +31,7 @@ from app import (
     api_sprints,
     api_tasks,
     api_team,
+    api_teams,
     api_translation,
     api_workspace,
     auth,
@@ -805,6 +806,7 @@ router.include_router(calendar_api.joins_router)
 router.include_router(calendar_recurring.router)
 router.include_router(api_workspace.router)
 router.include_router(api_tasks.router)
+router.include_router(api_teams.router)
 router.include_router(api_series.router)
 router.include_router(api_projects.router)
 router.include_router(api_sprints.router)

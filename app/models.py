@@ -489,6 +489,12 @@ class UserSettings(Base):
     # W8: whether this person is emailed the agenda a teammate sends and the reminders before a
     # recurring meeting they attend (Settings > Email).
     notify_reminders: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    # The one team this person's new meetings are shared to when their notes are first written
+    # (multi-team design 6.3); null = none chosen, and the team default (`teams.
+    # share_new_meetings`, owners and admins) applies as before.
+    auto_share_team_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
+    )
 
 
 class CalendarConnection(Base):

@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, mail, services, tasks, teams, timezones, titles, workspace
+from app import auth, mail, services, tasks, team_admin, teams, timezones, titles, workspace
 from app.api_schemas import (
     AttentionOut,
     ErrorResponse,
@@ -32,7 +32,7 @@ from app.api_schemas import (
 )
 from app.db import get_session
 from app.extraction import TranscriptIndex
-from app.models import Meeting, Task, User, UserSettings
+from app.models import Meeting, Task, Team, User, UserSettings
 from app.visibility import can_read_clause
 
 router = APIRouter()
@@ -151,8 +151,8 @@ def _task_or_404(session: Session, user: User, task_id: int) -> Task:
     return task
 
 
-def _team_people(session: Session, user: User) -> list[PersonOut]:
-    team = teams.ensure_team(session, user)
+def _team_people(session: Session, user: User, team_id: int | None = None) -> list[PersonOut]:
+    team = session.get(Team, team_id) if team_id is not None else teams.ensure_team(session, user)
     return [
         PersonOut(user_id=m.user_id, name=m.display_name, is_you=m.user_id == user.id)
         for m in tasks.members_of(session, team.id)
@@ -185,13 +185,18 @@ def list_tasks(
     ),
     limit: int = Query(tasks.LIST_DEFAULT, ge=1, le=tasks.LIST_MAX),
     before_id: int | None = Query(None, ge=1, le=services.MAX_ID),
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TaskList:
     """The tasks the caller can see: those assigned to them, those from meetings they can read,
     and their team's manual tasks. Newest first; for the next page pass `before_id` =
     `next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a
-    suggested task is in no count."""
+    suggested task is in no count. With the `X-Team-Id` header (404 for a team the caller is not
+    in) only that team's board, its people and its counts; without it, every team's tasks the
+    caller can see, as before (`people` are then the default team's)."""
+    if team_id is not None:
+        team_admin.my_membership(session, user, team_id)  # 404 for a team that is not theirs
     rows, more = tasks.list_tasks(
         session,
         user,
@@ -203,11 +208,12 @@ def list_tasks(
         milestone=milestone,
         sprint=sprint,
         suggested=suggested,
+        team_id=team_id,
     )
     return TaskList(
         tasks=present(session, user, rows),
-        people=_team_people(session, user),
-        attention=AttentionOut(**tasks.attention(session, user)),
+        people=_team_people(session, user, team_id),
+        attention=AttentionOut(**tasks.attention(session, user, team_id)),
         has_more=more,
         next_before_id=rows[-1].id if more else None,
     )
@@ -221,10 +227,15 @@ def list_tasks(
 )
 def create_task(
     body: TaskCreate,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TaskOut:
-    """Make a task by hand, in the caller's team. Anyone on the team may. It has no meeting."""
+    """Make a task by hand, in the team named by the `X-Team-Id` header (404 for a team the caller
+    is not in) or, without it, the caller's default team. Anyone on the team may. It has no
+    meeting."""
+    if team_id is not None:
+        team_admin.my_membership(session, user, team_id)
     zone = _zone(session, user)
     try:
         task = tasks.create(
@@ -236,6 +247,7 @@ def create_task(
             status=body.status,
             project_id=body.project_id,
             sprint_id=body.sprint_id if "sprint_id" in body.model_fields_set else tasks.UNSET,
+            team_id=team_id,
             today=timezones.localise(datetime.now(UTC), zone)[0].date(),
         )
     except tasks.TaskInvalid as exc:

@@ -37,6 +37,11 @@ from app.services import Refused
 TTL = timedelta(days=7)
 MAX_PENDING = 10  # live invitations a team may hold (the whole pilot is ten accounts)
 MAX_PER_DAY = 20  # invitations a team may create in 24 hours, revoked ones included
+# Per PERSON, across every team they invite from (multi-team design 6.2): with up to three owned
+# teams the per-team caps alone would triple what one person can send, and an invitation bypasses
+# a closed or full sign-up.
+MAX_PER_PERSON_PER_HOUR = 10
+MAX_PER_PERSON_PER_DAY = 20
 RESEND_COOLDOWN = timedelta(seconds=60)
 MAX_NAME_CHARS = 100
 
@@ -204,13 +209,13 @@ def create(
         if is_live(existing, now):
             existing.role, existing.name = role, _clean_name(name) or existing.name
         else:  # an expired one is reused: it counts as a new invitation again
-            _check_caps(session, team_id, now)
+            _check_caps(session, team_id, inviter.id, now)
             existing.role, existing.name = role, _clean_name(name)
             if needs_place(session, email) and not has_room:
                 raise _full()
         send(session, settings, existing, inviter, now)
         return InviteResult(email, "resent", existing)
-    _check_caps(session, team_id, now)
+    _check_caps(session, team_id, inviter.id, now)
     if needs_place(session, email) and not has_room:
         raise _full()
     invite = TeamInvite(
@@ -229,7 +234,7 @@ def create(
     return InviteResult(email, "sent", invite)
 
 
-def _check_caps(session: Session, team_id: int, now: datetime) -> None:
+def _check_caps(session: Session, team_id: int, inviter_id: int, now: datetime) -> None:
     pending = session.scalar(
         select(func.count())
         .select_from(TeamInvite)
@@ -240,7 +245,17 @@ def _check_caps(session: Session, team_id: int, now: datetime) -> None:
         .select_from(TeamInvite)
         .where(TeamInvite.team_id == team_id, TeamInvite.created_at > now - timedelta(days=1))
     )
-    if pending >= MAX_PENDING or created >= MAX_PER_DAY:
+    by_person = (
+        select(func.count()).select_from(TeamInvite).where(TeamInvite.invited_by == inviter_id)
+    )
+    last_hour = session.scalar(by_person.where(TeamInvite.created_at > now - timedelta(hours=1)))
+    last_day = session.scalar(by_person.where(TeamInvite.created_at > now - timedelta(days=1)))
+    if (
+        pending >= MAX_PENDING
+        or created >= MAX_PER_DAY
+        or last_hour >= MAX_PER_PERSON_PER_HOUR
+        or last_day >= MAX_PER_PERSON_PER_DAY
+    ):
         raise Refused(
             409,
             "invite_limit",

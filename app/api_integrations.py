@@ -39,10 +39,12 @@ def _out(row: Integration | None, me: TeamMember) -> SlackOut:
 
 @router.get("/slack")
 def read_slack(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> SlackOut:
     """Whether the team posts new tasks to Slack, and how the last post went."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     return _out(integrations.get(session, me.team_id), me)
 
 
@@ -58,12 +60,13 @@ def read_slack(
 )
 def connect_slack(
     body: SlackIn,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> SlackOut:
     """Connect Slack with an incoming-webhook address (owner or admin). One test message is posted
     to the channel first; a webhook Slack refuses is not stored. Replaces an earlier one."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     row = integrations.connect_slack(session, me.team_id, user, body.webhook_url, datetime.now(UTC))
     return _out(row, me)
@@ -71,10 +74,12 @@ def connect_slack(
 
 @router.delete("/slack", status_code=204, responses=FORBIDDEN)
 def disconnect_slack(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> Response:
     """Disconnect Slack and delete the stored address (owner or admin). Safe to repeat."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     integrations.disconnect(session, me.team_id)
     return Response(status_code=204)
@@ -105,22 +110,25 @@ def _linear_out(row: Integration | None, me: TeamMember) -> LinearOut:
 
 @router.get("/linear")
 def read_linear(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> LinearOut:
     """Whether the team pushes new tasks to Linear, to which team, and how the last push went."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     return _linear_out(integrations.get(session, me.team_id, integrations.LINEAR), me)
 
 
 @router.post("/linear/teams", responses=LINEAR_ERRORS)
 def linear_teams(
     body: LinearKeyIn,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> LinearTeamsOut:
     """The Linear teams a pasted key can reach, for the choice before connecting (owner or admin).
     The key is checked with Linear and not stored."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     found = integrations.linear_teams(session, me.team_id, body.api_key, datetime.now(UTC))
     return LinearTeamsOut(teams=found)
@@ -129,12 +137,13 @@ def linear_teams(
 @router.put("/linear", responses=LINEAR_ERRORS)
 def connect_linear(
     body: LinearIn,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> LinearOut:
     """Connect Linear with a personal API key and one of its teams (owner or admin). New tasks from
     shared meetings are then created as issues in that team, once each. Replaces an earlier key."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     row = integrations.connect_linear(
         session, me.team_id, user, body.api_key, body.team_id, datetime.now(UTC)
@@ -144,11 +153,13 @@ def connect_linear(
 
 @router.delete("/linear", status_code=204, responses=FORBIDDEN)
 def disconnect_linear(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> Response:
     """Disconnect Linear and delete the stored key (owner or admin). Issues already created stay in
     Linear. Safe to repeat."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     integrations.disconnect(session, me.team_id, integrations.LINEAR)
     return Response(status_code=204)
