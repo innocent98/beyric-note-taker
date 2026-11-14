@@ -355,14 +355,18 @@ def test_every_get_route_answers_without_an_error_for_a_person_with_two_membersh
             assert pat.get(path).status_code < 500, path
 
 
-def test_a_person_with_two_ordinary_teams_can_share_a_meeting_and_the_default_team_is_used(
-    app, session, template, world
-):
+def test_a_person_with_two_ordinary_teams_names_the_team_to_share_to(app, session, template, world):
+    """Replaces the stage-1 test that pinned the bug: with two ordinary teams and no team given,
+    Share went to the personal team and answered 200. Now it asks (422 `team_required`), and a
+    named team is used (more in tests/test_multi_team_moved.py)."""
     mine = ready(session, template, owner_user_id=world.pat.id)
     pat = sign_in(app, PAT)
-    assert pat.post(f"/api/meetings/{mine.id}/share").status_code == 200
+    error_of(pat.post(f"/api/meetings/{mine.id}/share"), 422, "team_required")
     session.refresh(mine)
-    assert mine.shared_team_id == teams.personal_team(session, world.pat.id).id  # default: personal
+    assert mine.shared_team_id is None
+    assert pat.post(f"/api/meetings/{mine.id}/share", {"team_id": world.y.id}).status_code == 200
+    session.refresh(mine)
+    assert mine.shared_team_id == world.y.id
     ada = sign_in(app, "owner@example.test")
     assert ada.post(f"/api/meetings/{world.private.id}/share").status_code == 200
     session.refresh(world.private)

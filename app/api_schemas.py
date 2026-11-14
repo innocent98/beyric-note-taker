@@ -217,6 +217,21 @@ class QuestionOut(BaseModel):
     can_update: bool
 
 
+class TeamRef(BaseModel):
+    id: int
+    name: str
+
+
+class ShareRequest(BaseModel):
+    # The team to share with. Omitted, the caller's default team is used (what the frontend before
+    # multi-team sends); 422 `team_required` when that would be a guess (two or more teams).
+    team_id: int | None = None
+
+
+class MoveRequest(BaseModel):
+    team_id: int
+
+
 class MeetingDetail(MeetingSummary):
     # Set (never null) when status is "failed", null otherwise.
     failure_reason: str | None
@@ -244,6 +259,15 @@ class MeetingDetail(MeetingSummary):
     # Who recorded it, for a teammate reading a shared meeting ("Shared by Dan"); null for the
     # owner's own view.
     shared_by: str | None
+    # The team the meeting is shared with or, when `owned_by_team`, the team that owns it; null for
+    # a private meeting. A moved meeting belongs to its team: it stays if the recorder leaves.
+    team: TeamRef | None = None
+    owned_by_team: bool = False
+    # The recorder of a finished, private or shared meeting may move it to a team they belong to
+    # (only while the switch is on, `MULTI_TEAM_ENABLED`); the team's owners and admins may move a
+    # team's meeting back to its recorder.
+    can_move: bool = False
+    can_move_back: bool = False
     join_attempts: int
     max_join_attempts: int
     bot_left_early: bool

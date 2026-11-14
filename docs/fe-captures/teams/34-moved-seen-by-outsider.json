@@ -1,0 +1,21 @@
+{
+  "note": "Not in X: 404.",
+  "as": "Quinn",
+  "request": {
+    "method": "GET",
+    "path": "/api/meetings/1",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "note": "Nobody to give it back to: 409.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/move-back",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "recorder_gone",
+        "message": "The person who recorded this meeting has left, so it cannot be given back."
+      }
+    }
+  }
+}

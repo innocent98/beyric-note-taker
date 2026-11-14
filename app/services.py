@@ -424,7 +424,17 @@ def owned_meeting_or_404(session: Session, user: User, meeting_id: int) -> Meeti
     one that does not exist: the answer must not tell a reader that the id is real and writable
     by someone else. Goes through `visible_meetings` first, so it can never be wider than a read."""
     meeting = visible_meeting_or_404(session, user, meeting_id)
-    if not visibility.owns(user, meeting):
+    if not visibility.owns(session, user, meeting):
+        raise HTTPException(404, "No such meeting")
+    return meeting
+
+
+def recorded_meeting_or_404(session: Session, user: User, meeting_id: int) -> Meeting:
+    """A meeting the caller RECORDED and may still change: for what is the recorder's even on a
+    team's meeting (email shares: who the notes were mailed to, and mailing them as themselves).
+    A team admin who may change a moved meeting gets 404 here."""
+    meeting = owned_meeting_or_404(session, user, meeting_id)
+    if not visibility.recorded_by(session, user, meeting):
         raise HTTPException(404, "No such meeting")
     return meeting
 

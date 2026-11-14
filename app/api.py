@@ -37,11 +37,11 @@ from app import (
     calendar_api,
     calendar_recurring,
     export,
+    meeting_teams,
     notifications,
     services,
     tasks,
     teams,
-    titles,
     translation,
     usage,
     visibility,
@@ -55,10 +55,13 @@ from app.api_schemas import (
     MeetingDetail,
     MeetingList,
     MeetingSummary,
+    MoveRequest,
     NewMeeting,
     NewTerm,
     Regenerate,
     SessionState,
+    ShareRequest,
+    TeamRef,
     TemplateIn,
     TemplateList,
     TemplateOut,
@@ -70,7 +73,7 @@ from app.api_schemas import (
 from app.bot_invite import meeting_invite_email
 from app.config import get_settings
 from app.db import get_session
-from app.models import Decision, Meeting, MeetingTranslation, ReviewItem, User, UserSettings
+from app.models import Decision, Meeting, MeetingTranslation, ReviewItem, Team, User, UserSettings
 from app.notes_document import (
     build_notes_document,
     content_disposition,
@@ -301,7 +304,21 @@ def _owner_name(session: Session, meeting: Meeting) -> str | None:
     owner = session.get(User, meeting.owner_user_id)
     if owner is None:
         return None
-    return titles.clean_title(owner.name, 100) or owner.email.split("@")[0]
+    return visibility.former_or_name(owner)
+
+
+def _team_ref(session: Session, meeting: Meeting) -> TeamRef | None:
+    """The team a meeting is shared with or owned by (the viewer reads it through that team, or is
+    the recorder who shared it)."""
+    team = session.get(Team, meeting.owner_team_id or meeting.shared_team_id or 0)
+    return TeamRef(id=team.id, name=team.name) if team is not None else None
+
+
+def _can_move_back(session: Session, user: User, meeting: Meeting) -> bool:
+    if meeting.owner_team_id is None:
+        return False
+    member = teams.membership(session, user.id, meeting.owner_team_id)
+    return member is not None and member.role in teams.MANAGER_ROLES
 
 
 def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
@@ -309,11 +326,12 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
     carries its meeting password. The `can_*` flags are false for a teammate reading a shared
     meeting: only the owner may change it (those routes answer 404 to anyone else)."""
     failed, ready = meeting.status == "failed", meeting.status == "ready"
-    owner = visibility.owns(user, meeting)
+    owner = visibility.owns(session, user, meeting)  # may change it (the recorder; a team's admin)
+    recorder = meeting.owner_user_id == user.id
     block = services.retry_block(meeting) if failed else None
     active = meeting.status in services.ACTIVE
     decisions_count, review_open_count = _workspace_counts(meeting, session) if ready else (0, 0)
-    review_open_count = review_open_count if owner else 0  # review items are owner-only
+    review_open_count = review_open_count if recorder else 0  # review items are the recorder's
     task_rows = tasks.meeting_tasks(session, user, meeting.id) if ready else []
     return MeetingDetail(
         **_summary(
@@ -331,8 +349,18 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         can_regenerate=owner and ready,
         can_delete=owner and not active,
         shared_with_team=visibility.is_shared(meeting),
-        can_share=owner,
-        shared_by=None if owner else _owner_name(session, meeting),
+        can_share=owner and meeting.owner_team_id is None,
+        shared_by=None if recorder else _owner_name(session, meeting),
+        team=_team_ref(session, meeting),
+        owned_by_team=meeting.owner_team_id is not None,
+        can_move=(
+            owner
+            and ready
+            and meeting.owner_team_id is None
+            and recorder
+            and teams.multi_team_enabled()
+        ),
+        can_move_back=_can_move_back(session, user, meeting),
         join_attempts=meeting.join_attempts,
         max_join_attempts=MAX_JOIN_ATTEMPTS,
         bot_left_early=ready and meeting.completion_reason in REMOVAL_REASONS,
@@ -352,7 +380,10 @@ def _detail(meeting: Meeting, session: Session, user: User) -> MeetingDetail:
         review_open_count=review_open_count,
         tasks=api_tasks.present(session, user, task_rows),
         series=api_series.meeting_series(session, user, meeting),
-        suggest_recurring=owner and ready and series_rules.reused_code(session, meeting),
+        suggest_recurring=recorder
+        and owner
+        and ready
+        and series_rules.reused_code(session, meeting),
         open_questions=api_series.meeting_questions(session, user, meeting) if ready else [],
         translations=[
             api_translation.brief(row, meeting)
@@ -566,23 +597,30 @@ def delete_meeting(
     "/meetings/{meeting_id:id}/share",
     tags=["meetings"],
     responses={
-        404: {"model": ErrorResponse, "description": "No such meeting (or not the caller's)"}
+        404: {
+            "model": ErrorResponse,
+            "description": "No such meeting, or no such team (of the caller's)",
+        },
+        409: {"model": ErrorResponse, "description": "`personal_team`, `meeting_team_owned`"},
+        422: {"model": ErrorResponse, "description": "`team_required`"},
     },
 )
 def share_meeting(
     meeting_id: int,
+    body: ShareRequest | None = None,
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MeetingDetail:
-    """Share the meeting with the caller's team (the "Share with team" switch): teammates may read
-    its notes, transcript and tasks, never change it. Only the one who recorded it (a teammate or
-    anyone else gets 404). Doing it twice is fine. The team's default (`share_new_meetings`) is
-    read once, when the notes are first written; this is how a person shares one by hand."""
+    """Share the meeting with one of the caller's teams (the "Share with team" switch): its members
+    may read the notes, transcript and tasks, never change them. Only the one who recorded it (a
+    teammate or anyone else gets 404). Send `{"team_id": ...}` for a team the caller belongs to
+    (404 `not_found` for any other, 409 `personal_team` for their own personal space); send
+    nothing and the default team is used, as before multi-team, unless the caller is on two or more
+    teams (422 `team_required`). A meeting is shared with one team: sharing again moves it. 409
+    `meeting_team_owned` for a meeting moved to a team. The team's default (`share_new_meetings`)
+    is read once, when the notes are first written; this is how a person shares one by hand."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
-    team = teams.ensure_team(session, user)  # the default team (`teams.default_membership`)
-    meeting.shared_team_id = team.id
-    if meeting.series_id is not None:
-        series_rules.mark_topics_stale(session, meeting.series_id)  # the repeat topics may change
+    meeting_teams.share(session, user, meeting, body.team_id if body else None)
     session.commit()
     return _detail(meeting, session, user)
 
@@ -591,7 +629,8 @@ def share_meeting(
     "/meetings/{meeting_id:id}/share",
     tags=["meetings"],
     responses={
-        404: {"model": ErrorResponse, "description": "No such meeting (or not the caller's)"}
+        404: {"model": ErrorResponse, "description": "No such meeting (or not the caller's)"},
+        409: {"model": ErrorResponse, "description": "`meeting_team_owned`"},
     },
 )
 def unshare_meeting(
@@ -600,11 +639,66 @@ def unshare_meeting(
     user: User = Depends(auth.current_user),
 ) -> MeetingDetail:
     """Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone
-    else. Doing it twice is fine."""
+    else. Doing it twice is fine. 409 `meeting_team_owned` for a meeting moved to a team."""
     meeting = services.owned_meeting_or_404(session, user, meeting_id)
-    meeting.shared_team_id = None
-    if meeting.series_id is not None:
-        series_rules.mark_topics_stale(session, meeting.series_id)  # the repeat topics may change
+    meeting_teams.unshare(session, meeting)
+    session.commit()
+    return _detail(meeting, session, user)
+
+
+@router.post(
+    "/meetings/{meeting_id:id}/move",
+    tags=["meetings"],
+    responses={
+        404: {
+            "model": ErrorResponse,
+            "description": "No such meeting, or no such team (of the caller's)",
+        },
+        409: {
+            "model": ErrorResponse,
+            "description": "`personal_team`, `already_moved`, `meeting_not_ready`, "
+            "`multi_team_disabled`",
+        },
+    },
+)
+def move_meeting(
+    meeting_id: int,
+    body: MoveRequest,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingDetail:
+    """Move the meeting to a team the caller belongs to: the team owns it from now on. Every member
+    reads it; the recorder (while a member) and the team's owners and admins change it; it stays
+    with the team if the recorder leaves it or deletes their account (they then show as "Former
+    member"). Only the recorder, only a finished meeting. Doing it again for the same team is
+    fine. The page must say so first: "This meeting will belong to the team. It stays with the
+    team even if you leave or delete your account." Its tasks move to the team."""
+    meeting = services.owned_meeting_or_404(session, user, meeting_id)
+    meeting_teams.move(session, user, meeting, body.team_id)
+    session.commit()
+    return _detail(meeting, session, user)
+
+
+@router.post(
+    "/meetings/{meeting_id:id}/move-back",
+    tags=["meetings"],
+    responses={
+        403: {"model": ErrorResponse, "description": "`team_forbidden`"},
+        404: {"model": ErrorResponse, "description": "No such meeting"},
+        409: {"model": ErrorResponse, "description": "`not_moved`, `recorder_gone`"},
+    },
+)
+def move_meeting_back(
+    meeting_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> MeetingDetail:
+    """Give a team's meeting back to its recorder (private to them again; its tasks go to their
+    personal team). Only an owner or admin of the team that owns it (403 `team_forbidden` for any
+    other reader, the recorder included). 409 `not_moved` for a meeting no team owns, 409
+    `recorder_gone` when the recorder deleted their account."""
+    meeting = services.visible_meeting_or_404(session, user, meeting_id)
+    meeting_teams.move_back(session, user, meeting)
     session.commit()
     return _detail(meeting, session, user)
 

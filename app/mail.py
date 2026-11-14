@@ -42,7 +42,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import mail_templates
+from app import mail_templates, visibility
 from app.config import Settings
 from app.edge import Throttle
 from app.mail_message import Attachment, MailError, Message, valid_address
@@ -314,6 +314,9 @@ def _tell_owner_of_cap_skip(session: Session, row: MailOutbox, cap: int) -> None
             meeting = session.get(Meeting, meeting_id)
             if meeting is None:
                 return
+            owner = session.get(User, meeting.owner_user_id)
+            if owner is None or not visibility.recorded_by(session, owner, meeting):
+                return  # a recorder who left the meeting's team is told nothing of it
             session.execute(
                 insert(Notification)
                 .values(
