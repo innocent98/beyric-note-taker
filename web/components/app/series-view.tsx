@@ -191,7 +191,7 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
 
   return (
     <div className="stack-lg sr">
-      <AppLink className="crumb" href="/">
+      <AppLink className="crumb" href="/meetings">
         <Icon name="back" size={14} />
         All meetings
       </AppLink>

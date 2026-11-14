@@ -49,13 +49,17 @@ PREFILL_COOKIE_PATH = "/api/pilot"
 TERMS_FLAG = ".t"  # a flow cookie "<state>.t" means the terms were accepted at the consent text
 MAX_NAME_CHARS = 200
 
+# Where a sign-in lands when no safe `return_to` came with it: the owner's Meetings page (`/` is
+# the landing page for everyone, signed in or not).
+DEFAULT_RETURN_TO = "/meetings"
+
 # A relative path with exactly one leading slash: never `//host`, a scheme or a backslash.
 # `\Z`, not `$`: `$` also matches before a trailing newline.
 RETURN_TO_PATTERN = re.compile(r"^/(?![/\\])[A-Za-z0-9._~!$&'()*+,;=:@%/?-]{0,200}\Z")
 
 
 def safe_return_to(value: str | None) -> str:
-    return value if value and RETURN_TO_PATTERN.match(value) else "/"
+    return value if value and RETURN_TO_PATTERN.match(value) else DEFAULT_RETURN_TO
 
 
 # ---- the round trip ----

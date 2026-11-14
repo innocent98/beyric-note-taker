@@ -16,14 +16,14 @@ function Glyph({ d, size, stroke = 1.9 }: { d: string; size: number; stroke?: nu
   );
 }
 
-// `signedIn` is true on /welcome for the owner (app/welcome/page.tsx): the logo then leads to
-// /welcome, the page they are on, since `/` is their Meetings page, and the two sign-up buttons
-// give way to one way back into the app. A visitor's header is the designer's, unchanged.
+// `signedIn` is true when the owner reads the landing page at `/` (app/page.tsx): the two sign-up
+// buttons then give way to one way back into the app, `/meetings`. A visitor's header is the
+// designer's, unchanged.
 export function LandingHeader({ signedIn = false }: { signedIn?: boolean }) {
   return (
     <header className="ld-header">
       <div className="ld-header-in">
-        <Logo size="lg" href={signedIn ? "/welcome" : "/"} />
+        <Logo size="lg" href="/" />
         <nav className="ld-nav" aria-label="Sections">
           <a href="#workflow">How it works</a>
           <a href="#features">Features</a>
@@ -32,7 +32,7 @@ export function LandingHeader({ signedIn = false }: { signedIn?: boolean }) {
         </nav>
         <div className="ld-header-actions">
           {signedIn ? (
-            <AppLink className="ld-get-started" href="/">
+            <AppLink className="ld-get-started" href="/meetings">
               Open the app
             </AppLink>
           ) : (
@@ -355,7 +355,7 @@ export function LandingFooter({ signedIn = false }: { signedIn?: boolean }) {
       <div className="ld-footer-in">
         <div className="ld-footer-cols">
           <div className="ld-footer-brand">
-            <Logo size="sm" href={signedIn ? "/welcome" : "/"} />
+            <Logo size="sm" href="/" />
             <p>Meeting notes, decisions and tasks for teams, from {LEGAL_NAME}.</p>
           </div>
           <div className="ld-footer-col">
@@ -380,8 +380,8 @@ export function LandingFooter({ signedIn = false }: { signedIn?: boolean }) {
   );
 }
 
-// A visitor who is not logged in sees this page at `/` (app/page.tsx shows the owner Meetings there);
-// everyone, the owner included, sees it at `/welcome` (app/welcome/page.tsx).
+// Everyone, signed in or not, sees this page at `/` (app/page.tsx); the owner's Meetings page is
+// at `/meetings`.
 export function Landing() {
   return (
     <>

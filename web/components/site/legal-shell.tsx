@@ -1,14 +1,12 @@
 import type { ReactNode } from "react";
 import { AppLink, Logo } from "@/components/ui";
-import { getSession } from "@/lib/api/server";
 import { LEGAL_NAME } from "@/lib/site";
 
 // The frame of the privacy and terms pages from Privacy Policy.dc.html: a sticky header with the
 // two legal pages as tabs, an "On this page" list that follows the reader, the text, and a footer.
 // The text itself (components/legal/*) is the live legal text, not the prototype's sample words.
-// For the owner the logo leads to /welcome (the landing page), since `/` is their Meetings page; a
-// visitor's logo leads to `/`, as it always did.
-export async function LegalShell({
+// The logo leads to `/`, the landing page, for everyone.
+export function LegalShell({
   current,
   toc,
   children,
@@ -17,7 +15,6 @@ export async function LegalShell({
   toc: ReadonlyArray<readonly [string, string]>;
   children: ReactNode;
 }) {
-  const home = (await getSession())?.authenticated === true ? "/welcome" : "/";
   return (
     <div className="lg">
       <a className="skip-link" href="#main">
@@ -25,7 +22,7 @@ export async function LegalShell({
       </a>
       <header className="lg-header">
         <div className="lg-header-in">
-          <Logo href={home} />
+          <Logo href="/" />
           <nav className="lg-tabs" aria-label="Legal">
             <AppLink href="/privacy" aria-current={current === "privacy" ? "page" : undefined}>
               Privacy

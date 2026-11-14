@@ -154,7 +154,7 @@ describe("account messages", () => {
   });
 
   it("builds the Google start address, with accept_terms only when ticked", () => {
-    expect(googleStartUrl(false)).toBe("/api/auth/google/start?return_to=%2F");
-    expect(googleStartUrl(true)).toBe("/api/auth/google/start?return_to=%2F&accept_terms=true");
+    expect(googleStartUrl(false)).toBe("/api/auth/google/start?return_to=%2Fmeetings");
+    expect(googleStartUrl(true)).toBe("/api/auth/google/start?return_to=%2Fmeetings&accept_terms=true");
   });
 });

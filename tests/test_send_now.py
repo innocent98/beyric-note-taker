@@ -525,7 +525,7 @@ def test_an_upcoming_row_carries_the_join_and_whether_send_now_is_on_offer(
 
 
 def test_the_could_not_join_mail_has_a_send_it_again_button_that_opens_the_meetings_page():
-    assert mail_templates.SEND_AGAIN_PATH == "/"
+    assert mail_templates.SEND_AGAIN_PATH == "/meetings"
     settings = make_settings(public_base_url="https://notes.example.test")
     message = mail_templates.render_link(
         mail_templates.NOT_JOINED,
@@ -534,8 +534,8 @@ def test_the_could_not_join_mail_has_a_send_it_again_button_that_opens_the_meeti
         settings,
     )
     assert "Send it again" in message.html and "Send it again" in message.text
-    assert 'href="https://notes.example.test/"' in message.html
-    assert "https://notes.example.test/\n" in message.text
+    assert 'href="https://notes.example.test/meetings"' in message.html
+    assert "https://notes.example.test/meetings\n" in message.text
     # a link into the signed-in app: no token, no query, nothing that acts when it is opened
     for part in (message.html, message.text):
         assert "token" not in part.lower() and "/?" not in part

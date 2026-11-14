@@ -10,7 +10,7 @@ const { values } = parseArgs({ options: { next: { type: "string" } } });
 const NEXT = values.next.replace(/\/$/, "");
 const { chromium } = await import(process.env.PLAYWRIGHT ?? "playwright");
 const browser = await chromium.launch({ executablePath: process.env.CHROME });
-const PAGES = ["/", "/meetings/1", "/meetings/2", "/meetings/3", "/meetings/4", "/notifications", "/settings"];
+const PAGES = ["/meetings", "/meetings/1", "/meetings/2", "/meetings/3", "/meetings/4", "/notifications", "/settings"];
 
 async function measure(path, width, timeZoneId) {
   const context = await browser.newContext({ viewport: { width, height: 900 }, timezoneId: timeZoneId });

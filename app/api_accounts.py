@@ -306,7 +306,7 @@ def _finish_google(request, session, google, flow, code, error, cookie, now) -> 
     )
     if outcome.user is not None:
         services.start_session(request, session, outcome.user)
-        return RedirectResponse(flow.return_to or "/", status_code=302)
+        return RedirectResponse(flow.return_to or google_signin.DEFAULT_RETURN_TO, status_code=302)
     if outcome.full:
         settings = request.app.state.settings
         response = RedirectResponse("/pilot-full", status_code=302)

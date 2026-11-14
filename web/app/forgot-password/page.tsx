@@ -7,7 +7,7 @@ import { getSession } from "@/lib/api/server";
 export const metadata: Metadata = { title: "Reset your password", robots: { index: false, follow: false } };
 
 export default async function ForgotPasswordPage() {
-  if ((await getSession())?.authenticated) redirect("/");
+  if ((await getSession())?.authenticated) redirect("/meetings");
   return (
     <AuthShell action={{ label: "Back to sign in", href: "/login" }}>
       <ForgotPasswordFlow />

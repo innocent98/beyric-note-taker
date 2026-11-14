@@ -225,12 +225,12 @@ def _alert(payload: dict, to: str, settings: Settings) -> Message:
 
 NOT_JOINED = "meeting_not_joined"
 # The page the designer's "Send it again" button opens: the Meetings page ("Send it again from the
-# Meetings page", `Beyric Note Taker.dc.html`), which is the app's home, `/` (there is no
-# `/meetings` page; a visitor who is not signed in sees the landing page and its Log in link). A
+# Meetings page", `Beyric Note Taker.dc.html`), which is the app's home, `/meetings` (`/` is the
+# landing page; a visitor who is not signed in is sent to the login page from `/meetings`). A
 # failed meeting has its Send it again there, and a meeting the scheduler never got into has its
 # Send now (C15b). A plain link into the signed-in app: no token, no query, and nothing happens by
 # opening it (a mail scanner or a forwarded copy cannot send a bot). None draws no button.
-SEND_AGAIN_PATH: str | None = "/"
+SEND_AGAIN_PATH: str | None = "/meetings"
 # The designer's words, shared with the bell entry that goes with the mail (`app/pipeline.py`).
 NOT_JOINED_TITLE = "The note taker could not join your meeting"
 NOT_JOINED_REASON = (

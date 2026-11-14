@@ -220,7 +220,7 @@ export function MeetingView({
     } catch {
       // Private mode: the list is shown without the toast.
     }
-    router.push("/");
+    router.push("/meetings");
   }
 
   const m = meeting;
@@ -245,7 +245,7 @@ export function MeetingView({
 
   return (
     <div className="stack-lg">
-      <AppLink className="crumb" href="/">
+      <AppLink className="crumb" href="/meetings">
         <Icon name="back" size={14} />
         All meetings
       </AppLink>

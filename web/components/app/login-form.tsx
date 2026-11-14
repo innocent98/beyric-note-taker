@@ -57,7 +57,7 @@ export function LoginForm({
       // A meeting link shared from another app (the PWA share target) is waiting in this tab: back to it.
       // A new account's first sign-in (the confirmation page marked this tab) goes to the workspace step.
       const setup = takeSetupPending();
-      router.replace(hasPendingShare() ? "/share" : setup ? "/setup" : "/");
+      router.replace(hasPendingShare() ? "/share" : setup ? "/setup" : "/meetings");
       router.refresh();
     } catch (caught) {
       setError(errorMessage(caught));

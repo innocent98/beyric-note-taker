@@ -84,7 +84,7 @@ describe("manifest and service worker", () => {
       params: { title: "title", text: "text", url: "url" },
     });
     // Everything Chrome asks of an installable manifest.
-    expect(m.start_url).toBe("/");
+    expect(m.start_url).toBe("/meetings");
     expect(m.display).toBe("standalone");
     expect(m.name).toBeTruthy();
     expect(m.icons?.map((i) => i.sizes)).toEqual(expect.arrayContaining(["192x192", "512x512"]));

@@ -315,11 +315,11 @@ def test_start_redirects_to_google_and_keeps_a_hashed_single_use_flow(gapp, sess
         "",
     ],
 )
-def test_an_unsafe_return_to_falls_back_to_the_home_page(gapp, session, target):
+def test_an_unsafe_return_to_falls_back_to_the_meetings_page(gapp, session, target):
     from urllib.parse import quote
 
     start(browser(gapp), f"?accept_terms=true&return_to={quote(target)}")
-    assert session.scalars(select(OAuthFlow)).one().return_to == "/"
+    assert session.scalars(select(OAuthFlow)).one().return_to == "/meetings"
 
 
 def test_the_flow_cookie_is_http_only_lax_and_scoped_to_the_google_routes(gapp):
@@ -334,7 +334,7 @@ def test_a_full_sign_up_with_google_creates_a_verified_user_and_a_session(gapp, 
     before = logged_in(web)["csrf_token"]
     _, state = start(web)
     response = callback(web, state)
-    assert (response.status_code, response.headers["location"]) == (302, "/")
+    assert (response.status_code, response.headers["location"]) == (302, "/meetings")
     after = logged_in(web)
     assert after["authenticated"] and after["user"]["email"] == "ada@example.test"
     assert after["user"]["email_verified"] is True and after["csrf_token"] != before
@@ -379,7 +379,7 @@ def test_a_new_account_needs_the_terms_accepted_at_the_consent_text(gapp, sessio
 def test_an_existing_account_signs_in_without_accepting_terms_again(gapp, session):
     make_user(session, "ada@example.test", password=None, google_sub="g-ada-1")
     web = browser(gapp)
-    assert sign_in(web, "").headers["location"] == "/"
+    assert sign_in(web, "").headers["location"] == "/meetings"
     assert logged_in(web)["authenticated"]
 
 
@@ -399,7 +399,7 @@ def test_a_state_works_once(gapp, session):
     open_pilot(session)
     web = browser(gapp)
     _, state = start(web)
-    assert callback(web, state).headers["location"] == "/"
+    assert callback(web, state).headers["location"] == "/meetings"
     again = browser(gapp, "198.51.100.2")  # same state, replayed, with the cookie it had
     again.client.cookies.set("google_flow", state, path="/api/auth/google")
     assert callback(again, state).headers["location"] == "/login?error=google_failed"
@@ -549,7 +549,7 @@ def test_google_redeems_the_invite_of_an_unconfirmed_account_when_the_pilot_is_f
     )
     session.commit()
     web = browser(gapp)
-    assert sign_in(web).headers["location"] == "/"
+    assert sign_in(web).headers["location"] == "/meetings"
     user = user_by(session, id=planted.id)
     assert user.email_verified_at is not None and user.google_sub == "g-ada-1"
     assert session.scalars(select(WaitlistEntry)).one().status == "joined"
@@ -597,7 +597,7 @@ def test_a_confirmation_and_a_google_link_for_one_account_at_once_do_not_deadloc
     for thread in threads:
         thread.join()
     assert errors == []
-    assert results["google"] == "/" and results["verify"] in (200, 400)
+    assert results["google"] == "/meetings" and results["verify"] in (200, 400)
     assert user_by(session, email="ada@example.test").email_verified_at is not None
 
 
@@ -671,7 +671,7 @@ def test_existing_users_still_sign_in_when_the_pilot_is_closed_or_full(gapp, ses
     open_pilot(session, max_accounts=1, signups_open=False)
     make_user(session, "ada@example.test", password=None, google_sub="g-ada-1")
     web = browser(gapp)
-    assert sign_in(web).headers["location"] == "/"
+    assert sign_in(web).headers["location"] == "/meetings"
 
 
 def test_a_full_pilot_sets_a_short_cookie_and_leaves_no_half_made_user(gapp, session):
@@ -730,7 +730,7 @@ def test_a_waitlist_invite_for_the_google_address_gets_in_when_full_and_is_used_
     )
     session.commit()
     web = browser(gapp)
-    assert sign_in(web).headers["location"] == "/"
+    assert sign_in(web).headers["location"] == "/meetings"
     assert user_by(session, email="ada@example.test") is not None
     assert session.scalars(select(AuthToken).where(AuthToken.used_at.is_(None))).all() == []
     session.expire_all()
@@ -800,7 +800,7 @@ def test_ten_parallel_google_sign_ups_at_nine_accounts_make_exactly_one(
         thread.start()
     for thread in threads:
         thread.join()
-    assert sorted(outcomes) == ["/"] + ["/pilot-full"] * 9
+    assert sorted(outcomes) == ["/meetings"] + ["/pilot-full"] * 9
     session.expire_all()
     assert session.scalar(select(func.count()).select_from(User)) == 10
 
@@ -809,3 +809,13 @@ def test_the_public_routes_in_the_guard_match_the_ones_the_tests_know():
     from tests.test_api import PUBLIC
 
     assert auth.PUBLIC_API == PUBLIC
+
+
+def test_the_meetings_page_is_an_accepted_return_to(gapp, session):
+    # `/meetings` is the owner's home and the sign-in fallback; the allow-list must accept it
+    # (and `/` stays accepted: the landing page).
+    assert google_signin.RETURN_TO_PATTERN.match("/meetings")
+    assert google_signin.safe_return_to("/meetings") == "/meetings"
+    assert google_signin.safe_return_to("/") == "/"
+    assert google_signin.safe_return_to(None) == "/meetings"
+    assert google_signin.safe_return_to("//evil.test") == "/meetings"

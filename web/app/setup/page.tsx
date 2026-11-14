@@ -19,7 +19,7 @@ export default async function SetupPage() {
     if (error instanceof ApiError && error.status === 401) redirect("/login");
     return null;
   });
-  if (!team?.can_manage) redirect("/");
+  if (!team?.can_manage) redirect("/meetings");
   // The calendar block is left out while the server has the feature off (404 `calendar_unavailable`).
   const calendar: CalendarState | null = await api.calendar.get().catch(() => null);
   return (

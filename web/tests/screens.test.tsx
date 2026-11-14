@@ -77,7 +77,7 @@ describe("login", () => {
     await userEvent.type(screen.getByLabelText("Password"), "hunter2");
     await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(mocks.login).toHaveBeenCalledWith("owner@example.test", "hunter2");
-    expect(mocks.replace).toHaveBeenCalledWith("/");
+    expect(mocks.replace).toHaveBeenCalledWith("/meetings");
   });
 
   it("sends a new account's first sign-in to the workspace step, once", async () => {

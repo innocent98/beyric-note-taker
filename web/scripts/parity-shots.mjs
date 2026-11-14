@@ -61,7 +61,7 @@ const SCREENS = {
   signin: [`${DESIGN}/Auth.dc.html#sign-in`, [], "/login", false],
   privacy: [`${DESIGN}/Privacy%20Policy.dc.html`, [], "/privacy", false],
   terms: [`${DESIGN}/Terms%20of%20Service.dc.html`, [], "/terms", false],
-  "app-meetings": [APP, [], "/", true],
+  "app-meetings": [APP, [], "/meetings", true],
   "app-detail": [APP, [["Beyric Monday planning", "last"]], "/meetings/1", true],
   "app-templates": [APP, [["Templates", "first"]], "/templates", true],
   "app-vocabulary": [APP, [["Vocabulary", "first"]], "/vocabulary", true],
@@ -77,7 +77,7 @@ const SCREENS = {
   // after 1 s), so those clicks wait. The Next side shows what the mock's --calendar flag says.
   "app-settings": [APP, [["Settings", "first"]], "/settings", true],
   "app-settings-connected": [APP, [["Settings", "first"], ["Connect Google Calendar", "first", 1500]], "/settings", true],
-  "app-meetings-calendar": [APP, [["Settings", "first"], ["Connect Google Calendar", "first", 1500], ["Meetings", "first"]], "/", true],
+  "app-meetings-calendar": [APP, [["Settings", "first"], ["Connect Google Calendar", "first", 1500], ["Meetings", "first"]], "/meetings", true],
   // The notifications list shows each notice's day and time (no prototype).
   "app-notifications": [null, [], "/notifications", true],
   // Series (W8): a Recurring card opens the Series page. The mock's page is the owner's view of the
@@ -395,9 +395,9 @@ const SCREENS = {
   // mock started with `--calendar connected --notrecorded list` and a clock of 2026-11-08T21:15:00Z: the Upcoming
   // card with a missed row, the Not recorded card, Send now pressed (the toast, both rows updated), and a refusal
   // (run app-not-recorded-busy against `--sendnow busy`: the 409 `bot_busy` words under the row, the button kept).
-  "app-not-recorded": [null, [], "/", true],
-  "app-not-recorded-sent": [null, [], "/", true, [{ text: "Send now", wait: 1200 }]],
-  "app-not-recorded-busy": [null, [], "/", true, [{ text: "Send now", wait: 1200 }]],
+  "app-not-recorded": [null, [], "/meetings", true],
+  "app-not-recorded-sent": [null, [], "/meetings", true, [{ text: "Send now", wait: 1200 }]],
+  "app-not-recorded-busy": [null, [], "/meetings", true, [{ text: "Send now", wait: 1200 }]],
   "app-settings-language": [APP, [["Settings", "first"], DEFAULT_LANG("French", 300)], "/settings", true, [DEFAULT_LANG("French", 400)]],
 };
 

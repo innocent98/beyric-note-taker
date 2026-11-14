@@ -114,7 +114,7 @@ export function ShellNav({ children }: { children: ReactNode }) {
         >
           <Icon name="menu" size={20} />
         </button>
-        <Logo />
+        <Logo href="/meetings" />
       </div>
       <div className="drawer-scrim" data-open={open ? "true" : "false"} aria-hidden="true" onClick={close} />
       <aside
@@ -126,7 +126,7 @@ export function ShellNav({ children }: { children: ReactNode }) {
         onClick={onDrawerClick}
       >
         <div className="sidebar-brand">
-          <Logo />
+          <Logo href="/meetings" />
           <button ref={closeRef} type="button" className="drawer-close" aria-label="Close menu" onClick={close}>
             <Icon name="close" size={18} />
           </button>

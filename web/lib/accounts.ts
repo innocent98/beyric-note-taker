@@ -89,7 +89,7 @@ export const LOGIN_ERRORS_WITH_SIGNUP: ReadonlySet<string> = new Set(["terms_req
 // A full page load to Google's consent screen through our own route (section 9). `accept_terms`
 // goes on only when the visitor ticked the box.
 export function googleStartUrl(acceptTerms: boolean): string {
-  const query = new URLSearchParams({ return_to: "/" });
+  const query = new URLSearchParams({ return_to: "/meetings" });
   if (acceptTerms) query.set("accept_terms", "true");
   return `/api/auth/google/start?${query.toString()}`;
 }

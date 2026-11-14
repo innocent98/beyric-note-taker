@@ -677,7 +677,7 @@ const server = http.createServer(async (req, res) => {
     if (values["no-google"]) return json(res, 404, accountBody("03-google-start-unavailable"));
     const outcome = values["google-outcome"];
     if (outcome === "ok") {
-      res.writeHead(302, { location: "/", "set-cookie": "session=owner; Path=/; HttpOnly; SameSite=Lax" });
+      res.writeHead(302, { location: "/meetings", "set-cookie": "session=owner; Path=/; HttpOnly; SameSite=Lax" });
     } else if (outcome === "pilot_full") {
       res.writeHead(302, { location: "/pilot-full" });
     } else {

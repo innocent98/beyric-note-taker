@@ -60,7 +60,7 @@ export function SetupWorkspace({
     setNameError(undefined);
     setPending(true);
     if (await saveName()) {
-      router.replace("/");
+      router.replace("/meetings");
       router.refresh();
       return;
     }
@@ -157,7 +157,7 @@ export function SetupWorkspace({
         <Button size="field" block disabled={pending || connecting !== null}>
           {pending ? "Setting up..." : "Continue to Beyric"}
         </Button>
-        <Button kind="ghost" href="/" block>
+        <Button kind="ghost" href="/meetings" block>
           Skip for now
         </Button>
       </div>

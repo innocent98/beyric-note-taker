@@ -87,7 +87,7 @@ for (const scheme of ["light", "dark"]) {
     await page.getByLabel("Password").fill(values.password);
     await page.getByRole("button", { name: "Sign in" }).click();
     await page.getByRole("button", { name: /Send note taker/ }).waitFor();
-    check(`${name} login: signed in and landed on the Meetings page`, new URL(page.url()).pathname === "/");
+    check(`${name} login: signed in and landed on the Meetings page`, new URL(page.url()).pathname === "/meetings");
     await shot("meetings");
     await noScroll("meetings");
 
@@ -112,7 +112,7 @@ for (const scheme of ["light", "dark"]) {
     check(`${name} meeting pages: ${[...seen].join(", ") || "none seeded"}`, seen.size > 0, "no meetings; seed the database");
 
     // Client navigation keeps the document (no full load) between Next pages
-    await page.goto(`${BASE}/`);
+    await page.goto(`${BASE}/meetings`);
     await page.evaluate(() => (window.__alive = true));
     await page.getByRole("link", { name: "Templates" }).first().click();
     await page.getByRole("heading", { level: 1, name: "Templates" }).waitFor();
@@ -152,7 +152,7 @@ for (const scheme of ["light", "dark"]) {
     check(`${name} vocabulary: term deleted through the UI`, true);
 
     if (values["send-check"] && name === "light-1280") {
-      await page.goto(`${BASE}/`);
+      await page.goto(`${BASE}/meetings`);
       await page.getByLabel("Meeting link").fill("https://example.com/not-a-meeting");
       await page.getByRole("button", { name: "Send note taker" }).click();
       await page.getByRole("alert").filter({ hasText: "That is not a Google Meet, Zoom or Microsoft Teams link" }).waitFor();
@@ -173,7 +173,7 @@ for (const scheme of ["light", "dark"]) {
     }
 
     // Logout through the button
-    await page.goto(`${BASE}/`);
+    await page.goto(`${BASE}/meetings`);
     await page.getByRole("button", { name: "Log out" }).click();
     await page.waitForURL(`${BASE}/login`);
     check(`${name} logout: back on the login page`, true);

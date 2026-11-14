@@ -102,7 +102,7 @@ export function ShareFlow({
             the Meetings page.
           </Alert>
           <div>
-            <Button href="/">Go to Meetings</Button>
+            <Button href="/meetings">Go to Meetings</Button>
           </div>
         </div>
       </Card>
@@ -117,7 +117,7 @@ export function ShareFlow({
             Nothing was sent. The link was not kept.
           </Alert>
           <div>
-            <Button href="/">Go to Meetings</Button>
+            <Button href="/meetings">Go to Meetings</Button>
           </div>
         </div>
       </Card>

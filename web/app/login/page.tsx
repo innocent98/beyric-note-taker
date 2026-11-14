@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Sign in", robots: { index: false, fo
 // `?error=<code>` is where the Google callback sends a visitor it turned back (guide section 9).
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string | string[] }> }) {
   const session = await getSession();
-  if (session?.authenticated) redirect("/");
+  if (session?.authenticated) redirect("/meetings");
   const { error } = await searchParams;
   const code = Array.isArray(error) ? error[0] : error;
   const pilot = await getPilot();

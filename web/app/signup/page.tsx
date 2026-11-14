@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Create your account", robots: { inde
 // says whether the pilot is open, full or closed and whether Google sign-in exists. The sign-up
 // itself stays closed until the admin opens it: nothing here opens it.
 export default async function SignupPage({ searchParams }: { searchParams: Promise<{ invite?: string | string[] }> }) {
-  if ((await getSession())?.authenticated) redirect("/");
+  if ((await getSession())?.authenticated) redirect("/meetings");
   const { invite } = await searchParams;
   // Only whether there is an invitation: the token is read in the browser and removed from the
   // address, so it is not in the server-rendered page.

@@ -75,7 +75,7 @@ describe("/signup", () => {
 
   it("sends a signed-in visitor to the app", async () => {
     state.authenticated = true;
-    await expect(SignupPage(query({}))).rejects.toThrow("redirect:/");
+    await expect(SignupPage(query({}))).rejects.toThrow("redirect:/meetings");
   });
 });
 
@@ -147,6 +147,6 @@ describe("the pages the mails open", () => {
   it("/forgot-password draws the form, and sends a signed-in visitor to the app", async () => {
     expect(await html(ForgotPasswordPage())).toContain("Reset your password");
     state.authenticated = true;
-    await expect(ForgotPasswordPage()).rejects.toThrow("redirect:/");
+    await expect(ForgotPasswordPage()).rejects.toThrow("redirect:/meetings");
   });
 });
