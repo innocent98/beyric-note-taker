@@ -1,0 +1,22 @@
+{
+  "note": "The same read with the switch OFF: `multi_team` is false, logged out as well as in.",
+  "as": "nobody",
+  "request": {
+    "method": "GET",
+    "path": "/api/session",
+    "headers": {},
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "authenticated": false,
+      "csrf_token": "<csrf-A>",
+      "user": null,
+      "usage": null,
+      "unread_notifications": null,
+      "badges": null,
+      "multi_team": false
+    }
+  }
+}

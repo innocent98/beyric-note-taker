@@ -1,5 +1,6 @@
 import type {
   AgendaItem,
+  AutoShare,
   AskAnswer,
   AskScope,
   AgendaSent,
@@ -64,6 +65,8 @@ import type {
   ShareList,
   Team,
   TeamChanges,
+  TeamList,
+  TeamSummary,
   TeamInvite,
   TeamInvitesCreated,
   TeamMemberChanges,
@@ -118,10 +121,40 @@ export type ApiOptions = {
   // Sees every response before it is read; the logout route handler uses it to pass FastAPI's
   // Set-Cookie on to the browser.
   onResponse?: (response: Response) => void;
+  // The team the caller is working on, sent as `X-Team-Id` on the team-scoped routes (and only those:
+  // see `isTeamScoped`). null or undefined: send none, and the API uses the person's default team.
+  // The browser reads it from the tab (lib/active-team.ts); a server page passes the `?team=` it was
+  // opened with. Nothing is kept on the server between requests.
+  teamId?: () => number | null | undefined;
+  // Called once when a request that named a team is answered 404 "No such team.": the person is no
+  // longer in it. The browser forgets the team and reloads on the default one, with a notice.
+  onTeamGone?: () => void;
+  // Called after a login or a logout through this client: the browser forgets the tab's remembered team.
+  onSessionChange?: () => void;
 };
 
 type Query = Record<string, string | number | undefined>;
-type Call = { body?: unknown; query?: Query; write?: boolean; accept?: string };
+// `team` names the team of this one call (null: none) in place of `teamId`'s: the meeting page asks
+// about the team the MEETING belongs to, whatever the tab's team is.
+type Call = { body?: unknown; query?: Query; write?: boolean; accept?: string; team?: number | null };
+
+export const TEAM_HEADER = "X-Team-Id";
+export const TEAM_NOT_FOUND_MESSAGE = "No such team.";
+
+// The routes that read `X-Team-Id` (docs/fe-integration-guide-teams.md section 10): the team's own
+// routes, tasks (list and create), projects, milestones, sprints, series (list and create), the
+// integrations and a meeting's milestones. Joining by invitation names its team in the token, a
+// task, a series or a meeting is read through its own team, so those go without.
+export function isTeamScoped(path: string): boolean {
+  const p = path.split("?", 1)[0];
+  if (/^\/api\/team\/invites\/(preview|accept)$/.test(p)) return false;
+  return (
+    /^\/api\/team(\/|$)/.test(p) ||
+    /^\/api\/(projects|milestones|sprints|integrations)(\/|$)/.test(p) ||
+    /^\/api\/(tasks|series)$/.test(p) ||
+    /^\/api\/meetings\/\d+\/milestones$/.test(p)
+  );
+}
 
 export type Api = ReturnType<typeof createApi>;
 
@@ -150,7 +183,12 @@ export function createApi(options: ApiOptions = {}) {
   // The token the last write went out with, to tell a stale one from a session that never changed.
   let sentCsrf: string | null = null;
 
-  async function send(method: string, path: string, { body, query, write, accept }: Call): Promise<Response> {
+  // Which team each response's request named, for `fail` to tell "that team is gone" from "no such task".
+  // An explicit per-call team (a meeting's) is not the tab's: a reload cannot change it, so only the tab's own
+  // team being gone triggers `onTeamGone`.
+  const teamSent = new WeakMap<Response, { team: number; explicit: boolean }>();
+
+  async function send(method: string, path: string, { body, query, write, accept, team }: Call): Promise<Response> {
     const search = query
       ? Object.entries(query)
           .filter(([, v]) => v !== undefined)
@@ -161,6 +199,8 @@ export function createApi(options: ApiOptions = {}) {
       Accept: accept ?? "application/json",
       ...((await options.headers?.()) as Record<string, string> | undefined),
     };
+    const teamId = isTeamScoped(path) ? (team !== undefined ? team : (options.teamId?.() ?? null)) : null;
+    if (teamId !== null) headers[TEAM_HEADER] = String(teamId);
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (write) {
       sentCsrf = csrf ?? (await readSession()).csrf_token;
@@ -178,6 +218,7 @@ export function createApi(options: ApiOptions = {}) {
     } catch {
       throw new ApiError(0, "network_error", NETWORK_MESSAGE);
     }
+    if (teamId !== null) teamSent.set(res, { team: teamId, explicit: team !== undefined });
     options.onResponse?.(res);
     return res;
   }
@@ -194,6 +235,11 @@ export function createApi(options: ApiOptions = {}) {
     const error = data?.error;
     if (!error?.code) throw new ApiError(res.status, "gateway_error", GATEWAY_MESSAGE);
     if (res.status === 401 && error.code === "not_authenticated") options.onUnauthorized?.();
+    // The one 404 that is about the team and not the thing asked for: the code is the same
+    // (`not_found`), so the words tell them apart (guide section 10).
+    if (res.status === 404 && error.code === "not_found" && error.message === TEAM_NOT_FOUND_MESSAGE && teamSent.get(res)?.explicit === false) {
+      options.onTeamGone?.();
+    }
     throw new ApiError(res.status, error.code, error.message ?? FALLBACK_MESSAGE, error.fields ?? []);
   }
 
@@ -247,11 +293,13 @@ export function createApi(options: ApiOptions = {}) {
         write: true,
       });
       csrf = state.csrf_token;
+      options.onSessionChange?.();
       return state;
     },
     async logout(): Promise<SessionState> {
       const state = await request<SessionState>("DELETE", "/api/session", { write: true });
       csrf = state.csrf_token;
+      options.onSessionChange?.();
       return state;
     },
     // Public account routes: no session needed, but every write still sends the CSRF token
@@ -292,7 +340,18 @@ export function createApi(options: ApiOptions = {}) {
       setSeries: (id: number, series_id: number | null) =>
         request<MeetingSeriesResult>("PUT", `/api/meetings/${id}/series`, { body: { series_id }, write: true }),
       makeRecurring: (id: number) => request<MeetingSeriesResult>("POST", `/api/meetings/${id}/recurring`, { write: true }),
-      share: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/share`, { write: true }),
+      // `teamId` names the team to share with (required once a person is on two teams: 422 `team_required`
+      // without it). Moving gives the meeting to the team (409 `meeting_not_ready`, `personal_team`,
+      // `already_moved`; 404 for a team that is not theirs); moving back is for the owning team's owner or
+      // admin (403 `team_forbidden`, 409 `not_moved`, `recorder_gone`). docs/fe-integration-guide-teams.md 4 to 6.
+      share: (id: number, teamId?: number) =>
+        request<Meeting>("POST", `/api/meetings/${id}/share`, {
+          write: true,
+          ...(teamId !== undefined ? { body: { team_id: teamId } } : {}),
+        }),
+      move: (id: number, teamId: number) =>
+        request<Meeting>("POST", `/api/meetings/${id}/move`, { body: { team_id: teamId }, write: true }),
+      moveBack: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/move-back`, { write: true }),
       unshare: (id: number) => request<Meeting>("DELETE", `/api/meetings/${id}/share`, { write: true }),
       cancel: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/cancel`, { write: true }),
       end: (id: number) => request<Meeting>("POST", `/api/meetings/${id}/end`, { write: true }),
@@ -354,9 +413,11 @@ export function createApi(options: ApiOptions = {}) {
     tasks: {
       list: (
         query: { assignee?: string; status?: string; suggested?: boolean; project?: string; milestone?: number; sprint?: string; limit?: number; before_id?: number } = {},
+        team?: number | null,
       ) =>
         request<TaskList>("GET", "/api/tasks", {
           query: { ...query, suggested: query.suggested === undefined ? undefined : String(query.suggested) },
+          team,
         }),
       get: (id: number) => request<Task>("GET", `/api/tasks/${id}`),
       create: (body: Partial<NewTask> = {}) => request<Task>("POST", "/api/tasks", { body, write: true }),
@@ -372,7 +433,7 @@ export function createApi(options: ApiOptions = {}) {
     // Projects and milestones (docs/fe-integration-guide-projects.md). Everyone on the team reads;
     // an owner or admin writes (403 `team_forbidden` otherwise). `update` sends one field.
     projects: {
-      list: () => request<ProjectList>("GET", "/api/projects"),
+      list: (team?: number | null) => request<ProjectList>("GET", "/api/projects", { team }),
       create: (body: { name?: string; color?: string; keywords?: string[] } = {}) =>
         request<Project>("POST", "/api/projects", { body, write: true }),
       update: (id: number, body: ProjectChanges) =>
@@ -384,19 +445,27 @@ export function createApi(options: ApiOptions = {}) {
     // already closed or is not the current one). `list` with a project id is that project's own pair
     // when it has a sprint length of its own, else the team's pair counting only its tasks.
     sprints: {
-      list: (project?: number) => request<SprintList>("GET", "/api/sprints", { query: { project } }),
+      list: (project?: number, team?: number | null) => request<SprintList>("GET", "/api/sprints", { query: { project }, team }),
       close: (id: number) => request<SprintClosed>("POST", `/api/sprints/${id}/close`, { body: {}, write: true }),
     },
     milestones: {
-      list: () => request<MilestoneList>("GET", "/api/milestones"),
-      forMeeting: (meetingId: number) => request<MeetingMilestones>("GET", `/api/meetings/${meetingId}/milestones`),
+      list: (team?: number | null) => request<MilestoneList>("GET", "/api/milestones", { team }),
+      forMeeting: (meetingId: number, team?: number | null) =>
+        request<MeetingMilestones>("GET", `/api/meetings/${meetingId}/milestones`, { team }),
       confirm: (id: number) => request<Milestone>("POST", `/api/milestones/${id}/confirm`, { body: {}, write: true }),
     },
+    // The teams a person belongs to (docs/fe-integration-guide-teams.md section 9): the switcher's list and
+    // "Create a team" (409 `team_limit` at three owned teams, 422 `invalid_name`, 409 `multi_team_disabled`).
+    teams: {
+      list: () => request<TeamList>("GET", "/api/teams"),
+      create: (name: string) => request<TeamSummary>("POST", "/api/teams", { body: { name }, write: true }),
+    },
     // The Team screen (docs/fe-integration-guide-team.md). A member is addressed by `user_id`.
+    // `team` on a call names the team it is about in place of the tab's (the meeting page: the meeting's).
     team: {
-      get: () => request<Team>("GET", "/api/team"),
+      get: (team?: number | null) => request<Team>("GET", "/api/team", { team }),
       update: (body: TeamChanges) => request<Team>("PATCH", "/api/team", { body, write: true }),
-      members: () => request<TeamMembers>("GET", "/api/team/members"),
+      members: (team?: number | null) => request<TeamMembers>("GET", "/api/team/members", { team }),
       updateMember: (userId: number, body: TeamMemberChanges) =>
         request<TeamMembers>("PATCH", `/api/team/members/${userId}`, { body, write: true }),
       removeMember: (userId: number) => request<void>("DELETE", `/api/team/members/${userId}`, { write: true }),
@@ -417,6 +486,13 @@ export function createApi(options: ApiOptions = {}) {
     },
     // Whether the notes-ready email is on (GET and PUT /api/settings/email).
     settings: {
+      // The one team a person's new meetings are shared to when their notes are first written (guide section 12):
+      // `null` is "no team". 409 `personal_team`, 404 "No such team.", 409 `multi_team_disabled`.
+      autoShare: {
+        get: () => request<AutoShare>("GET", "/api/settings/auto-share"),
+        set: (team_id: number | null) =>
+          request<AutoShare>("PUT", "/api/settings/auto-share", { body: { team_id }, write: true }),
+      },
       // The language meetings open in when a translation exists (GET and PUT /api/settings/language).
       language: {
         get: () => request<LanguagePreferences>("GET", "/api/settings/language"),
@@ -452,8 +528,10 @@ export function createApi(options: ApiOptions = {}) {
     // `sendAgenda` mails the teammates who were in the last three meetings (409 `no_attendees`,
     // `nothing_to_send`; 429 `agenda_rate_limited`). `question` is "On next agenda" and "Mark resolved".
     series: {
-      list: () => request<SeriesList>("GET", "/api/series"),
-      create: (title: string) => request<SeriesCard>("POST", "/api/series", { body: { title }, write: true }),
+      // `team`: the meeting page lists and makes series in the MEETING's team (a meeting joins only a series of its own team).
+      list: (team?: number | null) => request<SeriesList>("GET", "/api/series", { team }),
+      create: (title: string, team?: number | null) =>
+        request<SeriesCard>("POST", "/api/series", { body: { title }, write: true, team }),
       get: (id: number) => request<SeriesPage>("GET", `/api/series/${id}`),
       // Link a recurring meeting to a project, or unlink it (`null`): the Projects screen's Recurring
       // meetings checklist (docs/fe-integration-guide-series-project-link.md). Owner or admin only.

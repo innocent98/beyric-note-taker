@@ -19,7 +19,9 @@ import { actionSummary, avatarTone, isOverdue, personInitials, taskDueText } fro
 // A suggested task (the AI was unsure of it) has the pill "To confirm" in place of "Needs owner", is
 // not counted in "N tasks created, assigned to M people", and is accepted or dismissed from its drawer
 // (the summary then ends ", K to confirm" while K is above 0).
-export function ActionTasks({ initial }: { initial: Task[] }) {
+// `team` is the team the MEETING belongs to (multi-team): the drawer's people, projects, milestones and
+// sprints are that team's, whatever team this tab is working on. undefined: the tab's own, as before.
+export function ActionTasks({ initial, team }: { initial: Task[]; team?: number | null }) {
   const today = useToday();
   const [tasks, setTasks] = useState(initial);
   const [people, setPeople] = useState<TaskPerson[]>([]);
@@ -42,16 +44,16 @@ export function ActionTasks({ initial }: { initial: Task[] }) {
     setOpenId(id);
     if (people.length === 0) {
       try {
-        setPeople((await api.tasks.list({ limit: 1 })).people);
+        setPeople((await api.tasks.list({ limit: 1 }, team)).people);
       } catch {
         // the drawer still opens; the assignee list is just short
       }
       try {
-        const read = (await api.projects.list()).projects;
+        const read = (await api.projects.list(team)).projects;
         setProjects(read);
-        setMilestones((await api.milestones.list()).milestones);
+        setMilestones((await api.milestones.list(team)).milestones);
         // The Sprint row (W9); left out when the sprints cannot be read.
-        setSprints(await loadSprintBook(api, read));
+        setSprints(await loadSprintBook(api, read, team));
       } catch {
         // the Project and Milestone rows are then left out of the drawer
       }

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TeamView } from "@/components/app/team-view";
 import { ApiError } from "@/lib/api/client";
 import type { Team, TeamInviteResult, TeamInvitesCreated, TeamMembers } from "@/lib/api/types";
-import { teamBody } from "./helpers";
+import { teamBody, teamsBody } from "./helpers";
 
 // Fed the bodies captured from the running API (docs/fe-captures/team-w3/, cited in
 // docs/fe-integration-guide-team.md): Dan's view of a team of three with Ada's invitation pending
@@ -249,5 +249,42 @@ describe("the invite dialog", () => {
       expect(within(dialog).getByLabelText("Name (optional)")).toHaveProperty("value", "Kemi Adeyemi");
       expect(window.sessionStorage.getItem("beyric.invite-name")).toBeNull();
     });
+  });
+});
+
+
+// Multi-team (captures 53 and 54 of docs/fe-captures/teams/): Pat's personal space, and Platform team.
+describe("with several teams (the switch is on)", () => {
+  const personal = teamsBody<Team>("53-team-no-header.json");
+  const platform = teamsBody<Team>("54-team-header-x.json");
+  const solo: TeamMembers = { members: afterAda.members.slice(0, 1), invites: [] };
+
+  it("a personal space says so, offers no Invite people, and points to making a team", () => {
+    render(<TeamView initialTeam={personal} initialMembers={solo} multiTeam />);
+    expect(screen.queryByRole("button", { name: "Invite people" })).toBeNull();
+    expect(screen.getByText(/This is your personal space\./)).toBeTruthy();
+    expect(screen.getByRole("link", { name: "make a team" }).getAttribute("href")).toBe("/teams");
+  });
+
+  it("an ordinary team names itself in the subtitle and keeps Invite people", () => {
+    render(<TeamView initialTeam={platform} initialMembers={solo} multiTeam />);
+    expect(screen.getByText("People on Platform team can be assigned tasks from meetings.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Invite people" })).toBeTruthy();
+    expect(screen.queryByText(/personal space/)).toBeNull();
+  });
+
+  it("the team-wide share switch says that a person's own choice in Settings wins (only with the switch on)", () => {
+    const { unmount } = render(<TeamView initialTeam={platform} initialMembers={solo} multiTeam />);
+    expect(screen.getByText(/Someone who chose a team under Settings, Share my new meetings with, follows that choice instead\./)).toBeTruthy();
+    unmount();
+    render(<TeamView initialTeam={platform} initialMembers={solo} />);
+    expect(screen.queryByText(/Share my new meetings with/)).toBeNull();
+  });
+
+  it("with the switch off the team of one is exactly as before, personal or not", () => {
+    render(<TeamView initialTeam={personal} initialMembers={solo} />);
+    expect(screen.getByText("People on your team can be assigned tasks from meetings.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Invite people" })).toBeTruthy();
+    expect(screen.queryByText(/personal space/)).toBeNull();
   });
 });

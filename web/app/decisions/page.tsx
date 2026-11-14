@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app/shell";
 import { DecisionsView } from "@/components/app/decisions-view";
 import { ApiError } from "@/lib/api/client";
 import type { DecisionList } from "@/lib/api/types";
-import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireOwner, getShellTeams } from "@/lib/api/server";
 
 export const metadata: Metadata = { title: "Decisions", robots: { index: false, follow: false } };
 
@@ -23,7 +23,7 @@ export default async function DecisionsPage() {
       current="decisions"
       reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()}
-      unread={await getUnreadNotifications()} user={await getShellUser()}
+      unread={await getUnreadNotifications()} user={await getShellUser()} teams={await getShellTeams()}
       timeZone={await getTimeZone()}
     >
       <DecisionsView initial={initial} />

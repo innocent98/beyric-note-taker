@@ -54,6 +54,13 @@ p { margin: 0 0 var(--space-3); }
 .row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .row-wrap { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); }
 
+/* The team switcher (lead-designed, not in the designer's file; team-switcher.tsx): a labelled select above the
+   sidebar's links on desktop, in the slim top bar on phones. Built from `.select .select-sm` and `.nav-label`. */
+.team-switch-sidebar { padding: 0 var(--space-2) var(--space-4); }
+.team-switch-label { display: block; padding: 0 0 6px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.05em; color: var(--text-faint); text-transform: uppercase; }
+.team-switch-select { width: 100%; font-weight: 550; text-overflow: ellipsis; }
+.team-switch-topbar { display: none; }
+
 /* Drawer parts: not drawn on desktop. */
 .topbar, .drawer-scrim, .drawer-close { display: none; }
 
@@ -69,6 +76,9 @@ p { margin: 0 0 var(--space-3); }
     border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-3); cursor: pointer;
   }
   .topbar-menu:hover, .drawer-close:hover { background: var(--surface-hover); color: var(--text); }
+  /* The switcher moves from the drawer to the top bar, beside the logo, so a person can change team without opening the menu. */
+  .team-switch-sidebar { display: none; }
+  .team-switch-topbar { display: block; flex: 1; min-width: 0; max-width: 220px; margin-left: auto; }
   /* The sidebar becomes the drawer: out of the flow, off screen, and unreachable by keyboard while closed. */
   .sidebar {
     position: fixed; top: 0; bottom: 0; left: 0; z-index: 50; width: min(300px, 86vw); height: auto; overflow-y: auto;

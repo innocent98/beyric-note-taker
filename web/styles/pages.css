@@ -957,3 +957,11 @@
 .cal-up-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 12px; }
 .nr-reason { margin: 2px 0 0; font-size: var(--text-sm); color: var(--warning-text); }
 .nr-error { margin: 4px 0 0; font-size: var(--text-sm); color: var(--danger-text); }
+
+/* The Teams screen and the meeting page's team card (lead-designed, multi-team stage 3; teams-view.tsx,
+   meeting-team-card.tsx). Built from the list rows, badges, cards and fields; only spacing is new. */
+.teams-name { display: block; font-size: var(--text-base); font-weight: 550; overflow-wrap: anywhere; }
+.teams-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-top: 4px; }
+.mt-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3); }
+.mt-fields { display: flex; flex-direction: column; gap: var(--space-3); margin-top: var(--space-3); }
+.mt-note { margin: var(--space-3) 0 0; }

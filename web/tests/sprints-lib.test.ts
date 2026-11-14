@@ -109,7 +109,13 @@ describe("loadSprintBook", () => {
     const list = vi.fn(async (project?: number) => (project === 2 ? own : team));
     const result = await loadSprintBook({ sprints: { list } }, projects.map((p) => (p.id === 2 ? { ...p, sprint_length: "week14" as const } : p)));
     expect(result).toEqual({ team, own: { 2: own } });
-    expect(list.mock.calls).toEqual([[], [2]]);
+    expect(list.mock.calls).toEqual([[undefined, undefined], [2, undefined]]);
+  });
+
+  it("asks for the named team's sprints when one is given (the meeting page's drawer)", async () => {
+    const list = vi.fn(async (project?: number) => (project === 2 ? own : team));
+    await loadSprintBook({ sprints: { list } }, projects.map((p) => (p.id === 2 ? { ...p, sprint_length: "week14" as const } : p)), 4);
+    expect(list.mock.calls).toEqual([[undefined, 4], [2, 4]]);
   });
 
   it("asks only for the team's when no project has its own length", async () => {

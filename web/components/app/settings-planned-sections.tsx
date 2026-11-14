@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { AppLink } from "@/components/ui";
 import { SettingsSlack } from "@/components/app/settings-slack";
 import { SettingsSprintRows } from "@/components/app/settings-sprints";
 import { SettingsTracker } from "@/components/app/settings-tracker";
@@ -88,6 +89,7 @@ export function SettingsPlannedSections({
   team = null,
   reminderMail = null,
   sprints = null,
+  integrations = true,
 }: {
   tasks?: TasksSettings | null;
   slack?: SlackState | null;
@@ -95,9 +97,15 @@ export function SettingsPlannedSections({
   team?: Team | null;
   reminderMail?: ReminderPreferences | null;
   sprints?: SprintList | null;
+  // false for a personal space while multi-team is on: Slack and Linear belong to a team, so nothing can be
+  // connected there (the server refuses it: 409 `personal_team`). A row is then drawn only for an integration
+  // that is ALREADY connected, with Disconnect and a line saying why it cannot be added again.
+  integrations?: boolean;
 }) {
   // The Tasks card's rows that are still drawn off, named in its one "not available yet" line.
-  const pending = [...(linear ? [] : ["Sync with your project tool"]), ...(slack ? [] : ["Post tasks to Slack"])];
+  const pending = integrations
+    ? [...(linear ? [] : ["Sync with your project tool"]), ...(slack ? [] : ["Post tasks to Slack"])]
+    : [];
   return (
     <>
       <section className="card card-flush" aria-labelledby="set-sprints">
@@ -188,7 +196,9 @@ export function SettingsPlannedSections({
         </div>
           </>
         )}
-        {linear ? (
+        {!integrations ? (
+          linear?.connected ? <SettingsTracker initial={linear} personal /> : null
+        ) : linear ? (
           <SettingsTracker initial={linear} />
         ) : (
           <div className="pl-row pl-row-center">
@@ -206,7 +216,22 @@ export function SettingsPlannedSections({
             </div>
           </div>
         )}
-        {slack ? (
+        {!integrations ? (
+          <>
+            {slack?.connected ? <SettingsSlack initial={slack} personal /> : null}
+            {/* LEAD-DESIGNED (owner's request 2026-11-14): in a personal space the Connect controls are not drawn;
+                this one note takes their place and says why. */}
+            <div className="pl-row pl-row-last">
+              <div>
+                <div className="pl-row-title">Slack and Linear</div>
+                <div className="pl-row-sub">
+                  Slack and Linear work for teams. Make a team (it can be just you), then connect them there.{" "}
+                  <AppLink href="/teams">Make a team</AppLink>
+                </div>
+              </div>
+            </div>
+          </>
+        ) : slack ? (
           <SettingsSlack initial={slack} />
         ) : (
           <div className="pl-row pl-row-center pl-row-last">

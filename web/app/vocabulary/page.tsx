@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { AppShell } from "@/components/app/shell";
 import { VocabularyManager } from "@/components/app/vocabulary-manager";
-import { getReviewOpen, getTasksNew, getShellUser, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getShellUser, getUnreadNotifications, load, requireOwner, getShellTeams } from "@/lib/api/server";
 
 export const metadata: Metadata = { title: "Vocabulary", robots: { index: false, follow: false } };
 
@@ -10,7 +10,7 @@ export default async function VocabularyPage() {
   const terms = await load(api.vocabulary.list());
   return (
     <AppShell current="vocabulary" reviewOpen={await getReviewOpen()}
-      tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()}>
+      tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()} teams={await getShellTeams()}>
       <VocabularyManager initial={terms} />
     </AppShell>
   );

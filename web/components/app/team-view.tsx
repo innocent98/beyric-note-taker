@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { TeamInviteDialog } from "@/components/app/team-invite-dialog";
-import { Alert, Button, Icon, PageHead, Toast, Toggle } from "@/components/ui";
+import { Alert, AppLink, Button, Icon, PageHead, Toast, Toggle } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
@@ -28,9 +28,13 @@ const ROLE_LABEL: Record<TeamRole, string> = { owner: "Owner", admin: "Admin", m
 export function TeamView({
   initialTeam,
   initialMembers,
+  multiTeam = false,
 }: {
   initialTeam: Team | null;
   initialMembers: TeamMembers | null;
+  // The server's multi-team switch is on: the page names the team it is about, and a personal space
+  // (nobody is invited into it) says so instead of offering "Invite people". Off: exactly as before.
+  multiTeam?: boolean;
 }) {
   const [team, setTeam] = useState(initialTeam);
   const [list, setList] = useState(initialMembers);
@@ -97,6 +101,8 @@ export function TeamView({
     );
   }
 
+  const personal = multiTeam && team.is_personal;
+  const subtitle = multiTeam && !team.is_personal ? `People on ${team.name} can be assigned tasks from meetings.` : "People on your team can be assigned tasks from meetings.";
   const pending = list.invites.length;
   const count = `${plural(list.members.length, "member")}, ${pending} pending`;
 
@@ -120,8 +126,8 @@ export function TeamView({
 
   return (
     <div className="stack-lg tm">
-      <PageHead title="Team" subtitle="People on your team can be assigned tasks from meetings.">
-        {team.can_manage ? (
+      <PageHead title="Team" subtitle={subtitle}>
+        {team.can_manage && !personal ? (
           <Button
             type="button"
             size="md"
@@ -136,6 +142,12 @@ export function TeamView({
         ) : null}
       </PageHead>
       {error ? <Alert kind="error">{error}</Alert> : null}
+      {personal ? (
+        <Alert kind="info">
+          This is your personal space. Only you are in it, and nobody can be invited into it. To work with other people,{" "}
+          <AppLink href="/teams">make a team</AppLink>.
+        </Alert>
+      ) : null}
       <section className="tm-card" aria-label="Members">
         <div className="tm-card-head">
           <h2>Members</h2>
@@ -337,6 +349,7 @@ export function TeamView({
               <div className="pl-row-sub" id="tm-share-sub">
                 Meetings recorded by owners and admins are shared when their notes are ready. Members share their own
                 meetings from the meeting page. Meetings you shared before stay as they are.
+                {multiTeam ? " Someone who chose a team under Settings, Share my new meetings with, follows that choice instead." : ""}
               </div>
             </div>
             <Toggle

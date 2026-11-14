@@ -1,0 +1,25 @@
+{
+  "note": "Linear too: the key is not even checked for a personal space.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/integrations/linear/teams",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "api_key": "placeholder-not-a-real-key"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "personal_team",
+        "message": "Slack and Linear belong to a team. Your personal space has none; choose a team first."
+      }
+    }
+  }
+}
