@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useId } from "react";
-import { isTeamPage, withTeam, writeStoredTeam } from "@/lib/active-team";
+import { beginTeamSwitch, planSwitch, writeStoredTeam } from "@/lib/active-team";
 import type { TeamSummary } from "@/lib/api/types";
 import { useActiveTeam } from "@/components/app/use-active-team";
 
@@ -31,11 +31,12 @@ export function TeamSwitcher({ teams, variant }: { teams: TeamSummary[]; variant
   function choose(value: string) {
     const next = Number(value);
     if (!teams.some((t) => t.id === next)) return;
-    const remembered = next === defaultId ? null : next;
-    writeStoredTeam(remembered);
-    const query = search?.toString();
-    const here = `${pathname}${query ? `?${query}` : ""}`;
-    pageLoad.to(isTeamPage(pathname) ? withTeam(here, remembered) : here);
+    const { remember, href } = planSwitch({ pathname, query: search?.toString() ?? "", teamId: next, defaultId });
+    // The page on screen still names the old team until the new one loads: ActiveTeamSync must leave the
+    // choice alone meanwhile (lib/active-team.ts beginTeamSwitch).
+    beginTeamSwitch();
+    writeStoredTeam(remember);
+    pageLoad.to(href);
   }
 
   return (

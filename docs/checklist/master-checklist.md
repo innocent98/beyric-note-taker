@@ -710,6 +710,9 @@ Goal: one person has a permanent personal team and may belong to several teams; 
   - [x] Switching team is a full page load; `?team=` now also on `/`, `/decisions`, `/review`; `proxy.ts` hands the address's team to the server render
   - [x] Reported, not changed: Ask and search, Notifications, series, tasks with no header (SOP table)
   - [ ] CI green, Opus review, merge on his typed word, deploy; a look in a real browser with the server running
+- [x] **Fix: choosing the default team on a team page did not stick (2026-11-14, live report; branch `fix/team-switch-team-pages`, PR number added when known; frontend only; SOP `docs/sop/2026-11-14-team-switch-sticks.md`)**
+  - [x] Cause proven in a browser: `ActiveTeamSync` wrote the old team back 6 ms after the switcher forgot it (the leaving page still named the old team); `planSwitch` / `planSync` extracted, `beginTeamSwitch` guard, regression tests mount switcher and sync together
+  - [ ] CI green, merge on his typed word, deploy
 - [ ] **Stage 4: switch on**: `MULTI_TEAM_ENABLED=true` only after stage 3 is live
   - [ ] Prerequisite: privacy and terms wording for multi-team drafted (2026-11-14, PR on `feature/legal-wording-teams`, SOP `docs/sop/2026-11-14-legal-wording-teams.md`), **awaiting the owner's lawyer**; then merged and deployed. Lead-flagged mismatches (sole-owner team, "empty record", the move confirmation that is stage 3) are in the SOP
   - [ ] Prerequisite (stage-1 review): while the switch is off the one-personal-team rule drifts (a joiner's personal team is dissolved; the inviter of a team of one is left with none; an invitation made into a team of one while off may be unredeemable once on). Needs a second backfill so every live account has a personal team, and a plan for pending invitations (list, revoke and re-send from an ordinary team)

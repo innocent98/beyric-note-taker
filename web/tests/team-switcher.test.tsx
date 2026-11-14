@@ -28,6 +28,7 @@ function at(path: string, search = "") {
   window.history.replaceState(null, "", search ? `${path}?${search}` : path);
 }
 beforeEach(() => {
+  window.dispatchEvent(new Event("pageshow")); // a page that was leaving for a switch is on screen again
   nav.push.mockReset();
   nav.replace.mockReset();
   nav.refresh.mockReset();
@@ -225,5 +226,85 @@ describe("keeping the tab's team in step", () => {
     render(<ActiveTeamSync teams={teams} />);
     expect(screen.getByRole("status").textContent).toContain("no longer available to you");
     expect(window.location.search).toBe("");
+  });
+});
+
+// The live bug of 2026-11-14: the switcher and the sync are both on every page, and the page that is leaving
+// still has the OLD team in its address while the new page loads. jsdom cannot navigate, so `at()` keeps the old
+// address, exactly what the browser shows until the load commits. These tests mount BOTH, as the shell does;
+// the tests above mount one at a time and could not see it.
+describe("choosing a team while the sync is mounted", () => {
+  const both = (list = teams) => (
+    <>
+      <TeamSwitcher teams={list} variant="sidebar" />
+      <ActiveTeamSync teams={list} />
+    </>
+  );
+
+  it("choosing the default team from another team's page stays on the default team", () => {
+    at("/tasks", "team=4");
+    render(both());
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":4"); // the sync remembered the address's team
+    fireEvent.change(select(), { target: { value: "2" } });
+    expect(load).toHaveBeenCalledWith("/tasks");
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBeNull(); // not put back by the sync
+    expect(nav.replace).not.toHaveBeenCalled();
+    // ... and the page that loads (no ?team=, nothing remembered) is left as it is.
+    cleanup();
+    at("/tasks");
+    render(both());
+    expect(nav.replace).not.toHaveBeenCalled();
+    expect(select().value).toBe("2");
+  });
+
+  it.each(["/", "/tasks", "/decisions", "/review"])("%s: default team to another team, and back, sticks", (path) => {
+    at(path);
+    render(both());
+    fireEvent.change(select(), { target: { value: "4" } });
+    expect(load).toHaveBeenLastCalledWith(`${path}?team=4`);
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":4");
+    expect(nav.replace).not.toHaveBeenCalled(); // no second, soft transition racing the full load
+    cleanup();
+    window.dispatchEvent(new Event("pageshow"));
+    at(path, "team=4"); // the page that loaded
+    render(both());
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":4");
+    fireEvent.change(select(), { target: { value: "2" } });
+    expect(load).toHaveBeenLastCalledWith(path);
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBeNull();
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it("from one non-default team to another, the new choice is what stays remembered", () => {
+    at("/decisions", "team=4");
+    render(both());
+    fireEvent.change(select(), { target: { value: "5" } });
+    expect(load).toHaveBeenCalledWith("/decisions?team=5");
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":5");
+  });
+
+  it("a server refresh while the new page is loading (new `teams` array) does not undo the choice", () => {
+    at("/review", "team=5");
+    const view = render(both());
+    fireEvent.change(select(), { target: { value: "2" } });
+    view.rerender(both([...teams]));
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBeNull();
+    expect(nav.replace).not.toHaveBeenCalled();
+  });
+
+  it("the shell's one-ordinary-team shape (the ordinary team is the default): choosing the personal space, then the default again, sticks", () => {
+    const shape = teams.map((t) => ({ ...t, is_default: t.id === 4 })); // personal (2) + Platform team (4, the default) + Client Y (5)
+    at("/");
+    render(both(shape));
+    expect(select().value).toBe("4");
+    fireEvent.change(select(), { target: { value: "2" } });
+    expect(load).toHaveBeenLastCalledWith("/?team=2");
+    cleanup();
+    window.dispatchEvent(new Event("pageshow"));
+    at("/", "team=2");
+    render(both(shape));
+    fireEvent.change(select(), { target: { value: "4" } });
+    expect(load).toHaveBeenLastCalledWith("/");
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBeNull();
   });
 });

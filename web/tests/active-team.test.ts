@@ -5,6 +5,8 @@ import {
   isTeamPage,
   NOTICE_PARAM,
   parseTeamId,
+  planSwitch,
+  planSync,
   readStoredTeam,
   resetToDefaultTeam,
   RESET_KEY,
@@ -147,5 +149,50 @@ describe("resetToDefaultTeam", () => {
     resetToDefaultTeam();
     expect(readStoredTeam()).toBeNull();
     expect(target).toBe(`/tasks?x=1&${NOTICE_PARAM}=team-gone`);
+  });
+});
+
+// The two rules behind the switcher and the sync, run without a browser. Teams: 1 personal, 2 and 3 ordinary.
+describe("planSwitch: what choosing a team stores and loads", () => {
+  const base = { pathname: "/tasks", query: "", defaultId: 1 };
+  it("a non-default team is remembered and named in the address of a team page", () => {
+    expect(planSwitch({ ...base, teamId: 2 })).toEqual({ remember: 2, href: "/tasks?team=2" });
+    expect(planSwitch({ ...base, pathname: "/", teamId: 3 })).toEqual({ remember: 3, href: "/?team=3" });
+  });
+  it("the default team is remembered as nothing, and a team page loads with no ?team=", () => {
+    expect(planSwitch({ ...base, query: "team=2", teamId: 1 })).toEqual({ remember: null, href: "/tasks" });
+    // the default team is ANY team the server names default: here the ordinary team 2
+    expect(planSwitch({ pathname: "/", query: "team=1", teamId: 2, defaultId: 2 })).toEqual({ remember: null, href: "/" });
+  });
+  it("keeps the rest of the query, and a page that is not one team's loads as it is", () => {
+    expect(planSwitch({ ...base, pathname: "/settings", query: "calendar=connected&team=2", teamId: 3 }).href).toBe("/settings?calendar=connected&team=3");
+    expect(planSwitch({ ...base, pathname: "/ask", query: "q=1", teamId: 2 })).toEqual({ remember: 2, href: "/ask?q=1" });
+  });
+});
+
+describe("planSync: what a page does about the tab's team when it loads", () => {
+  const teams = [{ id: 1, is_default: true }, { id: 2 }, { id: 3 }];
+  const sync = (pathname: string, search: string, stored: number | null, list = teams) =>
+    planSync({ pathname, params: new URLSearchParams(search), teams: list, stored });
+  it("remembers the address's team, and nothing for the default team", () => {
+    expect(sync("/tasks", "team=2", null)).toEqual({ kind: "remember", teamId: 2 });
+    expect(sync("/tasks", "team=2", 2)).toEqual({ kind: "none" });
+    expect(sync("/tasks", "team=1", 2)).toEqual({ kind: "remember", teamId: null });
+  });
+  it("follows a remembered team on a team page opened without ?team=, but only there", () => {
+    expect(sync("/decisions", "", 3)).toEqual({ kind: "follow", href: "/decisions?team=3" });
+    expect(sync("/", "", 3)).toEqual({ kind: "follow", href: "/?team=3" });
+    expect(sync("/ask", "", 3)).toEqual({ kind: "none" });
+    expect(sync("/tasks", "", null)).toEqual({ kind: "none" }); // the default team: nothing to follow
+  });
+  it("the page a switch to the default team lands on (no ?team=, nothing remembered) stays on the default team", () => {
+    expect(sync("/review", "", null)).toEqual({ kind: "none" });
+  });
+  it("a remembered team that is gone is forgotten, and the server's notice is shown", () => {
+    expect(sync("/tasks", "", 9)).toEqual({ kind: "stale" });
+    expect(sync("/tasks", "notice=team-gone", null)).toEqual({ kind: "notice" });
+  });
+  it("an address naming a team that is not ours is left to the server (it redirects with the notice)", () => {
+    expect(sync("/tasks", "team=9", null)).toEqual({ kind: "none" });
   });
 });

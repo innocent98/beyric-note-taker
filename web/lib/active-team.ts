@@ -128,6 +128,65 @@ export function activeTeamForRequest(): number | null {
   return activeTeam() ?? shellDefaultTeam();
 }
 
+// ---- Choosing a team, and what a page does when it loads -------------------------------------------------------
+// Both are pure, so a test can run the real rules (components/app/team-switcher.tsx and active-team-sync.tsx
+// only carry the plan out).
+
+// What choosing `teamId` in the switcher does, from the page the person is on (`query` has no leading "?"):
+// `remember` is what this tab's storage must hold when the new page loads (null = nothing: the default team is
+// a link without `?team=`), `href` is the page to load. Choosing the default team on a team page loads the page
+// with no `?team=`, so storage MUST be empty by then: any team still remembered would be followed straight away
+// (planSync's "follow").
+export function planSwitch(args: { pathname: string; query: string; teamId: number; defaultId: number | null }): { remember: number | null; href: string } {
+  const remember = args.teamId === args.defaultId ? null : args.teamId;
+  const here = `${args.pathname}${args.query ? `?${args.query}` : ""}`;
+  return { remember, href: isTeamPage(args.pathname) ? withTeam(here, remember) : here };
+}
+
+// While a switch is loading the new page, the page still on screen must not touch the team: its address
+// still names the OLD team, and "the address says X, storage says Y, so store X" would undo the choice the
+// person just made (live bug 2026-11-14: choosing the default team went back to the old one).
+let leaving = false;
+export function beginTeamSwitch(): void {
+  leaving = true;
+  // Coming back to this page from the browser's back-forward cache: it is the page on screen again.
+  if (typeof window !== "undefined") window.addEventListener("pageshow", () => void (leaving = false), { once: true });
+}
+export function isLeavingForTeamSwitch(): boolean {
+  return leaving;
+}
+
+export type SyncStep =
+  | { kind: "none" }
+  | { kind: "notice" } // the server sent `?notice=team-gone`: forget the team, say so, clean the address
+  | { kind: "stale" } // the remembered team is not one of the person's: forget it, say so
+  | { kind: "remember"; teamId: number | null } // the address names a team of theirs: this tab's storage follows it (null = the default)
+  | { kind: "follow"; href: string }; // a team page opened with no `?team=` while a team is remembered: same page on that team
+
+// What the page that just loaded does about the tab's team. `stored` is the remembered team (null = none).
+export function planSync(args: {
+  pathname: string;
+  params: URLSearchParams | null;
+  teams: { id: number; is_default?: boolean }[];
+  stored: number | null;
+}): SyncStep {
+  const { pathname, params, teams, stored } = args;
+  const ours = (id: number | null) => id !== null && teams.some((t) => t.id === id);
+  if (params?.get(NOTICE_PARAM) === TEAM_GONE_NOTICE) return { kind: "notice" };
+  if (stored !== null && !ours(stored)) return { kind: "stale" };
+  const fromUrl = isTeamPage(pathname) ? parseTeamId(params?.get(TEAM_PARAM)) : null;
+  if (fromUrl !== null && ours(fromUrl)) {
+    const defaultId = teams.find((t) => t.is_default)?.id ?? teams[0]?.id ?? null;
+    const remembered = fromUrl === defaultId ? null : fromUrl;
+    return remembered !== stored ? { kind: "remember", teamId: remembered } : { kind: "none" };
+  }
+  if (isTeamPage(pathname) && params !== null && params.get(TEAM_PARAM) === null && stored !== null) {
+    const query = params.toString();
+    return { kind: "follow", href: withTeam(`${pathname}${query ? `?${query}` : ""}`, stored) };
+  }
+  return { kind: "none" };
+}
+
 // The team the API told us is not ours (404 "No such team."): forget it and go to the same page on
 // the default team, with a notice. A full load, so the server renders it fresh.
 //
