@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app import auth, services, tasks, workspace
+from app import auth, services, tasks, team_admin, workspace
 from app.api_schemas import (
     DecisionCounts,
     DecisionGroup,
@@ -141,15 +141,21 @@ def list_decisions(
         workspace.DECISIONS_DEFAULT_MEETINGS, ge=1, le=workspace.DECISIONS_MAX_MEETINGS
     ),
     before_id: int | None = Query(None, ge=1, le=services.MAX_ID),
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> DecisionList:
-    """Everything the caller's meetings decided, newest meeting first, grouped by meeting. `q`
+    """Everything the active team's meetings decided, newest meeting first, grouped by meeting.
+    The team is the `X-Team-Id` header (404 `not_found` "No such team." for a team the caller is
+    not in), else their default team while multi-team is on; a decision belongs to its meeting's
+    team (an ordinary team: meetings shared or moved to it; the personal team: the caller's own that
+    no team has). `q`
     matches a decision's words or its meeting's title (a title match shows all of that meeting's
     decisions). `status` keeps one tab's decisions. `limit` counts meetings, not decisions. For
     the next page pass `before_id` = `next_before_id`. A decision the caller hid is not listed.
     `counts` and `due_this_week` are over the whole log, whatever `q` and `status` say."""
-    groups, more = workspace.list_decisions(session, user, q, limit, before_id, status)
+    active = team_admin.active_team(session, user, team_id)
+    groups, more = workspace.list_decisions(session, user, q, limit, before_id, status, active)
     flat = [(decision, meeting) for meeting, decisions in groups for decision in decisions]
     shown = iter(_present_decisions(session, user, flat))
     return DecisionList(
@@ -159,8 +165,8 @@ def list_decisions(
         ],
         has_more=more,
         next_before_id=groups[-1][0].id if more else None,
-        counts=DecisionCounts(**workspace.decision_counts(session, user)),
-        due_this_week=workspace.due_this_week(session, user),
+        counts=DecisionCounts(**workspace.decision_counts(session, user, active)),
+        due_this_week=workspace.due_this_week(session, user, active=active),
     )
 
 
@@ -232,15 +238,21 @@ def hide_decision(
 @router.get("/review", tags=["review"])
 def list_review(
     state: Literal["open", "checked"] = "open",
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> ReviewList:
-    """The caller's "Please check" items from their meetings: `state=open` (default) or
-    `checked`. Newest meeting first, in the order of the notes."""
-    rows, truncated = workspace.list_review(session, user, checked=state == "checked")
+    """The caller's "Please check" items from the active team's meetings: `state=open` (default) or
+    `checked`. Newest meeting first, in the order of the notes. The team is the `X-Team-Id` header
+    (404 `not_found` "No such team." for a team the caller is not in), else their default team while
+    multi-team is on; `open_count` counts the same team's items."""
+    active = team_admin.active_team(session, user, team_id)
+    rows, truncated = workspace.list_review(
+        session, user, checked=state == "checked", active=active
+    )
     return ReviewList(
         items=[_item(item, meeting) for item, meeting in rows],
-        open_count=workspace.open_review_count(session, user),
+        open_count=workspace.open_review_count(session, user, active),
         truncated=truncated,
     )
 

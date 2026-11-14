@@ -42,6 +42,7 @@ from app import (
     notifications,
     services,
     tasks,
+    team_admin,
     teams,
     translation,
     usage,
@@ -173,7 +174,7 @@ def install_errors(app: FastAPI) -> None:
 # ---- session ----
 
 
-def _session_state(request: Request, db: Session) -> SessionState:
+def _session_state(request: Request, db: Session, team_id: int | None = None) -> SessionState:
     current, user = request.state.session, request.state.user
     if user is None:
         return SessionState(
@@ -186,6 +187,7 @@ def _session_state(request: Request, db: Session) -> SessionState:
             multi_team=teams.multi_team_enabled(),
         )
     settings = request.app.state.settings
+    active = team_admin.active_team_or_default(db, user, team_id)
     used = usage.hours_used(db, user, datetime.now(UTC), settings.max_poll_hours * 3600)
     return SessionState(
         authenticated=True,
@@ -203,21 +205,29 @@ def _session_state(request: Request, db: Session) -> SessionState:
         usage=UsageOut(used_seconds=used, cap_seconds=usage.effective_cap(db, user)),
         unread_notifications=notifications.unread_count(db, user),
         badges=BadgesOut(
-            review_open=workspace.open_review_count(db, user),
-            tasks_new=tasks.new_count(db, user),
+            review_open=workspace.open_review_count(db, user, active),
+            tasks_new=tasks.new_count(db, user, active.id if active else None),
         ),
         multi_team=teams.multi_team_enabled(),
     )
 
 
 @router.get("/session", tags=["session"])
-def read_session(request: Request, session: Session = Depends(get_session)) -> SessionState:
+def read_session(
+    request: Request,
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+) -> SessionState:
     """Whether the cookie is a logged-in session, plus the CSRF token to send on writes.
 
     Public. Call it first: it also gives a logged-out visitor a cookie to log in with. Logged in,
     it names the user and reports their recorded hours (`usage`).
+
+    The `badges` count one team's items: the `X-Team-Id` header, else the person's default team
+    (with multi-team off and no header: everything they can see, as before). A team the caller is
+    not in is NOT an error here (this call is every page's first): it counts the default team.
     """
-    return _session_state(request, session)
+    return _session_state(request, session, team_id)
 
 
 @router.post(
@@ -415,11 +425,19 @@ def list_meetings(
     from_day: str | None = Query(None, alias="from"),
     to_day: str | None = Query(None, alias="to"),
     tz: str | None = Query(None),
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MeetingList:
-    """The caller's meetings, plus any shared with their team, newest first. For the next page
-    pass `before_id` = `next_before_id`.
+    """The active team's meetings, newest first. For the next page pass `before_id` =
+    `next_before_id`.
+
+    The team is the `X-Team-Id` header (404 `not_found` "No such team." for a team the caller is not
+    in), else their default team while multi-team is on. An ordinary team lists the meetings shared
+    to it or moved to it, whoever recorded them; the personal team lists only the meetings the
+    caller recorded that are neither shared nor moved. The list only narrows what the caller may
+    read: a meeting opened by its link opens whatever team is active. With multi-team off and no
+    header, the caller's meetings plus any shared with their team, as before.
 
     `from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar
     days, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),
@@ -436,7 +454,10 @@ def list_meetings(
     stored = session.scalar(select(UserSettings.time_zone).where(UserSettings.user_id == user.id))
     zone = services.pick_zone(stored, tz)
     created_from, created_before = services.day_range_utc(zone, first, last)
-    rows = services.list_meetings(session, user, limit + 1, before_id, created_from, created_before)
+    active = team_admin.active_team(session, user, team_id)
+    rows = services.list_meetings(
+        session, user, limit + 1, before_id, created_from, created_before, active
+    )
     page = rows[:limit]
     names = services.template_names(session, page)
     counts = tasks.counts_for_meetings(session, user, [m.id for m in page])

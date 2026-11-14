@@ -98,12 +98,15 @@ def test_search_finds_a_decision_shared_to_x_for_a_member_of_x_and_for_nobody_on
     add_decision(session, world.in_z, "Freeze the ZULUPRICE")
     pat, quinn = sign_in(app, PAT), sign_in(app, QUINN)
     for word, expected in (("XRAYPRICE", [world.in_x.id]), ("PRIVPRICE", []), ("ZULUPRICE", [])):
-        found = pat.get(f"/api/decisions?q={word}").json()["groups"]
+        as_x = {"X-Team-Id": str(world.x.id)}  # the log is the active team's list
+        found = pat.client.get(f"/api/decisions?q={word}", headers=as_x).json()["groups"]
         assert [g["meeting"]["id"] for g in found] == expected, word
         assert quinn.get(f"/api/decisions?q={word}").json()["groups"] == [], word
     world.in_x.shared_team_id = None
     session.commit()
-    assert pat.get("/api/decisions?q=XRAYPRICE").json()["groups"] == []  # unsharing hides it again
+    as_x = {"X-Team-Id": str(world.x.id)}
+    found = pat.client.get("/api/decisions?q=XRAYPRICE", headers=as_x).json()["groups"]
+    assert found == []  # unsharing hides it again
 
 
 # ---- the series page, repeat topics and the suggested agenda ----

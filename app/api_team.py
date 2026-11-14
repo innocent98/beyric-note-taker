@@ -114,11 +114,18 @@ def update_team(
     and/or set the reminders before recurring meetings: `reminders_on` and `reminder_timing`.
     Changing a sprint setting redraws the open sprints. The default applies,
     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
-    member's meetings are never shared by it. 403 `team_forbidden`."""
+    member's meetings are never shared by it. 403 `team_forbidden`. A person's own personal team
+    keeps its name while multi-team is on: 409 `personal_team` for a `name` on it."""
     me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     team = session.get(Team, me.team_id)
     if body.name is not None:
+        if teams.multi_team_enabled() and teams.is_personal_of(team, user.id):
+            raise Refused(
+                409,
+                "personal_team",
+                "Your personal space keeps its name. Make a team to name it yourself.",
+            )
         name = titles.clean_title(body.name, 100)
         if not name:
             raise Refused(422, "invalid_name", "Give the team a name.")

@@ -186,7 +186,11 @@ def test_the_person_in_two_teams_reads_x_and_never_changes_it_or_reads_the_priva
     for method, path in sorted(READS | OWNER_ONLY):
         error_of(call(pat, method, path, world.private), 404, "not_found")
         error_of(call(pat, method, path, world.in_z), 404, "not_found")
-    assert [m["id"] for m in pat.get("/api/meetings").json()["meetings"]] == [world.in_x.id]
+    # The list is the active team's (tests/test_team_scoped_lists.py): X is where Ada's meeting is.
+    as_x = {"X-Team-Id": str(world.x.id)}
+    assert [m["id"] for m in pat.client.get("/api/meetings", headers=as_x).json()["meetings"]] == [
+        world.in_x.id
+    ]
 
 
 def test_unsharing_closes_every_read_route_for_the_person_in_two_teams(app, session, world):
@@ -233,7 +237,8 @@ def test_decisions_open_questions_and_tasks_follow_the_meeting_never_the_team_al
     assert series.question_for(session, world.quinn, question.id) is None
     assert series.question_for(session, world.pat, question.id) is not None
 
-    groups = pat.get("/api/decisions").json()["groups"]
+    as_x = {"X-Team-Id": str(world.x.id)}  # the log is the active team's list
+    groups = pat.client.get("/api/decisions", headers=as_x).json()["groups"]
     assert [g["meeting"]["id"] for g in groups] == [world.in_x.id]
     assert [t["id"] for t in pat.get("/api/tasks").json()["tasks"]] == [in_x.id]
     assert pat.get(f"/api/tasks/{in_x.id}").status_code == 200
