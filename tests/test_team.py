@@ -315,6 +315,7 @@ def test_a_new_person_signing_in_with_google_joins_the_team_without_a_token(
         session,
         Identity(sub="g-ada", email=NEW, name="Ada Lovelace"),
         accepted_terms=True,
+        accepted_recording=True,
         now=now(),
     )
     assert outcome.user is not None and outcome.error is None
