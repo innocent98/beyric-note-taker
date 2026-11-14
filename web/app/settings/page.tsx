@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/shell";
 import { EmailSettingsSection } from "@/components/app/email-settings-section";
+import { SettingsAutoShare } from "@/components/app/settings-auto-share";
 import { SettingsCalendar } from "@/components/app/settings-calendar";
 import { SettingsLanguage } from "@/components/app/settings-language";
 import { SettingsTimeZone } from "@/components/app/settings-time-zone";
@@ -52,6 +53,8 @@ export default async function SettingsPage({
   const reminderMail = await api.settings.reminders.get().catch(() => null);
   const linear = await api.integrations.linear.get().catch(() => null);
   // Slack and Linear belong to a team: a personal space has none, and the server refuses them there.
+  // Per person, only while the switch is on: the team this person's new meetings are shared to (null: none).
+  const autoShare = teams ? await api.settings.autoShare.get().catch(() => null) : null;
   const noIntegrations = teams !== null && team?.is_personal === true;
   const [email, language, timeZone] = await Promise.all([
     load(api.settings.email.get()),
@@ -65,6 +68,7 @@ export default async function SettingsPage({
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
         <SettingsCalendar initial={calendar} notice={calendarNotice(params)} templates={templates} />
         <SettingsPlannedSections tasks={tasksSettings} slack={slack} linear={linear} integrations={!noIntegrations} team={team} reminderMail={reminderMail} sprints={sprints} />
+        {teams && autoShare ? <SettingsAutoShare initial={autoShare.team_id} teams={teams.teams} /> : null}
         <SettingsTimeZone initial={timeZone.time_zone} />
         <SettingsLanguage initial={language.default_language} />
         <EmailSettingsSection email={email} />

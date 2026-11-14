@@ -119,6 +119,7 @@ export function TeamsView({ initial }: { initial: TeamList | null }) {
         )}
       </Card>
       <Card title="Make a team">
+        <p className="meta">A team can be just you. Teams can share meetings and connect Slack and Linear.</p>
         <form
           className="stack-sm"
           onSubmit={(event) => {

@@ -68,6 +68,7 @@ const myTeams = multiTeam
     ]
   : [];
 const MAX_OWNED = 3;
+let autoShareTeam = null;
 const teamsOut = () => ({
   teams: myTeams.map((t) => ({ ...t })),
   can_create_more: Math.max(0, MAX_OWNED - myTeams.filter((t) => t.role === "owner" && !t.is_personal).length),
@@ -823,6 +824,18 @@ const server = http.createServer(async (req, res) => {
     }
     if (typeof data?.resolved === "boolean") item.resolved = data.resolved;
     return json(res, 200, item);
+  }
+  // Multi-team: the per-person team new meetings are shared to (guide section 12, captures 66 to 70).
+  if (multiTeam && path === "/api/settings/auto-share") {
+    if (method === "GET") return json(res, 200, { team_id: autoShareTeam });
+    if (method === "PUT") {
+      const wanted = data?.team_id ?? null;
+      const chosen = myTeams.find((t) => t.id === wanted);
+      if (wanted !== null && !chosen) return json(res, 404, noSuchTeam);
+      if (chosen?.is_personal) return json(res, 409, { error: { code: "personal_team", message: "Choose a team. Your personal space is only yours." } });
+      autoShareTeam = wanted;
+      return json(res, 200, { team_id: autoShareTeam });
+    }
   }
   // Multi-team: the person's teams, and making one.
   if (multiTeam && path === "/api/teams" && method === "GET") return json(res, 200, teamsOut());

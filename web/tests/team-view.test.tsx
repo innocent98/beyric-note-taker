@@ -273,6 +273,14 @@ describe("with several teams (the switch is on)", () => {
     expect(screen.queryByText(/personal space/)).toBeNull();
   });
 
+  it("the team-wide share switch says that a person's own choice in Settings wins (only with the switch on)", () => {
+    const { unmount } = render(<TeamView initialTeam={platform} initialMembers={solo} multiTeam />);
+    expect(screen.getByText(/Someone who chose a team under Settings, Share my new meetings with, follows that choice instead\./)).toBeTruthy();
+    unmount();
+    render(<TeamView initialTeam={platform} initialMembers={solo} />);
+    expect(screen.queryByText(/Share my new meetings with/)).toBeNull();
+  });
+
   it("with the switch off the team of one is exactly as before, personal or not", () => {
     render(<TeamView initialTeam={personal} initialMembers={solo} />);
     expect(screen.getByText("People on your team can be assigned tasks from meetings.")).toBeTruthy();

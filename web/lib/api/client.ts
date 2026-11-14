@@ -1,5 +1,6 @@
 import type {
   AgendaItem,
+  AutoShare,
   AskAnswer,
   AskScope,
   AgendaSent,
@@ -485,6 +486,13 @@ export function createApi(options: ApiOptions = {}) {
     },
     // Whether the notes-ready email is on (GET and PUT /api/settings/email).
     settings: {
+      // The one team a person's new meetings are shared to when their notes are first written (guide section 12):
+      // `null` is "no team". 409 `personal_team`, 404 "No such team.", 409 `multi_team_disabled`.
+      autoShare: {
+        get: () => request<AutoShare>("GET", "/api/settings/auto-share"),
+        set: (team_id: number | null) =>
+          request<AutoShare>("PUT", "/api/settings/auto-share", { body: { team_id }, write: true }),
+      },
       // The language meetings open in when a translation exists (GET and PUT /api/settings/language).
       language: {
         get: () => request<LanguagePreferences>("GET", "/api/settings/language"),

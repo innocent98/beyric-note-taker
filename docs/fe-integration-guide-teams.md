@@ -1041,9 +1041,18 @@ For the next person to touch the screens. Every sentence is a rule the code and 
 - **UX consequences surfaced (section 7 and 13):** the stop-sharing and move-back texts say that tasks go back
   to the recorder and teammates' assignments are removed; the Move and move-back texts say that Slack posts
   already made are not recalled.
+- **The auto-share team has a screen** (Settings, "Share my new meetings with", only while the switch is on): a select of
+  "No team (keep private)" and the person's non-personal teams, saved on change (`PUT /api/settings/auto-share`, captures 66 to
+  70), confirmed with a toast, the refusals shown as in section 12. A person's choice is used for their own meetings **instead of**
+  the team-wide "Share new meetings with the team" switch (`teams.apply_share_default`: a chosen team wins, whatever the role
+  in it); with "No team" the team-wide switch applies as before to owners and admins. Both screens say so in one line.
+- **A personal space says why it has no Slack or Linear:** "Slack and Linear work for teams. Make a team (it can be just you),
+  then connect them there." with a link to the Teams screen. The Teams screen says: "A team can be just you. Teams can share
+  meetings and connect Slack and Linear."
 - **Lead-designed, not in the designer's file** (marked in the code, the SOP and the parity report so the
   designer can review): the team switcher, the Teams screen, the meeting page's team card and its two
-  confirmation dialogs, the personal-space notice on the Team screen.
+  confirmation dialogs, the personal-space notice on the Team screen, the Settings auto-share card, the personal-space
+  Slack and Linear note.
 
 ## 17. Verification table
 

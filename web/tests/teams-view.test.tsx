@@ -81,6 +81,11 @@ describe("making a team", () => {
   const name = () => screen.getByLabelText("Team name") as HTMLInputElement;
   const submit = () => screen.getByRole("button", { name: "Make team" });
 
+  it("says in one line what a team is for, near the form", () => {
+    render(<TeamsView initial={list} />);
+    expect(screen.getByText("A team can be just you. Teams can share meetings and connect Slack and Linear.")).toBeTruthy();
+  });
+
   it("needs a name, says how many more can be made, and sends the name", async () => {
     mocks.create.mockResolvedValue(created);
     mocks.list.mockResolvedValue({ ...list, teams: [...list.teams, created], can_create_more: 1 });

@@ -349,6 +349,7 @@ export function TeamView({
               <div className="pl-row-sub" id="tm-share-sub">
                 Meetings recorded by owners and admins are shared when their notes are ready. Members share their own
                 meetings from the meeting page. Meetings you shared before stay as they are.
+                {multiTeam ? " Someone who chose a team under Settings, Share my new meetings with, follows that choice instead." : ""}
               </div>
             </div>
             <Toggle

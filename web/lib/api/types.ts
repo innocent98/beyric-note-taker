@@ -61,6 +61,7 @@ export type SprintClosed = Schemas["SprintClosed"];
 export type SprintLength = SprintList["sprint_length"];
 
 export type Team = Schemas["TeamOut"];
+export type AutoShare = Schemas["AutoShareOut"];
 export type TeamSummary = Schemas["TeamSummary"];
 export type TeamList = Schemas["TeamList"];
 export type TeamRole = Team["my_role"];

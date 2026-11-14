@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
   teamOverride: {} as Record<string, unknown>,
   slackOn: false,
   linearOn: false,
+  autoShare: null as number | null,
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
@@ -49,6 +50,7 @@ vi.mock("@/lib/api/server", () => {
         timeZone: { get: async () => ({ time_zone: "UTC", is_set: false }) },
         tasks: { get: async () => ({ auto_create_tasks: true, email_assignees: true }) },
         reminders: { get: async () => ({ notify_reminders: true }) },
+        autoShare: { get: async () => ({ team_id: state.autoShare }) },
       },
       integrations: {
         linear: {
@@ -237,6 +239,7 @@ describe("Slack and Linear belong to a team (multi-team)", () => {
     state.teamOverride = {};
     state.slackOn = false;
     state.linearOn = false;
+    state.autoShare = null;
   });
 
   it("a personal space gets neither the Slack nor the Linear row, and no 'not available yet' stand-ins", async () => {
@@ -260,6 +263,21 @@ describe("Slack and Linear belong to a team (multi-team)", () => {
     expect(html).not.toContain("Connect Slack");
   });
 
+  it("a personal space gets one plain note in their place, with a link to make a team", async () => {
+    withTeams({ is_personal: true });
+    const html = await render();
+    expect(html).toContain("Slack and Linear work for teams. Make a team (it can be just you), then connect them there.");
+    expect(html).toMatch(/<a [^>]*href="\/teams"[^>]*>Make a team<\/a>/);
+    expect(html.match(/Slack and Linear work for teams/g)).toHaveLength(1);
+  });
+
+  it("an ordinary team, and a server with the switch off, show no such note", async () => {
+    withTeams({ is_personal: false });
+    expect(await render()).not.toContain("Slack and Linear work for teams");
+    withTeams({ is_personal: true }, false);
+    expect(await render()).not.toContain("Slack and Linear work for teams");
+  });
+
   it("an ordinary team keeps them", async () => {
     withTeams({ is_personal: false });
     const html = await render();
@@ -272,5 +290,27 @@ describe("Slack and Linear belong to a team (multi-team)", () => {
     const html = await render();
     expect(html).toContain("Post tasks to Slack");
     expect(html).toContain("Sync with your project tool");
+  });
+});
+
+describe("Share my new meetings with (multi-team)", () => {
+  const teams = [
+    { id: 1, name: "My team", role: "owner", member_count: 1, is_personal: true, is_default: true, can_manage: true },
+    { id: 4, name: "Platform team", role: "owner", member_count: 1, is_personal: false, is_default: false, can_manage: true },
+  ];
+  afterEach(() => {
+    state.teams = null;
+    state.autoShare = null;
+  });
+
+  it("is drawn only while the switch is on, with the person's choice selected", async () => {
+    state.answer = async () => connected;
+    state.teams = { teams };
+    state.autoShare = 4;
+    const html = await render();
+    expect(html).toContain("Share my new meetings with");
+    expect(html).toMatch(/<option value="4" selected="">Platform team<\/option>/);
+    state.teams = null;
+    expect(await render()).not.toContain("Share my new meetings with");
   });
 });

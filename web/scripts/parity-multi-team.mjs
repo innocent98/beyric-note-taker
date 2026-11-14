@@ -53,8 +53,19 @@ const STATES = {
   "team-personal": go("/team?team=1"),
   "team-ordinary": go("/team?team=2"),
   "teams-list": go("/teams"),
-  "settings-personal": go("/settings?team=1"),
+  // The personal space: no Connect for Slack or Linear, one note in their place (scrolled into view).
+  "settings-personal": async (page) => {
+    await go("/settings?team=1")(page);
+    await page.getByText("Slack and Linear work for teams.").evaluate((el) => el.scrollIntoView({ block: "center" }));
+  },
   "settings-ordinary": go("/settings?team=2"),
+  // "Share my new meetings with" (per person), chosen: Platform... the mock's Product team.
+  "settings-auto-share": async (page) => {
+    await page.request.put(`${NEXT}/api/settings/auto-share`, { data: { team_id: 2 }, headers: { "X-CSRF-Token": await csrf(page) } });
+    await go("/settings?team=2")(page);
+    await page.locator("#set-auto-share").scrollIntoViewIfNeeded();
+    await page.locator("#set-auto-share").evaluate((el) => el.scrollIntoView({ block: "center" }));
+  },
   "meeting-private": async (page) => {
     await go(`/meetings/${await readyMeeting(page)}`)(page);
   },
