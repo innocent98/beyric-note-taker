@@ -1,5 +1,5 @@
 {
-  "note": "`label.tld` with a TLD from the short list in `app/titles.py` counts as a web address.",
+  "note": "`label.tld` with a TLD from the short list in `app/titles.py` is a web address.",
   "client": "signed-in user",
   "request": {
     "method": "PUT",

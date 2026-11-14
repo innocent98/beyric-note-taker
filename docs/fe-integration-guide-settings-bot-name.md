@@ -15,15 +15,17 @@ A person can choose the name people see when their note taker joins their meetin
   "bot_name": null,
   "bot_name_default": "Beyric Meeting Support",
   "warning": null,
-  "bot_name_applies_when_signed_in": false
+  "bot_name_applies_when_signed_in": false,
+  "meet_account_name": null
 }
 ```
 
-After a save the same four fields come back with `bot_name` set (06 is read after a save; 17 is read after the refusals and still holds the previous good value).
+After a save the same five fields come back with `bot_name` set (06 is read after a save; 17 is read after the refusals and still holds the previous good value).
 
 - `bot_name` is **`null` when none is set (present, never absent)**. `bot_name_default` is read from the server (`SKRIBBY_BOT_NAME` while Skribby is the provider): use it for the placeholder and the help text. Never hard-code it.
 - `warning` is `null`, or the soft warning (below). Present on every answer.
-- `bot_name_applies_when_signed_in` is the server's switch `BOT_NAME_APPLIES_WHEN_SIGNED_IN`, **read only**: `false` today. While it is `false` the card shows "On Google Meet this name may not show yet; we are still checking." under the help text; when it is `true` that sentence is not drawn.
+- `bot_name_applies_when_signed_in` is the server's switch `BOT_NAME_APPLIES_WHEN_SIGNED_IN`, **read only**: `false` (live evidence 2026-11-14: Skribby ignores the custom name for the signed-in Meet bot).
+- `meet_account_name` is the Google account's own name that the signed-in Meet bot always shows (`SKRIBBY_ACCOUNT_NAME`), or `null` when the page should say nothing about Meet's name (no signed-in account, no account name set, or the switch above is `true`) [31 has a name, 32 and 04 have `null`]. When it is a string the card shows under the help text: "On Google Meet the note taker always shows its own name, “<meet_account_name>”. Your name shows on Zoom and Teams."; when `null`, nothing.
 - Not signed in: 401 `{"error":{"code":"not_authenticated","message":"Log in first."}}` [03].
 - Sending `bot_name_applies_when_signed_in` (or any unknown field) in a PUT is a 422 `validation_error`: the flag is read only (unit test, not captured).
 
@@ -36,7 +38,8 @@ Request `{ "bot_name": "  Alex   from  Product " }` -> response (the stored valu
   "bot_name": "Alex from Product",
   "bot_name_default": "Beyric Meeting Support",
   "warning": null,
-  "bot_name_applies_when_signed_in": false
+  "bot_name_applies_when_signed_in": false,
+  "meet_account_name": null
 }
 ```
 
@@ -67,9 +70,9 @@ A refused write changes nothing [17].
 
 ## 4. UX consequences the page must surface
 
-- Under the help text, **while `bot_name_applies_when_signed_in` is `false`**, one plain sentence: "On Google Meet this name may not show yet; we are still checking." (added after review, lead-designed).
+- Under the help text, **when `meet_account_name` is a string**, one plain sentence: "On Google Meet the note taker always shows its own name, “<meet_account_name>”. Your name shows on Zoom and Teams." (lead-designed, true by live evidence).
 - The help text is the owner's approved wording: "This is the name people see when the note taker joins your meetings. Leave it empty to use “<default>”. Choose a name your attendees will recognise as your notes taker, such as “Alex from Product”. Don't use another person's name, and don't hide that it records. Google Meet and Zoom may refuse bots whose names look like recorders." The default in it is `bot_name_default`.
-- **On Google Meet the name may not show.** The bot there is signed in as a shared Google account, and it is unproven whether Skribby shows the custom name for a signed-in bot. Until the live check is done, the app's "Waiting to be let in. Admit '...' in the meeting" line (the `status_text` of `GET /api/meetings/{id}`) names the **account's own name** on a signed-in Meet bot, not the custom one. On Zoom and Teams it names the custom name. Do not add copy that promises the custom name on Meet.
+- **On Google Meet the custom name does not show.** The bot there is signed in as a shared Google account and always shows that account's own name (live evidence 2026-11-14, a real Meet call: waiting list, participant list and chat sender). The app's "Waiting to be let in. Admit '...' in the meeting" line (the `status_text` of `GET /api/meetings/{id}`) names that account name on a signed-in Meet bot when the server's `SKRIBBY_ACCOUNT_NAME` is set. On Zoom and Teams it names the custom name (guest bots; not yet seen live). Do not add copy that promises the custom name on Meet.
 - A change applies to the **next** meeting. A meeting already sent keeps its name.
 
 ## 5. What the meeting answer shows (the "Admit" line)
@@ -89,7 +92,28 @@ The capture server has no signed-in account, so the signed-in Meet row of the ta
 
 [25] records the bodies a stand-in Skribby received from the real app and client: `{"service": "gmeet", "bot_name": "Alex from Product", ...}`, then zoom with the same name, then gmeet with `"Beyric Meeting Support"` after clearing. [26] is the stored `meetings.bot_name` of the three.
 
-## 7. Verification table
+## 7. "Your name" (Settings, `users.name`)
+
+The display name shown to teammates and said by the note taker in the meeting chat ("Hi, I'm ... Ada Example added me ..."); without one the chat says "The host". Lead-designed card, label "Your name", help text "This is the name shown to your teammates and in the message the note taker posts when it joins your meetings."
+
+### `GET /api/settings/name` -> 200 [33, 38]
+
+`{ "name": null }` for an account that has none (the capture's admin account, made by the migration); `{ "name": "Ada Example" }` after a save. `name` is present and `null`, never absent. `GET /api/session` carries the same name in `user.name` [39].
+
+### `PUT /api/settings/name` -> 200 [37]
+
+Request `{ "name": "  Ada   Example\u202e " }` (the last character is a direction override) -> `{ "name": "Ada Example" }`: trimmed, inner whitespace collapsed, control, direction and invisible characters **removed** (not refused). 1 to 100 characters; **a name cannot be emptied**.
+
+| Case | Status | Body (exact) | Capture |
+|---|---|---|---|
+| Empty, spaces only, or nothing visible left after cleaning | 422 | `{"error":{"code":"name_invalid","message":"Enter your name."}}` | 34 |
+| 101 characters or more (counted after whitespace is collapsed) | 422 | `{"error":{"code":"name_invalid","message":"Use 100 characters or fewer."}}` | 35 |
+| `name` not a string (`null`, a number), missing, or an unknown field | 422 | `{"error":{"code":"validation_error","message":"Some fields are missing or not valid.","fields":[{"field":"name","message":"Input should be a valid string"}]}}` | 36 |
+| No `X-CSRF-Token` | 403 | the usual `csrf_rejected` body | 40 |
+
+Traps: show `error.message` for `name_invalid` (the shared `errorMessage()` hides every 422 as developer text); **replace the field's value with the response's `name`** after a save; call `router.refresh()` so the sidebar user and other pages show the new name; there is **no Clear** (an empty name is refused). A name stored before this route (sign-up allowed up to 200 characters) reads back as stored and can be saved again only at 100 or fewer.
+
+## 8. Verification table
 
 | Behaviour | Verified |
 |---|---|
@@ -99,6 +123,10 @@ The capture server has no signed-in account, so the signed-in Meet row of the ta
 | A refusal changes nothing | live (#17) |
 | The name sent as `bot_name` for Meet and Zoom, default after clearing | live against a stand-in Skribby (#25, #26); the real Skribby was not called |
 | `status_text` names the custom name / default / null-name meeting | live (#27 to #30) |
+| `meet_account_name` set and `null` | live (#31, #32, #04) |
+| "Your name": read `null` and a name, save with cleaning, 422 empty and too long, strict body, CSRF, session shows it | live (#33 to #40) |
+| The chat notice says the saved name instead of "The host" | unit test only (`tests/test_display_name.py`); not captured, and the real meeting has not been seen with it |
+| Google Meet shows the account's own name, not the configured one | **relayed live evidence 2026-11-14** (the owner's real call, via the lead); not captured by us |
 | The flag set to `true` in the answer, invisible-only names, signed-in Meet "Admit" line, Teams body, calendar auto-join, send now, retries, Skribby refusing a name | unit tests only (`tests/test_bot_name.py`, `tests/test_bot_name_paths.py`); not captured |
 | What a participant sees in Meet, Zoom, Teams | **not verified** (see the SOP, "How to prove it live") |
 | The card in a browser against the live API | not verified; unit tests and the mock-free component test only |

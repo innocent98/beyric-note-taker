@@ -276,6 +276,86 @@ def run(app, server_base, engine) -> None:
     ):
         user.call(f"meeting-{label}-admit-line", "GET", f"/api/meetings/{ids[label]}", note=note)
 
+    # What the card says about Google Meet: the server's signed-in account name (the capture server
+    # has no signed-in account, so the setting is changed for these reads only).
+    live = app.state.settings
+    app.state.settings = live.model_copy(
+        update={
+            "skribby_account_id": "11111111-2222-3333-4444-555555555555",
+            "skribby_account_name": "Beyric Note Taker",
+        }
+    )
+    user.call(
+        "read-with-meet-account-name",
+        "GET",
+        "/api/settings/bot-name",
+        note="A signed-in Google account with a known name: `meet_account_name` is that name and "
+        "the card says Meet always shows it (live evidence 2026-11-14).",
+    )
+    app.state.settings = live.model_copy(
+        update={"skribby_account_id": "11111111-2222-3333-4444-555555555555"}
+    )
+    user.call(
+        "read-with-meet-account-name-unset",
+        "GET",
+        "/api/settings/bot-name",
+        note="Signed in but `SKRIBBY_ACCOUNT_NAME` empty: `meet_account_name` is `null` and the "
+        "card says nothing about Meet.",
+    )
+    app.state.settings = live
+
+    # "Your name": the account made by migration 0006 has no name.
+    user.call(
+        "name-read-none",
+        "GET",
+        "/api/settings/name",
+        note="The owner account made by the migration has no name: `name` is `null`.",
+    )
+    user.call(
+        "name-save-empty",
+        "PUT",
+        "/api/settings/name",
+        body={"name": "   "},
+        note="Empty is refused, also for an account with no name yet.",
+    )
+    user.call(
+        "name-save-too-long",
+        "PUT",
+        "/api/settings/name",
+        body={"name": "N" * 101},
+        note="101 characters: the limit is 100.",
+    )
+    user.call(
+        "name-save-null",
+        "PUT",
+        "/api/settings/name",
+        body={"name": None},
+        note="Not a string: the framework's own validation answer, not `name_invalid`.",
+    )
+    user.call(
+        "name-save",
+        "PUT",
+        "/api/settings/name",
+        body={"name": "  Ada   Example\u202e "},
+        note="Trimmed, inner whitespace collapsed, the direction override removed: the answer is "
+        "what was stored.",
+    )
+    user.call("name-read", "GET", "/api/settings/name")
+    user.call(
+        "name-in-session",
+        "GET",
+        "/api/session",
+        note="`user.name` in the session answer shows the new name.",
+    )
+    user.call(
+        "name-save-without-csrf",
+        "PUT",
+        "/api/settings/name",
+        body={"name": "X"},
+        csrf=None,
+        note="A write without the CSRF token.",
+    )
+
 
 def main() -> None:
     if not sys.argv[1:]:

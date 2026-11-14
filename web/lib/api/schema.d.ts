@@ -1813,6 +1813,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/name": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Display Name
+         * @description The caller's own display name, or null when the account has none.
+         */
+        get: operations["read_display_name"];
+        /**
+         * Write Display Name
+         * @description Set the caller's display name: 1 to 100 characters, cleaned like other user text. It is
+         *     shown to teammates and said by the note taker in the meeting chat when it joins. 422
+         *     `name_invalid` for an empty name (it cannot be blanked) or a longer one.
+         */
+        put: operations["write_display_name"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/recording-ack": {
         parameters: {
             query?: never;
@@ -2742,6 +2768,8 @@ export interface components {
             bot_name_applies_when_signed_in: boolean;
             /** Bot Name Default */
             bot_name_default: string;
+            /** Meet Account Name */
+            meet_account_name?: string | null;
             /** Warning */
             warning?: string | null;
         };
@@ -2991,6 +3019,16 @@ export interface components {
              * @constant
              */
             status: "disconnected";
+        };
+        /** DisplayNameIn */
+        DisplayNameIn: {
+            /** Name */
+            name: string;
+        };
+        /** DisplayNameOut */
+        DisplayNameOut: {
+            /** Name */
+            name: string | null;
         };
         /** EmailIn */
         EmailIn: {
@@ -10770,6 +10808,104 @@ export interface operations {
                 };
             };
             /** @description `language_unsupported` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_display_name: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisplayNameOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_display_name: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisplayNameIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DisplayNameOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `name_invalid` */
             422: {
                 headers: {
                     [name: string]: unknown;

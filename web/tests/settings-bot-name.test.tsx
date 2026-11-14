@@ -13,8 +13,14 @@ const mocks = vi.hoisted(() => ({ set: vi.fn() }));
 vi.mock("@/lib/api/browser", () => ({ api: { settings: { botName: { set: mocks.set } } } }));
 
 const DEFAULT = "Beyric Meeting Support";
-const PAYLOAD = { bot_name: null, bot_name_default: DEFAULT, warning: null, bot_name_applies_when_signed_in: false };
-const MEET_SENTENCE = "On Google Meet this name may not show yet; we are still checking.";
+const PAYLOAD = {
+  bot_name: null,
+  bot_name_default: DEFAULT,
+  warning: null,
+  bot_name_applies_when_signed_in: false,
+  meet_account_name: "Beyric Note Taker",
+};
+const MEET_SENTENCE = "On Google Meet the note taker always shows its own name, “Beyric Note Taker”. Your name shows on Zoom and Teams.";
 const field = () => screen.getByRole("textbox", { name: "Note taker name" }) as HTMLInputElement;
 
 beforeEach(() => mocks.set.mockReset());
@@ -82,14 +88,18 @@ describe("saving and clearing", () => {
 });
 
 describe("the lines the lead added", () => {
-  it("says the name may not show on Google Meet while the server's switch is off", () => {
+  it("says the Google Meet bot always shows the account's own name, from the server", () => {
     render(<SettingsBotName initial={PAYLOAD} />);
     expect(screen.getByText(MEET_SENTENCE)).toBeTruthy();
+    cleanup();
+    render(<SettingsBotName initial={{ ...PAYLOAD, meet_account_name: "Acme Notes" }} />);
+    expect(screen.getByText(/always shows its own name, “Acme Notes”\. Your name shows on Zoom and Teams\./)).toBeTruthy();
   });
 
-  it("drops that sentence when the server's switch is on", () => {
-    render(<SettingsBotName initial={{ ...PAYLOAD, bot_name_applies_when_signed_in: true }} />);
-    expect(screen.queryByText(MEET_SENTENCE)).toBeNull();
+  it("says nothing about Meet's name when the server gives none", () => {
+    render(<SettingsBotName initial={{ ...PAYLOAD, meet_account_name: null }} />);
+    expect(screen.queryByText(/On Google Meet/)).toBeNull();
+    expect(screen.queryByText(/Zoom and Teams/)).toBeNull();
   });
 
   it("shows the soft warning for a saved recorder-like name, and a save still works", async () => {

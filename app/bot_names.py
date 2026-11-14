@@ -13,12 +13,14 @@ Two different questions, kept apart on purpose:
 * `sent_name` is what we put in Skribby's `bot_name`. It is the person's name, else the default.
 * `shown_name` is what the HOST will see in the participant list, which is only the same thing when
   the name is known to apply. On Google Meet the bot signs in as a Google account
-  (`SKRIBBY_ACCOUNT_ID`), and the earlier leads recorded that Skribby ignores `bot_name` once the
-  bot is signed in. Skribby's own pages do not say (see `docs/sop/2026-11-14-per-user-bot-name.md`),
-  and nobody has tested it live, so the "Admit" line keeps naming the account's own name on a signed
-  in Meet bot until `BOT_NAME_APPLIES_WHEN_SIGNED_IN` is turned on after the live check. Zoom and
-  Teams bots always join as guests (`SkribbyClient.payload` authenticates Meet only), so there the
-  name is the one we sent.
+  (`SKRIBBY_ACCOUNT_ID`), and Skribby ignores `bot_name` for a signed-in bot: the owner's real Meet
+  call on 2026-11-14 showed the Google account's own name ("Beyric Note Taker") in the waiting
+  list, the participant list and as the sender of the chat message, not `SKRIBBY_BOT_NAME` (see
+  `docs/sop/2026-11-14-per-user-bot-name.md`). So the "Admit" line and the chat notice keep naming
+  the account's own name on a signed-in Meet bot (`SKRIBBY_ACCOUNT_NAME`), unless
+  `BOT_NAME_APPLIES_WHEN_SIGNED_IN` is turned on. Zoom and Teams bots always join as guests
+  (`SkribbyClient.payload` authenticates Meet only), so there the name is the one we sent (not yet
+  seen live).
 
 Validation is server-side and refuses rather than quietly rewriting, except for whitespace (trimmed
 and collapsed, so a pasted name with a newline is one line). The rules are in `clean_bot_name`.
@@ -81,7 +83,7 @@ def clean_bot_name(raw: str | None) -> str | None:
     cleaned = titles.clean_title(collapsed, limit=len(collapsed) + 1)
     if cleaned != collapsed:
         raise BotNameInvalid(HAS_JUNK)
-    if not any(_draws_something(char) for char in collapsed):
+    if not any(draws_something(char) for char in collapsed):
         raise BotNameInvalid(HAS_JUNK)
     if len(collapsed) > NAME_LIMIT:
         raise BotNameInvalid(TOO_LONG)
@@ -92,7 +94,7 @@ def clean_bot_name(raw: str | None) -> str | None:
     return collapsed
 
 
-def _draws_something(char: str) -> bool:
+def draws_something(char: str) -> bool:
     """Whether `char` shows in a participant list: not a space, not a bare combining mark or
     variation selector, not one of the characters that draw nothing."""
     if char in _DRAWS_NOTHING or char.isspace():
@@ -148,6 +150,16 @@ def shown_name(
     if signed_in and not settings.bot_name_applies_when_signed_in:
         return settings.skribby_account_name.strip() or name
     return name
+
+
+def meet_account_name(settings: Settings) -> str | None:
+    """The name a signed-in Google Meet bot always shows, for the Settings help line: the Google
+    account's own name (`SKRIBBY_ACCOUNT_NAME`), only while the bot signs in (`SKRIBBY_ACCOUNT_ID`),
+    the account name is known and `BOT_NAME_APPLIES_WHEN_SIGNED_IN` is off. None means the page
+    says nothing about Meet's name."""
+    if not settings.skribby_account_id or settings.bot_name_applies_when_signed_in:
+        return None
+    return titles.clean_title(settings.skribby_account_name, NAME_LIMIT) or None
 
 
 def own_names(settings: Settings, stored: str | None) -> tuple[str, ...]:

@@ -725,9 +725,25 @@ class BotNameOut(BaseModel):
     # The soft warning for a name that sounds like a recorder ("Bot", "Notetaker", "Recording",
     # "Transcription", "AI", whole words): `null` for an ordinary name. It never stops a save.
     warning: str | None = None
-    # The server's switch (`BOT_NAME_APPLIES_WHEN_SIGNED_IN`), read only. While it is false the
-    # name may not show on the signed-in Google Meet bot, and the page says so in one sentence.
+    # The server's switch (`BOT_NAME_APPLIES_WHEN_SIGNED_IN`), read only.
     bot_name_applies_when_signed_in: bool = False
+    # The name the signed-in Google Meet bot always shows (the Google account's own name,
+    # `SKRIBBY_ACCOUNT_NAME`), or `null` when the page should say nothing about Meet's name (no
+    # signed-in account, no account name set, or the switch above is on). The page says: "On Google
+    # Meet the note taker always shows its own name, "<this>". Your name shows on Zoom and Teams."
+    meet_account_name: str | None = None
+
+
+class DisplayNameOut(BaseModel):
+    # The caller's name as stored (`null` for an account that never had one: the first Google
+    # sign-in without a name and the owner account made by the migration).
+    name: str | None
+
+
+class DisplayNameIn(Body):
+    # 1 to 100 characters after whitespace is collapsed; control, direction and invisible
+    # characters are removed. Empty (or nothing visible) is 422 `name_invalid`, so is a longer name.
+    name: str
 
 
 class BotNameIn(Body):

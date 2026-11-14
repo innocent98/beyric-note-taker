@@ -192,6 +192,7 @@ def test_the_default_is_shown_from_the_server_and_nothing_is_set(api, app, sessi
         "bot_name_default": "Service Desk",
         "warning": None,
         "bot_name_applies_when_signed_in": False,
+        "meet_account_name": None,
     }
     app.state.settings = make_settings(bot_provider="vexa")
     assert api.get(ROUTE).json()["bot_name_default"] == make_settings().bot_name
@@ -911,3 +912,38 @@ def test_a_name_with_html_characters_is_text_in_the_line_and_escaped_where_it_is
     assert line == "Waiting to be let in. Admit 'Tom & <b>Jerry</b> {x} \"q\"' in the meeting"
     drawn = templates.env.from_string("{{ status_text(m) }}").render(m=meeting)
     assert "<b>" not in drawn and "&lt;b&gt;Jerry&lt;/b&gt;" in drawn and "&amp;" in drawn
+
+
+# ---- what the Settings help says about Google Meet ----
+
+
+def test_meet_account_name_is_the_server_account_name_only_when_it_is_true():
+    signed_in = make_settings(skribby_account_id=OTHER, skribby_account_name="Beyric Note Taker")
+    assert bot_names.meet_account_name(signed_in) == "Beyric Note Taker"
+    # No account name set: the page says nothing about Meet's name.
+    assert bot_names.meet_account_name(make_settings(skribby_account_id=OTHER)) is None
+    assert (
+        bot_names.meet_account_name(
+            make_settings(skribby_account_id=OTHER, skribby_account_name="  ")
+        )
+        is None
+    )
+    # A guest bot (no signed-in account): the name does show, so nothing to caveat.
+    assert (
+        bot_names.meet_account_name(make_settings(skribby_account_name="Beyric Note Taker")) is None
+    )
+    # The switch on (a later live call showed the custom name): the sentence goes.
+    proven = signed_in.model_copy(update={"bot_name_applies_when_signed_in": True})
+    assert bot_names.meet_account_name(proven) is None
+
+
+def test_the_answer_carries_the_meet_account_name_from_the_server(api, app, owner):
+    app.state.settings = make_settings(
+        skribby_account_id=OTHER, skribby_account_name="Beyric Note Taker"
+    )
+    assert api.get(ROUTE).json()["meet_account_name"] == "Beyric Note Taker"
+    assert api.put(ROUTE, {"bot_name": "Alex from Product"}).json()["meet_account_name"] == (
+        "Beyric Note Taker"
+    )
+    app.state.settings = make_settings(skribby_account_id=OTHER)
+    assert api.get(ROUTE).json()["meet_account_name"] is None

@@ -12,12 +12,14 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import auth, bot_names, services, signup, teams, timezones, translation
+from app import auth, bot_names, display_names, services, signup, teams, timezones, translation
 from app.api_schemas import (
     AutoShareIn,
     AutoShareOut,
     BotNameIn,
     BotNameOut,
+    DisplayNameIn,
+    DisplayNameOut,
     EmailPreferencesIn,
     EmailPreferencesOut,
     ErrorResponse,
@@ -162,6 +164,7 @@ def _bot_name_out(request: Request, user: User) -> BotNameOut:
         bot_name_default=bot_names.default_name(settings, None),
         warning=bot_names.recorder_warning(user.bot_name),
         bot_name_applies_when_signed_in=settings.bot_name_applies_when_signed_in,
+        meet_account_name=bot_names.meet_account_name(settings),
     )
 
 
@@ -192,6 +195,34 @@ def write_bot_name(
     session.commit()
     session.refresh(user)
     return _bot_name_out(request, user)
+
+
+@router.get("/name")
+def read_display_name(user: User = Depends(auth.current_user)) -> DisplayNameOut:
+    """The caller's own display name, or null when the account has none."""
+    return DisplayNameOut(name=user.name)
+
+
+@router.put(
+    "/name",
+    responses={422: {"model": ErrorResponse, "description": "`name_invalid`"}},
+)
+def write_display_name(
+    body: DisplayNameIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> DisplayNameOut:
+    """Set the caller's display name: 1 to 100 characters, cleaned like other user text. It is
+    shown to teammates and said by the note taker in the meeting chat when it joins. 422
+    `name_invalid` for an empty name (it cannot be blanked) or a longer one."""
+    try:
+        name = display_names.clean_display_name(body.name)
+    except display_names.DisplayNameInvalid as exc:
+        raise services.Refused(422, "name_invalid", str(exc)) from None
+    session.execute(update(User).where(User.id == user.id).values(name=name))
+    session.commit()
+    session.refresh(user)
+    return DisplayNameOut(name=user.name)
 
 
 @router.get("/auto-share")

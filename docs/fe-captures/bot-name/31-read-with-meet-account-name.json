@@ -1,0 +1,26 @@
+{
+  "note": "A signed-in Google account with a known name: `meet_account_name` is that name and the card says Meet always shows it (live evidence 2026-11-14).",
+  "client": "signed-in user",
+  "request": {
+    "method": "GET",
+    "path": "/api/settings/bot-name",
+    "headers": {
+      "Cookie": "device=<cookie>; session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "bot_name": null,
+      "bot_name_default": "Beyric Meeting Support",
+      "warning": null,
+      "bot_name_applies_when_signed_in": false,
+      "meet_account_name": "Beyric Note Taker"
+    }
+  }
+}

@@ -20,7 +20,8 @@
       "user": null,
       "usage": null,
       "unread_notifications": null,
-      "badges": null
+      "badges": null,
+      "multi_team": false
     }
   }
 }

@@ -23,6 +23,7 @@ import type {
   LanguagePreferences,
   TimeZonePreferences,
   BotNamePreferences,
+  DisplayName,
   RecordingAck,
   Meeting,
   MeetingList,
@@ -507,6 +508,11 @@ export function createApi(options: ApiOptions = {}) {
         get: () => request<TimeZonePreferences>("GET", "/api/settings/time-zone"),
         set: (time_zone: string) =>
           request<TimeZonePreferences>("PUT", "/api/settings/time-zone", { body: { time_zone }, write: true }),
+      },
+      // The person's own display name (GET and PUT /api/settings/name); it cannot be emptied.
+      name: {
+        get: () => request<DisplayName>("GET", "/api/settings/name"),
+        set: (name: string) => request<DisplayName>("PUT", "/api/settings/name", { body: { name }, write: true }),
       },
       // The person's own note taker name (GET and PUT /api/settings/bot-name); null clears it.
       botName: {

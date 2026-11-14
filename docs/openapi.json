@@ -790,6 +790,17 @@
             "title": "Bot Name Default",
             "type": "string"
           },
+          "meet_account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meet Account Name"
+          },
           "warning": {
             "anyOf": [
               {
@@ -1456,6 +1467,40 @@
           "revoked"
         ],
         "title": "DisconnectOut",
+        "type": "object"
+      },
+      "DisplayNameIn": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DisplayNameIn",
+        "type": "object"
+      },
+      "DisplayNameOut": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DisplayNameOut",
         "type": "object"
       },
       "EmailIn": {
@@ -14608,6 +14653,118 @@
           }
         },
         "summary": "Write Language Preferences",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/name": {
+      "get": {
+        "description": "The caller's own display name, or null when the account has none.",
+        "operationId": "read_display_name",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisplayNameOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Display Name",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Set the caller's display name: 1 to 100 characters, cleaned like other user text. It is\nshown to teammates and said by the note taker in the meeting chat when it joins. 422\n`name_invalid` for an empty name (it cannot be blanked) or a longer one.",
+        "operationId": "write_display_name",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DisplayNameIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DisplayNameOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`name_invalid`"
+          }
+        },
+        "summary": "Write Display Name",
         "tags": [
           "settings"
         ]

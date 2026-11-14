@@ -42,7 +42,8 @@
       "badges": {
         "review_open": 0,
         "tasks_new": 0
-      }
+      },
+      "multi_team": false
     }
   }
 }
