@@ -163,8 +163,8 @@ Built app, `web/scripts/mock-api.mjs` (`--multi-team on` for the new screens, de
 | **Team switcher**: one native select, labelled "Team"; personal space shown as "(personal)"; sidebar on desktop, top bar beside the logo on phones; a "Teams" sidebar link | Every app screen while the switch is on | `switcher-meetings`, `team-ordinary`, `team-personal` |
 | **Teams screen**: list (role or Personal, member count, "Working in this team", Open) and "Make a team" | `/teams` | `teams-list`, `teams-limit` (three owned: the form says so and is disabled) |
 | **Team card on the meeting page** (replaces the share switch): team select, Share / Stop sharing / Move to team; moved state with Recorded by and Move back | Meeting page | `meeting-private`, `meeting-moved` |
-| **Move dialog** (his exact words) and the Move back dialog | Meeting page | `meeting-move-dialog` |
-| Personal-space note on the Team screen; Slack and Linear rows hidden for a personal space | `/team`, `/settings` | `team-personal`, `settings-personal` (against `settings-ordinary`) |
+| **Move dialog** (his exact words) and the Move back dialog | Meeting page | `meeting-move-dialog`, `meeting-move-back-dialog` |
+| Personal-space note on the Team screen; Slack and Linear: no Connect for a personal space (a row appears only for one already connected, with Disconnect and the reason) | `/team`, `/settings` | `team-personal`, `settings-personal` (against `settings-ordinary`) |
 
 **Design-covered screens are unchanged with the switch off**: the Meetings list, the meeting page, the sidebar and phone top bar/drawer, and Settings, shot with `parity-shots.mjs` (design left, page right) as `app-multi-team-off-meetings|detail|settings|nav-closed|nav-drawer-<width>.jpg`. The page still shows the old "Share with team" switch and no switcher; the markup is also asserted in `web/tests/team-switcher.test.tsx` ("with the switch off draws nothing new"). With the switch on, the only change to a design-covered screen is the switcher above the sidebar links, a "Teams" link after "Team", the team card where the share switch was, and a "Team" row in Details.
 

@@ -221,6 +221,20 @@ describe("the meeting's own team answers for its series and milestones", () => {
   });
 });
 
+describe("when the switch is on but the teams could not be read", () => {
+  it("shows a plain error with Try again, not the old share switch (which would send no team)", () => {
+    render(<MeetingView initial={detail(PRIVATE)} templates={templates} teams={null} teamsFailed teamSize={0} />);
+    expect(screen.queryByRole("switch", { name: "Share with team" })).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("Could not load your teams, so sharing is not available right now.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(mocks.refresh).toHaveBeenCalled();
+  });
+  it("draws nothing of it for someone who may not share", () => {
+    render(<MeetingView initial={{ ...detail(PRIVATE), can_share: false }} templates={templates} teams={null} teamsFailed />);
+    expect(screen.queryByText(/Could not load your teams/)).toBeNull();
+  });
+});
+
 describe("with the switch off", () => {
   const withSize = (m: Meeting, size = 3) => render(<MeetingView initial={m} templates={templates} teamSize={size} />);
 

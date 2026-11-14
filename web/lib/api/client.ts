@@ -128,6 +128,8 @@ export type ApiOptions = {
   // Called once when a request that named a team is answered 404 "No such team.": the person is no
   // longer in it. The browser forgets the team and reloads on the default one, with a notice.
   onTeamGone?: () => void;
+  // Called after a login or a logout through this client: the browser forgets the tab's remembered team.
+  onSessionChange?: () => void;
 };
 
 type Query = Record<string, string | number | undefined>;
@@ -181,7 +183,9 @@ export function createApi(options: ApiOptions = {}) {
   let sentCsrf: string | null = null;
 
   // Which team each response's request named, for `fail` to tell "that team is gone" from "no such task".
-  const teamSent = new WeakMap<Response, number>();
+  // An explicit per-call team (a meeting's) is not the tab's: a reload cannot change it, so only the tab's own
+  // team being gone triggers `onTeamGone`.
+  const teamSent = new WeakMap<Response, { team: number; explicit: boolean }>();
 
   async function send(method: string, path: string, { body, query, write, accept, team }: Call): Promise<Response> {
     const search = query
@@ -213,7 +217,7 @@ export function createApi(options: ApiOptions = {}) {
     } catch {
       throw new ApiError(0, "network_error", NETWORK_MESSAGE);
     }
-    if (teamId !== null) teamSent.set(res, teamId);
+    if (teamId !== null) teamSent.set(res, { team: teamId, explicit: team !== undefined });
     options.onResponse?.(res);
     return res;
   }
@@ -232,7 +236,7 @@ export function createApi(options: ApiOptions = {}) {
     if (res.status === 401 && error.code === "not_authenticated") options.onUnauthorized?.();
     // The one 404 that is about the team and not the thing asked for: the code is the same
     // (`not_found`), so the words tell them apart (guide section 10).
-    if (res.status === 404 && error.code === "not_found" && error.message === TEAM_NOT_FOUND_MESSAGE && teamSent.has(res)) {
+    if (res.status === 404 && error.code === "not_found" && error.message === TEAM_NOT_FOUND_MESSAGE && teamSent.get(res)?.explicit === false) {
       options.onTeamGone?.();
     }
     throw new ApiError(res.status, error.code, error.message ?? FALLBACK_MESSAGE, error.fields ?? []);
@@ -288,11 +292,13 @@ export function createApi(options: ApiOptions = {}) {
         write: true,
       });
       csrf = state.csrf_token;
+      options.onSessionChange?.();
       return state;
     },
     async logout(): Promise<SessionState> {
       const state = await request<SessionState>("DELETE", "/api/session", { write: true });
       csrf = state.csrf_token;
+      options.onSessionChange?.();
       return state;
     },
     // Public account routes: no session needed, but every write still sends the CSRF token
@@ -406,9 +412,11 @@ export function createApi(options: ApiOptions = {}) {
     tasks: {
       list: (
         query: { assignee?: string; status?: string; suggested?: boolean; project?: string; milestone?: number; sprint?: string; limit?: number; before_id?: number } = {},
+        team?: number | null,
       ) =>
         request<TaskList>("GET", "/api/tasks", {
           query: { ...query, suggested: query.suggested === undefined ? undefined : String(query.suggested) },
+          team,
         }),
       get: (id: number) => request<Task>("GET", `/api/tasks/${id}`),
       create: (body: Partial<NewTask> = {}) => request<Task>("POST", "/api/tasks", { body, write: true }),
@@ -424,7 +432,7 @@ export function createApi(options: ApiOptions = {}) {
     // Projects and milestones (docs/fe-integration-guide-projects.md). Everyone on the team reads;
     // an owner or admin writes (403 `team_forbidden` otherwise). `update` sends one field.
     projects: {
-      list: () => request<ProjectList>("GET", "/api/projects"),
+      list: (team?: number | null) => request<ProjectList>("GET", "/api/projects", { team }),
       create: (body: { name?: string; color?: string; keywords?: string[] } = {}) =>
         request<Project>("POST", "/api/projects", { body, write: true }),
       update: (id: number, body: ProjectChanges) =>
@@ -436,11 +444,11 @@ export function createApi(options: ApiOptions = {}) {
     // already closed or is not the current one). `list` with a project id is that project's own pair
     // when it has a sprint length of its own, else the team's pair counting only its tasks.
     sprints: {
-      list: (project?: number) => request<SprintList>("GET", "/api/sprints", { query: { project } }),
+      list: (project?: number, team?: number | null) => request<SprintList>("GET", "/api/sprints", { query: { project }, team }),
       close: (id: number) => request<SprintClosed>("POST", `/api/sprints/${id}/close`, { body: {}, write: true }),
     },
     milestones: {
-      list: () => request<MilestoneList>("GET", "/api/milestones"),
+      list: (team?: number | null) => request<MilestoneList>("GET", "/api/milestones", { team }),
       forMeeting: (meetingId: number, team?: number | null) =>
         request<MeetingMilestones>("GET", `/api/meetings/${meetingId}/milestones`, { team }),
       confirm: (id: number) => request<Milestone>("POST", `/api/milestones/${id}/confirm`, { body: {}, write: true }),

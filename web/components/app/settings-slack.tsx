@@ -15,7 +15,10 @@ import type { SlackState } from "@/lib/api/types";
 //   channel name, the failure line, and the "Only owners and admins" note for a teammate.
 // The webhook address is never shown again after it is sent: this component never holds it past the
 // request.
-export function SettingsSlack({ initial }: { initial: SlackState }) {
+// `personal`: this is a personal space while multi-team is on. Slack belongs to a team, so nothing can be
+// connected here (the API refuses it, 409 `personal_team`); one that was connected before can still be seen
+// and disconnected, with a plain line saying why it cannot be added again.
+export function SettingsSlack({ initial, personal = false }: { initial: SlackState; personal?: boolean }) {
   const [state, setState] = useState(initial);
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
@@ -49,6 +52,7 @@ export function SettingsSlack({ initial }: { initial: SlackState }) {
     setBusy(false);
   }
 
+  if (personal && !state.connected) return null;
   return (
     <>
       <div className="pl-row pl-row-center pl-row-last">
@@ -56,6 +60,7 @@ export function SettingsSlack({ initial }: { initial: SlackState }) {
           <div className="pl-row-title">Post tasks to Slack</div>
           <div className="pl-row-sub">Share new tasks in a channel so the team can track them there.</div>
           {!state.can_manage ? <div className="pl-row-sub">Only owners and admins can change this.</div> : null}
+          {personal ? <div className="pl-row-sub">This is your personal space. Slack belongs to a team, so it can be disconnected here but not connected again. Connect it from a team.</div> : null}
         </div>
         {state.connected ? (
           <div className="pl-controls">

@@ -62,7 +62,7 @@ describe("the list", () => {
     const open = (name: string) => screen.getByRole("link", { name }) as HTMLAnchorElement;
     expect(open("Open Platform team").getAttribute("href")).toBe("/team?team=4");
     fireEvent.click(open("Open Platform team"));
-    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe("4");
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":4");
     expect(open("Open My team").getAttribute("href")).toBe("/team");
     fireEvent.click(open("Open My team"));
     expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBeNull();

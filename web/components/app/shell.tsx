@@ -56,7 +56,7 @@ export function AppShell({
       <NavLink href={href} label={label} current={current === section} badge={badge} />
     );
   return (
-    <div className="shell" {...(teams ? { [SHELL_MARK]: "" } : {})}>
+    <div className="shell" {...(teams ? { [SHELL_MARK]: user?.email ?? "" } : {})}>
       <a className="skip-link" href="#main">
         Skip to content
       </a>

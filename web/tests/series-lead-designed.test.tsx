@@ -93,7 +93,7 @@ describe("Add to recurring meeting (lead-designed)", () => {
     expect(add.disabled).toBe(true); // a name is needed
     await userEvent.type(within(dialog).getByLabelText("Name"), "Design sync");
     await userEvent.click(add);
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith("Design sync"));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith("Design sync", undefined));
     expect(mocks.setSeries).toHaveBeenCalledWith(lone.id, 7);
   });
 

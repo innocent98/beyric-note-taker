@@ -7,6 +7,7 @@ import {
   parseTeamId,
   readStoredTeam,
   resetToDefaultTeam,
+  RESET_KEY,
   SHELL_MARK,
   TEAM_STORAGE_KEY,
   withTeam,
@@ -35,6 +36,10 @@ describe("parseTeamId", () => {
     [["7", "8"], 7],
     [12, 12],
   ])("%j is %j", (raw, id) => expect(parseTeamId(raw)).toBe(id));
+  it("accepts up to the largest id the API takes (2147483647) and nothing beyond", () => {
+    expect(parseTeamId("2147483647")).toBe(2147483647);
+    for (const raw of ["2147483648", "9999999999", 2147483648, 9999999999]) expect(parseTeamId(raw)).toBeNull();
+  });
   it.each(["", "0", "-1", "1.5", "abc", "5; drop", "12345678901", null, undefined, 0, 2.5])("%j is not an id", (raw) =>
     expect(parseTeamId(raw)).toBeNull(),
   );
@@ -76,19 +81,60 @@ describe("the tab's team", () => {
   });
   it("is per tab: it lives in sessionStorage, never localStorage", () => {
     writeStoredTeam(4);
-    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe("4");
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":4");
     expect(window.localStorage.getItem(TEAM_STORAGE_KEY)).toBeNull();
   });
   it("forgets a team, and ignores a stored value that is not an id", () => {
     writeStoredTeam(4);
     writeStoredTeam(null);
     expect(readStoredTeam()).toBeNull();
-    window.sessionStorage.setItem(TEAM_STORAGE_KEY, "abc");
+    window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":abc");
     expect(readStoredTeam()).toBeNull();
   });
 });
 
+describe("whose team it is", () => {
+  const as = (who: string) => {
+    document.body.innerHTML = `<div ${SHELL_MARK}="${who}"></div>`;
+  };
+  it("a team remembered for one person is not read as another's (logout, then someone else signs in)", () => {
+    as("a@example.test");
+    writeStoredTeam(4);
+    expect(activeTeam()).toBe(4);
+    as("b@example.test");
+    expect(readStoredTeam()).toBeNull();
+    expect(activeTeam()).toBeNull();
+    as("a@example.test");
+    expect(readStoredTeam()).toBe(4); // still A's, if A comes back in this tab
+  });
+  it("never keeps the address itself in the storage", () => {
+    as("a@example.test");
+    writeStoredTeam(4);
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).not.toContain("example");
+  });
+  it("a stored or typed id above the API's maximum is no team", () => {
+    window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":9999999999");
+    expect(readStoredTeam()).toBeNull();
+    at("/tasks?team=9999999999");
+    expect(activeTeam()).toBeNull();
+  });
+});
+
 describe("resetToDefaultTeam", () => {
+  it("does not reload twice in a row (a server that keeps saying 'No such team.' cannot loop the tab)", () => {
+    const targets: string[] = [];
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...window.location, pathname: "/tasks", search: "?team=9", hash: "" },
+    });
+    Object.defineProperty(window.location, "href", { configurable: true, get: () => "http://localhost/tasks?team=9", set: (v: string) => targets.push(v) });
+    window.sessionStorage.removeItem(RESET_KEY);
+    resetToDefaultTeam();
+    resetToDefaultTeam();
+    expect(targets).toHaveLength(1);
+    expect(readStoredTeam()).toBeNull(); // the second call still forgets the team
+  });
+
   it("forgets the team and goes to the same page without it, with the notice", () => {
     let target = "";
     Object.defineProperty(window, "location", {

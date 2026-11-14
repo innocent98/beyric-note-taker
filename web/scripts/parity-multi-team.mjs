@@ -12,7 +12,7 @@
 import { parseArgs } from "node:util";
 import { mkdirSync } from "node:fs";
 
-const { values } = parseArgs({ options: { next: { type: "string" }, out: { type: "string" } } });
+const { values } = parseArgs({ options: { next: { type: "string" }, out: { type: "string" }, only: { type: "string" } } });
 const NEXT = values.next.replace(/\/$/, "");
 const WIDTHS = [1440, 768, 390];
 mkdirSync(values.out, { recursive: true });
@@ -68,6 +68,13 @@ const STATES = {
     await page.request.post(`${NEXT}/api/meetings/${id}/move`, { data: { team_id: 2 }, headers: { "X-CSRF-Token": await csrf(page) } });
     await go(`/meetings/${id}`)(page);
   },
+  "meeting-move-back-dialog": async (page) => {
+    const id = await readyMeeting(page);
+    await page.request.post(`${NEXT}/api/meetings/${id}/move`, { data: { team_id: 2 }, headers: { "X-CSRF-Token": await csrf(page) } });
+    await go(`/meetings/${id}`)(page);
+    await page.getByRole("button", { name: "Move back to you" }).click();
+    await page.waitForTimeout(300);
+  },
   "teams-limit": async (page) => {
     const token = await csrf(page);
     for (const name of ["Side project", "Book club"]) await page.request.post(`${NEXT}/api/teams`, { data: { name }, headers: { "X-CSRF-Token": token } });
@@ -76,7 +83,9 @@ const STATES = {
   },
 };
 
+const only = values.only?.split(",");
 for (const [name, run] of Object.entries(STATES)) {
+  if (only && !only.includes(name)) continue;
   for (const width of WIDTHS) {
     try {
       await shot(name, width, run);

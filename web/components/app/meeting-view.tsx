@@ -73,6 +73,7 @@ export function MeetingView({
   members = [],
   initialShares = [],
   teams = null,
+  teamsFailed = false,
 }: {
   initial: Meeting;
   templates: Template[];
@@ -92,6 +93,9 @@ export function MeetingView({
   // The person's teams (`GET /api/teams`), given only while the server's multi-team switch is on: the share
   // switch then becomes the team card (share to a team, Move, Move back). null: the page is as it was.
   teams?: TeamSummary[] | null;
+  // The switch is on but the teams could not be read: the old share switch would send no team (422
+  // `team_required` for a person on several teams), so a plain error with Try again is drawn instead.
+  teamsFailed?: boolean;
 }) {
   const router = useRouter();
   const [meeting, setMeeting] = useState(initial);
@@ -350,7 +354,7 @@ export function MeetingView({
                 <NotesHtml
                   html={translation.translated?.notes_html ?? m.notes_html ?? ""}
                   actions={
-                    !translation.translated && m.tasks.length > 0 ? <ActionTasks key={m.tasks.map((t) => t.id).join()} initial={m.tasks} /> : undefined
+                    !translation.translated && m.tasks.length > 0 ? <ActionTasks key={`${m.tasks.map((t) => t.id).join()}:${meetingTeam}`} initial={m.tasks} team={meetingTeam} /> : undefined
                   }
                   questions={
                     !translation.translated && m.series && m.open_questions.length > 0 ? (
@@ -443,6 +447,15 @@ export function MeetingView({
                 onMove={(teamId) => void act("move", () => api.meetings.move(m.id, teamId))}
                 onMoveBack={() => void act("move", () => api.meetings.moveBack(m.id))}
               />
+            ) : teamsFailed && m.can_share ? (
+              <Card compact>
+                <Alert kind="error">
+                  <span>Could not load your teams, so sharing is not available right now. </span>
+                  <button type="button" className="btn btn-link" onClick={() => router.refresh()}>
+                    Try again
+                  </button>
+                </Alert>
+              </Card>
             ) : m.can_share && teamSize > 1 ? (
               <Card compact>
                 {/* Lead-designed, not in the designer's file: the "Share with team" switch (spec 8.2). */}

@@ -96,8 +96,9 @@ export function SettingsPlannedSections({
   team?: Team | null;
   reminderMail?: ReminderPreferences | null;
   sprints?: SprintList | null;
-  // false for a personal space while multi-team is on: Slack and Linear belong to a team, so their rows are
-  // not drawn at all (the server refuses them there: 409 `personal_team`).
+  // false for a personal space while multi-team is on: Slack and Linear belong to a team, so nothing can be
+  // connected there (the server refuses it: 409 `personal_team`). A row is then drawn only for an integration
+  // that is ALREADY connected, with Disconnect and a line saying why it cannot be added again.
   integrations?: boolean;
 }) {
   // The Tasks card's rows that are still drawn off, named in its one "not available yet" line.
@@ -194,7 +195,9 @@ export function SettingsPlannedSections({
         </div>
           </>
         )}
-        {!integrations ? null : linear ? (
+        {!integrations ? (
+          linear?.connected ? <SettingsTracker initial={linear} personal /> : null
+        ) : linear ? (
           <SettingsTracker initial={linear} />
         ) : (
           <div className="pl-row pl-row-center">
@@ -212,7 +215,9 @@ export function SettingsPlannedSections({
             </div>
           </div>
         )}
-        {!integrations ? null : slack ? (
+        {!integrations ? (
+          slack?.connected ? <SettingsSlack initial={slack} personal /> : null
+        ) : slack ? (
           <SettingsSlack initial={slack} />
         ) : (
           <div className="pl-row pl-row-center pl-row-last">

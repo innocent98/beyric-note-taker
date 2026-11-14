@@ -9,7 +9,10 @@ import { actionSummary, dueLabel, dueOptions, groupTasks } from "@/lib/tasks";
 import { tasksBody } from "./helpers";
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), update: vi.fn(), remove: vi.fn() }));
-vi.mock("@/lib/api/browser", () => ({ api: { tasks: mocks } }));
+const others = vi.hoisted(() => ({ projects: vi.fn(), milestones: vi.fn(), sprints: vi.fn() }));
+vi.mock("@/lib/api/browser", () => ({
+  api: { tasks: mocks, projects: { list: others.projects }, milestones: { list: others.milestones }, sprints: { list: others.sprints } },
+}));
 
 const meeting = tasksBody<MeetingTasks>("18-meeting-tasks.json");
 const board = tasksBody<TaskList>("17-tasks.json");
@@ -18,10 +21,42 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-11-03T12:00:00Z"));
   Object.values(mocks).forEach((fn) => fn.mockReset());
+  Object.values(others).forEach((fn) => fn.mockReset());
 });
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+});
+
+describe("the drawer reads the MEETING's team (multi-team)", () => {
+  const ask = async (team?: number | null) => {
+    mocks.list.mockResolvedValue(board);
+    others.projects.mockResolvedValue({ projects: [] });
+    others.milestones.mockResolvedValue({ milestones: [] });
+    others.sprints.mockRejectedValue(new Error("not needed"));
+    render(<ActionTasks initial={meeting.tasks} team={team} />);
+    await userEvent.click(screen.getByText("Set up the tracking plan"));
+    await waitFor(() => expect(others.sprints).toHaveBeenCalled());
+  };
+
+  it("asks for the people, projects, milestones and sprints of the meeting's team, not the tab's", async () => {
+    await ask(4);
+    expect(mocks.list).toHaveBeenCalledWith({ limit: 1 }, 4);
+    expect(others.projects).toHaveBeenCalledWith(4);
+    expect(others.milestones).toHaveBeenCalledWith(4);
+    expect(others.sprints).toHaveBeenCalledWith(undefined, 4);
+  });
+
+  it("a private meeting names no team (null: the default team), and with the switch off nothing is named", async () => {
+    await ask(null);
+    expect(mocks.list).toHaveBeenCalledWith({ limit: 1 }, null);
+    cleanup();
+    Object.values(mocks).forEach((fn) => fn.mockReset());
+    Object.values(others).forEach((fn) => fn.mockReset());
+    await ask(undefined);
+    expect(mocks.list).toHaveBeenCalledWith({ limit: 1 }, undefined);
+    expect(others.projects).toHaveBeenCalledWith(undefined);
+  });
 });
 
 describe("the meeting page's Action items as tasks", () => {

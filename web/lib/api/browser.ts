@@ -1,4 +1,4 @@
-import { activeTeamForRequest, resetToDefaultTeam } from "@/lib/active-team";
+import { activeTeamForRequest, resetToDefaultTeam, writeStoredTeam } from "@/lib/active-team";
 import { createApi } from "./client";
 
 // The API as the browser calls it: same origin (nginx and Next pass /api/* to FastAPI), so the
@@ -11,6 +11,8 @@ import { createApi } from "./client";
 export const api = createApi({
   teamId: activeTeamForRequest,
   onTeamGone: resetToDefaultTeam,
+  // A login or logout here: the next person in this tab starts on their default team.
+  onSessionChange: () => writeStoredTeam(null),
   onUnauthorized: () => {
     if (typeof window !== "undefined" && window.location.pathname !== "/login") {
       // A full load, so the server renders the login page fresh.

@@ -126,6 +126,15 @@ describe("a team that is gone", () => {
     expect(onTeamGone).toHaveBeenCalledTimes(1);
   });
 
+  it("does nothing for a team a call named for itself (a meeting's): reloading cannot change it", async () => {
+    const onTeamGone = vi.fn();
+    const { api } = setup({ teamId: () => 5, onTeamGone }, teamGone);
+    await expect(api.series.list(8)).rejects.toMatchObject({ status: 404 });
+    await expect(api.milestones.forMeeting(3, 8)).rejects.toMatchObject({ status: 404 });
+    await expect(api.tasks.list({ limit: 1 }, 8)).rejects.toMatchObject({ status: 404 });
+    expect(onTeamGone).not.toHaveBeenCalled();
+  });
+
   it("does nothing when the call named no team", async () => {
     const onTeamGone = vi.fn();
     const { api } = setup({ onTeamGone }, teamGone);
@@ -139,5 +148,21 @@ describe("a team that is gone", () => {
     await expect(api.meetings.get(1)).rejects.toMatchObject({ status: 404 });
     await expect(api.milestones.forMeeting(1)).rejects.toMatchObject({ status: 404 });
     expect(onTeamGone).not.toHaveBeenCalled();
+  });
+});
+
+describe("login and logout", () => {
+  it("tell the browser to forget the remembered team", async () => {
+    const onSessionChange = vi.fn();
+    const { api } = setup({ onSessionChange }, () => json(200, { csrf_token: "tok", authenticated: true }));
+    await api.login("a@example.test", "pw");
+    expect(onSessionChange).toHaveBeenCalledTimes(1);
+    await api.logout();
+    expect(onSessionChange).toHaveBeenCalledTimes(2);
+  });
+
+  it("a meeting's series and an unscoped call do not carry the team: /api/meetings/N/series", () => {
+    expect(isTeamScoped("/api/meetings/12/series")).toBe(false);
+    expect(isTeamScoped("/api/meetings/12/recurring")).toBe(false);
   });
 });

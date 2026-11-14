@@ -59,7 +59,7 @@ describe("the switcher", () => {
     at("/tasks");
     render(<TeamSwitcher teams={teams} variant="sidebar" />);
     fireEvent.change(select(), { target: { value: "4" } });
-    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe("4");
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":4");
     expect(nav.push).toHaveBeenCalledWith("/tasks?team=4");
   });
 
@@ -72,7 +72,7 @@ describe("the switcher", () => {
 
   it("choosing the default team forgets the choice and drops ?team=", () => {
     at("/tasks", "team=4");
-    window.sessionStorage.setItem(TEAM_STORAGE_KEY, "4");
+    window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":4");
     render(<TeamSwitcher teams={teams} variant="sidebar" />);
     expect(select().value).toBe("4");
     fireEvent.change(select(), { target: { value: "2" } });
@@ -83,7 +83,7 @@ describe("the switcher", () => {
   it("on a page that is not one team's (the Meetings list) it only remembers the choice", () => {
     render(<TeamSwitcher teams={teams} variant="sidebar" />);
     fireEvent.change(select(), { target: { value: "5" } });
-    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe("5");
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":5");
     expect(nav.push).not.toHaveBeenCalled();
   });
 
@@ -93,7 +93,7 @@ describe("the switcher", () => {
     expect(select().value).toBe("5");
     first.unmount();
     at("/");
-    window.sessionStorage.setItem(TEAM_STORAGE_KEY, "99");
+    window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":99");
     render(<TeamSwitcher teams={teams} variant="sidebar" />);
     expect(select().value).toBe("2");
   });
@@ -140,26 +140,26 @@ describe("keeping the tab's team in step", () => {
   it("remembers the team of a team page", () => {
     at("/tasks", "team=4");
     render(<ActiveTeamSync teams={teams} />);
-    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe("4");
+    expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBe(":4");
     expect(nav.replace).not.toHaveBeenCalled();
   });
 
   it("a team page opened without ?team= while a team is remembered is replaced by that team's", () => {
-    window.sessionStorage.setItem(TEAM_STORAGE_KEY, "5");
+    window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":5");
     at("/projects");
     render(<ActiveTeamSync teams={teams} />);
     expect(nav.replace).toHaveBeenCalledWith("/projects?team=5");
   });
 
   it("does not touch a page that is not one team's", () => {
-    window.sessionStorage.setItem(TEAM_STORAGE_KEY, "5");
+    window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":5");
     at("/");
     render(<ActiveTeamSync teams={teams} />);
     expect(nav.replace).not.toHaveBeenCalled();
   });
 
   it("a remembered team the person is no longer in is forgotten, with a plain notice", () => {
-    window.sessionStorage.setItem(TEAM_STORAGE_KEY, "99");
+    window.sessionStorage.setItem(TEAM_STORAGE_KEY, ":99");
     at("/tasks");
     render(<ActiveTeamSync teams={teams} />);
     expect(window.sessionStorage.getItem(TEAM_STORAGE_KEY)).toBeNull();

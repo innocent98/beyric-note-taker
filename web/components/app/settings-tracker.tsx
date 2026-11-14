@@ -16,7 +16,9 @@ import type { LinearState, LinearTeam } from "@/lib/api/types";
 // The key is sent once and never held past the request; the state never contains it.
 const TOOLS = ["Jira", "Linear", "Asana", "Taiga"] as const;
 
-export function SettingsTracker({ initial }: { initial: LinearState }) {
+// `personal`: a personal space while multi-team is on. Linear belongs to a team: nothing can be connected here
+// (409 `personal_team`), but one connected before can still be seen and disconnected.
+export function SettingsTracker({ initial, personal = false }: { initial: LinearState; personal?: boolean }) {
   const [state, setState] = useState(initial);
   const [open, setOpen] = useState(false);
   const [key, setKey] = useState("");
@@ -74,6 +76,7 @@ export function SettingsTracker({ initial }: { initial: LinearState }) {
     setBusy(false);
   }
 
+  if (personal && !state.connected) return null;
   return (
     <>
       <div className="pl-row pl-row-center">
@@ -82,6 +85,7 @@ export function SettingsTracker({ initial }: { initial: LinearState }) {
           <div className="pl-row-sub">Send tasks, projects and sprints to a tool your team already uses.</div>
           <div className="pl-row-sub">Only Linear is available for now. New tasks from meetings shared with the team become issues.</div>
           {!state.can_manage ? <div className="pl-row-sub">Only owners and admins can change this.</div> : null}
+          {personal ? <div className="pl-row-sub">This is your personal space. Linear belongs to a team, so it can be disconnected here but not connected again. Connect it from a team.</div> : null}
         </div>
         {state.connected ? (
           <div className="pl-controls">

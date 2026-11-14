@@ -63,15 +63,16 @@ export function sprintOption(sprint: Sprint): string {
 // length of its own, that project's pair (`GET /api/sprints` and `GET /api/sprints?project=<id>`).
 export type SprintBook = { team: SprintList; own: Record<number, SprintList> };
 
-type SprintsApi = { sprints: { list: (project?: number) => Promise<SprintList> } };
+type SprintsApi = { sprints: { list: (project?: number, team?: number | null) => Promise<SprintList> } };
 
 // Reads the team's sprints and those of each project with its own length. `null` when any read fails
 // (the screens then say so and offer Try again rather than draw half the picture).
-export async function loadSprintBook(api: SprintsApi, projects: Project[] | null): Promise<SprintBook | null> {
+// `team`: the team the thing on screen belongs to (the meeting page's drawer), else the tab's.
+export async function loadSprintBook(api: SprintsApi, projects: Project[] | null, team?: number | null): Promise<SprintBook | null> {
   try {
     const owned = (projects ?? []).filter((p) => p.sprint_length !== null);
-    const [team, ...lists] = await Promise.all([api.sprints.list(), ...owned.map((p) => api.sprints.list(p.id))]);
-    return { team, own: Object.fromEntries(owned.map((p, i) => [p.id, lists[i]])) };
+    const [teamList, ...lists] = await Promise.all([api.sprints.list(undefined, team), ...owned.map((p) => api.sprints.list(p.id, team))]);
+    return { team: teamList, own: Object.fromEntries(owned.map((p, i) => [p.id, lists[i]])) };
   } catch {
     return null;
   }

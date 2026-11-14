@@ -19,13 +19,15 @@ export const SHELL_MARK = "data-multi-team";
 // Pages whose content is one team's: they carry `?team=` in the URL.
 export const TEAM_PAGES = ["/team", "/tasks", "/projects", "/settings"] as const;
 
-// A team id as the API issues them: a positive whole number.
+// The largest id the API accepts in `X-Team-Id` (`MAX_ID` in app/services.py): beyond it the server
+// answers 422, so such a value (a hand-edited URL or storage) counts as no team at all.
+export const MAX_TEAM_ID = 2_147_483_647;
+
+// A team id as the API issues them: a whole number from 1 to MAX_TEAM_ID.
 export function parseTeamId(raw: unknown): number | null {
   const text = Array.isArray(raw) ? raw[0] : raw;
-  if (typeof text === "number") return Number.isSafeInteger(text) && text > 0 ? text : null;
-  if (typeof text !== "string" || !/^\d{1,10}$/.test(text)) return null;
-  const id = Number(text);
-  return id > 0 ? id : null;
+  const id = typeof text === "number" ? text : typeof text === "string" && /^\d{1,10}$/.test(text) ? Number(text) : NaN;
+  return Number.isSafeInteger(id) && id > 0 && id <= MAX_TEAM_ID ? id : null;
 }
 
 export function isTeamPage(path: string): boolean {
@@ -54,9 +56,22 @@ function storage(): Storage | null {
   }
 }
 
+// Who is signed in, as the shell marks it (a short hash of the address, never the address): the remembered
+// team belongs to that person. Another person signing in in this tab (logout and login, a second account)
+// finds no remembered team, so A's choice is never sent as B's. "" when no shell is on the page.
+function personKey(): string {
+  if (typeof document === "undefined") return "";
+  const mark = document.querySelector(`[${SHELL_MARK}]`)?.getAttribute(SHELL_MARK) ?? "";
+  let hash = 5381;
+  for (const ch of mark) hash = ((hash * 33) ^ ch.charCodeAt(0)) >>> 0;
+  return mark ? hash.toString(36) : "";
+}
+
+// Stored as "<person>:<team id>".
 export function readStoredTeam(): number | null {
   try {
-    return parseTeamId(storage()?.getItem(TEAM_STORAGE_KEY));
+    const [who, id] = (storage()?.getItem(TEAM_STORAGE_KEY) ?? "").split(":");
+    return who === personKey() ? parseTeamId(id) : null;
   } catch {
     return null;
   }
@@ -67,7 +82,7 @@ export const TEAM_EVENT = "beyric:active-team";
 export function writeStoredTeam(teamId: number | null): void {
   try {
     if (teamId === null) storage()?.removeItem(TEAM_STORAGE_KEY);
-    else storage()?.setItem(TEAM_STORAGE_KEY, String(teamId));
+    else storage()?.setItem(TEAM_STORAGE_KEY, `${personKey()}:${teamId}`);
   } catch {
     // Private mode: the URL still carries the team on the team pages.
   }
@@ -98,9 +113,21 @@ export function activeTeamForRequest(): number | null {
 
 // The team the API told us is not ours (404 "No such team."): forget it and go to the same page on
 // the default team, with a notice. A full load, so the server renders it fresh.
+//
+// Never twice in a row: a reset that came less than RESET_GAP_MS after the last one forgets the team but does
+// not reload, so a server that keeps answering "No such team." cannot trap the tab in a reload loop.
+export const RESET_KEY = "beyric.team-reset-at";
+export const RESET_GAP_MS = 15_000;
 export function resetToDefaultTeam(): void {
   if (typeof window === "undefined") return;
   writeStoredTeam(null);
+  try {
+    const last = Number(storage()?.getItem(RESET_KEY) ?? 0);
+    if (Date.now() - last < RESET_GAP_MS) return;
+    storage()?.setItem(RESET_KEY, String(Date.now()));
+  } catch {
+    // No storage: the reload below still happens once per call.
+  }
   const url = new URL(window.location.href);
   url.searchParams.delete(TEAM_PARAM);
   url.searchParams.set(NOTICE_PARAM, TEAM_GONE_NOTICE);

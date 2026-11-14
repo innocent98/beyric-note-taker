@@ -35,7 +35,7 @@ a meeting. The switch could only go on once the screens understood two teams.
 | Which screens carry the team? | The sidebar's Tasks, Projects, Team and Settings links carry `?team=` (`TeamNavLink`); a team page opened without it while a team is remembered is replaced by that team's (`ActiveTeamSync`) | So a person never reads the default team's data believing it is another's. |
 | The meeting page | A **team card** replaces the share switch while the switch is on: choose one of your non-personal teams, **Share** / **Stop sharing** / share to another team, **Move to team** (finished meetings the recorder owns: `can_move`), **Move back** (`can_move_back`, hidden when the recorder's account is gone). Series and milestones use the **meeting's** team | `can_share`, `can_move`, `can_move_back` and `shared_by: "Former member"` come from the API; the page never decides who may. |
 | The Move confirmation | A native `<dialog>` with his exact words: "This meeting will belong to the team. It stays with the team even if you leave or delete your account." plus the consequences the guide asks to surface (tasks move, an assignee who is not in the team is unassigned, Slack posts already made stay) | His decision (spec 9.1). |
-| Integrations on the personal space | Server: **409 `personal_team`** on `PUT /slack`, `POST /linear/teams`, `PUT /linear` while the switch is on (not with it off: the team of one is the only team). UI: the Slack and Linear rows are not drawn for a personal space | Spec 6.9. Reading and disconnecting stay allowed. |
+| Integrations on the personal space | Server: **409 `personal_team`** on `PUT /slack`, `POST /linear/teams`, `PUT /linear` while the switch is on (not with it off: the team of one is the only team). UI: no Connect on a personal space; a row is drawn only for an integration that is ALREADY connected (Disconnect and the reason), so an old connection stays manageable. The owner has not confirmed that integrations stay off personal teams: the spec rule is kept and he may reverse it | Spec 6.9. Reading and disconnecting stay allowed. |
 | CORS, proxy | **Nothing to change**, checked: the browser calls the same origin; `web/next.config.ts` proxies `/api/*` to FastAPI with all headers; `deploy/nginx.conf` has no header allow-list (`X-Team-Id` has no underscore, so nginx passes it); FastAPI has no CORS middleware | The stage-2b review could not verify this. |
 
 ## What's involved
@@ -91,3 +91,24 @@ on. To try the screens locally: `MULTI_TEAM_ENABLED=true` in your own dev `.env`
 - There is still no route to delete a team or hand one on, so "three owned teams" never frees up by itself (stage 2b follow-up).
 - The Meetings list is not filtered by team (a person's meetings are theirs); a "moved to team X" tag on a list row is not built.
 - A designer pass over the four lead-designed pieces.
+
+## Review fixes (lead's review of the first push, same PR)
+
+| Finding | Fix |
+|---|---|
+| Task drawer on the meeting page used the tab's team | `ActionTasks` takes the meeting's team; `tasks.list`, `projects.list`, `milestones.list`, `sprints.list` and `loadSprintBook` accept a per-call team (a shadowed variable in `loadSprintBook` was found by the new test). Test: `action-tasks.test.tsx`. `/api/meetings/N/series` and `/recurring` asserted not team-scoped |
+| Remembered team survived logout and login | Stored with a hash of the signed-in address (the shell's mark carries it) so another person never reads it; cleared on login and logout through the client (`onSessionChange`) |
+| Personal space with Slack or Linear already connected became unmanageable | Shown with Disconnect and a plain reason when connected; no Connect (see the table above) |
+| Endless reload when the team in a 404 cannot be changed | `onTeamGone` fires only for the tab's own team, never for a call's explicit one (a meeting's); never reloads twice within 15 s |
+| `parseTeamId` took ids the server rejects | Capped at 2147483647 |
+| Teams list failed with the switch on: old share switch (422 `team_required`) | A plain error with Try again on the meeting page |
+| Parity claimed a Move back dialog shot | `meeting-move-back-dialog-*` taken |
+
+**Known limits and records (not fixed here):**
+- The **Decisions** and **Series** pages open the same task drawer, but a decision or a series carries no team id, so the drawer reads the tab's team there: a task of another team opened from those pages can show the tab's people and projects. Fixing it needs a team on those payloads (a backend change).
+- The switcher navigates on every `change` (arrow keys through a closed select fire one navigation each in some browsers).
+- Choosing a team on a page that is not one team's (Meetings, a meeting) shows no feedback; it is only remembered.
+- A team page opened without `?team=` while a team is remembered shows the default team's data for a moment before `ActiveTeamSync` replaces the URL.
+- Moving or moving back remounts the meeting's task list (so its cached pickers are read again); other open tabs keep theirs.
+- The switch-off parity images come from the same build as the switch-on ones, not from `main`'s.
+- `/teams` with the switch off is a Next 404 for a signed-in person and a /login redirect for a signed-out one (it was a FastAPI 404 before).

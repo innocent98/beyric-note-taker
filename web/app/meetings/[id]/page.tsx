@@ -4,7 +4,7 @@ import { cache } from "react";
 import { AppShell } from "@/components/app/shell";
 import { parseLine } from "@/lib/ask";
 import { MeetingView } from "@/components/app/meeting-view";
-import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireOwner, getShellTeams, serverApi } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireOwner, getShellTeams, getMultiTeam, serverApi } from "@/lib/api/server";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -41,7 +41,9 @@ export default async function MeetingPage({ params, searchParams }: Props) {
   ]);
   // Only to know whether there is a team to share with; a failure just hides the switch.
   const teams = await getShellTeams();
-  const teamSize = !teams && meeting.can_share ? await api.team.get().then((team) => team.member_count, () => 0) : 0;
+  // The switch is on but the list could not be read: the page says so rather than offer a share that would be refused.
+  const teamsFailed = !teams && (await getMultiTeam());
+  const teamSize = !teams && !teamsFailed && meeting.can_share ? await api.team.get().then((team) => team.member_count, () => 0) : 0;
   // For "Share notes": the team's addresses (a participant that matches a member gets theirs) and
   // the shares so far. Either failing only leaves the dialog without them.
   // With several teams the addresses are those of the team the meeting is shared with (else the default team).
@@ -68,6 +70,7 @@ export default async function MeetingPage({ params, searchParams }: Props) {
         defaultLanguage={language.default_language}
         teamSize={teamSize}
         teams={teams}
+        teamsFailed={teamsFailed}
         members={members}
         initialShares={shares}
       />

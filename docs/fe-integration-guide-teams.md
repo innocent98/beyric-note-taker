@@ -963,7 +963,7 @@ Spec 6.9: the personal space has no integrations. While the switch is on, `PUT /
 **409 `personal_team`**, before anything is checked, posted or stored. Reading the state
 (`GET`) and disconnecting (`DELETE`, safe to repeat) still work on any team. With the switch **off** the
 team of one is the only team there is, so connecting stays allowed (tested, not captured: the capture server
-has the switch on). The Settings screen hides the Slack and Linear rows for a personal space.
+has the switch on). The Settings screen draws no Connect for a personal space; an integration already connected there is still shown, with Disconnect and a line saying it cannot be connected again.
 
 `PUT /api/integrations/slack` as **Pat** with `X-Team-Id` = Pat's personal team, body `{"webhook_url": "https://example.test/not-a-slack-webhook"}` → **409**  
 *Slack is a team's, not the personal space's: 409 while the switch is on. Nothing is posted or stored.* (capture `72-integrations-slack-personal-team.json`)
@@ -1014,15 +1014,20 @@ For the next person to touch the screens. Every sentence is a rule the code and 
   (the share and move routes take the team in the **body**), `/api/settings/*` or any other route.
 - **Per browser tab, never on the server.** On the Team, Tasks, Projects and Settings pages the team is in the
   URL, `?team=<id>`, because the server render can only read the URL. This tab remembers the choice in
-  `sessionStorage` (one tab's), for pages without the parameter (the meeting page). The default team is "no
-  choice": no parameter, no header. A second tab never sees the first tab's choice.
+  `sessionStorage` (one tab's), for pages without the parameter (the meeting page), stored with a hash of the
+  signed-in address so another person signing in in the same tab never inherits it (it is also cleared on login
+  and logout through the API client). The default team is "no choice": no parameter, no header. A second tab never
+  sees the first tab's choice. An id above 2147483647 (the server's limit, else 422) is read as no team.
 - **The meeting page asks about the MEETING's team**, not the tab's: a meeting shared to team X lists X's
-  series and X's milestones (header `X-Team-Id: <meeting.team.id>`), a private one uses the default team. Share
-  and Move name their team in the body.
+  series and X's milestones, and its task drawer reads X's people, projects, milestones and sprints (header
+  `X-Team-Id: <meeting.team.id>`); a private one uses the default team. Share and Move name their team in the body.
+  The Decisions and Series pages open the same drawer, but a decision or a series carries no team id, so they use the
+  tab's team (a known limit, see the SOP).
 - **A team that is not the person's (404 `not_found`, message `No such team.`).** Server render: `?team=` that
   is not in `GET /api/teams` (they left, it was deleted, a hand-typed id) redirects to the same page without
-  it and `?notice=team-gone`. Browser call: a team-scoped call that carried the header and got this 404 sends
-  the tab to the same page on the default team with the same notice. The notice reads: "That team is no longer
+  it and `?notice=team-gone`. Browser call: a team-scoped call that carried the TAB's team (not one a call named for itself, such as a
+  meeting's) and got this 404 sends the tab to the same page on the default team with the same notice, never twice
+  within 15 seconds. The notice reads: "That team is no longer
   available to you, so you are back on your default team." The 404 shares its `code` with every "no such
   thing" 404, so the frontend tells this one by the exact message `No such team.` and by having sent the header.
 - **Words shown as written.** The Move confirmation: "This meeting will belong to the team. It stays with the
