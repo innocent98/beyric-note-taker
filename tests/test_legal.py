@@ -157,6 +157,14 @@ def test_the_pages_say_what_happens_to_a_meeting_moved_to_a_team(anon_client):
         "Meetings you moved to a team are an exception: they stay with the team when you close "
         "your account" in privacy
     )
+    assert (
+        "If you are the only member of a team when you close your account, the team and the "
+        "meetings moved to it are deleted with your account." in privacy
+    )
+    assert (
+        "A team whose only member closes their account is deleted with it, and so are the "
+        "meetings moved to it." in privacy
+    )
     assert "Meetings you only shared with a team are deleted when you close your account" in privacy
     assert (
         "We keep only an empty record with no name or email address, so that meetings moved to "
