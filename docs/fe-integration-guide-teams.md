@@ -5,7 +5,7 @@
 below changes for anyone except two things: `POST /api/meetings/{id}/move` and `POST /api/teams`
 answer **409 `multi_team_disabled`**, and `can_move` is always `false`. Sections 1 to 8 are stage 2a
 (the meeting and its team), sections 9 to 13 are stage 2b (the teams list, creating a team, an
-explicit team per request, series, the auto-share team). Sections 14 to 16 are stage 3 (the frontend): the switch the screens read, integrations and the personal space, and what the screens built on all of this do.
+explicit team per request, series, the auto-share team). Sections 14 to 16 are stage 3 (the frontend): the switch the screens read, integrations and the personal space, and what the screens built on all of this do. **Section 17 (2026-11-14, after switch-on): the Meetings list, Decisions, Review and the sidebar badges follow the active team, and a team can be renamed.**
 
 **Every payload, status and error string below was copied from a real response captured against the
 running app** (`scripts/capture_teams_api.py`, a scratch database with the real migrations, uvicorn,
@@ -1010,8 +1010,9 @@ For the next person to touch the screens. Every sentence is a rule the code and 
   `GET` and `POST /api/tasks` (not `/api/tasks/{id}`), `/api/projects*`, `/api/milestones*`, `/api/sprints*`,
   `GET` and `POST /api/series` (not `/api/series/{id}*`), `/api/integrations/*`, and
   `/api/meetings/{id}/milestones`. One interceptor in `web/lib/api/client.ts` (`isTeamScoped`), used by the
-  browser client and by the server render. **Never** on `/api/teams`, `/api/session`, the meeting routes
-  (the share and move routes take the team in the **body**), `/api/settings/*` or any other route.
+  browser client and by the server render. **Never** on `/api/teams`, a write to `/api/session` (login, logout), the meeting routes
+  other than the list (the share and move routes take the team in the **body**), `/api/decisions/{id}`, `/api/review/{id}/*`, `/api/settings/*` or any other route.
+  **Added in section 17 (2026-11-14):** the READS `GET /api/meetings`, `GET /api/decisions`, `GET /api/review` and `GET /api/session` also carry it, and the default team is named explicitly.
 - **Per browser tab, never on the server.** On the Team, Tasks, Projects and Settings pages the team is in the
   URL, `?team=<id>`, because the server render can only read the URL. This tab remembers the choice in
   `sessionStorage` (one tab's), for pages without the parameter (the meeting page), stored with a hash of the
@@ -1054,7 +1055,249 @@ For the next person to touch the screens. Every sentence is a rule the code and 
   confirmation dialogs, the personal-space notice on the Team screen, the Settings auto-share card, the personal-space
   Slack and Linear note.
 
-## 17. Verification table
+## 17. The lists and the counts follow the active team (meetings, decisions, review, the sidebar badges)
+
+Captures: `docs/fe-captures/team-scoped-lists/` (made by `scripts/capture_team_scoped_lists.py`, a scratch
+database with the real migrations, uvicorn, httpx). Placeholders again: ids are the scratch database's, names
+and emails are fake. The cast: **Pat** is in team X ("Platform team", id 4, owned by Ada) and team Y ("Client Y", id 5,
+owned by Quinn) and has a personal team (id 2, "My team"). Pat's meetings: `Pat private` (nobody has it, id 1),
+`Pat shared to X` (id 2), `Pat moved to Y` (id 3); Ada's `Ada shared to X` (id 4); Quinn's `Quinn shared to Y` (id 5);
+Ada's private `Ada private` (id 6).
+
+### 17.1 What it is, in the screen's terms
+
+One team is active at a time (the switcher). **The Meetings list (the home page `/`), the Decisions log, the Review list and
+the two sidebar counts (Tasks "new", Review) show that team only**:
+
+| Active team | What is on its list |
+|---|---|
+| An ordinary team X | the meetings **shared to X** or **moved to X**, **whoever recorded them** |
+| The person's personal team | only the meetings **they recorded** that are **neither shared nor moved** |
+
+A decision belongs to its meeting's team. A review item belongs to its meeting's team (and is only ever the recorder's).
+**A person who is in X and Y therefore sees each of their readable meetings on exactly one team's list.** The team only
+**narrows a list**: it never lets anyone read more. **A meeting opened by its link, a mail or a notification opens by the
+normal read rule whatever team is active** (capture `13-meeting-by-link-while-personal.json`, 200, with the personal team active).
+
+### 17.2 How a team is named
+
+The same `X-Team-Id: <id>` header as section 10, on these four reads (and only on the reads; a write on the same path does not read it):
+
+| Route | Header read |
+|---|---|
+| `GET /api/meetings` | the Meetings list (`/`) |
+| `GET /api/decisions` | the Decisions log: `groups`, `counts` and `due_this_week` are the team's |
+| `GET /api/review` | the Review list: `items` and `open_count` are the team's |
+| `GET /api/session` | `badges.review_open` and `badges.tasks_new` are the team's |
+
+**With no header**, and multi-team on, the route acts on the person's **default team** (the same rule as every other team route:
+their one ordinary team, else their personal space). With multi-team **off** and no header nothing changes (everything the person may read).
+**The frontend must still send the header on every call, the default team included** (it sends the default team's id), so a list, its counts and the
+badge are always about one team: `GET /api/tasks` **without** the header is still every team's tasks (section 10), which would not match the badge.
+
+Errors: a team the caller is not in (or that does not exist) is **404 `not_found`, message `No such team.`** on the three lists (capture `12-meetings-not-my-team.json`). **`GET /api/session` is the exception: it never fails over a stale team**; it counts the default team instead (capture `25-session-stale-team.json`), because it is every page's first call.
+
+`GET /api/meetings` as **Pat** with `X-Team-Id: 2` (the personal team) → **200** (capture `08-meetings-personal.json`, listing id 1 only)
+*Trimmed to the fields that matter; the full capture has every field of each row.*
+```json
+{
+  "has_more": false,
+  "next_before_id": null,
+  "meetings": [
+    {
+      "id": 1,
+      "title": "Pat private",
+      "status": "ready"
+    }
+  ]
+}
+```
+
+The same calls, as **Pat**, listed by meeting id (from the captures; each is a full `MeetingList`):
+
+| Request | Capture | Meeting ids on the list |
+|---|---|---|
+| `GET /api/meetings`, **no header** (Pat's default is the personal space) | `07-meetings-no-header.json` | [1] (`Pat private`) |
+| `GET /api/meetings`, `X-Team-Id: 2` (personal) | `08-meetings-personal.json` | [1] (`Pat private`) |
+| `GET /api/meetings`, `X-Team-Id: 4` (X) | `09-meetings-x.json` | [2, 4] (`Pat shared to X`, `Ada shared to X`) |
+| `GET /api/meetings`, `X-Team-Id: 5` (Y) | `10-meetings-y.json` | [3, 5] (`Pat moved to Y`, `Quinn shared to Y`) |
+
+As **Ada**, who has one ordinary team: no header lists X (her default), ids [2, 4] (capture `11-meetings-ada-no-header.json`).
+
+`GET /api/meetings` as **Pat** with `X-Team-Id: 105` (not a team of Pat's) → **404** (capture `12-meetings-not-my-team.json`)
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "No such team."
+  }
+}
+```
+
+`GET /api/meetings/6` as **Pat** with `X-Team-Id: 4` (Ada's private meeting) → **404** (capture `14-meeting-private-of-ada.json`): a team never widens a read.
+`GET /api/meetings/4` as **Pat** with `X-Team-Id: 2` (Ada's meeting of X, opened by its link while the personal team is active) → **200** (capture `13-meeting-by-link-while-personal.json`).
+
+### 17.3 Decisions and Review
+
+`GET /api/decisions` as **Pat**: personal team → meeting ids [1] (capture `15-decisions-personal.json`); X → [2, 4] (`16-decisions-x.json`); Y → [3, 5] (`17-decisions-y.json`).
+The body is the usual `DecisionList` (see the decisions guide); `counts.all` and `due_this_week` are the team's, whatever `q` and `status` say. Capture `15-decisions-personal.json` (trimmed to the heads):
+```json
+{
+  "groups": [
+    {
+      "meeting": {
+        "id": 1,
+        "title": "Pat private",
+        "platform": "google_meet",
+        "created_at": "2026-11-14T17:02:20.521115Z"
+      },
+      "decisions": [
+        {
+          "id": 1,
+          "text": "Decision of Pat private",
+          "status": "approved"
+        }
+      ]
+    }
+  ],
+  "counts": {
+    "all": 1,
+    "approved": 1,
+    "proposed": 0,
+    "replaced": 0,
+    "rejected": 0
+  },
+  "due_this_week": 0
+}
+```
+
+`GET /api/review` as **Pat** with `X-Team-Id: 4` (X) → **200** (capture `18-review-x.json`): the one open item of `Pat shared to X`, and `open_count` is 1.
+```json
+{
+  "items": [
+    {
+      "id": 2,
+      "text": "Check the figures in pat_in_x",
+      "heard_as": null,
+      "checked_at": null,
+      "meeting": {
+        "id": 2,
+        "title": "Pat shared to X",
+        "platform": "google_meet",
+        "created_at": "2026-11-14T17:02:20.521115Z"
+      }
+    }
+  ],
+  "open_count": 1,
+  "truncated": false
+}
+```
+With `X-Team-Id: 2` (personal) the item is `Pat private`'s (capture `19-review-personal.json`); Y's is `Pat moved to Y`'s. Ada, who recorded none of these, has **no** review items on any team (a review item is only ever the recorder's: `tests/test_team_scoped_lists.py`).
+
+### 17.4 The sidebar badges: a team that shows no tasks shows no count
+
+`GET /api/session` as **Pat** → `badges` for each team (captures `20-badges-personal.json`, `21-badges-x.json`, `22-badges-y.json`):
+
+| `X-Team-Id` | `badges` |
+|---|---|
+| 2 (personal) | `{
+  "review_open": 1,
+  "tasks_new": 0
+}` |
+| 4 (X) | `{
+  "review_open": 1,
+  "tasks_new": 2
+}` |
+| 5 (Y) | `{
+  "review_open": 1,
+  "tasks_new": 1
+}` |
+| none (Pat's default, personal) | `{
+  "review_open": 1,
+  "tasks_new": 0
+}` (capture `26-badges-no-header.json`) |
+
+`tasks_new` is **exactly the number of New, open, confirmed tasks that the same team's board lists** (`GET /api/tasks` with the same header,
+captures `23-tasks-x.json` and `24-tasks-personal.json`: X's board has two New tasks and its badge is 2; the personal board is empty and its badge is 0). This
+is the bug being fixed: the count used to be every team's, so a personal board with no tasks still showed 41. `review_open` is the number of
+open items `GET /api/review` lists for that team. **Notifications (`unread_notifications`) is not per team** and did not change.
+
+**Field-nesting trap:** the badges are in `GET /api/session` under `badges`, as before; only their meaning changed (one team's), and the header is now read on that GET.
+A logged-out `GET /api/session` with a header is a plain session (`badges: null`).
+
+### 17.5 Renaming a team (`PATCH /api/team`)
+
+The route already existed; the Team screen now has the field. **Owners and admins** of an **ordinary** team send `{"name": "..."}` with `X-Team-Id`:
+
+`PATCH /api/team` as **Ada** with `X-Team-Id: 4` and body `{"name": "Platform"}` → **200** (capture `28-team-rename.json`, the whole team body)
+```json
+{
+  "id": 4,
+  "name": "Platform",
+  "is_personal": false,
+  "share_new_meetings": false,
+  "reminders_on": false,
+  "reminder_timing": "both",
+  "my_role": "owner",
+  "sprint_length": "week5",
+  "sprint_custom_days": 10,
+  "sprint_align_weekdays": true,
+  "member_count": 2,
+  "pending_invites": 0,
+  "can_manage": true,
+  "can_change_roles": true
+}
+```
+`GET /api/teams` afterwards shows the new name in the list (capture `32-teams-after-rename.json`; the switcher shows it after the page is read again).
+
+| Case | Status and body (from the captures) |
+|---|---|
+| Empty or blank name (`29-team-rename-empty.json`) | **422** `{
+  "error": {
+    "code": "invalid_name",
+    "message": "Give the team a name."
+  }
+}` |
+| A plain member (`30-team-rename-as-member.json`) | **403** `{
+  "error": {
+    "code": "team_forbidden",
+    "message": "Only an owner or admin of the team can do that."
+  }
+}` |
+| **The personal team** (`31-team-rename-personal.json`) | **409** `{
+  "error": {
+    "code": "personal_team",
+    "message": "Your personal space keeps its name. Make a team to name it yourself."
+  }
+}` |
+
+The personal team keeps its fixed name **while multi-team is on**; its other settings still change. With multi-team **off** a team of one renames as it always did (tested, not captured).
+
+### 17.6 What the screens do with this (UX instructions)
+
+- **One Teams entry in the sidebar** (with multi-team on). There is no separate "Team" link: **Teams** (`/teams`) lists the person's teams and has **Make a team**; **Open** goes to
+  that team's page (`/team?team=<id>`), which has **All teams** and **Make a team** links back to the list. With multi-team **off** the sidebar keeps its one "Team" link. The switcher at the top of the sidebar is unchanged.
+- **Switching team is a full page load** (not a client-side transition) on the new team's address, so every screen, count and cached picker reads again for the new team.
+  `?team=<id>` is now on **`/`, `/decisions` and `/review`** as well as `/team`, `/tasks`, `/projects`, `/settings`. The meeting page, Ask, Notifications and the rest keep the tab's remembered team and just load again.
+- **The badges beside Tasks and Review count the active team.** The server draws them for the team in the address; on a page with no `?team=` (a meeting, Ask) the browser counts them again for the tab's team.
+- **Surprising if shown silently: a meeting disappears from the list when its team is not the active one.** The empty state of a team's Meetings list is "No meetings yet." even when the person has meetings on another team; the switcher is how they find them. **Search, Ask Beyric and Notifications still cover every team** (below).
+- **Rename**: Save is off while the name is empty or unchanged; after saving, the page asks the server for the shell again so the switcher shows the new name.
+
+### 17.7 Everything else that shows meetings or counts across teams (not changed here)
+
+| Where | What it does today |
+|---|---|
+| Ask Beyric (`/api/ask`) and its search | every meeting the person may read, **all teams** (`visible_meetings`); the answer marks a team's meeting as shared |
+| Notifications (list, unread count, the badge) | notifications of every meeting the person may read, **all teams** |
+| The recurring page and "Keeps coming up" (series) | unchanged: a series belongs to one team; its occurrences are those the viewer may read |
+| The Recurring cards on `/` (`GET /api/series`) | the active team's series (the header was already read there) |
+| `GET /api/tasks` **without** the header | every team's tasks, as before (section 10); the frontend always sends the header |
+| `tasks_count` on a Meetings list row | the tasks of that meeting the person may see (a task stays with its meeting's team) |
+| Calendar "Upcoming" and "Not recorded" | the person's own calendar, not a team's |
+| The Teams list (`GET /api/teams`) | roles and member counts only; **no meeting counts** |
+| The old server-rendered page (`app/web.py`) | unfiltered; not used by the new screens |
+
+## 18. Verification table
 
 | Behaviour | Verified |
 |---|---|
@@ -1080,3 +1323,9 @@ For the next person to touch the screens. Every sentence is a rule the code and 
 | `multi_team` in the session: switch on (logged out, logged in) and off | **verified-live** (02, 03, 71); the switch-off read is made in the capture process with the switch turned off for that one call |
 | Slack and Linear refused on a personal team (409 `personal_team`), read still 200, an ordinary team gets past it | **verified-live** (72 to 75); the switch-off case (team of one allowed) is **tested only** (`tests/test_multi_team_stage3.py`) |
 | The header on exactly the team-scoped routes, per tab, the `team-gone` notice, the meeting page's own team | **tested against the captured shapes** in `web/tests/` (the screens were also looked at in a browser against the mock, not against a real FastAPI) |
+| Meetings list per team: personal, X, Y, default with no header, Ada's default, not my team (404), opened by link while another team is active (200), another person's private meeting (404) | **verified-live** (`team-scoped-lists/` 07 to 14) |
+| Decisions per team (`groups`; `counts` and `due_this_week` follow the same team) | **verified-live** for the groups (15 to 17); the `counts` equal the groups in **tests** (`tests/test_team_scoped_lists.py`) |
+| Review per team and its `open_count`; the badges per team; the badge equals the tasks board; the stale-team session; no header | **verified-live** (18 to 26) |
+| Meetings list with the switch OFF and no header (everything, as before) | **verified-live** (27; the switch is turned off in the capture process for that one call) |
+| Rename: owner (200), empty (422), plain member (403), personal team (409), the list afterwards | **verified-live** (28 to 32); rename with the switch off is **tested only** |
+| The screens: one Teams entry, the full reload on switching, the rename field, the badge recount in the browser, the header on exactly these reads | **tested against the captured shapes** in `web/tests/` (not looked at against a real FastAPI) |

@@ -1,0 +1,107 @@
+{
+  "note": "The board of X: two New tasks, so `badges.tasks_new` is 2 for X.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/tasks",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "tasks": [
+        {
+          "id": 2,
+          "title": "Order the cake",
+          "status": "todo",
+          "assignee": null,
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": null,
+          "is_new": true,
+          "unverified": false,
+          "source": "manual",
+          "assigned_on": "2026-11-03",
+          "done_at": null,
+          "created_at": "2026-11-14T17:02:20.521115Z",
+          "from_meeting": false,
+          "meeting": null,
+          "project_id": null,
+          "milestone_id": null,
+          "sprint_id": null,
+          "carried": false,
+          "check_project": false,
+          "suggested": false,
+          "confidence": null,
+          "reason": null,
+          "quote_speaker": null,
+          "quote_line": null,
+          "can_update": false,
+          "can_edit": false,
+          "can_assign": false,
+          "can_claim": true,
+          "can_delete": false,
+          "can_decide": false
+        },
+        {
+          "id": 1,
+          "title": "Book the room",
+          "status": "todo",
+          "assignee": null,
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": null,
+          "is_new": true,
+          "unverified": false,
+          "source": "manual",
+          "assigned_on": "2026-11-03",
+          "done_at": null,
+          "created_at": "2026-11-14T17:02:20.521115Z",
+          "from_meeting": false,
+          "meeting": null,
+          "project_id": null,
+          "milestone_id": null,
+          "sprint_id": null,
+          "carried": false,
+          "check_project": false,
+          "suggested": false,
+          "confidence": null,
+          "reason": null,
+          "quote_speaker": null,
+          "quote_line": null,
+          "can_update": false,
+          "can_edit": false,
+          "can_assign": false,
+          "can_claim": true,
+          "can_delete": false,
+          "can_decide": false
+        }
+      ],
+      "people": [
+        {
+          "user_id": 1,
+          "name": "Ada Example",
+          "is_you": false
+        },
+        {
+          "user_id": 2,
+          "name": "Pat Example",
+          "is_you": true
+        }
+      ],
+      "attention": {
+        "needs_owner": 2,
+        "unverified": 0,
+        "check_project": 0
+      },
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

@@ -700,6 +700,13 @@ Goal: one person has a permanent personal team and may belong to several teams; 
   - [x] Tests: vitest for the switcher, the header interceptor, the Move dialog, the flag-off rendering, `requireTeamOwner`; backend tests; mock-api `--multi-team on`; `schema.d.ts` regenerated
   - [ ] CI green, Opus review of header handling, Move and share, merge, deploy
   - [ ] Designer's review of the four lead-designed pieces; a screen reader pass; a look against a real server with the switch on (local dev only)
+- [x] **Team-scoped lists and one Teams entry (2026-11-14, after switch-on; PR opened on `feature/team-scoped-lists-and-nav`, number added when known; no migration; SOP `docs/sop/2026-11-14-team-scoped-lists-and-nav.md`; FE guide section 17; captures `docs/fe-captures/team-scoped-lists/`)**
+  - [x] The Meetings list (home `/`, stays at `/`), Decisions, Review and the two sidebar badges follow the active team (`visibility.readable_in`); a meeting opened by link still opens; tests first (`tests/test_team_scoped_lists.py`)
+  - [x] One "Teams" sidebar entry (switcher unchanged); a team's page links back to the list and to Make a team
+  - [x] Rename a team (Team name card for owners and admins; the personal team keeps its name: 409 `personal_team`); root cause: the screen never had the field
+  - [x] Switching team is a full page load; `?team=` now also on `/`, `/decisions`, `/review`; `proxy.ts` hands the address's team to the server render
+  - [x] Reported, not changed: Ask and search, Notifications, series, tasks with no header (SOP table)
+  - [ ] CI green, Opus review, merge on his typed word, deploy; a look in a real browser with the server running
 - [ ] **Stage 4: switch on**: `MULTI_TEAM_ENABLED=true` only after stage 3 is live
   - [ ] Prerequisite: privacy and terms wording for multi-team drafted (2026-11-14, PR on `feature/legal-wording-teams`, SOP `docs/sop/2026-11-14-legal-wording-teams.md`), **awaiting the owner's lawyer**; then merged and deployed. Lead-flagged mismatches (sole-owner team, "empty record", the move confirmation that is stage 3) are in the SOP
   - [ ] Prerequisite (stage-1 review): while the switch is off the one-personal-team rule drifts (a joiner's personal team is dissolved; the inviter of a team of one is left with none; an invitation made into a team of one while off may be unredeemable once on). Needs a second backfill so every live account has a personal team, and a plan for pending invitations (list, revoke and re-send from an ordinary team)
