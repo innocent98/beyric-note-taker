@@ -10,6 +10,7 @@ import { ApiError, errorMessage } from "@/lib/api/client";
 import type { AgendaItem, AgendaSuggestion, CarriedQuestion, SeriesPage, Task, TaskPerson } from "@/lib/api/types";
 import { durationLabel, initials, platformLabel, plural } from "@/lib/format";
 import { avatarTone, dayLabel, isOverdue, personInitials, taskDueText, todayIn } from "@/lib/tasks";
+import { noPastText, scopeNote, teamLabel } from "@/lib/series-team";
 import { LocalTime } from "@/components/app/local-time";
 
 // A 422 is developer text for most calls (`errorMessage` hides it), but the agenda's own refusals are
@@ -76,7 +77,11 @@ function TaskRow({
   );
 }
 
-export function SeriesView({ initial }: { initial: SeriesPage }) {
+// `multiTeam`: the server's multi-team switch is on (the page knows it from the teams list). Then the
+// page says which team (or "Personal") the row is, says what it lists, sends the row's team with the
+// call for the task drawer's people (the tab's team may be another), and on a personal row draws no
+// "Next meeting" box and no "Send agenda" (no next date is given there, and nobody else is on it).
+export function SeriesView({ initial, multiTeam = false }: { initial: SeriesPage; multiTeam?: boolean }) {
   const today = useToday();
   const [page, setPage] = useState(initial);
   const [toast, flash] = useToast();
@@ -100,7 +105,7 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
     setOpenId(id);
     if (people.length === 0) {
       try {
-        setPeople((await api.tasks.list({ limit: 1 })).people);
+        setPeople((await api.tasks.list({ limit: 1 }, multiTeam ? page.team.id : undefined)).people);
       } catch {
         // the drawer still opens; the assignee list is just short
       }
@@ -185,6 +190,7 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
       finished: p.finished.map((t) => (t.id === next.id ? next : t)),
     }));
   const noSend = page.agenda_recipients === 0;
+  const personal = multiTeam && page.team.is_personal;
   // The score tiles: the open tasks whose day has passed (in the person's zone) are the Overdue
   // tile; the rest of the open ones are Still open.
   const overdue = page.unfinished.filter((t) => isOverdue(t.due_date, today)).length;
@@ -197,32 +203,39 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
       </AppLink>
       <div>
         <h1 className="sr-h1">{page.title}</h1>
-        <div className="sr-sub">{page.platform ? `${page.cadence} · ${platformLabel(page.platform)}` : page.cadence}</div>
+        <div className="sr-sub">
+          {[page.cadence, page.platform ? platformLabel(page.platform) : null, multiTeam ? teamLabel(page.team) : null]
+            .filter(Boolean)
+            .join(" · ")}
+        </div>
+        {multiTeam ? <div className="sr-note sr-scope">{scopeNote(page.team)}</div> : null}
       </div>
       <div role="status" aria-live="polite">
         {error ? <Alert kind="error">{error}</Alert> : null}
       </div>
       <div className="sr-grid">
         <section className="sr-main" aria-label="Next meeting and carry-over">
-          <div className="sr-next">
-            <div>
-              {page.next_text ? (
-                <>
-                  <div className="sr-next-label">Next meeting</div>
-                  <div className="sr-next-value">{page.next_text}</div>
-                  {page.sprint_note ? <div className="sr-next-sprint">{page.sprint_note}</div> : null}
-                </>
-              ) : null}
+          {personal ? null : (
+            <div className="sr-next">
+              <div>
+                {page.next_text ? (
+                  <>
+                    <div className="sr-next-label">Next meeting</div>
+                    <div className="sr-next-value">{page.next_text}</div>
+                    {page.sprint_note ? <div className="sr-next-sprint">{page.sprint_note}</div> : null}
+                  </>
+                ) : null}
+              </div>
+              <Button
+                type="button"
+                onClick={() => void send()}
+                disabled={noSend || busy === "send"}
+                title={noSend ? "Nobody on your team was in the last three meetings, so there is nobody to send it to." : undefined}
+              >
+                Send agenda to attendees
+              </Button>
             </div>
-            <Button
-              type="button"
-              onClick={() => void send()}
-              disabled={noSend || busy === "send"}
-              title={noSend ? "Nobody on your team was in the last three meetings, so there is nobody to send it to." : undefined}
-            >
-              Send agenda to attendees
-            </Button>
-          </div>
+          )}
           <div className="sr-body">
             <div className="sr-score">
               <div className="sr-tile">
@@ -409,9 +422,10 @@ export function SeriesView({ initial }: { initial: SeriesPage }) {
               <Icon name="chevron" size={14} />
             </AppLink>
           ))}
-          {page.past_meetings.length === 0 ? <div className="sr-past-none">No meetings recorded in this series yet.</div> : null}
+          {page.past_meetings.length === 0 ? <div className="sr-past-none">{noPastText(multiTeam ? page.team : null)}</div> : null}
           <div className="sr-side-title sr-side-gap">Attendees</div>
           <div className="sr-people">
+            {page.attendees.length === 0 ? <div className="sr-past-none">Nobody yet.</div> : null}
             {page.attendees.map((person, index) => (
               <div className="sr-person" key={person.name}>
                 <div className={`avatar avatar-26 ${AVATAR_TONES[index % AVATAR_TONES.length]}`} aria-hidden="true">
