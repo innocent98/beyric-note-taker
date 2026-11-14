@@ -7,7 +7,7 @@ import { NewMeetingForm } from "@/components/app/new-meeting-form";
 import { RecurringCards } from "@/components/app/recurring-cards";
 import { LandingPage } from "@/components/landing/landing-page";
 import { Alert, PageHead } from "@/components/ui";
-import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, getSession, load, serverApi } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, getSession, load, serverApi, getShellTeams } from "@/lib/api/server";
 import type { CalendarState, NotRecordedItem } from "@/lib/api/types";
 import { ApiError } from "@/lib/api/client";
 import { isFiltered, readRange, type DayRange } from "@/lib/date-range";
@@ -83,7 +83,7 @@ async function MeetingsPage({ range, notice, zone }: { range: DayRange; notice: 
   const busy = newest.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
   return (
     <AppShell current="meetings" reviewOpen={await getReviewOpen()}
-      tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()} timeZone={await getTimeZone()}>
+      tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()} teams={await getShellTeams()} timeZone={await getTimeZone()}>
       {list.worker_stale ? (
         <Alert kind="notice" role="alert">
           The background worker has not checked in for over 20 minutes. New meetings will not be processed until it

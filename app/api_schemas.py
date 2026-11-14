@@ -88,6 +88,10 @@ class SessionState(BaseModel):
     unread_notifications: int | None
     # Counts for the sidebar.
     badges: BadgesOut | None
+    # `MULTI_TEAM_ENABLED`: whether this server lets a person belong to several teams. The frontend
+    # draws the team switcher, the teams list and the Move action only when it is true. A server
+    # setting, not a person's: the same answer logged in or out.
+    multi_team: bool
 
 
 class Login(Body):

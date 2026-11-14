@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app/shell";
 import { EmailSettingsSection } from "@/components/app/email-settings-section";
+import { SettingsAutoShare } from "@/components/app/settings-auto-share";
 import { SettingsCalendar } from "@/components/app/settings-calendar";
 import { SettingsBotName } from "@/components/app/settings-bot-name";
 import { SettingsLanguage } from "@/components/app/settings-language";
@@ -9,7 +10,7 @@ import { SettingsTimeZone } from "@/components/app/settings-time-zone";
 import { SettingsPlannedSections } from "@/components/app/settings-planned-sections";
 import { PageHead } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
-import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireTeamOwner, getShellTeams } from "@/lib/api/server";
 import { calendarNotice } from "@/lib/calendar-notice";
 import type { CalendarState, Template } from "@/lib/api/types";
 
@@ -25,7 +26,8 @@ export default async function SettingsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const api = await requireOwner();
+  const params = await searchParams;
+  const { api, teams } = await requireTeamOwner("/settings", params);
   let calendar: CalendarState | null;
   try {
     calendar = await api.calendar.get();
@@ -51,6 +53,10 @@ export default async function SettingsPage({
   const sprints = team ? await api.sprints.list().catch(() => null) : null;
   const reminderMail = await api.settings.reminders.get().catch(() => null);
   const linear = await api.integrations.linear.get().catch(() => null);
+  // Slack and Linear belong to a team: a personal space has none, and the server refuses them there.
+  // Per person, only while the switch is on: the team this person's new meetings are shared to (null: none).
+  const autoShare = teams ? await api.settings.autoShare.get().catch(() => null) : null;
+  const noIntegrations = teams !== null && team?.is_personal === true;
   const [email, language, timeZone, botName] = await Promise.all([
     load(api.settings.email.get()),
     load(api.settings.language.get()),
@@ -59,11 +65,12 @@ export default async function SettingsPage({
   ]);
   return (
     <AppShell current="settings" reviewOpen={await getReviewOpen()}
-      tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()} timeZone={await getTimeZone()}>
+      tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()} teams={await getShellTeams()} timeZone={await getTimeZone()}>
       <div className="stack-md measure">
         <PageHead title="Settings" subtitle="Preferences for your notes and transcripts." />
-        <SettingsCalendar initial={calendar} notice={calendarNotice(await searchParams)} templates={templates} />
-        <SettingsPlannedSections tasks={tasksSettings} slack={slack} linear={linear} team={team} reminderMail={reminderMail} sprints={sprints} />
+        <SettingsCalendar initial={calendar} notice={calendarNotice(params)} templates={templates} />
+        <SettingsPlannedSections tasks={tasksSettings} slack={slack} linear={linear} integrations={!noIntegrations} team={team} reminderMail={reminderMail} sprints={sprints} />
+        {teams && autoShare ? <SettingsAutoShare initial={autoShare.team_id} teams={teams.teams} /> : null}
         <SettingsTimeZone initial={timeZone.time_zone} />
         <SettingsBotName initial={botName} />
         <SettingsLanguage initial={language.default_language} />

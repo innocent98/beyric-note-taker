@@ -19,11 +19,14 @@ export function SeriesPicker({
   dialogId,
   meetingId,
   current,
+  team,
   onDone,
 }: {
   dialogId: string;
   meetingId: number;
   current: SeriesRef | null;
+  // The team the MEETING belongs to (multi-team: a meeting joins only a series of its own team); undefined = as before.
+  team?: number | null;
   onDone: () => void;
 }) {
   const [cards, setCards] = useState<SeriesCard[]>([]);
@@ -41,7 +44,7 @@ export function SeriesPicker({
     const load = () => {
       if (!dialog.open) return;
       api.series
-        .list()
+        .list(team)
         .then((answer) => {
           if (live) setCards(answer.series);
         })
@@ -55,7 +58,7 @@ export function SeriesPicker({
       live = false;
       watch.disconnect();
     };
-  }, [dialogId]);
+  }, [dialogId, team]);
 
   const options: Array<readonly [string, string]> = [
     ["", "Choose a recurring meeting"],
@@ -73,7 +76,7 @@ export function SeriesPicker({
     setError(null);
     try {
       if (choice === NONE) await api.meetings.setSeries(meetingId, null);
-      else if (choice === NEW) await api.meetings.setSeries(meetingId, (await api.series.create(title.trim())).id);
+      else if (choice === NEW) await api.meetings.setSeries(meetingId, (await api.series.create(title.trim(), team)).id);
       else await api.meetings.setSeries(meetingId, Number(choice));
       close();
       onDone();

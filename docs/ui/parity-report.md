@@ -151,3 +151,22 @@ No page and no control was faked for any of these.
 ## Translate (W7), 2026-11-04
 
 Checked as above (built app, the mock replaying `docs/fe-captures/translate/`, Chromium, **1440, 768 and 390 px**), design left and page right: `docs/ui/parity/after/app-translate-original-*`, `app-translate-working-*`, `app-translate-fr-*`, `app-translate-fr-transcript-*`, `app-translate-es-*`, `app-translate-download-*`, `app-settings-language-*`; the Settings and meeting screens were re-shot (`app-settings*`, `app-detail`). The table of what was designed, what is built and every difference is in `docs/sop/2026-11-04-w7-translate.md` ("Parity table"). In short: the Language select, "Translating to French...", "Translated from English to French · Show original", the translated notes with the dictionary's headings, the translated transcript, Copy, the Download menu's language note and the live "Default notes language" card with the designer's toast all follow the file; the failed, out-of-date, offer and error states are the smallest things (the design is silent) and are listed as gaps. Differences left: the bordered Action items box (Tasks), turn times in the transcript (not stored), the design's 900 ms translation against a real one.
+
+## Multi-team (stage 3), 2026-11-14
+
+Built app, `web/scripts/mock-api.mjs` (`--multi-team on` for the new screens, default off for the old ones), Chromium, **1440, 768 and 390 px**, in `docs/ui/parity/after/`.
+
+**The designer's file has none of these screens, so four pieces are LEAD-DESIGNED (marked in the code, the SOP and the PR) for the designer to review.** They reuse `web/components/ui` and the existing styles; only spacing is new (`.team-switch*`, `.teams-*`, `.mt-*`):
+
+| Lead-designed piece | Where | Shots (`app-multi-team-<state>-<width>.jpg`) |
+|---|---|---|
+| **Team switcher**: one native select, labelled "Team"; personal space shown as "(personal)"; sidebar on desktop, top bar beside the logo on phones; a "Teams" sidebar link | Every app screen while the switch is on | `switcher-meetings`, `team-ordinary`, `team-personal` |
+| **Teams screen**: list (role or Personal, member count, "Working in this team", Open) and "Make a team" | `/teams` | `teams-list`, `teams-limit` (three owned: the form says so and is disabled) |
+| **Team card on the meeting page** (replaces the share switch): team select, Share / Stop sharing / Move to team; moved state with Recorded by and Move back | Meeting page | `meeting-private`, `meeting-moved` |
+| **Move dialog** (his exact words) and the Move back dialog | Meeting page | `meeting-move-dialog`, `meeting-move-back-dialog` |
+| **"Share my new meetings with"** card in Settings (per person) and the personal-space Slack and Linear note | `/settings` | `settings-auto-share`, `settings-personal` |
+| Personal-space note on the Team screen; Slack and Linear: no Connect for a personal space (a row appears only for one already connected, with Disconnect and the reason) | `/team`, `/settings` | `team-personal`, `settings-personal` (against `settings-ordinary`) |
+
+**Design-covered screens are unchanged with the switch off**: the Meetings list, the meeting page, the sidebar and phone top bar/drawer, and Settings, shot with `parity-shots.mjs` (design left, page right) as `app-multi-team-off-meetings|detail|settings|nav-closed|nav-drawer-<width>.jpg`. The page still shows the old "Share with team" switch and no switcher; the markup is also asserted in `web/tests/team-switcher.test.tsx` ("with the switch off draws nothing new"). With the switch on, the only change to a design-covered screen is the switcher above the sidebar links, a "Teams" link after "Team", the team card where the share switch was, and a "Team" row in Details.
+
+**Not verified:** Safari and Firefox; real FastAPI; a screen reader; the top-bar switcher truncates a long team name when closed ("My team (perso…" at 390 px; the open list shows it whole). The switch-off parity images were taken from the same build as the switch-on ones, not from `main`'s build.

@@ -590,6 +590,53 @@ def run(base: str, seeded: dict, engine) -> None:
     )
     pat.call("auto-share-clear", "PUT", "/api/settings/auto-share", body={"team_id": None})
 
+    # ---- stage 3: the flag the screens read, and no integrations on a personal team ----
+    # Captures 01 (anonymous) and 02 (Ada) above already carry `multi_team: true`; the switch-off read is below.
+    # The server runs in this process, so the switch is turned off for this one read and put back.
+    switch = teams.multi_team_enabled
+    teams.multi_team_enabled = lambda: False
+    try:
+        Recorder(base, "nobody").call(
+            "session-anonymous-switch-off",
+            "GET",
+            "/api/session",
+            note="The same read with the switch OFF: `multi_team` is false, logged out as well as in.",
+        )
+    finally:
+        teams.multi_team_enabled = switch
+    not_slack = {"webhook_url": "https://example.test/not-a-slack-webhook"}
+    pat.call(
+        "integrations-slack-personal-team",
+        "PUT",
+        "/api/integrations/slack",
+        team=seeded["pat_home"],
+        body=not_slack,
+        note="Slack is a team's, not the personal space's: 409 while the switch is on. Nothing is posted or stored.",
+    )
+    pat.call(
+        "integrations-linear-teams-personal-team",
+        "POST",
+        "/api/integrations/linear/teams",
+        team=seeded["pat_home"],
+        body={"api_key": "placeholder-not-a-real-key"},
+        note="Linear too: the key is not even checked for a personal space.",
+    )
+    pat.call(
+        "integrations-slack-read-personal-team",
+        "GET",
+        "/api/integrations/slack",
+        team=seeded["pat_home"],
+        note="Reading the state of a personal team still works (the screen hides the section instead).",
+    )
+    pat.call(
+        "integrations-slack-ordinary-team",
+        "PUT",
+        "/api/integrations/slack",
+        team=x,
+        body=not_slack,
+        note="A team Pat owns gets past the personal-team rule: this fake address ends in 400, as before.",
+    )
+
 
 def main() -> None:
     if not sys.argv[1:]:

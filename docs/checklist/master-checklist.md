@@ -680,7 +680,7 @@ Goal: one person has a permanent personal team and may belong to several teams; 
     - [x] `GET /api/teams`, `POST /api/teams` (three owned teams per account, checked in the route, serialised on the person's row), an explicit team per request (the `X-Team-Id` header) on every team-implicit route
     - [x] Series per team (sized first: ~10 call sites; by-id through the series' own team, list and create per team, a meeting joins only its own team's series), one reminder mail per person per occurrence, per-person invitation caps, one auto-share team per person (`/api/settings/auto-share`, dark while the switch is off), integrations follow the meeting's team (no recall of posts)
     - [x] Leak and behaviour tests (`tests/test_multi_team_api.py`, `tests/test_multi_team_guard.py`) and mutation checks; `docs/fe-integration-guide-teams.md` extended from live captures (sections 9 to 14)
-    - [ ] For stage 3 (recorded in the SOP): send and allow `X-Team-Id` in the frontend and any proxy; refuse Slack/Linear on a personal team while the switch is on
+    - [x] For stage 3 (recorded in the SOP): send and allow `X-Team-Id` in the frontend and any proxy; refuse Slack/Linear on a personal team while the switch is on (done in stage 3)
   - [x] Team-owned meetings (`owner_team_id`), the Move route, write rule (recorder plus the team's owner and admins), move back by owner or admin (2a)
   - [x] Tasks follow the meeting: re-home on share, unshare, move, move back, switch on only (2a); the extractor files by the meeting's team
   - [x] Leak tests for moved meetings, including survive-the-recorder-leaving and survive-account-deletion (2a)
@@ -688,7 +688,16 @@ Goal: one person has a permanent personal team and may belong to several teams; 
 - [x] **Stage 2 prerequisites from the stage-1 review** (SOP `docs/sop/2026-11-13-multi-team-stage-1.md`; done in 2a)
   - [x] Moved meetings: the recorder reads and owns one only while a member of the owning team; the team's owner and admins may change it; `app/deletion.py` does not delete moved meetings on account deletion (spec 6.4, 9.1). `can_read_clause`, `owns()` and `deletion.py` changed together, with leak tests. Scenario tested: Ada moves a meeting to X, leaves X, cannot read or delete it; deletes her account, the team keeps it
   - [x] The share route takes a team in the request (no team and two ordinary teams: `422 team_required`); `test_a_person_with_two_ordinary_teams_can_share_a_meeting_and_the_default_team_is_used` replaced
-- [ ] **Stage 3: frontend**: team switcher in the shell, teams list, create team, share-or-move control (designer's files in `docs/ui/`; lead-designed where they have nothing, marked so)
+- [x] **Stage 3: frontend, dark** (PR opened 2026-11-14, number added when known; no migration; SOP `docs/sop/2026-11-14-multi-team-stage-3.md`; FE guide sections 14 to 16; parity `docs/ui/parity-report.md` "Multi-team (stage 3)"; four pieces are lead-designed and marked so, for the designer)
+  - [x] The frontend learns the switch from `multi_team` in `GET /api/session` (one read-only boolean, tested, captured live 02, 03, 71)
+  - [x] One interceptor sends `X-Team-Id` on exactly the team-scoped routes, per browser tab (`?team=` plus `sessionStorage`), never a server-side team; a stale or removed team resets to the default with a plain notice
+  - [x] Team switcher in the shell (sidebar, phone top bar), Teams list and Make a team (`team_limit` in plain words)
+  - [x] Meeting page: team card (share to a team), Move with his exact confirmation, Move back, "Former member"; series and milestones use the meeting's team
+  - [x] Backend: Slack and Linear refused on a personal team (409 `personal_team`) while the switch is on; Slack and Linear rows hidden for a personal space
+  - [x] `X-Team-Id` through the proxy: checked (same origin, no CORS middleware, Next and nginx pass it); nothing to change
+  - [x] Tests: vitest for the switcher, the header interceptor, the Move dialog, the flag-off rendering, `requireTeamOwner`; backend tests; mock-api `--multi-team on`; `schema.d.ts` regenerated
+  - [ ] CI green, Opus review of header handling, Move and share, merge, deploy
+  - [ ] Designer's review of the four lead-designed pieces; a screen reader pass; a look against a real server with the switch on (local dev only)
 - [ ] **Stage 4: switch on**: `MULTI_TEAM_ENABLED=true` only after stage 3 is live
   - [ ] Prerequisite (stage-1 review): while the switch is off the one-personal-team rule drifts (a joiner's personal team is dissolved; the inviter of a team of one is left with none; an invitation made into a team of one while off may be unredeemable once on). Needs a second backfill so every live account has a personal team, and a plan for pending invitations (list, revoke and re-send from an ordinary team)
 - Open outside the code: the privacy policy and terms (today they promise that deleting an account deletes the person's meetings; a moved meeting now survives its recorder's deletion in the code) must be changed and read by his lawyer before `MULTI_TEAM_ENABLED` is switched on

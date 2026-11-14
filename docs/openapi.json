@@ -4229,6 +4229,10 @@
             "title": "Csrf Token",
             "type": "string"
           },
+          "multi_team": {
+            "title": "Multi Team",
+            "type": "boolean"
+          },
           "unread_notifications": {
             "anyOf": [
               {
@@ -4267,7 +4271,8 @@
           "user",
           "usage",
           "unread_notifications",
-          "badges"
+          "badges",
+          "multi_team"
         ],
         "title": "SessionState",
         "type": "object"
@@ -8705,6 +8710,16 @@
             },
             "description": "`team_forbidden`"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -8828,6 +8843,16 @@
               }
             },
             "description": "`team_forbidden`"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`"
           },
           "422": {
             "content": {
@@ -9089,6 +9114,16 @@
               }
             },
             "description": "`team_forbidden`"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`"
           },
           "422": {
             "content": {

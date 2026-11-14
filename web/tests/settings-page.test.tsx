@@ -1,11 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import SettingsPage, { metadata } from "@/app/settings/page";
 import { AppShell } from "@/components/app/shell";
 import { ApiError } from "@/lib/api/client";
 import { APP_PATHS, NEXT_PAGES, isNextPage } from "@/lib/routes";
 import type { CalendarState } from "@/lib/api/types";
-import { calendarBody, read, sprintsBody, WEB } from "./helpers";
+import { calendarBody, integrationsBody, read, sprintsBody, WEB } from "./helpers";
 import { join } from "node:path";
 
 // The server half of /settings/calendar, and where it sits in the app's routes and sidebar.
@@ -15,6 +15,11 @@ const state = vi.hoisted(() => ({
   answer: null as null | (() => Promise<unknown>),
   calls: 0,
   templates: null as null | (() => Promise<unknown>),
+  teams: null as null | { teams: unknown[] },
+  teamOverride: {} as Record<string, unknown>,
+  slackOn: false,
+  linearOn: false,
+  autoShare: null as number | null,
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
@@ -24,10 +29,11 @@ vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("not-found");
   },
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
-vi.mock("@/lib/api/server", () => ({
-  requireOwner: async () => {
+vi.mock("@/lib/api/server", () => {
+  const owner = async () => {
     if (!state.authenticated) throw new Error("redirect:/login");
     return {
       calendar: {
@@ -45,25 +51,31 @@ vi.mock("@/lib/api/server", () => ({
         botName: { get: async () => ({ bot_name: null, bot_name_default: "Beyric Meeting Support", warning: null, bot_name_applies_when_signed_in: false }) },
         tasks: { get: async () => ({ auto_create_tasks: true, email_assignees: true }) },
         reminders: { get: async () => ({ notify_reminders: true }) },
+        autoShare: { get: async () => ({ team_id: state.autoShare }) },
       },
       integrations: {
         linear: {
-          get: async () => ({ connected: false, status: null, last_error: null, last_synced_at: null, team_name: null, can_manage: true }),
+          get: async () => (state.linearOn ? integrationsBody("26-linear-connected.json") : { connected: false, status: null, last_error: null, last_synced_at: null, team_name: null, can_manage: true }),
         },
         slack: {
-          get: async () => ({ connected: false, status: null, last_error: null, last_posted_at: null, can_manage: true }),
+          get: async () => (state.slackOn ? integrationsBody("10-slack-connected.json") : { connected: false, status: null, last_error: null, last_posted_at: null, can_manage: true }),
         },
       },
-      team: { get: async () => ({ id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", sprint_length: "week5", sprint_custom_days: 10, sprint_align_weekdays: true, my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true }) },
+      team: { get: async () => ({ id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", sprint_length: "week5", sprint_custom_days: 10, sprint_align_weekdays: true, my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true, ...state.teamOverride }) },
     };
-  },
+  };
+  return {
+  requireOwner: owner,
+  requireTeamOwner: async () => ({ api: await owner(), teams: state.teams, teamId: null }),
   getReviewOpen: async () => 2,
   getTasksNew: async () => 0,
   getUnreadNotifications: async () => null,
   getShellUser: async () => null,
+  getShellTeams: async () => state.teams?.teams ?? null,
   getTimeZone: async () => null,
   load: <T,>(call: Promise<T>) => call,
-}));
+  };
+});
 
 const connected = calendarBody<CalendarState>("09-state-connected-with-upcoming.json");
 const render = async (params: Record<string, string | string[]> = {}) =>
@@ -213,5 +225,93 @@ describe("server and client code stay apart", () => {
     expect(plain).not.toMatch(/use client/);
     expect(page).toMatch(/import \{ SettingsCalendar \} from "@\/components\/app\/settings-calendar"/);
     expect(page).toMatch(/calendarNotice\b[^;]*from "@\/lib\/calendar-notice"/);
+  });
+});
+
+
+describe("Slack and Linear belong to a team (multi-team)", () => {
+  const withTeams = (team: Record<string, unknown>, on = true) => {
+    state.answer = async () => connected;
+    state.teams = on ? { teams: [{ id: 2, name: "My team", role: "owner", member_count: 1, is_personal: true, is_default: true, can_manage: true }] } : null;
+    state.teamOverride = team;
+  };
+  afterEach(() => {
+    state.teams = null;
+    state.teamOverride = {};
+    state.slackOn = false;
+    state.linearOn = false;
+    state.autoShare = null;
+  });
+
+  it("a personal space gets neither the Slack nor the Linear row, and no 'not available yet' stand-ins", async () => {
+    withTeams({ is_personal: true });
+    const html = await render();
+    expect(html).not.toContain("Post tasks to Slack");
+    expect(html).not.toContain("Sync with your project tool");
+    expect(html).not.toContain("Connect Slack");
+  });
+
+  it("a personal space that already has Slack and Linear connected still shows them, with Disconnect and the reason, and no Connect", async () => {
+    withTeams({ is_personal: true });
+    state.slackOn = true;
+    state.linearOn = true;
+    const html = await render();
+    expect(html).toContain("Slack connected");
+    expect(html).toContain("Syncing with Linear");
+    expect(html.match(/pl-slack-disconnect/g)).toHaveLength(2);
+    expect(html).toContain("This is your personal space. Slack belongs to a team, so it can be disconnected here but not connected again.");
+    expect(html).toContain("This is your personal space. Linear belongs to a team, so it can be disconnected here but not connected again.");
+    expect(html).not.toContain("Connect Slack");
+  });
+
+  it("a personal space gets one plain note in their place, with a link to make a team", async () => {
+    withTeams({ is_personal: true });
+    const html = await render();
+    expect(html).toContain("Slack and Linear work for teams. Make a team (it can be just you), then connect them there.");
+    expect(html).toMatch(/<a [^>]*href="\/teams"[^>]*>Make a team<\/a>/);
+    expect(html.match(/Slack and Linear work for teams/g)).toHaveLength(1);
+  });
+
+  it("an ordinary team, and a server with the switch off, show no such note", async () => {
+    withTeams({ is_personal: false });
+    expect(await render()).not.toContain("Slack and Linear work for teams");
+    withTeams({ is_personal: true }, false);
+    expect(await render()).not.toContain("Slack and Linear work for teams");
+  });
+
+  it("an ordinary team keeps them", async () => {
+    withTeams({ is_personal: false });
+    const html = await render();
+    expect(html).toContain("Post tasks to Slack");
+    expect(html).toContain("Sync with your project tool");
+  });
+
+  it("with the switch off the team of one keeps them, personal or not (nothing changes)", async () => {
+    withTeams({ is_personal: true }, false);
+    const html = await render();
+    expect(html).toContain("Post tasks to Slack");
+    expect(html).toContain("Sync with your project tool");
+  });
+});
+
+describe("Share my new meetings with (multi-team)", () => {
+  const teams = [
+    { id: 1, name: "My team", role: "owner", member_count: 1, is_personal: true, is_default: true, can_manage: true },
+    { id: 4, name: "Platform team", role: "owner", member_count: 1, is_personal: false, is_default: false, can_manage: true },
+  ];
+  afterEach(() => {
+    state.teams = null;
+    state.autoShare = null;
+  });
+
+  it("is drawn only while the switch is on, with the person's choice selected", async () => {
+    state.answer = async () => connected;
+    state.teams = { teams };
+    state.autoShare = 4;
+    const html = await render();
+    expect(html).toContain("Share my new meetings with");
+    expect(html).toMatch(/<option value="4" selected="">Platform team<\/option>/);
+    state.teams = null;
+    expect(await render()).not.toContain("Share my new meetings with");
   });
 });

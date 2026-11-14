@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app/shell";
 import { AskView } from "@/components/app/ask-view";
 import { ApiError } from "@/lib/api/client";
 import type { AskScope } from "@/lib/api/types";
-import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireOwner } from "@/lib/api/server";
+import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, requireOwner, getShellTeams } from "@/lib/api/server";
 import { initials } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Ask Beyric", robots: { index: false, follow: false } };
@@ -26,7 +26,7 @@ export default async function AskPage() {
       current="ask"
       reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()}
-      unread={await getUnreadNotifications()} user={user}
+      unread={await getUnreadNotifications()} user={user} teams={await getShellTeams()}
       timeZone={await getTimeZone()}
     >
       <AskView scope={scope} initials={name ? initials(name) : "?"} />
