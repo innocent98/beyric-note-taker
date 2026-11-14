@@ -13,8 +13,9 @@ confirm that the row exists).
 
 import logging
 import math
+import re
 import shutil
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import HTTPException, Request
 from markdown_it import MarkdownIt
@@ -31,6 +32,7 @@ from app import (
     edge,
     passwords,
     placement,
+    timezones,
     titles,
     usage,
     visibility,
@@ -390,12 +392,71 @@ def worker_is_stale(session: Session) -> bool:
 # ---- meetings ----
 
 
+DAY_FORMAT = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def parse_day(text_value: str | None, which: str) -> date | None:
+    """A calendar day written YYYY-MM-DD, or None for nothing. Anything else (another layout, a
+    day that does not exist such as 2026-02-30, a year outside 1900 to 2200) is a 422 in plain
+    words; `which` is "From" or "To" so the message says which box to fix."""
+    if text_value is None or text_value == "":
+        return None
+    try:
+        if not DAY_FORMAT.fullmatch(text_value):
+            raise ValueError
+        day = date.fromisoformat(text_value)
+        if not 1900 <= day.year <= 2200:
+            raise ValueError
+    except ValueError:
+        raise Refused(
+            422,
+            "invalid_date",
+            f"{which} is not a date. Write it as YYYY-MM-DD, for example 2026-11-14.",
+        ) from None
+    return day
+
+
+def day_range_utc(
+    zone_name: str | None, first: date | None, last: date | None
+) -> tuple[datetime | None, datetime | None]:
+    """The instants a pair of calendar days covers in a person's time zone, for a filter on a
+    timestamp: from the start of `first` (inclusive) to the start of the day after `last`
+    (exclusive), so both days are included whole. The zone is the person's stored one (UTC when
+    none): a meeting at 23:30 on the 7th, there, belongs to the 7th whatever UTC says. A day that
+    starts at a clock change is handled by the zone database. 422 when `first` is after `last`."""
+    if first is not None and last is not None and first > last:
+        raise Refused(
+            422, "invalid_date_range", "From must be on or before To. Swap the two dates."
+        )
+    zone = timezones.zone(zone_name)
+
+    def midnight(day: date) -> datetime:
+        return datetime.combine(day, time.min, tzinfo=zone).astimezone(UTC)
+
+    return (
+        midnight(first) if first is not None else None,
+        midnight(last + timedelta(days=1)) if last is not None else None,
+    )
+
+
 def list_meetings(
-    session: Session, user: User, limit: int = 50, before_id: int | None = None
+    session: Session,
+    user: User,
+    limit: int = 50,
+    before_id: int | None = None,
+    created_from: datetime | None = None,
+    created_before: datetime | None = None,
 ) -> list[Meeting]:
+    """Newest first, through the same visibility rule as every other read. `created_from`
+    (inclusive) and `created_before` (exclusive) are instants on `created_at`, the timestamp the
+    list and its day headings use; `day_range_utc` makes them from two calendar days."""
     query = visibility.visible_meetings(user).order_by(Meeting.id.desc()).limit(limit)
     if before_id is not None:
         query = query.where(Meeting.id < before_id)
+    if created_from is not None:
+        query = query.where(Meeting.created_at >= created_from)
+    if created_before is not None:
+        query = query.where(Meeting.created_at < created_before)
     return list(session.scalars(query))
 
 

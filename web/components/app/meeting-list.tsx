@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge, Button, Card, EmptyState, Icon, ListRow, Toast } from "@/components/ui";
+import { Alert, Badge, Button, Card, EmptyState, Icon, ListRow, Toast } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { DELETED_FLAG } from "@/lib/deleted-flag";
 import { api } from "@/lib/api/browser";
 import type { MeetingList as MeetingListData, MeetingSummary, Template } from "@/lib/api/types";
 import { LocalTime, useDisplayTimeZone } from "@/components/app/local-time";
-import { groupByDay } from "@/lib/day-groups";
+import { MeetingFilter } from "@/components/app/meeting-filter";
+import { NO_RANGE, isFiltered, rangeHeading, rangeQuery, type DayRange } from "@/lib/date-range";
+import { dayKey, groupByDay } from "@/lib/day-groups";
 import { plural } from "@/lib/format";
 
 // The list of meetings, newest first. The first page comes from the server render; older pages are
@@ -20,10 +22,30 @@ import { plural } from "@/lib/format";
 // own times are written in. A meeting is under the day of the `created_at` its row shows. The groups
 // are made from the whole list (first page and every older page together), so a day that runs over
 // a page boundary stays under one heading.
-export function MeetingList({ initial, templates }: { initial: MeetingListData; templates: Template[] }) {
+//
+// The date filter (`range`, lead-designed; components/app/meeting-filter.tsx) is in the address
+// (`/meetings?from=&to=`): applying it navigates, the server renders the first page of that range, and
+// "Show older meetings" asks for the same range. The refresh above keeps the address, so it keeps the
+// filter. `rangeNotice` says why a damaged address was ignored.
+export function MeetingList({
+  initial,
+  templates,
+  range = NO_RANGE,
+  rangeNotice = null,
+}: {
+  initial: MeetingListData;
+  templates: Template[];
+  range?: DayRange;
+  rangeNotice?: string | null;
+}) {
   const router = useRouter();
-  const [older, setOlder] = useState<MeetingSummary[]>([]);
-  const [paging, setPaging] = useState<{ hasMore: boolean; before: number | null } | null>(null);
+  // Older pages belong to the range they were fetched for: another range starts again from the
+  // server's first page, with no effect to reset anything.
+  const rangeId = rangeQuery(range);
+  const [paged, setPaged] = useState<{ rangeId: string; older: MeetingSummary[]; hasMore: boolean; before: number | null } | null>(null);
+  const current = paged && paged.rangeId === rangeId ? paged : null;
+  const older = current?.older ?? [];
+  const paging = current ? { hasMore: current.hasMore, before: current.before } : null;
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const [toast, flash] = useToast();
@@ -63,33 +85,49 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
   const before = paging ? paging.before : initial.next_before_id;
   const names = new Map(templates.map((t) => [t.id, t.name]));
   const days = groupByDay(meetings, timeZone, now);
+  const filtered = isFiltered(range);
+  const today = dayKey(now.toISOString(), timeZone);
 
   async function loadOlder() {
     if (before === null || loading) return;
     setLoading(true);
     setFailed(false);
     try {
-      const page = await api.meetings.list({ before_id: before });
-      setOlder((current) => [...current, ...page.meetings]);
-      setPaging({ hasMore: page.has_more, before: page.next_before_id });
+      const page = await api.meetings.list({ before_id: before, from: range.from ?? undefined, to: range.to ?? undefined });
+      setPaged({
+        rangeId,
+        older: [...older, ...page.meetings],
+        hasMore: page.has_more,
+        before: page.next_before_id,
+      });
     } catch {
       setFailed(true);
     }
     setLoading(false);
   }
 
+  function applyRange(next: DayRange) {
+    router.push(`/meetings${rangeQuery(next)}`, { scroll: false });
+  }
+
+  const head = (
+    <div className="card-head">
+      <h2 suppressHydrationWarning>{rangeHeading(range, today)}</h2>
+      <span className="meta">
+        {plural(meetings.length, "meeting")}
+        {hasMore ? "+" : ""}
+      </span>
+    </div>
+  );
+
   return (
     <>
+    {meetings.length > 0 || filtered ? <MeetingFilter range={range} today={today} onApply={applyRange} /> : null}
+    {rangeNotice ? <Alert kind="notice">{rangeNotice}</Alert> : null}
     <Card flush>
       {meetings.length > 0 ? (
         <>
-          <div className="card-head">
-            <h2>Recent</h2>
-            <span className="meta">
-              {plural(meetings.length, "meeting")}
-              {hasMore ? "+" : ""}
-            </span>
-          </div>
+          {head}
           {days.map((day) => (
             <div className="day-group" key={day.key}>
               <h3 className="day-head" id={`meetings-day-${day.key}`} suppressHydrationWarning>
@@ -141,6 +179,11 @@ export function MeetingList({ initial, templates }: { initial: MeetingListData; 
               {failed ? <span className="meta">Could not load older meetings. Try again.</span> : null}
             </div>
           ) : null}
+        </>
+      ) : filtered ? (
+        <>
+          {head}
+          <EmptyState title="No meetings in this range.">Try other dates, or clear the filter to see every meeting.</EmptyState>
         </>
       ) : (
         <EmptyState title="No meetings yet.">Paste a meeting link above to send the note taker.</EmptyState>

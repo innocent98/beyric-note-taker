@@ -709,6 +709,484 @@ content-type: application/json
 ```
 _Capture: `docs/fe-captures/owner-app/56-meetings-list-bad-limit.json`_
 
+#### 5.1a The date filter: `from` and `to`
+
+`GET /api/meetings` takes two optional query parameters, `from` and `to`, each a day written `YYYY-MM-DD`. They keep only the meetings made on those calendar days, **both days included**. The Meetings page's date filter (lead-designed: the designer's files have no filter) sends them; the page keeps the range in its own address, `/meetings?from=2026-11-01&to=2026-11-07`, so a filtered view can be reloaded and shared.
+
+| Rule | Detail |
+|---|---|
+| Whose days | The **caller's own** days: their stored time zone (Settings > Time zone, `docs/fe-integration-guide-settings-time-zone.md`; UTC when none is stored), not the recorder's and not UTC. A meeting at 23:30 on the 7th in Lagos is on the 7th, whatever UTC says |
+| Which timestamp | `created_at`, the one the list shows and the day headings use |
+| Open ends | `from` alone: that day and after. `to` alone: that day and before. Neither, or both empty (`?from=&to=`): the list exactly as before |
+| With paging | Works with `limit`, `before_id`, `has_more` and `next_before_id`: pass the same `from` and `to` on every page. `has_more` counts only meetings in the range |
+| Visibility | Unchanged: the filter only narrows what the caller may already read (their own and their team's shared meetings) |
+| Empty result | 200 with `meetings: []`, `has_more: false`, `next_before_id: null` (never a 404) |
+| Refused | **422** `invalid_date` (not a real `YYYY-MM-DD` day, or a year outside 1900 to 2200; the message says `From` or `To`) and **422** `invalid_date_range` (`from` after `to`). Both use the usual `{"error": {"code", "message"}}` shape, with no `fields` list |
+
+**Nesting trap:** the parameters are `from` and `to`, but the object they filter is not changed: `created_at` in the response is still a UTC instant. To draw a day in the owner's zone use the zone the page already uses for times (`user.time_zone` of `GET /api/session`); do not cut the string.
+
+**What the page does with it:** From and To boxes with Apply, quick buttons Today, Last 7 days (today and the six days before it) and Last 30 days (today and the 29 before), computed in the owner's zone, and Clear. With a filter on, the list's heading names the range and an empty result reads "No meetings in this range.".
+
+The six meetings used below are inserted by SQL with chosen times around midnight in Lagos (UTC+1); the capture's notes list which is which.
+
+No `from` and `to`: all six, as before:
+
+```http
+GET /api/meetings
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 6,
+      "title": "Meeting f",
+      "created_at": "2026-11-10T09:00:00Z"
+    },
+    {
+      "id": 5,
+      "title": "Meeting e",
+      "created_at": "2026-11-07T23:30:00Z"
+    },
+    {
+      "id": 4,
+      "title": "Meeting d",
+      "created_at": "2026-11-07T22:30:00Z"
+    },
+    {
+      "id": 3,
+      "title": "Meeting c",
+      "created_at": "2026-11-07T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "title": "Meeting b",
+      "created_at": "2026-11-06T23:30:00Z"
+    },
+    {
+      "id": 1,
+      "title": "Meeting a",
+      "created_at": "2026-11-06T22:30:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/04-list-no-filter.json`_
+
+No time zone stored yet: the days are UTC days. The 7th holds the meetings at 12:00, 22:30 and 23:30 UTC:
+
+```http
+GET /api/meetings?from=2026-11-07&to=2026-11-07
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 5,
+      "title": "Meeting e",
+      "created_at": "2026-11-07T23:30:00Z"
+    },
+    {
+      "id": 4,
+      "title": "Meeting d",
+      "created_at": "2026-11-07T22:30:00Z"
+    },
+    {
+      "id": 3,
+      "title": "Meeting c",
+      "created_at": "2026-11-07T12:00:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/05-range-utc-no-zone-stored.json`_
+
+The owner then picks Lagos on Settings:
+
+```http
+PUT /api/settings/time-zone
+X-CSRF-Token: <csrf-B>
+Cookie: session=<cookie>
+```
+```json
+{"time_zone": "Africa/Lagos"}
+```
+
+```http
+HTTP 200
+content-type: application/json
+```
+```json
+{
+  "time_zone": "Africa/Lagos",
+  "is_set": true
+}
+```
+
+_Capture: `docs/fe-captures/meetings-date-filter/06-set-time-zone.json`_
+
+The same request is now the 7th in Lagos: the meeting at 22:30 UTC on the 6th (00:30 on the 7th there) is in, the one at 23:30 UTC on the 7th (00:30 on the 8th) is out:
+
+```http
+GET /api/meetings?from=2026-11-07&to=2026-11-07
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 4,
+      "title": "Meeting d",
+      "created_at": "2026-11-07T22:30:00Z"
+    },
+    {
+      "id": 3,
+      "title": "Meeting c",
+      "created_at": "2026-11-07T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "title": "Meeting b",
+      "created_at": "2026-11-06T23:30:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/07-range-one-day-lagos.json`_
+
+Two days, both whole:
+
+```http
+GET /api/meetings?from=2026-11-07&to=2026-11-08
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 5,
+      "title": "Meeting e",
+      "created_at": "2026-11-07T23:30:00Z"
+    },
+    {
+      "id": 4,
+      "title": "Meeting d",
+      "created_at": "2026-11-07T22:30:00Z"
+    },
+    {
+      "id": 3,
+      "title": "Meeting c",
+      "created_at": "2026-11-07T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "title": "Meeting b",
+      "created_at": "2026-11-06T23:30:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/08-range-two-days.json`_
+
+Only `from`:
+
+```http
+GET /api/meetings?from=2026-11-08
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 6,
+      "title": "Meeting f",
+      "created_at": "2026-11-10T09:00:00Z"
+    },
+    {
+      "id": 5,
+      "title": "Meeting e",
+      "created_at": "2026-11-07T23:30:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/09-range-only-from.json`_
+
+Only `to`:
+
+```http
+GET /api/meetings?to=2026-11-06
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 1,
+      "title": "Meeting a",
+      "created_at": "2026-11-06T22:30:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/10-range-only-to.json`_
+
+Paging inside a range, page 1 (`limit=2`):
+
+```http
+GET /api/meetings?from=2026-11-06&to=2026-11-08&limit=2
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 5,
+      "title": "Meeting e",
+      "created_at": "2026-11-07T23:30:00Z"
+    },
+    {
+      "id": 4,
+      "title": "Meeting d",
+      "created_at": "2026-11-07T22:30:00Z"
+    }
+  ],
+  "has_more": true,
+  "next_before_id": 4
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/11-range-paging-page-1.json`_
+
+Page 2: the first page's `next_before_id` as `before_id`, the same `from` and `to`:
+
+```http
+GET /api/meetings?from=2026-11-06&to=2026-11-08&limit=2&before_id=4
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 3,
+      "title": "Meeting c",
+      "created_at": "2026-11-07T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "title": "Meeting b",
+      "created_at": "2026-11-06T23:30:00Z"
+    }
+  ],
+  "has_more": true,
+  "next_before_id": 2
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/12-range-paging-page-2.json`_
+
+A range with no meetings:
+
+```http
+GET /api/meetings?from=2026-01-01&to=2026-01-31
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/13-range-empty.json`_
+
+Blank values are the same as none:
+
+```http
+GET /api/meetings?from=&to=
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 200
+```
+```json
+{
+  "meetings": [
+    {
+      "id": 6,
+      "title": "Meeting f",
+      "created_at": "2026-11-10T09:00:00Z"
+    },
+    {
+      "id": 5,
+      "title": "Meeting e",
+      "created_at": "2026-11-07T23:30:00Z"
+    },
+    {
+      "id": 4,
+      "title": "Meeting d",
+      "created_at": "2026-11-07T22:30:00Z"
+    },
+    {
+      "id": 3,
+      "title": "Meeting c",
+      "created_at": "2026-11-07T12:00:00Z"
+    },
+    {
+      "id": 2,
+      "title": "Meeting b",
+      "created_at": "2026-11-06T23:30:00Z"
+    },
+    {
+      "id": 1,
+      "title": "Meeting a",
+      "created_at": "2026-11-06T22:30:00Z"
+    }
+  ],
+  "has_more": false,
+  "next_before_id": null
+}
+```
+_Trimmed: each meeting shows only `id`, `title` and `created_at`; `worker_stale`, `refresh_after_seconds` and every other field are as in 5.1. Nothing was changed or added._
+
+_Capture: `docs/fe-captures/meetings-date-filter/14-range-blank-values.json`_
+
+`from` after `to`:
+
+```http
+GET /api/meetings?from=2026-11-09&to=2026-11-08
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 422
+content-type: application/json
+```
+```json
+{
+  "error": {
+    "code": "invalid_date_range",
+    "message": "From must be on or before To. Swap the two dates."
+  }
+}
+```
+
+_Capture: `docs/fe-captures/meetings-date-filter/15-error-from-after-to.json`_
+
+A day that does not exist:
+
+```http
+GET /api/meetings?from=2026-02-30
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 422
+content-type: application/json
+```
+```json
+{
+  "error": {
+    "code": "invalid_date",
+    "message": "From is not a date. Write it as YYYY-MM-DD, for example 2026-11-14."
+  }
+}
+```
+
+_Capture: `docs/fe-captures/meetings-date-filter/16-error-not-a-date.json`_
+
+Another layout (it names `To`):
+
+```http
+GET /api/meetings?to=07/11/2026
+Cookie: session=<cookie>
+```
+
+```http
+HTTP 422
+content-type: application/json
+```
+```json
+{
+  "error": {
+    "code": "invalid_date",
+    "message": "To is not a date. Write it as YYYY-MM-DD, for example 2026-11-14."
+  }
+}
+```
+
+_Capture: `docs/fe-captures/meetings-date-filter/17-error-wrong-layout.json`_
+
+**Not exercised live:** a teammate reading a shared meeting through a range (covered by `tests/test_meetings_date_filter.py`, not captured), and a day that starts at a clock change (test only). The page itself was checked by component tests against these shapes.
+
+Re-derive with `python scripts/capture_meetings_date_filter.py postgresql+psycopg://USER:PASS@localhost:PORT/postgres` (run from `scripts/`, with the repo root on `PYTHONPATH`).
+
 ### 5.2 `GET /api/meetings/{id}`: the meeting page
 
 The body is the same object `POST /api/meetings` returns for a new meeting (5.3, complete there). A ready meeting, with every field and `notes_html` as returned:
@@ -2133,6 +2611,8 @@ The generator command is a suggestion; it was **not run** as part of this work.
 | Regenerate: ok, not ready, no template, OpenAI failure | Verified live **with a fake OpenAI** | `59`–`62` |
 | Real OpenAI regenerate, its duration, edge timeouts | **NOT EXERCISED** | `deploy/nginx.conf` |
 | Template create, update, duplicate, empty, too long, unknown | Verified live | `22`–`28` |
+| `GET /api/meetings?from=&to=`: UTC days without a stored zone, Lagos days with one, one day, two days, only `from`, only `to`, paging inside a range, empty range, blank values, `from` after `to` (422), not a date (422), wrong layout (422) | Verified live | `docs/fe-captures/meetings-date-filter/04`–`17` |
+| The filter for a teammate reading a shared meeting; a day starting at a clock change; the filter box in a real browser | Test only / **NOT EXERCISED** live | `tests/test_meetings_date_filter.py`, `web/tests/meetings-date-filter.test.tsx` |
 | Vocabulary add, list, duplicate, invalid, delete, delete twice | Verified live | `13`–`21` |
 | Validation errors (missing field, wrong type, unknown field, bad JSON, not an object) | Verified live (the unknown-field case is a test) | `06`, `07`, `28`, `32`, `70`, `71` |
 | 404 for unknown id, long id, non-number, unknown path; 405 | Verified live | `63`–`65`, `68`, `69` |

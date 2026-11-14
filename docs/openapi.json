@@ -8753,7 +8753,7 @@
     },
     "/api/meetings": {
       "get": {
-        "description": "The caller's meetings, plus any shared with their team, newest first. For the next page\npass `before_id` = `next_before_id`.",
+        "description": "The caller's meetings, plus any shared with their team, newest first. For the next page\npass `before_id` = `next_before_id`.\n\n`from` and `to` (both optional, `YYYY-MM-DD`) keep only the meetings made on those calendar\ndays, both included, in the caller's stored time zone (Settings > Time zone; UTC when none),\nby the same `created_at` the list's day headings use. They work with `before_id`,\n`has_more` and `next_before_id` as without them. 422 `invalid_date` for a value that is not\na date, 422 `invalid_date_range` when `from` is after `to`. With neither, nothing changes.",
         "operationId": "list_meetings",
         "parameters": [
           {
@@ -8784,6 +8784,38 @@
                 }
               ],
               "title": "Before Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
             }
           }
         ],
@@ -8826,7 +8858,7 @@
                 }
               }
             },
-            "description": "Malformed request"
+            "description": "`invalid_date`, `invalid_date_range`"
           }
         },
         "summary": "List Meetings",

@@ -7,6 +7,7 @@ import { RecurringCards } from "@/components/app/recurring-cards";
 import { Alert, PageHead } from "@/components/ui";
 import { getReviewOpen, getTasksNew, getTimeZone, getShellUser, getUnreadNotifications, load, requireOwner, serverApi } from "@/lib/api/server";
 import type { CalendarState, NotRecordedItem } from "@/lib/api/types";
+import { isFiltered, readRange } from "@/lib/date-range";
 
 // The owner's Meetings page: the home of the signed-in app. `/` is the landing page for everyone
 // (app/page.tsx); this page is for the owner only (a visitor goes to /login) and is never indexed.
@@ -31,14 +32,23 @@ async function getNotRecorded(api: Awaited<ReturnType<typeof serverApi>>): Promi
   }
 }
 
-export default async function MeetingsPage() {
+// The date filter is in the address (`/meetings?from=2026-11-01&to=2026-11-07`, lead-designed), so a
+// filtered view can be reloaded and shared. A damaged value is ignored with a line about it.
+export default async function MeetingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+} = {}) {
   const api = await requireOwner();
+  const { range, notice } = readRange((await searchParams) ?? {});
   const [[list, templates], calendar, notRecorded] = await Promise.all([
-    load(Promise.all([api.meetings.list(), api.templates.list()])),
+    load(Promise.all([api.meetings.list({ from: range.from ?? undefined, to: range.to ?? undefined }), api.templates.list()])),
     getCalendar(api),
     getNotRecorded(api),
   ]);
-  const busy = list.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
+  // "A bot is already on a meeting" is about the newest meetings, not about the filtered ones.
+  const newest = isFiltered(range) ? await load(api.meetings.list({ limit: 10 })) : list;
+  const busy = newest.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
   return (
     <AppShell current="meetings" reviewOpen={await getReviewOpen()}
       tasksNew={await getTasksNew()} unread={await getUnreadNotifications()} user={await getShellUser()} timeZone={await getTimeZone()}>
@@ -53,7 +63,7 @@ export default async function MeetingsPage() {
         <NewMeetingForm templates={templates} busy={busy} />
         <MeetingsCalendar state={calendar} notRecorded={notRecorded} />
         <RecurringCards />
-        <MeetingList initial={list} templates={templates} />
+        <MeetingList initial={list} templates={templates} range={range} rangeNotice={notice} />
       </div>
     </AppShell>
   );
