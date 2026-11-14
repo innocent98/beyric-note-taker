@@ -136,7 +136,9 @@ _ANY_DOT_LINK = re.compile(
 )
 
 
-_INVISIBLE_MARKS = re.compile("[\u200c\u200d\u034f\ufe00-\ufe0f]")
+_INVISIBLE_MARKS = re.compile(
+    "[\u200c\u200d\u034f\u180b-\u180d\u180f\ufe00-\ufe0f\U000e0100-\U000e01ef]"
+)
 
 
 def tidy_dots(text: str) -> str:
@@ -145,10 +147,11 @@ def tidy_dots(text: str) -> str:
 
 
 def without_joiners(text: str) -> str:
-    """`text` with EVERY zero-width joiner and non-joiner, combining grapheme joiner (U+034F) and
-    variation selector removed: the copy the link checks and the defanging look at, because such a
-    mark inside the label or the top-level domain ("evil.c<ZWJ>om") draws nothing and splits the
-    word for a regex while a person still reads "evil.com"."""
+    """`text` with every zero-width joiner and non-joiner, combining grapheme joiner (U+034F) and
+    variation selector (the Mongolian and supplementary ones too) removed: the copy the link checks
+    and the defanging look at, because such a mark inside the label or the top-level domain
+    ("evil.c<ZWJ>om") draws nothing and splits the word for a regex while a person still reads
+    "evil.com"."""
     return _INVISIBLE_MARKS.sub("", text)
 
 

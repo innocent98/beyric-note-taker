@@ -1160,7 +1160,10 @@ def test_the_name_models_have_a_generous_max_length_and_keep_their_own_codes(api
     assert error_of(huge, 422, "validation_error")["fields"][0]["field"] == "name"
 
 
-@pytest.mark.parametrize("mark", ["͏", "️", "︀"])
+@pytest.mark.parametrize(
+    "mark",
+    ["\u034f", "\ufe0f", "\ufe00", "\u180b", "\u180d", "\u180f", "\U000e0100", "\U000e01ef"],
+)
 def test_an_invisible_mark_inside_a_web_address_cannot_hide_it(mark):
     # They draw nothing, so a person still reads "evil.com" while a regex sees a split word.
     with pytest.raises(BotNameInvalid) as caught:
