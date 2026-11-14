@@ -250,3 +250,12 @@ export function shareCapture(file: string): { request: { body: unknown }; respon
 export function shareBody<T>(file: string): T {
   return shareCapture(file).response.body as T;
 }
+
+// A capture from the running API for the multi-team routes (docs/fe-captures/teams/<file>, `python
+// scripts/capture_teams_api.py`): the whole exchange, or the response body.
+export function teamsCapture(file: string): { as: string; request: { method: string; path: string; headers: Record<string, string>; body: unknown }; response: { status: number; body: unknown } } {
+  return JSON.parse(read(join(REPO, "docs/fe-captures/teams", file)));
+}
+export function teamsBody<T>(file: string): T {
+  return teamsCapture(file).response.body as T;
+}

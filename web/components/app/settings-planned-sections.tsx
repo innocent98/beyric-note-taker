@@ -88,6 +88,7 @@ export function SettingsPlannedSections({
   team = null,
   reminderMail = null,
   sprints = null,
+  integrations = true,
 }: {
   tasks?: TasksSettings | null;
   slack?: SlackState | null;
@@ -95,9 +96,14 @@ export function SettingsPlannedSections({
   team?: Team | null;
   reminderMail?: ReminderPreferences | null;
   sprints?: SprintList | null;
+  // false for a personal space while multi-team is on: Slack and Linear belong to a team, so their rows are
+  // not drawn at all (the server refuses them there: 409 `personal_team`).
+  integrations?: boolean;
 }) {
   // The Tasks card's rows that are still drawn off, named in its one "not available yet" line.
-  const pending = [...(linear ? [] : ["Sync with your project tool"]), ...(slack ? [] : ["Post tasks to Slack"])];
+  const pending = integrations
+    ? [...(linear ? [] : ["Sync with your project tool"]), ...(slack ? [] : ["Post tasks to Slack"])]
+    : [];
   return (
     <>
       <section className="card card-flush" aria-labelledby="set-sprints">
@@ -188,7 +194,7 @@ export function SettingsPlannedSections({
         </div>
           </>
         )}
-        {linear ? (
+        {!integrations ? null : linear ? (
           <SettingsTracker initial={linear} />
         ) : (
           <div className="pl-row pl-row-center">
@@ -206,7 +212,7 @@ export function SettingsPlannedSections({
             </div>
           </div>
         )}
-        {slack ? (
+        {!integrations ? null : slack ? (
           <SettingsSlack initial={slack} />
         ) : (
           <div className="pl-row pl-row-center pl-row-last">

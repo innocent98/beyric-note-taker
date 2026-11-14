@@ -17,7 +17,8 @@ import { Icon, Logo } from "@/components/ui";
 const DRAWER_QUERY = "(max-width: 860px)";
 const FOCUSABLE = "a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
-export function ShellNav({ children }: { children: ReactNode }) {
+// `topbar` is extra content for the phone top bar, beside the logo (the team switcher, while multi-team is on).
+export function ShellNav({ children, topbar = null }: { children: ReactNode; topbar?: ReactNode }) {
   const pathname = usePathname();
   // The page the drawer was opened on: a route change makes it differ, which closes the drawer
   // without an effect (no flash of a drawer left open on the next page).
@@ -115,6 +116,7 @@ export function ShellNav({ children }: { children: ReactNode }) {
           <Icon name="menu" size={20} />
         </button>
         <Logo />
+        {topbar}
       </div>
       <div className="drawer-scrim" data-open={open ? "true" : "false"} aria-hidden="true" onClick={close} />
       <aside

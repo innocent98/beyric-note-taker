@@ -23,7 +23,8 @@
         "name": "Pat Example",
         "is_admin": false,
         "email_verified": true,
-        "time_zone": null
+        "time_zone": null,
+        "recording_acknowledged": false
       },
       "usage": {
         "used_seconds": 0,
@@ -33,7 +34,8 @@
       "badges": {
         "review_open": 0,
         "tasks_new": 0
-      }
+      },
+      "multi_team": true
     }
   }
 }

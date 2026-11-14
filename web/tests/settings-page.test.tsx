@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import SettingsPage, { metadata } from "@/app/settings/page";
 import { AppShell } from "@/components/app/shell";
 import { ApiError } from "@/lib/api/client";
@@ -15,6 +15,8 @@ const state = vi.hoisted(() => ({
   answer: null as null | (() => Promise<unknown>),
   calls: 0,
   templates: null as null | (() => Promise<unknown>),
+  teams: null as null | { teams: unknown[] },
+  teamOverride: {} as Record<string, unknown>,
 }));
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
@@ -24,10 +26,11 @@ vi.mock("next/navigation", () => ({
   notFound: () => {
     throw new Error("not-found");
   },
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
-vi.mock("@/lib/api/server", () => ({
-  requireOwner: async () => {
+vi.mock("@/lib/api/server", () => {
+  const owner = async () => {
     if (!state.authenticated) throw new Error("redirect:/login");
     return {
       calendar: {
@@ -53,16 +56,21 @@ vi.mock("@/lib/api/server", () => ({
           get: async () => ({ connected: false, status: null, last_error: null, last_posted_at: null, can_manage: true }),
         },
       },
-      team: { get: async () => ({ id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", sprint_length: "week5", sprint_custom_days: 10, sprint_align_weekdays: true, my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true }) },
+      team: { get: async () => ({ id: 2, name: "My team", share_new_meetings: false, reminders_on: false, reminder_timing: "both", sprint_length: "week5", sprint_custom_days: 10, sprint_align_weekdays: true, my_role: "owner", member_count: 2, pending_invites: 0, can_manage: true, can_change_roles: true, ...state.teamOverride }) },
     };
-  },
+  };
+  return {
+  requireOwner: owner,
+  requireTeamOwner: async () => ({ api: await owner(), teams: state.teams, teamId: null }),
   getReviewOpen: async () => 2,
   getTasksNew: async () => 0,
   getUnreadNotifications: async () => null,
   getShellUser: async () => null,
+  getShellTeams: async () => state.teams?.teams ?? null,
   getTimeZone: async () => null,
   load: <T,>(call: Promise<T>) => call,
-}));
+  };
+});
 
 const connected = calendarBody<CalendarState>("09-state-connected-with-upcoming.json");
 const render = async (params: Record<string, string | string[]> = {}) =>
@@ -212,5 +220,40 @@ describe("server and client code stay apart", () => {
     expect(plain).not.toMatch(/use client/);
     expect(page).toMatch(/import \{ SettingsCalendar \} from "@\/components\/app\/settings-calendar"/);
     expect(page).toMatch(/calendarNotice\b[^;]*from "@\/lib\/calendar-notice"/);
+  });
+});
+
+
+describe("Slack and Linear belong to a team (multi-team)", () => {
+  const withTeams = (team: Record<string, unknown>, on = true) => {
+    state.answer = async () => connected;
+    state.teams = on ? { teams: [{ id: 2, name: "My team", role: "owner", member_count: 1, is_personal: true, is_default: true, can_manage: true }] } : null;
+    state.teamOverride = team;
+  };
+  afterEach(() => {
+    state.teams = null;
+    state.teamOverride = {};
+  });
+
+  it("a personal space gets neither the Slack nor the Linear row, and no 'not available yet' stand-ins", async () => {
+    withTeams({ is_personal: true });
+    const html = await render();
+    expect(html).not.toContain("Post tasks to Slack");
+    expect(html).not.toContain("Sync with your project tool");
+    expect(html).not.toContain("Connect Slack");
+  });
+
+  it("an ordinary team keeps them", async () => {
+    withTeams({ is_personal: false });
+    const html = await render();
+    expect(html).toContain("Post tasks to Slack");
+    expect(html).toContain("Sync with your project tool");
+  });
+
+  it("with the switch off the team of one keeps them, personal or not (nothing changes)", async () => {
+    withTeams({ is_personal: true }, false);
+    const html = await render();
+    expect(html).toContain("Post tasks to Slack");
+    expect(html).toContain("Sync with your project tool");
   });
 });

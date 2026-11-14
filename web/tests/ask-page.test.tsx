@@ -27,6 +27,7 @@ vi.mock("@/lib/api/server", () => ({
   getTasksNew: async () => 0,
   getUnreadNotifications: async () => null,
   getShellUser: async () => state.user,
+  getShellTeams: async () => null,
   getTimeZone: async () => null,
 }));
 

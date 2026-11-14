@@ -1,0 +1,25 @@
+{
+  "note": "A team Pat owns gets past the personal-team rule: this fake address ends in 400, as before.",
+  "as": "Pat",
+  "request": {
+    "method": "PUT",
+    "path": "/api/integrations/slack",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "webhook_url": "https://example.test/not-a-slack-webhook"
+    }
+  },
+  "response": {
+    "status": 400,
+    "body": {
+      "error": {
+        "code": "slack_webhook_invalid",
+        "message": "That is not a Slack webhook address. It starts with https://hooks.slack.com/services/."
+      }
+    }
+  }
+}

@@ -38,6 +38,7 @@ export const config = {
     "/tasks",
     "/projects",
     "/team",
+    "/teams",
     "/accept-invite",
     "/setup",
     "/decisions",

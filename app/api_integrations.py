@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
-from app import auth, integrations, team_admin
+from app import auth, integrations, team_admin, teams
 from app.api_schemas import (
     ErrorResponse,
     LinearIn,
@@ -20,11 +20,27 @@ from app.api_schemas import (
     SlackOut,
 )
 from app.db import get_session
-from app.models import Integration, TeamMember, User
+from app.models import Integration, Team, TeamMember, User
+from app.services import Refused
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 FORBIDDEN = {403: {"model": ErrorResponse, "description": "`team_forbidden`"}}
+
+
+def refuse_personal_team(session: Session, me: TeamMember) -> None:
+    """Slack and Linear belong to a team; the personal space has none (multi-team design 6.9). While
+    `MULTI_TEAM_ENABLED` is on, connecting either to the caller's personal team is 409
+    `personal_team`. With it off the team of one stays allowed: it is the only team there is."""
+    if not teams.multi_team_enabled():
+        return
+    team = session.get(Team, me.team_id)
+    if team is not None and teams.is_personal_of(team, me.user_id):
+        raise Refused(
+            409,
+            "personal_team",
+            "Slack and Linear belong to a team. Your personal space has none; choose a team first.",
+        )
 
 
 def _out(row: Integration | None, me: TeamMember) -> SlackOut:
@@ -53,6 +69,7 @@ def read_slack(
     responses={
         **FORBIDDEN,
         400: {"model": ErrorResponse, "description": "`slack_webhook_invalid`"},
+        409: {"model": ErrorResponse, "description": "`personal_team`"},
         429: {"model": ErrorResponse, "description": "`integration_rate`"},
         502: {"model": ErrorResponse, "description": "`slack_unreachable`"},
         503: {"model": ErrorResponse, "description": "`integrations_unavailable`"},
@@ -68,6 +85,7 @@ def connect_slack(
     to the channel first; a webhook Slack refuses is not stored. Replaces an earlier one."""
     me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
+    refuse_personal_team(session, me)
     row = integrations.connect_slack(session, me.team_id, user, body.webhook_url, datetime.now(UTC))
     return _out(row, me)
 
@@ -91,6 +109,7 @@ LINEAR_ERRORS = {
         "model": ErrorResponse,
         "description": "`linear_key_invalid`, `linear_key_rejected`, `linear_team_invalid`",
     },
+    409: {"model": ErrorResponse, "description": "`personal_team`"},
     429: {"model": ErrorResponse, "description": "`integration_rate`"},
     502: {"model": ErrorResponse, "description": "`linear_unreachable`"},
     503: {"model": ErrorResponse, "description": "`integrations_unavailable`"},
@@ -130,6 +149,7 @@ def linear_teams(
     The key is checked with Linear and not stored."""
     me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
+    refuse_personal_team(session, me)
     found = integrations.linear_teams(session, me.team_id, body.api_key, datetime.now(UTC))
     return LinearTeamsOut(teams=found)
 
@@ -145,6 +165,7 @@ def connect_linear(
     shared meetings are then created as issues in that team, once each. Replaces an earlier key."""
     me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
+    refuse_personal_team(session, me)
     row = integrations.connect_linear(
         session, me.team_id, user, body.api_key, body.team_id, datetime.now(UTC)
     )

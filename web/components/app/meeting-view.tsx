@@ -10,6 +10,7 @@ import { NotesHtml } from "@/components/app/notes-html";
 import { OpenQuestions } from "@/components/app/open-questions";
 import { RecurringHint } from "@/components/app/recurring-hint";
 import { SeriesPicker } from "@/components/app/series-picker";
+import { MeetingTeamCard, teamActionMessage } from "@/components/app/meeting-team-card";
 import { ShareDialog, sentToast } from "@/components/app/share-dialog";
 import { LanguageSelect, TranslationBanner, useTranslation } from "@/components/app/translation";
 import { TranscriptPanel } from "@/components/app/transcript-panel";
@@ -29,7 +30,7 @@ import {
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { ApiError, errorMessage } from "@/lib/api/client";
-import type { Meeting, NoteLanguage, RetryBlock, Share, Template, TeamMember } from "@/lib/api/types";
+import type { Meeting, NoteLanguage, RetryBlock, Share, Template, TeamMember, TeamSummary } from "@/lib/api/types";
 import { LocalTime } from "@/components/app/local-time";
 import { MilestoneProposals, MilestoneRows, useMeetingMilestones } from "@/components/app/meeting-milestones";
 import { DELETED_FLAG } from "@/lib/deleted-flag";
@@ -48,7 +49,7 @@ const RETRY_BLOCKED: Record<RetryBlock, string> = {
   not_failed: "This meeting can't be retried.",
 };
 
-type Busy = "cancel" | "end" | "retry" | "rewrite" | "delete" | "share" | null;
+type Busy = "cancel" | "end" | "retry" | "rewrite" | "delete" | "share" | "move" | null;
 
 
 // While the notes are being read for decisions and review items, ask again every 5 seconds for up to
@@ -71,6 +72,7 @@ export function MeetingView({
   teamSize = 0,
   members = [],
   initialShares = [],
+  teams = null,
 }: {
   initial: Meeting;
   templates: Template[];
@@ -87,12 +89,17 @@ export function MeetingView({
   // alias (a transcript has names only), and the meeting's shares for "Shared with ...".
   members?: TeamMember[];
   initialShares?: Share[];
+  // The person's teams (`GET /api/teams`), given only while the server's multi-team switch is on: the share
+  // switch then becomes the team card (share to a team, Move, Move back). null: the page is as it was.
+  teams?: TeamSummary[] | null;
 }) {
   const router = useRouter();
   const [meeting, setMeeting] = useState(initial);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [tab, setTab] = useState<string>(initialTab);
-  const [milestones, setMilestones] = useMeetingMilestones(meeting.id, meeting.status === "ready", meeting.extraction_status);
+  // With several teams, the meeting's own team answers for its milestones and series (null: the default team).
+  const meetingTeam = teams ? (meeting.team?.id ?? null) : undefined;
+  const [milestones, setMilestones] = useMeetingMilestones(meeting.id, meeting.status === "ready", meeting.extraction_status, meetingTeam);
   const [extractionStalled, setExtractionStalled] = useState(false);
   const extractionPolls = useRef(0);
   const [busy, setBusy] = useState<Busy>(null);
@@ -179,8 +186,10 @@ export function MeetingView({
     try {
       setMeeting(await call());
     } catch (caught) {
-      setError(errorMessage(caught));
+      setError(kind === "share" || kind === "move" ? teamActionMessage(caught) : errorMessage(caught));
       if (caught instanceof ApiError) {
+        // A team that is not theirs any more (404 "No such team."): the switcher's list is stale too.
+        if (caught.status === 404 && (kind === "share" || kind === "move")) router.refresh();
         // The state moved under us (409), or the edge gave up on a slow rewrite and the rewrite
         // probably finished anyway (docs/fe-integration-guide-owner-app.md section 8, point 2).
         if (caught.status === 409) void refetch();
@@ -366,8 +375,14 @@ export function MeetingView({
                 <dd>{duration}</dd>
                 {m.shared_by ? (
                   <>
-                    <dt>Shared by</dt>
+                    <dt>{teams && m.owned_by_team ? "Recorded by" : "Shared by"}</dt>
                     <dd>{m.shared_by}</dd>
+                  </>
+                ) : null}
+                {teams && m.team ? (
+                  <>
+                    <dt>Team</dt>
+                    <dd>{m.team.name}</dd>
                   </>
                 ) : null}
                 {templateName ? (
@@ -418,7 +433,17 @@ export function MeetingView({
                 </>
               ) : null}
             </Card>
-            {m.can_share && teamSize > 1 ? (
+            {teams ? (
+              <MeetingTeamCard
+                meeting={m}
+                teams={teams}
+                busy={busy !== null}
+                onShare={(teamId) => void act("share", () => api.meetings.share(m.id, teamId))}
+                onUnshare={() => void act("share", () => api.meetings.unshare(m.id))}
+                onMove={(teamId) => void act("move", () => api.meetings.move(m.id, teamId))}
+                onMoveBack={() => void act("move", () => api.meetings.moveBack(m.id))}
+              />
+            ) : m.can_share && teamSize > 1 ? (
               <Card compact>
                 {/* Lead-designed, not in the designer's file: the "Share with team" switch (spec 8.2). */}
                 <div className="sh-row">
@@ -591,7 +616,7 @@ export function MeetingView({
       ) : null}
       <Toast message={toast} />
       <Dialog id="series-dialog" title="Add to recurring meeting">
-        <SeriesPicker dialogId="series-dialog" meetingId={m.id} current={m.series ?? null} onDone={() => void refetch()} />
+        <SeriesPicker dialogId="series-dialog" meetingId={m.id} current={m.series ?? null} team={meetingTeam} onDone={() => void refetch()} />
       </Dialog>
 
       <Dialog id="end-dialog" title="End the meeting and write the notes?">

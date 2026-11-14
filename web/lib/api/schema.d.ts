@@ -3916,6 +3916,8 @@ export interface components {
             badges: components["schemas"]["BadgesOut"] | null;
             /** Csrf Token */
             csrf_token: string;
+            /** Multi Team */
+            multi_team: boolean;
             /** Unread Notifications */
             unread_notifications: number | null;
             usage: components["schemas"]["UsageOut"] | null;
@@ -6214,6 +6216,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description `personal_team` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Malformed request */
             422: {
                 headers: {
@@ -6345,6 +6356,15 @@ export interface operations {
             };
             /** @description `team_forbidden` */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `personal_team` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6485,6 +6505,15 @@ export interface operations {
             };
             /** @description `team_forbidden` */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `personal_team` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

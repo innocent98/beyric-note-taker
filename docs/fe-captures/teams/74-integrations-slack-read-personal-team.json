@@ -1,0 +1,23 @@
+{
+  "note": "Reading the state of a personal team still works (the screen hides the section instead).",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/integrations/slack",
+    "headers": {
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "connected": false,
+      "status": null,
+      "last_error": null,
+      "last_posted_at": null,
+      "can_manage": true
+    }
+  }
+}

@@ -49,8 +49,36 @@ const { values } = parseArgs({
     topics: { type: "string", default: "live" },
     notrecorded: { type: "string", default: "none" },
     sendnow: { type: "string", default: "ok" },
+    "multi-team": { type: "string", default: "off" },
   },
 });
+
+// Multi-team (stage 3): `--multi-team on` is a server whose MULTI_TEAM_ENABLED switch is on: the session says so
+// (`multi_team: true`), `GET/POST /api/teams` answer, the team routes read `X-Team-Id` (404 "No such team." for a
+// team that is not in the list), a meeting can be shared to a team, moved and moved back (in memory), and Slack and
+// Linear are refused on the personal space (409 personal_team). Off (the default) is today's server. The shapes are
+// the ones in docs/fe-captures/teams/ (cited in docs/fe-integration-guide-teams.md); the names are the mock's own.
+const multiTeam = values["multi-team"] === "on";
+const roleOf = values.role ?? "owner";
+const myTeams = multiTeam
+  ? [
+      { id: 1, name: "My team", role: "owner", member_count: 1, is_personal: true, is_default: true, can_manage: true },
+      { id: 2, name: "Product team", role: roleOf, member_count: 4, is_personal: false, is_default: false, can_manage: roleOf !== "member" },
+      { id: 3, name: "Client Y", role: "member", member_count: 2, is_personal: false, is_default: false, can_manage: false },
+    ]
+  : [];
+const MAX_OWNED = 3;
+const teamsOut = () => ({
+  teams: myTeams.map((t) => ({ ...t })),
+  can_create_more: Math.max(0, MAX_OWNED - myTeams.filter((t) => t.role === "owner" && !t.is_personal).length),
+});
+const noSuchTeam = { error: { code: "not_found", message: "No such team." } };
+// The team a request names (`X-Team-Id`): null when none, undefined when it is not one of the caller's.
+const requestedTeam = (req) => {
+  const raw = req.headers["x-team-id"];
+  if (raw === undefined) return null;
+  return myTeams.find((t) => String(t.id) === String(raw)) ?? undefined;
+};
 
 // Team: `--role owner|admin|member` is the caller's role on the sample team (default owner). Invitation links:
 // token "new" is for an address with no account, "existing" for owner@example.test, "onteam" is refused with
@@ -132,7 +160,7 @@ for (const meeting of details) {
   meeting.review_open_count = ready ? 3 : 0;
   meeting.can_delete = meeting.status !== "bot_sent" && meeting.status !== "processing";
   if (ready) meeting.extraction_status = "done";
-  Object.assign(meeting, { shared_with_team: false, can_share: true, shared_by: null });
+  Object.assign(meeting, { shared_with_team: false, can_share: true, shared_by: null, team: null, owned_by_team: false, can_move: multiTeam && ready, can_move_back: false });
 }
 // The owner-app captures predate `template_name`; the running API sends it on every meeting.
 for (const meeting of details) meeting.template_name = body("11-templates-seeded").templates.find((t) => t.id === meeting.template_id)?.name ?? "General";
@@ -707,12 +735,12 @@ const server = http.createServer(async (req, res) => {
         return res.end("<html><body><h1>429 Too Many Requests</h1><hr>nginx</body></html>");
       }
       if (data?.password === "wrong") return json(res, 401, accountBody("21-login-before-verifying"));
-      return json(res, 200, { authenticated: true, csrf_token: "mock-csrf", user: mockUser(), usage: { used_seconds: 0, cap_seconds: 18000 } }, { "set-cookie": "session=owner; Path=/; HttpOnly; SameSite=Lax" });
+      return json(res, 200, { authenticated: true, csrf_token: "mock-csrf", user: mockUser(), usage: { used_seconds: 0, cap_seconds: 18000 }, multi_team: multiTeam }, { "set-cookie": "session=owner; Path=/; HttpOnly; SameSite=Lax" });
     }
     if (method === "DELETE") {
-      return json(res, 200, { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null }, { "set-cookie": "session=; Path=/; Max-Age=0" });
+      return json(res, 200, { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null, multi_team: multiTeam }, { "set-cookie": "session=; Path=/; Max-Age=0" });
     }
-    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: mockUser(), usage: { used_seconds: 0, cap_seconds: 18000 }, unread_notifications: 1, badges: { review_open: 0, tasks_new: tasksNew() } } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null });
+    return json(res, 200, loggedIn ? { authenticated: true, csrf_token: "mock-csrf", user: mockUser(), usage: { used_seconds: 0, cap_seconds: 18000 }, unread_notifications: 1, badges: { review_open: 0, tasks_new: tasksNew() }, multi_team: multiTeam } : { authenticated: false, csrf_token: "mock-csrf", user: null, usage: null, multi_team: multiTeam });
   }
   // The invitation link: public preview, then (signed in) accept.
   if (path === "/api/team/invites/preview" && method === "GET") {
@@ -796,8 +824,27 @@ const server = http.createServer(async (req, res) => {
     if (typeof data?.resolved === "boolean") item.resolved = data.resolved;
     return json(res, 200, item);
   }
-  // Team: the screen's reads and writes (in memory).
-  if (path === "/api/team" && method === "GET") return json(res, 200, teamOut());
+  // Multi-team: the person's teams, and making one.
+  if (multiTeam && path === "/api/teams" && method === "GET") return json(res, 200, teamsOut());
+  if (path === "/api/teams") {
+    if (!multiTeam) return method === "POST" ? json(res, 409, { error: { code: "multi_team_disabled", message: "Creating a team is not available yet." } }) : json(res, 404, { error: { code: "not_found", message: "Not found" } });
+    if (method === "POST") {
+      const name = String(data?.name ?? "").trim();
+      if (!name) return json(res, 422, { error: { code: "invalid_name", message: "Give the team a name." } });
+      if (teamsOut().can_create_more === 0) return json(res, 409, { error: { code: "team_limit", message: "You can own up to 3 teams." } });
+      const made = { id: Math.max(...myTeams.map((t) => t.id)) + 1, name, role: "owner", member_count: 1, is_personal: false, is_default: false, can_manage: true };
+      myTeams.push(made);
+      return json(res, 201, made);
+    }
+  }
+  // A team the caller is not in is 404, for every route that reads X-Team-Id.
+  if (multiTeam && requestedTeam(req) === undefined && /^\/api\/(team(\/members|\/invites)?|tasks|projects|milestones|sprints|series|integrations\/\w+)$/.test(path)) return json(res, 404, noSuchTeam);
+  // Slack and Linear are not for the personal space (409 personal_team, capture 72).
+  if (multiTeam && /^\/api\/integrations\/(slack|linear)/.test(path) && method !== "GET" && method !== "DELETE" && requestedTeam(req)?.is_personal) return json(res, 409, { error: { code: "personal_team", message: "Slack and Linear belong to a team. Your personal space has none; choose a team first." } });
+  // Team: the screen's reads and writes (in memory). The personal space is a team of one.
+  if (multiTeam && path === "/api/team" && method === "GET" && requestedTeam(req)?.is_personal) return json(res, 200, { ...teamOut(), id: 1, name: "My team", is_personal: true, my_role: "owner", member_count: 1, pending_invites: 0, can_manage: true, can_change_roles: true });
+  if (multiTeam && path === "/api/team/members" && method === "GET" && requestedTeam(req)?.is_personal) return json(res, 200, { members: membersOut().members.filter((m) => m.user_id === myTeamId()), invites: [] });
+  if (path === "/api/team" && method === "GET") return json(res, 200, multiTeam ? { ...teamOut(), is_personal: false, name: requestedTeam(req)?.name ?? "Product team" } : teamOut());
   if (path === "/api/team" && method === "PATCH") {
     if (!manager()) return json(res, 403, forbidden);
     if (typeof data?.share_new_meetings === "boolean") team.share_new_meetings = data.share_new_meetings;
@@ -859,7 +906,30 @@ const server = http.createServer(async (req, res) => {
   if (sharing && (method === "POST" || method === "DELETE")) {
     const found = details.find((m) => m.id === Number(sharing[1])) ?? (Number(sharing[1]) === sample.id ? sample : null);
     if (!found) return json(res, 404, { error: { code: "not_found", message: "No such meeting" } });
+    if (multiTeam && found.owned_by_team) return json(res, 409, { error: { code: "meeting_team_owned", message: "This meeting belongs to a team. An owner or admin of the team can move it back first." } });
     found.shared_with_team = method === "POST";
+    if (multiTeam) {
+      const chosen = myTeams.find((t) => t.id === data?.team_id);
+      if (method === "POST" && data?.team_id !== undefined && !chosen) return json(res, 404, noSuchTeam);
+      if (method === "POST" && chosen?.is_personal) return json(res, 409, { error: { code: "personal_team", message: "Choose a team. Your personal space is only yours; nobody else would see the meeting." } });
+      found.team = method === "POST" ? { id: chosen.id, name: chosen.name } : null;
+    }
+    return json(res, 200, found);
+  }
+  const moving = multiTeam ? /^\/api\/meetings\/(\d+)\/(move|move-back)$/.exec(path) : null;
+  if (moving && method === "POST") {
+    const found = details.find((m) => m.id === Number(moving[1]));
+    if (!found) return json(res, 404, { error: { code: "not_found", message: "No such meeting" } });
+    if (moving[2] === "move") {
+      const chosen = myTeams.find((t) => t.id === data?.team_id);
+      if (!chosen) return json(res, 404, noSuchTeam);
+      if (chosen.is_personal) return json(res, 409, { error: { code: "personal_team", message: "Choose a team. Your personal space is only yours; nobody else would see the meeting." } });
+      if (found.status !== "ready") return json(res, 409, { error: { code: "meeting_not_ready", message: "Wait until the notes are ready, then move the meeting." } });
+      Object.assign(found, { team: { id: chosen.id, name: chosen.name }, owned_by_team: true, shared_with_team: true, can_share: false, can_move: false, can_move_back: chosen.role !== "member" });
+    } else {
+      if (!found.owned_by_team) return json(res, 409, { error: { code: "not_moved", message: "This meeting does not belong to a team." } });
+      Object.assign(found, { team: null, owned_by_team: false, shared_with_team: false, can_share: true, can_move: true, can_move_back: false });
+    }
     return json(res, 200, found);
   }
   // Sprints (in memory): the board's list, and Close sprint.

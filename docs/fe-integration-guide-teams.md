@@ -1,11 +1,11 @@
-# Frontend integration guide: teams (multi-team, stage 2: the meeting and its team, the teams list, an explicit team per request)
+# Frontend integration guide: teams (multi-team, stages 2 and 3: the meeting and its team, the teams list, an explicit team per request, the switch the screens read)
 
 **Status: dark.** Everything here works only when the server runs with `MULTI_TEAM_ENABLED=true`
 (off by default, and it stays off until the frontend of stage 3 is live). With the switch off nothing
 below changes for anyone except two things: `POST /api/meetings/{id}/move` and `POST /api/teams`
 answer **409 `multi_team_disabled`**, and `can_move` is always `false`. Sections 1 to 8 are stage 2a
 (the meeting and its team), sections 9 to 13 are stage 2b (the teams list, creating a team, an
-explicit team per request, series, the auto-share team).
+explicit team per request, series, the auto-share team). Sections 14 to 16 are stage 3 (the frontend): the switch the screens read, integrations and the personal space, and what the screens built on all of this do.
 
 **Every payload, status and error string below was copied from a real response captured against the
 running app** (`scripts/capture_teams_api.py`, a scratch database with the real migrations, uvicorn,
@@ -889,7 +889,158 @@ team when their notes are ready."
   meeting is unshared, moved or re-homed (a Slack post cannot be unsent): tell the person so in the
   unshare and move confirmations. *Not captured live* (no Slack in the capture).
 
-## 14. Verification table
+## 14. How the frontend learns the switch is on (stage 3)
+
+`GET /api/session` (and the login and logout answers, which are the same shape) carries one read-only
+boolean, **`multi_team`**: whether this server lets a person belong to several teams. It is a server
+setting, not the person's: the same answer logged in or out. The frontend draws the team switcher, the Teams
+screen and the Move action **only when it is `true`**, and with it `false` the app is exactly what it was
+before multi-team. It is a required field (never absent).
+
+`GET /api/session` with the switch on, before login (capture `02-session-ada.json`; the visitor has a cookie but is not signed in):
+
+```json
+{
+  "authenticated": false,
+  "csrf_token": "<csrf-A>",
+  "user": null,
+  "usage": null,
+  "unread_notifications": null,
+  "badges": null,
+  "multi_team": true
+}
+```
+
+`POST /api/session` as **Ada** with the switch on → **200** (capture `03-login-ada.json`):
+
+```json
+{
+  "authenticated": true,
+  "csrf_token": "<csrf-B>",
+  "user": {
+    "email": "owner@example.test",
+    "name": "Ada Example",
+    "is_admin": true,
+    "email_verified": true,
+    "time_zone": null,
+    "recording_acknowledged": false
+  },
+  "usage": {
+    "used_seconds": 0,
+    "cap_seconds": null
+  },
+  "unread_notifications": 0,
+  "badges": {
+    "review_open": 0,
+    "tasks_new": 2
+  },
+  "multi_team": true
+}
+```
+
+`GET /api/session` with the switch **off** (capture `71-session-anonymous-switch-off.json`; the capture server runs in one process, so the switch is turned off for this single read):
+
+```json
+{
+  "authenticated": false,
+  "csrf_token": "<csrf-A>",
+  "user": null,
+  "usage": null,
+  "unread_notifications": null,
+  "badges": null,
+  "multi_team": false
+}
+```
+
+Other ways to guess the switch are worse: `can_create_more` is also 0 when a person owns three teams, `can_move` is also false for an unfinished meeting, and `POST /api/teams` answering `multi_team_disabled` is a write.
+(`can_create_more` is 0 while the switch is off, section 9, but that is not a way to *read* the switch.)
+
+## 15. Slack and Linear are not for the personal space (stage 3)
+
+Spec 6.9: the personal space has no integrations. While the switch is on, `PUT /api/integrations/slack`,
+`POST /api/integrations/linear/teams` and `PUT /api/integrations/linear` on a person's **personal** team
+(`X-Team-Id: <personal id>`, or no header when the personal space is their default team) are refused
+**409 `personal_team`**, before anything is checked, posted or stored. Reading the state
+(`GET`) and disconnecting (`DELETE`, safe to repeat) still work on any team. With the switch **off** the
+team of one is the only team there is, so connecting stays allowed (tested, not captured: the capture server
+has the switch on). The Settings screen hides the Slack and Linear rows for a personal space.
+
+`PUT /api/integrations/slack` as **Pat** with `X-Team-Id` = Pat's personal team, body `{"webhook_url": "https://example.test/not-a-slack-webhook"}` → **409**  
+*Slack is a team's, not the personal space's: 409 while the switch is on. Nothing is posted or stored.* (capture `72-integrations-slack-personal-team.json`)
+```json
+{
+  "error": {
+    "code": "personal_team",
+    "message": "Slack and Linear belong to a team. Your personal space has none; choose a team first."
+  }
+}
+```
+
+`POST /api/integrations/linear/teams` as **Pat**, personal team → **409** (capture `73-integrations-linear-teams-personal-team.json`): the same body.
+
+`GET /api/integrations/slack` as **Pat**, personal team → **200**  
+*Reading the state of a personal team still works (the screen hides the section instead).* (capture `74-integrations-slack-read-personal-team.json`)
+```json
+{
+  "connected": false,
+  "status": null,
+  "last_error": null,
+  "last_posted_at": null,
+  "can_manage": true
+}
+```
+
+`PUT /api/integrations/slack` as **Pat**, team X (which Pat owns), the same invalid address → **400**  
+*A team Pat owns gets past the personal-team rule: this fake address ends in 400, as before.* (capture `75-integrations-slack-ordinary-team.json`)
+```json
+{
+  "error": {
+    "code": "slack_webhook_invalid",
+    "message": "That is not a Slack webhook address. It starts with https://hooks.slack.com/services/."
+  }
+}
+```
+
+## 16. What the stage 3 screens do with all this (the contract the frontend keeps)
+
+For the next person to touch the screens. Every sentence is a rule the code and its tests keep.
+
+- **Which calls carry `X-Team-Id`.** Exactly the routes that read it (section 10): `/api/team` and its
+  `members` and `invites` routes (not `invites/preview` or `invites/accept`: the token names the team),
+  `GET` and `POST /api/tasks` (not `/api/tasks/{id}`), `/api/projects*`, `/api/milestones*`, `/api/sprints*`,
+  `GET` and `POST /api/series` (not `/api/series/{id}*`), `/api/integrations/*`, and
+  `/api/meetings/{id}/milestones`. One interceptor in `web/lib/api/client.ts` (`isTeamScoped`), used by the
+  browser client and by the server render. **Never** on `/api/teams`, `/api/session`, the meeting routes
+  (the share and move routes take the team in the **body**), `/api/settings/*` or any other route.
+- **Per browser tab, never on the server.** On the Team, Tasks, Projects and Settings pages the team is in the
+  URL, `?team=<id>`, because the server render can only read the URL. This tab remembers the choice in
+  `sessionStorage` (one tab's), for pages without the parameter (the meeting page). The default team is "no
+  choice": no parameter, no header. A second tab never sees the first tab's choice.
+- **The meeting page asks about the MEETING's team**, not the tab's: a meeting shared to team X lists X's
+  series and X's milestones (header `X-Team-Id: <meeting.team.id>`), a private one uses the default team. Share
+  and Move name their team in the body.
+- **A team that is not the person's (404 `not_found`, message `No such team.`).** Server render: `?team=` that
+  is not in `GET /api/teams` (they left, it was deleted, a hand-typed id) redirects to the same page without
+  it and `?notice=team-gone`. Browser call: a team-scoped call that carried the header and got this 404 sends
+  the tab to the same page on the default team with the same notice. The notice reads: "That team is no longer
+  available to you, so you are back on your default team." The 404 shares its `code` with every "no such
+  thing" 404, so the frontend tells this one by the exact message `No such team.` and by having sent the header.
+- **Words shown as written.** The Move confirmation: "This meeting will belong to the team. It stays with the
+  team even if you leave or delete your account." The refusals of share, move and move back
+  (`team_required`, `personal_team`, `meeting_team_owned`, `meeting_not_ready`, `already_moved`,
+  `team_forbidden`, `not_moved`, `recorder_gone`, `multi_team_disabled`) show the server's own `message`
+  (sections 4 to 6, 9); `team_limit` and `invalid_name` on creating a team likewise. A 404 `No such team.` on
+  share or move reads "You are no longer in that team. Choose another." and the switcher's list is fetched again.
+- **A moved meeting's recorder** is shown as the string the API sends: `Former member` when the account is
+  gone (section 8); the Details row reads "Recorded by" for a moved meeting and "Shared by" otherwise.
+- **UX consequences surfaced (section 7 and 13):** the stop-sharing and move-back texts say that tasks go back
+  to the recorder and teammates' assignments are removed; the Move and move-back texts say that Slack posts
+  already made are not recalled.
+- **Lead-designed, not in the designer's file** (marked in the code, the SOP and the parity report so the
+  designer can review): the team switcher, the Teams screen, the meeting page's team card and its two
+  confirmation dialogs, the personal-space notice on the Team screen.
+
+## 17. Verification table
 
 | Behaviour | Verified |
 |---|---|
@@ -912,3 +1063,6 @@ team when their notes are ready."
 | Auto-share team: read, set, personal (409), not mine (404), clear | **verified-live** (66 to 70); the effect on a new meeting's notes is **tested only** |
 | `multi_team_disabled` on `POST /api/teams`; the per-person invitation caps; one reminder per person per occurrence; Slack and Linear per team | **not live** (tested only; no mail or Slack in the capture) |
 | Projects, milestones, sprints and integrations with the header | **not live** (same pattern as the team route; tested in `tests/test_multi_team_api.py`) |
+| `multi_team` in the session: switch on (logged out, logged in) and off | **verified-live** (02, 03, 71); the switch-off read is made in the capture process with the switch turned off for that one call |
+| Slack and Linear refused on a personal team (409 `personal_team`), read still 200, an ordinary team gets past it | **verified-live** (72 to 75); the switch-off case (team of one allowed) is **tested only** (`tests/test_multi_team_stage3.py`) |
+| The header on exactly the team-scoped routes, per tab, the `team-gone` notice, the meeting page's own team | **tested against the captured shapes** in `web/tests/` (the screens were also looked at in a browser against the mock, not against a real FastAPI) |

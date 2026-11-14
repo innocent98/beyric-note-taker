@@ -183,6 +183,7 @@ def _session_state(request: Request, db: Session) -> SessionState:
             usage=None,
             unread_notifications=None,
             badges=None,
+            multi_team=teams.multi_team_enabled(),
         )
     settings = request.app.state.settings
     used = usage.hours_used(db, user, datetime.now(UTC), settings.max_poll_hours * 3600)
@@ -205,6 +206,7 @@ def _session_state(request: Request, db: Session) -> SessionState:
             review_open=workspace.open_review_count(db, user),
             tasks_new=tasks.new_count(db, user),
         ),
+        multi_team=teams.multi_team_enabled(),
     )
 
 

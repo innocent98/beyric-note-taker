@@ -2,7 +2,8 @@ import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { ApiError, createApi } from "./client";
-import type { Pilot, SessionState } from "./types";
+import { parseTeamId, NOTICE_PARAM, TEAM_GONE_NOTICE, TEAM_PARAM } from "@/lib/active-team";
+import type { Pilot, SessionState, TeamList } from "./types";
 
 // FastAPI's address inside the compose network (the same variable next.config.ts reads for the
 // fallback proxy, set at runtime in compose.yaml).
@@ -18,10 +19,16 @@ const FORWARDED = ["cookie", "x-forwarded-for", "x-forwarded-proto", "x-edge-sec
 
 // The API as a server component or route handler calls it: the visitor's Cookie (and address, for
 // FastAPI's own limits and logs) are passed on. A 401 leaves the page for /login.
-export async function serverApi(extra: { onResponse?: (response: Response) => void } = {}) {
+// `teamId` is the team this page is about (`?team=` of a team page), sent as `X-Team-Id` on the
+// team-scoped calls; null or left out: the person's default team, as before multi-team.
+export async function serverApi(
+  extra: { onResponse?: (response: Response) => void; teamId?: number | null } = {},
+) {
   const incoming = await headers();
+  const { teamId, ...rest } = extra;
   return createApi({
-    ...extra,
+    ...rest,
+    ...(teamId ? { teamId: () => teamId } : {}),
     baseUrl: fastapiUrl(),
     headers: () => {
       const out: Record<string, string> = {};
@@ -83,6 +90,49 @@ export async function getTimeZone(): Promise<string | null> {
 export async function getShellUser(): Promise<{ name: string | null; email: string } | null> {
   const user = (await getSession())?.user;
   return user ? { name: user.name, email: user.email } : null;
+}
+
+// Does this server let a person belong to several teams (`multi_team` of the session)? false when it
+// is not known: the app then looks exactly as it did before multi-team.
+export async function getMultiTeam(): Promise<boolean> {
+  return (await getSession())?.multi_team === true;
+}
+
+// The person's teams, for the switcher: only while the switch is on, and null when it is off or the
+// list cannot be read (the shell then draws no switcher; nothing else depends on it).
+export const getTeams = cache(async (): Promise<TeamList | null> => {
+  if (!(await getMultiTeam())) return null;
+  try {
+    return await (await serverApi()).teams.list();
+  } catch {
+    return null;
+  }
+});
+
+// What the shell takes as `teams`: the list, or null while the switch is off (no switcher).
+export async function getShellTeams() {
+  return (await getTeams())?.teams ?? null;
+}
+
+type SearchParams = Record<string, string | string[] | undefined>;
+
+// For the team pages (Team, Tasks, Projects, Settings): like `requireOwner`, plus the team the page
+// is about. `?team=<id>` names it; none (or the switch off) means the default team. A team the
+// person is not in (they left, it was deleted, a hand-typed id) is not an error page: the person goes
+// to the same page on the default team with a plain notice. `teams` is the list for the shell.
+export async function requireTeamOwner(path: string, searchParams: SearchParams) {
+  const session = await getSession();
+  if (!session?.authenticated) redirect("/login");
+  const teams = await getTeams();
+  let teamId: number | null = null;
+  const raw = searchParams[TEAM_PARAM];
+  if (teams && raw !== undefined) {
+    const asked = parseTeamId(raw);
+    if (asked !== null && teams.teams.some((t) => t.id === asked)) teamId = asked;
+    else redirect(`${path}?${NOTICE_PARAM}=${TEAM_GONE_NOTICE}`);
+  }
+  const api = await serverApi({ teamId });
+  return { api, teams, teamId };
 }
 
 // For pages that are only for the owner. Anyone else goes to /login.

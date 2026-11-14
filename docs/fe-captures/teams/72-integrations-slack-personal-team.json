@@ -1,0 +1,25 @@
+{
+  "note": "Slack is a team's, not the personal space's: 409 while the switch is on. Nothing is posted or stored.",
+  "as": "Pat",
+  "request": {
+    "method": "PUT",
+    "path": "/api/integrations/slack",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "2",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "webhook_url": "https://example.test/not-a-slack-webhook"
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "personal_team",
+        "message": "Slack and Linear belong to a team. Your personal space has none; choose a team first."
+      }
+    }
+  }
+}

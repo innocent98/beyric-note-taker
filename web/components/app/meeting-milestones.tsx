@@ -13,19 +13,20 @@ import { milestoneTitle } from "@/lib/tasks";
 // notice pattern of the task drawer). Only an owner or admin of the team can confirm
 // (`can_confirm`), so nobody else is shown a button that would be refused; a failed read draws
 // nothing. Read again when the meeting's extraction finishes (`extractionStatus`).
-export function useMeetingMilestones(meetingId: number, ready: boolean, extractionStatus: string | null) {
+// `team`: the team the MEETING belongs to (multi-team); undefined = the tab's own, as before.
+export function useMeetingMilestones(meetingId: number, ready: boolean, extractionStatus: string | null, team?: number | null) {
   const [rows, setRows] = useState<Milestone[]>([]);
   useEffect(() => {
     if (!ready) return;
     let live = true;
-    api.milestones.forMeeting(meetingId).then(
+    api.milestones.forMeeting(meetingId, team).then(
       (answer) => live && setRows(answer.milestones),
       () => undefined,
     );
     return () => {
       live = false;
     };
-  }, [meetingId, ready, extractionStatus]);
+  }, [meetingId, ready, extractionStatus, team]);
   return [rows, setRows] as const;
 }
 
