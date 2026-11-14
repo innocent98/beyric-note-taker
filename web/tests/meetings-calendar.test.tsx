@@ -20,21 +20,25 @@ vi.mock("next/navigation", () => ({
   },
   useRouter: () => ({ refresh: vi.fn() }),
 }));
-vi.mock("@/lib/api/server", () => ({
-  getSession: async () => ({ authenticated: true }),
-  getReviewOpen: async () => null,
-  getTasksNew: async () => 0,
-  getUnreadNotifications: async () => null,
-  getShellUser: async () => null,
-  getShellTeams: async () => null,
-  getTimeZone: async () => null,
-  load: <T,>(call: Promise<T>) => call,
-  serverApi: async () => ({
+vi.mock("@/lib/api/server", () => {
+  const serverApi = async () => ({
     meetings: { list: async () => captured<MeetingList>("53-meetings-list.json") },
     templates: { list: async () => [{ id: 1, name: "General", instructions: "x", is_default: true }] },
     calendar: { get: () => state.calendar!() },
-  }),
-}));
+  });
+  return {
+    getSession: async () => ({ authenticated: true }),
+    getReviewOpen: async () => null,
+    getTasksNew: async () => 0,
+    getUnreadNotifications: async () => null,
+    getShellUser: async () => null,
+    getShellTeams: async () => null,
+    getTimeZone: async () => null,
+    load: <T,>(call: Promise<T>) => call,
+    serverApi,
+    resolveTeam: async () => ({ api: await serverApi(), teams: null, teamId: null }),
+  };
+});
 
 const notConnected = calendarBody<CalendarState>("05-state-not-connected.json");
 const withEvents = calendarBody<CalendarState>("09-state-connected-with-upcoming.json");

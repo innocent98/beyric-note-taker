@@ -147,9 +147,13 @@ export const TEAM_NOT_FOUND_MESSAGE = "No such team.";
 // routes, tasks (list and create), projects, milestones, sprints, series (list and create), the
 // integrations and a meeting's milestones. Joining by invitation names its team in the token, a
 // task, a series or a meeting is read through its own team, so those go without.
-export function isTeamScoped(path: string): boolean {
+// Also the READS that show one team at a time: the Meetings list, the Decisions log, the Review list and
+// the session (its sidebar `badges`). A read only: creating a meeting, hiding a decision or checking a
+// review item is about that one thing, never about a team.
+export function isTeamScoped(path: string, method = "GET"): boolean {
   const p = path.split("?", 1)[0];
   if (/^\/api\/team\/invites\/(preview|accept)$/.test(p)) return false;
+  if (/^\/api\/(meetings|decisions|review|session)$/.test(p)) return method === "GET";
   return (
     /^\/api\/team(\/|$)/.test(p) ||
     /^\/api\/(projects|milestones|sprints|integrations)(\/|$)/.test(p) ||
@@ -201,7 +205,7 @@ export function createApi(options: ApiOptions = {}) {
       Accept: accept ?? "application/json",
       ...((await options.headers?.()) as Record<string, string> | undefined),
     };
-    const teamId = isTeamScoped(path) ? (team !== undefined ? team : (options.teamId?.() ?? null)) : null;
+    const teamId = isTeamScoped(path, method) ? (team !== undefined ? team : (options.teamId?.() ?? null)) : null;
     if (teamId !== null) headers[TEAM_HEADER] = String(teamId);
     if (body !== undefined) headers["Content-Type"] = "application/json";
     if (write) {

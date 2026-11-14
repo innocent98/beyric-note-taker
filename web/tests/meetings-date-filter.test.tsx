@@ -47,7 +47,8 @@ vi.mock("@/lib/api/server", () => {
     getTimeZone: async () => zones.stored,
     load: <T,>(call: Promise<T>) => call,
     serverApi,
-    };
+    resolveTeam: async () => ({ api: await serverApi(), teams: null, teamId: null }),
+  };
 });
 
 const templates = captured<{ templates: Template[] }>("11-templates-seeded.json").templates;
@@ -118,6 +119,15 @@ describe("the filter box", () => {
     expect(mocks.push).toHaveBeenLastCalledWith("/?from=2026-11-01&to=2026-11-07", { scroll: false });
     await userEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(mocks.push).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps the active team in the address when the dates are applied (the list is one team's)", async () => {
+    window.history.replaceState(null, "", "/?team=4");
+    view(<MeetingList initial={first} templates={templates} />);
+    await userEvent.type(screen.getByLabelText("From"), "2026-11-01");
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(mocks.push).toHaveBeenLastCalledWith("/?from=2026-11-01&team=4", { scroll: false });
+    window.history.replaceState(null, "", "/");
   });
 
   it("applies only one end: just From, or just To", async () => {

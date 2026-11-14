@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getShellTeams, getTeams, requireTeamOwner } from "@/lib/api/server";
+import { getSession, getShellTeams, getTeams, requireTeamOwner } from "@/lib/api/server";
 import type { SessionState, TeamList } from "@/lib/api/types";
 import { teamsBody } from "./helpers";
 
@@ -8,7 +8,8 @@ import { teamsBody } from "./helpers";
 // the team-scoped calls; with the switch off nothing of this happens. A team that is not theirs is a
 // redirect to the same page with the plain notice, never an error page.
 
-vi.mock("next/headers", () => ({ headers: async () => new Headers({ cookie: "session=placeholder" }) }));
+const incoming = vi.hoisted(() => ({ extra: {} as Record<string, string> }));
+vi.mock("next/headers", () => ({ headers: async () => new Headers({ cookie: "session=placeholder", ...incoming.extra }) }));
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => {
     throw new Error(`redirect:${to}`);
@@ -36,7 +37,10 @@ function serve(state: { session: unknown; teams?: unknown; teamsStatus?: number 
     }),
   );
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  incoming.extra = {};
+});
 beforeEach(() => serve({ session: session(true), teams }));
 
 describe("requireTeamOwner", () => {
@@ -53,11 +57,21 @@ describe("requireTeamOwner", () => {
     ]);
   });
 
-  it("without ?team= it asks for no team (the default team)", async () => {
+  it("without ?team= it names the DEFAULT team, so the list, its counts and the badges agree on one team", async () => {
     const { api, teamId } = await requireTeamOwner("/tasks", {});
-    expect(teamId).toBeNull();
+    expect(teamId).toBeNull(); // the address named none
     await api.team.get();
-    expect(seen.find((s) => s.path === "/api/team")?.team).toBeNull();
+    expect(seen.find((s) => s.path === "/api/team")?.team).toBe("2"); // Pat's default: the personal space
+  });
+
+  it("names a team on the Meetings list, the Decisions log and the Review list, and on the session's badges", async () => {
+    const { api } = await requireTeamOwner("/decisions", { team: "5" });
+    await api.meetings.list();
+    await api.decisions.list();
+    await api.review.list("open");
+    await api.session();
+    const named = seen.filter((s) => ["/api/meetings", "/api/decisions", "/api/review"].includes(s.path));
+    expect(named.map((s) => s.team)).toEqual(["5", "5", "5"]);
   });
 
   it.each([["99"], ["abc"], ["0"], [["4", "x"]]])("a team that is not theirs (%j) goes to the same page with the notice", async (raw) => {
@@ -82,6 +96,23 @@ describe("requireTeamOwner", () => {
   it("a visitor who is not signed in goes to /login", async () => {
     serve({ session: session(true, false) });
     await expect(requireTeamOwner("/tasks", {})).rejects.toThrow("redirect:/login");
+  });
+});
+
+describe("the session the server render reads first (its sidebar badges)", () => {
+  // `getSession` is cached per request by React; outside a request each call runs, so each test sees its own.
+  it("names the team of the address, which proxy.ts hands over as x-active-team", async () => {
+    incoming.extra = { "x-active-team": "5" };
+    await getSession();
+    expect(seen.find((s) => s.path === "/api/session")?.team).toBe("5");
+  });
+
+  it("names none when the address names none (the API counts the default team), and ignores a damaged value", async () => {
+    await getSession();
+    expect(seen.find((s) => s.path === "/api/session")?.team).toBeNull();
+    incoming.extra = { "x-active-team": "not-a-team" };
+    await getSession();
+    expect(seen.filter((s) => s.path === "/api/session").every((s) => s.team === null)).toBe(true);
   });
 });
 

@@ -16,7 +16,7 @@ export const MAX_NAME = 100;
 
 // The words of the refusals, from docs/fe-integration-guide-teams.md section 9. 422 is not shown by
 // `errorMessage` (developer text elsewhere), but `invalid_name` is written for the person.
-const OWN_WORDS = new Set(["team_limit", "invalid_name", "multi_team_disabled"]);
+const OWN_WORDS = new Set(["team_limit", "invalid_name", "multi_team_disabled", "personal_team"]);
 export function createErrorMessage(caught: unknown): string {
   if (caught instanceof ApiError && OWN_WORDS.has(caught.code)) return caught.message;
   return errorMessage(caught);
@@ -85,7 +85,7 @@ export function TeamsView({ initial }: { initial: TeamList | null }) {
   const full = list.can_create_more === 0;
   return (
     <div className="stack-md measure teams">
-      <PageHead title="Teams" subtitle="The teams you belong to. The switcher chooses which one the Team, Tasks, Projects and Settings screens work on." />
+      <PageHead title="Teams" subtitle="The teams you belong to. The switcher chooses which one the Meetings, Tasks, Projects, Decisions, Review and Settings screens work on." />
       {error ? <Alert kind="error">{error}</Alert> : null}
       <Card flush>
         {list.teams.length === 0 ? (

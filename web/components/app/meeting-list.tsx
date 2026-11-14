@@ -10,6 +10,7 @@ import type { MeetingList as MeetingListData, MeetingSummary, Template } from "@
 import { LocalTime, useDisplayTimeZone } from "@/components/app/local-time";
 import { MeetingFilter } from "@/components/app/meeting-filter";
 import { useStoredTimeZone } from "@/components/app/time-zone-context";
+import { TEAM_PARAM, parseTeamId, withTeam } from "@/lib/active-team";
 import { NO_RANGE, isFiltered, rangeHeading, rangeQuery, type DayRange } from "@/lib/date-range";
 import { dayKey, groupByDay } from "@/lib/day-groups";
 import { browserTimeZone, plural } from "@/lib/format";
@@ -35,6 +36,13 @@ import { browserTimeZone, plural } from "@/lib/format";
 // meetings" send it, and an address with another zone (a link someone else sent, or none) is
 // replaced once, in the browser, with this browser's own, so the list is re-rendered for the days the
 // headings show.
+// An address on this page with the team of the current address kept: the date filter navigates to
+// `/?from=&to=`, and the list must stay the active team's (`?team=`; none: the default team).
+function keepTeam(href: string): string {
+  if (typeof window === "undefined") return href;
+  return withTeam(href, parseTeamId(new URLSearchParams(window.location.search).get(TEAM_PARAM)));
+}
+
 export function MeetingList({
   initial,
   templates,
@@ -113,7 +121,7 @@ export function MeetingList({
     const zone = browserTimeZone();
     if (zone === rangeZone) return;
     corrected.current = true;
-    router.replace(`${basePath}${rangeQuery(range, zone)}`, { scroll: false });
+    router.replace(keepTeam(`${basePath}${rangeQuery(range, zone)}`), { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- addressKey stands for range and rangeZone
   }, [stored, filtered, addressKey, basePath, router]);
 
@@ -136,7 +144,7 @@ export function MeetingList({
   }
 
   function applyRange(next: DayRange) {
-    router.push(`${basePath}${rangeQuery(next, askZone ?? null)}`, { scroll: false });
+    router.push(keepTeam(`${basePath}${rangeQuery(next, askZone ?? null)}`), { scroll: false });
   }
 
   const head = (

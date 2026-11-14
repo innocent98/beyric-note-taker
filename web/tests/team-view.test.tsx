@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   revoke: vi.fn(),
 }));
 vi.mock("@/lib/api/browser", () => ({ api: { team: mocks } }));
+const refresh = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 const team = teamBody<Team>("29-team-three.json");
 const withInvites = teamBody<TeamMembers>("12-members-with-invites.json");
@@ -286,5 +288,68 @@ describe("with several teams (the switch is on)", () => {
     expect(screen.getByText("People on your team can be assigned tasks from meetings.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Invite people" })).toBeTruthy();
     expect(screen.queryByText(/personal space/)).toBeNull();
+  });
+
+  // LEAD-DESIGNED (owner's request 2026-11-14): the Team name card and the way back to the Teams list.
+  describe("the team's name and the way back to Teams", () => {
+    const clientY = teamsBody<Team>("55-team-header-y.json"); // Pat is a plain member of Client Y
+    beforeEach(() => {
+      refresh.mockClear();
+      mocks.update.mockReset();
+    });
+
+    it("shows an owner of an ordinary team a Team name field with the current name", () => {
+      render(<TeamView initialTeam={platform} initialMembers={solo} multiTeam />);
+      const field = screen.getByRole("textbox", { name: "Team name" }) as HTMLInputElement;
+      expect(field.value).toBe("Platform team");
+      expect((screen.getByRole("button", { name: "Save name" }) as HTMLButtonElement).disabled).toBe(true); // unchanged
+    });
+
+    it("does not offer it on a personal space (it keeps its name), to a plain member, or with the switch off", () => {
+      const { unmount } = render(<TeamView initialTeam={personal} initialMembers={solo} multiTeam />);
+      expect(screen.queryByRole("textbox", { name: "Team name" })).toBeNull();
+      unmount();
+      const member = render(<TeamView initialTeam={clientY} initialMembers={solo} multiTeam />);
+      expect(screen.queryByRole("textbox", { name: "Team name" })).toBeNull();
+      member.unmount();
+      render(<TeamView initialTeam={platform} initialMembers={solo} />);
+      expect(screen.queryByRole("textbox", { name: "Team name" })).toBeNull();
+    });
+
+    it("saves the new name over PATCH /api/team, says so, and asks the server for the shell again (the switcher)", async () => {
+      mocks.update.mockResolvedValue({ ...platform, name: "Platform" });
+      render(<TeamView initialTeam={platform} initialMembers={solo} multiTeam />);
+      const user = userEvent.setup();
+      const field = screen.getByRole("textbox", { name: "Team name" });
+      await user.clear(field);
+      await user.type(field, "  Platform  ");
+      await user.click(screen.getByRole("button", { name: "Save name" }));
+      expect(mocks.update).toHaveBeenCalledWith({ name: "Platform" });
+      expect(await screen.findByText("Team renamed")).toBeTruthy();
+      expect(refresh).toHaveBeenCalled();
+      expect((screen.getByRole("textbox", { name: "Team name" }) as HTMLInputElement).value).toBe("Platform");
+    });
+
+    it("will not save an empty name, and shows the API's refusal", async () => {
+      render(<TeamView initialTeam={platform} initialMembers={solo} multiTeam />);
+      const user = userEvent.setup();
+      await user.clear(screen.getByRole("textbox", { name: "Team name" }));
+      expect((screen.getByRole("button", { name: "Save name" }) as HTMLButtonElement).disabled).toBe(true);
+      mocks.update.mockRejectedValue(new ApiError(409, "personal_team", "Your personal space keeps its name. Make a team to name it yourself."));
+      await user.type(screen.getByRole("textbox", { name: "Team name" }), "Other");
+      await user.click(screen.getByRole("button", { name: "Save name" }));
+      expect(await screen.findByText(/Something went wrong|keeps its name/)).toBeTruthy();
+      expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it("links back to the Teams list and to making a team, only while the switch is on", () => {
+      const { unmount } = render(<TeamView initialTeam={platform} initialMembers={solo} multiTeam />);
+      const trail = screen.getByRole("navigation", { name: "Teams" });
+      expect(within(trail).getByRole("link", { name: /All teams/ }).getAttribute("href")).toBe("/teams");
+      expect(within(trail).getByRole("link", { name: "Make a team" }).getAttribute("href")).toBe("/teams");
+      unmount();
+      render(<TeamView initialTeam={platform} initialMembers={solo} />);
+      expect(screen.queryByRole("navigation", { name: "Teams" })).toBeNull();
+    });
   });
 });

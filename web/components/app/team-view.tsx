@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { TeamInviteDialog } from "@/components/app/team-invite-dialog";
-import { Alert, AppLink, Button, Icon, PageHead, Toast, Toggle } from "@/components/ui";
+import { MAX_NAME } from "@/components/app/teams-view";
+import { Alert, AppLink, Button, Field, Icon, PageHead, Toast, Toggle } from "@/components/ui";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/browser";
 import { errorMessage } from "@/lib/api/client";
@@ -25,6 +27,11 @@ const ROLE_LABEL: Record<TeamRole, string> = { owner: "Owner", admin: "Admin", m
 // switch card (owner and admin only); (4) the inline question before removing someone or leaving,
 // which says what happens, built from the Decisions "Remove" ask. The designer removes at once.
 // The sentence "Owner manages billing" is trimmed: there is no billing (spec 2 row 1).
+//
+// LEAD-DESIGNED too (owner's request 2026-11-14, multi-team; for the designer to review), only while the
+// server's multi-team switch is on: (5) the "Team name" card, for owners and admins of an ordinary team (a
+// personal space keeps its name), and (6) the "All teams" and "Make a team" links above the heading: there is
+// one Teams entry in the sidebar, so a team's page is reached from the Teams list and goes back to it.
 export function TeamView({
   initialTeam,
   initialMembers,
@@ -47,6 +54,8 @@ export function TeamView({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, flash] = useToast();
+  const router = useRouter();
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
 
   // "Invite them to the team" in the task drawer leaves the spoken name here and comes to this page.
   useEffect(() => {
@@ -124,8 +133,19 @@ export function TeamView({
     );
   }
 
+  const canRename = multiTeam && team.can_manage && !team.is_personal;
+  const nameShown = nameDraft ?? team.name;
+  const nameChanged = nameShown.trim() !== "" && nameShown.trim() !== team.name;
+
   return (
     <div className="stack-lg tm">
+      {multiTeam ? (
+        <nav className="tm-trail meta" aria-label="Teams">
+          <AppLink href="/teams">&larr; All teams</AppLink>
+          <span aria-hidden="true"> · </span>
+          <AppLink href="/teams">Make a team</AppLink>
+        </nav>
+      ) : null}
       <PageHead title="Team" subtitle={subtitle}>
         {team.can_manage && !personal ? (
           <Button
@@ -147,6 +167,41 @@ export function TeamView({
           This is your personal space. Only you are in it, and nobody can be invited into it. To work with other people,{" "}
           <AppLink href="/teams">make a team</AppLink>.
         </Alert>
+      ) : null}
+      {canRename ? (
+        <section className="tm-card" aria-label="Team name">
+          <form
+            className="tm-name-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!nameChanged) return;
+              void run(
+                "rename",
+                () => api.team.update({ name: nameShown.trim() }),
+                (next) => {
+                  setTeam(next);
+                  setNameDraft(null);
+                  flash("Team renamed");
+                  // The switcher and the Teams list were drawn by the server: ask for them again.
+                  router.refresh();
+                },
+              );
+            }}
+          >
+            <Field
+              id="team-rename"
+              label="Team name"
+              value={nameShown}
+              maxLength={MAX_NAME}
+              hint="Everyone on the team sees this name."
+              onChange={(event) => setNameDraft(event.target.value)}
+              disabled={busy !== null}
+            />
+            <Button size="md" disabled={busy !== null || !nameChanged}>
+              {busy === "rename" ? "Saving..." : "Save name"}
+            </Button>
+          </form>
+        </section>
       ) : null}
       <section className="tm-card" aria-label="Members">
         <div className="tm-card-head">
