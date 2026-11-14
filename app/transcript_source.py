@@ -20,6 +20,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app import chat_notice
 from app.config import Settings
 from app.models import VocabularyTerm
 from app.notes import UNKNOWN_SPEAKER, _clean_segments
@@ -196,7 +197,17 @@ def send_options(
     mode, only for a provider that takes it (Skribby's `custom_vocabulary`) and only when the
     configured model is one Skribby lists with it (`skribby.VOCABULARY_MODELS`), because there it is
     Skribby's model that transcribes. Our own transcription reads the vocabulary itself. Reading
-    it can fail without stopping the send: no vocabulary is then sent."""
+    it can fail without stopping the send: no vocabulary is then sent. The chat notice
+    (`app.chat_notice`, off by default) rides in the same dictionary: this is the one place both
+    callers of `send_bot` already go through."""
+    return _vocabulary_options(session, provider, owner_user_id, settings) | (
+        chat_notice.send_options(session, provider, owner_user_id, settings)
+    )
+
+
+def _vocabulary_options(
+    session: Session | None, provider, owner_user_id: int, settings: Settings
+) -> dict[str, Any]:
     if (
         session is None
         or settings.transcript_source != SKRIBBY

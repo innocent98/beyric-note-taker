@@ -761,7 +761,7 @@ class Meeting(Base):
     # is none. A state older than a couple of poll intervals is not shown as current.
     bot_state_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source: Mapped[str] = mapped_column(String(16), default="manual", server_default="manual")
-    # The calendar event's title; null for a pasted link.
+    # The calendar event's title, or the name the owner typed for a pasted link; null if none.
     title: Mapped[str | None] = mapped_column(Text)
     # Length of the recording the pipeline prepared, in seconds; the unit of the hours cap.
     recorded_seconds: Mapped[int | None] = mapped_column(Integer)

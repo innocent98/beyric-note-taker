@@ -10,10 +10,13 @@ import type { Template } from "@/lib/api/types";
 // "New meeting": POST /api/meetings, then on to the meeting's page. What the owner typed stays in
 // the form after an error (the server never echoes the link back, and a Zoom link carries a
 // password, so it is never put in a URL either). `busy` is true while a bot is already on a
-// meeting: the server would answer 409, so the form says so instead.
+// meeting: the server would answer 409, so the form says so instead. The title is optional
+// (lead-designed: the designer's file has no such field): a pasted link has no calendar event to
+// take a name from, so without one the list shows "Google Meet <code>". It is sent only when filled.
 export function NewMeetingForm({ templates, busy }: { templates: Template[]; busy: boolean }) {
   const router = useRouter();
   const [url, setUrl] = useState("");
+  const [title, setTitle] = useState("");
   const [templateId, setTemplateId] = useState(String(templates[0]?.id ?? ""));
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -24,7 +27,12 @@ export function NewMeetingForm({ templates, busy }: { templates: Template[]; bus
     setPending(true);
     setError(null);
     try {
-      const meeting = await api.meetings.create({ url: url.trim(), template_id: Number(templateId) });
+      const name = title.trim();
+      const meeting = await api.meetings.create({
+        url: url.trim(),
+        template_id: Number(templateId),
+        ...(name ? { title: name } : {}),
+      });
       router.push(`/meetings/${meeting.id}`);
     } catch (caught) {
       setError(errorMessage(caught));
@@ -66,6 +74,15 @@ export function NewMeetingForm({ templates, busy }: { templates: Template[]; bus
           </div>
           <Button disabled={pending || busy}>{pending ? "Sending..." : "Send note taker"}</Button>
         </div>
+        <Field
+          id="title"
+          label="Title (optional)"
+          autoComplete="off"
+          maxLength={200}
+          placeholder="What is this meeting about? For example, Weekly planning"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+        />
         <p className="note send-note">
           <Icon name="info" size={15} />
           Tell participants that this meeting will be recorded.

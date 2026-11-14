@@ -2812,6 +2812,18 @@
             "title": "Template Id",
             "type": "integer"
           },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
           "url": {
             "title": "Url",
             "type": "string"
