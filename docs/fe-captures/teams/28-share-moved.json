@@ -1,0 +1,24 @@
+{
+  "note": "A moved meeting is not shared or unshared by hand.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "team_id": 4
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "meeting_team_owned",
+        "message": "This meeting belongs to a team. An owner or admin of the team can move it back first."
+      }
+    }
+  }
+}

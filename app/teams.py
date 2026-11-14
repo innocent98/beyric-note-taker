@@ -21,7 +21,17 @@ from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import Meeting, Milestone, Project, Task, Team, TeamInvite, TeamMember, User
+from app.models import (
+    Meeting,
+    Milestone,
+    Project,
+    Task,
+    Team,
+    TeamInvite,
+    TeamMember,
+    User,
+    UserSettings,
+)
 
 
 def multi_team_enabled() -> bool:
@@ -86,6 +96,17 @@ def default_membership(session: Session, user_id: int) -> TeamMember | None:
     return own[0] if own else rows[0][0]
 
 
+def ordinary_teams_of(session: Session, user_id: int) -> list[Team]:
+    """The teams the person belongs to that are not their own personal one, oldest first."""
+    rows = session.scalars(
+        select(Team)
+        .join(TeamMember, TeamMember.team_id == Team.id)
+        .where(TeamMember.user_id == user_id)
+        .order_by(TeamMember.id)
+    )
+    return [t for t in rows if not is_personal_of(t, user_id)]
+
+
 def team_of(session: Session, user_id: int) -> Team | None:
     """The person's default team (see `default_membership`)."""
     member = default_membership(session, user_id)
@@ -99,6 +120,90 @@ def ensure_team(session: Session, user: User) -> Team:
     paths knowing about it."""
     team = team_of(session, user.id)
     return team if team is not None else ensure_personal_team(session, user)
+
+
+def team_for_meeting(session: Session, meeting: Meeting) -> Team:
+    """The team a meeting's extracted tasks belong to (spec 6.6): the team that owns it, else the
+    team it is shared to, else (switch on) its recorder's personal team. While the switch is off
+    it is the recorder's default team, as it has always been. In the caller's transaction (it may
+    make a personal team)."""
+    for team_id in (meeting.owner_team_id, meeting.shared_team_id):
+        if team_id is not None:
+            team = session.get(Team, team_id)
+            if team is not None:
+                return team
+    recorder = session.get(User, meeting.owner_user_id)
+    if multi_team_enabled():
+        return ensure_personal_team(session, recorder)
+    return ensure_team(session, recorder)
+
+
+def rehome_tasks(session: Session, meeting: Meeting, target: Team | None = None) -> None:
+    """Sharing, unsharing, moving and moving back: the tasks the AI took from the meeting follow it
+    to the meeting's team (spec 6.6). Tasks typed in by hand stay where they were made. What
+    belonged to the old team goes with it: the project, milestone and sprint are cleared, an
+    assignee who is not in the new team is unassigned, and a date proposed from the meeting stays
+    with the meeting. With no `target` given, nothing happens while `MULTI_TEAM_ENABLED` is off: a
+    person with one team has nowhere else to put them, and the old rule (tasks stay, hidden by the
+    meeting check) is the one that applies to a team of several. A `target` (a team being deleted
+    gives its meetings back: `app/deletion.py`) always re-files. In the caller's transaction, no
+    commit."""
+    if target is None:
+        if not multi_team_enabled():
+            return
+        target = team_for_meeting(session, meeting)
+    members = select(TeamMember.user_id).where(TeamMember.team_id == target.id)
+    session.execute(
+        update(Task)
+        .where(Task.meeting_id == meeting.id, Task.source == "ai", Task.team_id != target.id)
+        .values(
+            team_id=target.id,
+            assignee_user_id=case((Task.assignee_user_id.in_(members), Task.assignee_user_id)),
+            project_id=None,
+            milestone_id=None,
+            check_project=False,
+            sprint_id=None,
+            carried=False,
+        )
+    )
+    session.execute(
+        update(Milestone)
+        .where(
+            Milestone.source_meeting_id == meeting.id,
+            Milestone.confirmed_at.is_(None),
+            Milestone.team_id != target.id,
+        )
+        .values(team_id=target.id, project_id=None)
+    )
+
+
+def create_owned_team(session: Session, user: User, name: str) -> Team:
+    """Make a team the person owns: at most `MAX_OWNED_TEAMS` besides the personal one (409
+    `team_limit`). The person's row is locked first, so two creates at once count one after the
+    other. In the caller's transaction (flushes, no commit)."""
+    session.execute(select(User.id).where(User.id == user.id).with_for_update())
+    owned = session.scalar(
+        select(func.count())
+        .select_from(Team)
+        .where(Team.owner_user_id == user.id, Team.is_personal.is_(False))
+    )
+    if owned >= MAX_OWNED_TEAMS:
+        raise TeamChangeRefused(409, "team_limit", f"You can own up to {MAX_OWNED_TEAMS} teams.")
+    team = Team(owner_user_id=user.id, name=name, is_personal=False)
+    session.add(team)
+    session.flush()
+    session.add(TeamMember(team_id=team.id, user_id=user.id, role="owner"))
+    session.flush()
+    return team
+
+
+def doomed_teams(session: Session, user_id: int) -> list[int]:
+    """The teams that go when this account is deleted: those it owns that nobody else is in (see
+    `remove_users`, which deletes them). What the team owned is not the team's to keep then:
+    `app/deletion.py` decides each moved meeting's fate (spec 6.8, proposed: back to its recorder
+    when that account still exists, otherwise deleted with the team)."""
+    owned = session.scalars(select(Team.id).where(Team.owner_user_id == user_id))
+    return [team_id for team_id in owned if not _has_other_members(session, team_id, user_id)]
 
 
 def remove_users(session: Session, user_ids: list[int]) -> None:
@@ -129,6 +234,9 @@ def remove_users(session: Session, user_ids: list[int]) -> None:
 # ---- W3: joining, leaving, the share default ----
 
 MANAGER_ROLES = ("owner", "admin")
+# Teams one account may own besides its personal one (a plan setting later; checked in the route,
+# not by a database constraint).
+MAX_OWNED_TEAMS = 3
 
 
 class TeamChangeRefused(Exception):
@@ -289,7 +397,11 @@ def leave(session: Session, user: User, now: datetime, team_id: int | None = Non
     ):
         raise TeamChangeRefused(409, "personal_team", "Your personal space cannot be left.")
     home = ensure_personal_team(session, user)
-    own_meetings = select(Meeting.id).where(Meeting.owner_user_id == user.id)
+    # A meeting MOVED to this team is the team's, not theirs to take away: it stays, and so do its
+    # tasks. Only what the person recorded and kept as their own leaves with them.
+    own_meetings = select(Meeting.id).where(
+        Meeting.owner_user_id == user.id, Meeting.owner_team_id.is_(None)
+    )
     session.execute(
         update(Task)
         .where(
@@ -349,6 +461,22 @@ def leave(session: Session, user: User, now: datetime, team_id: int | None = Non
     return home
 
 
+def auto_share_team(session: Session, user: User) -> int | None:
+    """The team the person chose for new meetings (`user_settings.auto_share_team_id`), only while
+    they are still a member of it and it is not a personal space; else None. Always None while
+    `MULTI_TEAM_ENABLED` is off: then only today's team-wide rule applies (owners and admins), and a
+    row written while the switch was on lies dormant (it comes back if the switch does)."""
+    if not multi_team_enabled():
+        return None
+    team_id = session.scalar(
+        select(UserSettings.auto_share_team_id).where(UserSettings.user_id == user.id)
+    )
+    if team_id is None or membership(session, user.id, team_id) is None:
+        return None
+    team = session.get(Team, team_id)
+    return team_id if team is not None and not team.is_personal else None
+
+
 def apply_share_default(session: Session, meeting: Meeting) -> None:
     """When a meeting's notes are first written: share it with the owner's team if the team's
     default says so (spec 8.2, decision D3). Read NOW, never when the bot joined and never again
@@ -357,7 +485,15 @@ def apply_share_default(session: Session, meeting: Meeting) -> None:
 
     Only the meetings of the team's owner and admins are covered: an admin switching the default
     on must not publish a member's calls; a member shares their own with the switch on the
-    meeting page."""
+    meeting page.
+
+    A person who chose one team for their new meetings (`auto_share_team`, at most one) is shared
+    to THAT team, whatever their role in it: it is their own choice for their own meetings."""
+    recorder = session.get(User, meeting.owner_user_id)
+    chosen = auto_share_team(session, recorder) if recorder is not None else None
+    if chosen is not None:
+        meeting.shared_team_id = chosen
+        return
     member = default_membership(session, meeting.owner_user_id)
     if member is None or member.role not in MANAGER_ROLES:
         return

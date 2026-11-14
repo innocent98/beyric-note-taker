@@ -1,0 +1,65 @@
+{
+  "note": "`can_create_more` is 0 now.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/teams",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "teams": [
+        {
+          "id": 2,
+          "name": "My team",
+          "role": "owner",
+          "member_count": 1,
+          "is_personal": true,
+          "is_default": true,
+          "can_manage": true
+        },
+        {
+          "id": 4,
+          "name": "Platform team",
+          "role": "owner",
+          "member_count": 1,
+          "is_personal": false,
+          "is_default": false,
+          "can_manage": true
+        },
+        {
+          "id": 5,
+          "name": "Client Y",
+          "role": "member",
+          "member_count": 2,
+          "is_personal": false,
+          "is_default": false,
+          "can_manage": false
+        },
+        {
+          "id": 7,
+          "name": "Side project",
+          "role": "owner",
+          "member_count": 1,
+          "is_personal": false,
+          "is_default": false,
+          "can_manage": true
+        },
+        {
+          "id": 8,
+          "name": "Book club",
+          "role": "owner",
+          "member_count": 1,
+          "is_personal": false,
+          "is_default": false,
+          "can_manage": true
+        }
+      ],
+      "can_create_more": 0
+    }
+  }
+}

@@ -47,7 +47,13 @@ from app.models import (
     User,
 )
 from app.notes_document import parse_transcript
-from app.visibility import can_read_clause, meeting_team_ids, owns, visible_meetings
+from app.visibility import (
+    can_read_clause,
+    meeting_team_ids,
+    owns,
+    recorded_by,
+    visible_meetings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -120,20 +126,21 @@ def _seen_by(user: User):
 
 
 def get(session: Session, user: User, series_id: int) -> Series | None:
-    """The series, only when it belongs to the caller's team and the caller may see it: anything
-    else is None (404)."""
-    member = membership(session, user)
-    if member is None:
-        return None
+    """The series, only when it belongs to a team the caller is in and the caller may see it:
+    anything else is None (404). The series' OWN team decides, so a person on two teams reads the
+    series of either through the same URL (no team has to be named for an id), and a series of a
+    team they are not in does not exist for them."""
+    mine = select(TeamMember.team_id).where(TeamMember.user_id == user.id)
     return session.scalars(
-        select(Series).where(
-            Series.id == series_id, Series.team_id == member.team_id, _seen_by(user)
-        )
+        select(Series).where(Series.id == series_id, Series.team_id.in_(mine), _seen_by(user))
     ).first()
 
 
-def list_for(session: Session, user: User) -> list[Series]:
-    member = membership(session, user)
+def list_for(session: Session, user: User, team_id: int | None = None) -> list[Series]:
+    """The Recurring cards of one team: `team_id` (the route has checked the caller is in it) or,
+    naming none, the caller's default team. A series whose meetings were shared to ANOTHER team
+    is not part of this team's list: only what the caller may read counts (`_seen_by`)."""
+    member = membership(session, user, team_id)
     if member is None:
         return []
     return list(
@@ -302,12 +309,13 @@ def sync_from_joins(session: Session, now: datetime) -> int:
     return made
 
 
-def create(session: Session, user: User, title: str) -> Series:
-    """A recurring meeting made by hand (no calendar id), in the caller's team."""
+def create(session: Session, user: User, title: str, team_id: int | None = None) -> Series:
+    """A recurring meeting made by hand (no calendar id), in `team_id` (the route has checked the
+    caller is in it) or, naming none, the caller's default team."""
     clean = _clean(title, MAX_TITLE_CHARS)
     if not clean:
         raise SeriesRefused(422, "invalid_title", "Give the recurring meeting a name.")
-    team_id = team_id_of(session, user)
+    team_id = team_id if team_id is not None else team_id_of(session, user)
     count = session.scalar(
         select(func.count()).select_from(Series).where(Series.team_id == team_id)
     )
@@ -365,7 +373,7 @@ def attach(session: Session, user: User, meeting: Meeting, series_id: int | None
     """Put the caller's own meeting into a series of their team, or take it out (`None`). Only the
     meeting's owner may (a teammate who can read it may not move it). 404 for a series that is
     not the caller's team's."""
-    if not owns(user, meeting):
+    if not recorded_by(session, user, meeting):
         raise SeriesRefused(404, "not_found", "No such meeting.")
     if series_id is None:
         if meeting.series_id is not None:
@@ -374,10 +382,17 @@ def attach(session: Session, user: User, meeting: Meeting, series_id: int | None
         session.flush()
         return None
     series = get(session, user, series_id)
-    if series is None:
+    if series is None or series.team_id != meeting_team_id(session, user, meeting):
         raise SeriesRefused(404, "not_found", "No such recurring meeting.")
     join(session, meeting, series)
     return series
+
+
+def meeting_team_id(session: Session, recorder: User, meeting: Meeting) -> int:
+    """The team a meeting's series must belong to: the team that owns it, else the one it is shared
+    with, else (a private meeting) its recorder's default team, as before multi-team. A series of
+    any other team would mail people named in the meeting, in a team that cannot read it."""
+    return meeting.owner_team_id or meeting.shared_team_id or team_id_of(session, recorder)
 
 
 def reused_code(session: Session, meeting: Meeting) -> bool:
@@ -405,7 +420,7 @@ def make_from_reused_link(session: Session, user: User, meeting: Meeting) -> Ser
     """Make a recurring meeting from a link that was used again: named after the meeting, with this
     meeting and the caller's other meetings of the same code that are in no series. Only the
     meeting's owner may (404); 409 `not_reused` when the code was not used before."""
-    if not owns(user, meeting):
+    if not recorded_by(session, user, meeting):
         raise SeriesRefused(404, "not_found", "No such meeting.")
     if not reused_code(session, meeting):
         raise SeriesRefused(
@@ -413,7 +428,8 @@ def make_from_reused_link(session: Session, user: User, meeting: Meeting) -> Ser
             "not_reused",
             "This link has not been used for another meeting, so it is not recurring.",
         )
-    made = create(session, user, titles.meeting_name(meeting))
+    team_id = meeting_team_id(session, user, meeting)
+    made = create(session, user, titles.meeting_name(meeting), team_id)
     others = session.scalars(
         select(Meeting).where(
             Meeting.owner_user_id == user.id,
@@ -423,7 +439,8 @@ def make_from_reused_link(session: Session, user: User, meeting: Meeting) -> Ser
         )
     )
     for row in others:
-        row.series_id = made.id
+        if meeting_team_id(session, user, row) == team_id:  # never mix two teams in one series
+            row.series_id = made.id
     session.flush()
     return made
 
@@ -434,7 +451,11 @@ def forget_meetings_of(session: Session, user_id: int, team_id: int) -> None:
     in_team = select(Series.id).where(Series.team_id == team_id)
     session.execute(
         update(Meeting)
-        .where(Meeting.owner_user_id == user_id, Meeting.series_id.in_(in_team))
+        .where(
+            Meeting.owner_user_id == user_id,
+            Meeting.owner_team_id.is_(None),  # a meeting the team owns stays in its series
+            Meeting.series_id.in_(in_team),
+        )
         .values(series_id=None)
     )
 
@@ -689,7 +710,7 @@ def question_for(
 
 def can_change_question(session: Session, viewer: User, meeting: Meeting) -> bool:
     """The meeting's owner, or an owner or admin of the team the meeting is shared with."""
-    if owns(viewer, meeting):
+    if owns(session, viewer, meeting):
         return True
     return any(is_manager(session, viewer, t) for t in meeting_team_ids(meeting))
 

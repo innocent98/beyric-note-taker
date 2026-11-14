@@ -1,0 +1,29 @@
+{
+  "note": "A refused link stays refused, with the usual 400.",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "url": "https://example.com/x",
+      "template_id": 2,
+      "title": "Weekly"
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "invalid_meeting_url",
+        "message": "That is not a Google Meet, Zoom or Microsoft Teams link. Paste the full meeting link."
+      }
+    }
+  }
+}

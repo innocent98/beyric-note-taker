@@ -23,7 +23,7 @@ The app records people who never agreed to it. Beyric cannot ask them; the perso
 ## What's involved
 
 - Backend: `app/signup.py` (`RECORDING_ACK_VERSION`, the check, the stored fields), `app/google_signin.py` (flow-cookie flags, `_create`), `app/api_accounts.py` (the new query parameter and body field), `app/api_schemas.py` (`SignUp.accept_recording`, `UserOut.recording_acknowledged`, `RecordingAckOut`), `app/api.py` (`_session_state`), `app/api_settings.py` (`POST /api/settings/recording-ack`), `app/models.py`.
-- Migration `alembic/versions/0046_recording_ack.py`: two nullable columns, additive. **Number 0046** because `origin/main` is at 0043 and the open multi-team PRs hold 0044 (#182) and 0045 (#184). Its `down_revision` is `"0043"` so this branch has one head on its own: **once #182 and #184 merge, change that one line to `"0045"`** (`tests/test_migrations.py::test_single_head` fails otherwise).
+- Migration `alembic/versions/0046_recording_ack.py`: two nullable columns, additive. **Number 0046**, the next after the multi-team migrations 0044 (#182) and 0045 (#184). Its `down_revision` is `"0045"` (`0045_auto_share_team`): it was first written against 0043 while #182 (0044) and #184 (0045) were open, and moved to 0045 when they merged.
 - Frontend: `web/components/auth/recording-consent.tsx` (words, `RecordingBox`, `HowToTell`), `web/components/auth/signup-flow.tsx` (both forms and the Google guard), `web/components/auth/google-button.tsx`, `web/lib/accounts.ts` (error code, field, login message, `googleStartUrl`), `web/components/app/recording-ack-card.tsx`, `web/app/page.tsx` (one line where the Meetings page is drawn; **#183 moves that page to `/meetings`, so this line moves with it**), `web/lib/api/client.ts`, `types.ts`, `schema.d.ts`; `docs/openapi.json` regenerated.
 - Docs: `docs/fe-integration-guide-recording-ack.md`, edits to the pilot-accounts and team guides, captures in `docs/fe-captures/recording-ack/` (`scripts/capture_recording_ack.py`).
 - Tools: `scripts/capture_*_api.py` now send the new field; `web/scripts/mock-api.mjs` refuses a sign-up without it and has `--recording-ack pending` to draw the card.
@@ -42,7 +42,6 @@ Run `alembic upgrade head` (the deploy does). No setting, no switch. To roll bac
 
 ## Follow-ups
 
-- After #182 and #184 merge: `down_revision` to `"0045"` (see above).
 - Decision for the owner: whether existing accounts should ever be gated (today: never).
 - The privacy policy and terms may want a sentence on this; that is the lawyer's, untouched here.
 - Bot chat notice when the bot joins (C18, the next PR) is the other half of this.

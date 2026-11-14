@@ -164,6 +164,10 @@ class WaitlistAccepted(BaseModel):
 class NewMeeting(Body):
     url: str
     template_id: int
+    # An optional name for the meeting. Cleaned like a calendar event's title (one plain line, cut
+    # at 200 characters); blank or only spaces means no title, so the list shows "Google Meet
+    # <code>". The 1000 is only a guard against a huge body, not the stored length.
+    title: str | None = Field(default=None, max_length=1000)
 
 
 class Regenerate(Body):
@@ -224,6 +228,21 @@ class QuestionOut(BaseModel):
     can_update: bool
 
 
+class TeamRef(BaseModel):
+    id: int
+    name: str
+
+
+class ShareRequest(BaseModel):
+    # The team to share with. Omitted, the caller's default team is used (what the frontend before
+    # multi-team sends); 422 `team_required` when that would be a guess (two or more teams).
+    team_id: int | None = None
+
+
+class MoveRequest(BaseModel):
+    team_id: int
+
+
 class MeetingDetail(MeetingSummary):
     # Set (never null) when status is "failed", null otherwise.
     failure_reason: str | None
@@ -251,6 +270,15 @@ class MeetingDetail(MeetingSummary):
     # Who recorded it, for a teammate reading a shared meeting ("Shared by Dan"); null for the
     # owner's own view.
     shared_by: str | None
+    # The team the meeting is shared with or, when `owned_by_team`, the team that owns it; null for
+    # a private meeting. A moved meeting belongs to its team: it stays if the recorder leaves.
+    team: TeamRef | None = None
+    owned_by_team: bool = False
+    # The recorder of a finished, private or shared meeting may move it to a team they belong to
+    # (only while the switch is on, `MULTI_TEAM_ENABLED`); the team's owners and admins may move a
+    # team's meeting back to its recorder.
+    can_move: bool = False
+    can_move_back: bool = False
     join_attempts: int
     max_join_attempts: int
     bot_left_early: bool
@@ -659,6 +687,18 @@ class RecordingAckOut(BaseModel):
     recording_acknowledged: bool
 
 
+class AutoShareOut(BaseModel):
+    # The team the caller's new meetings are shared to when their notes are first written, or null
+    # when they chose none (the team default, if any, then applies to owners and admins as before).
+    team_id: int | None
+
+
+class AutoShareIn(Body):
+    # A team the caller belongs to (404 for any other, 409 `personal_team` for their personal
+    # space), or null to choose none.
+    team_id: int | None = None
+
+
 class TimeZoneOut(BaseModel):
     # The stored IANA zone name, or "UTC" when none was ever chosen.
     time_zone: str
@@ -858,9 +898,38 @@ InviteStatus = Literal["pending", "expired"]
 InviteOutcome = Literal["sent", "resent", "already_member", "already_invited", "invalid_email"]
 
 
+class TeamSummary(BaseModel):
+    """One of the caller's teams, as the switcher lists it."""
+
+    id: int
+    name: str
+    # The caller's role in it.
+    role: TeamRole
+    # Active members, the caller included.
+    member_count: int
+    # The caller's own permanent space: never left, nobody is invited into it, nothing is shared
+    # to it. Show it as "Personal", not as a team to share with.
+    is_personal: bool
+    # The team a request with no `X-Team-Id` acts on (what the frontend before multi-team uses).
+    is_default: bool
+    can_manage: bool
+
+
+class TeamList(BaseModel):
+    teams: list[TeamSummary]
+    # How many more teams the caller may create now (they may own three).
+    can_create_more: int
+
+
+class TeamCreate(Body):
+    name: str
+
+
 class TeamOut(BaseModel):
     id: int
     name: str
+    # True for the caller's personal space (see `TeamSummary.is_personal`).
+    is_personal: bool = False
     # The team default for "Share with team": new meetings of the team's owner and admins are
     # shared when their notes are first written. Off by default; members' meetings are never
     # shared by it.

@@ -694,6 +694,44 @@
         "title": "AttentionOut",
         "type": "object"
       },
+      "AutoShareIn": {
+        "additionalProperties": false,
+        "properties": {
+          "team_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Id"
+          }
+        },
+        "title": "AutoShareIn",
+        "type": "object"
+      },
+      "AutoShareOut": {
+        "properties": {
+          "team_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Id"
+          }
+        },
+        "required": [
+          "team_id"
+        ],
+        "title": "AutoShareOut",
+        "type": "object"
+      },
       "BadgesOut": {
         "properties": {
           "review_open": {
@@ -1879,6 +1917,16 @@
             "title": "Can End",
             "type": "boolean"
           },
+          "can_move": {
+            "default": false,
+            "title": "Can Move",
+            "type": "boolean"
+          },
+          "can_move_back": {
+            "default": false,
+            "title": "Can Move Back",
+            "type": "boolean"
+          },
           "can_regenerate": {
             "title": "Can Regenerate",
             "type": "boolean"
@@ -1997,6 +2045,11 @@
             },
             "title": "Open Questions",
             "type": "array"
+          },
+          "owned_by_team": {
+            "default": false,
+            "title": "Owned By Team",
+            "type": "boolean"
           },
           "participants": {
             "items": {
@@ -2138,6 +2191,16 @@
           "tasks_count": {
             "title": "Tasks Count",
             "type": "integer"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TeamRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "template_id": {
             "title": "Template Id",
@@ -2729,12 +2792,37 @@
         "title": "MilestonePatch",
         "type": "object"
       },
+      "MoveRequest": {
+        "properties": {
+          "team_id": {
+            "title": "Team Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "team_id"
+        ],
+        "title": "MoveRequest",
+        "type": "object"
+      },
       "NewMeeting": {
         "additionalProperties": false,
         "properties": {
           "template_id": {
             "title": "Template Id",
             "type": "integer"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
           },
           "url": {
             "title": "Url",
@@ -4385,6 +4473,23 @@
         "title": "ShareRecipientOut",
         "type": "object"
       },
+      "ShareRequest": {
+        "properties": {
+          "team_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Id"
+          }
+        },
+        "title": "ShareRequest",
+        "type": "object"
+      },
       "SignUp": {
         "additionalProperties": false,
         "properties": {
@@ -5238,6 +5343,20 @@
         "title": "TasksSettingsOut",
         "type": "object"
       },
+      "TeamCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TeamCreate",
+        "type": "object"
+      },
       "TeamInviteOut": {
         "properties": {
           "email": {
@@ -5315,6 +5434,27 @@
           "expires_at"
         ],
         "title": "TeamInviteOut",
+        "type": "object"
+      },
+      "TeamList": {
+        "properties": {
+          "can_create_more": {
+            "title": "Can Create More",
+            "type": "integer"
+          },
+          "teams": {
+            "items": {
+              "$ref": "#/components/schemas/TeamSummary"
+            },
+            "title": "Teams",
+            "type": "array"
+          }
+        },
+        "required": [
+          "teams",
+          "can_create_more"
+        ],
+        "title": "TeamList",
         "type": "object"
       },
       "TeamMemberOut": {
@@ -5464,6 +5604,11 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "is_personal": {
+            "default": false,
+            "title": "Is Personal",
+            "type": "boolean"
           },
           "member_count": {
             "title": "Member Count",
@@ -5643,6 +5788,73 @@
           }
         },
         "title": "TeamPatch",
+        "type": "object"
+      },
+      "TeamRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "TeamRef",
+        "type": "object"
+      },
+      "TeamSummary": {
+        "description": "One of the caller's teams, as the switcher lists it.",
+        "properties": {
+          "can_manage": {
+            "title": "Can Manage",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_default": {
+            "title": "Is Default",
+            "type": "boolean"
+          },
+          "is_personal": {
+            "title": "Is Personal",
+            "type": "boolean"
+          },
+          "member_count": {
+            "title": "Member Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "member_count",
+          "is_personal",
+          "is_default",
+          "can_manage"
+        ],
+        "title": "TeamSummary",
         "type": "object"
       },
       "TemplateIn": {
@@ -8224,6 +8436,28 @@
       "delete": {
         "description": "Disconnect Linear and delete the stored key (owner or admin). Issues already created stay in\nLinear. Safe to repeat.",
         "operationId": "disconnect_linear",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "204": {
             "description": "Successful Response"
@@ -8267,6 +8501,28 @@
       "get": {
         "description": "Whether the team pushes new tasks to Linear, to which team, and how the last push went.",
         "operationId": "read_linear",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -8317,6 +8573,28 @@
       "put": {
         "description": "Connect Linear with a personal API key and one of its teams (owner or admin). New tasks from\nshared meetings are then created as issues in that team, once each. Replaces an earlier key.",
         "operationId": "connect_linear",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -8419,6 +8697,28 @@
       "post": {
         "description": "The Linear teams a pasted key can reach, for the choice before connecting (owner or admin).\nThe key is checked with Linear and not stored.",
         "operationId": "linear_teams",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -8521,6 +8821,28 @@
       "delete": {
         "description": "Disconnect Slack and delete the stored address (owner or admin). Safe to repeat.",
         "operationId": "disconnect_slack",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "204": {
             "description": "Successful Response"
@@ -8564,6 +8886,28 @@
       "get": {
         "description": "Whether the team posts new tasks to Slack, and how the last post went.",
         "operationId": "read_slack",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -8614,6 +8958,28 @@
       "put": {
         "description": "Connect Slack with an incoming-webhook address (owner or admin). One test message is posted\nto the channel first; a webhook Slack refuses is not stored. Replaces an earlier one.",
         "operationId": "connect_slack",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -9462,6 +9828,26 @@
               "title": "Meeting Id",
               "type": "integer"
             }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
           }
         ],
         "responses": {
@@ -9519,6 +9905,182 @@
         "summary": "Meeting Milestones",
         "tags": [
           "projects"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/move": {
+      "post": {
+        "description": "Move the meeting to a team the caller belongs to: the team owns it from now on. Every member\nreads it; the recorder (while a member) and the team's owners and admins change it; it stays\nwith the team if the recorder leaves it or deletes their account (they then show as \"Former\nmember\"). Only the recorder, only a finished meeting. Doing it again for the same team is\nfine. The page must say so first: \"This meeting will belong to the team. It stays with the\nteam even if you leave or delete your account.\" Its tasks move to the team.",
+        "operationId": "move_meeting",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such meeting, or no such team (of the caller's)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`, `already_moved`, `meeting_not_ready`, `multi_team_disabled`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Move Meeting",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/move-back": {
+      "post": {
+        "description": "Give a team's meeting back to its recorder (private to them again; its tasks go to their\npersonal team). Only an owner or admin of the team that owns it (403 `team_forbidden` for any\nother reader, the recorder included). 409 `not_moved` for a meeting no team owns, 409\n`recorder_gone` when the recorder deleted their account.",
+        "operationId": "move_meeting_back",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such meeting"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_moved`, `recorder_gone`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Move Meeting Back",
+        "tags": [
+          "meetings"
         ]
       }
     },
@@ -9896,7 +10458,7 @@
     },
     "/api/meetings/{meeting_id}/share": {
       "delete": {
-        "description": "Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone\nelse. Doing it twice is fine.",
+        "description": "Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone\nelse. Doing it twice is fine. 409 `meeting_team_owned` for a meeting moved to a team.",
         "operationId": "unshare_meeting",
         "parameters": [
           {
@@ -9950,6 +10512,16 @@
             },
             "description": "No such meeting (or not the caller's)"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`meeting_team_owned`"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -9967,7 +10539,7 @@
         ]
       },
       "post": {
-        "description": "Share the meeting with the caller's team (the \"Share with team\" switch): teammates may read\nits notes, transcript and tasks, never change it. Only the one who recorded it (a teammate or\nanyone else gets 404). Doing it twice is fine. The team's default (`share_new_meetings`) is\nread once, when the notes are first written; this is how a person shares one by hand.",
+        "description": "Share the meeting with one of the caller's teams (the \"Share with team\" switch): its members\nmay read the notes, transcript and tasks, never change them. Only the one who recorded it (a\nteammate or anyone else gets 404). Send `{\"team_id\": ...}` for a team the caller belongs to\n(404 `not_found` for any other, 409 `personal_team` for their own personal space); send\nnothing and the default team is used, as before multi-team, unless the caller is on two or more\nteams (422 `team_required`). A meeting is shared with one team: sharing again moves it. 409\n`meeting_team_owned` for a meeting moved to a team. The team's default (`share_new_meetings`)\nis read once, when the notes are first written; this is how a person shares one by hand.",
         "operationId": "share_meeting",
         "parameters": [
           {
@@ -9980,6 +10552,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ShareRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -10019,7 +10608,17 @@
                 }
               }
             },
-            "description": "No such meeting (or not the caller's)"
+            "description": "No such meeting, or no such team (of the caller's)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`, `meeting_team_owned`"
           },
           "422": {
             "content": {
@@ -10029,7 +10628,7 @@
                 }
               }
             },
-            "description": "Malformed request"
+            "description": "`team_required`"
           }
         },
         "summary": "Share Meeting",
@@ -10040,7 +10639,7 @@
     },
     "/api/meetings/{meeting_id}/shares": {
       "get": {
-        "description": "The shares of a meeting, newest first, for \"Shared with ...\": who each went to and whether\nit was sent. Only the person who recorded the meeting sees them.",
+        "description": "The shares of a meeting, newest first, for \"Shared with ...\": who each went to and whether\nit was sent. Only the person who recorded the meeting sees them, even on a meeting moved to a\nteam (its owners and admins get 404: the addresses are the recorder's).",
         "operationId": "list_shares",
         "parameters": [
           {
@@ -10111,7 +10710,7 @@
         ]
       },
       "post": {
-        "description": "Mail the notes of a ready meeting to up to 10 people, each in their own mail, sent as the\ncaller (`Reply-To` is the caller, the footer names them). The mail holds the Summary,\nDecisions, Action items and Open questions, abridged; a PDF or Word file with every section\ncan be attached, with the transcript if ticked. Nobody outside the caller's team gets a link\nto the notes. A language that is not translated yet is translated first: the answer is still\n202 and `status` is `waiting_translation`. Limits: 10 recipients a share and 20 a day per\naccount (429 `share_limit`). Needs a confirmed email.",
+        "description": "Mail the notes of a ready meeting to up to 10 people, each in their own mail, sent as the\ncaller (`Reply-To` is the caller, the footer names them). The mail holds the Summary,\nDecisions, Action items and Open questions, abridged; a PDF or Word file with every section\ncan be attached, with the transcript if ticked. Nobody outside the caller's team gets a link\nto the notes. A language that is not translated yet is translated first: the answer is still\n202 and `status` is `waiting_translation`. Limits: 10 recipients a share and 20 a day per\naccount (429 `share_limit`). Needs a confirmed email. Only the person who recorded the meeting\n(a team admin of a meeting moved to the team gets 404: the mail goes out as its sender).",
         "operationId": "create_share",
         "parameters": [
           {
@@ -10661,6 +11260,26 @@
               ],
               "title": "Project Id"
             }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
           }
         ],
         "responses": {
@@ -10713,6 +11332,28 @@
       "post": {
         "description": "Make a milestone by hand (owner or admin). It is confirmed at once.",
         "operationId": "create_milestone",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -10784,6 +11425,26 @@
               "title": "Milestone Id",
               "type": "integer"
             }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
           }
         ],
         "responses": {
@@ -10847,6 +11508,26 @@
             "schema": {
               "title": "Milestone Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -10930,6 +11611,26 @@
             "schema": {
               "title": "Milestone Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -11469,6 +12170,28 @@
       "get": {
         "description": "The team's projects, oldest first. Every member reads them. `open_tasks` counts only the\nopen tasks the caller may see.",
         "operationId": "list_projects",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -11519,6 +12242,28 @@
       "post": {
         "description": "Make a project (owner or admin). A blank name is allowed: the screen opens a blank project\nand saves the name as it is typed.",
         "operationId": "create_project",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -11590,6 +12335,26 @@
               "title": "Project Id",
               "type": "integer"
             }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
           }
         ],
         "responses": {
@@ -11652,6 +12417,26 @@
             "schema": {
               "title": "Project Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -11723,6 +12508,26 @@
             "schema": {
               "title": "Project Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -12299,8 +13104,30 @@
     },
     "/api/series": {
       "get": {
-        "description": "The Recurring cards: the caller's team's recurring meetings, soonest next meeting first\n(those with no known next date last, by name). The unfinished-task and open-question counts\ncover only what the caller may read. A recurring meeting appears once the calendar's event\nhas a join scheduled (within the hour) or its first recording has notes.",
+        "description": "The Recurring cards: the caller's team's recurring meetings, soonest next meeting first\n(those with no known next date last, by name). The unfinished-task and open-question counts\ncover only what the caller may read. A recurring meeting appears once the calendar's event\nhas a join scheduled (within the hour) or its first recording has notes. The `X-Team-Id` header\nnames the team (404 for one the caller is not in); without it, the default team's.",
         "operationId": "list_series",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -12349,8 +13176,30 @@
         ]
       },
       "post": {
-        "description": "Make a recurring meeting by hand (a meeting is then attached with\n`PUT /api/meetings/{id}/series`). Any member of the team may. 409 `series_limit`.",
+        "description": "Make a recurring meeting by hand (a meeting is then attached with\n`PUT /api/meetings/{id}/series`). Any member of the team may: the `X-Team-Id` header\nnames it (404 for a team the caller is not in), else the default team. 409 `series_limit`.",
         "operationId": "create_series",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -13154,6 +14003,138 @@
         ]
       }
     },
+    "/api/settings/auto-share": {
+      "get": {
+        "description": "The one team this person's new meetings are shared to when their notes are first written\n(never when the bot joins), or null. A team they have since left reads as null.",
+        "operationId": "read_auto_share",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoShareOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Read Auto Share",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "description": "Choose the team new meetings are shared to automatically (one at most), or null for none. The\ncaller must belong to it and it must not be their personal space. It applies once, when a\nmeeting's notes are first written; a meeting already written is not touched. 409\n`multi_team_disabled` while the switch is off.",
+        "operationId": "write_auto_share",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoShareIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutoShareOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "A team the caller is not in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`, `multi_team_disabled`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Write Auto Share",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/settings/email": {
       "get": {
         "description": "Whether the caller is emailed when the notes of their meeting are ready (on by default,\nalso for an account that has no settings row yet).",
@@ -13942,6 +14923,26 @@
               ],
               "title": "Project"
             }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
           }
         ],
         "responses": {
@@ -14015,6 +15016,26 @@
               "title": "Sprint Id",
               "type": "integer"
             }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
           }
         ],
         "responses": {
@@ -14087,7 +15108,7 @@
     },
     "/api/tasks": {
       "get": {
-        "description": "The tasks the caller can see: those assigned to them, those from meetings they can read,\nand their team's manual tasks. Newest first; for the next page pass `before_id` =\n`next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a\nsuggested task is in no count.",
+        "description": "The tasks the caller can see: those assigned to them, those from meetings they can read,\nand their team's manual tasks. Newest first; for the next page pass `before_id` =\n`next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a\nsuggested task is in no count. With the `X-Team-Id` header (404 for a team the caller is not\nin) only that team's board, its people and its counts; without it, every team's tasks the\ncaller can see, as before (`people` are then the default team's).",
         "operationId": "list_tasks",
         "parameters": [
           {
@@ -14227,6 +15248,26 @@
               ],
               "title": "Before Id"
             }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
           }
         ],
         "responses": {
@@ -14277,8 +15318,30 @@
         ]
       },
       "post": {
-        "description": "Make a task by hand, in the caller's team. Anyone on the team may. It has no meeting.",
+        "description": "Make a task by hand, in the team named by the `X-Team-Id` header (404 for a team the caller\nis not in) or, without it, the caller's default team. Anyone on the team may. It has no\nmeeting.",
         "operationId": "create_task",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -14641,6 +15704,28 @@
       "get": {
         "description": "The caller's team: its name, the sharing default, the caller's role and what that role may\ndo. Every account has one (a team of one until it joins another).",
         "operationId": "read_team",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -14691,6 +15776,28 @@
       "patch": {
         "description": "Rename the team, switch \"Share new meetings\", set the sprint length, custom days and Monday\nto Friday switch (owner or admin; 422 `align_needs_week5` for the switch on any other length),\nand/or set the reminders before recurring meetings: `reminders_on` and `reminder_timing`.\nChanging a sprint setting redraws the open sprints. The default applies,\nwhen a meeting's notes are first written, to meetings of the team's owner and admins only; a\nmember's meetings are never shared by it. 403 `team_forbidden`.",
         "operationId": "update_team",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -14753,6 +15860,28 @@
       "post": {
         "description": "Invite up to 10 people by email (owner or admin; only the owner may invite an admin). One\nmail each, a link that works once for 7 days. A new person's invitation reserves one of the\npilot's places (409 `pilot_full` when there is none) and bypasses a closed or full pilot for\nthat address. Answers per address: `sent`, `resent` (already invited: a new link went out),\n`already_member`, `already_invited` (one went out a minute ago), `invalid_email`. The answer\nis the same for an address with an account and one without (except `pilot_full`, which only\nan address needing a place can get). 409 `invite_limit`: 10 open invitations or 20 a day per\nteam.",
         "operationId": "invite_people",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -14989,6 +16118,26 @@
               "title": "Invite Id",
               "type": "integer"
             }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
           }
         ],
         "responses": {
@@ -15054,6 +16203,26 @@
             "schema": {
               "title": "Invite Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -15139,6 +16308,28 @@
       "get": {
         "description": "The people on the team, and (for everyone) the invitations still open. Each member carries\nwhat the caller may do to them, so the screen shows only buttons that work.",
         "operationId": "list_members",
+        "parameters": [
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15199,6 +16390,26 @@
             "schema": {
               "title": "User Id",
               "type": "integer"
+            }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
             }
           }
         ],
@@ -15274,6 +16485,26 @@
               "title": "User Id",
               "type": "integer"
             }
+          },
+          {
+            "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+            "in": "header",
+            "name": "X-Team-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 2147483647,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`.",
+              "title": "X-Team-Id"
+            }
           }
         ],
         "requestBody": {
@@ -15339,6 +16570,128 @@
           }
         },
         "summary": "Update Member",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/teams": {
+      "get": {
+        "description": "Every team the caller belongs to, oldest membership first: its id and name, the caller's\nrole, how many people are in it, whether it is their personal space and which one a request\nwith no `X-Team-Id` acts on. The personal space is made here if the account has none (a person\nwho joined a team before multi-team lost theirs).",
+        "operationId": "list_teams",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "List Teams",
+        "tags": [
+          "team"
+        ]
+      },
+      "post": {
+        "description": "Make a team the caller owns. At most three teams per account besides the personal one (409\n`team_limit`). 409 `multi_team_disabled` while the switch is off (a second team is refused\nthen), 422 `invalid_name` for an empty name.",
+        "operationId": "create_team",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TeamCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`multi_team_disabled`, `team_limit`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`invalid_name`"
+          }
+        },
+        "summary": "Create Team",
         "tags": [
           "team"
         ]

@@ -1,0 +1,21 @@
+{
+  "note": "One team at most; it applies when a meeting's notes are first written.",
+  "as": "Pat",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/auto-share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "team_id": 5
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "team_id": 5
+    }
+  }
+}

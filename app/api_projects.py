@@ -129,7 +129,7 @@ def present_projects(
     sprint_counts = projects.sprint_counts(session, user, team_id, [p.id for p in rows])
     # Only the recurring meetings the caller may see are counted, as the checklist lists them.
     linked: dict[int, int] = {}
-    for found in series.list_for(session, user):
+    for found in series.list_for(session, user, team_id):
         if found.project_id is not None:
             linked[found.project_id] = linked.get(found.project_id, 0) + 1
     return _project_out(rows, counts, headline, sprint_counts, linked)
@@ -137,11 +137,13 @@ def present_projects(
 
 @router.get("/projects", tags=["projects"])
 def list_projects(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> ProjectList:
     """The team's projects, oldest first. Every member reads them. `open_tasks` counts only the
     open tasks the caller may see."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     rows = filing.team_projects(session, me.team_id)
     return ProjectList(
         projects=present_projects(session, user, me.team_id, rows),
@@ -152,12 +154,13 @@ def list_projects(
 @router.post("/projects", status_code=201, tags=["projects"], responses={**FORBIDDEN, **INVALID})
 def create_project(
     body: ProjectIn,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> ProjectOut:
     """Make a project (owner or admin). A blank name is allowed: the screen opens a blank project
     and saves the name as it is typed."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     try:
         project = projects.create(
@@ -171,10 +174,11 @@ def create_project(
 @router.get("/projects/{project_id:id}", tags=["projects"], responses=NOT_FOUND)
 def get_project(
     project_id: int,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> ProjectOut:
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     project = _project_or_404(session, me, project_id)
     return present_projects(session, user, me.team_id, [project])[0]
 
@@ -185,12 +189,13 @@ def get_project(
 def patch_project(
     project_id: int,
     body: ProjectPatch,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> ProjectOut:
     """Change the name, colour or keywords (owner or admin). The screen sends one field per
     change, debounced; a field left out is untouched. `keywords` replaces the whole list."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     project = _project_or_404(session, me, project_id)
     team_admin.require_manager(me)
     changes = {k: getattr(body, k) for k in body.model_fields_set}
@@ -212,12 +217,13 @@ def patch_project(
 )
 def delete_project(
     project_id: int,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> Response:
     """Delete a project (owner or admin). Its tasks stay and now have no project; its milestones
     go with it."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     project = _project_or_404(session, me, project_id)
     team_admin.require_manager(me)
     projects.delete(session, project)
@@ -278,13 +284,14 @@ def present_milestones(
 @router.get("/milestones", tags=["projects"])
 def list_milestones(
     project_id: int | None = Query(None, ge=1, le=services.MAX_ID),
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MilestoneList:
     """The team's confirmed milestones, soonest first, with how many tasks are filed under each
     and how many are done (over the tasks the caller may see). Proposals are not listed here:
     they live on the meeting they came from (`GET /api/meetings/{id}/milestones`)."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     rows = projects.confirmed_milestones(session, me.team_id, project_id=project_id)
     return MilestoneList(milestones=present_milestones(session, user, me, rows))
 
@@ -297,11 +304,12 @@ def _project_for(session: Session, me, project_id: int | None) -> None:
 @router.post("/milestones", status_code=201, tags=["projects"], responses={**FORBIDDEN, **INVALID})
 def create_milestone(
     body: MilestoneIn,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MilestoneOut:
     """Make a milestone by hand (owner or admin). It is confirmed at once."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     _project_for(session, me, body.project_id)
     row = Milestone(
@@ -326,11 +334,12 @@ def create_milestone(
 def patch_milestone(
     milestone_id: int,
     body: MilestonePatch,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MilestoneOut:
     """Rename, move to another date or another project (owner or admin)."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     row = _milestone_or_404(session, user, me, milestone_id)
     team_admin.require_manager(me)
     changes = {k: getattr(body, k) for k in body.model_fields_set}
@@ -358,12 +367,13 @@ def patch_milestone(
 )
 def delete_milestone(
     milestone_id: int,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> Response:
     """Delete a milestone, or turn a proposal down (owner or admin). Tasks filed under it stay,
     with no milestone."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     row = _milestone_or_404(session, user, me, milestone_id)
     team_admin.require_manager(me)
     session.delete(row)
@@ -379,13 +389,14 @@ def delete_milestone(
 def confirm_milestone(
     milestone_id: int,
     body: MilestoneConfirm | None = None,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MilestoneOut:
     """Turn a proposal into a milestone ("Set milestone: Client Portal launch, 8 Dec?" then
     Confirm). Owner or admin. Confirming one that is already confirmed changes nothing. Send a
     `project_id` to choose the project; left out, the one it was filed under stays."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     row = _milestone_or_404(session, user, me, milestone_id)
     team_admin.require_manager(me)
     chosen = body is not None and "project_id" in body.model_fields_set
@@ -403,12 +414,13 @@ def confirm_milestone(
 )
 def meeting_milestones(
     meeting_id: int,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> MeetingMilestones:
     """The dates proposed from this meeting and the milestones already set from it, for its page.
     Anyone who can read the meeting may ask; `can_confirm` says whether the caller may confirm."""
     meeting = services.visible_meeting_or_404(session, user, meeting_id)
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     rows = projects.meeting_milestones(session, user, meeting.id, me.team_id)
     return MeetingMilestones(milestones=present_milestones(session, user, me, rows))

@@ -147,6 +147,9 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # When the admin deleted the account (status `deleted`); the purge gives up a day after it.
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when the account was erased but its row had to stay because a team owns a meeting this
+    # person recorded (`app/deletion.py`): name, email and credentials are gone, the row is hollow.
+    purged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # A keyed hash of the client address an unconfirmed account was made from
     # (`ratelimit.origin_key`), so the sign-up flood defence can tell one address's rows from
     # another's. Set at creation and never changed by a later submission; null for older rows.
@@ -456,6 +459,11 @@ class UserSettings(Base):
 
     __tablename__ = "user_settings"
     __table_args__ = (
+        Index(
+            "ix_user_settings_auto_share_team_id",
+            "auto_share_team_id",
+            postgresql_where=sa.text("auto_share_team_id is not null"),
+        ),
         CheckConstraint(_in("auto_join_rule", AUTO_JOIN_RULES), name="ck_user_settings_rule"),
         CheckConstraint(
             "instant_meet_mode_override is null or "
@@ -495,6 +503,12 @@ class UserSettings(Base):
     # W8: whether this person is emailed the agenda a teammate sends and the reminders before a
     # recurring meeting they attend (Settings > Email).
     notify_reminders: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    # The one team this person's new meetings are shared to when their notes are first written
+    # (multi-team design 6.3); null = none chosen, and the team default (`teams.
+    # share_new_meetings`, owners and admins) applies as before.
+    auto_share_team_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
+    )
 
 
 class CalendarConnection(Base):
@@ -683,6 +697,11 @@ class Meeting(Base):
             "extraction_status is null or " + _in("extraction_status", EXTRACTION_STATUSES),
             name="ck_meetings_extraction_status",
         ),
+        # A meeting is private, shared with a team, or owned by a team: never owned by one team
+        # and shared with another (the read rule would then widen to both).
+        CheckConstraint(
+            "owner_team_id is null or shared_team_id is null", name="ck_meetings_team_xor"
+        ),
         Index("ix_meetings_owner_user_id", "owner_user_id", "id"),
         Index(
             "ix_meetings_series_id",
@@ -748,7 +767,7 @@ class Meeting(Base):
     # is none. A state older than a couple of poll intervals is not shown as current.
     bot_state_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source: Mapped[str] = mapped_column(String(16), default="manual", server_default="manual")
-    # The calendar event's title; null for a pasted link.
+    # The calendar event's title, or the name the owner typed for a pasted link; null if none.
     title: Mapped[str | None] = mapped_column(Text)
     # Length of the recording the pipeline prepared, in seconds; the unit of the hours cap.
     recorded_seconds: Mapped[int | None] = mapped_column(Integer)
@@ -771,9 +790,8 @@ class Meeting(Base):
         BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
     )
     # Stage 2 of the multi-team design: the team that OWNS the meeting (moved to it), as opposed to
-    # one it is merely shared with. Null for every row and unused until stage 2 fills it. The
-    # read rule in `app/visibility.py` matches it; the write and recorder rules for a moved meeting
-    # are stage 2 work (see that module's docstring).
+    # one it is merely shared with (`ck_meetings_team_xor`: never both). Null unless moved
+    # (`app/meeting_teams.py`). The read and write rules are in `app/visibility.py`.
     owner_team_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
     )

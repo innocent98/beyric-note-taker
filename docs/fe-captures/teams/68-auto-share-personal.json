@@ -1,0 +1,24 @@
+{
+  "note": "",
+  "as": "Pat",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/auto-share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "team_id": 2
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "personal_team",
+        "message": "Choose a team. Your personal space is only yours."
+      }
+    }
+  }
+}

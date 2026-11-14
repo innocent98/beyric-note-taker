@@ -797,6 +797,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/meetings/{meeting_id}/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move Meeting
+         * @description Move the meeting to a team the caller belongs to: the team owns it from now on. Every member
+         *     reads it; the recorder (while a member) and the team's owners and admins change it; it stays
+         *     with the team if the recorder leaves it or deletes their account (they then show as "Former
+         *     member"). Only the recorder, only a finished meeting. Doing it again for the same team is
+         *     fine. The page must say so first: "This meeting will belong to the team. It stays with the
+         *     team even if you leave or delete your account." Its tasks move to the team.
+         */
+        post: operations["move_meeting"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meetings/{meeting_id}/move-back": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Move Meeting Back
+         * @description Give a team's meeting back to its recorder (private to them again; its tasks go to their
+         *     personal team). Only an owner or admin of the team that owns it (403 `team_forbidden` for any
+         *     other reader, the recorder included). 409 `not_moved` for a meeting no team owns, 409
+         *     `recorder_gone` when the recorder deleted their account.
+         */
+        post: operations["move_meeting_back"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/meetings/{meeting_id}/recurring": {
         parameters: {
             query?: never;
@@ -895,16 +943,20 @@ export interface paths {
         put?: never;
         /**
          * Share Meeting
-         * @description Share the meeting with the caller's team (the "Share with team" switch): teammates may read
-         *     its notes, transcript and tasks, never change it. Only the one who recorded it (a teammate or
-         *     anyone else gets 404). Doing it twice is fine. The team's default (`share_new_meetings`) is
-         *     read once, when the notes are first written; this is how a person shares one by hand.
+         * @description Share the meeting with one of the caller's teams (the "Share with team" switch): its members
+         *     may read the notes, transcript and tasks, never change them. Only the one who recorded it (a
+         *     teammate or anyone else gets 404). Send `{"team_id": ...}` for a team the caller belongs to
+         *     (404 `not_found` for any other, 409 `personal_team` for their own personal space); send
+         *     nothing and the default team is used, as before multi-team, unless the caller is on two or more
+         *     teams (422 `team_required`). A meeting is shared with one team: sharing again moves it. 409
+         *     `meeting_team_owned` for a meeting moved to a team. The team's default (`share_new_meetings`)
+         *     is read once, when the notes are first written; this is how a person shares one by hand.
          */
         post: operations["share_meeting"];
         /**
          * Unshare Meeting
          * @description Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone
-         *     else. Doing it twice is fine.
+         *     else. Doing it twice is fine. 409 `meeting_team_owned` for a meeting moved to a team.
          */
         delete: operations["unshare_meeting"];
         options?: never;
@@ -922,7 +974,8 @@ export interface paths {
         /**
          * List Shares
          * @description The shares of a meeting, newest first, for "Shared with ...": who each went to and whether
-         *     it was sent. Only the person who recorded the meeting sees them.
+         *     it was sent. Only the person who recorded the meeting sees them, even on a meeting moved to a
+         *     team (its owners and admins get 404: the addresses are the recorder's).
          */
         get: operations["list_shares"];
         put?: never;
@@ -934,7 +987,8 @@ export interface paths {
          *     can be attached, with the transcript if ticked. Nobody outside the caller's team gets a link
          *     to the notes. A language that is not translated yet is translated first: the answer is still
          *     202 and `status` is `waiting_translation`. Limits: 10 recipients a share and 20 a day per
-         *     account (429 `share_limit`). Needs a confirmed email.
+         *     account (429 `share_limit`). Needs a confirmed email. Only the person who recorded the meeting
+         *     (a team admin of a meeting moved to the team gets 404: the mail goes out as its sender).
          */
         post: operations["create_share"];
         delete?: never;
@@ -1467,14 +1521,16 @@ export interface paths {
          * @description The Recurring cards: the caller's team's recurring meetings, soonest next meeting first
          *     (those with no known next date last, by name). The unfinished-task and open-question counts
          *     cover only what the caller may read. A recurring meeting appears once the calendar's event
-         *     has a join scheduled (within the hour) or its first recording has notes.
+         *     has a join scheduled (within the hour) or its first recording has notes. The `X-Team-Id` header
+         *     names the team (404 for one the caller is not in); without it, the default team's.
          */
         get: operations["list_series"];
         put?: never;
         /**
          * Create Series
          * @description Make a recurring meeting by hand (a meeting is then attached with
-         *     `PUT /api/meetings/{id}/series`). Any member of the team may. 409 `series_limit`.
+         *     `PUT /api/meetings/{id}/series`). Any member of the team may: the `X-Team-Id` header
+         *     names it (404 for a team the caller is not in), else the default team. 409 `series_limit`.
          */
         post: operations["create_series"];
         delete?: never;
@@ -1635,6 +1691,34 @@ export interface paths {
          *     Other users are not affected.
          */
         delete: operations["log_out"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/auto-share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read Auto Share
+         * @description The one team this person's new meetings are shared to when their notes are first written
+         *     (never when the bot joins), or null. A team they have since left reads as null.
+         */
+        get: operations["read_auto_share"];
+        /**
+         * Write Auto Share
+         * @description Choose the team new meetings are shared to automatically (one at most), or null for none. The
+         *     caller must belong to it and it must not be their personal space. It applies once, when a
+         *     meeting's notes are first written; a meeting already written is not touched. 409
+         *     `multi_team_disabled` while the switch is off.
+         */
+        put: operations["write_auto_share"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1905,13 +1989,17 @@ export interface paths {
          * @description The tasks the caller can see: those assigned to them, those from meetings they can read,
          *     and their team's manual tasks. Newest first; for the next page pass `before_id` =
          *     `next_before_id`. `attention` counts every open task the caller sees, whatever the filter; a
-         *     suggested task is in no count.
+         *     suggested task is in no count. With the `X-Team-Id` header (404 for a team the caller is not
+         *     in) only that team's board, its people and its counts; without it, every team's tasks the
+         *     caller can see, as before (`people` are then the default team's).
          */
         get: operations["list_tasks"];
         put?: never;
         /**
          * Create Task
-         * @description Make a task by hand, in the caller's team. Anyone on the team may. It has no meeting.
+         * @description Make a task by hand, in the team named by the `X-Team-Id` header (404 for a team the caller
+         *     is not in) or, without it, the caller's default team. Anyone on the team may. It has no
+         *     meeting.
          */
         post: operations["create_task"];
         delete?: never;
@@ -2171,6 +2259,35 @@ export interface paths {
          *     themselves). All of it is refused if any part is not allowed (403 `team_forbidden`).
          */
         patch: operations["update_member"];
+        trace?: never;
+    };
+    "/api/teams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Teams
+         * @description Every team the caller belongs to, oldest membership first: its id and name, the caller's
+         *     role, how many people are in it, whether it is their personal space and which one a request
+         *     with no `X-Team-Id` acts on. The personal space is made here if the account has none (a person
+         *     who joined a team before multi-team lost theirs).
+         */
+        get: operations["list_teams"];
+        put?: never;
+        /**
+         * Create Team
+         * @description Make a team the caller owns. At most three teams per account besides the personal one (409
+         *     `team_limit`). 409 `multi_team_disabled` while the switch is off (a second team is refused
+         *     then), 422 `invalid_name` for an empty name.
+         */
+        post: operations["create_team"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/templates": {
@@ -2554,6 +2671,16 @@ export interface components {
             needs_owner: number;
             /** Unverified */
             unverified: number;
+        };
+        /** AutoShareIn */
+        AutoShareIn: {
+            /** Team Id */
+            team_id?: number | null;
+        };
+        /** AutoShareOut */
+        AutoShareOut: {
+            /** Team Id */
+            team_id: number | null;
         };
         /** BadgesOut */
         BadgesOut: {
@@ -2993,6 +3120,16 @@ export interface components {
             can_delete: boolean;
             /** Can End */
             can_end: boolean;
+            /**
+             * Can Move
+             * @default false
+             */
+            can_move: boolean;
+            /**
+             * Can Move Back
+             * @default false
+             */
+            can_move_back: boolean;
             /** Can Regenerate */
             can_regenerate: boolean;
             /** Can Retry */
@@ -3031,6 +3168,11 @@ export interface components {
              * @default []
              */
             open_questions: components["schemas"]["QuestionOut"][];
+            /**
+             * Owned By Team
+             * @default false
+             */
+            owned_by_team: boolean;
             /** Participants */
             participants: string[];
             /**
@@ -3079,6 +3221,7 @@ export interface components {
             tasks: components["schemas"]["TaskOut"][];
             /** Tasks Count */
             tasks_count: number;
+            team?: components["schemas"]["TeamRef"] | null;
             /** Template Id */
             template_id: number;
             /** Template Name */
@@ -3266,10 +3409,17 @@ export interface components {
             /** Project Id */
             project_id?: number | null;
         };
+        /** MoveRequest */
+        MoveRequest: {
+            /** Team Id */
+            team_id: number;
+        };
         /** NewMeeting */
         NewMeeting: {
             /** Template Id */
             template_id: number;
+            /** Title */
+            title?: string | null;
             /** Url */
             url: string;
         };
@@ -3862,6 +4012,11 @@ export interface components {
              */
             status: "pending" | "sent" | "not_sent" | "failed";
         };
+        /** ShareRequest */
+        ShareRequest: {
+            /** Team Id */
+            team_id?: number | null;
+        };
         /** SignUp */
         SignUp: {
             /**
@@ -4115,6 +4270,11 @@ export interface components {
             /** Email Assignees */
             email_assignees: boolean;
         };
+        /** TeamCreate */
+        TeamCreate: {
+            /** Name */
+            name: string;
+        };
         /** TeamInviteOut */
         TeamInviteOut: {
             /** Email */
@@ -4142,6 +4302,13 @@ export interface components {
              * @enum {string}
              */
             status: "pending" | "expired";
+        };
+        /** TeamList */
+        TeamList: {
+            /** Can Create More */
+            can_create_more: number;
+            /** Teams */
+            teams: components["schemas"]["TeamSummary"][];
         };
         /** TeamMemberOut */
         TeamMemberOut: {
@@ -4200,6 +4367,11 @@ export interface components {
             can_manage: boolean;
             /** Id */
             id: number;
+            /**
+             * Is Personal
+             * @default false
+             */
+            is_personal: boolean;
             /** Member Count */
             member_count: number;
             /**
@@ -4246,6 +4418,36 @@ export interface components {
             sprint_custom_days?: number | null;
             /** Sprint Length */
             sprint_length?: ("week5" | "week7" | "week14" | "month1" | "month3" | "month6" | "custom") | null;
+        };
+        /** TeamRef */
+        TeamRef: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
+        /**
+         * TeamSummary
+         * @description One of the caller's teams, as the switcher lists it.
+         */
+        TeamSummary: {
+            /** Can Manage */
+            can_manage: boolean;
+            /** Id */
+            id: number;
+            /** Is Default */
+            is_default: boolean;
+            /** Is Personal */
+            is_personal: boolean;
+            /** Member Count */
+            member_count: number;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "owner" | "admin" | "member";
         };
         /** TemplateIn */
         TemplateIn: {
@@ -5902,7 +6104,10 @@ export interface operations {
     read_linear: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5949,7 +6154,10 @@ export interface operations {
     connect_linear: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6036,7 +6244,10 @@ export interface operations {
     disconnect_linear: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6081,7 +6292,10 @@ export interface operations {
     linear_teams: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6168,7 +6382,10 @@ export interface operations {
     read_slack: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6215,7 +6432,10 @@ export interface operations {
     connect_slack: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6302,7 +6522,10 @@ export interface operations {
     disconnect_slack: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6909,7 +7132,10 @@ export interface operations {
     meeting_milestones: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 meeting_id: number;
             };
@@ -6946,6 +7172,144 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    move_meeting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDetail"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such meeting, or no such team (of the caller's) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `personal_team`, `already_moved`, `meeting_not_ready`, `multi_team_disabled` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    move_meeting_back: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                meeting_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeetingDetail"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description No such meeting */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `not_moved`, `recorder_gone` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7267,7 +7631,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ShareRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -7296,7 +7664,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description No such meeting (or not the caller's) */
+            /** @description No such meeting, or no such team (of the caller's) */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7305,7 +7673,16 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Malformed request */
+            /** @description `personal_team`, `meeting_team_owned` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_required` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7356,6 +7733,15 @@ export interface operations {
             };
             /** @description No such meeting (or not the caller's) */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `meeting_team_owned` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7854,7 +8240,10 @@ export interface operations {
             query?: {
                 project_id?: number | null;
             };
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7901,7 +8290,10 @@ export interface operations {
     create_milestone: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7952,7 +8344,10 @@ export interface operations {
     delete_milestone: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 milestone_id: number;
             };
@@ -8008,7 +8403,10 @@ export interface operations {
     patch_milestone: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 milestone_id: number;
             };
@@ -8070,7 +8468,10 @@ export interface operations {
     confirm_milestone: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 milestone_id: number;
             };
@@ -8501,7 +8902,10 @@ export interface operations {
     list_projects: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8548,7 +8952,10 @@ export interface operations {
     create_project: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8599,7 +9006,10 @@ export interface operations {
     get_project: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 project_id: number;
             };
@@ -8657,7 +9067,10 @@ export interface operations {
     delete_project: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 project_id: number;
             };
@@ -8713,7 +9126,10 @@ export interface operations {
     patch_project: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 project_id: number;
             };
@@ -9167,7 +9583,10 @@ export interface operations {
     list_series: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9214,7 +9633,10 @@ export interface operations {
     create_series: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9842,6 +10264,122 @@ export interface operations {
             };
             /** @description Missing or wrong X-CSRF-Token */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    read_auto_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutoShareOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    write_auto_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AutoShareIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AutoShareOut"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description A team the caller is not in */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `personal_team`, `multi_team_disabled` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10531,7 +11069,10 @@ export interface operations {
             query?: {
                 project?: number | null;
             };
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10587,7 +11128,10 @@ export interface operations {
     close_sprint: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 sprint_id: number;
             };
@@ -10667,7 +11211,10 @@ export interface operations {
                 limit?: number;
                 before_id?: number | null;
             };
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10714,7 +11261,10 @@ export interface operations {
     create_task: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11008,7 +11558,10 @@ export interface operations {
     read_team: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11055,7 +11608,10 @@ export interface operations {
     update_team: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11106,7 +11662,10 @@ export interface operations {
     invite_people: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11293,7 +11852,10 @@ export interface operations {
     revoke_invite: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 invite_id: number;
             };
@@ -11349,7 +11911,10 @@ export interface operations {
     resend_invite: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 invite_id: number;
             };
@@ -11425,7 +11990,10 @@ export interface operations {
     list_members: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -11472,7 +12040,10 @@ export interface operations {
     remove_member: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 user_id: number;
             };
@@ -11537,7 +12108,10 @@ export interface operations {
     update_member: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description The team this request is about. Omitted: the caller's default team (their only team other than the personal one, else the personal one). A team the caller is not in is 404 `not_found`. */
+                "X-Team-Id"?: number | null;
+            };
             path: {
                 user_id: number;
             };
@@ -11586,6 +12160,113 @@ export interface operations {
                 };
             };
             /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_teams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamList"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_team: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TeamCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamSummary"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `multi_team_disabled`, `team_limit` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `invalid_name` */
             422: {
                 headers: {
                     [name: string]: unknown;

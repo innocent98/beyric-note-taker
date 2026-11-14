@@ -2,23 +2,20 @@
 
 `visible_meetings(user)` is the only way any service learns which meetings a caller may read: the
 caller's own meetings, plus meetings shared to, or owned by, ANY team the caller belongs to (a
-person may belong to several: multi-team design, 2026-11-13). `owner_team_id` is filled from stage 2
-on (a meeting moved to a team); until then only `shared_team_id` can match.
+person may belong to several: multi-team design, 2026-11-13).
 
-NOT YET DONE for team-owned meetings (stage 2 prerequisites, see docs/sop/2026-11-13-multi-team-
-stage-1.md): the clause below only lets a team's members READ a moved meeting. Spec 6.4 also says
-the recorder keeps reading it only while they are a member of the owning team, and that the team
-(not only the recorder) may change it. So `can_read_clause` (its `owner_user_id == user.id`
-branch) and `owns()` must change in stage 2, and `deletion.py` must stop deleting moved meetings.
-Until then nothing sets `owner_team_id`, so none of this can happen. Everything derived from
-a meeting (notes, transcript, translations, exports, decisions, open questions, tasks) is read
+A meeting a TEAM owns (`owner_team_id`, "moved": stage 2) is read by every member of that team and
+by nobody else, the recorder included: the recorder reads it only while they are a member. A
+meeting nobody moved is its recorder's, plus the team it is shared to. Everything derived from a
+meeting (notes, transcript, translations, exports, decisions, open questions, tasks) is read
 through it. Nothing else compares `shared_team_id` or `owner_team_id`: code that needs to ask "is
 this meeting the team's" uses `in_team`, `in_team_clause`, `via_team` or `meeting_team_ids` below,
 and no route reads `Meeting.owner_user_id == user.id` to decide a *read*.
 
-Reading is not writing. Delete, rename, rewrite, translate, cancel, end and retry stay with the
-owner (`owns`), and so do the things that are the owner's whatever a teammate may read: review
-items, vocabulary, templates, the calendar connection and the hours cap.
+Reading is not writing. Delete, rename, rewrite, translate, cancel, end and retry belong to the
+recorder (`owns`); for a moved meeting they belong to the recorder while still in the owning team
+AND to that team's owner and admins. The things that are the recorder's whatever a teammate may
+read stay theirs: review items, vocabulary, templates, the calendar connection and the hours cap.
 
 A meeting nobody may read is "no such meeting" (404, never 403), and the platform admin has no
 route into team content: `is_admin` is not consulted here.
@@ -27,7 +24,20 @@ route into team content: `is_admin` is not consulted here.
 from sqlalchemy import ColumnElement, Select, and_, or_, select
 from sqlalchemy.orm import Session
 
+from app import titles
 from app.models import Meeting, TeamMember, User
+
+MANAGER_ROLES = ("owner", "admin")
+FORMER_MEMBER = "Former member"
+
+
+def former_or_name(user: User) -> str:
+    """How a recorder is shown to a teammate: their name or the start of their email, or "Former
+    member" once the account is deleted (a team keeps the meetings moved to it; the person's name
+    and email are gone, `app/deletion.py`)."""
+    if user.status == "deleted":
+        return FORMER_MEMBER
+    return titles.clean_title(user.name, 100) or user.email.split("@")[0]
 
 
 def _my_team_ids(user: User):
@@ -49,10 +59,33 @@ def team_read_clause(user: User) -> ColumnElement[bool]:
     )
 
 
+def recorder_not_being_deleted() -> ColumnElement[bool]:
+    """For the worker's claims and the topics input: a meeting whose recorder's account is being
+    deleted is left alone (the purge deletes it), EXCEPT a meeting a team owns that still has a
+    live member: it outlives its recorder, whose hollow row stays `status = 'deleted'`
+    (`app/deletion.py`), so the team can still have it translated, re-read for tasks and counted in
+    the repeat topics. A team with no live member left is going with the account (the purge gives
+    the meeting back or deletes it), so nothing more is sent to the model for it meanwhile."""
+    live_teams = (
+        select(TeamMember.team_id)
+        .join(User, User.id == TeamMember.user_id)
+        .where(User.status != "deleted")
+    )
+    return or_(
+        Meeting.owner_team_id.in_(live_teams),
+        Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
+    )
+
+
 def can_read_clause(user: User) -> ColumnElement[bool]:
     """The `where` condition for "this caller may read this meeting", for queries that join
-    `meetings` (decisions, open questions). A caller with no team sees only their own."""
-    return or_(Meeting.owner_user_id == user.id, team_read_clause(user))
+    `meetings` (decisions, open questions): their own meeting that no team owns, or one shared to
+    or owned by a team they belong to. A caller with no team sees only their own. The recorder of a
+    MOVED meeting is not special: they read it as a member of its team, or not at all."""
+    return or_(
+        and_(Meeting.owner_user_id == user.id, Meeting.owner_team_id.is_(None)),
+        team_read_clause(user),
+    )
 
 
 def visible_meetings(user: User) -> Select[tuple[Meeting]]:
@@ -60,9 +93,27 @@ def visible_meetings(user: User) -> Select[tuple[Meeting]]:
     return select(Meeting).where(can_read_clause(user))
 
 
-def owns(user: User, meeting: Meeting) -> bool:
-    """True when `user` recorded the meeting: the only one who may change it."""
-    return meeting.owner_user_id == user.id
+def owns(session: Session, user: User, meeting: Meeting) -> bool:
+    """True when `user` may CHANGE the meeting. A meeting nobody moved: only its recorder. A moved
+    meeting: a member of the owning team who is its recorder, or the team's owner or admin. Someone
+    who left the team (or was removed) changes nothing, even their own recording."""
+    if meeting.owner_team_id is None:
+        return meeting.owner_user_id == user.id
+    role = session.scalar(
+        select(TeamMember.role).where(
+            TeamMember.team_id == meeting.owner_team_id, TeamMember.user_id == user.id
+        )
+    )
+    if role is None:
+        return False
+    return meeting.owner_user_id == user.id or role in MANAGER_ROLES
+
+
+def recorded_by(session: Session, user: User, meeting: Meeting) -> bool:
+    """True when `user` recorded the meeting AND may still change it (a moved meeting's recorder
+    who left its team does not). For what only the recorder does, even on a team's meeting:
+    putting it in their own recurring series."""
+    return meeting.owner_user_id == user.id and owns(session, user, meeting)
 
 
 def via_team(session: Session, user: User, meeting: Meeting) -> bool:

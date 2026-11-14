@@ -15,7 +15,7 @@ stay null: they get the card, they are never blocked.
 Downgrade drops both columns (the evidence is lost; revert the code first).
 
 Revision ID: 0046
-Revises: 0043
+Revises: 0045
 Create Date: 2026-11-14
 """
 
@@ -23,10 +23,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0046"
-# 0044 and 0045 are taken by the open multi-team PRs (#182, #184). This points at 0043 so the
-# branch has one head on its own; once those merge, the lead (or the author) changes this one line
-# to "0045" so main keeps a single head (tests/test_migrations.py::test_single_head says if not).
-down_revision = "0043"
+down_revision = "0045"
 branch_labels = None
 depends_on = None
 

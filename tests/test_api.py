@@ -12,7 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app import auth, services
+from app import auth, services, titles
 from app.db import get_session
 from app.models import AiRun, AppState, Decision, Meeting, ReviewItem, Template, VocabularyTerm
 from app.pipeline import REASON_CANCELLED, REASON_JOIN_REFUSED, REASON_NO_SPEECH
@@ -776,6 +776,63 @@ def test_create_sends_a_bot_and_returns_the_meeting(api, template, fake_vexa, se
 def test_create_trims_the_link(api, template, fake_vexa):
     assert create(api, template, url=f"  {MEET}  ").status_code == 201
     assert fake_vexa.sent == [MEET]
+
+
+def test_create_with_a_title_stores_it_and_names_the_meeting_by_it(
+    api, template, fake_vexa, session
+):
+    response = create(api, template, title="Weekly planning")
+    assert response.status_code == 201
+    body = response.json()
+    assert body["title"] == "Weekly planning"
+    assert session.get(Meeting, body["id"]).title == "Weekly planning"
+    listed = api.get("/api/meetings").json()["meetings"]
+    assert [m["title"] for m in listed] == ["Weekly planning"]
+
+
+@pytest.mark.parametrize("extra", [{}, {"title": None}, {"title": ""}, {"title": "  \t\n "}])
+def test_create_without_a_usable_title_keeps_the_fallback_name(
+    api, template, fake_vexa, session, extra
+):
+    body = create(api, template, **extra).json()
+    assert body["title"] == "Google Meet abc-defg-hij"
+    assert session.get(Meeting, body["id"]).title is None  # none stored: today's behaviour
+
+
+def test_create_cleans_a_title_like_a_calendar_title(api, template, fake_vexa, session):
+    body = create(api, template, title="  Q4\n\tplanning \x00 with   spaces  ").json()
+    assert body["title"] == "Q4 planning with spaces"
+    assert session.get(Meeting, body["id"]).title == "Q4 planning with spaces"
+
+
+def test_create_keeps_markup_in_a_title_as_plain_text(api, template, fake_vexa, session):
+    text = '<script>alert(1)</script> <b>Plan</b> & "review"'
+    body = create(api, template, title=text).json()
+    # Stored and returned as the words typed: the pages draw it as text (React escapes it) and mail
+    # goes through `titles.alert_name`, exactly as for a calendar event's title.
+    assert body["title"] == text
+    assert session.get(Meeting, body["id"]).title == text
+
+
+def test_create_cuts_a_long_title_at_the_calendar_limit(api, template, fake_vexa, session):
+    body = create(api, template, title="x" * 300).json()
+    assert len(body["title"]) == titles.TITLE_LIMIT and body["title"].endswith("…")
+    assert session.get(Meeting, body["id"]).title == body["title"]
+
+
+@pytest.mark.parametrize("title", ["y" * 1001, 5, ["a"], True])
+def test_create_refuses_a_title_that_is_huge_or_not_text(api, template, fake_vexa, session, title):
+    error_of(create(api, template, title=title), 422, "validation_error")
+    assert fake_vexa.sent == [] and session.scalars(select(Meeting)).first() is None
+
+
+def test_a_refused_link_stores_nothing_even_with_a_title(api, template, fake_vexa, session):
+    error_of(
+        create(api, template, url="https://example.com/x", title="Weekly"),
+        400,
+        "invalid_meeting_url",
+    )
+    assert session.scalars(select(Meeting)).first() is None
 
 
 @pytest.mark.parametrize(

@@ -81,8 +81,9 @@ def create_share(
     can be attached, with the transcript if ticked. Nobody outside the caller's team gets a link
     to the notes. A language that is not translated yet is translated first: the answer is still
     202 and `status` is `waiting_translation`. Limits: 10 recipients a share and 20 a day per
-    account (429 `share_limit`). Needs a confirmed email."""
-    meeting = services.owned_meeting_or_404(session, user, meeting_id)
+    account (429 `share_limit`). Needs a confirmed email. Only the person who recorded the meeting
+    (a team admin of a meeting moved to the team gets 404: the mail goes out as its sender)."""
+    meeting = services.recorded_meeting_or_404(session, user, meeting_id)
     if not mail.is_configured(request.app.state.settings):
         raise services.Refused(
             503, "mail_unavailable", "Email is not available right now. Try again later."
@@ -111,8 +112,9 @@ def list_shares(
     user: User = Depends(auth.current_user),
 ) -> ShareList:
     """The shares of a meeting, newest first, for "Shared with ...": who each went to and whether
-    it was sent. Only the person who recorded the meeting sees them."""
-    meeting = services.owned_meeting_or_404(session, user, meeting_id)
+    it was sent. Only the person who recorded the meeting sees them, even on a meeting moved to a
+    team (its owners and admins get 404: the addresses are the recorder's)."""
+    meeting = services.recorded_meeting_or_404(session, user, meeting_id)
     return ShareList(shares=[_out(s, r) for s, r in shares.shares_of(session, meeting)])
 
 

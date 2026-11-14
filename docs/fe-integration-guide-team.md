@@ -1391,6 +1391,8 @@ Response body:
 
 ## Share a meeting with the team ("Share with team")
 
+> **Since multi-team (stage 2): this section is the single-team picture.** `POST /api/meetings/{id}/share` now accepts an optional body `{"team_id": ...}`, `MeetingDetail` gains `team`, `owned_by_team`, `can_move` and `can_move_back`, and a meeting can also be *moved* to a team. Everything below still holds when no body is sent and the person has one team. The new shapes, with captured responses, are in `docs/fe-integration-guide-teams.md`.
+
 `POST /api/meetings/{id}/share` and `DELETE /api/meetings/{id}/share`. **Owner of the meeting only**: anyone else gets 404 (including a teammate who can read it). Both are idempotent and return the meeting (`MeetingDetail`, trimmed here).
 
 A teammate **cannot read** a meeting before it is shared:

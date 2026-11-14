@@ -13,7 +13,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import auth, signup, sprints, team_admin, team_invites, titles
+from app import auth, signup, sprints, team_admin, team_invites, teams, titles
 from app.api_schemas import (
     AcceptInviteIn,
     ErrorResponse,
@@ -62,6 +62,7 @@ def _team_out(session: Session, me: TeamMember, now: datetime) -> TeamOut:
     return TeamOut(
         id=team.id,
         name=team.name,
+        is_personal=teams.is_personal_of(team, me.user_id),
         share_new_meetings=team.share_new_meetings,
         reminders_on=team.reminders_on,
         reminder_timing=team.reminder_timing,
@@ -92,16 +93,19 @@ def _invite_out(session: Session, invite: TeamInvite, now: datetime) -> TeamInvi
 
 @router.get("/team", tags=["team"])
 def read_team(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> TeamOut:
     """The caller's team: its name, the sharing default, the caller's role and what that role may
     do. Every account has one (a team of one until it joins another)."""
-    return _team_out(session, team_admin.my_membership(session, user), _now())
+    return _team_out(session, team_admin.my_membership(session, user, team_id), _now())
 
 
 @router.patch("/team", tags=["team"], responses=FORBIDDEN)
 def update_team(
     body: TeamPatch,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TeamOut:
@@ -111,7 +115,7 @@ def update_team(
     Changing a sprint setting redraws the open sprints. The default applies,
     when a meeting's notes are first written, to meetings of the team's owner and admins only; a
     member's meetings are never shared by it. 403 `team_forbidden`."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     team = session.get(Team, me.team_id)
     if body.name is not None:
@@ -147,11 +151,13 @@ def update_team(
 
 @router.get("/team/members", tags=["team"])
 def list_members(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> TeamMembers:
     """The people on the team, and (for everyone) the invitations still open. Each member carries
     what the caller may do to them, so the screen shows only buttons that work."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     now = _now()
     open_tasks = team_admin.open_task_counts(session, me.team_id)
     rows = session.execute(
@@ -196,17 +202,18 @@ def list_members(
 def update_member(
     user_id: int,
     body: TeamMemberPatch,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TeamMembers:
     """Change a member's role (owner only; `admin` or `member`) and/or the names they are matched
     by in meetings (`aliases`, replacing the list: an owner or admin for anyone, a member for
     themselves). All of it is refused if any part is not allowed (403 `team_forbidden`)."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     target = team_admin.member_of_my_team(session, me, user_id)
     team_admin.update_member(session, me, target, role=body.role, aliases=body.aliases)
     session.commit()
-    return list_members(session, user)
+    return list_members(team_id=team_id, session=session, user=user)
 
 
 @router.delete(
@@ -217,6 +224,7 @@ def update_member(
 )
 def remove_member(
     user_id: int,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> Response:
@@ -224,7 +232,7 @@ def remove_member(
     tasks assigned to them become unassigned; their meetings stay theirs and are unshared. An owner
     or admin removes members; only the owner removes an admin; the owner cannot be removed and
     cannot leave while others remain (409 `owner_cannot_leave`). 403 `team_forbidden`."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     target = team_admin.member_of_my_team(session, me, user_id)
     team_admin.remove_member(session, me, target, _now())
     session.commit()
@@ -242,6 +250,7 @@ def remove_member(
 def invite_people(
     body: InvitesIn,
     request: Request,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> InvitesCreated:
@@ -253,7 +262,7 @@ def invite_people(
     is the same for an address with an account and one without (except `pilot_full`, which only
     an address needing a place can get). 409 `invite_limit`: 10 open invitations or 20 a day per
     team."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     if body.role == "admin" and me.role != "owner":
         raise team_admin.forbidden("Only the owner of the team can invite an admin.")
@@ -318,13 +327,14 @@ def invite_people(
 def resend_invite(
     invite_id: int,
     request: Request,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> TeamInviteOut:
     """Send an open (or expired) invitation again: a new link, the old one stops working, 7 more
     days. 429 `too_soon` within a minute of the last mail; 409 `pilot_full` for an expired
     invitation to a new person when the pilot has filled up meanwhile."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     invite = team_admin.invite_of_my_team(session, me, invite_id)
     now = _now()
@@ -351,11 +361,12 @@ def resend_invite(
 )
 def revoke_invite(
     invite_id: int,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> Response:
     """Cancel an invitation: its link stops working and its place is free again."""
-    me = team_admin.my_membership(session, user)
+    me = team_admin.my_membership(session, user, team_id)
     team_admin.require_manager(me)
     team_invites.revoke(session, team_admin.invite_of_my_team(session, me, invite_id), _now())
     session.commit()

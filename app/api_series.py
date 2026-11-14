@@ -25,6 +25,7 @@ from app import (
     services,
     sprints,
     tasks,
+    team_admin,
     timezones,
 )
 from app.api_schemas import ErrorResponse, MeetingRef, QuestionOut, SeriesRef
@@ -196,15 +197,20 @@ def meeting_series(session: Session, viewer: User, meeting: Meeting) -> SeriesRe
 
 @router.get("/series", tags=["series"])
 def list_series(
-    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+    team_id: int | None = Depends(team_admin.requested_team),
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
 ) -> SeriesList:
     """The Recurring cards: the caller's team's recurring meetings, soonest next meeting first
     (those with no known next date last, by name). The unfinished-task and open-question counts
     cover only what the caller may read. A recurring meeting appears once the calendar's event
-    has a join scheduled (within the hour) or its first recording has notes."""
+    has a join scheduled (within the hour) or its first recording has notes. The `X-Team-Id` header
+    names the team (404 for one the caller is not in); without it, the default team's."""
+    if team_id is not None:
+        team_admin.my_membership(session, user, team_id)  # 404 for a team that is not theirs
     now = _now()
     zone_name = _zone_name(session, user)
-    rows = series.list_for(session, user)
+    rows = series.list_for(session, user, team_id)
     counts = series.counts_for(session, user, [s.id for s in rows])
     names = _project_names(session, rows[0].team_id) if rows else {}
     cards = []
@@ -232,13 +238,17 @@ def list_series(
 @router.post("/series", status_code=201, tags=["series"], responses={**INVALID})
 def create_series(
     body: SeriesCreate,
+    team_id: int | None = Depends(team_admin.requested_team),
     session: Session = Depends(get_session),
     user: User = Depends(auth.current_user),
 ) -> SeriesCard:
     """Make a recurring meeting by hand (a meeting is then attached with
-    `PUT /api/meetings/{id}/series`). Any member of the team may. 409 `series_limit`."""
+    `PUT /api/meetings/{id}/series`). Any member of the team may: the `X-Team-Id` header
+    names it (404 for a team the caller is not in), else the default team. 409 `series_limit`."""
+    if team_id is not None:
+        team_admin.my_membership(session, user, team_id)  # 404 for a team that is not theirs
     try:
-        found = series.create(session, user, body.title)
+        found = series.create(session, user, body.title, team_id)
     except series.SeriesRefused as exc:
         raise _refuse(exc) from None
     session.commit()

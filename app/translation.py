@@ -39,7 +39,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app import ai_runs
+from app import ai_runs, visibility
 from app.ai_versions import TRANSLATE_PROMPT_VERSION
 from app.config import get_settings
 from app.models import AiRun, Meeting, MeetingTranslation, User, VocabularyTerm
@@ -624,7 +624,7 @@ def _claim(session: Session, now: datetime) -> MeetingTranslation | None:
                 MeetingTranslation.status == "translating",
                 (MeetingTranslation.started_at.is_(None))
                 | (MeetingTranslation.started_at <= now - STALE_RUNNING),
-                Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
+                visibility.recorder_not_being_deleted(),
             )
             .order_by(MeetingTranslation.id)
             .limit(1)
