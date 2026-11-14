@@ -656,6 +656,16 @@ def test_the_notice_keeps_a_surname_dot_but_defangs_a_domain_in_the_bot_name_and
     assert chat_notice.notice_text("Evil.Click", "Ada").startswith("Hi, I'm Evil[.]Click. ")
     assert chat_notice.notice_text("Dr.Evil.Click", "Ada").startswith("Hi, I'm Dr[.]Evil[.]Click. ")
     assert chat_notice.notice_text("Alex.Smith", "Ada").startswith("Hi, I'm Alex[.]Smith. ")
+    # A single letter or a title in front of a real domain is still a domain.
+    for name, shown in (
+        ("x.click", "x[.]click"),
+        ("t.co", "t[.]co"),
+        ("dr.click", "dr[.]click"),
+        ("Dr.click", "Dr[.]click"),
+        ("J.Co", "J[.]Co"),
+        ("a.b", "a.b"),  # nothing that reads as a domain: no letters after the dot
+    ):
+        assert chat_notice.notice_text(name, "Ada").startswith(f"Hi, I'm {shown}. "), name
     assert chat_notice.notice_text("Visit a.b.zip now", "Ada").startswith(
         "Hi, I'm Visit a[.]b[.]zip now. "
     )

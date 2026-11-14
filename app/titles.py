@@ -131,15 +131,22 @@ _NAME_DOMAIN = re.compile(r"(?<![\w-])[\w-]+(?:\.[\w-]+)*\.[^\W\d_]{2,}(?![\w-])
 def defang_name_domains(name: str) -> str:
     """A typed NAME for the meeting chat, with the dots of anything that could be linked written
     "[.]": every `label.tld` token ("evil.click" and "Evil.Click" become "evil[.]click" and
-    "Evil[.]Click"), except one dot after a single letter or a title ("J.Smith", "Dr.Smith",
-    "St.Mary"), which reads as an initial or an abbreviation: the exemption is that narrow, not a
-    test of the case of what follows. Dot look-alikes count as dots."""
+    "Evil[.]Click"), except one dot after a single letter or a title with a capitalised word after
+    it ("J.Smith", "Dr.Smith", "St.Mary"), which reads as an initial or an abbreviation. "x.click",
+    "t.co", "dr.click" and "J.Co" are defanged. Dot look-alikes count as dots."""
     plain = name.translate(_DOT_LOOKALIKES)
 
     def swap(found: re.Match) -> str:
         token = found.group()
         first, _, rest = token.partition(".")
-        abbreviation = "." not in rest and (len(first) == 1 or first.lower() in _NAME_TITLES)
+        # An initial or a title, ONE dot, and what follows starts with a capital and is not a listed
+        # TLD: "J.Smith", "Dr.Smith". Never "x.click", "t.co", "dr.click" or "J.Co".
+        abbreviation = (
+            "." not in rest
+            and (len(first) == 1 or first.lower() in _NAME_TITLES)
+            and rest[:1].isupper()
+            and rest.lower() not in LINK_TLDS
+        )
         return token if abbreviation else token.replace(".", "[.]")
 
     return _NAME_DOMAIN.sub(swap, plain)
