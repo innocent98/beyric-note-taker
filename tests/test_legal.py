@@ -172,3 +172,24 @@ def test_the_pages_say_what_happens_to_a_meeting_moved_to_a_team(anon_client):
     assert "A meeting you move to a team belongs to that team" in terms
     assert "This does not apply to meetings you moved to a team" in terms
     assert "who you invite to your team and for what you choose to share" not in terms
+
+
+def test_the_policy_names_the_vendors_that_receive_the_recording_and_says_what_they_keep(
+    anon_client,
+):
+    """The bot is Skribby's, hosted: the audio reaches Skribby and the transcription company it
+    uses, so the policy must not say the recording stays on our own server."""
+    page = text(anon_client, PRIVACY)
+    assert "runs on our own server" not in page
+    assert "no other company receives the recording" not in page
+    assert "runs on a separate network from our database" not in page
+    assert "a meeting-bot service run by Alianza" in page
+    assert "keeps technical debugging data, including screenshots, for 30 days" in page
+    assert "We cannot remove that debugging data" in page
+    assert "in the United States, is the transcription company Skribby currently uses" in page
+    assert "does not currently offer a zero-retention or deletion option" in page
+    assert "in the United States, receives the meeting audio after we download it" in page
+    assert "abuse-monitoring logs for up to 30 days" in page
+    assert "The software that joins meetings is run by Skribby, not by us." in page
+    assert "Copies held by Skribby, ElevenLabs and OpenAI" in page
+    assert "ElevenLabs meeting audio, and Resend" in page
