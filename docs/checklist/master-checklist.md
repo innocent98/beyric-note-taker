@@ -45,6 +45,7 @@ Goal: decide whether self-hosted Vexa can be the bot layer.
 - [x] Bot joins and transcribes a Zoom call Adebayo hosts (2026-11-02: joined and recorded; speaker labels and second-speaker audio need review)
 - [x] Bot joins a Zoom call someone else hosts, including a waiting room (2026-11-02: second account hosted)
 - [ ] Measure real OpenAI spend per meeting hour **[Reconciled 2026-11-07 checklist pass: the cost ledger now records OpenAI calls (#88, #95, `docs/sop/2026-11-05-notes-cost-ledger.md`) but a per-hour number has not been written down]**
+  - [ ] Real cost per meeting hour: read-only `scripts/ai_cost_report.py` built 2026-11-14 (branch `chore/ai-cost-report`, SOP `docs/sop/2026-11-14-ai-cost-report.md`; ElevenLabs $0.20 an hour from its own pricing page); not yet run on the server
 - [x] Summary quality checked on a real transcript (2026-11-02: usable, transcript errors carry through)
 - [x] Spike report and go / no-go decision: go, see `docs/spike/vexa-spike-report.md`
 
