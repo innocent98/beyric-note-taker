@@ -399,8 +399,22 @@ class NamedProvider:
         self.sent: list[dict] = []
         self.next = 0
 
-    def send_bot(self, meeting_url, vocabulary=None, chat_notice=None, bot_name=None):
-        self.sent.append({"url": meeting_url, "bot_name": bot_name, "chat_notice": chat_notice})
+    def send_bot(
+        self,
+        meeting_url,
+        vocabulary=None,
+        chat_notice=None,
+        bot_name=None,
+        chat_notice_fallback=None,
+    ):
+        self.sent.append(
+            {
+                "url": meeting_url,
+                "bot_name": bot_name,
+                "chat_notice": chat_notice,
+                "chat_notice_fallback": chat_notice_fallback,
+            }
+        )
         self.next += 1
         return f"00000000-0000-0000-0000-{self.next:012d}"
 
@@ -854,8 +868,8 @@ def test_a_resend_stores_the_name_that_was_really_used(session):
     from app.skribby import SentBotId
 
     class Refusing(NamedProvider):
-        def send_bot(self, meeting_url, vocabulary=None, chat_notice=None, bot_name=None):
-            super().send_bot(meeting_url, vocabulary, chat_notice, bot_name)
+        def send_bot(self, meeting_url, **kwargs):
+            super().send_bot(meeting_url, **kwargs)
             sent = SentBotId("00000000-0000-0000-0000-000000000009")
             sent.bot_name = "Service Desk"
             return sent
@@ -947,3 +961,96 @@ def test_the_answer_carries_the_meet_account_name_from_the_server(api, app, owne
     )
     app.state.settings = make_settings(skribby_account_id=OTHER)
     assert api.get(ROUTE).json()["meet_account_name"] is None
+
+
+# ---- the consent line survives a refused name, and cannot name a bot that did not join ----
+
+
+def test_on_a_name_fallback_the_notice_is_rebuilt_with_the_default_never_dropped(httpx_mock):
+    # The notice holds the CLEANED AND DEFANGED name, which differs from the name sent.
+    sent_name = "Alex.Coach"
+    notice = chat_notice.notice_text(sent_name, "Ada Lovelace")
+    assert "Alex[.]Coach" in notice and sent_name not in notice
+    fallback = chat_notice.notice_text("Service Desk", "Ada Lovelace")
+    refuse(httpx_mock, "bot_name invalid")
+    accept(httpx_mock)
+    provider, _ = make(bot_name="Service Desk")
+    bot_id = provider.send_bot(
+        URL, bot_name=sent_name, chat_notice=notice, chat_notice_fallback=fallback
+    )
+    first, second = posts(httpx_mock)
+    assert first["initial_chat_message"] == notice and first["bot_name"] == sent_name
+    assert second["bot_name"] == "Service Desk"
+    assert second["initial_chat_message"] == fallback  # the consent line still goes out
+    assert "Service Desk" in fallback and "Alex" not in second["initial_chat_message"]
+    assert bot_id.bot_name == "Service Desk"
+
+
+def test_a_placed_meeting_sends_the_rebuilt_notice_when_the_name_is_refused(session, httpx_mock):
+    user = make_user(session, name="Ada Lovelace", bot_name="Alex.Coach")
+    template = make_template(session, user)
+    refuse(httpx_mock, "bot_name invalid")
+    accept(httpx_mock)
+    provider, _ = make(bot_name=DEFAULT)
+    settings = make_settings(bot_chat_notice_enabled=True, skribby_bot_name=DEFAULT)
+    meeting = place_bot(
+        session, provider, request_for(user, template), now=datetime.now(UTC), settings=settings
+    )
+    first, second = posts(httpx_mock)
+    assert first["initial_chat_message"].startswith("Hi, I'm Alex[.]Coach. Ada Lovelace added me")
+    assert second["initial_chat_message"].startswith(f"Hi, I'm {DEFAULT}. Ada Lovelace added me")
+    assert second["bot_name"] == DEFAULT and meeting.bot_name == DEFAULT
+
+
+def test_no_fallback_key_when_the_default_is_what_the_notice_already_says():
+    settings = make_settings(bot_chat_notice_enabled=True)
+    plain = chat_notice.send_options(
+        None, make()[0], 1, settings, bot_name="Service Desk", fallback_bot_name="Service Desk"
+    )
+    assert "chat_notice_fallback" not in plain
+    other = chat_notice.send_options(
+        None, make()[0], 1, settings, bot_name="Alex", fallback_bot_name="Service Desk"
+    )
+    assert other["chat_notice_fallback"].startswith("Hi, I'm Service Desk.")
+
+
+# ---- dot look-alikes and joiners next to a dot, bot name and owner name alike ----
+
+JOINERS = ("‍", "‌")
+
+
+@pytest.mark.parametrize("joiner", JOINERS)
+@pytest.mark.parametrize("tail", [".com", "。com", ".ai"])
+def test_a_joiner_next_to_the_dot_does_not_hide_a_web_address_from_the_refusal(joiner, tail):
+    for raw in (f"evil{joiner}{tail}", f"evil{tail[0]}{joiner}{tail[1:]}"):
+        with pytest.raises(BotNameInvalid) as caught:
+            clean_bot_name(raw)
+        assert str(caught.value) == bot_names.HAS_LINK
+
+
+@pytest.mark.parametrize("joiner", JOINERS)
+def test_a_joiner_next_to_the_dot_does_not_survive_in_the_notice_for_either_name(joiner):
+    text = chat_notice.notice_text(f"evil{joiner}.click", f"Ada evil{joiner}.com")
+    assert "evil[.]click" in text and "evil[.]com" in text
+    assert "evil.click" not in text and "evil.com" not in text
+
+
+@pytest.mark.parametrize("dot", ["。", "．", "｡", "﹒", "․"])
+def test_the_owner_name_dot_look_alikes_are_defanged_too(dot):
+    text = chat_notice.notice_text("Service Desk", f"Ada evil{dot}com")
+    assert "Ada evil[.]com added me" in text
+
+
+def test_the_mail_cleaning_handles_look_alikes_but_leaves_cjk_sentences_alone():
+    from app import titles
+
+    assert titles.mail_line("see evil。com now", 80) == "see evil[.]com now"
+    assert titles.mail_line("see evil‍.com now", 80) == "see evil[.]com now"
+    assert titles.alert_name("Visit evil｡com", "zoom", "1") == "Visit evil[.]com"
+    # A CJK full stop between two sentences is ordinary text: no listed domain follows it.
+    assert titles.mail_line("你好。再见", 80) == "你好。再见"
+
+
+def test_a_joiner_inside_an_emoji_sequence_is_kept_in_the_notice():
+    family = "Team \U0001f468‍\U0001f469‍\U0001f467"
+    assert chat_notice.notice_text(family, "Ada").startswith(f"Hi, I'm {family}. ")

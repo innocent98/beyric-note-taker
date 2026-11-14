@@ -98,8 +98,7 @@ def meeting_name(meeting: Meeting) -> str:
 def alert_name(title: str | None, platform: str | None, native_id: str | None) -> str:
     """The name of an event or meeting for a mail, a notification or an alert: cleaned, short,
     with any web address removed and any bare domain defanged (a mail client would link them)."""
-    plain = URL.sub(LINK_REMOVED, clean_title(title, TITLE_LIMIT))
-    plain = _DOMAINISH.sub(lambda found: found.group().replace(".", "[.]"), plain)
+    plain = defang_text(URL.sub(LINK_REMOVED, clean_title(title, TITLE_LIMIT)))
     return clean_title(plain, MAIL_TITLE_LIMIT) or clean_title(
         _fallback(platform, native_id), MAIL_TITLE_LIMIT
     )
@@ -122,6 +121,35 @@ _TLD_LINK = re.compile(
 _DOT_LOOKALIKES = str.maketrans(
     {"\u3002": ".", "\uff0e": ".", "\uff61": ".", "\ufe52": ".", "\u2024": "."}
 )
+_DOT_CHARS = "." + "".join(chr(code) for code in (0x3002, 0xFF0E, 0xFF61, 0xFE52, 0x2024))
+_DOT = "[" + re.escape(_DOT_CHARS) + "]"
+# A zero-width joiner or non-joiner right next to a dot ("evil<ZWJ>.com"): it is kept in a name
+# (an emoji sequence or a Persian word needs it) but between a label and its dot it only hides the
+# link from the checks, so the checks and the defanging look at the text without it.
+_JOINERS_AT_DOTS = re.compile(rf"[\u200c\u200d]+(?={_DOT})|(?<={_DOT})[\u200c\u200d]+")
+# A link written with a listed domain ("evil。com", "evil.com"), any dot character: used on running
+# text (mail), where a dot look-alike is common punctuation (a CJK full stop) unless a listed TLD
+# follows it.
+_ANY_DOT_LINK = re.compile(
+    rf"(?<![\w-])[\w-]+(?:{_DOT}[\w-]+)*{_DOT}(?:" + "|".join(LINK_TLDS) + r")(?![\w-])",
+    re.IGNORECASE,
+)
+
+
+def tidy_dots(text: str) -> str:
+    """`text` without the joiners that sit next to a dot (see `_JOINERS_AT_DOTS`)."""
+    return _JOINERS_AT_DOTS.sub("", text)
+
+
+def defang_text(plain: str) -> str:
+    """Running text for a mail or an alert with the dots of anything that could be linked written
+    "[.]": a bare domain (`_DOMAINISH`) and a listed domain written with a dot look-alike or a
+    joiner next to the dot ("evil。com", "evil<ZWJ>.com"). Dot look-alikes are not touched
+    elsewhere: in CJK text they are ordinary full stops."""
+    plain = _ANY_DOT_LINK.sub(lambda found: re.sub(_DOT, "[.]", found.group()), tidy_dots(plain))
+    return _DOMAINISH.sub(lambda found: found.group().replace(".", "[.]"), plain)
+
+
 # The only first labels left alone in a dotted name: a single letter (an initial, "J.Smith") or a
 # title ("Dr.Smith"). Anything else with a dot and letters after it is defanged, in any case.
 _NAME_TITLES = frozenset("dr mr mrs ms mx st jr sr prof sgt capt gen col rev hon fr".split())
@@ -134,7 +162,7 @@ def defang_name_domains(name: str) -> str:
     "Evil[.]Click"), except one dot after a single letter or a title with a capitalised word after
     it ("J.Smith", "Dr.Smith", "St.Mary"), which reads as an initial or an abbreviation. "x.click",
     "t.co", "dr.click" and "J.Co" are defanged. Dot look-alikes count as dots."""
-    plain = name.translate(_DOT_LOOKALIKES)
+    plain = tidy_dots(name).translate(_DOT_LOOKALIKES)
 
     def swap(found: re.Match) -> str:
         token = found.group()
@@ -156,7 +184,7 @@ def looks_like_link(text: str) -> bool:
     """Whether a typed name reads as a web address: it holds `://`, starts a word with `www.`,
     is a link to a meeting host written bare, or is `label.tld` with a TLD from `LINK_TLDS`.
     Narrower than `mail_line`'s defanging on purpose (see `LINK_TLDS`)."""
-    text = text.translate(_DOT_LOOKALIKES)
+    text = tidy_dots(text).translate(_DOT_LOOKALIKES)
     return bool(URL.search(text) or "://" in text or _TLD_LINK.search(text))
 
 
@@ -164,8 +192,7 @@ def mail_line(text: str | None, limit: int) -> str:
     """Words somebody said in a meeting (a task title) as one plain line for a mail: a web address
     is replaced by "[link removed]" and a bare domain has its dots written "[.]", because a mail
     client would link either. Cut at `limit` characters."""
-    plain = URL.sub(LINK_REMOVED, clean_title(text, limit * 2))
-    plain = _DOMAINISH.sub(lambda found: found.group().replace(".", "[.]"), plain)
+    plain = defang_text(URL.sub(LINK_REMOVED, clean_title(text, limit * 2)))
     return clean_title(plain, limit)
 
 

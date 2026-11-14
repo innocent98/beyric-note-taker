@@ -295,6 +295,9 @@ def place_bot(
                 shown_bot_name=bot_names.shown_name(
                     effective, provider=provider, platform=req.platform, stored=sent_name
                 ),
+                fallback_shown_bot_name=bot_names.shown_name(
+                    effective, provider=provider, platform=req.platform, stored=None
+                ),
             ),
         )
     except BotDuplicate:  # a bot that is not ours is there (another host, a race)...

@@ -458,6 +458,9 @@ def send_again(meeting: Meeting, vexa, *, raise_duplicate: bool = False) -> bool
                 shown_bot_name=bot_names.shown_name(
                     settings, provider=provider, platform=meeting.platform, stored=sent
                 ),
+                fallback_shown_bot_name=bot_names.shown_name(
+                    settings, provider=provider, platform=meeting.platform, stored=None
+                ),
             ),
         )
     except BotDuplicate:

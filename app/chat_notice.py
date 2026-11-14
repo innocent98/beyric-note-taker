@@ -68,12 +68,16 @@ def send_options(
     owner_user_id: int,
     settings: Settings,
     bot_name: str | None = None,
+    fallback_bot_name: str | None = None,
 ) -> dict[str, Any]:
     """`{"chat_notice": "<the line>"}` for `provider.send_bot`, or nothing: only with
     `BOT_CHAT_NOTICE_ENABLED`, only for a provider that takes one (`accepts_chat_notice`,
     Skribby's). Reading the owner's name can fail without stopping the send: the line then says
     "the host". `bot_name` is the name the host sees for this meeting's bot (`app.bot_names.
-    shown_name`); without one the server default is used."""
+    shown_name`); without one the server default is used. `fallback_bot_name` is the name the host
+    sees if the person's own name is refused and the send is made again with the default: when it
+    differs, the same line built with it comes as `chat_notice_fallback`, so the consent line never
+    names a bot that did not join (`SkribbyClient.create`)."""
     if not settings.bot_chat_notice_enabled or not getattr(
         type(provider), "accepts_chat_notice", False
     ):
@@ -87,4 +91,8 @@ def send_options(
                 name = session.scalar(select(User.name).where(User.id == owner_user_id))
         except Exception:  # a database hiccup must not stop the bot from being sent
             logger.warning("the owner's name could not be read for the chat notice")
-    return {"chat_notice": notice_text(bot_name or notice_bot_name(settings), name)}
+    shown = bot_name or notice_bot_name(settings)
+    options = {"chat_notice": notice_text(shown, name)}
+    if fallback_bot_name and fallback_bot_name != shown:
+        options["chat_notice_fallback"] = notice_text(fallback_bot_name, name)
+    return options

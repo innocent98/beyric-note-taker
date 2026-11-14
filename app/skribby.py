@@ -952,7 +952,12 @@ class SkribbyClient:
         with self._http(connect=SEND_CONNECT_SECONDS) as client:
             return client.post("/bot", json=payload)
 
-    def create(self, payload: dict[str, Any], used: dict[str, Any] | None = None) -> str:
+    def create(
+        self,
+        payload: dict[str, Any],
+        used: dict[str, Any] | None = None,
+        fallback_notice: str | None = None,
+    ) -> str:
         """`POST /bot`; the new bot's id. Errors follow the interface: never connected is plain,
         no clear answer is `SkribbySendUncertain`, a 4xx is plain.
 
@@ -966,9 +971,12 @@ class SkribbyClient:
         than the server default and Skribby answers 400 or 422, the create is made once more with
         the default (the answer's own text decides what is dropped: a refusal that names only
         `bot_name` keeps the optional fields, one that names only an optional field keeps the name,
-        anything else drops both). The chat notice names the bot, so it goes with the name it
-        names. When the name was replaced, `used["bot_name"]` (the dictionary the caller passed)
-        is the default that the accepted create carried."""
+        anything else drops both). The chat notice names the bot, so when the name is replaced it
+        is replaced too, with `fallback_notice` (the same line built with the default name): the
+        consent line must still go out and must not name a bot that did not join. Without a
+        fallback (a direct caller) a notice that holds the refused name is dropped. When the name
+        was replaced, `used["bot_name"]` (the dictionary the caller passed) is the default that the
+        accepted create carried."""
         try:
             response = self._post_bot(payload)
             optional = [name for name in OPTIONAL_PARAMETERS if name in payload]
@@ -998,7 +1006,9 @@ class SkribbyClient:
                 if drop_name:
                     payload["bot_name"] = self._bot_name
                     notice = payload.get("initial_chat_message")
-                    if isinstance(notice, str) and custom and custom in notice:
+                    if isinstance(notice, str) and fallback_notice:
+                        payload["initial_chat_message"] = fallback_notice
+                    elif isinstance(notice, str) and custom and custom in notice:
                         payload.pop("initial_chat_message")  # it names the refused name
                     if used is not None:
                         used["bot_name"] = self._bot_name
@@ -1377,6 +1387,7 @@ class SkribbyProvider:
         vocabulary: list[str] | None = None,
         chat_notice: str | None = None,
         bot_name: str | None = None,
+        chat_notice_fallback: str | None = None,
     ) -> str:
         platform, code, canonical = _parse(meeting_url)  # UnsupportedMeetingUrl for a bad link
         payload = self._client.payload(platform, code, canonical, vocabulary, chat_notice, bot_name)
@@ -1390,7 +1401,7 @@ class SkribbyProvider:
                     raise SkribbyError("send_bot abandoned before anything was sent")
                 state["started"] = True
             used: dict[str, Any] = {}
-            bot_id = self._client.create(payload, used)
+            bot_id = self._client.create(payload, used, chat_notice_fallback)
             with lock:
                 late = state["abandoned"]
                 state["bot_id"] = bot_id

@@ -197,6 +197,7 @@ def send_options(
     settings: Settings,
     bot_name: str | None = None,
     shown_bot_name: str | None = None,
+    fallback_shown_bot_name: str | None = None,
 ) -> dict[str, Any]:
     """Extra keyword arguments for `provider.send_bot`: the owner's vocabulary, only in `skribby`
     mode, only for a provider that takes it (Skribby's `custom_vocabulary`) and only when the
@@ -207,7 +208,9 @@ def send_options(
     callers of `send_bot` already go through. So does the note taker's name (`bot_name`, only for a
     provider that takes one: `accepts_bot_name`, Skribby's; `app/bot_names.py` decides it): the
     caller computes it once, stores it on the meeting and passes it here, so what is sent and what
-    is stored cannot differ. `shown_bot_name` is what the notice calls the bot."""
+    is stored cannot differ. `shown_bot_name` is what the notice calls the bot;
+    `fallback_shown_bot_name` is what it would call it if the person's own name were refused and
+    the default used."""
     options: dict[str, Any] = {}
     if bot_name and getattr(type(provider), "accepts_bot_name", False):
         options["bot_name"] = bot_name
@@ -215,7 +218,12 @@ def send_options(
         options
         | _vocabulary_options(session, provider, owner_user_id, settings)
         | chat_notice.send_options(
-            session, provider, owner_user_id, settings, bot_name=shown_bot_name
+            session,
+            provider,
+            owner_user_id,
+            settings,
+            bot_name=shown_bot_name,
+            fallback_bot_name=fallback_shown_bot_name,
         )
     )
 
