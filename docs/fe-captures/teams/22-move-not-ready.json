@@ -1,0 +1,24 @@
+{
+  "note": "Only a finished meeting can be moved.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/3/move",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "team_id": 4
+    }
+  },
+  "response": {
+    "status": 409,
+    "body": {
+      "error": {
+        "code": "meeting_not_ready",
+        "message": "Wait until the notes are ready, then move the meeting."
+      }
+    }
+  }
+}

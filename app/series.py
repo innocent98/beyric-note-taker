@@ -47,7 +47,13 @@ from app.models import (
     User,
 )
 from app.notes_document import parse_transcript
-from app.visibility import can_read_clause, meeting_team_ids, owns, visible_meetings
+from app.visibility import (
+    can_read_clause,
+    meeting_team_ids,
+    owns,
+    recorded_by,
+    visible_meetings,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -365,7 +371,7 @@ def attach(session: Session, user: User, meeting: Meeting, series_id: int | None
     """Put the caller's own meeting into a series of their team, or take it out (`None`). Only the
     meeting's owner may (a teammate who can read it may not move it). 404 for a series that is
     not the caller's team's."""
-    if not owns(user, meeting):
+    if not recorded_by(session, user, meeting):
         raise SeriesRefused(404, "not_found", "No such meeting.")
     if series_id is None:
         if meeting.series_id is not None:
@@ -405,7 +411,7 @@ def make_from_reused_link(session: Session, user: User, meeting: Meeting) -> Ser
     """Make a recurring meeting from a link that was used again: named after the meeting, with this
     meeting and the caller's other meetings of the same code that are in no series. Only the
     meeting's owner may (404); 409 `not_reused` when the code was not used before."""
-    if not owns(user, meeting):
+    if not recorded_by(session, user, meeting):
         raise SeriesRefused(404, "not_found", "No such meeting.")
     if not reused_code(session, meeting):
         raise SeriesRefused(
@@ -434,7 +440,11 @@ def forget_meetings_of(session: Session, user_id: int, team_id: int) -> None:
     in_team = select(Series.id).where(Series.team_id == team_id)
     session.execute(
         update(Meeting)
-        .where(Meeting.owner_user_id == user_id, Meeting.series_id.in_(in_team))
+        .where(
+            Meeting.owner_user_id == user_id,
+            Meeting.owner_team_id.is_(None),  # a meeting the team owns stays in its series
+            Meeting.series_id.in_(in_team),
+        )
         .values(series_id=None)
     )
 
@@ -689,7 +699,7 @@ def question_for(
 
 def can_change_question(session: Session, viewer: User, meeting: Meeting) -> bool:
     """The meeting's owner, or an owner or admin of the team the meeting is shared with."""
-    if owns(viewer, meeting):
+    if owns(session, viewer, meeting):
         return True
     return any(is_manager(session, viewer, t) for t in meeting_team_ids(meeting))
 

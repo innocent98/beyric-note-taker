@@ -199,12 +199,16 @@ OWNER_ONLY = {
     ("DELETE", "/api/meetings/{meeting_id}/translations/{language}"),
     ("POST", "/api/meetings/{meeting_id}/tasks/extract"),
     ("POST", "/api/meetings/{meeting_id}/share"),
+    ("POST", "/api/meetings/{meeting_id}/move"),
     ("POST", "/api/meetings/{meeting_id}/shares"),
     ("GET", "/api/meetings/{meeting_id}/shares"),
     ("DELETE", "/api/meetings/{meeting_id}/share"),
     ("PUT", "/api/meetings/{meeting_id}/series"),
     ("POST", "/api/meetings/{meeting_id}/recurring"),
 }
+# Readable by whoever reads the meeting, changeable only by the owning team's owner or admin: the
+# others who can read it get 403 `team_forbidden`, everyone else 404 (test_multi_team_moved.py).
+TEAM_ADMIN_ONLY = {("POST", "/api/meetings/{meeting_id}/move-back")}
 # Routes with no meeting id in the path that still read meeting content, through the same rule.
 LISTS = {("GET", "/api/meetings"), ("GET", "/api/decisions")}
 
@@ -217,7 +221,8 @@ def test_every_route_with_a_meeting_id_is_classified(app):
     """A new meeting route fails here until someone decides: a read (through visible_meetings)
     or owner-only."""
     found = set(meeting_routes(app))
-    assert found == READS | OWNER_ONLY, found ^ (READS | OWNER_ONLY)
+    everything = READS | OWNER_ONLY | TEAM_ADMIN_ONLY
+    assert found == everything, found ^ everything
 
 
 def call(handle, method, path, meeting):
@@ -227,6 +232,8 @@ def call(handle, method, path, meeting):
         body = {"series_id": None}
     if method == "POST" and path.endswith("/shares"):
         body = {"recipients": [{"email": "x@example.test"}], "language": "en"}
+    if path.endswith("/move"):
+        body = {"team_id": 0}
     if path.endswith("/regenerate"):
         body = {"template_id": meeting.template_id}
     return handle.call(method, url, body)

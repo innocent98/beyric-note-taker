@@ -1966,3 +1966,25 @@ def test_0043_downgrade_refuses_while_somebody_belongs_to_two_teams(scratch_url)
     command.downgrade(cfg, "0042")
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0044_follows_0043():
+    script = ScriptDirectory.from_config(alembic_config(TEST_DATABASE_URL))
+    assert script.get_revision("0044").down_revision == "0043"
+
+
+def test_0044_adds_users_purged_at_empty_for_every_row_and_downgrades_cleanly(scratch_url):
+    cfg = alembic_config(scratch_url)
+    command.upgrade(cfg, "0043")
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, status) values ('a@example.test', 'active')"))
+    command.upgrade(cfg, "0044")
+    columns = {c["name"]: c for c in inspect(engine).get_columns("users")}
+    assert columns["purged_at"]["nullable"] is True
+    rows = _rows(engine, "select purged_at from users")
+    assert rows and all(row == (None,) for row in rows)  # the seeded admin and the one inserted
+    command.downgrade(cfg, "0043")
+    assert "purged_at" not in {c["name"] for c in inspect(engine).get_columns("users")}
+    command.upgrade(cfg, "head")
+    engine.dispose()

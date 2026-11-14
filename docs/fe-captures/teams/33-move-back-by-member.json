@@ -1,0 +1,22 @@
+{
+  "note": "A reader who is not an owner or admin: 403.",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/move-back",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "Only an owner or admin of the team can move it back."
+      }
+    }
+  }
+}

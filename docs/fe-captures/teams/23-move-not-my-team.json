@@ -1,0 +1,24 @@
+{
+  "note": "Not a member of Y: 404.",
+  "as": "Ada",
+  "request": {
+    "method": "POST",
+    "path": "/api/meetings/1/move",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "team_id": 5
+    }
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such team."
+      }
+    }
+  }
+}

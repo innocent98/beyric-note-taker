@@ -1,0 +1,22 @@
+{
+  "note": "...nor delete it.",
+  "as": "Ada",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/meetings/1",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such meeting"
+      }
+    }
+  }
+}

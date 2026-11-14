@@ -704,6 +704,7 @@ def test_every_api_route_with_an_id_returns_404_for_another_users_row(
             "/vocabulary": {"term": "Metrika"},
             "/translations": {"language": "fr"},
             "/shares": {"recipients": [{"email": "x@example.test"}], "language": "en"},
+            "/move": {"team_id": 1},
             "/override": {"override": False},
             "/api/tasks/{task_id}": {"status": "done"},
             "/api/decisions/{decision_id}": {"status": "rejected"},

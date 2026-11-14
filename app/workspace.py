@@ -269,9 +269,9 @@ def run_extraction(
     _reconcile(session, ReviewItem, meeting_id, parsed.please_check, owner_user_id=owner_id)
     team_id, members, fresh = None, [], frozenset()
     if make_tasks:
-        # The owner's default team (their only ordinary team, else their personal one). Stage 2 of
-        # the multi-team design files a meeting's tasks by the team the meeting belongs to.
-        team_id = teams.ensure_team(session, session.get(User, owner_id)).id
+        # The meeting's team: the one that owns it, else the one it is shared with, else (switch
+        # on) its recorder's personal team; switch off, their default team as ever.
+        team_id = teams.team_for_meeting(session, meeting).id
         members = tasks.members_of(session, team_id)
         # What the notes parser can read of each action bullet, so a failed call still leaves tasks.
         from_notes = check_extraction(
@@ -335,9 +335,9 @@ def run_extraction(
                 row.heard_as = hints[row.fingerprint]
     post_to_slack = None
     if checked is not None and full:
-        # The owner may have left the team while the model was asked: file into the team they are
-        # in now, never the one they were in then.
-        team_id = teams.ensure_team(session, session.get(User, owner_id)).id
+        # The meeting may have been shared, moved or left a team while the model was asked: file
+        # into the team it belongs to now, never the one it did then.
+        team_id = teams.team_for_meeting(session, meeting).id
         members = tasks.members_of(session, team_id)
         live = tasks.reconcile(
             session, meeting, team_id, parsed.action_items, checked.action_items, members, day,
@@ -637,7 +637,7 @@ def update_decision(
     already lead back here. It only means something when the decision is `replaced`: moving a
     decision to another status clears it, and naming one for a decision that is not `replaced` is
     refused. The caller commits through this function."""
-    if not owns(user, meeting):
+    if not owns(session, user, meeting):
         raise DecisionForbidden
     # Two changes to one decision (or two owners naming each other) must not interleave: take the
     # row locks in id order, and, to name a replacement, one lock that serialises every such change
@@ -701,13 +701,14 @@ def _topics_may_change(session: Session, meeting_id: int) -> None:
 def hide_decision(session: Session, user: User, decision_id: int) -> bool:
     """Take a decision out of the log (it is hidden, not edited, and stays hidden when the notes
     are rewritten). False when the caller has no such decision."""
-    decision = session.scalars(
-        select(Decision)
-        .join(Meeting)
-        .where(Decision.id == decision_id, Meeting.owner_user_id == user.id)
+    row = session.execute(
+        select(Decision, Meeting)
+        .join(Meeting, Meeting.id == Decision.meeting_id)
+        .where(Decision.id == decision_id, can_read_clause(user))
     ).first()
-    if decision is None:
+    if row is None or not owns(session, user, row[1]):
         return False
+    decision = row[0]
     if decision.hidden_at is None:
         decision.hidden_at = datetime.now(UTC)
         _topics_may_change(session, decision.meeting_id)

@@ -1,0 +1,124 @@
+{
+  "note": "Ada's own tasks: the two the meeting produced, in her personal team.",
+  "as": "Ada",
+  "request": {
+    "method": "GET",
+    "path": "/api/tasks",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "tasks": [
+        {
+          "id": 2,
+          "title": "Book the room",
+          "status": "todo",
+          "assignee": {
+            "user_id": 1,
+            "name": "Ada Example",
+            "is_you": true
+          },
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": "Book the room",
+          "is_new": true,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-03",
+          "done_at": null,
+          "created_at": "2026-11-14T09:09:25.210460Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet abc-defg-hij",
+            "platform": "google_meet",
+            "created_at": "2026-11-14T09:09:25.210460Z"
+          },
+          "project_id": null,
+          "milestone_id": null,
+          "sprint_id": null,
+          "carried": false,
+          "check_project": false,
+          "suggested": false,
+          "confidence": null,
+          "reason": null,
+          "quote_speaker": null,
+          "quote_line": null,
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": false,
+          "can_delete": true,
+          "can_decide": false
+        },
+        {
+          "id": 1,
+          "title": "Send the deck",
+          "status": "todo",
+          "assignee": {
+            "user_id": 2,
+            "name": "Pat Example",
+            "is_you": false
+          },
+          "spoken_owner": null,
+          "due_date": null,
+          "due_phrase": null,
+          "quote": "Send the deck",
+          "is_new": true,
+          "unverified": false,
+          "source": "ai",
+          "assigned_on": "2026-11-03",
+          "done_at": null,
+          "created_at": "2026-11-14T09:09:25.210460Z",
+          "from_meeting": true,
+          "meeting": {
+            "id": 1,
+            "title": "Google Meet abc-defg-hij",
+            "platform": "google_meet",
+            "created_at": "2026-11-14T09:09:25.210460Z"
+          },
+          "project_id": null,
+          "milestone_id": null,
+          "sprint_id": null,
+          "carried": false,
+          "check_project": false,
+          "suggested": false,
+          "confidence": null,
+          "reason": null,
+          "quote_speaker": null,
+          "quote_line": null,
+          "can_update": true,
+          "can_edit": true,
+          "can_assign": true,
+          "can_claim": false,
+          "can_delete": true,
+          "can_decide": false
+        }
+      ],
+      "people": [
+        {
+          "user_id": 1,
+          "name": "Ada Example",
+          "is_you": true
+        },
+        {
+          "user_id": 2,
+          "name": "Pat Example",
+          "is_you": false
+        }
+      ],
+      "attention": {
+        "needs_owner": 0,
+        "unverified": 0,
+        "check_project": 0
+      },
+      "has_more": false,
+      "next_before_id": null
+    }
+  }
+}

@@ -1879,6 +1879,16 @@
             "title": "Can End",
             "type": "boolean"
           },
+          "can_move": {
+            "default": false,
+            "title": "Can Move",
+            "type": "boolean"
+          },
+          "can_move_back": {
+            "default": false,
+            "title": "Can Move Back",
+            "type": "boolean"
+          },
           "can_regenerate": {
             "title": "Can Regenerate",
             "type": "boolean"
@@ -1997,6 +2007,11 @@
             },
             "title": "Open Questions",
             "type": "array"
+          },
+          "owned_by_team": {
+            "default": false,
+            "title": "Owned By Team",
+            "type": "boolean"
           },
           "participants": {
             "items": {
@@ -2138,6 +2153,16 @@
           "tasks_count": {
             "title": "Tasks Count",
             "type": "integer"
+          },
+          "team": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TeamRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "template_id": {
             "title": "Template Id",
@@ -2727,6 +2752,19 @@
           }
         },
         "title": "MilestonePatch",
+        "type": "object"
+      },
+      "MoveRequest": {
+        "properties": {
+          "team_id": {
+            "title": "Team Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "team_id"
+        ],
+        "title": "MoveRequest",
         "type": "object"
       },
       "NewMeeting": {
@@ -4372,6 +4410,23 @@
         "title": "ShareRecipientOut",
         "type": "object"
       },
+      "ShareRequest": {
+        "properties": {
+          "team_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Team Id"
+          }
+        },
+        "title": "ShareRequest",
+        "type": "object"
+      },
       "SignUp": {
         "additionalProperties": false,
         "properties": {
@@ -5625,6 +5680,24 @@
           }
         },
         "title": "TeamPatch",
+        "type": "object"
+      },
+      "TeamRef": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "TeamRef",
         "type": "object"
       },
       "TemplateIn": {
@@ -9489,6 +9562,182 @@
         ]
       }
     },
+    "/api/meetings/{meeting_id}/move": {
+      "post": {
+        "description": "Move the meeting to a team the caller belongs to: the team owns it from now on. Every member\nreads it; the recorder (while a member) and the team's owners and admins change it; it stays\nwith the team if the recorder leaves it or deletes their account (they then show as \"Former\nmember\"). Only the recorder, only a finished meeting. Doing it again for the same team is\nfine. The page must say so first: \"This meeting will belong to the team. It stays with the\nteam even if you leave or delete your account.\" Its tasks move to the team.",
+        "operationId": "move_meeting",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such meeting, or no such team (of the caller's)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`, `already_moved`, `meeting_not_ready`, `multi_team_disabled`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Move Meeting",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
+    "/api/meetings/{meeting_id}/move-back": {
+      "post": {
+        "description": "Give a team's meeting back to its recorder (private to them again; its tasks go to their\npersonal team). Only an owner or admin of the team that owns it (403 `team_forbidden` for any\nother reader, the recorder included). 409 `not_moved` for a meeting no team owns, 409\n`recorder_gone` when the recorder deleted their account.",
+        "operationId": "move_meeting_back",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "title": "Meeting Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeetingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`team_forbidden`"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No such meeting"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`not_moved`, `recorder_gone`"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Move Meeting Back",
+        "tags": [
+          "meetings"
+        ]
+      }
+    },
     "/api/meetings/{meeting_id}/recurring": {
       "post": {
         "description": "\"Make this a recurring meeting?\": make a recurring meeting named after this meeting from a\nlink that was used before, and put this meeting and the caller's other meetings of the same\nlink code into it. Only the meeting's owner (404 for anyone else); 409 `not_reused` when the\nlink was not used before; offered by `suggest_recurring` on the meeting.",
@@ -9863,7 +10112,7 @@
     },
     "/api/meetings/{meeting_id}/share": {
       "delete": {
-        "description": "Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone\nelse. Doing it twice is fine.",
+        "description": "Make the meeting private again: teammates lose it at once. Only the owner; 404 for anyone\nelse. Doing it twice is fine. 409 `meeting_team_owned` for a meeting moved to a team.",
         "operationId": "unshare_meeting",
         "parameters": [
           {
@@ -9917,6 +10166,16 @@
             },
             "description": "No such meeting (or not the caller's)"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`meeting_team_owned`"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -9934,7 +10193,7 @@
         ]
       },
       "post": {
-        "description": "Share the meeting with the caller's team (the \"Share with team\" switch): teammates may read\nits notes, transcript and tasks, never change it. Only the one who recorded it (a teammate or\nanyone else gets 404). Doing it twice is fine. The team's default (`share_new_meetings`) is\nread once, when the notes are first written; this is how a person shares one by hand.",
+        "description": "Share the meeting with one of the caller's teams (the \"Share with team\" switch): its members\nmay read the notes, transcript and tasks, never change them. Only the one who recorded it (a\nteammate or anyone else gets 404). Send `{\"team_id\": ...}` for a team the caller belongs to\n(404 `not_found` for any other, 409 `personal_team` for their own personal space); send\nnothing and the default team is used, as before multi-team, unless the caller is on two or more\nteams (422 `team_required`). A meeting is shared with one team: sharing again moves it. 409\n`meeting_team_owned` for a meeting moved to a team. The team's default (`share_new_meetings`)\nis read once, when the notes are first written; this is how a person shares one by hand.",
         "operationId": "share_meeting",
         "parameters": [
           {
@@ -9947,6 +10206,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ShareRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {
@@ -9986,7 +10262,17 @@
                 }
               }
             },
-            "description": "No such meeting (or not the caller's)"
+            "description": "No such meeting, or no such team (of the caller's)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "`personal_team`, `meeting_team_owned`"
           },
           "422": {
             "content": {
@@ -9996,7 +10282,7 @@
                 }
               }
             },
-            "description": "Malformed request"
+            "description": "`team_required`"
           }
         },
         "summary": "Share Meeting",
