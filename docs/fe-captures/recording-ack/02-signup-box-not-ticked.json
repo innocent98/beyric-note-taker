@@ -1,0 +1,32 @@
+{
+  "note": "The box is not ticked: 422, and no account is made.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ada Example",
+      "email": "ada@example.test",
+      "password": "<password>",
+      "accept_terms": true,
+      "accept_recording": false
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "recording_ack_required",
+        "message": "Confirm that you will tell the people in your meetings that Beyric will record them."
+      }
+    }
+  }
+}

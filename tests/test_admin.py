@@ -611,6 +611,7 @@ def signup_body(**over) -> dict:
         "email": "wait@example.test",
         "password": GOOD,
         "accept_terms": True,
+        "accept_recording": True,
     } | over
 
 

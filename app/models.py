@@ -137,6 +137,12 @@ class User(Base):
     session_epoch: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     terms_accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     terms_version: Mapped[str | None] = mapped_column(String(32))
+    # When the person confirmed they will tell the people in their meetings that Beyric records
+    # them, and which wording (`signup.RECORDING_ACK_VERSION`). Set at sign-up, or later by the
+    # one-time card on the Meetings page for accounts older than the box; null until then. It
+    # never gates a meeting, the bot or auto-join.
+    recording_ack_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    recording_ack_version: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # When the admin deleted the account (status `deleted`); the purge gives up a day after it.
@@ -453,6 +459,11 @@ class UserSettings(Base):
 
     __tablename__ = "user_settings"
     __table_args__ = (
+        Index(
+            "ix_user_settings_auto_share_team_id",
+            "auto_share_team_id",
+            postgresql_where=sa.text("auto_share_team_id is not null"),
+        ),
         CheckConstraint(_in("auto_join_rule", AUTO_JOIN_RULES), name="ck_user_settings_rule"),
         CheckConstraint(
             "instant_meet_mode_override is null or "
@@ -492,6 +503,12 @@ class UserSettings(Base):
     # W8: whether this person is emailed the agenda a teammate sends and the reminders before a
     # recurring meeting they attend (Settings > Email).
     notify_reminders: Mapped[bool] = mapped_column(Boolean, default=True, server_default=sa.true())
+    # The one team this person's new meetings are shared to when their notes are first written
+    # (multi-team design 6.3); null = none chosen, and the team default (`teams.
+    # share_new_meetings`, owners and admins) applies as before.
+    auto_share_team_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("teams.id", ondelete="SET NULL")
+    )
 
 
 class CalendarConnection(Base):

@@ -5,23 +5,28 @@ Only the caller's own row is ever read or written: the account is the logged-in 
 from the path or the body.
 """
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app import auth, services, timezones, translation
+from app import auth, services, signup, teams, timezones, translation
 from app.api_schemas import (
+    AutoShareIn,
+    AutoShareOut,
     EmailPreferencesIn,
     EmailPreferencesOut,
     ErrorResponse,
     LanguagePreferencesIn,
     LanguagePreferencesOut,
+    RecordingAckOut,
     TimeZoneIn,
     TimeZoneOut,
 )
 from app.db import get_session
-from app.models import User, UserSettings
+from app.models import Team, User, UserSettings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -90,6 +95,26 @@ def write_language_preferences(
     return LanguagePreferencesOut(default_language=body.default_language)
 
 
+@router.post("/recording-ack")
+def acknowledge_recording(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> RecordingAckOut:
+    """The one-time card on the Meetings page for accounts older than the sign-up box: the person
+    confirms they will tell the people in their meetings that Beyric records them. Stores the time
+    and the wording's version the first time; later calls change nothing. It never gates anything
+    else, so the bot, auto-join and every other route work whether or not it was ever called."""
+    # One conditional statement: the first call wins, a second (or a double click) changes nothing.
+    session.execute(
+        update(User)
+        .where(User.id == user.id, User.recording_ack_at.is_(None))
+        .values(
+            recording_ack_at=datetime.now(UTC), recording_ack_version=signup.RECORDING_ACK_VERSION
+        )
+    )
+    session.commit()
+    return RecordingAckOut(recording_acknowledged=True)
+
+
 @router.get("/time-zone")
 def read_time_zone(
     session: Session = Depends(get_session), user: User = Depends(auth.current_user)
@@ -124,3 +149,52 @@ def write_time_zone(
     )
     session.commit()
     return TimeZoneOut(time_zone=name, is_set=True)
+
+
+@router.get("/auto-share")
+def read_auto_share(
+    session: Session = Depends(get_session), user: User = Depends(auth.current_user)
+) -> AutoShareOut:
+    """The one team this person's new meetings are shared to when their notes are first written
+    (never when the bot joins), or null. A team they have since left reads as null."""
+    return AutoShareOut(team_id=teams.auto_share_team(session, user))
+
+
+@router.put(
+    "/auto-share",
+    responses={
+        404: {"model": ErrorResponse, "description": "A team the caller is not in"},
+        409: {"model": ErrorResponse, "description": "`personal_team`, `multi_team_disabled`"},
+    },
+)
+def write_auto_share(
+    body: AutoShareIn,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> AutoShareOut:
+    """Choose the team new meetings are shared to automatically (one at most), or null for none. The
+    caller must belong to it and it must not be their personal space. It applies once, when a
+    meeting's notes are first written; a meeting already written is not touched. 409
+    `multi_team_disabled` while the switch is off."""
+    if not teams.multi_team_enabled():
+        raise services.Refused(
+            409, "multi_team_disabled", "Choosing a team for new meetings is not available yet."
+        )
+    if body.team_id is not None:
+        member = teams.membership(session, user.id, body.team_id)
+        team = session.get(Team, body.team_id) if member is not None else None
+        if team is None:
+            raise services.Refused(404, "not_found", "No such team.")
+        if team.is_personal:
+            raise services.Refused(
+                409, "personal_team", "Choose a team. Your personal space is only yours."
+            )
+    session.execute(
+        insert(UserSettings)
+        .values(user_id=user.id, auto_share_team_id=body.team_id)
+        .on_conflict_do_update(
+            index_elements=["user_id"], set_={"auto_share_team_id": body.team_id}
+        )
+    )
+    session.commit()
+    return AutoShareOut(team_id=body.team_id)

@@ -147,7 +147,13 @@ def prepare_database() -> None:
 
 def form(email: str, n: int) -> dict:
     password = "-".join(["capture", "password", str(n), "ok"])
-    return {"name": "Ada Example", "email": email, "password": password, "accept_terms": True}
+    return {
+        "name": "Ada Example",
+        "email": email,
+        "password": password,
+        "accept_terms": True,
+        "accept_recording": True,
+    }
 
 
 def run(base: str, engine, settings: Settings) -> None:

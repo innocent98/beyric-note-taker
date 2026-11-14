@@ -1,0 +1,22 @@
+{
+  "note": "A team the caller is not in: 404, the same answer as for a team that does not exist.",
+  "as": "Quinn",
+  "request": {
+    "method": "GET",
+    "path": "/api/team",
+    "headers": {
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such team."
+      }
+    }
+  }
+}

@@ -315,6 +315,7 @@ def test_a_new_person_signing_in_with_google_joins_the_team_without_a_token(
         session,
         Identity(sub="g-ada", email=NEW, name="Ada Lovelace"),
         accepted_terms=True,
+        accepted_recording=True,
         now=now(),
     )
     assert outcome.user is not None and outcome.error is None
@@ -446,6 +447,8 @@ def test_the_team_and_its_members_as_the_screen_needs_them(
     assert body == {
         "id": team.id,
         "name": "My team",
+        # a hand-built fixture team: made by `ensure_team` (flagged personal) and joined by hand
+        "is_personal": True,
         "share_new_meetings": False,
         "reminders_on": False,
         "reminder_timing": "both",
@@ -777,7 +780,11 @@ TEAM_ID_ROUTES = {
     ("PATCH", "/api/team/members/{user_id}"),
     ("DELETE", "/api/team/members/{user_id}"),
 }
-TEAM_OTHER = {("POST", "/api/team/invites/accept")}
+TEAM_OTHER = {
+    ("POST", "/api/team/invites/accept"),
+    ("GET", "/api/teams"),  # the switcher's list (tests/test_multi_team_api.py)
+    ("POST", "/api/teams"),
+}
 
 
 def test_every_team_route_is_classified(app):

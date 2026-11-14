@@ -1,0 +1,38 @@
+{
+  "note": "Quinn owns Y: their default is Y (their only ordinary team).",
+  "as": "Quinn",
+  "request": {
+    "method": "GET",
+    "path": "/api/teams",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "teams": [
+        {
+          "id": 3,
+          "name": "My team",
+          "role": "owner",
+          "member_count": 1,
+          "is_personal": true,
+          "is_default": false,
+          "can_manage": true
+        },
+        {
+          "id": 5,
+          "name": "Client Y",
+          "role": "owner",
+          "member_count": 2,
+          "is_personal": false,
+          "is_default": true,
+          "can_manage": true
+        }
+      ],
+      "can_create_more": 2
+    }
+  }
+}

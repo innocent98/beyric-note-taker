@@ -21,6 +21,7 @@ import type {
   FieldError,
   LanguagePreferences,
   TimeZonePreferences,
+  RecordingAck,
   Meeting,
   MeetingList,
   MeetingMilestones,
@@ -422,6 +423,8 @@ export function createApi(options: ApiOptions = {}) {
         set: (default_language: NoteLanguage) =>
           request<LanguagePreferences>("PUT", "/api/settings/language", { body: { default_language }, write: true }),
       },
+      // The one-time recording-consent card on the Meetings page (POST /api/settings/recording-ack).
+      recordingAck: () => request<RecordingAck>("POST", "/api/settings/recording-ack", { write: true }),
       // The person's own time zone (GET and PUT /api/settings/time-zone).
       timeZone: {
         get: () => request<TimeZonePreferences>("GET", "/api/settings/time-zone"),

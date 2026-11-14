@@ -31,6 +31,7 @@ from app import (
     api_sprints,
     api_tasks,
     api_team,
+    api_teams,
     api_translation,
     api_workspace,
     auth,
@@ -193,6 +194,7 @@ def _session_state(request: Request, db: Session) -> SessionState:
             name=user.name,
             is_admin=user.is_admin,
             email_verified=user.email_verified_at is not None,
+            recording_acknowledged=user.recording_ack_at is not None,
             time_zone=db.scalar(
                 select(UserSettings.time_zone).where(UserSettings.user_id == user.id)
             ),
@@ -924,6 +926,7 @@ router.include_router(calendar_api.joins_router)
 router.include_router(calendar_recurring.router)
 router.include_router(api_workspace.router)
 router.include_router(api_tasks.router)
+router.include_router(api_teams.router)
 router.include_router(api_series.router)
 router.include_router(api_projects.router)
 router.include_router(api_sprints.router)

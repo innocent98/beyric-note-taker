@@ -120,8 +120,9 @@ def sign_up(body: SignUp, request: Request, session: Session = Depends(get_sessi
     is registered. The account cannot sign in until the emailed link is confirmed. Errors that do
     not depend on the address: 403 `pilot_closed`, 409 `pilot_full`, 403
     `password_signup_disabled`, 400 `invite_invalid`, 422 `password_too_weak`, `invalid_email`,
-    `invalid_name`, `terms_required`, 429 `too_many_requests` (5 sign-ups per hour per address)
-    and `server_busy`. `accept_terms` must be true: the account records the version accepted.
+    `invalid_name`, `terms_required`, `recording_ack_required`, 429 `too_many_requests` (5
+    sign-ups per hour per address) and `server_busy`. `accept_terms` and `accept_recording` must
+    be true: the account records the version of each that was accepted.
     A second sign-up for the same address within a minute is answered 202 and does nothing.
     """
     if not _limits(request).signup_address.hit(_address(request)):
@@ -133,6 +134,7 @@ def sign_up(body: SignUp, request: Request, session: Session = Depends(get_sessi
         email=body.email,
         password=body.password,
         accept_terms=body.accept_terms,
+        accept_recording=body.accept_recording,
         invite_token=body.invite_token,
         now=_now(),
         mail_allowed=lambda address: _limits(request).signup_email.hit(limits.email_key(address)),
@@ -233,13 +235,15 @@ def _login_error(code: str) -> RedirectResponse:
 def google_start(
     request: Request,
     accept_terms: bool = Query(False),
+    accept_recording: bool = Query(False),
     return_to: str | None = Query(None, max_length=500),
     session: Session = Depends(get_session),
     google: google_oauth.GoogleOAuth | None = Depends(google_oauth.get_google),
 ) -> RedirectResponse:
     """Send the browser to Google's consent screen (scopes `openid email profile` only). Public;
     navigate to it, do not fetch it. `accept_terms=true` must be sent by the sign-up screen: it
-    is what lets a NEW account be created (an existing one signs in without it). `return_to` is
+    and `accept_recording=true` (the recording box) are what let a NEW account be created (an
+    existing one signs in without either). `return_to` is
     a relative path to land on afterwards; anything else becomes `/`. 404
     `google_signin_unavailable` when the server has no Google client configured."""
     if google is None:
@@ -249,7 +253,7 @@ def google_start(
     response = RedirectResponse(url, status_code=302)
     response.set_cookie(
         google_signin.FLOW_COOKIE,
-        google_signin.flow_cookie_value(state, accept_terms),
+        google_signin.flow_cookie_value(state, accept_terms, accept_recording),
         max_age=int(google_signin.FLOW_TTL.total_seconds()),
         httponly=True,
         samesite="lax",
@@ -272,9 +276,9 @@ def google_callback(
     `google_flow` cookie of the browser that started the flow). Always a redirect, never JSON:
     success goes to the stored `return_to` with a new session; a failure goes to
     `/login?error=<code>` with `google_denied`, `google_failed`, `terms_required`,
-    `account_suspended`, `pilot_closed` or `email_unsupported`; a full pilot goes to
-    `/pilot-full` and sets a 15-minute cookie that `GET /api/pilot` reads as `prefill_email`
-    (the address is never put in a URL)."""
+    `recording_ack_required`, `account_suspended`, `pilot_closed` or `email_unsupported`; a full
+    pilot goes to `/pilot-full` and sets a 15-minute cookie that `GET /api/pilot` reads as
+    `prefill_email` (the address is never put in a URL)."""
     if google is None:
         raise _unavailable()
     now = _now()
@@ -302,6 +306,7 @@ def _finish_google(request, session, google, flow, code, error, cookie, now) -> 
         session,
         identity,
         accepted_terms=google_signin.cookie_accepted_terms(cookie),
+        accepted_recording=google_signin.cookie_accepted_recording(cookie),
         now=now,
     )
     if outcome.user is not None:

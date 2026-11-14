@@ -1,0 +1,24 @@
+{
+  "note": "Both boxes sent at the start: a new account and a session; redirect to `return_to`.",
+  "client": "google-visitor",
+  "request": {
+    "method": "GET",
+    "path": "/api/auth/google/callback?code=abc&state=<state>",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 302,
+    "headers": {
+      "cache-control": "no-store",
+      "location": "/",
+      "set-cookie": [
+        "google_flow=<cookie>; expires=Sat, 14 Nov 2026 10:07:59 GMT; Max-Age=0; Path=/api/auth/google; SameSite=lax",
+        "session=<cookie>; HttpOnly; Max-Age=2592000; Path=/; SameSite=lax"
+      ]
+    },
+    "body": ""
+  }
+}

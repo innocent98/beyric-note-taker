@@ -59,6 +59,24 @@ def team_read_clause(user: User) -> ColumnElement[bool]:
     )
 
 
+def recorder_not_being_deleted() -> ColumnElement[bool]:
+    """For the worker's claims and the topics input: a meeting whose recorder's account is being
+    deleted is left alone (the purge deletes it), EXCEPT a meeting a team owns that still has a
+    live member: it outlives its recorder, whose hollow row stays `status = 'deleted'`
+    (`app/deletion.py`), so the team can still have it translated, re-read for tasks and counted in
+    the repeat topics. A team with no live member left is going with the account (the purge gives
+    the meeting back or deletes it), so nothing more is sent to the model for it meanwhile."""
+    live_teams = (
+        select(TeamMember.team_id)
+        .join(User, User.id == TeamMember.user_id)
+        .where(User.status != "deleted")
+    )
+    return or_(
+        Meeting.owner_team_id.in_(live_teams),
+        Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
+    )
+
+
 def can_read_clause(user: User) -> ColumnElement[bool]:
     """The `where` condition for "this caller may read this meeting", for queries that join
     `meetings` (decisions, open questions): their own meeting that no team owns, or one shared to

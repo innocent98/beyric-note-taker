@@ -1,0 +1,32 @@
+{
+  "note": "The terms are asked for first.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/signup",
+    "headers": {
+      "X-CSRF-Token": "<csrf-A>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "name": "Ada Example",
+      "email": "ada@example.test",
+      "password": "<password>",
+      "accept_terms": false,
+      "accept_recording": false
+    }
+  },
+  "response": {
+    "status": 422,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "terms_required",
+        "message": "Accept the Terms and the Privacy Policy to create an account."
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "note": "Quinn is not in X.",
+  "as": "Quinn",
+  "request": {
+    "method": "PUT",
+    "path": "/api/settings/auto-share",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "team_id": 4
+    }
+  },
+  "response": {
+    "status": 404,
+    "body": {
+      "error": {
+        "code": "not_found",
+        "message": "No such team."
+      }
+    }
+  }
+}

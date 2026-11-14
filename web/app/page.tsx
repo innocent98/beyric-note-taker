@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/app/shell";
 import { MeetingsCalendar } from "@/components/app/meetings-calendar";
 import { MeetingList } from "@/components/app/meeting-list";
+import { RecordingAckCard } from "@/components/app/recording-ack-card";
 import { NewMeetingForm } from "@/components/app/new-meeting-form";
 import { RecurringCards } from "@/components/app/recurring-cards";
 import { LandingPage } from "@/components/landing/landing-page";
@@ -76,6 +77,7 @@ async function MeetingsPage({ range, notice, zone }: { range: DayRange; notice: 
     getCalendar(api),
     getNotRecorded(api),
   ]);
+  const session = await getSession();
   // "A bot is already on a meeting" is about the newest meetings, not about the filtered ones.
   const newest = isFiltered(range) ? await load(api.meetings.list({ limit: 10 })) : list;
   const busy = newest.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
@@ -90,6 +92,7 @@ async function MeetingsPage({ range, notice, zone }: { range: DayRange; notice: 
       ) : null}
       <div className="stack">
         <PageHead title="Meetings" subtitle="Send the note taker to a call and find your notes here afterwards." />
+        <RecordingAckCard acknowledged={session?.user?.recording_acknowledged ?? true} />
         <NewMeetingForm templates={templates} busy={busy} />
         <MeetingsCalendar state={calendar} notRecorded={notRecorded} />
         <RecurringCards />

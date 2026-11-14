@@ -12,7 +12,8 @@ verifier and nonce are needed again at the callback); `finish_flow` uses it up e
    address with a password they know. An account already linked to a different Google account is
    never relinked.
 3. nobody: a new account, verified, with no password, if the pilot has room (or the address holds
-   a live waitlist invitation) and the person accepted the terms at the consent text.
+   a live waitlist invitation) and the person accepted the terms and ticked the recording box at
+   the consent text.
 
 Steps 1 and 2 never look at the pilot's state (existing users always get in). Everything runs
 under the sign-up advisory lock, so ten parallel new Google sign-ups at nine accounts make one,
@@ -46,7 +47,10 @@ FLOW_COOKIE = "google_flow"
 FLOW_COOKIE_PATH = "/api/auth/google"
 PREFILL_COOKIE = "pilot_email"
 PREFILL_COOKIE_PATH = "/api/pilot"
-TERMS_FLAG = ".t"  # a flow cookie "<state>.t" means the terms were accepted at the consent text
+# The flow cookie is "<state>" plus a flag for each box ticked at the consent text: ".t" the terms,
+# ".r" the recording box ("<state>.t.r" is both). A state is URL-safe base64, so it holds no dot.
+TERMS_FLAG = ".t"
+RECORDING_FLAG = ".r"
 MAX_NAME_CHARS = 200
 
 # A relative path with exactly one leading slash: never `//host`, a scheme or a backslash.
@@ -96,20 +100,31 @@ def finish_flow(session: Session, state: str | None, now: datetime) -> OAuthFlow
 
 
 def flow_cookie_matches(cookie: str | None, state: str) -> bool:
-    """Whether this browser started the flow: its cookie is the state, with or without the terms
-    flag. Binds the callback to the browser that began it (against login CSRF)."""
+    """Whether this browser started the flow: its cookie is the state, with or without the box
+    flags. Binds the callback to the browser that began it (against login CSRF)."""
     if not cookie:
         return False
-    base = cookie.removesuffix(TERMS_FLAG)
-    return hmac.compare_digest(base.encode(), state.encode())
+    return hmac.compare_digest(cookie.split(".")[0].encode(), state.encode())
 
 
-def flow_cookie_value(state: str, accepted_terms: bool) -> str:
-    return state + (TERMS_FLAG if accepted_terms else "")
+def flow_cookie_value(state: str, accepted_terms: bool, accepted_recording: bool = False) -> str:
+    return (
+        state
+        + (TERMS_FLAG if accepted_terms else "")
+        + (RECORDING_FLAG if accepted_recording else "")
+    )
 
 
 def cookie_accepted_terms(cookie: str | None) -> bool:
-    return bool(cookie) and cookie.endswith(TERMS_FLAG)
+    return bool(cookie) and TERMS_FLAG in _flags(cookie)
+
+
+def cookie_accepted_recording(cookie: str | None) -> bool:
+    return bool(cookie) and RECORDING_FLAG in _flags(cookie)
+
+
+def _flags(cookie: str) -> list[str]:
+    return ["." + flag for flag in cookie.split(".")[1:]]
 
 
 # ---- matching ----
@@ -127,14 +142,19 @@ class Outcome:
 
 
 def complete(
-    session: Session, identity: Identity, *, accepted_terms: bool, now: datetime
+    session: Session,
+    identity: Identity,
+    *,
+    accepted_terms: bool,
+    accepted_recording: bool = False,
+    now: datetime,
 ) -> Outcome:
     """Find or create the account for a Google identity (see the module docstring). Commits."""
     address = signup.normalise_email(identity.email)
     if address is None:
         return Outcome(error="email_unsupported")
     session.execute(text("select pg_advisory_xact_lock(:key)"), {"key": signup.SIGNUP_LOCK})
-    outcome = _match(session, identity, address, accepted_terms, now)
+    outcome = _match(session, identity, address, accepted_terms, accepted_recording, now)
     if outcome.user is not None:
         session.commit()
     else:
@@ -143,7 +163,12 @@ def complete(
 
 
 def _match(
-    session: Session, identity: Identity, address: str, accepted_terms: bool, now: datetime
+    session: Session,
+    identity: Identity,
+    address: str,
+    accepted_terms: bool,
+    accepted_recording: bool,
+    now: datetime,
 ) -> Outcome:
     user = session.scalars(select(User).where(User.google_sub == identity.sub)).first()
     if user is not None:
@@ -153,7 +178,7 @@ def _match(
     ).first()
     if user is not None:
         return _link_by_email(session, user, identity, now)
-    return _create(session, identity, address, accepted_terms, now)
+    return _create(session, identity, address, accepted_terms, accepted_recording, now)
 
 
 def _refusal(user: User) -> Outcome | None:
@@ -193,7 +218,12 @@ def _link_by_email(session: Session, user: User, identity: Identity, now: dateti
 
 
 def _create(
-    session: Session, identity: Identity, address: str, accepted_terms: bool, now: datetime
+    session: Session,
+    identity: Identity,
+    address: str,
+    accepted_terms: bool,
+    accepted_recording: bool,
+    now: datetime,
 ) -> Outcome:
     invite = tokens.live_invite_for(session, address, now)
     team_invited = team_invites.live_for_email(session, address, now) is not None
@@ -205,6 +235,8 @@ def _create(
             return Outcome(full=True, email=address)
     if not accepted_terms:
         return Outcome(error="terms_required")
+    if not accepted_recording:
+        return Outcome(error="recording_ack_required")
     name = (identity.name or address.split("@")[0]).strip()[:MAX_NAME_CHARS]
     user = User(
         email=address,
@@ -213,6 +245,8 @@ def _create(
         email_verified_at=now,
         terms_accepted_at=now,
         terms_version=signup.TERMS_VERSION,
+        recording_ack_at=now,
+        recording_ack_version=signup.RECORDING_ACK_VERSION,
     )
     session.add(user)
     session.flush()

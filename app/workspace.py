@@ -38,7 +38,7 @@ from app.models import (
     User,
     UserSettings,
 )
-from app.visibility import can_read_clause, owns
+from app.visibility import can_read_clause, owns, recorder_not_being_deleted
 
 logger = logging.getLogger(__name__)
 
@@ -398,7 +398,7 @@ def claim_next(session: Session, now: datetime) -> Meeting | None:
             select(Meeting)
             .where(
                 Meeting.status == "ready",
-                Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
+                recorder_not_being_deleted(),
                 or_(
                     and_(
                         Meeting.extraction_status == "pending",
@@ -456,7 +456,7 @@ def backfill(session: Session, now: datetime, *, task_days: int = BACKFILL_TASK_
                 Meeting.status == "ready",
                 Meeting.notes.is_not(None),
                 Meeting.extraction_status.is_(None),
-                Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
+                recorder_not_being_deleted(),
             )
             .order_by(Meeting.id)
             .limit(1)
@@ -495,7 +495,7 @@ def backfill_tasks(session: Session, now: datetime, *, task_days: int = BACKFILL
                 Meeting.created_at >= recent_after,
                 Meeting.extraction_status == "done",
                 Meeting.extraction_version.is_distinct_from(ai_runs.EXTRACT_PROMPT_VERSION),
-                Meeting.owner_user_id.not_in(select(User.id).where(User.status == "deleted")),
+                recorder_not_being_deleted(),
                 wants_tasks,
             )
             .order_by(Meeting.id)
