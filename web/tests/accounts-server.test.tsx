@@ -92,6 +92,7 @@ describe("/login", () => {
     ["google_denied", "Google sign-in was cancelled."],
     ["google_failed", "We could not sign you in with Google."],
     ["terms_required", "accept the Terms and the Privacy Policy first"],
+    ["recording_ack_required", "tick the box about telling the people in your meetings"],
     ["pilot_closed", "Sign-up is not open yet."],
     ["account_suspended", "This account is suspended."],
     ["email_unsupported", "We cannot accept that Google address yet"],
@@ -100,8 +101,9 @@ describe("/login", () => {
     expect(out).toContain(words);
   });
 
-  it("links to sign-up for the two codes that need it, and shows only a general line for an unknown code", async () => {
+  it("links to sign-up for the codes that need it, and shows only a general line for an unknown code", async () => {
     expect(await html(LoginPage(query({ error: "terms_required" })))).toContain("Go to sign-up");
+    expect(await html(LoginPage(query({ error: "recording_ack_required" })))).toContain("Go to sign-up");
     expect(await html(LoginPage(query({ error: "google_denied" })))).not.toContain("Go to sign-up");
     const unknown = await html(LoginPage(query({ error: "<b>x</b>" })));
     expect(unknown).toContain("Sign-in did not work. Please try again.");

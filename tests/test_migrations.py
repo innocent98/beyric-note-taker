@@ -2023,3 +2023,25 @@ def test_0045_adds_the_auto_share_team_empty_for_every_row_and_clears_with_the_t
     }
     command.upgrade(cfg, "head")
     engine.dispose()
+
+
+def test_0046_adds_the_recording_ack_columns_and_leaves_existing_accounts_null(scratch_url):
+    cfg = alembic_config(scratch_url)
+    before = ScriptDirectory.from_config(cfg).get_revision("0046").down_revision
+    command.upgrade(cfg, before)
+    engine = create_engine(scratch_url)
+    with engine.begin() as conn:
+        conn.execute(text("insert into users (email, name) values ('old@example.test', 'Old')"))
+    command.upgrade(cfg, "head")
+    columns = {c["name"]: c for c in inspect(engine).get_columns("users")}
+    assert columns["recording_ack_at"]["nullable"] and columns["recording_ack_version"]["nullable"]
+    with engine.connect() as conn:  # an account from before the box has not acknowledged it
+        row = conn.execute(
+            text("select recording_ack_at, recording_ack_version from users where name = 'Old'")
+        ).one()
+    assert tuple(row) == (None, None)
+    command.downgrade(cfg, before)
+    names = {c["name"] for c in inspect(engine).get_columns("users")}
+    assert not names & {"recording_ack_at", "recording_ack_version"}
+    command.upgrade(cfg, "head")
+    engine.dispose()

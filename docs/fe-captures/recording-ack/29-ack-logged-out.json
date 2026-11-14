@@ -1,0 +1,26 @@
+{
+  "note": "Logged out: 401.",
+  "client": "visitor",
+  "request": {
+    "method": "POST",
+    "path": "/api/settings/recording-ack",
+    "headers": {
+      "X-CSRF-Token": "<csrf-I>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json",
+      "cache-control": "no-store"
+    },
+    "body": {
+      "error": {
+        "code": "not_authenticated",
+        "message": "Log in first."
+      }
+    }
+  }
+}

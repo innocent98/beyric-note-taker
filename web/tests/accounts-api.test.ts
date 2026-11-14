@@ -60,7 +60,7 @@ describe("accounts calls", () => {
       if (call.url === "/api/password/reset") return reply("44-reset-ok.json");
       return reply("49-waitlist-join.json");
     });
-    expect(await api.signup({ name: "Ada Example", email: "ada@example.test", password: "pw-placeholder", accept_terms: true })).toEqual({
+    expect(await api.signup({ name: "Ada Example", email: "ada@example.test", password: "pw-placeholder", accept_terms: true, accept_recording: true })).toEqual({
       status: "check_your_email",
     });
     expect(await api.resendVerification("ben@example.test")).toEqual({ status: "check_your_email" });
@@ -79,7 +79,7 @@ describe("accounts calls", () => {
     ]);
     for (const write of writes) expect(header(write.init, "X-CSRF-Token")).toBe("<csrf-A>");
     expect(writes.map((c) => JSON.parse(String(c.init.body)))).toEqual([
-      { name: "Ada Example", email: "ada@example.test", password: "pw-placeholder", accept_terms: true },
+      { name: "Ada Example", email: "ada@example.test", password: "pw-placeholder", accept_terms: true, accept_recording: true },
       { email: "ben@example.test" },
       { token: "tok", password: "pw-placeholder" },
       { email: "ada@example.test" },
@@ -109,7 +109,7 @@ describe("accounts calls", () => {
   ])("turns %s into an ApiError", async (file, status, code) => {
     const { api } = setup(() => reply(file));
     const error = (await api
-      .signup({ name: "Ada Example", email: "ada@example.test", password: "pw-placeholder", accept_terms: true })
+      .signup({ name: "Ada Example", email: "ada@example.test", password: "pw-placeholder", accept_terms: true, accept_recording: true })
       .catch((e: unknown) => e)) as ApiError;
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({ status, code });
@@ -119,7 +119,7 @@ describe("accounts calls", () => {
     const { api } = setup(
       () => new Response("<html><body><h1>429 Too Many Requests</h1></body></html>", { status: 429, headers: { "content-type": "text/html" } }),
     );
-    const error = (await api.signup({ name: "A", email: "a@b.c", password: "pw-placeholder", accept_terms: true }).catch((e: unknown) => e)) as ApiError;
+    const error = (await api.signup({ name: "A", email: "a@b.c", password: "pw-placeholder", accept_terms: true, accept_recording: true }).catch((e: unknown) => e)) as ApiError;
     expect(error).toMatchObject({ status: 429, code: "too_many_requests", message: RATE_LIMIT_MESSAGE });
     expect(accountError(error)).toBe("Too many attempts. Try again later.");
   });
@@ -141,11 +141,12 @@ describe("account messages", () => {
     expect(fieldOf(new ApiError(422, "invalid_email", "x"))).toBe("email");
     expect(fieldOf(new ApiError(422, "invalid_name", "x"))).toBe("name");
     expect(fieldOf(new ApiError(422, "terms_required", "x"))).toBe("terms");
+    expect(fieldOf(new ApiError(422, "recording_ack_required", "x"))).toBe("recording");
     expect(fieldOf(new ApiError(429, "too_many_requests", "x"))).toBeNull();
   });
 
   it("has a message for every redirect code of the Google callback and none for a made-up one", () => {
-    for (const code of ["google_failed", "google_denied", "terms_required", "pilot_closed", "account_suspended", "email_unsupported"]) {
+    for (const code of ["google_failed", "google_denied", "terms_required", "recording_ack_required", "pilot_closed", "account_suspended", "email_unsupported"]) {
       expect(loginErrorMessage(code), code).toBe(LOGIN_ERRORS[code as keyof typeof LOGIN_ERRORS]);
     }
     expect(loginErrorMessage(undefined)).toBeNull();
@@ -153,8 +154,10 @@ describe("account messages", () => {
     expect(loginErrorMessage("constructor")).toBe("Sign-in did not work. Please try again.");
   });
 
-  it("builds the Google start address, with accept_terms only when ticked", () => {
+  it("builds the Google start address, with each accept flag only when its box is ticked", () => {
     expect(googleStartUrl(false)).toBe("/api/auth/google/start?return_to=%2F");
     expect(googleStartUrl(true)).toBe("/api/auth/google/start?return_to=%2F&accept_terms=true");
+    expect(googleStartUrl(true, true)).toBe("/api/auth/google/start?return_to=%2F&accept_terms=true&accept_recording=true");
+    expect(googleStartUrl(false, true)).toBe("/api/auth/google/start?return_to=%2F&accept_recording=true");
   });
 });

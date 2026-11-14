@@ -51,6 +51,7 @@ def form(**over) -> dict:
         "email": NEW_EMAIL,
         "password": GOOD,
         "accept_terms": True,
+        "accept_recording": True,
     } | over
 
 

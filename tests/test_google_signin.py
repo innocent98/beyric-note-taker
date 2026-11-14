@@ -252,7 +252,7 @@ def browser(app, address="198.51.100.1") -> Api:
     return Api(TestClient(app, follow_redirects=False, client=(address, 50000)))
 
 
-def start(web: Api, query="?accept_terms=true"):
+def start(web: Api, query="?accept_terms=true&accept_recording=true"):
     response = web.client.get(f"/api/auth/google/start{query}")
     assert response.status_code == 302, response.text
     location = response.headers["location"]
@@ -263,7 +263,7 @@ def callback(web: Api, state: str, code="the-code", extra=""):
     return web.client.get(f"/api/auth/google/callback?code={code}&state={state}{extra}")
 
 
-def sign_in(web: Api, query="?accept_terms=true"):
+def sign_in(web: Api, query="?accept_terms=true&accept_recording=true"):
     _, state = start(web, query)
     return callback(web, state)
 
@@ -289,7 +289,9 @@ def test_the_pilot_says_when_google_sign_in_is_available(gapp):
 
 
 def test_start_redirects_to_google_and_keeps_a_hashed_single_use_flow(gapp, session, google):
-    response, state = start(browser(gapp), "?accept_terms=true&return_to=/templates")
+    response, state = start(
+        browser(gapp), "?accept_terms=true&accept_recording=true&return_to=/templates"
+    )
     assert response.headers["location"].startswith("https://accounts.google.test/auth?")
     [flow] = session.scalars(select(OAuthFlow)).all()
     assert flow.state_hash == tokens.digest(state) and state not in flow.state_hash
@@ -318,7 +320,7 @@ def test_start_redirects_to_google_and_keeps_a_hashed_single_use_flow(gapp, sess
 def test_an_unsafe_return_to_falls_back_to_the_home_page(gapp, session, target):
     from urllib.parse import quote
 
-    start(browser(gapp), f"?accept_terms=true&return_to={quote(target)}")
+    start(browser(gapp), f"?accept_terms=true&accept_recording=true&return_to={quote(target)}")
     assert session.scalars(select(OAuthFlow)).one().return_to == "/"
 
 
@@ -363,7 +365,7 @@ def test_the_code_verifier_and_nonce_sent_to_google_are_the_stored_ones(gapp, se
 def test_the_return_to_is_where_the_person_lands(gapp, session):
     open_pilot(session)
     web = browser(gapp)
-    _, state = start(web, "?accept_terms=true&return_to=/templates")
+    _, state = start(web, "?accept_terms=true&accept_recording=true&return_to=/templates")
     assert callback(web, state).headers["location"] == "/templates"
 
 

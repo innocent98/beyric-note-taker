@@ -3515,6 +3515,19 @@
         "title": "QuestionPatch",
         "type": "object"
       },
+      "RecordingAckOut": {
+        "properties": {
+          "recording_acknowledged": {
+            "title": "Recording Acknowledged",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recording_acknowledged"
+        ],
+        "title": "RecordingAckOut",
+        "type": "object"
+      },
       "RecurringOut": {
         "description": "The cards, soonest next occurrence first; empty when no calendar is connected or it holds no\nrecurring meeting (draw nothing then). `timezone` is the zone the texts are written in.",
         "properties": {
@@ -4480,6 +4493,11 @@
       "SignUp": {
         "additionalProperties": false,
         "properties": {
+          "accept_recording": {
+            "default": false,
+            "title": "Accept Recording",
+            "type": "boolean"
+          },
           "accept_terms": {
             "title": "Accept Terms",
             "type": "boolean"
@@ -6338,6 +6356,10 @@
             ],
             "title": "Name"
           },
+          "recording_acknowledged": {
+            "title": "Recording Acknowledged",
+            "type": "boolean"
+          },
           "time_zone": {
             "anyOf": [
               {
@@ -6354,7 +6376,8 @@
           "email",
           "name",
           "is_admin",
-          "email_verified"
+          "email_verified",
+          "recording_acknowledged"
         ],
         "title": "UserOut",
         "type": "object"
@@ -7317,7 +7340,7 @@
     },
     "/api/auth/google/callback": {
       "get": {
-        "description": "Where Google sends the browser back. Public (checked by the single-use `state` and the\n`google_flow` cookie of the browser that started the flow). Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with a new session; a failure goes to\n`/login?error=<code>` with `google_denied`, `google_failed`, `terms_required`,\n`account_suspended`, `pilot_closed` or `email_unsupported`; a full pilot goes to\n`/pilot-full` and sets a 15-minute cookie that `GET /api/pilot` reads as `prefill_email`\n(the address is never put in a URL).",
+        "description": "Where Google sends the browser back. Public (checked by the single-use `state` and the\n`google_flow` cookie of the browser that started the flow). Always a redirect, never JSON:\nsuccess goes to the stored `return_to` with a new session; a failure goes to\n`/login?error=<code>` with `google_denied`, `google_failed`, `terms_required`,\n`recording_ack_required`, `account_suspended`, `pilot_closed` or `email_unsupported`; a full\npilot goes to `/pilot-full` and sets a 15-minute cookie that `GET /api/pilot` reads as\n`prefill_email` (the address is never put in a URL).",
         "operationId": "google_callback",
         "parameters": [
           {
@@ -7430,7 +7453,7 @@
     },
     "/api/auth/google/start": {
       "get": {
-        "description": "Send the browser to Google's consent screen (scopes `openid email profile` only). Public;\nnavigate to it, do not fetch it. `accept_terms=true` must be sent by the sign-up screen: it\nis what lets a NEW account be created (an existing one signs in without it). `return_to` is\na relative path to land on afterwards; anything else becomes `/`. 404\n`google_signin_unavailable` when the server has no Google client configured.",
+        "description": "Send the browser to Google's consent screen (scopes `openid email profile` only). Public;\nnavigate to it, do not fetch it. `accept_terms=true` must be sent by the sign-up screen: it\nand `accept_recording=true` (the recording box) are what let a NEW account be created (an\nexisting one signs in without either). `return_to` is\na relative path to land on afterwards; anything else becomes `/`. 404\n`google_signin_unavailable` when the server has no Google client configured.",
         "operationId": "google_start",
         "parameters": [
           {
@@ -7440,6 +7463,16 @@
             "schema": {
               "default": false,
               "title": "Accept Terms",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "accept_recording",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Accept Recording",
               "type": "boolean"
             }
           },
@@ -14326,6 +14359,58 @@
         ]
       }
     },
+    "/api/settings/recording-ack": {
+      "post": {
+        "description": "The one-time card on the Meetings page for accounts older than the sign-up box: the person\nconfirms they will tell the people in their meetings that Beyric records them. Stores the time\nand the wording's version the first time; later calls change nothing. It never gates anything\nelse, so the bot, auto-join and every other route work whether or not it was ever called.",
+        "operationId": "acknowledge_recording",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordingAckOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not logged in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or wrong X-CSRF-Token"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Malformed request"
+          }
+        },
+        "summary": "Acknowledge Recording",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/settings/reminders": {
       "get": {
         "description": "Whether the caller is emailed the agenda a teammate sends and the reminders before the\nrecurring meetings they attend (on by default). The team's switch for reminders is\n`PATCH /api/team`.",
@@ -14664,7 +14749,7 @@
     },
     "/api/signup": {
       "post": {
-        "description": "Create an account with a password. Public (needs the X-CSRF-Token).\n\nAnswers 202 `check_your_email` for a new address AND for one that already has an account (a\nverified one gets a \"you already have an account\" mail), so it cannot be used to find out who\nis registered. The account cannot sign in until the emailed link is confirmed. Errors that do\nnot depend on the address: 403 `pilot_closed`, 409 `pilot_full`, 403\n`password_signup_disabled`, 400 `invite_invalid`, 422 `password_too_weak`, `invalid_email`,\n`invalid_name`, `terms_required`, 429 `too_many_requests` (5 sign-ups per hour per address)\nand `server_busy`. `accept_terms` must be true: the account records the version accepted.\nA second sign-up for the same address within a minute is answered 202 and does nothing.",
+        "description": "Create an account with a password. Public (needs the X-CSRF-Token).\n\nAnswers 202 `check_your_email` for a new address AND for one that already has an account (a\nverified one gets a \"you already have an account\" mail), so it cannot be used to find out who\nis registered. The account cannot sign in until the emailed link is confirmed. Errors that do\nnot depend on the address: 403 `pilot_closed`, 409 `pilot_full`, 403\n`password_signup_disabled`, 400 `invite_invalid`, 422 `password_too_weak`, `invalid_email`,\n`invalid_name`, `terms_required`, `recording_ack_required`, 429 `too_many_requests` (5\nsign-ups per hour per address) and `server_busy`. `accept_terms` and `accept_recording` must\nbe true: the account records the version of each that was accepted.\nA second sign-up for the same address within a minute is answered 202 and does nothing.",
         "operationId": "sign_up",
         "requestBody": {
           "content": {

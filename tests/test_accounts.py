@@ -117,6 +117,7 @@ def test_the_session_state_names_the_user(api, owner):
         "is_admin": False,
         "email_verified": True,
         "time_zone": None,
+        "recording_acknowledged": False,  # made by `make_user`, not through sign-up
     }
 
 

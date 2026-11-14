@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AppShell } from "@/components/app/shell";
 import { MeetingsCalendar } from "@/components/app/meetings-calendar";
 import { MeetingList } from "@/components/app/meeting-list";
+import { RecordingAckCard } from "@/components/app/recording-ack-card";
 import { NewMeetingForm } from "@/components/app/new-meeting-form";
 import { RecurringCards } from "@/components/app/recurring-cards";
 import { LandingPage } from "@/components/landing/landing-page";
@@ -51,6 +52,7 @@ async function MeetingsPage() {
     getCalendar(api),
     getNotRecorded(api),
   ]);
+  const session = await getSession();
   const busy = list.meetings.some((m) => m.status === "bot_sent" || m.status === "processing");
   return (
     <AppShell current="meetings" reviewOpen={await getReviewOpen()}
@@ -63,6 +65,7 @@ async function MeetingsPage() {
       ) : null}
       <div className="stack">
         <PageHead title="Meetings" subtitle="Send the note taker to a call and find your notes here afterwards." />
+        <RecordingAckCard acknowledged={session?.user?.recording_acknowledged ?? true} />
         <NewMeetingForm templates={templates} busy={busy} />
         <MeetingsCalendar state={calendar} notRecorded={notRecorded} />
         <RecurringCards />

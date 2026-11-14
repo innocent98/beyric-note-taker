@@ -11,7 +11,7 @@ import { VerifyEmailForm } from "@/components/auth/verify-email-form";
 import { WaitlistForm } from "@/components/auth/waitlist-form";
 import { LoginForm } from "@/components/app/login-form";
 import { ApiError } from "@/lib/api/client";
-import { accountBody, capturedAccount } from "./helpers";
+import { accountBody, capturedAccount, recordingCapture } from "./helpers";
 
 // Every error here is built from a response captured against the running app
 // (docs/fe-captures/pilot-accounts/), so the codes and messages are the real ones.
@@ -60,11 +60,15 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/page");
 });
 
-async function fillSignup(user: ReturnType<typeof userEvent.setup>, { terms = true } = {}) {
+const TERMS_BOX = { name: /I agree to the/ };
+const RECORDING_BOX = { name: /I understand that I'm responsible for telling the people in my meetings/ };
+
+async function fillSignup(user: ReturnType<typeof userEvent.setup>, { terms = true, recording = true } = {}) {
   await user.type(screen.getByLabelText("Full name"), "Ada Example");
   await user.type(screen.getByLabelText("Work email"), "ada@example.test");
   await user.type(screen.getByLabelText("Password"), "correct horse battery");
-  if (terms) await user.click(screen.getByRole("checkbox"));
+  if (terms) await user.click(screen.getByRole("checkbox", TERMS_BOX));
+  if (recording) await user.click(screen.getByRole("checkbox", RECORDING_BOX));
 }
 
 describe("sign-up screen states", () => {
@@ -112,7 +116,44 @@ describe("sign-up form", () => {
     expect(screen.getByText("Enter your work email.")).toBeTruthy();
     expect(screen.getByText("Use at least 8 characters.")).toBeTruthy();
     expect(screen.getByText("Accept the Terms and the Privacy Policy to create an account.")).toBeTruthy();
+    expect(screen.getByText("Confirm that you will tell the people in your meetings that Beyric will record them.")).toBeTruthy();
     expect(mocks.signup).not.toHaveBeenCalled();
+  });
+
+  it("draws the recording box with the owner's exact words, not ticked, and the example behind a link", async () => {
+    const user = userEvent.setup();
+    render(<SignupFlow pilot="open" google={false} hasInvite={false} />);
+    const box = screen.getByRole("checkbox", RECORDING_BOX) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(box.labels?.[0]?.textContent).toBe(
+      "I understand that I'm responsible for telling the people in my meetings that Beyric Note Taker will record and transcribe them, and for getting their consent wherever the law requires it.",
+    );
+    expect(screen.queryByText(/One line in the invite/)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "How to tell attendees" }));
+    expect(screen.getByText("One line in the invite or at the start of the call is enough, for example: 'I'm using Beyric to record this call and take notes.'")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "How to tell attendees" }));
+    expect(screen.queryByText(/One line in the invite/)).toBeNull();
+  });
+
+  it("does not call the API when only the recording box is left unticked, and says so under it", async () => {
+    const user = userEvent.setup();
+    render(<SignupFlow pilot="open" google={false} hasInvite={false} />);
+    await fillSignup(user, { recording: false });
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    expect(screen.getByText("Confirm that you will tell the people in your meetings that Beyric will record them.")).toBeTruthy();
+    expect(screen.queryByText("Accept the Terms and the Privacy Policy to create an account.")).toBeNull();
+    expect(mocks.signup).not.toHaveBeenCalled();
+  });
+
+  it("shows the API's captured refusal under the recording box when the server says so", async () => {
+    const { status, body } = recordingCapture("02-signup-box-not-ticked.json").response;
+    const { code, message } = (body as { error: { code: string; message: string } }).error;
+    mocks.signup.mockRejectedValue(new ApiError(status, code, message, []));
+    const user = userEvent.setup();
+    render(<SignupFlow pilot="open" google={false} hasInvite={false} />);
+    await fillSignup(user);
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    expect((await screen.findByText(message)).closest(".check")?.classList.contains("check-error")).toBe(true);
   });
 
   it("posts the captured body shape, then shows 'check your email' without saying whether the address exists", async () => {
@@ -126,6 +167,7 @@ describe("sign-up form", () => {
       email: "ada@example.test",
       password: "correct horse battery",
       accept_terms: true,
+      accept_recording: true,
     });
     expect(await screen.findByRole("heading", { name: "Check your email" })).toBeTruthy();
     expect(screen.getByText("ada@example.test")).toBeTruthy();
@@ -182,7 +224,7 @@ describe("sign-up form", () => {
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Too many attempts. Try again later."));
   });
 
-  it("asks for the terms before Google, and sends accept_terms=true once they are ticked", async () => {
+  it("asks for both boxes before Google, and sends accept_terms and accept_recording once they are ticked", async () => {
     const assign = vi.fn();
     vi.stubGlobal("location", { ...window.location, assign });
     const user = userEvent.setup();
@@ -190,9 +232,13 @@ describe("sign-up form", () => {
     await user.click(screen.getByRole("button", { name: "Continue with Google" }));
     expect(assign).not.toHaveBeenCalled();
     expect(screen.getByText("Accept the Terms and the Privacy Policy to create an account.")).toBeTruthy();
-    await user.click(screen.getByRole("checkbox"));
+    expect(screen.getByText("Confirm that you will tell the people in your meetings that Beyric will record them.")).toBeTruthy();
+    await user.click(screen.getByRole("checkbox", TERMS_BOX));
     await user.click(screen.getByRole("button", { name: "Continue with Google" }));
-    expect(assign).toHaveBeenCalledWith("/api/auth/google/start?return_to=%2F&accept_terms=true");
+    expect(assign).not.toHaveBeenCalled(); // the terms alone are not enough
+    await user.click(screen.getByRole("checkbox", RECORDING_BOX));
+    await user.click(screen.getByRole("button", { name: "Continue with Google" }));
+    expect(assign).toHaveBeenCalledWith("/api/auth/google/start?return_to=%2F&accept_terms=true&accept_recording=true");
     vi.unstubAllGlobals();
   });
 
@@ -553,9 +599,17 @@ describe("sign-up with a team's invitation link (docs/fe-captures/team-w3/)", ()
     expect(screen.queryByText("or use your email")).toBeNull();
     await userEvent.type(screen.getByLabelText("Full name"), "Ada Lovelace");
     await userEvent.type(screen.getByLabelText("Password"), "a-long-enough-pass-9");
-    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("checkbox", TERMS_BOX));
+    await userEvent.click(screen.getByRole("button", { name: "Join Beyric" }));
+    expect(mocks.signup).not.toHaveBeenCalled(); // the team sign-up needs the recording box too
+    await userEvent.click(screen.getByRole("checkbox", RECORDING_BOX));
     await userEvent.click(screen.getByRole("button", { name: "Join Beyric" }));
     await waitFor(() => expect(mocks.signup).toHaveBeenCalled());
-    expect(mocks.signup.mock.calls[0][0]).toMatchObject({ email: "ada@example.test", invite_token: "team-token" });
+    expect(mocks.signup.mock.calls[0][0]).toMatchObject({
+      email: "ada@example.test",
+      invite_token: "team-token",
+      accept_terms: true,
+      accept_recording: true,
+    });
   });
 });

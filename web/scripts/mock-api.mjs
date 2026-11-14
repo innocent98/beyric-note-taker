@@ -7,6 +7,8 @@
 //   node scripts/mock-api.mjs --port 8031
 //   FASTAPI_INTERNAL_URL=http://127.0.0.1:8031 npm run dev        (or build, then start)
 //
+// --recording-ack pending shows the one-time recording card on the Meetings page.
+//
 // Visit /login and sign in with any email and password. Start with --empty for the empty list, --stale for
 // the worker banner.
 //
@@ -37,6 +39,7 @@ const { values } = parseArgs({
     calendar: { type: "string", default: "not_connected" },
     recurring: { type: "string", default: "series" },
     language: { type: "string", default: "en" },
+    "recording-ack": { type: "string", default: "done" },
     decisions: { type: "string", default: "live" },
     review: { type: "string", default: "live" },
     ask: { type: "string", default: "live" },
@@ -101,6 +104,7 @@ const recurringCapture = (name) => JSON.parse(readFileSync(join(captureDir, "cal
 const settingsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "calendar-settings", `${name}.json`), "utf8")).response.body;
 const sendNowCapture = (name) => JSON.parse(readFileSync(join(captureDir, "send-now", `${name}.json`), "utf8")).response.body;
 const sentJoins = new Set();
+const recordingBody = (name) => JSON.parse(readFileSync(join(captureDir, "recording-ack", `${name}.json`), "utf8")).response.body;
 const accountBody = (name) => JSON.parse(readFileSync(join(captureDir, "pilot-accounts", `${name}.json`), "utf8")).response.body;
 
 // One meeting per state, from the captures. Titles vary so the list reads like a real one.
@@ -419,7 +423,9 @@ function json(res, status, payload, headers = {}) {
 
 let notifyEmail = true;
 let timeZone = values["time-zone"] ?? null;
-const mockUser = () => ({ email: "owner@example.test", name: "Adebayo Tosin", is_admin: false, email_verified: true, time_zone: timeZone });
+// --recording-ack pending: an account older than the sign-up box (the card shows until it is clicked).
+let recordingAcknowledged = values["recording-ack"] !== "pending";
+const mockUser = () => ({ email: "owner@example.test", name: "Adebayo Tosin", is_admin: false, email_verified: true, time_zone: timeZone, recording_acknowledged: recordingAcknowledged });
 const wsCapture = (name) => JSON.parse(readFileSync(join(captureDir, "ai-workspace-w1", `${name}.json`), "utf8")).response.body;
 const armed = { decisions: true, review: true, ask: true }; // `retry-loading` fails once after each reset
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -528,12 +534,17 @@ function accounts(path, method, data, res) {
       google_signin: !values["no-google"], // 02 is the same shape with false
     });
   }
+  if (path === "/api/settings/recording-ack" && method === "POST") {
+    recordingAcknowledged = true;
+    return json(res, 200, recordingBody("24-ack"));
+  }
   if (path === "/api/signup" && method === "POST") {
     if (email.startsWith("rate@")) return json(res, 429, accountBody("124-signup-rate-limited"));
     if (data?.invite_token === "bad") return json(res, 400, accountBody("82-signup-with-invite-wrong-address"));
     if (!data?.invite_token && values.pilot === "closed") return json(res, 403, accountBody("05-signup-while-closed"));
     if (!data?.invite_token && values.pilot === "full") return json(res, 409, accountBody("59-signup-pilot-full"));
     if (data?.accept_terms !== true) return json(res, 422, accountBody("13-signup-terms-not-accepted"));
+    if (data?.accept_recording !== true) return json(res, 422, recordingBody("02-signup-box-not-ticked"));
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json(res, 422, accountBody("14-signup-bad-email"));
     if (data?.password === "password") return json(res, 422, accountBody("12-signup-weak-password"));
     return json(res, 202, accountBody("18-signup-ok"));

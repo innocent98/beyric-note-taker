@@ -41,6 +41,10 @@ logger = logging.getLogger(__name__)
 # The "Last updated" date of the terms and privacy pages the person accepted at sign-up. Bump it
 # with the pages: it is recorded on the account (`users.terms_version`).
 TERMS_VERSION = "2026-11-04"
+# The date of the wording of the recording-consent box ("I understand that I'm responsible for
+# telling the people in my meetings ..."), recorded on the account (`users.recording_ack_version`).
+# Bump it when that wording changes.
+RECORDING_ACK_VERSION = "2026-11-14"
 SIGNUP_LOCK = 6002  # serialises "count the slots" + "take one" (next to placement.PLACEMENT_LOCK)
 MAX_NAME_CHARS = 200
 # Unconfirmed password accounts that may exist at once, so the form cannot be used to fill the
@@ -52,6 +56,9 @@ MAX_UNVERIFIED = 100
 # an hour; this keeps 20 of them from filling the table above.
 MAX_UNVERIFIED_PER_ORIGIN = limits.SIGNUP_ORIGIN_CAP
 MAX_EMAIL_CHARS = 254
+RECORDING_ACK_MESSAGE = (
+    "Confirm that you will tell the people in your meetings that Beyric will record them."
+)
 
 _LOCAL = r"[a-z0-9.!#$%&'*+/=?^_`{|}~-]+"
 _LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
@@ -227,6 +234,7 @@ def sign_up(
     email: str,
     password: str,
     accept_terms: bool,
+    accept_recording: bool,
     invite_token: str | None,
     now: datetime,
     mail_allowed: Callable[[str], bool] = lambda address: True,
@@ -235,7 +243,8 @@ def sign_up(
 ) -> None:
     """Create an unverified account and queue its verification mail, or do the quiet equivalent
     for an address that already has one. Commits. Raises `Refused` for what the person can fix
-    (a weak password, no terms) and for the pilot's state; never for who has an account.
+    (a weak password, no terms, no recording box) and for the pilot's state; never for who has an
+    account.
     `mail_allowed(address)` is asked once the request would touch an account or send a mail, and
     answers whether this address may be mailed now (the caller's per-email limit); when it says
     no, nothing happens and the caller still answers 202. `origin` is the keyed hash of the client
@@ -251,6 +260,8 @@ def sign_up(
         raise Refused(
             422, "terms_required", "Accept the Terms and the Privacy Policy to create an account."
         )
+    if not accept_recording:
+        raise Refused(422, "recording_ack_required", RECORDING_ACK_MESSAGE)
     _check_password(password)
     password_hash = _hash(password)  # always, so an existing address costs the same time
     try:
@@ -400,6 +411,9 @@ def _sign_up_locked(
             password_hash=password_hash,
             terms_accepted_at=now,
             terms_version=TERMS_VERSION,
+            # `sign_up` refused before here unless the box was ticked, so this is evidence of it.
+            recording_ack_at=now,
+            recording_ack_version=RECORDING_ACK_VERSION,
             signup_origin=origin,  # set once: a later submission from elsewhere never moves it
         )
         session.add(user)
@@ -423,6 +437,7 @@ def _sign_up_locked(
             team_invites.claim(session, team_invite, existing)
         existing.name, existing.password_hash = name, password_hash
         existing.terms_accepted_at, existing.terms_version = now, TERMS_VERSION
+        existing.recording_ack_at, existing.recording_ack_version = now, RECORDING_ACK_VERSION
         _send_verification(session, settings, existing, password_hash, now)
     elif existing.status != "deleted":
         mail.enqueue(

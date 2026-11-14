@@ -1,0 +1,21 @@
+{
+  "note": "A NEW Google user, terms accepted but no `accept_recording` at the start: a redirect to /login with the error code, and no account.",
+  "client": "google-visitor",
+  "request": {
+    "method": "GET",
+    "path": "/api/auth/google/callback?code=abc&state=<state>",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 302,
+    "headers": {
+      "cache-control": "no-store",
+      "location": "/login?error=recording_ack_required",
+      "set-cookie": "google_flow=<cookie>; expires=Sat, 14 Nov 2026 10:07:59 GMT; Max-Age=0; Path=/api/auth/google; SameSite=lax"
+    },
+    "body": ""
+  }
+}
