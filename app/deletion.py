@@ -42,7 +42,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from app import placement, teams
+from app import placement, series, teams
 from app.bot_provider import BotNotFound, provider_for
 from app.models import (
     AuthToken,
@@ -168,6 +168,9 @@ def _give_back_meetings_of_doomed_teams(
             teams.rehome_tasks(
                 session, meeting, target=teams.ensure_personal_team(session, recorder)
             )
+            # Flag on: its series row goes with the team (the foreign key would null it), so it
+            # follows to its recorder's personal row first.
+            series.follow_meeting(session, meeting)
     session.flush()
 
 

@@ -433,6 +433,14 @@ class Settings(BaseSettings):
     # understands several teams is live (stage 4). Restart web, worker and scheduler after changing.
     multi_team_enabled: bool = False
 
+    # Recurring meetings follow the meetings (docs/superpowers/specs/2026-11-14-series-follow-
+    # meetings.md). Off by default: a series is read and written exactly as before. On (and only
+    # with MULTI_TEAM_ENABLED on too): a series row belongs to one team scope, and a meeting moves
+    # to the row of its own scope when it is shared, unshared, moved, or its recorder leaves. Switch
+    # it on only AFTER `scripts/backfill_series_follow.py --apply` has run. Restart web, worker and
+    # scheduler after changing it.
+    series_follow_meetings: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:
