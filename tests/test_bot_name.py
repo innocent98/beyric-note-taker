@@ -1158,3 +1158,13 @@ def test_the_name_models_have_a_generous_max_length_and_keep_their_own_codes(api
     assert error_of(api.put("/api/settings/name", {"name": "N" * 500}), 422, "name_invalid")
     huge = api.put("/api/settings/name", {"name": "N" * 5000})
     assert error_of(huge, 422, "validation_error")["fields"][0]["field"] == "name"
+
+
+@pytest.mark.parametrize("mark", ["͏", "️", "︀"])
+def test_an_invisible_mark_inside_a_web_address_cannot_hide_it(mark):
+    # They draw nothing, so a person still reads "evil.com" while a regex sees a split word.
+    with pytest.raises(BotNameInvalid) as caught:
+        clean_bot_name(f"evil.c{mark}om")
+    assert str(caught.value) == bot_names.HAS_LINK
+    text = chat_notice.notice_text(f"evil.c{mark}lick", f"Ada evil.c{mark}om")
+    assert "evil[.]click" in text and "evil[.]com" in text and mark not in text
