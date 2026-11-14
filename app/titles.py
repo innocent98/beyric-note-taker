@@ -117,23 +117,30 @@ _TLD_LINK = re.compile(
 
 
 # Full stops that read as a dot in a web address but are not U+002E: ideographic full stop,
-# fullwidth full stop, halfwidth ideographic full stop. The link check and the chat defanging
-# treat them as dots.
-_DOT_LOOKALIKES = str.maketrans({"\u3002": ".", "\uff0e": ".", "\uff61": "."})
+# fullwidth full stop, halfwidth ideographic full stop, small full stop, one dot leader. The link
+# check and the chat defanging treat them as dots.
+_DOT_LOOKALIKES = str.maketrans(
+    {"\u3002": ".", "\uff0e": ".", "\uff61": ".", "\ufe52": ".", "\u2024": "."}
+)
+# The only first labels left alone in a dotted name: a single letter (an initial, "J.Smith") or a
+# title ("Dr.Smith"). Anything else with a dot and letters after it is defanged, in any case.
+_NAME_TITLES = frozenset("dr mr mrs ms mx st jr sr prof sgt capt gen col rev hon fr".split())
 _NAME_DOMAIN = re.compile(r"(?<![\w-])[\w-]+(?:\.[\w-]+)*\.[^\W\d_]{2,}(?![\w-])")
 
 
 def defang_name_domains(name: str) -> str:
     """A typed NAME for the meeting chat, with the dots of anything that could be linked written
-    "[.]": a `label.tld` token whose last part is all lower case ("evil.click" becomes
-    "evil[.]click"). A last part that starts a capital ("Dr.Smith", "St.Mary") reads as an
-    abbreviation or a surname and is left alone, which is why this is narrower than `mail_line`.
-    Dot look-alikes count as dots."""
+    "[.]": every `label.tld` token ("evil.click" and "Evil.Click" become "evil[.]click" and
+    "Evil[.]Click"), except one dot after a single letter or a title ("J.Smith", "Dr.Smith",
+    "St.Mary"), which reads as an initial or an abbreviation: the exemption is that narrow, not a
+    test of the case of what follows. Dot look-alikes count as dots."""
     plain = name.translate(_DOT_LOOKALIKES)
 
     def swap(found: re.Match) -> str:
         token = found.group()
-        return token.replace(".", "[.]") if token.rsplit(".", 1)[1].islower() else token
+        first, _, rest = token.partition(".")
+        abbreviation = "." not in rest and (len(first) == 1 or first.lower() in _NAME_TITLES)
+        return token if abbreviation else token.replace(".", "[.]")
 
     return _NAME_DOMAIN.sub(swap, plain)
 
