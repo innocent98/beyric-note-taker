@@ -1,6 +1,56 @@
 # Beyric Note Taker: master handoff
 
-**Updated 2026-11-13 about 20:30 WAT by the nineteenth lead: read the FIRST update block below, then the two after it.** **Written:** 2026-11-09, about 13:45 WAT, by the sixteenth lead session for the seventeenth (Adebayo starts it himself; this session does not). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6 to #131 and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail. **Sections 00, 1, 4, 5 and 6 were rewritten at this handoff and are current; sections 0, 2, 3 and 7 are standing rules, decisions, designs and recipes (the 2026-11-08/09 additions are marked).**
+**Updated 2026-11-14 about 10:00 WAT by the nineteenth lead: read the FIRST update block below, then the three after it.** **Written:** 2026-11-09, about 13:45 WAT, by the sixteenth lead session for the seventeenth (Adebayo starts it himself; this session does not). Start here: "Read `docs/HANDOFF-master.md` and continue as the lead." Earlier handoffs are in git history (PRs #6 to #131 and this one). This file is a map: the checklist (`docs/checklist/master-checklist.md`), the SOPs (`docs/sop/`, one per shipment), the specs and plans hold the detail. **Sections 00, 1, 4, 5 and 6 were rewritten at this handoff and are current; sections 0, 2, 3 and 7 are standing rules, decisions, designs and recipes (the 2026-11-08/09 additions are marked).**
+
+## UPDATE 2026-11-14, about 10:00 WAT, nineteenth lead for the twentieth: READ THIS BLOCK FIRST, then the 2026-11-13 block below it
+
+This block adds to the 2026-11-13 block (its decisions B and facts still stand) and supersedes it where they disagree. The 19th lead's session grew too large and Adebayo asked for this handoff. Start with: "Read `docs/HANDOFF-master.md` and continue as the lead." Verified with live commands unless marked "not verified".
+
+### A. State right now
+
+| Thing | State |
+|---|---|
+| `main` | `7a714f2` (#180, multi-team stage 1, merged 09:45 WAT). Main's ci was still running and its deploy had not started when this was written: **first job: confirm the deploy finished and migration 0043 ran** (he runs `select version_num from alembic_version;`, expect 0043). **No open PR.** |
+| Server (his pastes) | `SKRIBBY_TRANSCRIPTION_MODEL=elevenlabs/scribe-v2` since 18:31 WAT 2026-11-13; `TRANSCRIPT_SOURCE=own`, `TRANSCRIPT_SHADOW_PERCENT=0` (one-transcript path built and OFF); `MULTI_TEAM_ENABLED` unset = off; `MICROSOFT_CALENDAR_ENABLED=true` (his Outlook connect shows; untested against real Microsoft); **sign-up OPEN since 22:02 WAT 2026-11-13**: `signups_open` and `password_signup_enabled` true, `max_accounts` 10, `default_hours_cap_seconds` 18000 (5 h), 2 non-admin accounts then. |
+| Merged this session | #171 bake-off scored on Meet's timeline, #172 and #173 ElevenLabs single-transcript readiness plus vocabulary pass (0042), #174 handoff, #175 Teams wording and share finder, #176 day headings, #177 `/welcome` and sticky public header, #178 and #179 multi-team design, #180 multi-team stage 1 (0043). Alembic head **0043**. |
+| Sessions and worktrees | Every session this lead started is archived; none running. Branches of merged work deleted. Worktrees left by EARLIER leads, not reviewed by this lead: `bakeoff`, `c13-fix`, `designer-states`, `edge-secret`, `lead-16-spec`, `skribby-check`, `teams-test`, `ui-parity`, `w04-finish` under `.claude/worktrees/` (check each is clean and pushed, then remove). The main checkout is stale and holds his uncommitted design files (`docs/ui/Beyric Note Taker redesign/...`, `review.html`): never touch it; read code with `git show origin/main:<path>`. |
+| Data with a clock | Meeting 34's audio is kept until about **2026-11-20** (bake-off or text comparison must run before). Vexa cleanup: start Vexa an hour about **2026-11-16**, then stop it. |
+| Scratch tool | `compare34.py` (three-way text comparison, run with `docker compose exec -T worker python - <id> <FROM-TO> < compare34.py`) was a scratchpad file, not in the repo; the SOP `docs/sop/2026-11-13-elevenlabs-model-flip-and-text-comparison.md` describes it. |
+
+### B. What this lead decided or learned today (details in the 2026-11-13 block)
+
+- Meeting 34's wrong speakers are Skribby's diarization, not our alignment (alignment `label_transcript` still unmeasured). ElevenLabs won the bake-off; its text was more complete than our gpt-transcribe on two windows; his vocabulary list holds ONE term.
+- One transcript (Skribby's) is the plan, **off until a live meeting proves speaker names survive under ElevenLabs.** Cost estimate per meeting hour: about 0.83 USD today, 0.56 on one transcript (estimates).
+- Multi-team: approach A plus Move; he asked about full workspaces (B) and agreed to A after the lead advised against (2 accounts, same foundations). Spec `docs/superpowers/specs/2026-11-13-multi-team-design.md`, benchmark inside (section 11: Fireflies, Otter, Fathom read; Read AI not). His two decisions: moved meetings stay with the team if the recorder deletes their account; any recorder may move into any team they belong to. **Privacy policy and terms must change and be read by his lawyer before `MULTI_TEAM_ENABLED` is switched on.**
+- Deferred by him: mid-call catch-up ("whisper"), chatter filtering, tone and impression. Candidates: Chrome extension "Record with Beyric" (Read.ai shows its own dialog in Meet; likely its extension), role-specific summary after teams, translation beyond fr and es notes, task-tool integrations beyond Linear and Slack.
+- Billing and monetization: he asked to discuss it; not started. Inputs: cost 0.56 to 0.83 USD per meeting hour, per-user hours cap today, competitor anchors in spec section 11 (Fathom Team 15 to 19, Business 25 to 34 per user per month, free unlimited recordings: not an option for us), billing anchors on the Team.
+
+### C. Needs Adebayo
+
+1. Merge word for this docs PR.
+2. After each deploy: `/welcome` signed out and signed in; the day headings in his real Meetings list; the new-meeting placeholder says Google Meet, Microsoft Teams or Zoom.
+3. After his next real meeting: the meeting id (lead reads `scripts/skribby_segments_report.py <id>`: do names still come through?).
+4. Add his product names to his vocabulary list; privacy wording to his lawyer (above); the 18th lead's list C 1 to 5 still stands (Zoom retest, Microsoft publisher verification, Google sensitive-scope verification, Outlook for himself, lawyer on #134 #147 #156 wording).
+
+### D. Next for the lead, in order
+
+1. Confirm the deploy of `7a714f2` and 0043 (A above); the three UI checks.
+2. Names under ElevenLabs on the next live meeting; if they hold, give him the one-transcript flip (`TRANSCRIPT_SOURCE=skribby`, `TRANSCRIPT_SHADOW_PERCENT=10` to `25` for a week, then 0; restart only with no meeting on); if lost, revert the model line.
+3. Multi-team stage 2 (API, team-owned meetings, Move; spec section 7, checklist "Stage 2" and its prerequisites from the stage-1 review: moved meetings readable and writable by the recorder only while a member, `deletion.py` must keep moved meetings, the share route takes a team). One build session, one Opus review (this is permission code), then stage 3 (frontend), then the second backfill and the privacy wording before stage 4.
+4. Landing hero and closing band still say "Sign in" now sign-up is open (the designer's copy decision: ask him before changing words).
+5. Start the billing and monetization conversation with him (plans, hours allowance, seats, personal plan versus team plan); then the Chrome extension and the role-specific summary.
+6. The 18th lead's D list (Microsoft and Google verification, C18 recording notice, Zoom retest), Vexa cleanup 2026-11-16, review the old worktrees.
+
+### E. How we work (added today)
+
+- The lead cannot read the server over ssh: he runs one combined command; a one-off script goes on stdin (`ssh haven-respite 'cd /opt/beyric-note-taker && docker compose exec -T worker python - <args>' < script.py > out.txt`).
+- Opus review of every PR touching permission code (done for #180); the reviewer's findings go to the session that owns the branch, as a list of fix-now versus record-as-prerequisite.
+- The auto-mode checker blocks force-pushes (merge `origin/main` into the branch) and holds an `archive_session` call once for a re-check (repeat the call with exactly the input it quotes).
+- `gh pr merge` has no required checks here: check `gh pr checks` yourself and merge only on his typed word; merges queue their deploys one at a time (concurrency group `deploy`), docs-only merges skip the deploy.
+- Every brief: no AI attribution anywhere (commits, PR bodies), no `claude/` branch names, fast local checks and named tests only, never the full suite; a docs or SOP and checklist line with every shipment; the lead merges, sessions never do.
+- He wants plain words: purpose first, exact steps, and an offer to do it for him; he checks provenance (read vendor pages yourself, name them, say when a page refused to open).
+
+---
 
 ## UPDATE 2026-11-13, about 20:30 WAT, nineteenth lead for the twentieth: READ THIS BLOCK FIRST, then the 18th lead's block below it
 
