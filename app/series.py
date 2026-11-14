@@ -48,6 +48,7 @@ from app.models import (
     ScheduledJoin,
     Series,
     SeriesAgendaItem,
+    SeriesAgendaSend,
     SeriesTopic,
     Task,
     TeamMember,
@@ -117,7 +118,7 @@ def scope_team_id(session: Session, recorder: User, meeting: Meeting, *, follow:
     shared to (`visibility.scope_team_of`), else for a private meeting the recorder's PERSONAL team
     (`follow`) or, as before multi-team, their default team. In the caller's transaction (it may
     make a personal team)."""
-    home = scope_team_of(meeting)
+    home = scope_team_of(session, meeting, personal_is_private=follow)
     if home is not None:
         return home
     if follow:
@@ -258,10 +259,13 @@ def link_from_calendar(session: Session, meeting: Meeting) -> Series | None:
     owner = session.get(User, meeting.owner_user_id)
     if owner is None or owner.status != "active":
         return None
-    follow = follow_enabled()
-    team_id = scope_team_id(session, owner, meeting, follow=follow)
-    if follow:
+    if not follow_enabled():
+        team_id = team_id_of(session, owner)  # exactly as before: the recorder's default team
+    else:
+        team_id = scope_team_id(session, owner, meeting, follow=True)
         _rekey_empty_card(session, owner, row.recurring_event_id, team_id)
+        if _is_full(session, team_id) and not _has_row(session, team_id, row.recurring_event_id):
+            return None  # the scope's team has no room for another row
     series = _get_or_create(
         session,
         team_id,
@@ -274,12 +278,31 @@ def link_from_calendar(session: Session, meeting: Meeting) -> Series | None:
     return series
 
 
+def _is_full(session: Session, team_id: int) -> bool:
+    return (
+        session.scalar(select(func.count()).select_from(Series).where(Series.team_id == team_id))
+        >= MAX_SERIES_PER_TEAM
+    )
+
+
+def _has_row(session: Session, team_id: int, recurring_id: str) -> bool:
+    return (
+        session.scalar(
+            select(Series.id).where(
+                Series.team_id == team_id, Series.calendar_recurring_id == recurring_id
+            )
+        )
+        is not None
+    )
+
+
 def _rekey_empty_card(session: Session, recorder: User, recurring_id: str, scope_id: int) -> None:
     """The recorder's first meeting of a recurring event lands in a scope other than the team their
     pre-recording card (`sync_from_joins`) was made in: the card goes to that scope instead of
-    staying behind as an empty duplicate. Only the recorder's OWN empty card: no meeting, no waiting
-    agenda line (those are the team's and wait there for its next meeting), no linked project (a
-    project is the old team's), and not already a row of the scope. Anything else stays; the caller
+    staying behind as an empty duplicate. Only the recorder's OWN empty card: no meeting, no agenda
+    line waiting or consumed and no agenda send (those are the team's history and its lines wait
+    there for its next meeting), no linked project (a project is the old team's), and not already a
+    row of the scope. Anything else stays; the caller
     makes or finds the scope's row."""
     default_id = team_id_of(session, recorder)
     if default_id == scope_id:
@@ -294,17 +317,21 @@ def _rekey_empty_card(session: Session, recorder: User, recurring_id: str, scope
     held = session.scalar(
         select(func.count()).select_from(Meeting).where(Meeting.series_id == card.id)
     )
-    waiting = session.scalar(
+    history = session.scalar(
         select(func.count())
         .select_from(SeriesAgendaItem)
-        .where(SeriesAgendaItem.series_id == card.id, SeriesAgendaItem.consumed_at.is_(None))
+        .where(SeriesAgendaItem.series_id == card.id)
+    ) + session.scalar(
+        select(func.count())
+        .select_from(SeriesAgendaSend)
+        .where(SeriesAgendaSend.series_id == card.id)
     )
     taken = session.scalar(
         select(Series.id).where(
             Series.team_id == scope_id, Series.calendar_recurring_id == recurring_id
         )
     )
-    if held or waiting or taken is not None:
+    if held or history or taken is not None:
         return
     card.team_id = scope_id
     session.flush()
@@ -605,14 +632,29 @@ class Placement:
     skipped: bool = False
 
 
+def _event_title(session: Session, meeting: Meeting) -> str | None:
+    """The title of the calendar event the meeting was recorded from, while its row exists."""
+    return session.scalar(
+        select(CalendarEvent.title)
+        .join(ScheduledJoin, ScheduledJoin.calendar_event_id == CalendarEvent.id)
+        .where(
+            ScheduledJoin.meeting_id == meeting.id, ScheduledJoin.user_id == meeting.owner_user_id
+        )
+        .limit(1)
+    )
+
+
 def _row_for_scope(
-    session: Session, current: Series, scope_id: int, recorder: User | None
+    session: Session, current: Series, scope_id: int, recorder: User | None, meeting: Meeting
 ) -> tuple[Series | None, bool]:
     """The row of `current`'s recurring meeting in the team `scope_id`, made when the team has none:
     (row, made). A calendar row is found by its recurring id; a hand-made one (no id) by the same
-    title among that team's hand-made rows. A new row copies title and platform and is made by the
-    recorder; it NEVER copies the project link (a project belongs to one team) or the agenda lines
-    (they are the team's). No row (None) when the team already has as many as fit."""
+    title among that team's hand-made rows. A new row is made by the recorder and NEVER copies the
+    project link (a project belongs to one team) or the agenda lines (they are the team's). A
+    calendar row is titled from the calendar event, else the meeting's own title, never from the
+    source row, whose name may be one its team renamed it to (a hand-made row has to keep the
+    source title: that is how its twin is found). No row (None) when the team has as many as
+    fit."""
     if current.calendar_recurring_id is not None:
         found = session.scalars(
             select(Series).where(
@@ -632,18 +674,15 @@ def _row_for_scope(
         ).first()
     if found is not None:
         return found, False
-    count = session.scalar(
-        select(func.count()).select_from(Series).where(Series.team_id == scope_id)
-    )
-    if count >= MAX_SERIES_PER_TEAM:
+    if _is_full(session, scope_id):
         return None, False
-    creator = recorder.id if recorder is not None and recorder.status == "active" else None
+    creator = recorder.id if recorder is not None and recorder.status != "deleted" else None
     if current.calendar_recurring_id is not None:
         made = _get_or_create(
             session,
             scope_id,
             current.calendar_recurring_id,
-            current.title,
+            _series_title(_event_title(session, meeting), meeting.title),
             current.platform,
             creator,
         )
@@ -670,12 +709,14 @@ def place_meeting(session: Session, meeting: Meeting) -> Placement:
     if current is None:
         return Placement(None)
     recorder = session.get(User, meeting.owner_user_id)
-    if scope_team_of(meeting) is None and (recorder is None or recorder.status != "active"):
+    if scope_team_of(session, meeting) is None and (
+        recorder is None or recorder.status == "deleted"
+    ):
         return Placement(current, skipped=True)  # no personal team to take it to
     scope_id = scope_team_id(session, recorder, meeting, follow=True)
     if current.team_id == scope_id:
         return Placement(current)
-    target, made = _row_for_scope(session, current, scope_id, recorder)
+    target, made = _row_for_scope(session, current, scope_id, recorder, meeting)
     meeting.series_id = target.id if target is not None else None
     mark_topics_stale(session, current.id)
     if target is not None:

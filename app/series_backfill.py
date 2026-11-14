@@ -19,11 +19,11 @@ title, name or address.
 
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app import series as series_rules
-from app.models import Meeting, Series, Team
+from app.models import Meeting, Series, SeriesAgendaItem, Team
 from app.visibility import series_scope_clause
 
 
@@ -35,7 +35,10 @@ class Report:
     meetings_moved: int = 0  # includes the ones cut loose
     rows_made: int = 0
     meetings_cut_loose: int = 0  # taken out of their series: the team had no room for a row
-    meetings_skipped: int = 0  # a private meeting whose recorder's account is gone
+    meetings_skipped: int = 0  # a private meeting whose recorder's account is gone (every run)
+    personal_teams_made: int = 0  # a person who had none (they are made when first needed)
+    rows_left_empty: int = 0  # rows the split left with no meeting at all
+    rows_left_empty_with_lines: int = 0  # ...of which still hold waiting agenda lines
 
     def lines(self) -> list[str]:
         head = (
@@ -51,6 +54,9 @@ class Report:
             f"New rows made for them: {self.rows_made}",
             f"Meetings taken out of their series (the team had no room): {self.meetings_cut_loose}",
             f"Meetings left alone (their recorder's account is gone): {self.meetings_skipped}",
+            f"Personal spaces made for people who had none: {self.personal_teams_made}",
+            f"Rows left with no meeting after the split: {self.rows_left_empty}",
+            f"...of which still hold waiting agenda lines: {self.rows_left_empty_with_lines}",
         ]
 
 
@@ -58,6 +64,9 @@ def split_mixed_series(session: Session, *, apply: bool) -> Report:
     """Move every meeting that sits in a row of another scope to the row of its own. Commits with
     `apply`; with a dry run it rolls everything back. Returns the counts."""
     report = Report(applied=apply)
+    personal_before = session.scalar(
+        select(func.count()).select_from(Team).where(Team.is_personal.is_(True))
+    )
     for series_id in list(session.scalars(select(Series.id).order_by(Series.id))):
         row = session.get(Series, series_id)
         team = session.get(Team, row.team_id)
@@ -70,6 +79,8 @@ def split_mixed_series(session: Session, *, apply: bool) -> Report:
                 select(Meeting)
                 .where(Meeting.series_id == series_id, Meeting.id.not_in(in_scope))
                 .order_by(Meeting.id)
+                .with_for_update(of=Meeting)  # a share committing now is waited for, then re-read
+                .execution_options(populate_existing=True)
             )
         )
         split = False
@@ -83,6 +94,25 @@ def split_mixed_series(session: Session, *, apply: bool) -> Report:
             report.rows_made += placed.made
             report.meetings_cut_loose += placed.cut_loose
         report.rows_split += split
+        if split and not session.scalar(
+            select(Meeting.id).where(Meeting.series_id == series_id).limit(1)
+        ):
+            report.rows_left_empty += 1
+            report.rows_left_empty_with_lines += bool(
+                session.scalar(
+                    select(SeriesAgendaItem.id)
+                    .where(
+                        SeriesAgendaItem.series_id == series_id,
+                        SeriesAgendaItem.consumed_at.is_(None),
+                    )
+                    .limit(1)
+                )
+            )
+    session.flush()
+    report.personal_teams_made = (
+        session.scalar(select(func.count()).select_from(Team).where(Team.is_personal.is_(True)))
+        - personal_before
+    )
     if apply:
         session.commit()
     else:

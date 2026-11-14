@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from app import deletion, meeting_teams, teams, visibility
 from app import series as series_rules
 from app.config import Settings
-from app.models import Meeting, Series, SeriesAgendaItem, User
+from app.models import Meeting, Series, SeriesAgendaItem, SeriesAgendaSend, User
 from app.series_backfill import split_mixed_series
 from tests.test_api import (  # noqa: F401  (fixtures used by name)
     anon,
@@ -44,6 +44,7 @@ from tests.test_multi_team_leaks import (  # noqa: F401  (fixtures used by name)
 )
 from tests.test_multi_team_moved import NoVexa
 from tests.test_series import MONDAY, calendar_event, join_for, meeting_in
+from tests.test_web import make_user
 
 RID = "rid-1"
 LATER = datetime(2026, 11, 9, 9, 0, tzinfo=UTC)
@@ -77,9 +78,12 @@ def personal_of(session, user) -> int:
     return teams.ensure_personal_team(session, user).id
 
 
-def put(session, template, row, *, who, when=MONDAY, team=None, moved=None) -> Meeting:
+def put(
+    session, template, row, *, who, when=MONDAY, team=None, moved=None, title="Standup"
+) -> Meeting:
     """A ready meeting of `who` inside `row`, shared to `team` (or moved to `moved`)."""
     meeting = meeting_in(session, template, row, when=when, user=who)
+    meeting.title = title
     meeting.shared_team_id = team
     meeting.owner_team_id = moved
     session.commit()
@@ -124,6 +128,7 @@ def test_the_scope_clause_and_the_python_rule_agree_on_every_state(session, worl
     personal = teams.personal_team(session, world.ada.id)
     states = {
         "private": {},
+        "shared_own_personal": {"shared_team_id": personal.id},  # migration 0043's solo teams
         "shared_x": {"shared_team_id": world.x.id},
         "shared_y": {"shared_team_id": world.y.id},
         "moved_x": {"owner_team_id": world.x.id},
@@ -141,11 +146,14 @@ def test_the_scope_clause_and_the_python_rule_agree_on_every_state(session, worl
             )
         )
         for name, meeting in made.items():
-            home = visibility.scope_team_of(meeting)  # a team id, or None = recorder's personal
+            home = visibility.scope_team_of(
+                session, meeting
+            )  # a team id, or None = recorder's personal
             expected = home == team.id if home is not None else team.is_personal
             assert (meeting.id in in_scope) == expected, (name, team.id)
-    assert {n: visibility.scope_team_of(m) for n, m in made.items()} == {
+    assert {n: visibility.scope_team_of(session, m) for n, m in made.items()} == {
         "private": None,
+        "shared_own_personal": None,
         "shared_x": world.x.id,
         "shared_y": world.y.id,
         "moved_x": world.x.id,
@@ -179,17 +187,35 @@ def test_each_change_of_team_puts_the_meeting_into_its_scopes_row_and_marks_both
 ):
     ada_personal = personal_of(session, world.ada)
     legacy = standup(session, world.x.id, owner_id=world.ada.id)
+    existing = standup(session, ada_personal, owner_id=world.ada.id)  # the target already exists
     monday = put(session, template, legacy, who=world.ada, team=world.x.id)
     tuesday = put(session, template, legacy, who=world.ada, when=MONDAY + timedelta(days=1))
-    mark_fresh(session, legacy)
-    meeting_teams.unshare(session, tuesday)  # already private: nothing changes team
+    mark_fresh(session, legacy, existing)  # so only a hook can make them stale
+    meeting_teams.unshare(session, tuesday)  # private already: it now follows to the personal row
     session.commit()
-    assert tuesday.series_id != legacy.id  # a private meeting follows to the personal row
-    personal_row = row_of(session, ada_personal)
-    assert tuesday.series_id == personal_row.id
+    assert tuesday.series_id == existing.id  # found, not made again
     assert monday.series_id == legacy.id
-    assert stale(session, legacy) and stale(session, personal_row)
-    assert personal_row.title == "Standup" and personal_row.owner_user_id == world.ada.id
+    assert stale(session, legacy) and stale(session, existing)
+
+
+def test_a_new_row_made_for_a_meeting_has_the_recorder_as_creator(session, world, template):
+    legacy = standup(session, world.x.id, owner_id=world.ada.id)
+    meeting = put(session, template, legacy, who=world.ada, when=MONDAY + timedelta(days=1))
+    meeting_teams.unshare(session, meeting)
+    made = row_of(session, personal_of(session, world.ada))
+    assert made.owner_user_id == world.ada.id and made.calendar_recurring_id == RID
+
+
+def test_sharing_to_a_team_that_has_a_row_marks_that_row_and_the_old_one_stale(
+    session, world, template
+):
+    legacy = standup(session, world.x.id, owner_id=world.pat.id)
+    y_row = standup(session, world.y.id, owner_id=world.quinn.id)
+    meeting = put(session, template, legacy, who=world.pat, team=world.x.id)
+    mark_fresh(session, legacy, y_row)
+    meeting_teams.share(session, world.pat, meeting, world.y.id)
+    assert meeting.series_id == y_row.id
+    assert stale(session, legacy) and stale(session, y_row)
 
 
 def test_one_standup_one_row_per_team_with_exactly_that_teams_meetings(session, world, template):
@@ -263,8 +289,8 @@ def test_the_same_recurring_id_in_two_organisations_stays_two_rows(session, worl
     ada_row = standup(session, world.x.id, owner_id=world.ada.id, title="Tech standup")
     zed_row = standup(session, world.z.id, owner_id=world.zed.id, title="Zed's standup")
     session.add(SeriesAgendaItem(series_id=zed_row.id, text="Zed's line", created_by=world.zed.id))
-    mine = put(session, template, ada_row, who=world.ada, team=world.x.id)
-    theirs = put(session, template, zed_row, who=world.zed, team=world.z.id)
+    mine = put(session, template, ada_row, who=world.ada, team=world.x.id, title="Tech standup")
+    theirs = put(session, template, zed_row, who=world.zed, team=world.z.id, title="Zed's standup")
     meeting_teams.unshare(session, mine)
     meeting_teams.unshare(session, theirs)
     session.commit()
@@ -594,15 +620,47 @@ def test_flag_off_the_link_and_the_attach_rule_use_the_default_team(
     assert series_rules.meeting_team_id(session, world.ada, meeting) == world.x.id
 
 
-def test_flag_off_a_card_is_remade_by_the_sync_even_after_a_meeting_is_recorded(
+def test_flag_off_a_card_is_remade_by_the_sync_even_when_a_personal_row_holds_a_meeting(
     session, world, template, monkeypatch
 ):
     flag_off(monkeypatch)
+    ada_personal = personal_of(session, world.ada)
+    mine = standup(session, ada_personal, owner_id=world.ada.id)
+    put(session, template, mine, who=world.ada)  # a personal row with a meeting: flag on would skip
     event = calendar_event(session, world.ada, RID, MONDAY)
     join_for(session, world.ada, event, state="scheduled")
-    assert series_rules.sync_from_joins(session, MONDAY) == 1
-    assert series_rules.sync_from_joins(session, MONDAY) == 0
+    assert series_rules.sync_from_joins(session, MONDAY) == 1  # today's rule: Ada's default team
     assert row_of(session, world.x.id) is not None
+    assert series_rules.sync_from_joins(session, MONDAY) == 0
+
+
+def test_flag_off_the_link_puts_a_shared_or_moved_meeting_in_the_default_teams_row(
+    session, world, template, monkeypatch
+):
+    """Exactly today's rule with the flag off, for a person whose default team is NOT the team the
+    meeting is shared to: Pat has two ordinary teams, so his default team is his personal one."""
+    flag_off(monkeypatch)
+    pat_personal = personal_of(session, world.pat)
+    shared = calendar_meeting(
+        session,
+        template,
+        world.pat,
+        calendar_event(session, world.pat, RID, MONDAY),
+        shared_team_id=world.y.id,
+    )
+    moved = calendar_meeting(
+        session,
+        template,
+        world.pat,
+        calendar_event(session, world.pat, "rid-2", MONDAY),
+        owner_team_id=world.x.id,
+    )
+    for meeting in (shared, moved):
+        series_rules.link_from_calendar(session, meeting)
+    session.commit()
+    assert session.get(Series, shared.series_id).team_id == pat_personal
+    assert session.get(Series, moved.series_id).team_id == pat_personal
+    assert row_of(session, world.y.id) is None and row_of(session, world.x.id, "rid-2") is None
 
 
 def test_flag_off_a_meeting_given_back_loses_its_series_as_before(
@@ -728,11 +786,12 @@ def test_the_backfill_marks_both_rows_stale_and_works_with_the_flag_off(
 ):
     flag_off(monkeypatch)  # it is safe to run before anything is switched on
     legacy, rows = build_mixed_world(session, world, template)
-    mark_fresh(session, rows["mixed"])
+    ada_personal = personal_of(session, world.ada)
+    target = standup(session, ada_personal, owner_id=world.ada.id, title="Existing")  # not new
+    mark_fresh(session, rows["mixed"], target)
     split_mixed_series(session, apply=True)
-    assert stale(session, rows["mixed"])
-    sibling = session.get(Series, legacy["tuesday_private"].series_id)
-    assert stale(session, sibling) and sibling.team_id == personal_of(session, world.ada)
+    assert stale(session, rows["mixed"]) and stale(session, target)
+    assert session.get(Series, legacy["tuesday_private"].series_id).id == target.id
 
 
 def test_the_backfill_report_has_counts_only(session, world, template):
@@ -765,3 +824,110 @@ def test_the_backfill_skips_a_meeting_whose_recorder_is_gone(session, world, tem
     split_mixed_series(session, apply=True)
     session.refresh(gone)
     assert gone.series_id == mixed.id
+
+
+# ---- review fixes (Opus review of PR #199) ----
+
+
+def test_a_meeting_shared_to_its_recorders_own_personal_team_is_private(session, world, template):
+    """Migration 0043 made every solo team of one personal and kept what was shared to it."""
+    ada_personal = personal_of(session, world.ada)
+    mine = standup(session, ada_personal, owner_id=world.ada.id)
+    meeting = put(session, template, mine, who=world.ada, team=ada_personal)
+    placed = series_rules.place_meeting(session, meeting)
+    assert placed.series.id == mine.id and not placed.moved  # already where it belongs
+    report = split_mixed_series(session, apply=False)
+    assert report.meetings_moved == 0 and report.rows_split == 0
+    # a calendar meeting auto-shared to the personal team links to the personal row
+    event = calendar_event(session, world.ada, "rid-7", MONDAY)
+    auto = calendar_meeting(session, template, world.ada, event, shared_team_id=ada_personal)
+    assert series_rules.link_from_calendar(session, auto).team_id == ada_personal
+
+
+def test_a_new_row_is_named_from_the_calendar_event_never_from_the_source_rows_rename(
+    session, world, template
+):
+    internal = "Standup: HR follow-up for Bob"
+    legacy = standup(session, world.x.id, owner_id=world.ada.id, title=internal)
+    event = calendar_event(session, world.pat, RID, MONDAY, title="Team standup")
+    meeting = calendar_meeting(session, template, world.pat, event, shared_team_id=world.x.id)
+    meeting.series_id = legacy.id
+    session.commit()
+    meeting_teams.share(session, world.pat, meeting, world.y.id)
+    assert session.get(Series, meeting.series_id).title == "Team standup"
+    # no event row for this one: the meeting's own title, never the internal name
+    other = put(
+        session, template, legacy, who=world.pat, team=world.x.id, when=LATER, title="Weekly review"
+    )
+    meeting_teams.unshare(session, other)
+    assert session.get(Series, other.series_id).title == "Weekly review"
+    titles_made = {s.title for s in session.scalars(select(Series)) if s.id != legacy.id}
+    assert internal not in titles_made
+
+
+def test_a_suspended_recorders_meeting_still_follows(session, world, template):
+    legacy = standup(session, world.x.id, owner_id=world.pat.id)
+    meeting = put(session, template, legacy, who=world.pat)  # private, in X's row
+    world.pat.status = "suspended"
+    session.commit()
+    assert series_rules.place_meeting(session, meeting).moved
+
+
+def test_the_link_does_not_overfill_a_team_and_leaves_an_existing_row_usable(
+    session, world, template, monkeypatch
+):
+    monkeypatch.setattr(series_rules, "MAX_SERIES_PER_TEAM", 1)
+    ada_personal = personal_of(session, world.ada)
+    standup(session, ada_personal, rid="other", title="Another")  # the personal team is full
+    event = calendar_event(session, world.ada, RID, MONDAY)
+    meeting = calendar_meeting(session, template, world.ada, event)  # private: personal scope
+    assert series_rules.link_from_calendar(session, meeting) is None
+    assert meeting.series_id is None
+    existing = standup(session, world.x.id, owner_id=world.ada.id)  # X has one row: also full
+    shared = calendar_meeting(
+        session,
+        template,
+        world.ada,
+        calendar_event(session, world.ada, RID, LATER),
+        shared_team_id=world.x.id,
+    )
+    assert series_rules.link_from_calendar(session, shared).id == existing.id  # found, not made
+
+
+def test_a_card_with_consumed_lines_or_a_past_send_is_not_taken_into_a_personal_row(
+    session, world, template
+):
+    ada_personal = personal_of(session, world.ada)
+    for name in ("consumed", "send"):
+        rid = f"rid-{name}"
+        card = standup(session, world.x.id, rid=rid, owner_id=world.ada.id)
+        if name == "consumed":
+            session.add(
+                SeriesAgendaItem(
+                    series_id=card.id,
+                    text="Old line",
+                    created_by=world.pat.id,
+                    consumed_at=MONDAY,
+                )
+            )
+        else:
+            session.add(SeriesAgendaSend(series_id=card.id, sender_user_id=world.pat.id))
+        session.commit()
+        meeting = calendar_meeting(
+            session, template, world.ada, calendar_event(session, world.ada, rid, MONDAY)
+        )
+        series_rules.link_from_calendar(session, meeting)
+        assert row_of(session, world.x.id, rid).id == card.id, name  # the team's history stays
+        assert session.get(Series, meeting.series_id).team_id == ada_personal, name
+
+
+def test_the_backfill_counts_rows_left_empty_and_personal_spaces_made(session, world, template):
+    eve = make_user(session, "eve@example.test", name="Eve")  # no personal team yet
+    row = standup(session, world.x.id, owner_id=eve.id)
+    session.add(SeriesAgendaItem(series_id=row.id, text="Waiting line", created_by=world.ada.id))
+    put(session, template, row, who=eve)  # private: wants a personal row, emptying this one
+    report = split_mixed_series(session, apply=False)
+    assert report.personal_teams_made == 1
+    assert report.rows_left_empty == 1 and report.rows_left_empty_with_lines == 1
+    text = "\n".join(report.lines())
+    assert "Waiting line" not in text and "eve@" not in text
