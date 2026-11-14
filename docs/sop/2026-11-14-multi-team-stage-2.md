@@ -173,7 +173,7 @@ and an integration it connected is nulled.
   meeting must name its template). The person's name, email and credentials are gone.
 - **Privacy policy and terms** still promise that deleting an account deletes the person's meetings.
   A moved meeting stays with its team (spec 9.1). His lawyer must read the changed wording before the
-  switch-on; this PR does not touch those pages.
+  switch-on; this PR does not touch those pages. (Drafted since: `docs/sop/2026-11-14-legal-wording-teams.md`, awaiting the lawyer.)
 - The audio and the Vexa/Skribby copy of a kept moved meeting are kept by `purge_user` (the meeting is
   the team's). A team deleting such a meeting later goes through the normal delete route, which
   removes them.
