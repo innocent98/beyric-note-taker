@@ -500,9 +500,10 @@ def create_meeting(
     url: str,
     template_id: int | None,
     settings: Settings,
+    title: str | None = None,
 ) -> Meeting:
     try:
-        return _create_meeting(session, vexa, user, url.strip(), template_id, settings)
+        return _create_meeting(session, vexa, user, url.strip(), template_id, settings, title)
     except Refused:
         session.rollback()  # also releases the advisory lock
         raise
@@ -515,6 +516,7 @@ def _create_meeting(
     url: str,
     template_id: int | None,
     settings: Settings,
+    title: str | None = None,
 ) -> Meeting:
     # The submitted link is never echoed back: a Zoom link carries its meeting password.
     try:
@@ -544,6 +546,7 @@ def _create_meeting(
         meeting_url=url,
         template_id=template.id,
         source="manual",
+        title=title,  # cleaned when stored (`titles.event_title`); blank = the fallback name
     )
     try:
         return placement.place_bot(session, vexa, request, now=datetime.now(UTC), settings=settings)

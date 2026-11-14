@@ -533,7 +533,7 @@ def create_meeting(
     placement is under way; the text never says whose meeting holds it). 502 `bot_send_failed`
     when the bot host did not take the bot."""
     meeting = services.create_meeting(
-        session, vexa, user, body.url, body.template_id, request.app.state.settings
+        session, vexa, user, body.url, body.template_id, request.app.state.settings, body.title
     )
     response.headers["Location"] = f"/api/meetings/{meeting.id}"
     return _detail(meeting, session, user)
