@@ -701,6 +701,7 @@ Goal: one person has a permanent personal team and may belong to several teams; 
   - [ ] CI green, Opus review of header handling, Move and share, merge, deploy
   - [ ] Designer's review of the four lead-designed pieces; a screen reader pass; a look against a real server with the switch on (local dev only)
 - [ ] **Stage 4: switch on**: `MULTI_TEAM_ENABLED=true` only after stage 3 is live
+  - [ ] Prerequisite: privacy and terms wording for multi-team drafted (2026-11-14, PR on `feature/legal-wording-teams`, SOP `docs/sop/2026-11-14-legal-wording-teams.md`), **awaiting the owner's lawyer**; then merged and deployed. Lead-flagged mismatches (sole-owner team, "empty record", the move confirmation that is stage 3) are in the SOP
   - [ ] Prerequisite (stage-1 review): while the switch is off the one-personal-team rule drifts (a joiner's personal team is dissolved; the inviter of a team of one is left with none; an invitation made into a team of one while off may be unredeemable once on). Needs a second backfill so every live account has a personal team, and a plan for pending invitations (list, revoke and re-send from an ordinary team)
 - Open outside the code: the privacy policy and terms (today they promise that deleting an account deletes the person's meetings; a moved meeting now survives its recorder's deletion in the code) must be changed and read by his lawyer before `MULTI_TEAM_ENABLED` is switched on
 
