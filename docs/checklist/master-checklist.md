@@ -873,5 +873,45 @@ Legal and business
 - [x] Landing v2 from the new design with every claim cut to what is shipped (no HubSpot, Jira, Asana, timestamps, "every attendee", "unlimited", "free"); our footer (Beyrichq LTD, `privacy@`) and our signed-in `/welcome`; invite-only said plainly (PR open 2026-11-14, SOP `docs/sop/2026-11-14-landing-v2-and-pricing.md`, parity report and shots in `docs/ui/parity/landing-v2/`)
 - [x] `/pricing` page with placeholders only ("To be announced", Trial / Team / Team Plus), header and footer link, sitemap, robots, `llms.txt`; all plan data in `web/components/pricing/content.ts` (same PR)
 - [ ] Adebayo decides plan names, prices and hours, then one edit in `web/components/pricing/content.ts`
-- [ ] Billing spec (plan model, shared team hours, gating, downgrade, provider layer for NGN and USD), then plans and billing, then real numbers on the pricing page
+- [x] Billing spec written (PR `docs/billing-and-plans-spec`, 2026-11-15, `docs/superpowers/specs/2026-11-15-billing-and-plans-design.md`; waits on his ten yes or no answers in its section 11); the build is the module below, then real numbers on the pricing page
 - [ ] Later and separate: chat notice live, transcript turn times, per-team retention, translation languages, Jira or Asana, CRM (deferred; needs team rules first)
+
+## Billing, plans and feature gates (spec `docs/superpowers/specs/2026-11-15-billing-and-plans-design.md`, written 2026-11-15; NOTHING BUILT; every rule below is PROPOSED until he answers section 11; migrations 0048 to 0050)
+
+Goal: a team pays a monthly plan that gives shared meeting hours, can buy extra-hour packs, and is stopped, graced and lapsed by clear rules; money comes in through Flutterwave (Paystack for naira later) behind one provider layer. Dark first, small PRs, each deployed one at a time, none tested with real money until S8.
+
+- [x] S0: the spec and this map (docs only)
+- [ ] His answers to the ten questions in the spec's section 11 (plan prices and hours are his; see also the facts list under it: VAT status, naira list, Flutterwave account and keys)
+- [ ] Re-measure the real cost per hour after the one-transcript flip (`scripts/ai_cost_report.py`); the first plan's price waits on it (spec 4.2)
+- [ ] **S1: hours model in shadow** (M, migration 0048, `HOURS_POOL_MODE=shadow`)
+  - [ ] Tables `plans`, `plan_prices`, pack products, `hour_grants`, `usage_allocations`; `usage_entries.team_id`; `user_settings.hours_team_id`
+  - [ ] Backfill: each pilot account's remaining hours become a `pilot` grant on its personal team
+  - [ ] `app/entitlements.py`: `pool_for`, `status`, the grant order (trial, plan period, packs)
+  - [ ] Daily shadow comparison (new rule against old rule) and an admin read of hours per team per month
+  - [ ] Tests: backfill fixtures (one-member, many-member, deleted account), shadow comparison, clock-injected period tests
+- [ ] **S2: enforce the pool and the new warnings** (M, `HOURS_POOL_MODE=enforce`)
+  - [ ] Replace the per-person block in `placement.reserve_slot` (`app/placement.py:174-179`); keep 403 `hours_cap_reached`, add `reason`
+  - [ ] Running-meeting estimate counts every meeting charged to the pool
+  - [ ] 80% and 100% notices with a mail to owners and admins; one "pool is empty" notice per pool and period (not one per skipped meeting)
+  - [ ] New wording for the refusal and the join-runner notice (no "pilot", no `hello@`); Settings choice of hours team
+  - [ ] Boundary and concurrency tests; live captures; `docs/fe-integration-guide-billing.md` (first sections), SOP
+- [ ] **S3: provider layer and webhook inbox** (L, migration 0049, `BILLING_ENABLED=false`)
+  - [ ] `app/billing/`: `PaymentProvider` protocol, routing by currency, `FakeProvider`, Flutterwave adapter in test mode
+  - [ ] Webhook route: raw body, signature or secret check, dedupe table, 200 at once, worker processes, re-fetch the payment before any grant
+  - [ ] Signature vectors from the vendor pages; replay, wrong amount, wrong currency, wrong reference; raw body through the real proxy
+  - [ ] Test-mode sandbox run (needs his Flutterwave test keys); prove USD pricing and settlement (spec 5.6)
+- [ ] **S4: subscriptions, packs and the lapse states** (L, may split)
+  - [ ] Status machine (`active`, `past_due`, `lapsed`, `canceled`, `ended`), our scheduler for renewals, retries (days 1, 3, 5), 7-day grace, lapse
+  - [ ] Hosted checkout for a plan and a pack; saved-card renewal with the pay-link fallback; upgrade proration; downgrade and cancel at period end
+  - [ ] Lapsed-state gates: Ask (`api_ask.py`), translation (`api_translation.py`), connecting integrations; export and reading stay open
+  - [ ] Billing screens for owners, admins and members; table-driven state tests with a fake clock
+- [ ] **S5: invoices, billing profile, refunds, receipts** (M, migration 0050)
+  - [ ] Billing profile before the first payment (billing country picks the currency); sequential invoice numbers; PDF built on request; `BILLING_VAT_RATE_BP` (default 0)
+  - [ ] Admin refund action; receipt mail
+- [ ] **S6: Paystack adapter for naira** (M; blocked until a Paystack account exists)
+- [ ] **S7: trial and the pilot's end** (S): about 3 hours once per person by verified email; daily trial budget; pilot mail; `max_accounts` kept as a brake
+- [ ] **S8: go-live** (S): fill `web/components/pricing/content.ts`; Terms and Privacy Policy rewritten and read by the lawyer; live keys; one small real payment by Adebayo, then a refund (needs his explicit yes); raise the sign-up cap
+- [ ] Terms line "The Service is free during the pilot" (`web/components/legal/terms-content.tsx:30`) replaced (it is the wording he rejected for the pricing page)
+- [ ] Lawyer: the ten billing questions in the spec's section 9; accountant: the VAT questions in the same section
+- [ ] Deferred (not in this build): self-service refunds, annual billing, a Business plan, per-seat pricing, usage-based overage billing, coupons, a billing admin console beyond refunds, HubSpot
+
