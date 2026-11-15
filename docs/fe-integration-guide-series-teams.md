@@ -771,7 +771,7 @@ Rows left with no meeting after the split: 0
 | Remove errors: 403 `team_forbidden` for a plain member, **even the one who made a calendar row or a hand-made row**, 404 for a person outside the team, 404 for another person's personal row, 404 the second time | **verified live** (54, 55, 56, 65, 66, 78, 80) |
 | A removal acts on one row: the sibling rows of the same event (personal, another team) are untouched | **verified live** (59, 61 to 63, 69) |
 | The meeting stays, ungrouped (`series` null) and readable | **verified live** (67, 72) |
-| The calendar sync does not make the removed row again | **verified live** (70: the real `series.sync_from_joins`, run in the capture process, not an HTTP call) |
+| The calendar sync does not make the removed row again | **verified live** for a person in two teams (70: the real `series.sync_from_joins`, run in the capture process, not an HTTP call). **The one-team person who removes a Personal row: tests only** (`tests/test_series_remove.py`) |
 | A later share to the removed scope does not regroup the meeting | **verified live** (71 to 73) |
 | Remove with `SERIES_FOLLOW_MEETINGS` off; a later calendar meeting not regrouped; a creator who left the team (404) | **not exercised live**: covered by `tests/test_series_remove.py` |
 | Remove without CSRF token or session | **not exercised live**: the project's usual write guard; covered by `tests/test_series_remove.py` |

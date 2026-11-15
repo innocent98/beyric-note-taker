@@ -149,11 +149,9 @@ def test_a_plain_member_who_made_a_calendar_row_or_a_hand_made_row_gets_403(
     hand = standup(session, world.x.id, rid=None, owner_id=world.pat.id, title="Pat's own")
     put(session, template, hand, who=world.pat, team=world.x.id)
     hand_id = hand.id
+    assert rows.x.owner_user_id == hand.owner_user_id == world.pat.id  # he made both
     for row_id in (rows.x.id, hand_id):
-        assert (
-            rows.x.owner_user_id == world.pat.id
-            and pat.get(f"/api/series/{row_id}").status_code == 200
-        )
+        assert pat.get(f"/api/series/{row_id}").status_code == 200
         error = error_of(remove(pat, row_id), 403, "team_forbidden")
         assert error["message"] == FORBIDDEN_TEXT
         assert reload(session, row_id) is not None
