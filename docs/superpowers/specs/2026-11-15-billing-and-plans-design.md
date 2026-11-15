@@ -1,48 +1,49 @@
-# Billing, plans and feature gates: design spec
+# Billing, plans and feature gates: design spec (per-person model)
 
-Status: REVISED 2026-11-15 (second version, after Adebayo answered section 11 the same day; the first version is PR #206's first commit). What he decided is marked DECIDED with the date; the rest is still open. **Nothing here is built.** No application code, no migration and no endpoint come with this document.
+Status: REVISED 2026-11-15, third version. **The model changed the same day:** a plan belongs to a **person**, not to a team (Adebayo: "Yes, per person"). The first two versions pooled hours per team; that is gone. What he decided is marked DECIDED with the date; the rest is open or PROPOSED. **Nothing here is built.** No application code, no migration and no endpoint come with this document.
 
-Facts about today's code were read from `origin/main` at `871ed74f` (Alembic head **0047**). Facts about vendors and competitors were read from the vendor's own page on 2026-11-15; each one names its URL, and section 12 lists what could not be confirmed. If a sentence says "PROPOSED", nobody decided it yet. If it says "DECIDED", it is Adebayo's word, either in the handoff (`docs/HANDOFF-master.md`, 2026-11-14 23:45 block, section B) or in his answers to section 11 on 2026-11-15 (relayed by the 21st lead).
+Facts about today's code were read from `origin/main` at `871ed74f` (Alembic head **0047**). Facts about vendors and competitors were read from the vendor's own page on 2026-11-15; each names its URL, and section 12 lists what could not be confirmed. "PROPOSED" means nobody decided it yet. "DECIDED" means Adebayo's word, in the handoff (`docs/HANDOFF-master.md`, 2026-11-14 23:45 block, section B) or in his answers of 2026-11-15 relayed by the 21st lead.
 
 ## 0. Read this first
 
-**What this is for.** Today every account gets every feature and a lifetime cap of 5 recorded hours. Nobody can pay. This spec says how a team pays for hours, how those hours are counted and shared, what happens at the limits, and how money gets in through Paystack (naira) and Flutterwave (dollars), in small safe steps.
+**The model in plain words (DECIDED 2026-11-15).** If you want to use the note taker, you subscribe. It is your bot that joins your meetings, and the hours are yours. You can create a team and invite friends. The meeting's notes, transcript, summary, decisions and tasks you may **share** with that team, and teammates can read what is shared **without subscribing**. Ask Beyric, translation and rewriting notes do not work for anyone whose trial is finished, who never subscribed, or whose subscription has expired. If a friend also wants those features after the 3-hour trial, the friend pays too. Why he dropped the shared team pool: a teammate could use up hours the owner thinks he bought, and the owner could not explain where they went.
 
-### The five findings that matter most
-
-| # | Finding | Why it matters |
-|---|---|---|
-| 1 | **At about 15 USD for 20 hours, the margin is thin, and negative on today's Skribby-only cost.** With the one-transcript flip, a team that uses all 20 hours leaves about 1 to 3 USD (7 to 20%) before servers, support, tax and currency loss. On today's Skribby meetings (0.74 to 0.91 USD an hour) the same team costs us 15 to 18 USD: a loss. | Sections 4.2 and 4.3. Hold the price until the flip is proven and the cost is measured again (Question 1). |
-| 2 | **Pooled team hours look small next to the seat prices competitors show.** Otter's pricing page lists a Pro plan with 1,200 recording minutes (20 hours) per user a month at about 17 USD per user. Fathom shows unlimited recordings per user on its team plans from 15 to 19 USD per user. Our 20 hours are for the whole team. | Section 4.4. Our bot costs real money per hour (Skribby 0.35 USD an hour), so we cannot copy "unlimited". The pricing page must explain "hours shared by the team" in the first line. |
-| 3 | **Neither provider's own subscription feature fits our rules.** Flutterwave plans are card-only, tied to one email, retried 3 times 30 minutes apart, then cancelled. Paystack says a failed subscription charge is not retried. We want a 3-day grace period with our own retries on day 1 and day 2. | Section 5.3. Recommendation: we keep the billing clock ourselves and use the providers only to take a payment (hosted checkout, then a saved card for renewals, with a "pay link" mail as the fallback). |
-| 4 | **Where the money lands matters.** Our biggest costs (Skribby, OpenAI) are billed in USD by card. Flutterwave's pricing page says international cards are charged and settled in the local currency by default. Paystack's page says the same for naira, and describes USD settlement as a public pilot. Neither page confirms a Nigerian business can price in USD and be settled in USD. | Sections 5.6 and 12. Naira through Paystack settles in naira, which is the normal case. The dollar side (Flutterwave) is the first thing to prove in its test mode; until it is proven, do not promise that USD payments are settled in USD. |
-| 5 | **The hours rule lives in one place today, which makes the change small and safe.** Every way of sending the bot (pasted link, Send now, calendar auto-join) goes through `placement.reserve_slot`; the hours check is one block there (`app/placement.py:175`). Replacing a per-person lifetime cap with a per-team monthly pool is a change to that block, the ledger and the warnings, not a rewrite. | Sections 1 and 2. Two real gaps found on the way: the "hours used up" notice is sent once per skipped meeting (a team with an empty pool would get a flood), and the running-meeting estimate counts only the person's own meetings, not their teammates'. |
+**What this is for.** Today every account gets every feature and a lifetime cap of 5 recorded hours, and nobody can pay. This spec says how a person pays for hours, how those hours are counted, what each person can and cannot do with and without a plan, what happens at the limits, and how money gets in through Paystack (naira) and Flutterwave (dollars), in small safe steps.
 
 ### What is decided and what is only proposed
 
 | Topic | Status | Where |
 |---|---|---|
-| Q2: hours pooled per team, counted once per meeting however many attend, failed bots count zero | **DECIDED 2026-11-15** | 3.1 |
-| Q3: warn at 80%; at 100% recordings already running finish and new ones stop | **DECIDED 2026-11-15** | 3.3 |
-| Q4: monthly billing, no rollover of plan hours, extra-hour packs, a price change applies at renewal | **DECIDED 2026-11-15** | 3.2, 3.4 |
-| Q6: naira for a Nigerian billing country, dollars everywhere else | **DECIDED 2026-11-15** | 5.2 |
-| Grace is **3 days** and **no new hours are granted during grace** (his words: 7 days is too long because a team could run 40 hours on a failed card; his reply "Yes, agreed") | **DECIDED 2026-11-15** | 3.3 |
-| Providers: **build both** behind one layer: Paystack for naira, Flutterwave for dollars; the routing key is the billing country the team owner chooses (his words: "I have both Flutterwave accounts and Paystack accounts already ... our system should be smart enough to detect that this person is billing outside of Nigeria or billing from Nigeria") | **DECIDED 2026-11-15** | 5 |
-| Both accounts exist and are **new, made for Beyric**: his words (relayed 2026-11-15): "I already created another Paystack business [account], so we are not reusing the one that has been used already. So this one is new for both Paystack and Flutterwave." Assumed to sit under Beyrichq LTD; their business-verification (KYC) status is **not known** and is not stated as fact here. Test keys still to be put by him in a local env file | **DECIDED 2026-11-15** (fact); keys pending | 5.7 |
-| Test keys go in a local env file, never in chat and never in git | **DECIDED 2026-11-15** (rule from the lead's brief) | 5.7 |
-| Hours shared per team, never "unlimited" | **DECIDED** (handoff) | 3 |
-| The word "free" is not used anywhere; a one-time trial; no permanent free plan | **DECIDED** (handoff) | 3.8, 10 |
-| Calendar auto-join stays on every plan | **DECIDED** (handoff; he did not object) | 2 |
-| Business plan not shown | **DECIDED** (handoff) | 10 |
-| First paid plan: about 20 meeting hours a month for about 15 USD; next tier 40 h | His guess, **not a decision** | 4 |
-| Q1 price hold, Q5 beyond the grace change, Q8, Q9, Q10 | **OPEN** | 11 |
-| Everything else in sections 2 to 9 not listed above | **PROPOSED** | marked inline |
+| A plan belongs to a **person**; the hours are that person's; no team pool, no member limit on a plan, no team of one, no hours team | **DECIDED 2026-11-15** ("Yes, per person") | 1.4, 2 |
+| Teams stay a place to share: a member reads shared meetings, transcripts, notes, decisions and tasks without paying | **DECIDED 2026-11-15** | 1.4, 2.2 |
+| Hours are charged to the **recorder** (the person whose bot recorded the meeting) when the recording is prepared; sharing or moving a meeting later never moves the charge | **DECIDED 2026-11-15** | 3.1 |
+| Ask Beyric, new translations, rewriting notes, new recordings and calendar auto-join stop for anyone with no plan, an expired plan or a used-up trial; reading, search, export, tasks, decisions and delete stay | **DECIDED 2026-11-15** | 2.2, 2.3 |
+| Hours counted once per meeting, failed bots count zero (Q2); 80% warning and at 100% running recordings finish and new ones stop, now **per person** (Q3); monthly billing, no rollover, packs, a price change applies at renewal (Q4); naira for a Nigerian billing country and dollars elsewhere (Q6) | **DECIDED 2026-11-15** | 3 |
+| Grace is **3 days** after a failed renewal and **no new hours until payment succeeds**, now per person | **DECIDED 2026-11-15** | 3.3 |
+| Both providers, Paystack for naira and Flutterwave for dollars, behind one layer, routed by the **billing country the person chooses at first purchase** and saved on their profile; we keep the billing clock ourselves; both accounts are new and made for Beyric | **DECIDED 2026-11-15** | 5 |
+| Trial: about 3 hours per person, no card, once per person (email fingerprint); the 10 pilot accounts keep what is left of their 5 hours as a pilot grant | **DECIDED 2026-11-15** | 3.8, 3.9 |
+| The trial **also ends 14 days after sign-up**, whichever comes first | **PROPOSED** (the lead's), to confirm | 3.8 |
+| The pilot grant also expires (60 days after paid plans open) | **PROPOSED**, flagged | 3.9 |
+| Price and hours: 18 USD for 20 hours a month is a suggestion; he said 15, 17 or 18 and has not chosen | **NOT DECIDED** | 4.2 |
+| Test keys in a local env file, never in chat, never in git | **DECIDED 2026-11-15** | 5.7 |
+| The word "free" is not used anywhere; no permanent free plan; Business plan not shown; calendar auto-join stays on for everyone who has hours | **DECIDED** (handoff) | 10 |
+| Everything else not listed | **PROPOSED** | marked inline |
 
-### Decisions needed, in short
+### The findings that matter most
 
-Section 11 now holds the five questions still open (1, 5 beyond the grace change, 8, 9, 10), each with a plain-words line saying what it means, and the five decided on 2026-11-15. Facts only an accountant or lawyer can supply are in sections 6 and 9.
+| # | Finding | Why it matters |
+|---|---|---|
+| 1 | **The per-person model is almost what the code already does.** `usage.record_usage` charges the meeting's owner, the recorder (`app/usage.py:68-90`), the cap is per user (`app/usage.py:31`), and the join gate is one block in `placement.reserve_slot` that already reads the person's own hours (`app/placement.py:174-179`). The change is a monthly grant instead of a lifetime cap, plus plan states, not a new accounting system. | Sections 1 and 8. Smaller and safer than the pooled version. |
+| 2 | **At 18 USD for 20 hours the margin is real only after the one-transcript flip.** For 20 hours fully used, international card, net of fees: +3.9 to +5.9 USD (22 to 33%) after the flip, -1.1 to +2.3 on today's Skribby-only cost. At 15 USD the same team leaves +1.0 to +3.0 after the flip and loses 0.6 to 4.0 today. The flip is unproven. | Section 4.2. The price waits on a measured cost (open question 1). |
+| 3 | **Several teammates with the same calendar event: today the first bot placed wins and the others are skipped.** That decides who pays. The rule is a database check (`app/placement.py:203-212`), written while on Vexa and not proved live under Skribby with three calendars. The skipped person gets a notice that is now out of date ("Sharing notes between accounts is not available yet", `app/join_runner.py:831-835`). | Section 2.5. "Prefer the organizer's bot" is a follow-up question for him, not decided. |
+| 4 | **The rewrite-notes route was missing from the gates, and it costs money.** `POST /meetings/{id}/regenerate` (`app/api.py:814`, `app/services.py:656`) calls the notes model on every press. Review's "add the corrected spelling" does not call a model (`app/api_workspace.py:297-315`), so it is not gated. | Section 2.3. |
+| 5 | **Neither provider's own subscription feature gives a 3-day grace with our retries**, and the dollar side of settlement is unproven. | Sections 5.3 and 5.6. Decided: we keep the billing clock; each provider is proved in its own test mode. |
 
-## 1. What exists today, and what a plan replaces
+### Still open (short)
+
+Price and hours; whether the trial also ends after 14 days; whether the organizer's bot is preferred; packs; the refund rules; whether the pilot grant expires. Section 11 has each in plain words with my recommendation.
+
+## 1. What exists today, and what changes
 
 ### 1.1 Today's rule in plain words
 
@@ -58,123 +59,136 @@ A person has a lifetime allowance of recorded hours: 5 hours for every non-admin
 | The ledger table | `app/models.py:812` `UsageEntry` (`usage_entries`) | `user_id` (set null on user delete), `email_hash`, `meeting_id` (unique), `seconds` |
 | The warning | `app/usage.py:92-119` `_warn_when_low` | at 80% (`LOW_HOURS_FRACTION`) one in-app notice per person, once ever, "Most of your recorded hours are used". No mail |
 | The stop | `app/placement.py:174-179` inside `reserve_slot` | refuses with `hours_cap_reached` (403) when used is at or above the cap, under the placement lock |
-| Who calls it | `services.py:943` (pasted link), `send_now.py` (Send now), `join_runner.py:640` (calendar auto-join) through `place_bot` | one gate for all three |
+| Who calls it | `services.py:943` (pasted link), `send_now.py` (Send now), `join_runner.py:642` (calendar auto-join) through `place_bot` | one gate for all three |
 | What the person is told | `services.py:540-553` `hours_cap_message`; `join_runner.py:810-830` `_SKIP_REASONS` and `_NOTICES` | the message says "for the pilot" and asks them to write to hello@beyrictech.com; a calendar skip raises one notification per skipped meeting (dedupe key `calendar.{reason}:{join.id}`) |
 | What the screens read | `app/api.py:191-205` (`usage` in the session payload: `used_seconds`, `cap_seconds`) | the sidebar usage bar and the "hours used up" state |
 | Admin | `app/admin.py:87-126, 188-194`, `app/api_admin.py:68-110`, `app/api_schemas.py:448-513` | per-person override and the pilot default |
 | Sign-up brake | `app/signup.py:86` `slots_taken`, `app_state.max_accounts` (10) | the pilot account cap |
 | Teams | `app/teams.py` (`MAX_OWNED_TEAMS = 3` at line 239, `create_owned_team` line 180, `default_membership` line 78), `app/visibility.py`, `app/team_invites.py:38-47` | membership, personal team, invitation caps |
 
-### 1.3 What a plan has to replace
+### 1.3 What a plan changes
+
+The rule is already per person, so the plan replaces the **number**, not the structure.
 
 | Today | Becomes |
 |---|---|
-| One lifetime allowance per person | A monthly pool per paying team, plus a one-time trial per person |
-| `effective_cap(user)` | `entitlements.pool_for(user)` (section 2.1): which pool pays for this person's recordings, and how much is left |
-| `hours_used(user)` counts the person's own running meetings | Counts every running meeting charged to the same pool (teammates' too) |
-| `_warn_when_low`: once per person, in-app only | Once per pool per period at 80% and at 100%, in-app plus a mail to the team's owners and admins (section 3.3) |
-| `hours_cap_message` ("for the pilot", asks for a mail) | A message that names the team's pool and links to the billing screen (section 3.3) |
-| Admin sets a number on a person | Admin grants hours to a team with a written reason (`hour_grants`, kind `admin_gift`); the platform admin stays uncapped |
+| A lifetime allowance of 5 hours per person (`effective_cap`) | The person's hours: a one-time trial, a monthly plan, packs, and for the pilot accounts a pilot grant (section 3) |
+| `effective_cap(user)` returns a number or none | `entitlements.status(user)` returns the person's state (`trial`, `pilot`, `active`, `past_due`, `lapsed`, `none`) and hours left (section 2.1) |
+| `hours_used` counts the person's own running meetings | Same: the person's own, which is now exactly the right set (no pool, so no teammates' meetings to count) |
+| `_warn_when_low`: once per person ever, in-app only | Once per person per period at 80% and at 100%, in-app plus a mail to the person (section 3.3) |
+| `hours_cap_message` ("for the pilot", asks them to write to hello@beyrictech.com) | A message naming the person's plan state and linking to the billing screen |
+| Admin sets a number on a person | Admin grants hours to a person with a written reason (`hour_grants`, kind `admin_gift`); the platform admin stays uncapped |
+| Every feature open to every account | Ask Beyric, new translations and rewriting notes need a live plan or trial (section 2.3) |
 
-### 1.4 Personal team and the team model (what the plan attaches to)
+### 1.4 Teams stay what they are: a place to share
 
-From the multi-team design (`docs/superpowers/specs/2026-11-13-multi-team-design.md`, approved) and `app/teams.py`: every person has one permanent personal team (nobody else can join it, it has no integrations, Slack and Linear are refused on it with 409 `personal_team`) and can belong to several other teams; a person may own up to 3 ordinary teams. A meeting starts private and the recorder shares it to one team or moves it to one. Billing was deliberately left out of that design ("later, subscription and billing attach to a team").
+From the multi-team design (`docs/superpowers/specs/2026-11-13-multi-team-design.md`, approved) and `app/teams.py`: every person has one permanent personal team that nobody else can join (Slack and Linear are refused on it with 409 `personal_team`) and may belong to several other teams (a person may own up to 3, `app/teams.py:239`). A meeting starts private and its recorder shares it to one team or moves it to one.
 
-PROPOSED rules for where billing attaches:
+**Nothing in teams changes for billing (DECIDED 2026-11-15).** There is no team pool, no member limit that comes from a plan, no "team of one", no "hours team" and no payer of a team. A team member reads the meetings shared or moved to the team, with their transcripts, notes, decisions and tasks, whether or not they subscribe; the one visibility rule in `app/visibility.py` is untouched. What a plan decides is what a **person** may do: record, auto-join, ask, translate, rewrite. A solo person needs no team at all. The existing team limits (`MAX_OWNED_TEAMS`, invitation caps in `app/team_invites.py`) stay as abuse guards and are not tied to a plan.
 
-1. **A subscription belongs to an ordinary team, never to a personal team.** A person who wants to pay alone is not blocked: subscribing creates a one-person team for them in one step (shown as "Just me"; they can own three teams). The personal team only ever holds the person's trial hours. Reason: "teams, not individuals" is the target market, the personal team is a space nobody else can enter, and a plan on a team keeps one pool and one payer.
-2. **Every person has one "hours team": the pool their recordings are charged to.** Default: the same team the app already treats as their default (`teams.default_membership`: their one ordinary team if they have exactly one, else their personal team). They can pick another team they belong to in Settings. The meeting is charged at the moment the recording is prepared, to the hours team the recorder has at that moment. Sharing, moving or unsharing the meeting later never moves the charge (this matches the multi-team design: "hours are still charged to the recorder", section 6.4).
-3. **The payer is a person**: the team's owner by default (only an owner can start, change or cancel a plan; admins can buy extra-hour packs; members can see the pool). If the owner changes (`teams.transfer_owner`, `teams.py:525`) the saved card does not move with them: the plan keeps running to the end of the paid period and the new owner must add a card to renew (section 3.7).
+## 2. The plan model, states and where each gate lives
 
-## 2. The plan model, entitlements and where each check lives
+### 2.1 The model (PROPOSED shape, DECIDED principle)
 
-### 2.1 Model in one paragraph (PROPOSED)
+Plans are rows in a table, not code: a plan has a code, a name, monthly hours and one price per currency. A person has at most one live subscription with a status. Hours are held in grants (a trial, a pilot grant, a plan period, a pack, an admin gift), and every counted recording is split across the person's grants in a fixed order (section 3.2). One small module, `app/entitlements.py`, answers every question ("may this person start a recording?", "may this person ask Beyric?", "how many hours are left?"). No other code compares plan names or statuses, the same way `app/visibility.py` is the only place that decides who may read a meeting.
 
-Plans are rows in a table, not code: a plan has a code, a name, monthly hours, a member limit and one price per currency. A team has at most one live subscription row with a status. Hours are held in grants (a trial, a plan period, a pack, an admin gift), and every counted recording is split across grants in a fixed order. One small module, `app/entitlements.py`, answers every question ("may this person start a recording?", "may this team ask Beyric?", "how many hours are left?"). No other code compares plan names or statuses, the same way `app/visibility.py` is the only place that decides who may read a meeting.
+### 2.2 What a person can do in each state (DECIDED 2026-11-15, details PROPOSED)
 
-### 2.2 Entitlements for launch (PROPOSED)
+| State | Who | Can do | Cannot do |
+|---|---|---|---|
+| `trial` | a person in the first 3 hours or 14 days after sign-up (the 14 days PROPOSED) | everything | new recordings once the 3 hours are used; everything in the next row once the trial has ended |
+| `pilot` | the 10 pilot accounts while a pilot grant has hours (and, PROPOSED, before it expires) | everything | same as above |
+| `active` | a person with a paid plan | everything: record, calendar auto-join, Ask Beyric, translate, rewrite | new recordings while the plan's hours and packs are used up (Ask, translate and rewrite **keep working**: they use no recorded hours) |
+| `past_due` | the 3 days after a failed renewal (section 3.3) | read, search, export, tasks, decisions, Ask, translate, rewrite, settings, billing; record **only from hours still left** | the new period's hours (granted only when payment succeeds); change plan |
+| `lapsed`, `none`, or a trial that has ended | no plan, an expired plan, a used-up or expired trial, or a person who never subscribed (for example a teammate who only reads) | **read** everything they are allowed to read (their own meetings and everything shared with their teams), **search**, **export**, tasks, decisions, settings, billing, **delete**; record only from paid pack hours that remain | **Ask Beyric, new translations, rewriting notes, new recordings and calendar auto-join** |
 
-The pricing page already promises that "every feature exists for every account" and that plans differ only in hours. So the launch plans differ in **hours and a member limit only**. The gates below exist so a feature can be held back later, and so a team with no active plan stops costing us money.
+A teammate who never subscribes lives in the last row: they read what the team shares, search it, export it and use tasks and decisions. They cannot Ask Beyric, translate or rewrite until they subscribe, and their own bot never joins. This is what the model is for: a friend who wants the features pays.
 
-| Plan state | What the team can do | What stops |
-|---|---|---|
-| `trial` (a person's own, personal team) | everything, until the trial hours run out | new recordings once the hours are used |
-| `active` | everything | nothing |
-| `past_due` (the 3 days of grace after a failed renewal, section 3.3) | read, search, export, tasks, decisions, **Ask Beyric**, translation, Slack and Linear, calendar connection, settings, billing; **recordings and calendar joins only from hours still left in the pool** | **the new period's hours** (they are granted only when payment succeeds); upgrade and downgrade |
-| `lapsed` (the grace ended, no renewal) or no plan | read, search, export, tasks board, decisions, settings, billing, delete | new recordings, calendar auto-join joins, Ask Beyric, new translations, connecting Slack or Linear |
-| Pool empty (plan active, hours used) | everything that does not need new recorded hours | new recordings and auto-joins until a pack or upgrade |
-
-Cost reasoning: recordings cost 0.5 to 0.9 USD an hour; Ask and translation call OpenAI per use; reading, exporting and the board cost almost nothing, so they stay open after a lapse. That keeps the promise "notes and export stay available".
+Cost reasoning: recordings cost 0.5 to 0.9 USD an hour; Ask, translation and rewriting each call OpenAI per use; reading, searching, exporting and the board cost almost nothing, so they stay open. That keeps the promise "notes and export stay available".
 
 ### 2.3 Per-feature gates and where each check lives
 
+All of them are checked against the **caller**: the person pressing the button, not the meeting's recorder. A team admin who rewrites a moved meeting's notes is gated by their own plan.
+
 | Gate | Check goes here (file:line today) | Refusal | Notes |
 |---|---|---|---|
-| **Join: pasted link, Send now, shared link** | `app/placement.py:174-179` in `reserve_slot`, replacing the per-person block with `entitlements.check_join(session, user, now)` | keep 403 `hours_cap_reached` (the frontend already knows it); add a `reason` field (`pool_empty`, `plan_lapsed`) | Runs under the placement lock, so two starts cannot both read the last free hour. `services.placement_refusal` (`services.py:548`) maps it. |
-| **Calendar auto-join** | the same line, reached through `join_runner.place_bot` (`join_runner.py:640`); skip reasons in `_SKIP_REASONS` (`join_runner.py:810`) | `hours_cap` stays; add `plan_lapsed` | Connecting a calendar, the rule picker and the per-event switch are never gated (DECIDED: auto-join on every plan). |
-| **Ask Beyric** | `app/api_ask.py` route `POST /ask` (line 82) calling `ask.answer` (`app/ask.py:841`, daily limit `ask_daily_limit` at line 857) | 403 `plan_inactive` for a lapsed team | The existing per-person daily limit stays as a cost brake. |
-| **Export** (PDF, Word) | `app/api.py:516` `export_meeting` | not gated | Promise: export stays after a lapse. |
-| **Translation** | `app/api_translation.py:73` `request_translation` | 403 `plan_inactive` for a lapsed team; reading an existing translation is never gated | French and Spanish notes only today. |
-| **Integrations** (Slack, Linear) | `app/api_integrations.py` connect routes (personal-team refusal at line 31-41 shows the pattern) | connecting refused when lapsed; posting for earlier meetings continues | A post cannot be unsent anyway (multi-team design 6.9). |
-| **Team size** | `app/teams.py:302` `join`, `app/team_invites.py:240` `_check_caps` (today `MAX_PENDING = 10`, `MAX_PER_DAY = 20`) | 409 `member_limit` | There is no seat price, but a pooled plan with no limit could be shared by hundreds. Limit comes from the plan row. The numbers are not decided (Question 2 asks only for the rule; Adebayo sets them). |
-| **Owned teams** | `app/teams.py:239` `MAX_OWNED_TEAMS = 3` | 409 `team_limit` | Stays 3; later it can come from the plan. |
-| **Sign-up** | `app/signup.py:86` `slots_taken`, `app_state.max_accounts` (10) | pilot full | Keep it as the brake on trial give-aways when sign-up opens wider (section 3.8). |
+| **Join: pasted link, Send now, shared link** | `app/placement.py:174-179` in `reserve_slot`: the block that reads `usage.effective_cap` and `usage.hours_used` becomes `entitlements.check_join(session, user, now)` | keep 403 `hours_cap_reached` (the frontend already knows it); add a `reason` field (`no_hours`, `no_plan`) | Runs under the placement lock, so two starts cannot both read the last free hour. `services.placement_refusal` (`services.py:548`) maps it. |
+| **Calendar auto-join** | the same block, reached through `join_runner.place_bot` (`app/join_runner.py:642`); skip reasons in `_SKIP_REASONS` (`join_runner.py:810`) | `hours_cap` stays; add `no_plan` | Connecting a calendar, the rule picker and the per-event switch are never gated. |
+| **Ask Beyric** | `app/api_ask.py:82` route `POST /ask`, calling `ask.answer` (`app/ask.py:841`; the per-person daily limit `ask_daily_limit` is read at line 857) | 403 `plan_inactive` | The existing daily limit stays as a cost brake. Ask answers from what the asker may read, so a teammate's shared meetings are readable by Ask only if the asker has a plan. |
+| **Translation (new requests)** | `app/api_translation.py:73` `request_translation` | 403 `plan_inactive` | Reading an existing translation is never gated. French and Spanish notes only today. |
+| **Rewrite notes with another template (was missing)** | `app/api.py:814` route `POST /meetings/{id}/regenerate` (`regenerate_notes`, line 819) calling `services.regenerate_notes` (`app/services.py:656`), which calls the notes model each time (`notes_model`, recorded in `ai_runs` as kind `notes`). The legacy page route is `app/web.py:175` | 403 `plan_inactive` | Costs OpenAI on every press. Gate both routes in `services.regenerate_notes` so the legacy route cannot bypass it. |
+| **Review: "add the corrected spelling"** | `app/api_workspace.py:299-315` `add_review_term` | **not gated** | It only adds the term to the person's vocabulary and marks the item checked; it calls no model (its docstring says the notes are not rewritten). The paid step is the "rewrite the notes" button that follows, which is `POST /meetings/{id}/regenerate` above. |
+| **Export** (PDF, Word) | `app/api.py:516` `export_meeting` | not gated | Promise: export stays. |
+| **Search, notes, transcript, tasks, decisions, series** | the existing reads | not gated | Reading costs almost nothing. |
+| **Retry of a failed meeting** | `services.retry_meeting` (`app/api.py:810`) | not gated | The recording's hours are counted once per meeting (`usage.record_usage` is idempotent), so a retry never charges again; the small notes cost is accepted. |
+| **Integrations** (Slack, Linear), teams, invitations | `app/api_integrations.py`, `app/teams.py`, `app/team_invites.py` | not gated | They belong to teams and cost nothing per use; they are not part of a plan. |
+| **Sign-up** | `app/signup.py:86` `slots_taken`, `app_state.max_accounts` (10) | pilot full | Kept as the brake on trial give-aways while sign-up is open (section 3.8). |
 
 ### 2.4 What the screens read
 
-`app/api.py:191-205` builds `usage` for the session (`used_seconds`, `cap_seconds`). Keep both names and fill them from the person's hours team so the existing sidebar bar keeps working, and add `pool` fields (team name, period end, status, warning level) the frontend can use when it is ready. A new `docs/fe-integration-guide-billing.md` is built from live captures in the stage that adds each field (section 8).
+`app/api.py:191-205` builds `usage` for the session (`used_seconds`, `cap_seconds`). Keep both names and fill them from the person's current grants so the existing sidebar bar keeps working, and add fields the frontend can use when it is ready (state, period end, the trial's end date, warning level). A new `docs/fe-integration-guide-billing.md` is built from live captures in the stage that adds each field (section 8).
+
+### 2.5 Several teammates, one calendar event: who pays (what the code does today)
+
+When two or more teammates connect calendars that hold the same event with the same meeting link, each one's join runner tries to send that person's bot. The code allows **one live bot per meeting code**: `reserve_slot` refuses another person's bot when a meeting on the same platform and code is already in the call (`app/placement.py:203-212`, a check in our own database, not in the bot provider), the others are skipped with `meeting_has_note_taker` and are not retried (`app/join_runner.py:94-102`), and the skipped person is told (`app/join_runner.py:831-835`). Two runners racing on the same code are separated by the unique index `uq_scheduled_joins_live_code` and the placement lock (`app/models.py:655`, `app/join_runner.py:654`). So **the first account placed pays**, and the others are charged nothing because their bot never recorded.
+
+**Not proved live:** this was written while on Vexa and has not been tested under Skribby with three calendars connected. The first live test with three accounts is part of stage S8 (section 8).
+
+**Three things this rule leaves rough:** (1) "first placed" is a race, not a choice: the organizer's bot may lose to a guest's. (2) The skipped person's notice says "Sharing notes between accounts is not available yet", which stopped being true when teams arrived; the notes are visible to them only if the recorder shares the meeting (private by default, with an optional auto-share team per person). (3) The recorder alone is charged, which is what the model wants.
+
+**Follow-up question for Adebayo, not decided (section 11, question 3):** prefer the organizer's bot. The data exists: each calendar event stores whether the person is the organizer (`CalendarEvent.organizer_self`, `app/models.py:621`, filled for Google in `app/gcal_sync.py:315`; for Outlook the query asks for `isOrganizer`, `app/graph_client.py:81`, but I did not check that it reaches `organizer_self`), and a rule "only meetings I organize" already exists (`app/gcal_rules.py:96`).
 
 ## 3. Hours accounting, limits, grace, downgrade, lapse, cancel, refund
 
-Marked **DECIDED 2026-11-15** below: pooled per team and counted once per meeting with failed bots at zero (Q2), the 80% and 100% rules (Q3), monthly billing with no rollover, packs and a price change at renewal (Q4), and the **3-day grace with no new hours during grace**. Everything else in this section is **PROPOSED** (refund and cancel rules still wait for Q5).
+Marked **DECIDED 2026-11-15** below: charging the recorder, once per meeting and failed bots at zero (Q2), 80% and 100% (Q3), monthly with no rollover, packs and a price change at renewal (Q4), the 3-day grace with no new hours. Everything else here is **PROPOSED**; refund and cancel rules wait for the open questions.
 
-### 3.1 What counts
+### 3.1 What counts and who pays (DECIDED 2026-11-15)
 
 | Question | Rule | Check against today's code |
 |---|---|---|
-| Unit | seconds of the recording the pipeline prepared (what we transcribe and pay for); shown as hours with one decimal | same as `usage.py` today |
-| Many people in one meeting | counts **once**: the recording is what counts, not the attendees | `placement.py` already refuses a second bot into the same live meeting (`meeting_has_note_taker`, `already_in_meeting`), so it holds for a live meeting. The same Meet link used again later is a new recording and counts again. |
-| Failed bots | count **zero**: nothing is counted unless audio was prepared | true today (`pipeline.py:1053` runs only when a recording exists). Our own cost is not zero: Skribby bills a bot from creation to its end, and a bot never admitted is free only for the first 10 minutes of waiting (https://skribby.io/docs/guides/billing, "What Counts as Billable Time"). |
-| Shared, moved, viewed, exported, asked about | cost no hours | by design |
-| Rounding | none: counted in seconds | Skribby bills per minute, so we lose under a minute a meeting; fine |
-| Whose pool | the recorder's hours team at the moment the recording is prepared; never re-charged | section 1.4 |
+| Unit | seconds of the recording the pipeline prepared (what we transcribe and pay for); shown as hours with one decimal | same as `app/usage.py` today |
+| **Who is charged** | **the recorder**: the person whose bot recorded the meeting, at the moment the recording is prepared. Sharing, moving or unsharing the meeting later never moves the charge | `usage.record_usage` charges `meeting.owner_user_id` (`app/usage.py:77`), and a moved meeting keeps its recorder as `owner_user_id` (`app/visibility.py`, docstring) |
+| Many people in one meeting | counts **once**: the recording is what counts, not the attendees; with several teammates' calendars the first placed bot is the recorder (section 2.5) | `placement.py` refuses a second bot into the same live meeting |
+| Failed bots | count **zero**: nothing is counted unless audio was prepared | true today (`app/pipeline.py:1053` runs only when a recording exists). Our own cost is not zero: Skribby bills a bot from creation to its end, and a bot never admitted is free only for the first 10 minutes of waiting (https://skribby.io/docs/guides/billing, "What Counts as Billable Time") |
+| Shared, moved, read, exported, asked about | cost no recorded hours | by design |
+| Rounding | none: counted in seconds | Skribby bills per minute, so we lose under a minute a meeting |
 
-### 3.2 The pool and the order hours are used
+### 3.2 The order hours are used
 
-A pool is the team's grants. For a recording of S seconds charged to a team, the seconds are taken in this order, splitting a recording across two grants when needed:
+For a recording of S seconds charged to a person, the seconds are taken in this order, splitting a recording across two grants when needed:
 
-1. the recorder's own trial grant, if any is left (trial hours are the person's; using them first keeps the team's paid hours),
-2. the team's plan hours, oldest period first (a period's hours expire at its end, except that during the 3 days of grace after a failed renewal the old period's leftover stays usable, section 3.3),
-3. the team's packs, oldest expiry first.
+1. the person's trial or pilot grant, if any is left and not ended (it ends first by design),
+2. their plan hours, oldest period first (a period's hours expire at its end, except that during the 3 days of grace after a failed renewal the old period's leftover stays usable, section 3.3),
+3. their packs, oldest expiry first.
 
-Each split is recorded in `usage_allocations` (section 7), so a grant's remaining hours are always a sum, never a number someone edited. This is why a table of allocations is proposed instead of a running balance: it is auditable, and an expiry or a refund can be explained line by line.
+Each split is recorded in `usage_allocations` (section 7), so a grant's remaining hours are always a sum, never a number someone edited: auditable, and an expiry or a refund can be explained line by line. That matters here more than before, because the reason for the per-person model was that a team owner could not explain where hours went; now each person's ledger explains theirs.
 
-### 3.3 Warnings, stop and the exact moments
+### 3.3 Warnings, stop and the exact moments (per person)
 
 | Moment | What happens | Who is told | How |
 |---|---|---|---|
-| Period starts (first payment, or each renewal) | plan hours for the period are granted; the 80% and 100% flags for this pool reset | owners and admins: receipt mail (section 6) | mail |
-| Used reaches **80%** of what the pool holds (plan hours of this period plus unexpired pack hours) | warning once per pool per period | owners and admins; the person whose recording crossed it | in-app notification for each; one mail to owners and admins. Today's 80% rule (`LOW_HOURS_FRACTION`) is per person and in-app only. |
-| Used reaches **100%** | **in-progress recordings finish and are counted**; **no new recording starts** (pasted link, Send now, calendar auto-join all refuse with `hours_cap_reached`, reason `pool_empty`) until a pack is bought, the plan is upgraded or the period renews | owners and admins; every member sees the sidebar bar full | one mail to owners and admins, in-app for all. **Only one** "pool is empty" notice per pool per period, not one per skipped meeting (today's code raises one per skipped meeting: `join_runner.py` dedupe key includes the join id). Each skipped meeting still shows as "Not recorded" with a Send now button, which is the existing way to recover once hours exist. |
-| Pack bought or upgrade paid | hours are granted immediately and the stop lifts | the buyer | the billing screen and a receipt mail |
+| Period starts (first payment, or each renewal) | the plan hours for the period are granted; the person's 80% and 100% flags reset | the person: receipt mail (section 6) | mail |
+| Used reaches **80%** of what the person holds (plan hours of this period plus unexpired pack hours; for a trial, 80% of the trial hours) | warning once per period | the person | in-app notification and one mail. Today's 80% rule (`LOW_HOURS_FRACTION`, `app/usage.py:23`) is in-app only and once ever |
+| Used reaches **100%** | **in-progress recordings finish and are counted**; **no new recording starts** (pasted link, Send now, calendar auto-join all refuse with `hours_cap_reached`, reason `no_hours`) until a pack is bought, the plan is upgraded or the period renews. **Ask, translate and rewrite keep working** on a paid plan | the person | one mail, in-app. **Only one** "out of hours" notice per person per period, not one per skipped meeting (today's code raises one per skipped meeting: the dedupe key in `app/join_runner.py` includes the join id). Each skipped meeting still shows as "Not recorded" with a Send now button, the existing way to recover once hours exist |
+| Pack bought or upgrade paid | hours are granted immediately and the stop lifts | the person | the billing screen and a receipt mail |
 | Period ends with hours left | **unused plan hours expire** (no rollover), except that after a failed renewal they stay usable until the 3-day grace ends or the payment succeeds; pack hours stay until their own expiry | none | the usage screen shows "expired" lines |
-| Renewal payment fails at the due date (day 0) | status `past_due`; **grace of 3 days (72 hours) from the due date**; the new period's hours are **not** granted (**DECIDED 2026-11-15**) | owners and admins | mail on **day 0** (payment failed, with a pay link) and on **day 2** (last day, with a pay link); a banner on every screen during grace |
+| Renewal payment fails at the due date (day 0) | status `past_due`; **grace of 3 days (72 hours) from the due date**; the new period's hours are **not** granted (**DECIDED 2026-11-15**) | the person | mail on **day 0** (payment failed, with a pay link) and on **day 2** (last day, with a pay link); a banner on every screen during grace |
 | Our retries during grace | **day 1 and day 2**, at the due hour, using the saved card; each attempt and its result are written to the payment table; a pay link in both mails is the fallback | | our own scheduler (section 5.3) |
-| Grace ends unpaid (72 hours after the due date) | status `lapsed`: the stops in section 2.2 apply (no recordings, no joins, no Ask, no translation, no new Slack or Linear connection); the old period's leftover plan hours expire; remaining paid pack hours still work for recordings (they were paid for); the team's data and exports are untouched | owners and admins | one mail; a banner |
-| Payment succeeds during grace or later | status returns to `active`; a new period starts from the payment date and its hours are granted then; the old period's leftover hours, if any are still there, expire at that moment (no rollover) | the payer | receipt mail |
+| Grace ends unpaid (72 hours after the due date) | status `lapsed`: the person falls to the last row of section 2.2; the old period's leftover plan hours expire; remaining paid pack hours still work for recordings; their data and exports are untouched | the person | one mail; a banner |
+| Payment succeeds during grace or later | status returns to `active`; a new period starts from the payment date and its hours are granted then; the old period's leftover hours, if any are still there, expire at that moment (no rollover) | the person | receipt mail |
 
-The overshoot to accept (PROPOSED): a meeting that was already running when the pool hit zero finishes and is counted in full even if that takes the pool below zero; the shortfall is **written off**, not carried into the next period and not billed. The risk is bounded: concurrent bots are limited (`user_bot_limit` per person, `bot_max_local` for the host) and a bot stops after 6 hours (`max_poll_hours`). Several teammates can start bots in the last minutes; today's estimate for running meetings (`usage.hours_used`) covers only the person's own meetings, and the pool version must count every running meeting charged to the pool.
+The overshoot to accept (PROPOSED): a meeting that was already running when the person's hours hit zero finishes and is counted in full even if that takes them below zero; the shortfall is **written off**, not carried into the next period and not billed. The risk is bounded: concurrent bots are limited (`user_bot_limit` per person, `bot_max_local` for the host) and a bot stops after 6 hours (`max_poll_hours`). Because hours are now per person, today's estimate for the person's own running meetings (`usage.hours_used`) is exactly the right set; the earlier worry about counting teammates' meetings is gone.
 
 #### Grace in exact words (DECIDED 2026-11-15)
 
-Adebayo's reason: a 7-day grace could let a team run 40 hours on a card that has failed. Agreed with him: **3 days, and no new hours until payment succeeds.**
+Adebayo's reason: a 7-day grace could let someone run 40 hours on a card that has failed. Agreed: **3 days, and no new hours until payment succeeds.**
 
 | | During the 3 days |
 |---|---|
-| **Stays on** | reading every note, transcript, decision and task; search; export (PDF and Word); the tasks board; **Ask Beyric**; translation; Slack and Linear; the calendar connection and its rules; settings; the billing screen; deleting data |
-| **Recording** | a pasted link, Send now and a calendar auto-join still start, but **only from hours still left in the pool**: the old period's unused plan hours (kept usable until grace ends or the payment succeeds) and paid pack hours that have not expired. The usual 100% rule applies when they run out |
+| **Stays on** | reading, search, export, tasks, decisions, **Ask Beyric**, translation, rewriting notes, the calendar connection and its rules, settings, the billing screen, deleting data |
+| **Recording** | a pasted link, Send now and a calendar auto-join still start, but **only from hours still left**: the old period's unused plan hours (usable until grace ends or the payment succeeds) and paid pack hours that have not expired. The 100% rule applies when they run out |
 | **Off** | the new period's hours; upgrade and downgrade. A pack may still be bought, because that is a payment that succeeded |
-| **Worst case of extra hours** | **zero** beyond hours the team had already paid for, plus the running-meeting overshoot of section 3.3 (a meeting running when the pool empties finishes; the bot stops after 6 hours, `max_poll_hours`). That is the bound he asked for |
+| **Worst case of extra hours** | **zero** beyond hours the person had already paid for, plus the running-meeting overshoot above (a meeting running when the hours run out finishes; the bot stops after 6 hours). That is the bound he asked for |
 
 Moments, counted from the due date: day 0 the attempt fails and the first mail goes; day 1 retry; day 2 retry and the second mail; at 72 hours the status becomes `lapsed`.
 
@@ -182,13 +196,13 @@ Moments, counted from the due date: day 0 the attempt fails and the first mail g
 
 | Change | Rule | Reason |
 |---|---|---|
-| **Upgrade** (Team to Team Plus) | not possible during grace; otherwise takes effect at once; we charge the price difference for the days left in the period, and add the extra hours for the same fraction of the month (rounded down to 0.1 hour); the next renewal is at the new price | simple to explain; the customer gets what they pay for immediately |
-| **Downgrade** | not possible during grace; takes effect at the next renewal (`pending_plan_code`); the current period is untouched; if the team has more members than the lower plan allows, the owner must remove some before the downgrade can be confirmed | no refunds and no half periods |
-| **Cancel** | the owner cancels; no new renewal; everything works until the period ends; no refund of the unused part; packs stay valid for their own 12 months; the team goes to the "no plan" state at the period's end | the standard SaaS rule |
-| **Price change** | applies from the next renewal only; the subscription row keeps the price it was sold at until then | DECIDED proposal in the handoff, kept here |
-| **Currency change** | not allowed mid-subscription; a new subscription in the other currency starts at the next renewal if the owner asks | avoids half-converted periods |
+| **Upgrade** (to a bigger plan) | not possible during grace; otherwise takes effect at once; we charge the price difference for the days left in the period and add the extra hours for the same fraction of the month (rounded down to 0.1 hour); the next renewal is at the new price | simple to explain; the person gets what they pay for immediately |
+| **Downgrade** | not possible during grace; takes effect at the next renewal (`pending_plan_code`); the current period is untouched | no refunds and no half periods |
+| **Cancel** | the person cancels; no new renewal; everything works until the period ends; no refund of the unused part; packs stay valid for their own 12 months; the person falls to the last row of section 2.2 at the period's end | the standard SaaS rule |
+| **Price change** (DECIDED, Q4) | applies from the next renewal only; the subscription keeps the price it was sold at until then | |
+| **Currency change** | not allowed mid-subscription; a new subscription in the other currency starts at the next renewal if the person asks (section 5.2) | avoids half-converted periods |
 
-### 3.5 Refunds (PROPOSED, and the first thing to give the lawyer)
+### 3.5 Refunds (PROPOSED, still open, and the first thing to give the lawyer)
 
 | Case | Rule |
 |---|---|
@@ -198,26 +212,33 @@ Moments, counted from the due date: day 0 the attempt fails and the first mail g
 | Pack | refunded on request within 14 days if none of its hours were used |
 | Where it happens | first version: an admin action in our own admin area that calls the provider's refund endpoint, then marks the payment `refunded` and removes the grant; **no** self-service refunds |
 
-The competitor anchor: Fathom's pricing page carries a 90-day guarantee label on its plans (https://fathom.ai/pricing, read 2026-11-15); I did not read what its terms say behind that label. Chargebacks (a bank pulling a payment back) are not described in any provider page I read; treat them as a refund plus a flag on the team and ask each provider how disputes arrive before going live.
+The competitor anchor: Fathom's pricing page carries a 90-day guarantee label on its plans (https://fathom.ai/pricing, read 2026-11-15); I did not read what its terms say behind that label. Chargebacks (a bank pulling a payment back) are not described in any provider page I read; treat them as a refund plus a flag on the account and ask each provider how disputes arrive before going live.
 
-### 3.6 Lapse: what the team keeps
+### 3.6 Lapse: what the person keeps
 
-Notes, transcripts, decisions, tasks, exports and the ability to delete everything stay for as long as the account exists (as today). How long we keep a lapsed team's data is not decided; the Privacy Policy says transcripts and notes are kept "until you ask us to delete them or close your account" (`web/components/legal/privacy-content.tsx:100`), so the lapse changes nothing. The lawyer should confirm that this is what we want to say once people stop paying.
+Notes, transcripts, decisions, tasks, exports and the ability to delete everything stay for as long as the account exists (as today). The Privacy Policy says transcripts and notes are kept "until you ask us to delete them or close your account" (`web/components/legal/privacy-content.tsx:100`), so a lapse changes nothing. The lawyer should confirm that is what we want to say once people stop paying.
 
 ### 3.7 Edge cases to decide while building
 
 | Case | Proposed handling |
 |---|---|
-| The owner deletes their account while paying | `teams.remove_users` already hands the team to an heir; the plan is set to end at the paid period's end, the heir is told, and the heir adds a card to renew. The saved card token is deleted with the owner. |
-| The team is deleted while subscribed | refused until the owner cancels; unused packs are lost, and the Terms say so |
-| A member leaves | their past recordings stay charged to the pool; their trial hours stay with them |
-| Hours team points at a team the person left | falls back to their default (section 1.4) |
+| The person deletes their account while subscribed | the subscription ends, the saved card token is deleted, no refund of the paid period; the Terms say so. Their hours-ledger rows stay under the email fingerprint, as today |
+| A recorder leaves a team or the team is deleted | nothing changes for billing: the recorder's hours and plan are theirs |
+| A moved meeting after its recorder deletes their account | the meeting stays with the team (multi-team decision); its recorded hours were already charged to the recorder |
 | The platform admin | stays uncapped (`effective_cap` returns none for `is_admin` today) |
-| Pilot accounts (10, 5 hours each) | keep their remaining pilot hours as a `pilot` grant on their personal team; nothing is charged; the grant has no expiry; before launch they get one plain mail explaining the plans. Their existing ledger rows stay. |
+| A reader-only teammate asks Beyric across shared meetings | refused with `plan_inactive` until they subscribe (section 2.2) |
 
-### 3.8 The one-time trial (PROPOSED)
+### 3.8 The one-time trial (3 hours DECIDED; the 14-day end PROPOSED)
 
-About 3 hours, once per person, given at the first confirmed sign-in, no card. It is tied to the person (and to the email fingerprint, so deleting an account and signing up again does not give a second trial; the ledger already does this for hours). It is spent first (section 3.2). No "free" wording anywhere: the word is "trial" and "included". **Risk:** every trial costs us about 0.6 to 0.9 USD an hour, so a fake account costs about 2 to 3 USD. The brake is the same one that exists now: verified email, and the account cap (`max_accounts`) kept as a ceiling on how many new trials can start while sign-up is open. Section 8 adds a daily trial-hours budget switch.
+About 3 hours, once per person, given at the first confirmed sign-in, no card (DECIDED 2026-11-15). Tied to the person and to the email fingerprint, so deleting an account and signing up again does not give a second trial (the ledger already does this for hours). Spent first (section 3.2). No "free" wording anywhere: the word is "trial" and "included".
+
+**The trial ends when the 3 hours are used or 14 days after sign-up, whichever comes first (PROPOSED, to confirm).** The reason is the lead's: a teammate who only reads would never use the 3 hours, so Ask Beyric would stay on for them forever. "Sign-up" here is the day the email is confirmed (`users.email_verified_at`, `app/models.py:131`; `users.created_at` is at line 149), because the trial is given at the first confirmed sign-in. After it ends, a person with no plan is in the last row of section 2.2.
+
+**Risk:** every trial costs us about 0.6 to 0.9 USD an hour, so a fake account costs about 2 to 3 USD. The brake is the one that exists now: verified email and the account cap (`max_accounts`), kept as a ceiling on how many new trials can start while sign-up is open. Stage S10 adds a daily trial-hours budget switch.
+
+### 3.9 The pilot grant (kept DECIDED; its expiry PROPOSED and flagged)
+
+The 10 pilot accounts keep what is left of their 5 hours as a `pilot` grant (decided). **Should the pilot grant also expire? PROPOSED: yes, 60 days after paid plans open**, with one plain mail before. Reason: the pilot grant keeps Ask, translation and rewriting switched on for as long as it has hours, which is the same "reader who never uses the hours" problem as the trial. Without an expiry, a pilot account that only reads would have those features for ever. Flagged for Adebayo (section 11, question 6).
 
 ## 4. Cost and margin arithmetic
 
@@ -237,25 +258,30 @@ About 3 hours, once per person, given at the first confirmed sign-in, no card. I
 
 Flutterwave's effective rates, from the page: international 4.8% x 1.075 = **5.16%**; local 2% x 1.075 = **2.15%**. Paystack's effective rate cannot be completed without its VAT rule.
 
-### 4.2 Margin on the first plan (about 15 USD, 20 hours), paid by an international card through Flutterwave
+### 4.2 Margin by price and hours, per person, paid by an international card through Flutterwave
 
-Net after the fee: 15.00 x (1 - 0.0516) = **14.23 USD**. Cost = hours used x cost per hour. "Margin" is before servers, mail, support, tax and currency loss.
+Net after the fee: price x (1 - 0.0516) = price x 0.9484. Cost = hours used x cost per hour from 4.1. "Margin" is before servers, mail, support, tax and currency loss. These are **estimates**: the one-transcript flip is built but not switched on and not proved (section 4A), so the "after the flip" columns are a projection, and "today" is the measured Skribby-meeting cost. No person's real monthly usage has been measured (one account), so every row assumes the full allowance is used, which is the worst case for us.
 
-| Cost case | Cost per hour | Cost at 20 h used | Margin at 20 h | Margin as % of 15 USD | Team must use less than this to make money |
-|---|---|---|---|---|---|
-| Blended, as measured (includes non-Skribby meetings) | 0.52 to 0.65 | 10.40 to 13.00 | +1.23 to +3.83 | 8 to 26% | 21.9 to 27.4 h |
-| **Skribby meetings only, today** | 0.74 to 0.91 | 14.80 to 18.20 | **-3.97 to -0.57** | -26 to -4% | **15.6 to 19.2 h** |
-| One transcript (the flip), projected | 0.56 to 0.66 | 11.20 to 13.20 | +1.03 to +3.03 | 7 to 20% | 21.6 to 25.4 h |
+Per row, costs for the allowance fully used: after the flip 0.56 to 0.66 USD an hour, today on Skribby meetings 0.74 to 0.91 USD an hour.
 
-At 70% use (14 hours): blended +5.13 to +6.95; Skribby-only today +1.49 to +3.87; one transcript +4.99 to +6.39.
+| Offer | Price per hour | Net after the 5.16% fee | Margin after the flip | Margin today (Skribby-only) | Break-even hours after the flip | Break-even hours today |
+|---|---|---|---|---|---|---|
+| **15 USD for 20 hours** | 0.75 | 14.23 | **+1.0 to +3.0** (7 to 20%) | **-4.0 to -0.6** (-26 to -4%) | 21.6 to 25.4 | 15.6 to 19.2 |
+| **17 USD for 20 hours** | 0.85 | 16.12 | **+2.9 to +4.9** (17 to 29%) | **-2.1 to +1.3** (-12 to +8%) | 24.4 to 28.8 | 17.7 to 21.8 |
+| **18 USD for 20 hours** (the lead's suggestion) | 0.90 | 17.07 | **+3.9 to +5.9** (22 to 33%) | **-1.1 to +2.3** (-6 to +13%) | 25.9 to 30.5 | 18.8 to 23.1 |
+| **15 USD for 15 hours** | 1.00 | 14.23 | **+4.3 to +5.8** (29 to 39%) | **+0.6 to +3.1** (4 to 21%) | above 15 | above 15 |
 
-What price would make a plan safe? Break-even price for 20 hours on the worst Skribby-only case: 18.20 / 0.9484 = **19.19 USD** (this is the lead's "nearer 19"). For a 30% margin on the one-transcript case: 13.20 / (0.9484 - 0.30) = **20.36 USD**, and 11.20 / 0.6484 = 17.27 USD at its best. So 15 USD for 20 full hours is viable only after the flip, and only because few teams will use every hour. **No team's real usage has been measured** (one account); the shadow stage (section 8, S1) measures hours per team per month before any price is final.
+How to read the break-even columns: a person who uses fewer hours than the break-even number leaves us a profit. Where break-even is above the allowance (every "after the flip" figure for the 20-hour offers, and both figures for 15 hours), the offer cannot lose on direct cost even if the person uses every hour. Only today's Skribby-only cost can push the 20-hour offers into a loss, and only when almost all hours are used.
 
-The table is the dollar case (international card through Flutterwave). A Nigerian team paying a local card in naira through Paystack pays 1.5% + NGN 100 (VAT on that fee is not stated on Paystack's page), which is below the 5.16% used above, so the naira case leaves a little more margin per payment; a foreign card charged in naira costs more (3.9% + NGN 100). The naira list itself is Adebayo's to set.
+Checked: I recomputed every figure above from the inputs in 4.1 and they match the table the lead showed Adebayo (15, 17 and 18 USD for 20 hours, and 15 USD for 15 hours).
+
+A second tier at about 34 USD for 40 hours (0.85 USD an hour, a suggestion only) gives +5.8 to +9.8 after the flip (17 to 29%) and -4.2 to +2.6 today. A naira customer paying a local card through Paystack pays 1.5% + NGN 100 (VAT on that fee is not on Paystack's page), below the 5.16% used above, so the naira case leaves a little more per payment; a foreign card charged in naira costs more (3.9% + NGN 100). The naira price list is Adebayo's to set.
+
+What the table says: **18 USD for 20 hours is the first offer with a margin that survives a bad month even before the flip, and a comfortable one after it.** 15 USD for 20 hours loses money on today's cost. 15 USD for 15 hours is safe either way but gives the person fewer hours (a smaller offer than he guessed).
 
 ### 4.3 Packs at about 1 USD an hour
 
-A 10-hour pack at 10 USD, international card: net 10 x 0.9484 = 9.48, so 0.948 USD an hour. Margin per hour: blended 0.30 to 0.43; one transcript 0.29 to 0.39 (31 to 41%); **Skribby-only today 0.04 to 0.21**. Paystack's fixed NGN 100 would hurt a small pack, so packs have a minimum of 10 hours (PROPOSED).
+A 10-hour pack at 10 USD, international card: net 10 x 0.9484 = 9.48, so 0.948 USD an hour. Margin per hour: blended 0.30 to 0.43; after the flip 0.29 to 0.39 (31 to 41%); **Skribby-only today 0.04 to 0.21**. Paystack's fixed NGN 100 would hurt a small pack, so packs have a minimum of 10 hours (PROPOSED). Packs are per person, like everything else.
 
 ### 4.4 Competitor anchors (read 2026-11-15)
 
@@ -265,7 +291,7 @@ A 10-hour pack at 10 USD, international card: net 10 x 0.9484 = 9.48, so 0.948 U
 | Fireflies | Free; Pro 18 USD monthly or 10 annual per seat; Business 29 or 19; Enterprise 39 annual only; Pro storage of 8,000 minutes per seat and 20 to 50 AI credits depending on the plan | https://fireflies.ai/pricing | per seat; transcription listed as unlimited |
 | Otter | Basic 300 transcription minutes a month; Pro 1,200 in-app recording minutes, listed at 16.99 USD per user per month with a second, promotional 8.49 figure; Business 30 and 24 per user per month; the monthly minute limits are marked as not rolling over | https://otter.ai/pricing | the monthly versus annual label on each number was not clear in the page text I extracted |
 
-What this supports (my reading, not the vendors'): (a) "no rollover of plan hours" has a precedent (Otter marks its minute limits as no rollover); (b) these tools price per seat and give each person many hours or unlimited recordings, so 20 hours for a whole team looks stingy unless the page leads with price per team and says why hours are counted; (c) a free tier of unlimited recordings is something we cannot afford (see the multi-team spec, section 11).
+What this supports (my reading, not the vendors'): (a) **with a plan per person, 20 hours for about 17 to 18 USD is in line with Otter's Pro** (1,200 minutes is 20 hours per user), which the pooled-team version was not; (b) Fathom and Fireflies show unlimited recordings per seat, which we cannot match because our bot costs real money per hour (Skribby 0.35 USD an hour); (c) "no rollover of plan hours" has a precedent (Otter marks its minute limits as no rollover); (d) a free tier of unlimited recordings is not an option for us (the multi-team spec, section 11).
 
 ## 4A. Transcription and names, in plain words
 
@@ -276,7 +302,7 @@ This explains why the cost of an hour changes with the one-transcript flip (sect
 3. **Today** (`TRANSCRIPT_SOURCE=own`, the default and what the server runs, per the handoff): our own OpenAI transcription of the audio writes the text (`transcription_model`, `gpt-transcribe`; `app/pipeline.py:1008`). Skribby's segments, with their names, are then used only as a guide. `label_transcript` (`app/notes.py:232`) cuts our text into sections of up to 4,000 words and, for each section, picks the Skribby segments at the same place by **share of text** (`_segments_for`, `app/notes.py:187`; there are no per-line times) with a small overlap. It then asks the notes model (`notes_model`) to add `[Name]:` labels, and keeps the section unlabelled if more than 2% of its words changed (`MAX_WORD_DRIFT`, `app/notes.py:26`). This step is a model call with its own cost, recorded in `ai_runs` as kind `label` (`app/pipeline.py:1327-1336`).
 4. **The flip** (`TRANSCRIPT_SOURCE=skribby`, built, off): the stored transcript is built straight from Skribby's segments as `[Name]: text` turns; **our transcription and the model-based labelling are both skipped** (`app/pipeline.py:1066-1080`; `app/transcript_source.py`). Our own transcription still runs as a fallback when Skribby's text is missing, too short for the recording (under 20 words a minute), a loop of the same few words, has no segment times, or stops before 70% of the recording (`fallback_reason`, `app/transcript_source.py:133-149`). The vocabulary pass still applies to the text.
 5. **Why that changes cost.** Skribby makes a transcript for every bot meeting whichever source we use, and it is on the bill (ElevenLabs v2 at 0.20 USD an hour, https://skribby.io/docs/guides/billing). Today we pay for a second transcript (our OpenAI transcription, 0.27 to 0.36 USD an hour in `scripts/ai_cost_report.py`) and for the labelling model calls (not priced separately here). The flip stops both, which is the drop from 0.74 to 0.91 USD an hour on Skribby meetings to the projected 0.56 to 0.66 USD overall.
-6. **What could go wrong.** If speaker names do not survive on the ElevenLabs model (a live meeting is due to decide this), the flip stays off and the cost stays at today's level, which is why Question 1 asks to hold the price. The hold does not stop the billing build: every billing stage is dark and no price is published until stage S10.
+6. **What could go wrong.** If speaker names do not survive on the ElevenLabs model (a live meeting is due to decide this), the flip stays off and the cost stays at today's level, which is why the price is not final (section 11, question 1). Holding the price does not stop the billing build: every billing stage is dark and no price is published until stage S11.
 
 ## 5. The provider layer
 
@@ -297,7 +323,7 @@ Nothing outside `app/billing/` knows a provider's name: payments, grants and ent
 
 **The rule he gave:** build both providers; Nigeria is naira through Paystack; everywhere else is dollars through Flutterwave; the system must tell whether a customer is billing from Nigeria or from outside it.
 
-**The key is the billing country the team owner chooses at the first purchase and saved on the team** (`billing_profiles.billing_country`, section 7). It is not guessed from the visitor's IP address: a VPN or a traveller would send the wrong way. The screen shows the country list, then states the result before any payment ("Prices in naira, paid through Paystack" or "Prices in US dollars, paid through Flutterwave"). The naira price list is **fixed and set by Adebayo** (no live conversion), reviewed when the rate moves; the rate is his pending decision (handoff C5).
+**The key is the billing country the person chooses at their first purchase and saved on their billing profile** (`billing_profiles.billing_country`, section 7). It is not guessed from the visitor's IP address: a VPN or a traveller would send the wrong way. The screen shows the country list, then states the result before any payment ("Prices in naira, paid through Paystack" or "Prices in US dollars, paid through Flutterwave"). The naira price list is **fixed and set by Adebayo** (no live conversion), reviewed when the rate moves; the rate is his pending decision (handoff C5).
 
 | Billing country | Currency | Provider | Price list |
 |---|---|---|---|
@@ -306,13 +332,13 @@ Nothing outside `app/billing/` knows a provider's name: payments, grants and ent
 
 Paystack's pages also list Ghana, Kenya, South Africa and Côte d'Ivoire (https://paystack.com/pricing), but our account is a Nigerian business account, so those countries go to Flutterwave in dollars. Whether Flutterwave accepts a payer from every country is not confirmed: its coverage page came back empty (it is built by script).
 
-**When the owner changes the billing country later** (PROPOSED; only the owner may, each change is written to a history table with who, when, old and new, and no more than one change in 30 days):
+**When the person changes the billing country later** (PROPOSED; only the person may, each change is written to a history table with who, when, old and new, and no more than one change in 30 days):
 
 | Situation | What the build does |
 |---|---|
 | No live subscription | the change applies at once; the next checkout uses the new route |
 | A live subscription, same currency (for example two non-Nigerian countries) | the profile and later invoices change now; nothing else moves |
-| A live subscription, crossing between Nigeria and elsewhere | the change is **scheduled for the end of the paid period** (`pending_billing_country`). Until then renewals, retries and packs keep the old currency and provider. At the renewal the owner gets a fresh first-payment checkout with the new provider and price list (a saved card token belongs to one provider and cannot be moved). The old subscription ends at the period's end; hours already granted are untouched; an unpaid new checkout follows the normal 3-day grace |
+| A live subscription, crossing between Nigeria and elsewhere | the change is **scheduled for the end of the paid period** (`pending_billing_country`). Until then renewals, retries and packs keep the old currency and provider. At the renewal the person gets a fresh first-payment checkout with the new provider and price list (a saved card token belongs to one provider and cannot be moved). The old subscription ends at the period's end; hours already granted are untouched; an unpaid new checkout follows the normal 3-day grace |
 
 **When the card's issuing country disagrees with the billing country.** What each provider's page shows (sample responses, not live captures):
 
@@ -325,11 +351,11 @@ Not confirmed: that either field is filled for every real card, and what each re
 
 PROPOSED handling, after `fetch_transaction` has confirmed the payment:
 
-1. **Never refuse a payment that succeeded.** A Nigerian business with a foreign-issued card, or a team abroad with a Nigerian card, is a normal customer. Store `card_country` on the payment and set `country_mismatch` when it differs from the billing country.
-2. Show the owner a plain note once ("Your card was issued in X; your billing country is Y"), and list mismatched teams in the admin view for a human look.
-3. After two mismatched payments in a row, mail the owner asking them to correct the billing country if it is wrong. The system never changes the country by itself.
+1. **Never refuse a payment that succeeded.** A Nigerian business with a foreign-issued card, or a person billed abroad with a Nigerian card, is a normal customer. Store `card_country` on the payment and set `country_mismatch` when it differs from the billing country.
+2. Show the person a plain note once ("Your card was issued in X; your billing country is Y"), and list mismatched accounts in the admin view for a human look.
+3. After two mismatched payments in a row, mail the person asking them to correct the billing country if it is wrong. The system never changes the country by itself.
 4. **Why this matters:** the provider's fee rises when a foreign card is charged in naira (Paystack 3.9% + NGN 100 against 1.5% + NGN 100 for a local card; Flutterwave 4.8% against 2%, both from their pricing pages), and the naira list could be cheaper than the dollar list on a given day, so a foreign team could choose Nigeria to pay less. The Terms must say the billing country is where the customer is established (lawyer, section 9); the mismatch flag is the check.
-5. The other direction: a team billed in dollars paying with a Nigerian card needs a card its bank lets spend in dollars. No page I read says how often that fails; the screen tells the payer to use a card that can pay in dollars, or to change the billing country if they bill from Nigeria.
+5. The other direction: a person billed in dollars paying with a Nigerian card needs a card its bank lets spend in dollars. No page I read says how often that fails; the screen tells the payer to use a card that can pay in dollars, or to change the billing country if they bill from Nigeria.
 
 ### 5.3 Who owns the billing clock (recommendation)
 
@@ -337,7 +363,7 @@ PROPOSED handling, after `fetch_transaction` has confirmed the payment:
 |---|---|---|
 | Use the provider's subscriptions | Flutterwave: you create a payment plan and a customer is subscribed on the first charge; card payments only; the subscription is tied to the customer's email and that cannot be changed afterwards; it emails the customer a reminder before each charge; **a failed charge is retried 3 more times at 30-minute intervals**, and after three failures in a row the subscription is cancelled; it sends a webhook for each charge and for cancellation (https://developer.flutterwave.com/docs/recurring-payments/payment-plans). Paystack: cards and Direct Debit (Nigeria) only; billing dates by day of month (created after the 28th is billed on the 28th); a webhook `invoice.create` three days before the charge, then `charge.success` or `invoice.payment_failed`; **the page says a failed subscription charge is not retried** (https://paystack.com/docs/payments/subscriptions/) | Cannot give a 3-day grace with our own retries on day 1 and day 2, a mid-period upgrade, a pack, or a price change at renewal without fighting the provider (and the two providers behave differently, which we would have to hide) |
 | **We keep the clock** (recommended) | First payment through hosted checkout, which returns a reusable card token. Renewals: our scheduler charges the saved token on the due date and on retry days, writes every attempt, and moves the status. Paystack documents the call: `POST /transaction/charge_authorization` with an `authorization_code` marked reusable, and a `queue` flag for scheduled charges (https://paystack.com/docs/api/transaction/). Flutterwave's verify response carries a card `token` (https://developer.flutterwave.com/docs/transaction-verification) but **I could not open a Flutterwave page on charging a saved token** (the two addresses I tried returned 404), so that call is unconfirmed. | One state machine, ours, testable with a fake clock. Needs a fallback. |
-| Fallback inside the recommended option | If a renewal charge fails or no usable token exists, we mail the owner a **pay link** (a fresh hosted checkout for the same amount) at the same moments in section 3.3. A manual renewal is the safe floor. | Plan for it from day one: I could not find any source on how often Nigerian bank cards refuse a charge made without the cardholder present; assume many do. |
+| Fallback inside the recommended option | If a renewal charge fails or no usable token exists, we mail the person a **pay link** (a fresh hosted checkout for the same amount) at the same moments in section 3.3. A manual renewal is the safe floor. | Plan for it from day one: I could not find any source on how often Nigerian bank cards refuse a charge made without the cardholder present; assume many do. |
 
 ### 5.4 Webhooks, verification and idempotency (PROPOSED, with what each vendor page says)
 
@@ -367,7 +393,7 @@ Section 4.1 shows both pricing pages say international cards are charged and set
 
 ### 5.7 Accounts and keys
 
-- **Accounts.** Both the Paystack and the Flutterwave accounts exist and are **new, made for Beyric** (Adebayo, relayed 2026-11-15); the Paystack one is not the account used by another product. They are assumed to be under Beyrichq LTD. **What is not known:** whether either account's business verification (KYC) is finished; Flutterwave's settlement page says only approved accounts are settled (https://developer.flutterwave.com/docs/payment-operations/settlements, "Requirements"), so each account's live approval is a go-live check, not an assumption. **Still to do:** he puts the test keys in a local env file (below). Until he does, S5 and S6 can be built and tested only against the signature vectors and the fake provider, not in the vendors' test modes.
+- **Accounts.** Both the Paystack and the Flutterwave accounts exist and are **new, made for Beyric** (Adebayo, relayed 2026-11-15); the Paystack one is not the account used by another product. They are assumed to be under Beyrichq LTD. **What is not known:** whether either account's business verification (KYC) is finished; Flutterwave's settlement page says only approved accounts are settled (https://developer.flutterwave.com/docs/payment-operations/settlements, "Requirements"), so each account's live approval is a go-live check, not an assumption. **Still to do:** he puts the test keys in a local env file (below). Until he does, S6 (Paystack) and S7 (Flutterwave) can be built and tested only against the signature vectors and the fake provider, not in the vendors' test modes.
 - **Test keys go in a local env file, never in chat, never in git** (his rule via the lead). The repository already ignores `.env` and `.env.*` (`.gitignore` lines 1 and 2) and keeps names without values in `.env.example`. PROPOSED names: `FLUTTERWAVE_SECRET_KEY`, `FLUTTERWAVE_PUBLIC_KEY`, `FLUTTERWAVE_SECRET_HASH` (the webhook secret hash), `PAYSTACK_SECRET_KEY`, `PAYSTACK_PUBLIC_KEY`, `PAYSTACK_WEBHOOK_SECRET` (the `whsec_` signing secret). No key goes into a PR body, a log line, a test fixture or a captured response. Test and live keys are never mixed: the app checks at start that `BILLING_LIVE` matches the keys (each provider's key prefixes should be confirmed from its docs when building; I did not read them).
 - **Webhook addresses** are set separately in each dashboard for each mode (test and live), each pointing at `POST /api/billing/webhooks/{provider}`.
 
@@ -394,69 +420,74 @@ I read one Nigerian source and no official one. Treat everything below as "what 
 
 ## 7. Data model and migration sketch
 
-Next free Alembic number: **0048**. Checked on 2026-11-15: `alembic/versions/` ends at `0047_bot_name.py` on `main` (`871ed74f`), and `git ls-remote --heads origin` shows only `main` and two old branches, so no open work has taken 0048 (the `gh` CLI could not reach GitHub for a PR list; re-check when starting). All migrations are additive, so the old code keeps working during a rollout.
+Next free Alembic number: **0048**. Checked on 2026-11-15: `alembic/versions/` ends at `0047_bot_name.py` on `main` (`871ed74f`), and `git ls-remote --heads origin` shows only `main` and two old branches, so no open work has taken 0048 (the `gh` CLI could not reach GitHub for a PR list; re-check when starting). All migrations are additive, so the old code keeps working during a rollout. **Everything is keyed to a person (`user_id`); no table gets a `team_id` and `usage_entries` is unchanged** (it already records the recorder).
 
 | Table (new unless marked) | Key columns | Notes |
 |---|---|---|
-| `plans` | `code` (primary key: `trial`, `team`, `team_plus`), `name`, `monthly_seconds`, `member_limit`, `is_public`, `sort_order`, `active` | rows are data, edited by migration or admin; no plan name appears in code except in tests |
+| `plans` | `code` (primary key), `name`, `monthly_seconds`, `is_public`, `sort_order`, `active` | rows are data, edited by migration or admin; no member limit; no plan name appears in code except in tests |
 | `plan_prices` | `plan_code`, `currency` (`NGN`, `USD`), `interval` (`month`), `amount_minor`, `active_from`, `active_until` | price history; a subscription points at the price row it was sold at (a price change at renewal is a new row) |
 | `products` / pack prices | `code`, `seconds`, `currency`, `amount_minor`, `valid_months` | packs of 10 hours at launch |
-| `team_subscriptions` | `team_id`, `payer_user_id`, `plan_code`, `price_id`, `status` (`active`, `past_due`, `lapsed`, `canceled`, `ended`), `currency`, `provider`, `current_period_start`, `current_period_end`, `cancel_at_period_end`, `pending_plan_code`, `grace_ends_at`, `next_charge_at`, `retry_count`, `pending_billing_country` | at most one live row per team (partial unique index); never on a personal team (checked in the route and in `entitlements`, because a database check cannot look at another table) |
-| `payment_methods` | `team_id`, `payer_user_id`, `provider`, `token` (encrypted with `app/vault.py`), `brand`, `last4`, `expiry`, `email_at_provider` | never a card number; the token only |
-| `payments` | `team_id`, `subscription_id`, `provider`, `provider_tx_id`, `reference` (unique), `kind` (`plan`, `renewal`, `upgrade`, `pack`), `currency`, `amount_minor`, `status` (`pending`, `succeeded`, `failed`, `refunded`, `partly_refunded`), `paid_at`, `card_country`, `country_mismatch` | unique (provider, provider tx id) |
+| `subscriptions` | `user_id`, `plan_code`, `price_id`, `status` (`active`, `past_due`, `lapsed`, `canceled`, `ended`), `currency`, `provider`, `current_period_start`, `current_period_end`, `cancel_at_period_end`, `pending_plan_code`, `grace_ends_at`, `next_charge_at`, `retry_count`, `pending_billing_country` | at most one live row per person (partial unique index) |
+| `payment_methods` | `user_id`, `provider`, `token` (encrypted with `app/vault.py`), `brand`, `last4`, `expiry`, `email_at_provider` | never a card number; the token only |
+| `payments` | `user_id`, `subscription_id`, `provider`, `provider_tx_id`, `reference` (unique), `kind` (`plan`, `renewal`, `upgrade`, `pack`), `currency`, `amount_minor`, `status` (`pending`, `succeeded`, `failed`, `refunded`, `partly_refunded`), `paid_at`, `card_country`, `country_mismatch` | unique (provider, provider tx id) |
 | `billing_events` | `provider`, `dedupe_key`, `type`, `payload` (JSONB), `signature_ok`, `received_at`, `processed_at`, `error` | the webhook inbox; unique (provider, dedupe key); payloads are pruned after a retention period to be chosen |
-| `hour_grants` | `team_id` or `user_id` (one of them), `email_hash`, `kind` (`trial`, `pilot`, `plan_period`, `pack`, `admin_gift`), `seconds`, `starts_at`, `expires_at`, `source_payment_id`, `reason`, `created_by` | unique (kind, source payment id) so a replay cannot grant twice |
-| `usage_allocations` | `usage_entry_id`, `grant_id`, `seconds` | splits a counted recording across grants (section 3.2) |
-| `usage_entries` (changed) | add `team_id` (set null on team delete) | the pool a recording was charged to; old rows keep null and are read as "pilot" |
-| `invoices` | `number` (unique), `team_id`, `payment_id`, `issued_at`, `currency`, `subtotal_minor`, `vat_rate_bp`, `vat_minor`, `total_minor`, `seller` (JSON snapshot), `buyer` (JSON snapshot) | the PDF is built on request |
-| `billing_profiles` | `team_id`, `company_name`, `address`, **`billing_country`** (chosen by the owner at the first purchase; the routing key, section 5.2), `tax_id`, `billing_email` | one row per team |
-| `billing_country_changes` | `team_id`, `changed_by`, `old_country`, `new_country`, `effective_at`, `created_at` | the history behind the change rules in section 5.2 |
-| `user_settings` (changed) | add `hours_team_id` | the person's chosen hours team (section 1.4) |
+| `hour_grants` | `user_id`, `email_hash`, `kind` (`trial`, `pilot`, `plan_period`, `pack`, `admin_gift`), `seconds`, `starts_at`, `expires_at`, `source_payment_id`, `reason`, `created_by` | unique (kind, source payment id) so a replay cannot grant twice. A trial grant carries its own `expires_at` (sign-up plus 14 days, PROPOSED); a pilot grant carries the pilot expiry once decided |
+| `usage_allocations` | `usage_entry_id`, `grant_id`, `seconds` | splits a counted recording across the person's grants (section 3.2) |
+| `usage_entries` | **unchanged** | already records `user_id`, the email fingerprint, `meeting_id` and seconds; the recorder is the owner (`app/usage.py:77`) |
+| `invoices` | `number` (unique), `user_id`, `payment_id`, `issued_at`, `currency`, `subtotal_minor`, `vat_rate_bp`, `vat_minor`, `total_minor`, `seller` (JSON snapshot), `buyer` (JSON snapshot) | the PDF is built on request |
+| `billing_profiles` | `user_id`, `name_or_company`, `address`, **`billing_country`** (chosen by the person at their first purchase; the routing key, section 5.2), `tax_id`, `billing_email` | one row per person |
+| `billing_country_changes` | `user_id`, `old_country`, `new_country`, `effective_at`, `created_at` | the history behind the change rules in section 5.2 |
 | `refunds` | `payment_id`, `amount_minor`, `reason`, `created_by`, `provider_ref` | |
 
-Migrations, in the order of the stages: **0048** plans, prices, products, grants, allocations, the two column additions, and the **backfill of pilot accounts into `pilot` grants** (each account's remaining hours = its cap minus its ledger, so nobody loses or gains hours); **0049** billing profiles with the billing country and its history, payments, payment methods, billing events; **0050** subscriptions (the status machine's table); **0051** invoices and refunds. The numbers move if another migration lands first. Each needs the usual round trip on a scratch database: one head, upgrade, downgrade. Downgrade of 0048 is only safe while no grant other than `pilot` exists.
+What is **not** in the model any more: a team pool, `team_id` on usage, `user_settings.hours_team_id`, a member limit on a plan, a subscription on a team.
 
-Settings (flags), all off or dark first: `HOURS_POOL_MODE` (`off`, `shadow`, `enforce`), `BILLING_ENABLED`, `BILLING_COUNTRY_ROUTES` (the country to provider table: Nigeria to Paystack, everything else to Flutterwave), `BILLING_LIVE` (test keys or live keys), `TRIAL_SECONDS` (3 hours, 0 turns the trial off), `TRIAL_DAILY_BUDGET_SECONDS`, `BILLING_VAT_RATE_BP`.
+Migrations, in the order of the stages: **0048** plans, prices, products, grants, allocations, and the **backfill of pilot accounts into `pilot` grants** (each account's remaining hours = its cap minus its ledger, so nobody loses or gains hours); **0049** billing profiles with the billing country and its history, payments, payment methods, billing events; **0050** subscriptions (the status machine's table); **0051** invoices and refunds. Each needs the usual round trip on a scratch database: one head, upgrade, downgrade. Downgrade of 0048 is only safe while no grant other than `pilot` exists. The numbers move if another migration lands first.
+
+Settings (flags), all off or dark first: `HOURS_MODE` (`off`, `shadow`, `enforce`: the per-person hours rule), `FEATURE_GATES_MODE` (`off`, `shadow`, `enforce`: Ask, translation and rewrite), `BILLING_ENABLED`, `BILLING_COUNTRY_ROUTES` (the country to provider table: Nigeria to Paystack, everything else to Flutterwave), `BILLING_LIVE` (test keys or live keys), `TRIAL_SECONDS` (3 hours, 0 turns the trial off), `TRIAL_DAYS` (14, PROPOSED), `TRIAL_DAILY_BUDGET_SECONDS`, `BILLING_VAT_RATE_BP`.
 
 ## 8. Build stages: separate small PRs, in order
 
-Every stage is its own PR, deployed one at a time, dark first, with its SOP, its checklist lines and (where a payload changes) a true integration guide built from captures against the running app. Locally only lint, format, type-check and the tests of the touched files run (CI runs the rest).
+Every stage is its own PR, deployed one at a time, dark first, with its SOP, its checklist lines and (where a payload changes) a true integration guide built from captures against the running app. Locally only lint, format, type-check and the tests of the touched files run (CI runs the rest). The price question (section 11, question 1) **does not stop any of this**: every billing stage is dark, no price is shown until S11, and prices sit in data rows.
+
+**The feature gates ship dark and switch on with the go-live, not earlier** (a separate flag, `FEATURE_GATES_MODE`): the pilot accounts have Ask, translation and rewriting today, and a gate switched on before plans exist would take them away from people who cannot yet pay.
 
 | Stage | What | Size | Flag | How it is tested without real money |
 |---|---|---|---|---|
 | **S0** | This spec, the checklist map | docs | none | link check |
-| **S1** Hours model in shadow | Migration 0048; `app/entitlements.py` with `pool_for` and `status`; grants and allocations; the pilot backfill; an admin read of "per team: hours this month, what plan it would need"; nothing is enforced. A daily job logs where the new rule would have refused and the old rule did not (and the reverse) | M | `HOURS_POOL_MODE=shadow` | unit tests with the existing clock injection (`app/clock.py`); a backfill test with a one-member, a many-member and a deleted-account fixture; a shadow comparison test. **The shadow week is also the first real data on team hours.** |
-| **S2** Enforce the pool, with the new warnings | The one block in `reserve_slot`; pool-wide running estimate; 80% and 100% notices with owner and admin mail; one "pool is empty" notice per pool and period; `usage` in the session payload gets pool fields; the message stops saying "pilot" and "hello@"; the hours-team setting | M | `HOURS_POOL_MODE=enforce` | boundary tests at 79.9%, 80%, 99.9% and 100%; two teammates starting bots at once under the placement lock; a running meeting finishing past zero; the join runner skip reason; no leak between two teams' pools. FE guide from live captures. |
-| **S3** Provider layer and the webhook inbox | `app/billing/`: the `PaymentProvider` protocol, `FakeProvider`, the neutral event and payment types; migration 0049 (payments, events, payment methods); the webhook route with verification hooks, dedupe, re-fetch before any grant. No real provider yet | M | `BILLING_ENABLED=false` | replay of the same event twice; wrong amount, wrong currency, wrong reference; a bad signature; everything against `FakeProvider` |
-| **S4** Billing country and routing | the billing profile and its `billing_country` field; `routing.provider_for(billing_country)`; the change rules (immediate, same currency, scheduled at renewal); the history table; the card-country mismatch flag; owner-only | M | `BILLING_ENABLED` for allow-listed teams | a table test of every row in section 5.2; a mismatch with the fake provider; two changes inside 30 days refused. Needs no real money and no keys |
-| **S5** Paystack adapter (naira) | the adapter: hosted checkout, verify, webhook signature (both header forms), saved-card charge, refund; tested in Paystack's own test mode | M | `BILLING_LIVE=false` | signature vectors from Paystack's page (including the 300-second window and two signatures during a rotation); the Paystack test cards (section 5.5): success, declined, no token, refund scenarios; the raw body through the real proxy; needs the Paystack test keys in his local env file (section 5.7) |
-| **S6** Flutterwave adapter (dollars) | the adapter: hosted checkout, verify, the `verif-hash` check, saved-card charge (the call is not confirmed, section 5.3, so the pay link is the fallback), refund; tested in Flutterwave's own test mode; **prove dollar pricing and settlement (section 5.6)** | M | `BILLING_LIVE=false` | the Flutterwave test cards and OTPs (section 5.5); replay and wrong-amount cases; a USD payment end to end; the settlement question answered or marked unproven in the SOP |
-| **S7** Subscriptions, packs and the lapse states | the status machine; our scheduler for due dates, retries (day 1 and day 2), the 3-day grace and lapse; no new hours until a payment succeeds; checkout for a plan and a pack through whichever provider the country picks; upgrade proration; downgrade and cancel at period end; the lapsed-state gates (Ask, translation, integrations); the billing screens | L (may split: money first, gates second) | `BILLING_ENABLED` for allow-listed teams | a table of (status, event) to (status, effect) run with a fake clock through every row, including "payment succeeds on day 2" and "grace ends"; the worst-case hours during grace asserted as zero; end to end with `FakeProvider`; then in each provider's test mode: success, declined card, insufficient funds, a saved-card renewal |
-| **S8** Invoices, receipts, refunds | migration 0051; invoice numbering and PDF; the billing profile's VAT fields; the admin refund action; receipt mail | M | with S7 | invoice number uniqueness under two payments at once; PDF content test; refund of a pack with used hours is refused |
-| **S9** Trial, pilot conversion and the pilot's end | the 3-hour trial at first sign-in with the daily budget; the pilot mail; `max_accounts` becomes a trial brake | S | `TRIAL_SECONDS` | trial once per person and per email fingerprint; deleting and re-registering gives nothing |
-| **S10** Go-live | `/pricing` numbers (section 10), Terms and Privacy (section 9), the live keys (in the server's env file only), one real small payment through each provider by Adebayo with his own card followed by a refund (**needs his explicit yes: it moves real money**), then the sign-up cap raised | S | `BILLING_LIVE` | the runbook; nothing here is tested by code |
+| **S1** Hours model in shadow | Migration 0048; `app/entitlements.py` with `status` and hours left; grants and allocations; the pilot backfill; an admin read of "per person: hours this month"; nothing is enforced. A daily job logs where the new rule would have refused and the old rule did not (and the reverse) | M | `HOURS_MODE=shadow` | unit tests with the existing clock injection (`app/clock.py`); a backfill test with a pilot account, a deleted-and-re-registered account and an admin; a shadow comparison test. **The shadow weeks are also the first real data on hours per person.** |
+| **S2** Enforce the hours rule per person, with the new warnings | The one block in `reserve_slot` (`app/placement.py:174-179`); 80% and 100% notices with a mail to the person; one "out of hours" notice per person and period (not one per skipped meeting); `usage` in the session payload gets the new fields; the refusal message stops saying "pilot" and "hello@" | S to M | `HOURS_MODE=enforce` | boundary tests at 79.9%, 80%, 99.9% and 100%; a running meeting finishing past zero; the join runner skip reason; two accounts never share hours. FE guide from live captures |
+| **S3** Feature gates, dark | `entitlements.can(user, feature)` and the gates in section 2.3: Ask, new translations, rewrite notes (both routes, inside `services.regenerate_notes`); a shadow mode that logs "would have refused" | S to M | `FEATURE_GATES_MODE=shadow` | a table test of every state in section 2.2 against every gate; the reader-only teammate; the review-spelling route stays open; the legacy page route cannot bypass the gate |
+| **S4** Provider layer and the webhook inbox | `app/billing/`: the `PaymentProvider` protocol, `FakeProvider`, neutral event and payment types; migration 0049 (payments, events, payment methods); the webhook route with verification hooks, dedupe, re-fetch before any grant. No real provider yet | M | `BILLING_ENABLED=false` | replay of the same event twice; wrong amount, wrong currency, wrong reference; a bad signature; all against `FakeProvider` |
+| **S5** Billing profile, country and routing | the billing profile with the person's `billing_country`; `routing.provider_for(billing_country)`; the change rules (immediate, same currency, scheduled at renewal); the history table; the card-country mismatch flag; only the person changes their own | M | `BILLING_ENABLED` for allow-listed accounts | a table test of every row in section 5.2; a mismatch with the fake provider; two changes inside 30 days refused. Needs no real money and no keys |
+| **S6** Paystack adapter (naira) | hosted checkout, verify, webhook signature (both header forms), saved-card charge, refund; tested in Paystack's own test mode | M | `BILLING_LIVE=false` | signature vectors from Paystack's page (the 300-second window, two signatures during a rotation); the Paystack test cards (section 5.5): success, declined, no token, refund scenarios; the raw body through the real proxy; needs his Paystack test keys in a local env file (section 5.7) |
+| **S7** Flutterwave adapter (dollars) | hosted checkout, verify, the `verif-hash` check, saved-card charge (the call is not confirmed, section 5.3, so the pay link is the fallback), refund; tested in Flutterwave's own test mode; **prove dollar pricing and settlement (section 5.6)** | M | `BILLING_LIVE=false` | the Flutterwave test cards and OTPs (section 5.5); replay and wrong-amount cases; a USD payment end to end; the settlement question answered or marked unproven in the SOP |
+| **S8** Subscriptions, packs and the lapse states | the status machine; our scheduler for due dates, retries (day 1 and day 2), the 3-day grace and lapse; no new hours until a payment succeeds; checkout for a plan and a pack through whichever provider the billing country picks; upgrade proration; downgrade and cancel at period end; the billing screens. **Also the first live test with three accounts connected to the same calendar event** (section 2.5) | L (may split: money first, screens second) | `BILLING_ENABLED` for allow-listed accounts | a table of (status, event) to (status, effect) run with a fake clock through every row, including "payment succeeds on day 2" and "grace ends"; the worst-case hours during grace asserted as zero; end to end with `FakeProvider`; then in each provider's test mode: success, declined card, insufficient funds, a saved-card renewal |
+| **S9** Invoices, receipts, refunds | migration 0051; invoice numbering and PDF; the billing profile's VAT fields; the admin refund action; receipt mail | M | with S8 | invoice number uniqueness under two payments at once; PDF content test; refund of a pack with used hours is refused |
+| **S10** Trial, pilot grants and the daily budget | the 3-hour trial at first confirmed sign-in, ending at the 3 hours or after 14 days; the pilot grants' end and its mail; the trial-hours daily budget; `max_accounts` kept as a brake | S | `TRIAL_SECONDS`, `TRIAL_DAYS` | trial once per person and per email fingerprint; deleting and re-registering gives nothing; the 14th day with a fake clock |
+| **S11** Go-live | `/pricing` numbers (section 10), Terms and Privacy (section 9), the live keys (in the server's env file only), `FEATURE_GATES_MODE=enforce`, one real small payment through each provider by Adebayo with his own card followed by a refund (**needs his explicit yes: it moves real money**), then the sign-up cap raised | S | `BILLING_LIVE` | the runbook; nothing here is tested by code |
 
-The price hold (Question 1) does **not** stop any of this: every billing stage is dark, no price is shown until S10, and numbers sit in data rows. A shadow-then-enforce order means a mistake in the hours rule shows up in the logs for a week before any customer meets it, and the pay screens come only after the rule they sell has been live.
+A shadow-then-enforce order means a mistake in the hours rule shows up in the logs before any customer meets it, and the pay screens come only after the rule they sell has been live.
 
 ## 9. What the Terms and Privacy Policy must say, and what to ask the lawyer
 
-Today the Terms still say "The Service is free during the pilot" (`web/components/legal/terms-content.tsx:30`), which is the wording he rejected for the pricing page, and the hours message asks people to write to `hello@beyrictech.com`, which the audit says is not a confirmed mailbox. Both change in S2 and S10.
+Today the Terms still say "The Service is free during the pilot. Each pilot account has a limit on recorded hours, shown in the app" (`web/components/legal/terms-content.tsx:30`), which is the wording he rejected for the pricing page, and the hours message asks people to write to `hello@beyrictech.com`, which the audit says is not a confirmed mailbox. Both change in S2 and S11.
 
 ### Terms (new section, drafted by the lawyer from this list)
 
-- the plans, that hours are counted in recorded hours, shared by the team, and what counts (section 3.1); that plan hours expire at the end of each period and packs last 12 months (PROPOSED); that unused hours are not refunded
-- who the customer is: the team owner buys for the team and confirms they may do so
-- auto-renewal, how to cancel, that cancelling ends the plan at the period's end, and that a failed payment starts 3 days of grace in which no new hours are granted, after which recordings, Ask and translation stop while the data is kept
+- **Plans belong to a person.** Each person who wants Ask Beyric, translation, rewriting notes, a note taker of their own or calendar auto-join subscribes themselves (after the trial). A company name may appear on the invoice; the customer is the person who signs up and pays
+- what a team member can do without a plan: read what is shared with them (meetings, transcripts, notes, decisions, tasks), search, export, use tasks and decisions, and delete; what stops (section 2.2); that sharing a meeting changes who can read it, never who pays for its recording
+- hours: counted in recorded hours; **the recorder pays**; when several people's note takers would join the same meeting only the first records and the others do not join; hours expire at the end of each period (no rollover); packs last 12 months; unused hours are not refunded
+- the trial: about 3 hours, once per person, ends at the 3 hours or 14 days after sign-up, whichever comes first (the 14 days PROPOSED); no card; may be withdrawn for abuse
+- auto-renewal, how to cancel, that cancelling ends the plan at the period's end, and that a failed payment starts 3 days of grace in which no new hours are granted, after which recordings, Ask, translation and rewriting stop while the data is kept
 - price changes: that they apply from the next renewal (the handoff rule is "no notification of policy changes"; whether a price rise needs a notice is a contract question, below)
 - taxes: VAT added or included, who issues the invoice (Beyrichq LTD)
 - refunds and chargebacks (section 3.5)
-- the trial: one per person, may be withdrawn for abuse, no card needed
-- what happens to a team's data and packs when the team is deleted while subscribed
+- the pilot accounts' hours: what happens to the pilot grant (section 3.9); this changes the promise in today's Terms line and is a lawyer item
 - a clause that no recording law is changed by paying (the existing "Recording laws and consent" section still stands)
 
 ### Privacy Policy (additions)
 
-- the payment providers (Flutterwave, and Paystack once it is used) as recipients: what we send (the payer's name and email, the amount, our reference) and that card details are entered on the provider's page and are not seen or stored by us (only a token)
+- the payment providers (Paystack and Flutterwave) as recipients: what we send (the payer's name and email, the amount, our reference) and that card details are entered on the provider's page and are not seen or stored by us (only a token)
 - what we keep: payments, invoices, the billing profile, the hours ledger; that invoices are kept after account deletion for the period the law requires (to be confirmed), and that the existing "hours counted with a one-way fingerprint of the email address" (`privacy-content.tsx:105`) also covers the trial
 - the transfer of payer data to the providers' countries (the lawyer's existing NDPA question, now with two more recipients)
 
@@ -467,11 +498,13 @@ Today the Terms still say "The Service is free during the pilot" (`web/component
 3. Refunds: is the refund window rule (7 days for a first payment, 14 for a pack, section 3.5) acceptable, and what do the card networks and the providers require for chargebacks?
 4. Price changes at renewal: is a notice before a price rise required for subscribers, even though our rule is that legal pages promise no notice of policy changes?
 5. Invoice records: how long must they be kept, and does that override an account deletion request?
-6. Payment data going to Flutterwave and Paystack: what must the Privacy Policy say under the NDPA?
-7. The trial: is keeping a one-way fingerprint of the email to stop repeat trials covered by the existing wording, or does it need its own line?
+6. Payment data going to Paystack and Flutterwave: what must the Privacy Policy say under the NDPA?
+7. The trial: is keeping a one-way fingerprint of the email to stop repeat trials covered by the existing wording, or does it need its own line? Is ending it after 14 days acceptable?
 8. Seller details on the invoice (registered name, address, registration number) and the right wording for VAT lines.
 9. Selling to customers in other countries: does that need anything in the Terms or the Policy now?
-10. The unread items already open from #191 and #198 stay open; this list adds to them.
+10. The pilot accounts were told they have 5 hours for the pilot: what must we say, and how, if the pilot grant ends 60 days after paid plans open?
+11. "Only the first note taker records": is it enough to say so in the Terms, given the other attendees' bots do not join?
+12. The unread items already open from #191 and #198 stay open; this list adds to them.
 
 ### Questions to put to the accountant
 
@@ -479,62 +512,51 @@ Is Beyrichq LTD under the VAT threshold and may it opt out of charging VAT; whet
 
 ## 10. What changes on `/pricing` when the numbers are decided
 
-`web/components/pricing/content.ts` was built so the numbers are one edit:
+`web/components/pricing/content.ts` was built so the numbers are one edit, but the **per-person model changes its words**: today it says the hours are "shared by the whole team".
 
-- Set `price` (for example `"$15"`) and `hours` (for example `"20 hours"`) on each plan in `PLANS`; the cards and the comparison table read the same two fields. `names` and `taglines` are edited in the same array.
-- The same file's words need one pass when a plan goes on sale: `HERO.body` says "No plan is on sale yet, and every price and number of hours below is still to be announced"; the FAQ answer "Can I buy a plan today?" says "Not yet"; the Trial's `cta` and the two paid cards' `cta` ("Start with the trial") change to the buy action; the trial row of the table keeps "To be announced" only until its hours are set.
-- Add two FAQ entries the real model needs: "What happens when the hours run out?" (recordings in progress finish, new ones stop until a pack or the next period) and "What happens if I stop paying?" (notes and export stay). No "free" and no "unlimited" anywhere (DECIDED); Business stays hidden.
-- Currency: the page shows one price per currency from the same plan row; with two currencies the page needs a currency note and the card must not imply a conversion.
-- Outside this file: `web/app/llms.txt/route.ts` and the Terms line quoted in section 9. `web/components/site/json-ld.tsx` publishes no offer on purpose (its comment says so) and can add one after prices exist.
-- The first line of the page should say "the team shares the hours" (finding 2).
+- Set `price` (for example `"$18"`) and `hours` (for example `"20 hours"`) on each plan in `PLANS`; the cards and the comparison table read the same two fields.
+- Words to change in the same file: `hoursUnit` of the two paid plans ("each month, shared by the whole team" becomes "each month, for you"); the plan `tagline`s and the names `Team` and `Team Plus` (the ids `team` and `team-plus` too: a per-person plan is not a team plan, so the names are open); the paid cards' `includes` line "Extra-hour packs when the team needs more" ("when you need more"); the table row "Hours shared across the team" (replace it by a row that says the hours are the person's own, and that Ask Beyric, translation and rewriting notes need a plan); the FAQ answer "How are meeting hours counted?" (it says the hours are shared by the whole team); `HERO.body` ("No plan is on sale yet ...") and the FAQ "Can I buy a plan today?" ("Not yet") once a plan is on sale; the `cta` texts ("Start with the trial") to the buy action.
+- Add FAQ entries the real model needs: "Can my teammates read my meetings without subscribing?" (yes: they read what you share; they need their own plan for Ask Beyric, translation and rewriting notes); "What happens when the hours run out?" (recordings in progress finish, new ones stop until a pack or the next period; Ask, translation and rewriting keep working on a paid plan); "What happens if I stop paying?" (notes and export stay); "Who pays when my whole team joins the same meeting?" (the first note taker that joins records it and its owner's hours count). No "free" and no "unlimited" anywhere (DECIDED); Business stays hidden.
+- Currency: the page shows one price per currency from the same plan row; with two currencies the page needs a currency note and must not imply a conversion.
+- Outside this file: `web/app/llms.txt/route.ts` and the Terms line quoted in section 9. `web/components/site/json-ld.tsx` publishes no offer on purpose and can add one after prices exist.
 
-## 11. Questions for Adebayo
+## 10A. Later, only if companies ask
 
-Numbers are kept from the first version so earlier messages still match. Five were decided on 2026-11-15; five are still open. Each open one has a line in plain words saying what it means.
+A **team plan that pays centrally for staff** (one company payer, several people with their own hours) is not part of this build and is not designed. It would be a separate product decision: who is billed, whether hours are pooled or per person (the pool was dropped because an owner could not explain where shared hours went, so a company version would need a per-person usage report first), how seats are added and removed, and how it relates to the per-person plans already in use. Nothing in the per-person model blocks it: the billing profile, the payments and the provider layer are the same, and only a "payer" separate from the "user" would be new.
 
-### Decided on 2026-11-15
+## 11. Questions for Adebayo: what is still open
 
-| # | Decision | Where |
-|---|---|---|
-| 2 | **Yes:** hours pooled per team, counted once per meeting however many attend, failed bots count zero, charged to the recorder's chosen team when the recording is ready | 3.1, 3.2 |
-| 3 | **Yes:** warn at 80%; at 100% recordings already running finish and new ones (including calendar joins) stop until a pack or upgrade | 3.3 |
-| 4 | **Yes:** monthly billing, plan hours expire each month with no rollover, extra-hour packs, a price change applies from the next renewal | 3.2, 3.4 |
-| 6 | **Yes:** naira when the billing country is Nigeria, US dollars everywhere else | 5.2 |
-| 7 | **Changed by his answer:** build **both** providers, Paystack for naira and Flutterwave for dollars, routed by the billing country the owner chooses (not by IP address) | 5.2, 8 |
-| (grace) | **Agreed ("Yes, agreed"):** grace is 3 days and no new hours are granted during it | 3.3 |
+Decided on 2026-11-15 and no longer questions: charging the recorder; once per meeting and failed bots at zero; 80% and 100% per person; monthly, no rollover, packs, price change at renewal; naira for Nigeria and dollars elsewhere; 3-day grace with no new hours; both providers with our own billing clock; the 3-hour trial once per person; the pilot accounts keep their remaining hours. **Dropped by the per-person model:** the old Questions 8 (kept as decided: we run the monthly charge ourselves), 9 ("Just me" team of one) and the pooled parts of 2 and 4 (member limit, hours team). Plain words, with my recommendation for each.
 
-### Still open
+1. **Price and hours: which first plan?** He said 15, 17 or 18 USD and asked the lead, who suggested 18 USD for 20 hours a month. The table in section 4.2 shows what each leaves us.
+   *What this means:* the price decides whether a person who uses all their hours still leaves us a profit. At 18 USD for 20 hours we keep 3.9 to 5.9 USD (22 to 33%) after the one-transcript flip, and -1.1 to +2.3 on today's cost. At 15 USD for 20 hours we keep 1.0 to 3.0 after the flip and lose up to 4.0 on today's cost. The flip is not proved yet (a live meeting decides whether speaker names survive).
+   **Recommend: 18 USD for 20 hours, decided now but not printed anywhere until the flip is measured.** Pick a second tier after (about 34 USD for 40 hours is a suggestion, section 4.2) and new plan names ("Team" no longer fits a per-person plan). Holding the number does not stop the build.
 
-1. **Hold the 15 USD and 20 hours price until the one-transcript flip has run and the cost is measured again?**
-   *What this means:* today a team that uses all 20 hours costs us more than 15 USD; after the flip it should leave a small profit. Holding the price means we do not print a price until a live meeting shows names survive and a new cost run is done. **It does not stop us building:** every billing stage is dark and no price is shown until the last stage.
-   **Recommend: yes.** On today's cost a full team loses money, and after the flip the margin is thin (section 4.2). The shadow week (S1) also shows how many hours teams really use.
+2. **Should the trial also end after 14 days, not only when the 3 hours are used?** (The lead's proposal.)
+   *What this means:* a teammate who only reads would never use their 3 hours, so Ask Beyric, translation and rewriting would stay on for them for ever. With 14 days the trial ends at whichever comes first.
+   **Recommend: yes, 14 days from the day the email is confirmed.** Without a deadline the trial becomes a permanent plan for readers, which he ruled out.
 
-5. **Beyond the grace change: cancel any time with access to the end of the paid period and no part refund; refund only a double charge, a first payment within 7 days with no hours used, or an unused pack within 14 days?**
-   *What this means:* when someone cancels they keep what they paid for until the month ends, and we give money back only in the narrow cases listed. The grace itself (3 days, no new hours) is already decided and is not part of this question.
-   **Recommend: yes.** It is the usual rule and it keeps refunds rare. The lawyer reads it before launch (section 9).
+3. **Who pays when several teammates have the same calendar event: prefer the organizer's bot?**
+   *What this means:* today the first bot placed records the meeting and its owner pays; the others do not join (section 2.5). "First" is a race. Preferring the organizer means the organizer's bot goes on time and the other teammates' bots wait about two minutes and stay out if the organizer's is already in. If the organizer has no account, no hours or no plan, the first placed bot still records, as today. I would also fix the skipped person's notice, which still says sharing between accounts is not available.
+   **Recommend: yes, after the three-account live test in S8.** It matches how people think ("the organizer's tool records") and makes who pays predictable. The cost: an organizer who did not subscribe in time pays nothing and the meeting is recorded by the first teammate who did.
 
-8. **We run the monthly charge ourselves (our own scheduler charges the saved card and falls back to a pay link), instead of using each provider's own subscription feature?**
-   *What this means:* someone has to press "charge" each month. Either the provider does it with its own rules, or our server does it with ours. Flutterwave's rules retry 3 times in 90 minutes and then cancel; Paystack never retries. Neither can give a 3-day grace with retries on day 1 and day 2, and the two behave differently. Ours means one rule for both.
-   **Recommend: yes (ours).** One state machine we can test, and the same grace for naira and dollars.
+4. **Pack details: 10 hours for about 10 USD per person, valid 12 months, buyable only with a live plan; after a lapse, leftover pack hours still allow recordings but not Ask, translation or rewriting?**
+   *What this means:* packs are extra hours bought on top of a plan, a little dearer per hour than the plan so people prefer to upgrade. A pack stays usable for a year; if the plan lapses the paid pack hours are not lost, but the paid features need a live plan.
+   **Recommend: yes.** At 1 USD an hour packs keep a margin after the flip (0.29 to 0.39 an hour) and push people toward the plan.
 
-9. **A paid plan attaches to an ordinary team, not to the invisible Personal space; a person paying alone is never blocked, because subscribing creates a one-person team for them in one step, shown in the app as "Just me"?**
-   *What this means, in plain words:*
-   - **One person pays, once.** The team's owner pays **one subscription per team**. The other members do not pay anything.
-   - **One pool for everyone.** The plan's hours are **one pool the whole team shares**; nobody has a personal slice.
-   - **A member limit.** Each plan has a limit on how many people can be in the team (the numbers are yours to set).
-   - **A solo person is never blocked.** When they subscribe, the app creates a one-person team for them in one step, shown as "Just me". Their **private meetings stay private**, and they are still charged to that team's pool, because charging follows the recorder's "hours team" and not sharing: sharing a meeting or not changes who can read it, never which pool pays.
-   - **Why not the Personal space.** It is hidden and nobody else can join it. If a plan could sit on it there would be two kinds of pool and a question of which one pays for a meeting later shared with a team. The alternative is possible, but it means those two pool kinds.
-   **Recommend: yes.** One pool, one payer, and it fits "teams, not individuals".
+5. **Refund and cancel rules:** cancel any time with access to the end of the paid month and no part refund; refund only a double charge, a first payment within 7 days with no hours used, or an unused pack within 14 days?
+   *What this means:* when someone cancels they keep what they paid for until the month ends, and we give money back only in the narrow cases listed. The grace (3 days, no new hours) is already decided and is not part of this question.
+   **Recommend: yes.** It is the usual rule and keeps refunds rare. The lawyer reads it before launch (section 9).
 
-10. **A one-time trial of about 3 hours per person (verified email, no card), spent before the team's hours; the 10 pilot accounts keep what is left of their 5 hours as a pilot grant?**
-    *What this means:* a new person gets about 3 hours once, to try the product, with no card. Those hours are used first, so a paying team's hours last longer. The ten people already in the pilot keep whatever is left of their 5 hours, which no longer counts as a trial.
-    **Recommend: yes.** It keeps the pilot's promise, and the account cap stays as a brake on give-aways (a fake account costs us about 2 to 3 USD of trial).
+6. **Should the pilot accounts' leftover hours also expire (60 days after paid plans open, with one mail before)?**
+   *What this means:* the pilot grant keeps Ask, translation and rewriting on for as long as it has hours, even for a pilot account that only reads. An expiry gives them a date to subscribe. It also changes what the pilot was promised (5 hours), which is a lawyer item.
+   **Recommend: yes, 60 days.** Without an end, the pilot is a permanent plan; the mail keeps it fair.
 
 ### Open facts (not yes or no)
 
-- **Test keys for both new accounts**, created by him and kept in a local env file only (section 5.7). Both accounts exist; their business-verification status is not known.
-- Beyrichq's registration and tax numbers for invoices; whether it charges VAT (section 6); the naira price list and rate; the real Skribby invoice hours (to replace the 1.0 to 1.25 factor); whether to send the six open lawyer questions from #198 together with the ten in section 9.
-- The result of the live meeting that decides whether speaker names survive on the ElevenLabs model (section 4A).
+- Test keys for both new accounts, created by him and kept in a local env file only (section 5.7); the business-verification status of both accounts is not known.
+- Beyrichq's registration and tax numbers for invoices; whether it charges VAT (section 6); the naira price list and rate; the real Skribby invoice hours (to replace the 1.0 to 1.25 factor); whether to send the six open lawyer questions from #198 together with the twelve in section 9.
+- The live meeting that decides whether speaker names survive on the ElevenLabs model, then the cost re-measured (section 4A); the three-account live test of "first bot wins" (section 2.5).
 
 ## 12. Provenance and what I could not confirm
 
@@ -573,4 +595,4 @@ How I read pages: the web fetch tool refused every domain in this session ("unab
 - VAT or sales tax in other countries.
 - The 0.52 to 0.91 USD cost range is the lead's relay of the 2026-11-14 report; I did not re-run the script and its comments say some OpenAI figures are from secondary sources. The one-transcript range is a projection, not a measurement.
 - Competitor terms behind their guarantees and per-user limits (only the pricing pages were read).
-- The vendor webhook behaviours above are from the vendor pages, not from a live test; they are "verified live" only when S3 runs them.
+- The vendor webhook behaviours above are from the vendor pages, not from a live test; they are "verified live" only when S6 and S7 run them in each provider's test mode.
