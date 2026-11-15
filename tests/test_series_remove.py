@@ -5,8 +5,10 @@ The cast is `tests/test_multi_team_leaks.py`'s `world`: Ada records and owns tea
 and Y; Quinn owns Y and is only in Y; Zed owns Z (his own organisation). A removal acts on ONE row
 (one team scope, or one personal scope): never on another team's or person's row of the same
 recurring event. Who may (Adebayo, 2026-11-15: "Only owners and admins"): the owner or an admin of
-the row's team, and for a personal row its owner. The row's creator has no extra power on a team
-row. Any other member gets 403 `team_forbidden`; a person outside the team gets 404. Past meetings
+the row's team, and for a personal row its owner. The row's creator has no power over a team row
+that has anything in it, but may remove one that is completely empty (Adebayo, 2026-11-15: "Yes,
+empty rows only"): no meeting, no waiting line, no project, no mail still to go. Any other member
+gets 403 `team_forbidden`; a person outside the team gets 404. Past meetings
 stay as ordinary meetings (nothing of them changes); a row that came from a calendar recurring
 event is remembered as ignored for that scope, so the calendar sync does not make it again and
 later meetings of that event are not regrouped into it.
@@ -21,12 +23,15 @@ from sqlalchemy import func, select
 from app import meeting_teams
 from app import series as series_rules
 from app.models import (
+    MailOutbox,
     Meeting,
     OpenQuestion,
     Project,
     Series,
     SeriesAgendaItem,
+    SeriesAgendaSend,
     SeriesIgnored,
+    SeriesReminder,
     SeriesTopic,
     Task,
     TeamMember,
@@ -508,7 +513,7 @@ def test_an_emptied_row_the_ghost_card_is_removed_by_a_manager_who_sees_it(
     app, session, world, rows
 ):
     """An empty card shows to its creator only. Ada (owner of X) made one: she removes it. Pat (a
-    plain member) has one too: he sees it, and may not remove it (403), as for any team row."""
+    plain member) has a card with a waiting line in it: he sees it, and may not remove it (403)."""
     rows.monday.series_id = None  # Pat's X row lost its last meeting; the card stays, his alone
     session.commit()
     hers = standup(session, world.x.id, rid="rid-ghost", owner_id=world.ada.id, title="Ghost")
@@ -523,6 +528,161 @@ def test_an_emptied_row_the_ghost_card_is_removed_by_a_manager_who_sees_it(
     error_of(remove(pat, rows.x.id), 403, "team_forbidden")
     assert remove(ada, hers_id).status_code == 200
     assert ada.client.get("/api/series", headers=headers).json()["series"] == []
+
+
+# ---- a creator may remove a row that is completely empty (and only then) ----
+
+
+def empty_row(session, world, *, rid="rid-empty", title="Empty one"):
+    """Pat's own row in X with nothing in it: no meeting, no line, no project, no mail."""
+    return standup(session, world.x.id, rid=rid, owner_id=world.pat.id, title=title)
+
+
+def test_the_creator_may_remove_a_completely_empty_row_calendar_or_hand_made(app, session, world):
+    pat = sign_in(app, PAT)
+    calendar = empty_row(session, world)
+    hand = empty_row(session, world, rid=None, title="Hand")
+    calendar_id, hand_id = calendar.id, hand.id
+    for row_id in (calendar_id, hand_id):
+        assert pat.get(f"/api/series/{row_id}").json()["can_remove"] is True
+    assert remove(pat, calendar_id).json() == {
+        "meetings_kept": 0,
+        "agenda_lines_removed": 0,
+        "remembered": True,
+    }
+    assert remove(pat, hand_id).json()["remembered"] is False
+    assert reload(session, calendar_id) is None and reload(session, hand_id) is None
+    assert ignored(session, world.x.id, "rid-empty")
+
+
+def make_not_empty(session, world, row, how, template):
+    if how == "meeting":
+        put(session, template, row, who=world.pat, team=world.x.id)
+    elif how == "line":
+        session.add(SeriesAgendaItem(series_id=row.id, text="Budget", position=1))
+    elif how == "project":
+        project = Project(team_id=world.x.id, name="Launch", color="#0E6B5E")
+        session.add(project)
+        session.flush()
+        row.project_id = project.id
+    elif how == "agenda mail":
+        send = SeriesAgendaSend(series_id=row.id, sender_user_id=world.pat.id, recipient_count=1)
+        session.add(send)
+        session.flush()
+        session.add(
+            MailOutbox(
+                to_email="a@example.test",
+                template="series_agenda",
+                payload={"send_id": send.id, "user_id": world.pat.id},
+            )
+        )
+    elif how == "reminder mail":
+        reminder = SeriesReminder(
+            series_id=row.id, user_id=world.pat.id, kind="1h", starts_at=MONDAY
+        )
+        session.add(reminder)
+        session.flush()
+        session.add(
+            MailOutbox(
+                to_email="a@example.test",
+                template="series_reminder",
+                payload={"reminder_id": reminder.id},
+            )
+        )
+    session.commit()
+
+
+@pytest.mark.parametrize("how", ["meeting", "line", "project", "agenda mail", "reminder mail"])
+def test_the_creator_of_a_row_with_anything_in_it_gets_403_and_nothing_changes(
+    app, session, world, template, how
+):
+    row = empty_row(session, world)
+    make_not_empty(session, world, row, how, template)
+    row_id = row.id
+    pat = sign_in(app, PAT)
+    assert pat.get(f"/api/series/{row_id}").json()["can_remove"] is False
+    error = error_of(remove(pat, row_id), 403, "team_forbidden")
+    assert error["message"] == FORBIDDEN_TEXT
+    assert reload(session, row_id) is not None
+    assert not ignored(session, world.x.id, "rid-empty")
+    ada = sign_in(app, OWNER_EMAIL)  # the owner of X still may, whatever is in it
+    assert ada.client.get("/api/series", headers={"X-Team-Id": str(world.x.id)}).status_code == 200
+
+
+def test_a_mail_that_has_gone_does_not_make_a_row_non_empty(app, session, world, template):
+    row = empty_row(session, world)
+    make_not_empty(session, world, row, "agenda mail", template)
+    session.execute(MailOutbox.__table__.update().values(status="sent"))
+    session.commit()
+    pat = sign_in(app, PAT)
+    assert remove(pat, row.id).status_code == 200
+
+
+def test_another_plain_member_may_not_remove_someone_elses_empty_row(app, session, world):
+    """A calendar row (Pat's) is shown to a teammate who has the event on their own calendar; Mia
+    is a plain member who did not make it, so 403. Without the event she cannot see it at all."""
+    row = empty_row(session, world)
+    row_id = row.id
+    mia_user = add_member(session, world.x, "mia@example.test", "member")
+    mia = sign_in(app, "mia@example.test")
+    error_of(remove(mia, row_id), 404, "not_found")
+    calendar_event(session, mia_user, "rid-empty", MONDAY)
+    assert mia.get(f"/api/series/{row_id}").json()["can_remove"] is False
+    error_of(remove(mia, row_id), 403, "team_forbidden")
+    assert reload(session, row_id) is not None
+
+
+@pytest.mark.parametrize("arrives", ["line", "meeting"])
+def test_a_line_or_meeting_that_arrives_before_the_lock_makes_a_creators_removal_refuse(
+    session, world, template, arrives
+):
+    """The rule said yes, then something landed in the row. `remove` asks again under the row's
+    lock: refuse, do not delete."""
+    row = empty_row(session, world)
+    assert series_rules.can_remove(session, world.pat, row)
+    make_not_empty(session, world, row, arrives, template)
+    with pytest.raises(series_rules.SeriesRefused) as refused:
+        series_rules.remove(session, world.pat, row)
+    assert (refused.value.status, refused.value.code) == (403, "team_forbidden")
+    session.rollback()
+    assert reload(session, row.id) is not None
+    assert not ignored(session, world.x.id, "rid-empty")
+    assert series_rules.can_remove(session, world.ada, row)  # a manager is unaffected
+
+
+@pytest.mark.parametrize("arrives", ["line", "meeting"])
+def test_what_arrives_between_the_first_look_and_the_lock_still_refuses(
+    session, world, template, arrives, monkeypatch
+):
+    """The first look says "empty" and only THEN something lands (the window the lock closes): the
+    first answer is forced to yes, so only the look under the row's lock can refuse."""
+    row = empty_row(session, world)
+    make_not_empty(session, world, row, arrives, template)
+    real, looks = series_rules.is_empty, []
+
+    def first_look_says_empty(session, found):
+        looks.append(1)
+        return True if len(looks) == 1 else real(session, found)
+
+    monkeypatch.setattr(series_rules, "is_empty", first_look_says_empty)
+    with pytest.raises(series_rules.SeriesRefused) as refused:
+        series_rules.remove(session, world.pat, row)
+    assert (refused.value.status, refused.value.code) == (403, "team_forbidden")
+    assert len(looks) == 2  # asked once before the lock and once under it
+    session.rollback()
+    assert reload(session, row.id) is not None
+    assert not ignored(session, world.x.id, "rid-empty")
+
+
+def test_the_creator_who_left_the_team_may_not_remove_even_an_empty_row(session, world):
+    row = empty_row(session, world)
+    session.execute(
+        TeamMember.__table__.delete().where(
+            TeamMember.user_id == world.pat.id, TeamMember.team_id == world.x.id
+        )
+    )
+    session.commit()
+    assert not series_rules.can_remove(session, world.pat, row)
 
 
 # ---- the ignored mark itself ----

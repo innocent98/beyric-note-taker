@@ -40,9 +40,10 @@ from being grouped in the person's Personal row, and does not stop a meeting sha
 | Caller | Result |
 |---|---|
 | Owner or admin of the row's team | allowed |
-| The person who made the row, if they are only a plain member (a calendar row's "creator" is just whoever synced or recorded first; a hand-made row's is whoever made it) | **403 `team_forbidden`**: no extra power (Adebayo, 2026-11-15: "Only owners and admins") |
+| The person who made the row (still a member), a plain member, **while it is completely empty**: no meeting grouped under it, no waiting agenda line, no linked project, no agenda or reminder mail still to be sent (`series.is_empty`) | allowed (Adebayo, 2026-11-15: "Yes, empty rows only"). This is how an empty ("ghost") card is cleared |
+| That same person once **anything** is in the row (a calendar row's "creator" is just whoever synced or recorded first; a hand-made row's is whoever made it) | **403 `team_forbidden`**: no extra power (Adebayo: "Only owners and admins") |
 | A personal row's owner | allowed (they are the `owner` member of their personal team) |
-| Any other plain member who can read the row | **403 `team_forbidden`**, the project's usual team message, nothing changed |
+| Any other plain member who can read the row (an empty calendar row is shown to a teammate who has the event on their own calendar) | **403 `team_forbidden`**, the project's usual team message, nothing changed |
 | A person outside the team, another person's personal row, an unknown id, a second removal | **404** (the route's `_series_or_404`, which uses `series.get`: not in the row's team, or cannot see it) |
 | The person who made the row but left the team | 404 at the route; the rule itself also answers no (`is_manager` needs a membership, fails closed) |
 
@@ -57,6 +58,8 @@ that meeting is ungrouped all the same but not counted for them).
   one would show a removed row); a global per-person list (one removal would hide the same event in another team).
 * **`series.remove`** locks the row (`FOR UPDATE`), counts, inserts the mark (`ON CONFLICT DO NOTHING`), sets `meetings.series_id` null for every
   meeting in the row (in or out of scope), then deletes the row; the foreign keys take the agenda lines, topics, reminders and sends.
+* **Dialog for an empty row** (nothing grouped, nothing waiting, as the page shows it): "No meeting is grouped under it and nothing is waiting in it. You can't undo this.", with the calendar and other-pages lines kept and the list of what happens to meetings, lines, project, topics and tasks left out (it would say nothing true). `can_remove` is on the page only, not on the list cards (no card menu).
+* **A connected calendar still makes its recurring rows (asked by Adebayo, confirmed from the code and a real run).** `sync_from_joins` makes a card for each recurring event the scheduler will join, so a card appears once a join is scheduled (within the hour of the calendar sync, not the instant the calendar is connected), and a recording's notes link the meeting to its event's row. Removal only adds `is_ignored` checks, which skip an event somebody removed for that scope; no mark exists until a removal. Capture 87 is the real sync making a card for a never-removed event, and 88 the list showing it; capture 70 shows the same sync making none for removed ones.
 * **Review fix M1:** `sync_from_joins` also skips the event when it is ignored in the person's PERSONAL team (looked up, never made). A person with one ordinary team has that team as their default, so without this the removed Personal row came back as an empty card in their team.
 * **The three writers that make a row from a recurring event id check `series.is_ignored`** and make none: `link_from_calendar` (also before it
   re-keys an empty card into an ignored scope), `sync_from_joins`, and `place_meeting` through `_row_for_scope` (a meeting that follows a share to an
@@ -78,22 +81,22 @@ that meeting is ungrouped all the same but not counted for them).
 | `app/api_series.py`, `app/series_schemas.py` | `DELETE /api/series/{id}`, `SeriesRemoved`, `SeriesPage.can_remove` |
 | `docs/openapi.json`, `web/lib/api/schema.d.ts` | regenerated (`scripts/export_openapi.py`, `npm run gen:api`) |
 | `web/components/app/series-remove.tsx`, `series-view.tsx`, `recurring-cards.tsx`, `web/lib/deleted-flag.ts`, `web/lib/api/client.ts`, `types.ts`, `web/styles/pages.css`, `web/scripts/mock-api.mjs` | the button, the question, the toast |
-| `scripts/capture_series_follow.py`, `docs/fe-captures/series-follow/52` to `80` | the live capture (`--keep 51` writes only the new ones) |
+| `scripts/capture_series_follow.py`, `docs/fe-captures/series-follow/52` to `88` | the live capture (`--keep 51` writes only the new ones) |
 | `docs/fe-integration-guide-series-teams.md` (section 10, table rows), `docs/checklist/master-checklist.md`, the three series-follow SOPs (ghost-card pointers) | docs |
-| `tests/test_series_remove.py` (27), `tests/test_migrations.py` (0048), `web/tests/series-remove.test.tsx` (15) | tests |
+| `tests/test_series_remove.py` (27), `tests/test_migrations.py` (0048), `web/tests/series-remove.test.tsx` (17) | tests |
 
 ## Verification
 
-* **Tests first**, then the code (`tests/test_series_remove.py`, 27): owner and admin allowed; a plain member 403, the creator of a calendar row and of a hand-made row included; outsider and other people's personal row 404; creator
+* **Tests first**, then the code (`tests/test_series_remove.py`, 40): owner and admin allowed; a plain member 403, the creator of a row with anything in it (a meeting, a line, a project, a mail to go) included, but allowed on a completely empty row, calendar or hand-made; the rule asked again under the row's lock (what arrives in between refuses); outsider and other people's personal row 404; creator
   who left 404 (and the rule alone says no); removal in X leaves Y's row, the personal row and every meeting's readability exactly as before; past meetings, tasks, open
   questions and sharing untouched; the count is only what the caller may read; lines and topics go, the project and the filed task stay; the hourly sync, a later calendar
   meeting and a later share do not bring it back; flag off; hand-made rows; the ghost card; the mark itself and its cascade. **Mutation checks** (put the old rule back, a
-  test fails): `can_remove` always true (5 fail), the creator allowed again (4 fail), `is_ignored` always false (6 fail), the personal check in `sync_from_joins` removed (1 fails), the stray move removed (1 fails).
+  test fails): `can_remove` always true (5 fail), the creator allowed again (4 fail), `is_ignored` always false (6 fail), the personal check in `sync_from_joins` removed (1 fails), the stray move removed (1 fails), the creator always allowed (12 fail), the mail check dropped from `is_empty` (2 fail), the second look under the lock removed (2 fail).
 * **Migration 0048:** `tests/test_migrations.py::test_0048_...` runs upgrade, downgrade, upgrade on a scratch Postgres 17; `test_single_head` and `test_migration_matches_models` pass.
 * **Bounded, with CI running the rest:** `ruff check .`, `ruff format --check .`, `tests/test_series.py`, `test_series_follow.py`, `test_series_readers.py`, `test_series_project_link.py`,
   `test_series_remove.py` and the openapi test (150 passed); web `npm run typecheck`, `npm run lint`, `vitest` of `series-remove`, `series-follow`, `series-view`, `series-lead-designed`,
   `recurring-cards`, `meetings-recurring`, `guards`, `meeting-view` (all passed).
-* **Live capture** (`scripts/capture_series_follow.py --keep 51`): 29 new exchanges against the running app, every status and body in section 10 of the FE guide.
+* **Live capture** (`scripts/capture_series_follow.py --keep 51`): 37 new exchanges against the running app, every status and body in section 10 of the FE guide.
 * **Not verified:** the button and question in a real browser (tested against the captures only, no screenshots, no parity pass at 1440, 768 and 390 px); the removal with a real Google or
   Outlook calendar; the flag-off removal live (tests only); mail (a removed row's reminders simply stop; not built in the capture).
 
@@ -124,5 +127,4 @@ that meeting is ungrouped all the same but not counted for them).
 * **F5** After a Personal row is removed, a later manual share of a meeting of that event to a team does not join the team's row (the private meeting was never linked, and `place_meeting` ignores a meeting
   in no series). Before the removal it would have moved there. Auto-share is unaffected (applied before the link). Needs a small design (on share, try the calendar link for a meeting in no series).
 * **F6** Flag off: see the "works the same" line above (an admin can remove a team row that holds teammates' private meetings).
-* **An empty card a plain member made.** An empty (ghost) card shows only to the person who made it (or someone with the event on their own calendar). When that person is a plain member they see the card
-  and get 403 if they try to remove it, and an owner or admin usually does not see it. A small design would let managers see (or list) empty cards of their team.
+* **Closed (2026-11-15, "Yes, empty rows only"): the empty card a plain member made.** Its creator may remove it while it is completely empty, so nobody is stuck with it. An owner or admin who cannot see someone's empty card still cannot remove it unless the event is on their own calendar; that is unchanged and not a gap, because its creator can.

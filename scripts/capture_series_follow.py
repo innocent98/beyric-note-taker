@@ -962,15 +962,110 @@ def remove_story(
         "/api/series",
         body={"title": "Pat's own recurring"},
         team=x,
-        note="Pat, a plain member, makes a recurring meeting by hand in X (any member may).",
+        note="Pat, a plain member, makes a recurring meeting by hand in X (any member may). It is completely empty.",
     )
-    pats_hand_403 = pat.call(
-        "remove-pat-hand-made-403",
+    hand_id = pats_hand.json()["id"]
+    empty_page = pat.call(
+        "remove-page-pat-empty-hand-made",
+        "GET",
+        f"/api/series/{hand_id}",
+        note='"Yes, empty rows only" (Adebayo, 2026-11-15): the person who made a row may remove it while it is COMPLETELY EMPTY (no meeting, no waiting agenda line, no project, no mail still to go). Pat made this one and nothing is in it: `can_remove` is true.',
+    )
+    assert empty_page.json()["can_remove"] is True
+    line = pat.call(
+        "remove-pat-hand-made-add-line",
+        "POST",
+        f"/api/series/{hand_id}/agenda",
+        body={"text": "Plan the offsite"},
+        note="Pat adds one agenda line to his hand-made row. The row is no longer empty.",
+    )
+    with_line = pat.call(
+        "remove-page-pat-hand-made-with-line",
+        "GET",
+        f"/api/series/{hand_id}",
+        note="With a waiting line in it the same page says `can_remove: false` for Pat. An owner or admin of X may still remove it.",
+    )
+    assert with_line.json()["can_remove"] is False
+    refused = pat.call(
+        "remove-pat-hand-made-with-line-403",
         "DELETE",
-        f"/api/series/{pats_hand.json()['id']}",
-        note="He cannot remove the hand-made one he made either: 403 `team_forbidden`. An owner or admin of X can.",
+        f"/api/series/{hand_id}",
+        note="Pat tries to remove it now: 403 `team_forbidden`. Nothing changed.",
     )
-    assert pats_hand_403.status_code == 403
+    assert refused.status_code == 403
+    pat.call(
+        "remove-pat-hand-made-remove-line",
+        "DELETE",
+        f"/api/series/{hand_id}/agenda/{line.json()['id']}",
+        note="Pat removes his own line (its author may). The row is empty again.",
+    )
+    again_empty = pat.call(
+        "remove-page-pat-hand-made-empty-again",
+        "GET",
+        f"/api/series/{hand_id}",
+        note="`can_remove` is true again: the rule looks at what is in the row now.",
+    )
+    assert again_empty.json()["can_remove"] is True
+    gone = pat.call(
+        "remove-pat-hand-made-delete",
+        "DELETE",
+        f"/api/series/{hand_id}",
+        note="Pat removes his empty hand-made row: 200, nothing to remember (no calendar event).",
+    )
+    assert gone.status_code == 200 and gone.json()["remembered"] is False
+
+    # A connected calendar still makes its recurring rows: the removal feature changes nothing here.
+    with Session(engine) as session:
+        ada_user = session.scalars(select(User).where(User.email == ADA)).one()
+        connection = session.scalars(
+            select(CalendarConnection).where(CalendarConnection.user_id == ada_user.id)
+        ).first()
+        starts = datetime.now(UTC).replace(minute=0, second=0, microsecond=0) + timedelta(days=2)
+        event = CalendarEvent(
+            user_id=ada_user.id,
+            connection_id=connection.id,
+            source_event_id="rid-connected-0",
+            recurring_event_id="rid-connected",
+            title="Weekly planning",
+            starts_at=starts,
+            ends_at=starts + timedelta(minutes=30),
+            platform="google_meet",
+            meeting_url=MEET,
+            native_id="abc-defg-hij",
+            status="confirmed",
+        )
+        session.add(event)
+        session.commit()
+        session.add(
+            ScheduledJoin(
+                user_id=ada_user.id,
+                calendar_event_id=event.id,
+                platform="google_meet",
+                native_id="abc-defg-hij",
+                meeting_url=MEET,
+                starts_at=event.starts_at,
+                ends_at=event.ends_at,
+                run_at=event.starts_at - timedelta(minutes=2),
+                deadline_at=event.ends_at,
+                state="scheduled",
+            )
+        )
+        session.commit()
+        made_now = series.sync_from_joins(session, datetime.now(UTC))
+    assert made_now == 1
+    note_file(
+        "remove-calendar-recurring-still-makes-a-card",
+        "NOT AN HTTP CALL. A recurring event on Ada's connected calendar that the scheduler will join (a join is scheduled) and that was never removed: the real hourly `series.sync_from_joins` makes its row. It makes 1. The removal feature changes nothing here: it only skips an event that someone REMOVED for that scope (capture 70 shows 0 rows made for the removed ones).",
+        {"rows_made": made_now, "recurring_event_id": "rid-connected"},
+    )
+    shown = ada.call(
+        "remove-calendar-recurring-card-listed",
+        "GET",
+        "/api/series",
+        team=x,
+        note="Ada's X list now has the new empty card for the event: `Weekly planning`, with the next meeting. It appears once a join is scheduled for the event (within the hour of the calendar sync), or when its first recording has notes.",
+    )
+    assert "Weekly planning" in [c["title"] for c in shown.json()["series"]]
 
 
 def main() -> None:

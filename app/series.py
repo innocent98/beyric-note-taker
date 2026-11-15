@@ -32,10 +32,11 @@ a legacy row still points at is never shown, counted, mailed or fed to the model
 writers did. A personal row has no repeat topics (never read, never shown).
 
 **Removing one (`remove`, LEAD-DESIGNED, Adebayo 2026-11-15).** Only the owner or an admin of the
-row's team (the row's creator gets no extra power), or a personal row's owner, may remove it.
-Its meetings only stop being grouped. A row that came from a calendar recurring event is also
-remembered as ignored for ITS scope (`SeriesIgnored`): `link_from_calendar`, `sync_from_joins` and
-`place_meeting` (through `_row_for_scope`) check `is_ignored` and make no row for it.
+row's team, or a personal row's owner, may remove it; the row's creator may only when it is
+completely empty (`is_empty`). Its meetings only stop being grouped. A row that came from a calendar
+recurring event is also remembered as ignored for ITS scope (`SeriesIgnored`): `link_from_calendar`,
+`sync_from_joins` and `place_meeting` (through `_row_for_scope`) check `is_ignored` and make no row
+for it.
 
 This module imports neither the services nor the API (the pipeline imports it).
 """
@@ -55,6 +56,7 @@ from app import tasks, teams, titles
 from app.config import get_settings
 from app.models import (
     CalendarEvent,
+    MailOutbox,
     Meeting,
     OpenQuestion,
     Project,
@@ -63,6 +65,7 @@ from app.models import (
     SeriesAgendaItem,
     SeriesAgendaSend,
     SeriesIgnored,
+    SeriesReminder,
     SeriesTopic,
     Task,
     Team,
@@ -292,16 +295,80 @@ def is_ignored(session: Session, team_id: int, recurring_id: str) -> bool:
     )
 
 
+def _mail_pending(session: Session, series_id: int) -> bool:
+    """Whether a mail about this row is still waiting to go: an agenda mail of one of its sends, or
+    a reminder mail of one of its reminder rows (`mail_outbox` rows keep the ids in their payload
+    until they are done)."""
+    sends = [
+        str(i)
+        for i in session.scalars(
+            select(SeriesAgendaSend.id).where(SeriesAgendaSend.series_id == series_id)
+        )
+    ]
+    reminders = [
+        str(i)
+        for i in session.scalars(
+            select(SeriesReminder.id).where(SeriesReminder.series_id == series_id)
+        )
+    ]
+    waiting = []
+    if sends:
+        waiting.append(
+            and_(
+                MailOutbox.template == "series_agenda",
+                MailOutbox.payload["send_id"].astext.in_(sends),
+            )
+        )
+    if reminders:
+        waiting.append(
+            and_(
+                MailOutbox.template == "series_reminder",
+                MailOutbox.payload["reminder_id"].astext.in_(reminders),
+            )
+        )
+    if not waiting:
+        return False
+    return (
+        session.scalar(
+            select(MailOutbox.id).where(MailOutbox.status == "pending", or_(*waiting)).limit(1)
+        )
+        is not None
+    )
+
+
+def is_empty(session: Session, series: Series) -> bool:
+    """A row with nothing in it: no meeting points at it (in its scope or not), no agenda line is
+    waiting, no project is linked and no agenda or reminder mail of it is still to be sent. Read
+    fresh on each call (the counts are queries, not the identity map)."""
+    if series.project_id is not None:
+        return False
+    held = select(Meeting.id).where(Meeting.series_id == series.id)
+    waiting = select(SeriesAgendaItem.id).where(
+        SeriesAgendaItem.series_id == series.id, SeriesAgendaItem.consumed_at.is_(None)
+    )
+    if session.scalar(select(held.exists())) or session.scalar(select(waiting.exists())):
+        return False
+    return not _mail_pending(session, series.id)
+
+
 def can_remove(session: Session, user: User, series: Series) -> bool:
     """THE PERMISSION RULE for removing a recurring meeting (Adebayo, 2026-11-15: "Only owners and
-    admins"). The caller must be an owner or admin of the row's team. The row's "creator" has no
-    extra power: for a calendar row that is only whoever synced or recorded first, and removing a
-    team's row ungroups everyone's meetings, deletes lines others wrote and drops the project
-    link, none of which a plain member may do elsewhere. A personal team's only member is its
-    owner, who is its `owner` member, so a person may remove their own personal row. A plain
-    member gets 403 `team_forbidden` at the route (rename keeps its creator rule). The caller has
-    already seen the row (`get`), which is the 404 for everyone outside the team."""
-    return is_manager(session, user, series.team_id)
+    admins", then "Yes, empty rows only"). An owner or admin of the row's team may. The row's
+    "creator" gets no power over a row that has anything in it (for a calendar row that is only
+    whoever synced or recorded first; removing a team's row ungroups everyone's meetings, deletes
+    lines others wrote and drops the project link), but a creator who is still a member may remove
+    a row that is completely empty (`is_empty`), which is how an empty card is cleared. A personal
+    team's only member is its owner, who is its `owner` member, so a person may remove their own
+    personal row. Any other member gets 403 `team_forbidden` at the route (rename keeps its
+    creator rule). The caller has already seen the row (`get`), which is the 404 for everyone
+    outside the team. `remove` asks again under the row's lock."""
+    if is_manager(session, user, series.team_id):
+        return True
+    return (
+        series.owner_user_id == user.id
+        and membership(session, user, series.team_id) is not None
+        and is_empty(session, series)
+    )
 
 
 @dataclass(frozen=True)
@@ -328,9 +395,16 @@ def remove(session: Session, user: User, series: Series) -> Removal:
     caller's transaction; the caller commits."""
     if not can_remove(session, user, series):
         raise _forbidden()
-    locked = session.scalars(select(Series).where(Series.id == series.id).with_for_update()).first()
+    locked = session.scalars(
+        select(Series)
+        .where(Series.id == series.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).first()
     if locked is None:
         raise SeriesRefused(404, "not_found", "No such recurring meeting.")
+    if not can_remove(session, user, locked):  # again, under the lock: a meeting or a line may
+        raise _forbidden()  # have arrived since the first look, and then a creator may not
     if follow_enabled():
         # A meeting of ANOTHER scope that a legacy row still points at is not this removal's to
         # ungroup: it goes to the row of its own scope first (the backfill finds strays only through

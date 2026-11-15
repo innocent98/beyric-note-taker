@@ -1,5 +1,5 @@
 {
-  "note": "Pat, a plain member, makes a recurring meeting by hand in X (any member may).",
+  "note": "Pat, a plain member, makes a recurring meeting by hand in X (any member may). It is completely empty.",
   "as": "Pat",
   "request": {
     "method": "POST",

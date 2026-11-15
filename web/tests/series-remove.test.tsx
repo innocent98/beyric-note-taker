@@ -121,6 +121,26 @@ describe("the question", () => {
   });
 });
 
+describe("the question for an empty row", () => {
+  const empty = { ...owned, past_meetings: [], agenda: [] };
+
+  it("says nothing is grouped under it, and keeps the lines that are still true", async () => {
+    const group = await ask(empty);
+    expect(within(group).getByText(/No meeting is grouped under it and nothing is waiting in it\./)).toBeTruthy();
+    expect(within(group).getByText(/You can't undo this\./)).toBeTruthy();
+    expect(within(group).getByText("Your calendar:")).toBeTruthy();
+    expect(within(group).queryByText("Past meetings:")).toBeNull();
+    expect(within(group).queryByText("Waiting agenda items:")).toBeNull();
+    expect(within(group).queryByText(/for everyone in/)).toBeNull();
+  });
+
+  it("is the full question as soon as a line is waiting", async () => {
+    const group = await ask({ ...empty, agenda: [{ id: 1, text: "Budget", can_remove: true }] });
+    expect(within(group).getByText("Past meetings:")).toBeTruthy();
+    expect(within(group).getByText(/1 line will be removed\./)).toBeTruthy();
+  });
+});
+
 describe("removing", () => {
   it("calls the server for this row, remembers to say so, and goes to the list", async () => {
     mocks.remove.mockResolvedValue(removed);

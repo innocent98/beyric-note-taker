@@ -1,5 +1,5 @@
 {
-  "note": "He cannot remove the hand-made one he made either: 403 `team_forbidden`. An owner or admin of X can.",
+  "note": "Pat tries to remove it now: 403 `team_forbidden`. Nothing changed.",
   "as": "Pat",
   "request": {
     "method": "DELETE",

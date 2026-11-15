@@ -1,0 +1,43 @@
+{
+  "note": "\"Yes, empty rows only\" (Adebayo, 2026-11-15): the person who made a row may remove it while it is COMPLETELY EMPTY (no meeting, no waiting agenda line, no project, no mail still to go). Pat made this one and nothing is in it: `can_remove` is true.",
+  "as": "Pat",
+  "request": {
+    "method": "GET",
+    "path": "/api/series/16",
+    "headers": {
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "id": 16,
+      "title": "Pat's own recurring",
+      "team": {
+        "id": 4,
+        "name": "Platform team",
+        "is_personal": false
+      },
+      "scoped": true,
+      "cadence": "Recurring",
+      "platform": null,
+      "timezone": "UTC",
+      "next_starts_at": null,
+      "next_text": null,
+      "sprint_note": null,
+      "can_rename": true,
+      "can_remove": true,
+      "agenda_recipients": 0,
+      "unfinished": [],
+      "finished_since_text": null,
+      "finished": [],
+      "questions": [],
+      "agenda": [],
+      "topics": [],
+      "suggested_agenda": [],
+      "past_meetings": [],
+      "attendees": []
+    }
+  }
+}

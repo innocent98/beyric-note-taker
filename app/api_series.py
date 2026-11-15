@@ -479,8 +479,9 @@ def delete_series(
     user: User = Depends(auth.current_user),
 ) -> SeriesRemoved:
     """Remove ONE recurring meeting (LEAD-DESIGNED, approved 2026-11-15): an owner or admin of its
-    team, or for a personal row its owner (403 `team_forbidden` for any other member, the one
-    who made the row included; 404 for a recurring meeting the caller cannot see, which includes
+    team, or for a personal row its owner, or the person who made the row while it is completely
+    empty (403 `team_forbidden` for any other member, the creator of a row that has anything in it
+    included; 404 for a recurring meeting the caller cannot see, which includes
     everyone outside the team, and for a second removal). Its meetings only stop being grouped:
     nothing in them is deleted or changed. The waiting agenda lines, the "Keeps coming up"
     topics and the project link go with it (the project stays). A row from a calendar recurring
