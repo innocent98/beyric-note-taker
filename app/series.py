@@ -323,12 +323,26 @@ def remove(session: Session, user: User, series: Series) -> Removal:
     calendar recurring event is remembered as ignored for ITS team (`SeriesIgnored`); a hand-made
     row has no event to remember. Never touches another team's or person's row of the same event.
     The row is locked first, so a meeting that is being linked to it waits for the removal and a
-    second removal finds nothing. In the caller's transaction; the caller commits."""
+    second removal finds nothing. With the flag on, a meeting of another scope that the row still
+    points at (a legacy stray) is put into the row of its own scope first, not ungrouped. In the
+    caller's transaction; the caller commits."""
     if not can_remove(session, user, series):
         raise _forbidden()
     locked = session.scalars(select(Series).where(Series.id == series.id).with_for_update()).first()
     if locked is None:
         raise SeriesRefused(404, "not_found", "No such recurring meeting.")
+    if follow_enabled():
+        # A meeting of ANOTHER scope that a legacy row still points at is not this removal's to
+        # ungroup: it goes to the row of its own scope first (the backfill finds strays only through
+        # their row, so after the bulk ungroup below nothing would ever put it back).
+        strays = select(Meeting).where(
+            Meeting.series_id == locked.id,
+            Meeting.id.not_in(select(Meeting.id).where(in_row(session, locked))),
+        )
+        for stray in session.scalars(
+            strays.order_by(Meeting.id).execution_options(populate_existing=True)
+        ).all():
+            place_meeting(session, stray)
     readable = session.scalar(
         select(func.count())
         .select_from(Meeting)
@@ -576,6 +590,12 @@ def sync_from_joins(session: Session, now: datetime) -> int:
         team_id = team_id_of(session, user)
         if is_ignored(session, team_id, recurring_id):
             continue  # removed from this team (or personal space): its card is not made again
+        if follow:
+            # A person with one ordinary team has that team as their default, but their PERSONAL
+            # row may be the one they removed: no placeholder card then, in their team or anywhere.
+            personal = teams.personal_team(session, user_id)
+            if personal is not None and is_ignored(session, personal.id, recurring_id):
+                continue
         exists = session.scalar(
             select(Series.id).where(
                 Series.team_id == team_id, Series.calendar_recurring_id == recurring_id

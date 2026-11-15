@@ -16,7 +16,7 @@ event from the calendar was made again by the next sync even if the person did n
 
 | Thing | What happens | Product choice? |
 |---|---|---|
-| Past meetings | stay as ordinary meetings, not grouped any more. Nothing of them changes: notes, transcript, tasks, decisions, open questions, sharing | his words |
+| Past meetings | stay as ordinary meetings, not grouped any more. Nothing of them changes: notes, transcript, tasks, decisions, open questions, sharing. A meeting of another scope that a legacy row still pointed at is not ungrouped: it moves to the row of its own scope first (review fix S3) | his words |
 | Tasks and open questions | stay with their meetings | default I chose |
 | Waiting "Other agenda items" lines | **deleted** with the row; the question says how many | **real choice**: alternative is to refuse removal while lines wait, or move them nowhere (they belong to the team's row) |
 | Linked project | the project stays; only the link goes. Tasks already filed in it stay filed | default I chose |
@@ -26,6 +26,8 @@ event from the calendar was made again by the next sync even if the person did n
 | Another team's or person's row of the same event | untouched. A removal acts on ONE row | his words |
 | A hand-made recurring meeting | removed; nothing to remember (no calendar event) | default |
 | **Bringing it back** | **not built.** There is no undo and no list of removed ones. The only way back today is by hand on the server (below) | **real choice**: a "Removed recurring meetings" list with Bring back needs a screen the designer did not draw; I left it as a follow-up rather than invent one |
+
+The question says (review fix S2): a team row "removes it for everyone in {team}"; "No meeting is deleted" (the lines, topics and link are, and the list says so); "You can't undo this"; a Personal row has its own sentence for the other pages.
 
 A removed scope still gets a row for the same event in a **different** scope: removing Tech's Standup does not stop Monday's private Standup
 from being grouped in the person's Personal row, and does not stop a meeting shared to another team from grouping there. This is by the
@@ -55,11 +57,12 @@ that meeting is ungrouped all the same but not counted for them).
   one would show a removed row); a global per-person list (one removal would hide the same event in another team).
 * **`series.remove`** locks the row (`FOR UPDATE`), counts, inserts the mark (`ON CONFLICT DO NOTHING`), sets `meetings.series_id` null for every
   meeting in the row (in or out of scope), then deletes the row; the foreign keys take the agenda lines, topics, reminders and sends.
+* **Review fix M1:** `sync_from_joins` also skips the event when it is ignored in the person's PERSONAL team (looked up, never made). A person with one ordinary team has that team as their default, so without this the removed Personal row came back as an empty card in their team.
 * **The three writers that make a row from a recurring event id check `series.is_ignored`** and make none: `link_from_calendar` (also before it
   re-keys an empty card into an ignored scope), `sync_from_joins`, and `place_meeting` through `_row_for_scope` (a meeting that follows a share to an
   ignored scope is cut loose from its series: `Placement.ignored`; the backfill counts it as moved, not as "no room"). Hand attach and "Make this a
   recurring meeting?" make hand-made rows and are not affected.
-* **Flag `SERIES_FOLLOW_MEETINGS` off:** the action works the same. The mark is keyed by the row's team; the off-path writers make rows in the
+* **Flag `SERIES_FOLLOW_MEETINGS` off:** the action works the same, **but a team row then also holds teammates' private meetings** (the old model): an admin who has the event on their own calendar sees the row and can remove it, which ungroups those meetings and marks the event for the whole team; `meetings_kept` will say 0 for them (F6). The mark is keyed by the row's team; the off-path writers make rows in the
   recorder's default team, which is the row's team, so the check holds there too (tested).
 * **Frontend:** `web/components/app/series-remove.tsx` (own component, so the Series view needs no router unless the person may remove),
   `series-view.tsx`, `recurring-cards.tsx` (the toast, via `sessionStorage` like "Meeting deleted"), `lib/deleted-flag.ts`, `lib/api/client.ts`
@@ -77,7 +80,7 @@ that meeting is ungrouped all the same but not counted for them).
 | `web/components/app/series-remove.tsx`, `series-view.tsx`, `recurring-cards.tsx`, `web/lib/deleted-flag.ts`, `web/lib/api/client.ts`, `types.ts`, `web/styles/pages.css`, `web/scripts/mock-api.mjs` | the button, the question, the toast |
 | `scripts/capture_series_follow.py`, `docs/fe-captures/series-follow/52` to `76` | the live capture (`--keep 51` writes only the new ones) |
 | `docs/fe-integration-guide-series-teams.md` (section 10, table rows), `docs/checklist/master-checklist.md`, the three series-follow SOPs (ghost-card pointers) | docs |
-| `tests/test_series_remove.py` (26), `tests/test_migrations.py` (0048), `web/tests/series-remove.test.tsx` (14) | tests |
+| `tests/test_series_remove.py` (27), `tests/test_migrations.py` (0048), `web/tests/series-remove.test.tsx` (15) | tests |
 
 ## Verification
 
@@ -103,6 +106,14 @@ that meeting is ungrouped all the same but not counted for them).
   `delete from series_ignored where team_id = <team id> and calendar_recurring_id = '<event id>';`
 * A mark holds only the calendar event's id and who removed it; it goes with its team.
 
+## Open decision for Adebayo (review S1): who counts as "the person who made the row"
+
+For a calendar row the "creator" (`owner_user_id`) is nobody's choice: it is whoever's sync or recording came first. As built (his brief says "the person who created the row if they are still a
+member"), a **plain member who is that creator can remove the team's row**. That ungroups every teammate's meetings in it, deletes waiting agenda lines others wrote (a plain member may not do that
+elsewhere), drops the project link (owner or admin only elsewhere), and marks the event ignored for the whole team, with no undo in the app. So the first teammate whose calendar synced can permanently
+remove Tech's Standup for everyone. Not changed; waiting for his answer. Smallest fix if he wants it narrower: a creator who is not an owner or admin may remove only a hand-made row, or one that holds
+no meeting but their own, no project link and no lines by others; otherwise 403.
+
 ## Follow-ups
 
 * **Bring back:** a "Removed recurring meetings" list with "Bring back" (needs a design), and regrouping the old meetings when it comes back.
@@ -112,3 +123,12 @@ that meeting is ungrouped all the same but not counted for them).
 * **Browser parity pass** (screenshots at 1440, 768, 390 px) of the question box.
 * **Race:** a meeting being linked to a row at the very moment it is removed can fail its link (the pipeline's link is best effort and logs it); the meeting is kept and the next recording is
   not affected. Not locked further.
+* **F1 lock order.** `remove` locks the series row, then the meetings; a share (`meeting_teams.share` to `place_meeting`) and the extraction (`mark_topics_stale`) lock the meeting first. Removing and sharing the
+  same row at the same instant can deadlock; Postgres fails one request (500), nothing is corrupted. Fix if wanted: lock the row's meetings, ordered by id, before the series.
+* **F2** A write racing the removal (an agenda line added, a meeting attached at that instant) fails its foreign key check and returns a 500. The pipeline's link is protected by its savepoint.
+* **F3** A sync or recording that passed `is_ignored` just before the removal committed can make the row again (`_get_or_create` inserts after the delete). The window is tiny; removing again works.
+* **F4** A team of one dissolved into another team with multi-team off (`move_team_series`): the marks cascade away with the old team, so removed cards can come back in the new team, and a moved row can land
+  in a scope that has a mark. Multi-team is on in production, so legacy only. Fix: move the marks too.
+* **F5** After a Personal row is removed, a later manual share of a meeting of that event to a team does not join the team's row (the private meeting was never linked, and `place_meeting` ignores a meeting
+  in no series). Before the removal it would have moved there. Auto-share is unaffected (applied before the link). Needs a small design (on share, try the calendar link for a meeting in no series).
+* **F6** Flag off: see the "works the same" line above (an admin can remove a team row that holds teammates' private meetings).

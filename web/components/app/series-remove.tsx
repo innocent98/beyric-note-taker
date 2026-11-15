@@ -47,6 +47,7 @@ export function SeriesRemove({ page, multiTeam }: { page: SeriesPage; multiTeam:
   }
 
   const lines = page.agenda.length;
+  const personal = page.team.is_personal;
   return (
     <div>
       <div role="status" aria-live="polite">
@@ -55,8 +56,11 @@ export function SeriesRemove({ page, multiTeam }: { page: SeriesPage; multiTeam:
       {asking ? (
         <div className="meeting-delete-ask" role="group" aria-label="Remove this recurring meeting?">
           <p>
-            <strong>Remove this recurring meeting?</strong> Your past meetings stay. They will not be grouped any more.
-            Nothing is deleted.
+            <strong>Remove this recurring meeting?</strong>{" "}
+            {personal
+              ? "Your past meetings stay. They will not be grouped any more. No meeting is deleted."
+              : `This removes it for everyone in ${page.team.name}. The past meetings stay. They will not be grouped any more. No meeting is deleted.`}{" "}
+            You can&apos;t undo this.
           </p>
           <ul className="sr-remove-list">
             <li>
@@ -82,8 +86,10 @@ export function SeriesRemove({ page, multiTeam }: { page: SeriesPage; multiTeam:
             </li>
             {multiTeam ? (
               <li>
-                <strong>Other pages:</strong> this removes it from {teamLabel(page.team)} only. The same recurring
-                meeting on another team&apos;s page, or on your personal page, is not changed.
+                <strong>Other pages:</strong>{" "}
+                {personal
+                  ? "this removes it from your Personal space only. The same recurring meeting on a team's page is not changed."
+                  : `this removes it from ${teamLabel(page.team)} only. The same recurring meeting on another team's page, or on your personal page, is not changed.`}
               </li>
             ) : null}
           </ul>

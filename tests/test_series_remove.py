@@ -308,17 +308,23 @@ def test_past_meetings_stay_readable_with_their_tasks_questions_and_sharing(
         assert fields(session.get(Meeting, other.id)) == before[other.id]
 
 
-def test_the_answer_counts_only_meetings_the_caller_may_read(app, session, world, rows):
-    """A legacy mixed X row still points at Pat's private Tuesday and Wednesday (Y): Ada may not
-    read those, so they are not in the number she is told."""
+def test_a_stray_of_another_scope_goes_to_its_own_row_not_into_no_series(app, session, world, rows):
+    """A legacy mixed X row still points at Pat's private Tuesday and Wednesday (Y): removing X's
+    row is not Pat's Personal or Y's grouping to undo. Each stray moves to the row of its own
+    scope, and Ada is told only about the one meeting she may read."""
     for meeting in (rows.tuesday, rows.wednesday):
         meeting.series_id = rows.x.id
     session.commit()
     ada = sign_in(app, OWNER_EMAIL)
     body = remove(ada, rows.x.id).json()
-    assert body["meetings_kept"] == 1  # Monday only
+    assert (
+        body["meetings_kept"] == 1
+    )  # Monday only: the strays are not counted, they are not ungrouped
     session.expire_all()
-    assert session.get(Meeting, rows.tuesday.id).series_id is None  # ungrouped all the same
+    assert session.get(Meeting, rows.monday.id).series_id is None
+    assert session.get(Meeting, rows.tuesday.id).series_id == rows.mine.id  # Pat's personal row
+    assert session.get(Meeting, rows.wednesday.id).series_id == rows.y.id  # Y's row
+    assert reload(session, rows.mine.id) is not None and reload(session, rows.y.id) is not None
 
 
 def test_the_answer_says_what_was_removed_and_remembered(app, session, world, rows):
@@ -377,6 +383,28 @@ def test_the_hourly_sync_does_not_recreate_a_removed_calendar_row(app, session, 
     assert card_id not in ids
 
 
+def test_removing_the_personal_row_of_a_one_team_person_leaves_no_card_in_their_team(
+    app, session, world, template
+):
+    """Ada is in ONE ordinary team (X), so X is her default team. Her private recurring meeting
+    is in her Personal row. She removes it. The hourly sync must not make an empty card for the
+    event in X (the ghost card, back in another scope)."""
+    mine = personal_of(session, world.ada)
+    row = standup(session, mine, rid="rid-m1", owner_id=world.ada.id, title="1:1")
+    event = calendar_event(session, world.ada, "rid-m1", MONDAY)
+    meeting = put(session, template, row, who=world.ada, title="1:1")
+    meeting.source = "calendar"
+    session.commit()
+    join_for(session, world.ada, event, meeting, state="completed")
+    row_id = row.id
+    ada = sign_in(app, OWNER_EMAIL)
+    assert remove(ada, row_id).status_code == 200
+    assert ignored(session, mine, "rid-m1")
+    assert series_rules.sync_from_joins(session, MONDAY) == 0
+    assert row_of(session, world.x.id, "rid-m1") is None
+    assert row_of(session, mine, "rid-m1") is None
+
+
 def test_a_later_calendar_meeting_of_that_event_is_not_regrouped(
     app, session, world, rows, template
 ):
@@ -410,9 +438,10 @@ def test_sharing_a_meeting_of_that_event_to_the_removed_scope_does_not_regroup_i
 
 
 def test_a_card_waiting_to_move_is_not_taken_into_an_ignored_scope(app, session, world, template):
-    """Ada's empty card in X (before her first recording). She removes her personal Standup (a
-    hand-over from earlier); her first meeting is private, so it would go to the personal scope:
-    ignored, so it is not linked and the X card is left where it is."""
+    """Ada's empty card in X (before her first recording) already exists. Her personal scope is
+    removed; her first meeting is private, so it would go to the personal scope: ignored, so it
+    is not linked and the X card that already exists is left where it is (one that does not exist
+    yet is not made: see the test about the personal row of a one-team person)."""
     event = calendar_event(session, world.ada, "rid-card", MONDAY)
     scheduled = join_for(session, world.ada, event, state="scheduled")
     series_rules.sync_from_joins(session, MONDAY)

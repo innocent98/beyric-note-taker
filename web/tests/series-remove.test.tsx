@@ -27,6 +27,7 @@ vi.mock("@/lib/api/browser", () => ({
 const capture = (file: string) => JSON.parse(read(join(REPO, "docs/fe-captures/series-follow", file)));
 const owned = capture("52-remove-page-ada-x-before.json").response.body as SeriesPage;
 const notAllowed = capture("53-remove-page-pat-x-cannot.json").response.body as SeriesPage;
+const personalPage = capture("25-page-ada-personal.json").response.body as SeriesPage;
 const forbidden = capture("54-remove-pat-x-403.json").response;
 const removed = capture("64-remove-ada-x-standup.json").response.body;
 const emptiedPersonalRemoved = capture("74-remove-ada-personal-standup-emptied.json").response.body;
@@ -77,7 +78,9 @@ describe("the button", () => {
 describe("the question", () => {
   it("says the plain words and what happens to each thing", async () => {
     const group = await ask(owned);
-    expect(within(group).getByText(/Your past meetings stay\. They will not be grouped any more\. Nothing is deleted\./)).toBeTruthy();
+    expect(within(group).getByText(/The past meetings stay\. They will not be grouped any more\. No meeting is deleted\./)).toBeTruthy();
+    expect(within(group).getByText(/You can't undo this\./)).toBeTruthy();
+    expect(within(group).queryByText(/Nothing is deleted/)).toBeNull();
     for (const label of ["Past meetings:", "Waiting agenda items:", "Linked project:", "Keeps coming up:", "Tasks and open questions:", "Your calendar:"]) {
       expect(within(group).getByText(label)).toBeTruthy();
     }
@@ -88,6 +91,18 @@ describe("the question", () => {
     const page = { ...owned, agenda: [{ id: 1, text: "Budget", can_remove: true }, { id: 2, text: "Hiring", can_remove: true }] };
     const group = await ask(page);
     expect(within(group).getByText(/2 lines will be removed\./)).toBeTruthy();
+  });
+
+  it("says a team row goes for everyone in the team, and a personal row only for the person", async () => {
+    const group = await ask(owned);
+    expect(within(group).getByText(/This removes it for everyone in Platform team\./)).toBeTruthy();
+    cleanup();
+    const personal = await ask({ ...personalPage, can_remove: true });
+    expect(within(personal).queryByText(/for everyone in/)).toBeNull();
+    expect(within(personal).getByText(/Your past meetings stay\./)).toBeTruthy();
+    expect(within(personal).getByText(/You can't undo this\./)).toBeTruthy();
+    expect(within(personal).getByText(/this removes it from your Personal space only\. The same recurring meeting on a team's page is not changed\./)).toBeTruthy();
+    expect(within(personal).queryByText(/your personal page/)).toBeNull();
   });
 
   it("says it removes from this team only, while multi-team is on", async () => {

@@ -806,7 +806,7 @@ What goes with the row, and what stays (the dialog says each of these in words, 
 | "Keeps coming up" topics, reminders, agenda sends of that row | removed with the row |
 | The linked project | stays; only the link goes. Tasks already filed in it stay filed |
 | The calendar event | remembered as removed for this team (or Personal space) when the row came from one; `remembered` says so |
-| Another team's, or the person's personal, row of the same event | untouched |
+| Another team's, or the person's personal, row of the same event | untouched. A meeting of another scope that a legacy row still pointed at is put into the row of its own scope, not ungrouped (tests only; production has none after the backfill) |
 
 ### 10.2 Who may, and the new field `can_remove`
 
@@ -996,10 +996,9 @@ unknown id, tested in `tests/test_series_remove.py`).
   **no** recurring meeting (capture 72: `series` is `null`), and X's list has no Standup (capture 73).
 
 **What the frontend does** (`web/components/app/series-remove.tsx`, `recurring-cards.tsx`): a red text button "Remove this recurring meeting" at the foot of the
-Series page, only when `can_remove`. Pressing it opens the inline question (same box and buttons as "Delete meeting"): *Remove this recurring meeting? Your past
-meetings stay. They will not be grouped any more. Nothing is deleted.* with one line each for the past meetings, the waiting agenda items (the number from
+Series page, only when `can_remove`. Pressing it opens the inline question (same box and buttons as "Delete meeting"): *Remove this recurring meeting? This removes it for everyone in {team}. The past meetings stay. They will not be grouped any more. No meeting is deleted. You can't undo this.* (on a Personal row: *Your past meetings stay. They will not be grouped any more. No meeting is deleted. You can't undo this.*) with one line each for the past meetings, the waiting agenda items (the number from
 `agenda.length` of the page), the linked project, "Keeps coming up", tasks and open questions, the calendar, and (while multi-team is on) "this removes it from
-{team} only". On success it goes to the Meetings page, where the Recurring cards say once: *Recurring meeting removed. Your past meetings stay.* A 404 is treated
+{team} only" (on a Personal row: "from your Personal space only; the same recurring meeting on a team's page is not changed"). On success it goes to the Meetings page, where the Recurring cards say once: *Recurring meeting removed. Your past meetings stay.* A 404 is treated
 as success; any other error shows the server's message and stays.
 
 ### 10.6 UX consequences the frontend must surface
