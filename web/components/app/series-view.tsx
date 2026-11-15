@@ -12,6 +12,7 @@ import { durationLabel, initials, platformLabel, plural } from "@/lib/format";
 import { avatarTone, dayLabel, isOverdue, personInitials, taskDueText, todayIn } from "@/lib/tasks";
 import { noPastText, scopeNote, teamLabel } from "@/lib/series-team";
 import { LocalTime } from "@/components/app/local-time";
+import { SeriesRemove } from "@/components/app/series-remove";
 
 // A 422 is developer text for most calls (`errorMessage` hides it), but the agenda's own refusals are
 // written for the person ("Write the item without a web address.").
@@ -441,6 +442,7 @@ export function SeriesView({ initial, multiTeam = false }: { initial: SeriesPage
           </div>
         </aside>
       </div>
+      {page.can_remove ? <SeriesRemove page={page} multiTeam={multiTeam} /> : null}
       {current ? (
         <TaskDrawer
           task={current}

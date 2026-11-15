@@ -627,14 +627,14 @@ seriesPages[1].sprint_note = "Opens Sprint 13";
 seriesPages[3].sprint_note = null;
 // The row's team: the captures are older than the `team` field (docs/fe-captures/series-follow/ has the real shape).
 const seriesTeam = { id: 1, name: "Mock team", is_personal: false };
-Object.values(seriesPages).forEach((page) => Object.assign(page, { team: seriesTeam, scoped: true }));
+Object.values(seriesPages).forEach((page) => Object.assign(page, { team: seriesTeam, scoped: true, can_remove: teamRole !== "member" }));
 const projectLink = (id) => {
   const project = projects.find((p) => p.id === seriesProject[id]);
   return project ? { id: project.id, name: project.name } : null;
 };
 const seriesCards = () => {
   const body = seriesCapture("08");
-  return { ...body, series: body.series.map((card) => ({ ...card, team: seriesTeam, project: projectLink(card.id) })) };
+  return { ...body, series: body.series.filter((card) => !card.id || seriesPages[card.id]).map((card) => ({ ...card, team: seriesTeam, project: projectLink(card.id) })) };
 };
 if (values.overdue) {
   seriesPages[1].unfinished.slice(0, 2).forEach((t) => (t.due_date = "2026-10-30"));
@@ -812,6 +812,14 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, seriesCards().series.find((c) => c.id === card.id));
   }
   const onePage = /^\/api\/series\/(\d+)$/.exec(path);
+  if (onePage && method === "DELETE") {
+    // "Remove this recurring meeting": the answer shape of docs/fe-captures/series-follow/64; the card goes from the list.
+    const page = seriesPages[onePage[1]];
+    if (!page) return json(res, 404, { error: { code: "not_found", message: "No such recurring meeting" } });
+    if (teamRole === "member") return json(res, 403, { error: { code: "team_forbidden", message: "You can't do that here. Ask an owner or admin of your team." } });
+    delete seriesPages[onePage[1]];
+    return json(res, 200, { meetings_kept: page.past_meetings.length, agenda_lines_removed: page.agenda.length, remembered: true });
+  }
   if (onePage && method === "GET") {
     const page = seriesPages[onePage[1]];
     return page ? json(res, 200, withTopics(page, Number(onePage[1]))) : json(res, 404, { error: { code: "not_found", message: "No such recurring meeting" } });

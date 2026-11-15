@@ -127,6 +127,10 @@ class SeriesPage(BaseModel):
     sprint_note: str | None
     # The caller may rename the series (its creator, or an owner or admin).
     can_rename: bool
+    # The caller may remove this recurring meeting (`DELETE /api/series/{id}`): the person who made
+    # it, or an owner or admin of its team; for a personal row, its owner. false: do not draw the
+    # button. LEAD-DESIGNED, not in the designer's files.
+    can_remove: bool
     # Teammates who attended the last three meetings, other than the caller, who the agenda would
     # go to. 0 disables "Send agenda to attendees" (it would answer 409 `no_attendees`).
     agenda_recipients: int
@@ -143,6 +147,20 @@ class SeriesPage(BaseModel):
     suggested_agenda: list[AgendaSuggestion]
     past_meetings: list[PastMeeting]
     attendees: list[AttendeeOut]
+
+
+class SeriesRemoved(BaseModel):
+    """What `DELETE /api/series/{id}` did, for the toast. Counts only."""
+
+    # How many of the row's meetings the caller may read, which are now ordinary meetings, not
+    # grouped. They are all still there.
+    meetings_kept: int
+    # The waiting "Other agenda items" lines that went with the row.
+    agenda_lines_removed: int
+    # true: the row came from a calendar recurring event and the event is now remembered as removed
+    # for this team (or this personal space): it will not be made again, and later meetings of it
+    # are not grouped there. false: a recurring meeting made by hand has no event to remember.
+    remembered: bool
 
 
 class SeriesCreate(Body):

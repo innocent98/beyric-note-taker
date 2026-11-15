@@ -1580,7 +1580,19 @@ export interface paths {
         get: operations["get_series"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Series
+         * @description Remove ONE recurring meeting (LEAD-DESIGNED, approved 2026-11-15): the person who made it, an
+         *     owner or admin of its team, or for a personal row its owner (403 `team_forbidden` for any
+         *     other member; 404 for a recurring meeting the caller cannot see, which includes everyone
+         *     outside the team, and for a second removal). Its meetings only stop being grouped: nothing in
+         *     them is deleted or changed. The waiting agenda lines, the "Keeps coming up" topics and the
+         *     project link go with it (the project stays). A row from a calendar recurring event is
+         *     remembered as removed for this team (or personal space) alone: the calendar sync does not make
+         *     it again and later meetings of the event are not grouped there. Another team's or person's
+         *     row of the same event is untouched. Works with `SERIES_FOLLOW_MEETINGS` on or off.
+         */
+        delete: operations["delete_series"];
         options?: never;
         head?: never;
         /**
@@ -3960,6 +3972,8 @@ export interface components {
             attendees: components["schemas"]["AttendeeOut"][];
             /** Cadence */
             cadence: string;
+            /** Can Remove */
+            can_remove: boolean;
             /** Can Rename */
             can_rename: boolean;
             /** Finished */
@@ -4013,6 +4027,18 @@ export interface components {
             id: number;
             /** Title */
             title: string;
+        };
+        /**
+         * SeriesRemoved
+         * @description What `DELETE /api/series/{id}` did, for the toast. Counts only.
+         */
+        SeriesRemoved: {
+            /** Agenda Lines Removed */
+            agenda_lines_removed: number;
+            /** Meetings Kept */
+            meetings_kept: number;
+            /** Remembered */
+            remembered: boolean;
         };
         /**
          * SeriesTeam
@@ -9885,6 +9911,64 @@ export interface operations {
                 };
             };
             /** @description Missing or wrong X-CSRF-Token */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Malformed request */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_series: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                series_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesRemoved"];
+                };
+            };
+            /** @description Not logged in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description `team_forbidden` */
             403: {
                 headers: {
                     [name: string]: unknown;

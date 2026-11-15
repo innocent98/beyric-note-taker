@@ -64,6 +64,7 @@ from app.series_schemas import (
     SeriesPage,
     SeriesPatch,
     SeriesProjectIn,
+    SeriesRemoved,
     SeriesTeam,
     TopicOut,
 )
@@ -352,6 +353,7 @@ def _page(session: Session, user: User, found: Series) -> SeriesPage:
         sprint_note=_sprint_note(session, user, found, upcoming, zone_name),
         can_rename=found.owner_user_id == user.id
         or series.is_manager(session, user, found.team_id),
+        can_remove=series.can_remove(session, user, found),
         agenda_recipients=len(recipients),
         unfinished=api_tasks.present(session, user, unfinished),
         finished_since_text=(f"{last_day:%a} {last_day.day} {last_day:%b}" if last_day else None),
@@ -463,6 +465,39 @@ def patch_series(
         unfinished_tasks=counts[0],
         open_questions=counts[1],
         project=_project_link(found, _project_names(session, found.team_id)),
+    )
+
+
+@router.delete(
+    "/series/{series_id:id}",
+    tags=["series"],
+    responses={**NOT_FOUND, **FORBIDDEN},
+)
+def delete_series(
+    series_id: int,
+    session: Session = Depends(get_session),
+    user: User = Depends(auth.current_user),
+) -> SeriesRemoved:
+    """Remove ONE recurring meeting (LEAD-DESIGNED, approved 2026-11-15): the person who made it, an
+    owner or admin of its team, or for a personal row its owner (403 `team_forbidden` for any
+    other member; 404 for a recurring meeting the caller cannot see, which includes everyone
+    outside the team, and for a second removal). Its meetings only stop being grouped: nothing in
+    them is deleted or changed. The waiting agenda lines, the "Keeps coming up" topics and the
+    project link go with it (the project stays). A row from a calendar recurring event is
+    remembered as removed for this team (or personal space) alone: the calendar sync does not make
+    it again and later meetings of the event are not grouped there. Another team's or person's
+    row of the same event is untouched. Works with `SERIES_FOLLOW_MEETINGS` on or off."""
+    found = _series_or_404(session, user, series_id)
+    try:
+        removal = series.remove(session, user, found)
+    except series.SeriesRefused as exc:
+        session.rollback()
+        raise _refuse(exc) from None
+    session.commit()
+    return SeriesRemoved(
+        meetings_kept=removal.meetings_kept,
+        agenda_lines_removed=removal.agenda_lines_removed,
+        remembered=removal.remembered,
     )
 
 

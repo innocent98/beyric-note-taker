@@ -117,7 +117,7 @@ display catches up at switch-on. That is why step 2 belongs right before the swi
   all-private recurring call that is a lasting empty card in the team list. Not built: the note
   says empty cards stay, and this case is not what that sentence was written for. The fix is small
   if wanted (re-key the emptied row into the new scope when it has no waiting lines and no project,
-  else delete it). Decision for Adebayo or the lead before PR 3.
+  else delete it). **Decided 2026-11-15: not automatic; the person removes it** (`docs/sop/2026-11-15-remove-recurring-meeting.md`).
 - From the Opus review, not built (small, low odds or pilot-scale): the re-key of an empty card and
   `_get_or_create` are not locked, so two links of one recurring id at once can fail the link of one
   (the pipeline's savepoint swallows it); the backfill is one transaction over the whole table
