@@ -1,0 +1,35 @@
+{
+  "note": "Pat, a plain member, makes a recurring meeting by hand in X (any member may).",
+  "as": "Pat",
+  "request": {
+    "method": "POST",
+    "path": "/api/series",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "X-Team-Id": "4",
+      "Cookie": "session=<cookie>"
+    },
+    "body": {
+      "title": "Pat's own recurring"
+    }
+  },
+  "response": {
+    "status": 201,
+    "body": {
+      "id": 16,
+      "title": "Pat's own recurring",
+      "team": {
+        "id": 4,
+        "name": "Platform team",
+        "is_personal": false
+      },
+      "cadence": "Recurring",
+      "platform": null,
+      "next_starts_at": null,
+      "next_text": null,
+      "unfinished_tasks": 0,
+      "open_questions": 0,
+      "project": null
+    }
+  }
+}

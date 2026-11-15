@@ -1,15 +1,15 @@
 """Remove a recurring meeting (`DELETE /api/series/{id}`). LEAD-DESIGNED, approved by Adebayo
 2026-11-15. Written before the code: the permission and leak cases first.
 
-The cast is `tests/test_multi_team_leaks.py`'s `world`: Ada records and owns team X; Pat is in X and
-Y; Quinn owns Y and is only in Y; Zed owns Z (his own organisation). A removal acts on ONE row (one
-team scope, or one personal scope): never on another team's or person's row of the same recurring
-event. Who may: the owner or an admin of the row's team, the person who made the row while they are
-still a member, and for a personal row its owner. A member who is none of those gets 403
-`team_forbidden`; a person outside the team gets 404. Past meetings stay as ordinary meetings
-(nothing of them changes); a row that came from a calendar recurring event is remembered as
-ignored for that scope, so the calendar sync does not make it again and later meetings of that
-event are not regrouped into it.
+The cast is `tests/test_multi_team_leaks.py`'s `world`: Ada records and owns team X; Pat is in X
+and Y; Quinn owns Y and is only in Y; Zed owns Z (his own organisation). A removal acts on ONE row
+(one team scope, or one personal scope): never on another team's or person's row of the same
+recurring event. Who may (Adebayo, 2026-11-15: "Only owners and admins"): the owner or an admin of
+the row's team, and for a personal row its owner. The row's creator has no extra power on a team
+row. Any other member gets 403 `team_forbidden`; a person outside the team gets 404. Past meetings
+stay as ordinary meetings (nothing of them changes); a row that came from a calendar recurring
+event is remembered as ignored for that scope, so the calendar sync does not make it again and
+later meetings of that event are not regrouped into it.
 """
 
 # ruff: noqa: F811  (fixtures are imported by name and used as arguments)
@@ -140,10 +140,25 @@ def test_an_admin_of_the_team_may_remove_it(app, session, world, rows):
     assert reload(session, rows.x.id) is None
 
 
-def test_the_person_who_made_the_row_may_remove_it_while_a_member(app, session, world, rows):
-    pat = sign_in(app, PAT)  # a plain member of X, and the row's creator
-    assert remove(pat, rows.x.id).status_code == 200
-    assert reload(session, rows.x.id) is None
+def test_a_plain_member_who_made_a_calendar_row_or_a_hand_made_row_gets_403(
+    app, session, world, rows, template
+):
+    """Pat made X's calendar row (`rows.x`, he recorded first) and now a hand-made one. He is a
+    plain member of X: he may rename them but not remove them."""
+    pat = sign_in(app, PAT)
+    hand = standup(session, world.x.id, rid=None, owner_id=world.pat.id, title="Pat's own")
+    put(session, template, hand, who=world.pat, team=world.x.id)
+    hand_id = hand.id
+    for row_id in (rows.x.id, hand_id):
+        assert (
+            rows.x.owner_user_id == world.pat.id
+            and pat.get(f"/api/series/{row_id}").status_code == 200
+        )
+        error = error_of(remove(pat, row_id), 403, "team_forbidden")
+        assert error["message"] == FORBIDDEN_TEXT
+        assert reload(session, row_id) is not None
+    assert not ignored(session, world.x.id)
+    assert pat.call("PATCH", f"/api/series/{hand_id}", {"title": "Renamed"}).status_code == 200
 
 
 def test_a_plain_member_who_did_not_make_it_gets_403_and_nothing_changes(app, session, world, rows):
@@ -233,10 +248,12 @@ def test_the_page_says_who_may_remove(app, session, world, rows):
         ("mia", "mia@example.test"),
     ):
         flags[name] = sign_in(app, email).get(f"/api/series/{rows.x.id}").json()["can_remove"]
-    assert flags == {"ada": True, "pat": True, "mia": False}
+    assert flags == {"ada": True, "pat": False, "mia": False}  # Pat made the row: no extra power
     pat = sign_in(app, PAT)
-    assert pat.get(f"/api/series/{rows.mine.id}").json()["can_remove"] is True
-    assert pat.get(f"/api/series/{rows.y.id}").json()["can_remove"] is True  # he made Y's row too
+    assert pat.get(f"/api/series/{rows.mine.id}").json()["can_remove"] is True  # his own personal
+    assert pat.get(f"/api/series/{rows.y.id}").json()["can_remove"] is False  # he made Y's row too
+    quinn = sign_in(app, QUINN)  # owns Y
+    assert quinn.get(f"/api/series/{rows.y.id}").json()["can_remove"] is True
 
 
 # ---- one row only: the sibling rows and the meetings are untouched ----
@@ -248,8 +265,8 @@ def test_removing_x_leaves_ys_row_and_the_personal_row_and_every_meeting_as_it_w
     before = {
         who.id: ids_of(session, who) for who in (world.ada, world.pat, world.quinn, world.zed)
     }
-    pat = sign_in(app, PAT)
-    assert remove(pat, rows.x.id).status_code == 200
+    ada = sign_in(app, OWNER_EMAIL)
+    assert remove(ada, rows.x.id).status_code == 200
     assert reload(session, rows.y.id) is not None and reload(session, rows.mine.id) is not None
     assert session.get(Meeting, rows.wednesday.id).series_id == rows.y.id
     assert session.get(Meeting, rows.tuesday.id).series_id == rows.mine.id
@@ -257,7 +274,7 @@ def test_removing_x_leaves_ys_row_and_the_personal_row_and_every_meeting_as_it_w
     assert not ignored(session, world.y.id) and not ignored(session, rows.me)
     after = {who.id: ids_of(session, who) for who in (world.ada, world.pat, world.quinn, world.zed)}
     assert after == before  # nobody reads more or fewer meetings
-    page = pat.get(f"/api/series/{rows.y.id}").json()
+    page = sign_in(app, PAT).get(f"/api/series/{rows.y.id}").json()
     assert [m["id"] for m in page["past_meetings"]] == [rows.wednesday.id]
 
 
@@ -489,24 +506,25 @@ def test_a_hand_made_row_is_removed_and_nothing_is_remembered(app, session, worl
     assert session.scalar(select(func.count()).select_from(SeriesIgnored)) == 0
 
 
-def test_an_emptied_row_the_ghost_card_is_removed_with_the_same_action(app, session, world, rows):
-    rows.monday.series_id = None  # its last meeting went elsewhere; the card stays
+def test_an_emptied_row_the_ghost_card_is_removed_by_a_manager_who_sees_it(
+    app, session, world, rows
+):
+    """An empty card shows to its creator only. Ada (owner of X) made one: she removes it. Pat (a
+    plain member) has one too: he sees it, and may not remove it (403), as for any team row."""
+    rows.monday.series_id = None  # Pat's X row lost its last meeting; the card stays, his alone
     session.commit()
+    hers = standup(session, world.x.id, rid="rid-ghost", owner_id=world.ada.id, title="Ghost")
+    hers_id = hers.id
+    headers = {"X-Team-Id": str(world.x.id)}
     ada = sign_in(app, OWNER_EMAIL)
-    assert [
-        c["id"]
-        for c in ada.client.get("/api/series", headers={"X-Team-Id": str(world.x.id)}).json()[
-            "series"
-        ]
-    ] == []
-    # the creator sees the empty card, and removes it
+    seen = ada.client.get("/api/series", headers=headers).json()["series"]
+    assert [c["id"] for c in seen] == [hers_id]  # not Pat's card
     pat = sign_in(app, PAT)
-    cards = pat.client.get("/api/series", headers={"X-Team-Id": str(world.x.id)}).json()["series"]
-    assert [c["id"] for c in cards] == [rows.x.id]
-    assert remove(pat, rows.x.id).status_code == 200
-    assert (
-        pat.client.get("/api/series", headers={"X-Team-Id": str(world.x.id)}).json()["series"] == []
-    )
+    seen_by_pat = pat.client.get("/api/series", headers=headers).json()["series"]
+    assert [c["id"] for c in seen_by_pat] == [rows.x.id]
+    error_of(remove(pat, rows.x.id), 403, "team_forbidden")
+    assert remove(ada, hers_id).status_code == 200
+    assert ada.client.get("/api/series", headers=headers).json()["series"] == []
 
 
 # ---- the ignored mark itself ----

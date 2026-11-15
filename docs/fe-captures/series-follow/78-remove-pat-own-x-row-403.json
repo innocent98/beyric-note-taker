@@ -1,0 +1,22 @@
+{
+  "note": "Pat tries to remove the calendar row he made: 403 `team_forbidden`. Nothing changed.",
+  "as": "Pat",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/13",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "You can't do that here. Ask an owner or admin of your team."
+      }
+    }
+  }
+}

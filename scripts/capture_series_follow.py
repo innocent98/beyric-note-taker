@@ -941,6 +941,37 @@ def remove_story(
     )
     assert hand_removed.json()["remembered"] is False
 
+    # "Only owners and admins" (Adebayo, 2026-11-15): the person who made a team row has no extra power.
+    own = pat.call(
+        "remove-page-pat-own-x-row",
+        "GET",
+        f"/api/series/{pat_x}",
+        note="Pat made X's Design sync (his calendar synced first) but is a plain member of X: the page says `can_remove: false`. The person who made a team row gets no extra power.",
+    )
+    assert own.json()["can_remove"] is False
+    own_403 = pat.call(
+        "remove-pat-own-x-row-403",
+        "DELETE",
+        f"/api/series/{pat_x}",
+        note="Pat tries to remove the calendar row he made: 403 `team_forbidden`. Nothing changed.",
+    )
+    assert own_403.status_code == 403
+    pats_hand = pat.call(
+        "remove-pat-hand-made-create",
+        "POST",
+        "/api/series",
+        body={"title": "Pat's own recurring"},
+        team=x,
+        note="Pat, a plain member, makes a recurring meeting by hand in X (any member may).",
+    )
+    pats_hand_403 = pat.call(
+        "remove-pat-hand-made-403",
+        "DELETE",
+        f"/api/series/{pats_hand.json()['id']}",
+        note="He cannot remove the hand-made one he made either: 403 `team_forbidden`. An owner or admin of X can.",
+    )
+    assert pats_hand_403.status_code == 403
+
 
 def main() -> None:
     if KEEP == 0 and OUT.exists():

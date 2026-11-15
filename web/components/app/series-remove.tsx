@@ -14,8 +14,8 @@ import { teamLabel } from "@/lib/series-team";
 // designer drew no such control. It reuses the Meeting page's "Delete meeting" pieces exactly (the red text
 // button, the inline ask in the same box, Cancel and the danger button): docs/ui has nothing to add.
 //
-// Drawn only when the server says the caller may (`can_remove`: the person who made the row, an owner or admin
-// of its team, or the owner of a personal row). It acts on THIS page's row only; the ask says what happens to
+// Drawn only when the server says the caller may (`can_remove`: an owner or admin of the row's team, or the owner
+// of a personal row; the row's creator gets no extra power). It acts on THIS page's row only; the ask says what happens to
 // everything that was in it. Nothing is deleted but the row, the waiting agenda lines and the repeat topics:
 // the meetings only stop being grouped. A 404 means it is already gone, which is what the person wanted.
 export function SeriesRemove({ page, multiTeam }: { page: SeriesPage; multiTeam: boolean }) {

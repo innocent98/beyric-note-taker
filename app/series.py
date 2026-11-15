@@ -31,8 +31,8 @@ mail) also asks for the row's scope (`in_row`, `rows_in_scope`), so a meeting of
 a legacy row still points at is never shown, counted, mailed or fed to the model, whatever the
 writers did. A personal row has no repeat topics (never read, never shown).
 
-**Removing one (`remove`, LEAD-DESIGNED, Adebayo 2026-11-15).** The owner or an admin of the row's
-team, the person who made the row while still a member, or a personal row's owner may remove it.
+**Removing one (`remove`, LEAD-DESIGNED, Adebayo 2026-11-15).** Only the owner or an admin of the
+row's team (the row's creator gets no extra power), or a personal row's owner, may remove it.
 Its meetings only stop being grouped. A row that came from a calendar recurring event is also
 remembered as ignored for ITS scope (`SeriesIgnored`): `link_from_calendar`, `sync_from_joins` and
 `place_meeting` (through `_row_for_scope`) check `is_ignored` and make no row for it.
@@ -293,15 +293,15 @@ def is_ignored(session: Session, team_id: int, recurring_id: str) -> bool:
 
 
 def can_remove(session: Session, user: User, series: Series) -> bool:
-    """THE PERMISSION RULE for removing a recurring meeting. The caller must be a member of the
-    row's team (so a person who left it, or was never in it, may not), and then: the person who
-    made the row, or an owner or admin of its team. A personal team's only member is its owner, who
-    is its `owner` member. A plain member who did not make the row may not (403 `team_forbidden`
-    at the route). The caller has already seen the row (`get`), which is the 404 for everyone
-    outside the team."""
-    if membership(session, user, series.team_id) is None:
-        return False
-    return series.owner_user_id == user.id or is_manager(session, user, series.team_id)
+    """THE PERMISSION RULE for removing a recurring meeting (Adebayo, 2026-11-15: "Only owners and
+    admins"). The caller must be an owner or admin of the row's team. The row's "creator" has no
+    extra power: for a calendar row that is only whoever synced or recorded first, and removing a
+    team's row ungroups everyone's meetings, deletes lines others wrote and drops the project
+    link, none of which a plain member may do elsewhere. A personal team's only member is its
+    owner, who is its `owner` member, so a person may remove their own personal row. A plain
+    member gets 403 `team_forbidden` at the route (rename keeps its creator rule). The caller has
+    already seen the row (`get`), which is the 404 for everyone outside the team."""
+    return is_manager(session, user, series.team_id)
 
 
 @dataclass(frozen=True)

@@ -3,7 +3,7 @@
 Everything in this file is a body, status or message **copied from a real response**: the capture script
 `scripts/capture_series_follow.py` runs the real app (real migrations, auth, CSRF, team roles, visibility,
 the backfill script) on a scratch Postgres and writes every exchange to `docs/fe-captures/series-follow/NN-name.json`. Run it again
-to re-derive any claim. What was **not** exercised live is marked inline and listed in section 9. Sections 1 to 9 use captures 01 to 51; **section 10 (remove a recurring meeting) uses 52 to 76**. The page bodies in sections 1 to 9 were captured before `can_remove` was added to the page, so they do not show it; section 10.2 shows it.
+to re-derive any claim. What was **not** exercised live is marked inline and listed in section 9. Sections 1 to 9 use captures 01 to 51; **section 10 (remove a recurring meeting) uses 52 to 80**. The page bodies in sections 1 to 9 were captured before `can_remove` was added to the page, so they do not show it; section 10.2 shows it.
 Names, emails and ids are placeholders ("Ada Example", `owner@example.test`, ids from a scratch database:
 yours will differ).
 
@@ -766,9 +766,9 @@ Rows left with no meeting after the split: 0
 | The task drawer's `GET /api/tasks` with `X-Team-Id` of a **personal** team | **not exercised live**: vitest against a mock only |
 | Real Google or Outlook calendars; the real flag flip in the containers | **not exercised**: calendar rows are made as the sync leaves them; the flag is flipped inside the running process (`get_settings.cache_clear()`) |
 | The frontend in a browser against a live server | **not exercised**: the frontend is tested against these captures (`web/tests/series-follow.test.tsx`) |
-| `can_remove` on the page: true for the owner of the team, false for a plain member who did not make the row | **verified live** (52, 53) |
+| `can_remove` on the page: true for the owner of the team, false for a plain member, including the one who made the row | **verified live** (52, 53, 77) |
 | `DELETE /api/series/{id}`: 200 with `meetings_kept`, `agenda_lines_removed`, `remembered`, for a team row, an emptied (ghost) row, a personal row with a waiting line and a hand-made row | **verified live** (57, 60, 64, 74, 76) |
-| Remove errors: 403 `team_forbidden` for a plain member, 404 for a person outside the team, 404 for another person's personal row, 404 the second time | **verified live** (54, 55, 56, 65, 66) |
+| Remove errors: 403 `team_forbidden` for a plain member, **even the one who made a calendar row or a hand-made row**, 404 for a person outside the team, 404 for another person's personal row, 404 the second time | **verified live** (54, 55, 56, 65, 66, 78, 80) |
 | A removal acts on one row: the sibling rows of the same event (personal, another team) are untouched | **verified live** (59, 61 to 63, 69) |
 | The meeting stays, ungrouped (`series` null) and readable | **verified live** (67, 72) |
 | The calendar sync does not make the removed row again | **verified live** (70: the real `series.sync_from_joins`, run in the capture process, not an HTTP call) |
@@ -780,8 +780,8 @@ Rows left with no meeting after the split: 0
 ## 10. Remove this recurring meeting
 
 **LEAD-DESIGNED** (Adebayo, 2026-11-15): the designer drew no such control. Added in PR `feature/remove-recurring-meeting`;
-SOP `docs/sop/2026-11-15-remove-recurring-meeting.md`. Captures 52 to 76, made by the same script
-(`python scripts/capture_series_follow.py <admin url> --keep 51` writes only 52 and up; without `--keep` it rewrites all). Ids are
+SOP `docs/sop/2026-11-15-remove-recurring-meeting.md`. Captures 52 to 80, made by the same script
+(`python scripts/capture_series_follow.py <admin url> --keep 51` writes only 52 and up (the later four were added with `--keep 76`); without `--keep` it rewrites all). Ids are
 from a scratch database: yours will differ. It runs with the flag `SERIES_FOLLOW_MEETINGS` **on**, as production is; what it does with the flag off is
 in the verification table (not exercised live).
 
@@ -811,8 +811,8 @@ What goes with the row, and what stays (the dialog says each of these in words, 
 ### 10.2 Who may, and the new field `can_remove`
 
 Every series page now carries `can_remove` (top level, next to `can_rename`). **Draw the button only when it is `true`.** The rule, on the server:
-the person must be a member of the row's team, and be the person who made the row, or an owner or admin of that team. A personal row's only
-member is its owner.
+**only an owner or an admin of the row's team may remove it** (Adebayo, 2026-11-15: "Only owners and admins"). The person who made the row gets **no extra power**: for a calendar row that is only whoever's calendar
+synced or recorded first. A personal row's only member is its owner, so a person may remove their own Personal row. Every other member gets 403.
 
 `GET /api/series/1` as Ada (owner of team X) → **200** (`docs/fe-captures/series-follow/52-remove-page-ada-x-before.json`)
 
@@ -833,7 +833,7 @@ member is its owner.
 }
 ```
 
-A plain member who did not make the row can read the page and gets `can_remove: false` (capture 53, same page, only these fields shown):
+A plain member can read the page and gets `can_remove: false` (capture 53, same page, only these fields shown). **So does the plain member who made the row** (capture 77, Pat's own calendar row):
 
 `GET /api/series/1` as Pat (a plain member of X) → **200** (`docs/fe-captures/series-follow/53-remove-pat-x-cannot.json`)
 
@@ -853,8 +853,7 @@ A plain member who did not make the row can read the page and gets `can_remove: 
 ```
 
 **Trap:** `can_remove` is on the **page** only, not on the list cards. There is no remove menu on a card: open the page.
-`can_rename` and `can_remove` are not the same rule in one case: a plain member who made the row can both rename and remove it;
-a plain member who did not make it can do neither. Do not derive one from the other.
+`can_rename` and `can_remove` are **not** the same rule: a plain member who made the row can rename it (`can_rename` true) but not remove it (`can_remove` false); capture 77 shows both fields on one page. Do not derive one from the other.
 
 ### 10.3 The call
 
@@ -915,9 +914,71 @@ A recurring meeting made by hand has no calendar event to remember:
 
 ### 10.4 Errors, exactly as returned
 
-A plain member who did not make the row and is not an owner or admin (**403**, nothing changed). Show the `message` as is:
+A plain member (**403**, nothing changed; the one who made the row is a plain member too, capture 78). Show the `message` as is:
 
 `DELETE /api/series/1` as Pat (a plain member of X) → **403** (`docs/fe-captures/series-follow/54-remove-pat-x-403.json`)
+
+```json
+{
+  "error": {
+    "code": "team_forbidden",
+    "message": "You can't do that here. Ask an owner or admin of your team."
+  }
+}
+```
+
+The plain member removing the calendar row he made himself, and a hand-made row he made (any member may make one, `POST /api/series`), both the same 403 (captures 78 and 80, 79 is the create):
+
+`GET /api/series/13` as Pat (a plain member of X, who made the row) → **200** (`docs/fe-captures/series-follow/77-remove-page-pat-own-x-row.json`)
+
+```json
+{
+  "id": 13,
+  "title": "Design sync",
+  "team": {
+    "id": 4,
+    "name": "Platform team",
+    "is_personal": false
+  },
+  "can_rename": true,
+  "can_remove": false,
+  "...": "trimmed: the rest of the page is section 5"
+}
+```
+
+`DELETE /api/series/13` as Pat → **403** (`docs/fe-captures/series-follow/78-remove-pat-own-x-row-403.json`)
+
+```json
+{
+  "error": {
+    "code": "team_forbidden",
+    "message": "You can't do that here. Ask an owner or admin of your team."
+  }
+}
+```
+
+`POST /api/series`  `X-Team-Id: 4` as Pat → **201** (`docs/fe-captures/series-follow/79-remove-pat-hand-made-create.json`)
+
+```json
+{
+  "id": 16,
+  "title": "Pat's own recurring",
+  "team": {
+    "id": 4,
+    "name": "Platform team",
+    "is_personal": false
+  },
+  "cadence": "Recurring",
+  "platform": null,
+  "next_starts_at": null,
+  "next_text": null,
+  "unfinished_tasks": 0,
+  "open_questions": 0,
+  "project": null
+}
+```
+
+`DELETE /api/series/16` as Pat → **403** (`docs/fe-captures/series-follow/80-remove-pat-hand-made-403.json`)
 
 ```json
 {
@@ -1008,4 +1069,6 @@ as success; any other error shows the server's message and stays.
 * **It is per team.** The same recurring meeting can be on a team's page and on the person's Personal page. Removing one leaves the other. The dialog says so
   while multi-team is on.
 * **Do not promise the meetings are "deleted".** They are not. Say they stay and are no longer grouped.
-* **An emptied card can now be removed**: it is the answer to the ghost card of section 7.
+* **An emptied card can now be removed, by an owner or admin of its team** (capture 57): it is the answer to the ghost card of section 7. **Trap:** an empty card is shown only to the person who made it. If that
+  person is a plain member they see the card and get 403 when they try to remove it (and an owner or admin does not see it, 404, unless the event is on their own calendar). The empty-card words of section 7 do not change; a plain member needs an
+  owner or admin to deal with it.

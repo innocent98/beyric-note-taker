@@ -1,0 +1,22 @@
+{
+  "note": "He cannot remove the hand-made one he made either: 403 `team_forbidden`. An owner or admin of X can.",
+  "as": "Pat",
+  "request": {
+    "method": "DELETE",
+    "path": "/api/series/16",
+    "headers": {
+      "X-CSRF-Token": "<csrf-B>",
+      "Cookie": "session=<cookie>"
+    },
+    "body": null
+  },
+  "response": {
+    "status": 403,
+    "body": {
+      "error": {
+        "code": "team_forbidden",
+        "message": "You can't do that here. Ask an owner or admin of your team."
+      }
+    }
+  }
+}

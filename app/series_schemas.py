@@ -127,9 +127,9 @@ class SeriesPage(BaseModel):
     sprint_note: str | None
     # The caller may rename the series (its creator, or an owner or admin).
     can_rename: bool
-    # The caller may remove this recurring meeting (`DELETE /api/series/{id}`): the person who made
-    # it, or an owner or admin of its team; for a personal row, its owner. false: do not draw the
-    # button. LEAD-DESIGNED, not in the designer's files.
+    # The caller may remove this recurring meeting (`DELETE /api/series/{id}`): an owner or
+    # admin of its team (not the person who made the row); for a personal row, its owner. false:
+    # do not draw the button. LEAD-DESIGNED, not in the designer's files.
     can_remove: bool
     # Teammates who attended the last three meetings, other than the caller, who the agenda would
     # go to. 0 disables "Send agenda to attendees" (it would answer 409 `no_attendees`).
